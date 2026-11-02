@@ -26,7 +26,7 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
   test.skip(seed?.candidateEnrolled !== true, "requires an explicitly selected and approved installed candidate");
   const status = () => contextStatus(state);
   await page.goto("/cigar?section=runtime");
-  await page.getByRole("button", { name: "Take a walkthrough", exact: true }).click();
+  await page.getByRole("tab", { name: "Guides", exact: true }).click();
   await page.getByRole("button", { name: /Start walkthrough.*Prepare your first cited brief/ }).click();
   const walkthrough = page.getByRole("complementary", { name: "Prepare your first cited brief", exact: true });
   await expect(walkthrough).toBeVisible();
@@ -188,6 +188,7 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     const disabled = await probe.request("get_guard_context", { query: "release procedure" });
     expect(disabled.error.code).toBe("native_context_assistance_disabled");
     await overview.getByRole("button", { name: "Open CIGAR" }).click();
+    await page.getByRole("button", { name: /^Advanced/ }).click();
     await page.getByRole("tab", { name: "Settings", exact: true }).click();
     await expect(toggle).toHaveAttribute("aria-checked", "false");
     await page.getByRole("button", { name: "Refresh runtime list" }).click();

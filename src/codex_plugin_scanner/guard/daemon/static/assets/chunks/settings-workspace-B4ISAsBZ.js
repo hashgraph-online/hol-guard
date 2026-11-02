@@ -1,8 +1,8 @@
-import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as shellHref, c as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b4 as HiMiniPauseCircle, b5 as listContextAgentSessions, h as harnessDisplayName, b6 as HiMiniLink, b7 as revokeContextAgentSession, b8 as authorizeContextAgentSession, b9 as ContextAssistanceApiError, ba as ask, bb as parseContextScope, bc as validContextBrokerRevision, bd as isGuardDemoMode, be as fetchWithGuardAuth, bf as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bg as HiMiniCodeBracketSquare, bh as HiMiniFolder, u as HiMiniDocumentText, bi as HiMiniComputerDesktop, bj as HiMiniHome, k as HiMiniCheck, bk as HiMiniFolderPlus, bl as HiMiniClock, bm as commitDashboardLocation, bn as listContextWorkspaces, bo as HiMiniFolderOpen, bp as grantContextWorkspace, bq as manageContextWorkspace, br as compileWorkspaceContext, bs as isCigarProducerVersion, bt as isCigarCoreLabel, w as HiMiniArrowRight, m as HiMiniHandRaised, bu as HiMiniBookOpen, M as HiMiniClipboardDocument, bv as HiMiniArrowLeft, bw as HiMiniAcademicCap, bx as subscribeDashboardLocation, a5 as HiMiniSparkles, by as HiMiniArrowUpCircle, bz as parseContextAssistanceStatus, bA as isCigarBuildIdentity, bB as fetchContextInstallations, bC as HiMiniCloudArrowDown, f as fetchContextAssistance, a as controlContextAssistance, bD as HiMiniArrowDownTray, bE as downloadBlob, bF as savedEvidenceCopy, bG as guardAwareHref, bH as fetchContextData, bI as forgetContextHistory, bJ as forgetSavedEvidence, bK as resolveProtectionLevelCopy, aA as fetchSettings, bL as fetchRuntimeSnapshot, bM as clearHarnessWatchOverrides, bN as withHarnessPosturePatch, P as updateSettings, bO as clearPolicy, bP as clearReviewQueue, bQ as revokeApprovalGateCooldown, bR as disableApprovalGateTotp, bS as importSettings, bT as resetSettings, bU as enrollApprovalGateTotp, bV as verifyApprovalGateTotp, bW as clearEvidence, bX as exportDiagnostics, bY as repairApprovalCenter, bZ as exportSettings, b_ as setupDesktopNotifications, a7 as EmptyState, b$ as settingsWatchBannerModel, c0 as WorkspacePageHeader, Z as WatchProtectionBanner, c1 as navigateFromAnchor, g as HiMiniChevronDown, c2 as humanizeList, c3 as isProtectionPosture, c4 as deriveProtectionPosture, c5 as normalizeHarnessPostures, c6 as approvalGateCooldownLabel } from "../guard-dashboard.js";
-import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-Nqs1ShEa.js";
+import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as shellHref, c as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b4 as HiMiniPauseCircle, b5 as listContextAgentSessions, h as harnessDisplayName, b6 as HiMiniLink, b7 as revokeContextAgentSession, b8 as authorizeContextAgentSession, b9 as ContextAssistanceApiError, ba as ask, bb as parseContextScope, bc as validContextBrokerRevision, bd as isGuardDemoMode, be as fetchWithGuardAuth, bf as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bg as HiMiniCodeBracketSquare, bh as HiMiniFolder, u as HiMiniDocumentText, bi as HiMiniComputerDesktop, bj as HiMiniHome, k as HiMiniCheck, bk as HiMiniFolderPlus, bl as HiMiniClock, bm as commitDashboardLocation, bn as listContextWorkspaces, bo as HiMiniFolderOpen, bp as grantContextWorkspace, bq as manageContextWorkspace, br as compileWorkspaceContext, w as HiMiniArrowRight, M as HiMiniClipboardDocument, bs as HiMiniArrowLeft, bt as isCigarProducerVersion, bu as isCigarCoreLabel, bv as subscribeDashboardLocation, a5 as HiMiniSparkles, bw as HiMiniArrowUpCircle, bx as parseContextAssistanceStatus, by as isCigarBuildIdentity, bz as fetchContextInstallations, bA as HiMiniCloudArrowDown, f as fetchContextAssistance, a as controlContextAssistance, bB as HiMiniArrowDownTray, bC as downloadBlob, bD as savedEvidenceCopy, bE as guardAwareHref, bF as fetchContextData, bG as forgetContextHistory, bH as forgetSavedEvidence, bI as resolveProtectionLevelCopy, aA as fetchSettings, bJ as fetchRuntimeSnapshot, bK as clearHarnessWatchOverrides, bL as withHarnessPosturePatch, P as updateSettings, bM as clearPolicy, bN as clearReviewQueue, bO as revokeApprovalGateCooldown, bP as disableApprovalGateTotp, bQ as importSettings, bR as resetSettings, bS as enrollApprovalGateTotp, bT as verifyApprovalGateTotp, bU as clearEvidence, bV as exportDiagnostics, bW as repairApprovalCenter, bX as exportSettings, bY as setupDesktopNotifications, a7 as EmptyState, bZ as settingsWatchBannerModel, b_ as WorkspacePageHeader, Z as WatchProtectionBanner, b$ as navigateFromAnchor, g as HiMiniChevronDown, c0 as humanizeList, c1 as isProtectionPosture, c2 as deriveProtectionPosture, c3 as normalizeHarnessPostures, c4 as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-_qdPvIXI.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
-import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-R8WOnNuC.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-q5ZpYwb7.js";
+import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-bAWZ8zmO.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-CjWFL3B3.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
   if (typeof count2 === "number" && count2 > 0) {
@@ -2793,7 +2793,7 @@ const caption$1 = "text-xs leading-5 text-slate-500";
 const PROFILES = [
   { value: "low_memory", label: "Smaller context", description: "One project at a time. Stops after two idle minutes." },
   { value: "balanced", label: "Balanced", description: "Two projects at a time. Stops after ten idle minutes." },
-  { value: "custom", label: "Custom limits", description: "Set your own limits under Advanced." }
+  { value: "custom", label: "Custom limits", description: "Set your own limits under More settings." }
 ];
 function Group({ title, children }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", children: [
@@ -2938,6 +2938,20 @@ function ContextSettingsControls(props) {
             onChange: (agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })
           }
         ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SettingsToggleRow,
+          {
+            label: "Allow selected workspace documents",
+            description: "With Context for AI apps on, prompts in Claude Code and Codex get the files in their project that match them. Pick a project folder under Projects & AI apps to choose exact files instead.",
+            checked: value.sources.workspace_documents,
+            disabled: editingDisabled,
+            onChange: (workspace_documents) => props.onChange({ ...value, sources: {
+              ...value.sources,
+              workspace_documents,
+              source_set_id: workspace_documents ? value.sources.source_set_id || "selected-workspaces" : value.sources.source_set_id
+            } })
+          }
+        ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             SettingsToggleRow,
@@ -2956,7 +2970,7 @@ function ContextSettingsControls(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 hover:bg-surface-1 sm:px-5 [&::-webkit-details-marker]:hidden", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-4 shrink-0 text-brand-dark/50 transition-transform group-open:rotate-90 motion-reduce:transition-none" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: "Advanced" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: "More settings" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-xs text-brand-dark/60", children: "Sources, limits, storage and runtime details" })
           ] })
         ] }),
@@ -2987,20 +3001,6 @@ function ContextSettingsControls(props) {
                   onChange: (sanitized_receipt_facts) => props.onChange({ ...value, sources: { ...value.sources, sanitized_receipt_facts } })
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                SettingsToggleRow,
-                {
-                  label: "Allow selected workspace documents",
-                  description: "With Context for AI apps on, prompts in Claude Code and Codex get the files in their project that match them. Choose folders in Workspace context access to pick exact files instead.",
-                  checked: value.sources.workspace_documents,
-                  disabled: editingDisabled,
-                  onChange: (workspace_documents) => props.onChange({ ...value, sources: {
-                    ...value.sources,
-                    workspace_documents,
-                    source_set_id: workspace_documents ? value.sources.source_set_id || "selected-workspaces" : value.sources.source_set_id
-                  } })
-                }
-              ),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   SettingsToggleRow,
@@ -3016,7 +3016,7 @@ function ContextSettingsControls(props) {
                 !value.sources.native_policy_facts ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1 + " pb-2", children: "Enable native policy and decision facts to choose execution associations." }) : null
               ] })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Workspace documents require explicit source access. Runtime activation grants no document access." })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Starting CIGAR grants no document access by itself. Project files are only added to prompts while Context for AI apps and Allow selected workspace documents are on." })
           ] }),
           value.resource_profile === "custom" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "grid gap-4 sm:grid-cols-2", disabled: editingDisabled, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "mb-3 text-sm font-semibold text-brand-dark", children: "Custom limits" }),
@@ -4613,6 +4613,536 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
     /* @__PURE__ */ jsxRuntimeExports.jsx(ContextAgentsPanel, { ready, enabled: agentsAllowed, dirty, generation, scopes, gate })
   ] });
 }
+const CIGAR_UPDATE_TUTORIAL = {
+  id: "cigar-updates",
+  title: "Update CIGAR with less interruption",
+  level: "Runtime maintenance",
+  description: "Prepare a replacement beside the current build and choose when to switch.",
+  outcome: "A verified selection, an understood reconnect boundary, and a path to the last good build.",
+  steps: [
+    {
+      title: "Read the available builds",
+      description: "Opening Updates reads metadata without starting Python or CIGAR.",
+      instructions: ["Check the Guard host, catalog freshness and build ID. Different builds can have the same version label.", "A withdrawn or expired artifact is unavailable for preparation. Installing checks each CIGAR feature on this computer before it can be used.", "Use Check for catalog updates only when a trusted feed is configured, or import a catalog signed by an already trusted key."],
+      expect: "You can identify the exact build and whether this Guard host has an installable artifact.",
+      target: "versions",
+      action: "Inspect versions & updates"
+    },
+    {
+      title: "Prepare beside your current runtime",
+      description: "Downloading and verifying a replacement does not select or enable it.",
+      instructions: ["Choose a registered Python interpreter for an available SDK build, or explicitly prepare an eligible private Python build first.", "Click Prepare this build and watch its native job. The current runtime remains selected while preparation runs.", "Cancel the job if you change your mind. For an uncertain response, refresh jobs and inspect the recorded job ID before another action."],
+      expect: "The prepared installation appears in the Versions list marked Installed, with your current selection intact.",
+      target: "versions",
+      action: "Prepare an eligible build"
+    },
+    {
+      title: "Prepare the selection",
+      description: "Guard checks the target and compatible data before offering a commit.",
+      instructions: ["Save any pending CIGAR preference edits, then click Prepare selection beside the target installation.", "Wait for that selection job to become ready. Its preparation can be cancelled without choosing the target.", "If Guard requires a saved-data choice or recovery, follow the diagnostic. Do not clear data just to bypass a refusal."],
+      expect: "A current native selection job offers Switch now, or Select & keep CIGAR off.",
+      target: "versions",
+      action: "Review selection readiness"
+    },
+    {
+      title: "Choose the switch boundary",
+      description: "A live switch briefly pauses CIGAR and ends existing context authority.",
+      instructions: ["For a live runtime, finish current context work and acknowledge that sources and app connections will need fresh access.", "Click Switch now and provide Guard's settings proof when required. Refresh jobs if the response is uncertain; the browser never retries the change automatically.", "If CIGAR is off, Select & keep CIGAR off commits only the selection. It does not turn CIGAR on."],
+      expect: "The selected runtime changes only after your explicit commit. Your Guard command approvals remain available.",
+      target: "versions",
+      action: "Review the explicit switch"
+    },
+    {
+      title: "Reconnect the scopes you need",
+      description: "Saved evidence does not restore source or app permission.",
+      instructions: ["If you selected while off, return to Settings, choose your enabled preference, save and explicitly start CIGAR.", "Use the live runtime status to confirm readiness before granting workspace access.", "Grant only the intended workspace sources and pair the current app connection again when needed."],
+      expect: "Your intended sources and apps have fresh access to the selected runtime.",
+      target: "access",
+      action: "Review projects & AI apps"
+    },
+    {
+      title: "Use the last good build deliberately",
+      description: "Rollback prepares current compatible data for the previous verified installation.",
+      instructions: ["In Updates, choose Prepare last good build when you need to return to the retained installation.", "Wait for the rollback selection job, then commit it explicitly with the same reconnect acknowledgement when live.", "Use Recover job for interrupted work. Recovery does not re-grant context access. Your Guard approvals remain in place."],
+      expect: "You know where to inspect a rollback or interrupted job before taking another action.",
+      target: "versions",
+      action: "Inspect rollback & recovery"
+    }
+  ]
+};
+const CIGAR_FULL_NAME = "Context Intelligence Graph Agentic Runtime";
+const CIGAR_TUTORIALS = [
+  {
+    id: "first-brief",
+    title: "Prepare your first cited brief",
+    level: "Start here",
+    description: "Go from a running runtime to useful evidence for one workspace.",
+    outcome: "A context brief whose sources and revisions you can inspect.",
+    steps: [
+      {
+        title: "Turn on CIGAR",
+        description: "One click. Guard gets Python ready, downloads the approved CIGAR copy, checks it and starts it.",
+        instructions: ["Click Turn on CIGAR at the top of this page. If Guard asks for your approval password, enter it once; it covers every step.", "Watch the steps tick off. You can stop at any point and nothing stays turned on.", "Later, if you want to switch versions yourself, use Updates."],
+        expect: "The status says Ready.",
+        target: "runtime",
+        action: "Open Settings",
+        tip: "CIGAR uses its own copy of Python 3.14. Guard can keep using the Python it already has."
+      },
+      {
+        title: "Choose a small evidence set",
+        description: "Pick the sources that can answer your question before granting workspace access.",
+        instructions: ["Open More settings in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents in Settings, above More settings. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
+        expect: "Your intended source preferences are saved and the runtime is Ready.",
+        target: "runtime",
+        action: "Choose source preferences",
+        tip: "A document preference allows you to choose files later. It does not grant access to the whole workspace."
+      },
+      {
+        title: "Grant one workspace access",
+        description: "A grant connects a workspace and a consumer to the evidence you explicitly select.",
+        instructions: ["In Projects & AI apps, click Choose a project folder and browse to your project. Folders that look like projects are marked.", "Under What should CIGAR read?, keep the suggested notes such as the README, or browse to tick others. Untick everything to use only Guard's own safety facts.", "Click Give CIGAR access and confirm when Guard asks for your approval password."],
+        expect: "A Context access section appears for your chosen workspace.",
+        target: "access",
+        action: "Open Projects & AI apps",
+        tip: "Choose only relevant sources. Environment files and credential stores are not valid context sources."
+      },
+      {
+        title: "Ask one concrete question",
+        description: "Tell CIGAR what evidence you need for the task in front of you.",
+        instructions: ["Fill What would you like context about? with one focused question.", "For native facts only, try the example below. If you granted project docs, ask about a specific documented workflow, file, or rule.", "Click Prepare cited context in the section for the workspace you want to use."],
+        expect: "Prepared context contains excerpts and citations. If relevant evidence is missing, refine the question or select better sources.",
+        target: "access",
+        action: "Prepare context in your workspace",
+        question: "Which native Guard policy and decision facts apply to this workspace?",
+        tip: "The brief is evidence prepared for your question. Your review or authorized AI app can use that evidence to reason about the task."
+      },
+      {
+        title: "Read the evidence behind it",
+        description: "Use the citations to decide whether the brief supports your task.",
+        instructions: ["Read the excerpts in Prepared context, then open Sources and revisions.", "Check the source names, line ranges, and document revisions. A citation identifies the evidence checked when the brief was prepared.", "For a pending command in Inbox, request its context brief when available, inspect the evidence, and make your Guard approval decision separately."],
+        expect: "You can trace a useful statement back to its admitted source. A brief never grants command permission.",
+        target: "access",
+        action: "Inspect your prepared context"
+      },
+      {
+        title: "Keep context current",
+        description: "Fresh sources make the next brief useful as your work changes.",
+        instructions: ["After editing a selected document, click Refresh selected files, then Prepare cited context again.", "Use Withdraw beside a file or Revoke workspace access when it is no longer needed.", "Stopping or restarting the runtime ends active access. Grant the workspace again when needed; saved evidence never restores permission."],
+        expect: "You know how to prepare a fresh brief and remove its source access.",
+        target: "access",
+        action: "Review workspace access",
+        tip: "Use Privacy to inspect or remove saved evidence. Memory is the default and ends with the runtime."
+      }
+    ]
+  },
+  {
+    id: "ai-apps",
+    title: "Give an AI app scoped context",
+    level: "After your first brief",
+    description: "Choose sources for an app, match its real connection code, and pair it explicitly.",
+    outcome: "One authorized Guard MCP connection with access to a chosen workspace.",
+    steps: [
+      {
+        title: "Enable app context deliberately",
+        description: "App access is a separate feature choice from review briefs.",
+        instructions: ["In Settings, enable Context for AI apps. Choose source preferences before granting access.", "Keep Share context between paired AI connections off while you try a single connection.", "Save your changes. If CIGAR is off, click Turn on CIGAR. Confirm the status says Ready."],
+        expect: "Context for AI apps is saved and the runtime is Ready.",
+        target: "runtime",
+        action: "Choose AI app preferences"
+      },
+      {
+        title: "Grant sources for that app",
+        description: "A dashboard grant and an app grant have different consumers.",
+        instructions: ["In Projects & AI apps, choose the project folder and tick the notes your app needs.", "Under Which app can use it?, pick Codex, Claude Code, or Cursor.", "Click Give CIGAR access and check the app and folder in the confirmation."],
+        expect: "A workspace grant names the app you chose.",
+        target: "access",
+        action: "Choose the app's sources"
+      },
+      {
+        title: "Identify the real connection",
+        description: "Use the local Guard MCP server configured in your app.",
+        instructions: ["In the app's Guard MCP connection, request get_context_status to obtain its pending connection code.", "Return to AI app context connections and click Refresh app connections.", "Match the displayed Connection code to the one from that app's actual process."],
+        expect: "The same code appears in your app and the pending connection shown here.",
+        target: "access",
+        action: "Find the pending connection",
+        tip: "This screen does not install an app connection. Choosing an app label is a permission choice; matching the real code identifies the connection you are authorizing."
+      },
+      {
+        title: "Authorize one connection",
+        description: "Pair the verified connection with the workspace grant you intended.",
+        instructions: ["Under the matched connection, choose its Workspace and app grant.", "Click Authorize context connection and confirm the connection code, app, and workspace when prompted.", "Look for Grant assigned. A running runtime alone does not grant app access."],
+        expect: "The intended connection shows Grant assigned for the chosen workspace.",
+        target: "access",
+        action: "Authorize the matched connection",
+        tip: "Connections have short leases. If one expires or the runtime restarts, reconnect and pair its current code."
+      },
+      {
+        title: "Ask the app to use its context",
+        description: "Make evidence use part of a focused task request.",
+        instructions: ["Ask the authorized app to request Guard context for a specific workspace task, using the example below as a starting point.", "Check the app's cited sources and ask it to identify missing evidence rather than assume an answer.", "Use Revoke context connection when you are finished. Add sharing only when you need it, with separate reviewed-note permissions."],
+        expect: "The app can request context within its grant. Missing access or evidence is reported explicitly.",
+        target: "access",
+        action: "Review app access",
+        question: "Use your Guard context tools for this workspace to explain the relevant project rules. Cite the evidence you receive and identify anything the available context does not establish."
+      }
+    ]
+  },
+  {
+    id: "execution",
+    title: "Understand execution context",
+    level: "Advanced · supported routes only",
+    description: "Learn the optional native preparation path for Pi and Oh My Pi captured-Bash actions.",
+    outcome: "An understanding of the route requirements and how to inspect an execution-context observation.",
+    steps: [
+      {
+        title: "Check the route first",
+        description: "Execution context has a narrower scope than general review briefs.",
+        instructions: ["Use an existing supported native captured-Bash route for Pi or Oh My Pi on macOS.", "Check the execution capability and Native execution context panel in Settings.", "This candidate has local native preparation checks. Full delivery from external apps has not yet been qualified."],
+        expect: "You know whether the preparation route is available in this build.",
+        target: "runtime",
+        action: "Inspect execution availability",
+        tip: "You can read this walkthrough even when the route is unavailable. Review briefs and paired app context have their own controls."
+      },
+      {
+        title: "Choose the execution preference",
+        description: "Execution associations use native capture and policy facts.",
+        instructions: ["Open More settings in Settings. Enable Native policy and decision facts.", "If the build offers it, enable Associate native context with execution.", "Save and start CIGAR. Inspect the Native execution context panel for preparation readiness."],
+        expect: "The panel reports the current native preparation state.",
+        target: "runtime",
+        action: "Review execution preferences"
+      },
+      {
+        title: "Scope the executor's workspace",
+        description: "Choose the app and workspace for the native route you use.",
+        instructions: ["In Projects & AI apps, choose the project folder, then pick Pi or Oh My Pi under Which app can use it?", "Tick only the notes it needs and give access to that one folder.", "A workspace grant does not install an app adapter or approve a command."],
+        expect: "The workspace grant names the intended executor consumer.",
+        target: "access",
+        action: "Inspect executor workspace access"
+      },
+      {
+        title: "Inspect the native observation",
+        description: "Keep the command decision in Guard's normal approval flow.",
+        instructions: ["Use your existing supported app route. Inspect its Guard review and choose the approval scope you intend, such as Run once or Always allow this version in this project.", "Return to Native execution context observations to inspect whether preparation or association was recorded.", "For an uncertain outcome, consult Guard's native execution record before retrying."],
+        expect: "You can distinguish context preparation, a dispatch acknowledgement, and a native execution record.",
+        target: "runtime",
+        action: "Open execution observations",
+        tip: "Context is supporting information. Guard owns command authorization and the execution record."
+      }
+    ]
+  },
+  CIGAR_UPDATE_TUTORIAL
+];
+function cigarTutorial(id2) {
+  return CIGAR_TUTORIALS.find((tutorial) => tutorial.id === id2) ?? CIGAR_TUTORIALS[0];
+}
+function CigarGuide({ onSelect, walkthroughs }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-guide", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-explained-heading", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-explained-heading", children: "How CIGAR works" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "With CIGAR on, and Context for AI apps and workspace documents turned on in Settings, every prompt you send in Claude Code or Codex gets the few project files that match it. The Turn on CIGAR button sets both up on a fresh install. CIGAR finds your project from the folder your AI app runs in. A prompt about the header color brings the header and its styles. A prompt that matches nothing, like “build a to-do app” in an empty folder, adds nothing." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Secrets, keys, hidden files, generated folders and anything your project's .gitignore files leave out are always skipped. To stop it, turn off CIGAR, or turn off Context for AI apps in Settings." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-caption", children: [
+        "CIGAR stands for ",
+        CIGAR_FULL_NAME,
+        "."
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card cigar-faq", "aria-labelledby": "cigar-faq-heading", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-faq-heading", children: "Common questions" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Do I need to install anything?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. When you click Turn on CIGAR, Guard gets its own copy of Python 3.14 ready, downloads the CIGAR version it approved for this computer, checks its fingerprint and starts it. The Python you already use stays as it is." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "If the button says it is waiting for Guard's safety check, a CIGAR version exists for your computer but Guard has not approved it yet. Guard never installs a version it has not checked." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("versions"), children: [
+          "Choose a version in Updates",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Does turning on CIGAR give it access to all my files?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. CIGAR only looks at the project your AI app is working in, and it skips secrets, keys, hidden files, generated folders and anything .gitignore leaves out. Starting CIGAR grants no access to anything else." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Do I have to pick a project folder?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. Without one, CIGAR uses the files that match each prompt. Pick a folder if you want to choose exactly which files it uses for that project." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("access"), children: [
+          "Open Projects & AI apps",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Why did a prompt get no files?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR adds only files that match the prompt. A vague prompt, or an empty or brand-new folder, matches nothing, so nothing is added. Name a file, a feature or a term from your project and try again. Also check that Context for AI apps and Allow selected workspace documents are on in Settings." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Does CIGAR save me tokens or make my AI faster?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR does not promise either. It hands over the few pieces that match your prompt instead of whole files, and shows where each piece came from." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "What happens when CIGAR is stopped or unavailable?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Guard keeps protecting commands under its existing policy and approvals. Prompts simply get no extra files until CIGAR is back. Turn off CIGAR to cancel context work. Memory context and active access end when it stops." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "What is saved on disk?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Memory is the default. Optional saved evidence uses private local SQLite files without Guard encryption and can outlive a runtime. Privacy provides retention, diagnostics, and removal controls. Restoring evidence never restores app access or approvals." })
+      ] })
+    ] }),
+    walkthroughs
+  ] });
+}
+const CIGAR_TABS = [
+  { value: "runtime", label: "Settings" },
+  { value: "access", label: "Projects & AI apps" },
+  { value: "versions", label: "Updates" },
+  { value: "data", label: "Privacy" },
+  { value: "guide", label: "Guides" }
+];
+function canStartCigar(status, dirty) {
+  return !dirty && status !== null && status.requested_enabled && status.preferences.enabled && status.effective_preferences.enabled && status.verification_permitted && Boolean(status.preferences.runtime_id) && !status.effective_enabled && status.job === null;
+}
+function cigarTabFromSearch(search) {
+  const value = new URLSearchParams(search).get("section");
+  if (value === "tutorials") return "guide";
+  return CIGAR_TABS.find((tab) => tab.value === value)?.value ?? "overview";
+}
+function cigarWaking(status) {
+  if (!status || status.effective_enabled) return false;
+  return status.diagnostic === "runtime_resting" || status.requested_enabled && status.job?.operation === "activate";
+}
+function cigarHelpsPrompts(status) {
+  const effective = status?.effective_preferences;
+  return effective?.features.agent_context === true && effective.sources.workspace_documents === true;
+}
+function cigarWillHelpPrompts(status) {
+  if (!status) return false;
+  if (cigarHelpsPrompts(status)) return true;
+  const { sources } = status.preferences;
+  return !sources.workspace_documents && !sources.source_set_id;
+}
+const PROMPT_PROMISE = "Every prompt you send in Claude Code or Codex gets the few project files that match it.";
+const NO_FILES_YET = "Prompts get no project files until Context for AI apps and workspace documents are on in Settings.";
+function cigarHomeCopy(status, loading, running) {
+  if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. You can keep browsing.", setupHint: false };
+  if (!status) {
+    if (loading) return { headline: "Checking CIGAR", detail: "One moment.", setupHint: false };
+    return { headline: "CIGAR status unavailable", detail: "Guard did not answer. Try refreshing the status.", setupHint: false };
+  }
+  if (status.effective_enabled) {
+    if (cigarHelpsPrompts(status)) return { headline: "CIGAR is on", detail: PROMPT_PROMISE, setupHint: false };
+    return { headline: "CIGAR is on", detail: NO_FILES_YET, setupHint: true };
+  }
+  if (cigarWaking(status)) {
+    return { headline: "CIGAR is on", detail: "It rests when nothing needs it and wakes up by itself. You do not need to turn it on again.", setupHint: false };
+  }
+  if (status.restriction && !status.effective_preferences.enabled) {
+    return { headline: "CIGAR is off", detail: "Your organization manages CIGAR on this computer.", setupHint: false };
+  }
+  if (status.requested_enabled) {
+    return { headline: "CIGAR is not running", detail: "It is saved as on but has not started. Turn it on to start it.", setupHint: false };
+  }
+  if (cigarWillHelpPrompts(status)) {
+    return { headline: "CIGAR is off", detail: "Turn it on and " + PROMPT_PROMISE.charAt(0).toLowerCase() + PROMPT_PROMISE.slice(1), setupHint: false };
+  }
+  return { headline: "CIGAR is off", detail: "Turn it on to start CIGAR. " + NO_FILES_YET, setupHint: true };
+}
+function CigarTutorials(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-walkthroughs", "aria-labelledby": "cigar-tutorials-heading", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-intro", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-tutorials-heading", children: "Guided walkthroughs" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Short step-by-step lessons. They only explain; you choose every setting, start and access grant." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-benefits", children: CIGAR_TUTORIALS.map((tutorial) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "cigar-card cigar-benefit", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: tutorial.level }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: tutorial.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: tutorial.description }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-learning-caption", children: [
+        tutorial.steps.length,
+        " guided steps"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-lesson-outcome", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "What you will learn" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: tutorial.outcome })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => props.onBegin(tutorial.id, props.progress.tutorial === tutorial.id && props.progress.step > 0), children: [
+        props.progress.tutorial === tutorial.id && props.progress.step > 0 ? "Resume walkthrough" : "Start walkthrough",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "sr-only", children: [
+          ": ",
+          tutorial.title
+        ] })
+      ] })
+    ] }, tutorial.id)) })
+  ] });
+}
+function CigarWalkthrough(props) {
+  const id2 = reactExports.useId();
+  const [copyMessage, setCopyMessage] = reactExports.useState("");
+  const step = props.tutorial.steps[props.step];
+  const last = props.step === props.tutorial.steps.length - 1;
+  const liveStatus = props.status ? contextStatusCopy(props.status).label : "Status unavailable";
+  reactExports.useEffect(() => {
+    setCopyMessage("");
+  }, [props.step, props.tutorial.id]);
+  async function copyQuestion() {
+    if (!step.question) return;
+    try {
+      if (!navigator.clipboard) throw new Error("clipboard_unavailable");
+      await navigator.clipboard.writeText(step.question);
+      setCopyMessage("Question copied. Paste it into the context question field or your authorized app.");
+    } catch {
+      setCopyMessage("Select the example text and copy it with your usual keyboard or touch controls.");
+    }
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "cigar-card cigar-walkthrough", "aria-labelledby": id2 + "-title", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-walkthrough-close", onClick: props.onExit, "aria-label": "Exit walkthrough", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { "aria-hidden": "true" }) }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: id2 + "-title", children: props.tutorial.title }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-learning-caption", children: [
+      "Step ",
+      props.step + 1,
+      " of ",
+      props.tutorial.steps.length,
+      " · learning progress"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "cigar-lesson-index", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { children: [
+        "All ",
+        props.tutorial.steps.length,
+        " steps"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-lesson-steps", "aria-label": "Walkthrough steps", children: props.tutorial.steps.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", "aria-current": props.step === index ? "step" : void 0, onClick: () => props.onMove(index), children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: index + 1 }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: item.title })
+      ] }) }, item.title)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-lesson-body", "aria-live": "polite", "aria-atomic": "false", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: step.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step.description }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-simple-list", children: step.instructions.map((instruction) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: instruction }, instruction)) }),
+      step.question ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-example-question", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Example question" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step.question }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => void copyQuestion(), children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, { "aria-hidden": "true" }),
+          "Copy question"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", className: "cigar-learning-caption", children: copyMessage })
+      ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-lesson-outcome", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "What to look for" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step.expect })
+      ] }),
+      step.tip ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-learning-tip", children: step.tip }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: props.onOpen, children: [
+        step.action,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-lesson-navigation", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-button", disabled: props.step === 0, onClick: () => props.onMove(props.step - 1), children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowLeft, { "aria-hidden": "true" }),
+        "Back"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-button", onClick: () => last ? props.onExit() : props.onMove(props.step + 1), children: [
+        last ? "Finish walkthrough" : "Next step",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-learning-caption", children: [
+      "Live runtime: ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: liveStatus }),
+      props.dirty ? " · unsaved preferences" : "",
+      ". Reading ahead does not complete setup or grant access."
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-text-button", onClick: () => props.onMove(0), children: "Restart this walkthrough" })
+  ] });
+}
+function Intro({ title, children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-intro", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: title }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children })
+  ] });
+}
+function CigarAdvanced(props) {
+  const { tab, status, lesson } = props;
+  const id2 = reactExports.useId();
+  const open = tab !== "overview";
+  function moveTab(event, index) {
+    let next;
+    if (event.key === "ArrowRight") next = (index + 1) % CIGAR_TABS.length;
+    else if (event.key === "ArrowLeft") next = (index + CIGAR_TABS.length - 1) % CIGAR_TABS.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = CIGAR_TABS.length - 1;
+    else return;
+    event.preventDefault();
+    props.onSelect(CIGAR_TABS[next].value, false);
+    document.getElementById(id2 + "-tab-" + CIGAR_TABS[next].value)?.focus();
+  }
+  const active = open ? tab : null;
+  const walkthroughs = /* @__PURE__ */ jsxRuntimeExports.jsx(CigarTutorials, { progress: lesson.progress, onBegin: props.onBegin });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-advanced", "data-open": open, "aria-label": "Advanced", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-advanced-toggle", "aria-expanded": open, "aria-controls": id2 + "-body", onClick: props.onToggle, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Advanced" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Projects, AI apps, settings, updates and privacy" })
+      ] })
+    ] }),
+    open ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: id2 + "-body", className: "cigar-advanced-body", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "cigar-tabs", role: "tablist", "aria-label": "CIGAR sections", children: CIGAR_TABS.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          id: id2 + "-tab-" + item.value,
+          type: "button",
+          role: "tab",
+          "aria-selected": tab === item.value,
+          "aria-controls": id2 + "-panel",
+          tabIndex: tab === item.value ? 0 : -1,
+          onKeyDown: (event) => moveTab(event, index),
+          onClick: () => props.onSelect(item.value, false),
+          children: item.label
+        },
+        item.value
+      )) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-learning-layout" + (lesson.active ? " has-walkthrough" : ""), children: [
+        lesson.active ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: props.walkthroughRef, tabIndex: -1, className: "cigar-walkthrough-anchor", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          CigarWalkthrough,
+          {
+            tutorial: lesson.tutorial,
+            step: lesson.progress.step,
+            status,
+            dirty: props.dirty,
+            onMove: props.onMove,
+            onOpen: () => props.onSelect(lesson.tutorial.steps[lesson.progress.step].target),
+            onExit: props.onExitLesson
+          }
+        ) }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: props.panelRef, id: id2 + "-panel", role: "tabpanel", "aria-labelledby": id2 + "-tab-" + tab, tabIndex: -1, className: "cigar-panel", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: active !== "runtime", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Settings", children: "CIGAR works well with the recommended settings. Change these only if you want to." }),
+            props.controls
+          ] }),
+          active === "versions" ? props.versions : null,
+          active === "access" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Projects & AI apps", children: "Optional. Pick a project folder to choose exactly which files CIGAR uses for it, or connect an AI app. Each step asks you first." }),
+            !status?.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-note", children: cigarWaking(status) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Waking up CIGAR" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Your projects and AI apps come back in a moment." })
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Turn on CIGAR first" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Projects and AI apps open up as soon as CIGAR is on. Use the button at the top of this page." })
+            ] }) }) : null,
+            props.access
+          ] }) : null,
+          active === "data" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Privacy", children: "By default, CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes." }),
+            props.data
+          ] }) : null,
+          active === "guide" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarGuide, { onSelect: props.onSelect, walkthroughs }) : null
+        ] })
+      ] })
+    ] }) : null
+  ] });
+}
 const cigarVersionJobId = () => "dashboard:" + crypto.randomUUID();
 function canCommitCigarJob(job, status) {
   return status !== null && job.can_commit && !job.cleanup_pending && job.expected_generation === status.generation && (job.initial_selection ? status.preferences.runtime_id === "" : job.source_runtime_id === status.preferences.runtime_id);
@@ -4725,56 +5255,6 @@ function parseCigarVersionJobs(value) {
   const jobs = value.jobs.map(parseCigarVersionJob);
   if (new Set(jobs.map((job) => job.job_id)).size !== jobs.length) invalid$3();
   return jobs;
-}
-const CIGAR_TABS = [
-  { value: "overview", label: "Overview" },
-  { value: "runtime", label: "Settings" },
-  { value: "versions", label: "Updates" },
-  { value: "access", label: "Projects & AI apps" },
-  { value: "data", label: "Privacy" },
-  { value: "tutorials", label: "Tutorials" },
-  { value: "guide", label: "How it works" }
-];
-function canStartCigar(status, dirty) {
-  return !dirty && status !== null && status.requested_enabled && status.preferences.enabled && status.effective_preferences.enabled && status.verification_permitted && Boolean(status.preferences.runtime_id) && !status.effective_enabled && status.job === null;
-}
-function cigarTabFromSearch(search) {
-  const value = new URLSearchParams(search).get("section");
-  return CIGAR_TABS.find((tab) => tab.value === value)?.value ?? "overview";
-}
-function cigarWaking(status) {
-  if (!status || status.effective_enabled) return false;
-  return status.diagnostic === "runtime_resting" || status.requested_enabled && status.job?.operation === "activate";
-}
-function cigarSetupSteps(status) {
-  const on = status?.effective_enabled === true;
-  const resting = status?.diagnostic === "runtime_resting";
-  let description = "One click. Guard gets everything ready and checks it first.";
-  if (on) description = "CIGAR is running on this computer.";
-  else if (resting) description = "CIGAR is on. It rests when nothing needs it.";
-  return [
-    {
-      title: "Turn on CIGAR",
-      description,
-      complete: on || resting,
-      action: null,
-      tab: "overview"
-    },
-    {
-      title: "Pick a project folder",
-      description: "Optional. Choose exactly which files CIGAR uses for a project, instead of the ones that match each prompt.",
-      complete: false,
-      action: on ? "Pick a folder" : null,
-      tab: "access"
-    },
-    {
-      title: "Connect an AI app (optional)",
-      description: "Let an AI app ask CIGAR for the parts of your project it needs. You approve each app.",
-      complete: false,
-      action: on ? "Connect an app" : null,
-      tab: "access"
-    }
-  ];
 }
 const CIGAR_SETUP_STAGE_LABELS = {
   python: "Getting ready",
@@ -5031,48 +5511,19 @@ async function runCigarSetup(plan, initial2, deps, proof) {
   }
 }
 const ALL_STAGES = ["python", "download", "check", "start"];
-const CIGAR_WHY = [
-  {
-    icon: HiMiniHandRaised,
-    title: "Know why Guard paused",
-    body: "When Guard stops your AI, you get a short note explaining why, with links to the exact lines it read."
-  },
-  {
-    icon: HiMiniBookOpen,
-    title: "Just the parts that matter",
-    body: "Instead of whole files, your AI gets the few pieces that answer the question, inside a size limit you set."
-  },
-  {
-    icon: HiMiniLockClosed,
-    title: "Private by default",
-    body: "It runs on your computer, reads only the folders you pick, and forgets everything when you turn it off."
-  }
-];
-function CigarWhy() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "cigar-why", "aria-label": "What CIGAR does for you", children: CIGAR_WHY.map(({ icon: Icon, title, body }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { "aria-hidden": "true" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: body })
-    ] })
-  ] }, title)) });
+function blockTabLabel(tab) {
+  if (tab === "versions") return "Updates";
+  return "details";
 }
-function CigarSetupAction({ setup, status, disabled, tone = "plain", onOpen }) {
-  const primary = "cigar-button cigar-button-primary" + (tone === "plain" ? " cigar-button-solid" : "");
-  if (status?.effective_enabled) {
-    const { features, sources } = status.effective_preferences;
-    const caption2 = features.agent_context && sources.workspace_documents ? "CIGAR is on. Prompts in Claude Code and Codex now get the project files that match them. Pick a folder to choose exactly which files it uses." : "CIGAR is on. To give prompts the project files that match them, turn on Context for AI apps and Allow selected workspace documents in Settings.";
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-action", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: primary, onClick: () => onOpen("access"), children: [
-        "Pick a project folder",
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: caption2 })
-    ] });
-  }
+function CigarSetupAction({ setup, status, disabled, canStop, stopDisabled, onStop, onOpen }) {
+  const off = canStop ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-button", disabled: stopDisabled, onClick: onStop, children: "Turn off CIGAR" }) : null;
+  if (status?.effective_enabled) return off ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-setup-action", children: off }) : null;
   if (setup.run.phase === "running") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-action", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-button", onClick: setup.stop, children: "Stop setup" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-buttons", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-button", onClick: setup.stop, children: "Stop setup" }),
+        off
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-setup-caption", role: "status", children: [
         CIGAR_SETUP_STAGE_LABELS[setup.run.stage],
         "…"
@@ -5081,10 +5532,7 @@ function CigarSetupAction({ setup, status, disabled, tone = "plain", onOpen }) {
   }
   if (cigarWaking(status)) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-action", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: primary, disabled: true, children: [
-        "Pick a project folder",
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-      ] }),
+      off,
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", role: "status", children: "CIGAR is on and waking up…" })
     ] });
   }
@@ -5092,35 +5540,46 @@ function CigarSetupAction({ setup, status, disabled, tone = "plain", onOpen }) {
   const block = plan?.kind === "blocked" ? plan.block : null;
   const checking = plan === null && setup.loadError === null;
   const failed = setup.run.phase === "failed" ? setup.run : null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-action", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        type: "button",
-        className: primary,
-        disabled: disabled || checking || block !== null || setup.run.phase === "proof",
-        onClick: setup.start,
-        children: [
-          failed ? "Try again" : "Turn on CIGAR",
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-        ]
-      }
-    ),
-    block ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-block", role: "status", children: [
+  let note2 = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: checking ? "Checking this computer…" : "About a minute · Runs on this computer · Off with one click" });
+  if (block) {
+    note2 = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-block", role: "status", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: block.title }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: block.detail }),
       block.tab ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onOpen(block.tab), children: [
         "Open ",
-        block.tab === "versions" ? "Updates" : "details",
+        blockTabLabel(block.tab),
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
       ] }) : null
-    ] }) : failed ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-block", role: "alert", children: [
+    ] });
+  } else if (failed) {
+    note2 = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-block", role: "alert", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR did not turn on" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: failed.message })
-    ] }) : setup.loadError ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-block", role: "alert", children: [
+    ] });
+  } else if (setup.loadError) {
+    note2 = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-block", role: "alert", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Guard did not answer" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: setup.loadError })
-    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: checking ? "Checking this computer…" : "About a minute · Runs on this computer · Off with one click" })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-action", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-buttons", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          className: "cigar-button cigar-button-primary cigar-button-solid",
+          disabled: disabled || checking || block !== null || setup.run.phase === "proof",
+          onClick: setup.start,
+          children: [
+            failed ? "Try again" : "Turn on CIGAR",
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
+          ]
+        }
+      ),
+      off
+    ] }),
+    note2
   ] });
 }
 function stageState(index, at, phase) {
@@ -5130,40 +5589,25 @@ function stageState(index, at, phase) {
   return phase === "running" ? "active" : "failed";
 }
 const STAGE_SUFFIX = { done: " (done)", active: " (in progress)", failed: " (stopped)", next: "" };
-function CigarSetupProgress({ setup, status, loading }) {
+function CigarSetupProgress({ setup }) {
   const run = setup.run;
-  const on = status?.effective_enabled === true;
   const live = run.phase === "running" || run.phase === "failed" ? run : null;
-  const stages = live?.stages ?? (setup.plan?.kind === "run" ? setup.plan.stages : ALL_STAGES);
-  const at = live?.stage ? stages.indexOf(live.stage) : -1;
-  let heading = "Guard does the setup for you";
-  if (on) heading = "CIGAR is on";
-  else if (run.phase === "running") heading = "Turning on CIGAR";
-  else if (run.phase === "failed") heading = "Setup stopped";
-  else if (loading) heading = "Checking…";
-  let label2 = "Checking";
-  if (run.phase === "running") label2 = "Working";
-  else if (status) label2 = contextStatusCopy(status).label;
-  let body = "Click once. Guard downloads CIGAR, makes sure it is safe and starts it. It reads only the project files you pick later.";
-  if (on) body = "Running on this computer. Next, pick a project folder. You can connect an AI app after that.";
-  else if (run.phase !== "running" && cigarWaking(status)) body = "CIGAR rests when nothing needs it and wakes up on its own. You do not need to turn it on again.";
-  else if (live?.stage) body = `${CIGAR_SETUP_STAGE_LABELS[live.stage]}… step ${at + 1} of ${stages.length}.`;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-runtime-card cigar-setup-progress", "aria-live": "polite", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-runtime-top", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: heading }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "cigar-status", "data-ready": on, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true" }),
-        label2
-      ] })
-    ] }),
+  if (!live) return null;
+  let stages = live.stages;
+  if (stages.length === 0) stages = setup.plan?.kind === "run" ? setup.plan.stages : ALL_STAGES;
+  const at = live.stage ? stages.indexOf(live.stage) : -1;
+  let body = "Getting ready…";
+  if (live.stage && run.phase === "running") body = `${CIGAR_SETUP_STAGE_LABELS[live.stage]}… step ${at + 1} of ${stages.length}.`;
+  else if (live.stage) body = `Setup stopped at step ${at + 1} of ${stages.length}.`;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-progress", "aria-live": "polite", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-body", children: body }),
-    !on && live ? /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-setup-track", "aria-label": "Setup progress", children: stages.map((stage, index) => {
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-setup-track", "aria-label": "Setup progress", children: stages.map((stage, index) => {
       const state = stageState(index, at, run.phase);
       return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { "data-state": state, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "sr-only", children: [
         CIGAR_SETUP_STAGE_LABELS[stage],
         STAGE_SUFFIX[state]
       ] }) }, stage);
-    }) }) : null
+    }) })
   ] });
 }
 function CigarSetupProof({ setup, gate }) {
@@ -5184,441 +5628,63 @@ function CigarSetupProof({ setup, gate }) {
     }
   );
 }
-const CIGAR_UPDATE_TUTORIAL = {
-  id: "cigar-updates",
-  title: "Update CIGAR with less interruption",
-  level: "Runtime maintenance",
-  description: "Prepare a replacement beside the current build and choose when to switch.",
-  outcome: "A verified selection, an understood reconnect boundary, and a path to the last good build.",
-  steps: [
-    {
-      title: "Read the available builds",
-      description: "Opening Updates reads metadata without starting Python or CIGAR.",
-      instructions: ["Check the Guard host, catalog freshness and build ID. Different builds can have the same version label.", "A withdrawn or expired artifact is unavailable for preparation. Installing checks each CIGAR feature on this computer before it can be used.", "Use Check for catalog updates only when a trusted feed is configured, or import a catalog signed by an already trusted key."],
-      expect: "You can identify the exact build and whether this Guard host has an installable artifact.",
-      target: "versions",
-      action: "Inspect versions & updates"
-    },
-    {
-      title: "Prepare beside your current runtime",
-      description: "Downloading and verifying a replacement does not select or enable it.",
-      instructions: ["Choose a registered Python interpreter for an available SDK build, or explicitly prepare an eligible private Python build first.", "Click Prepare this build and watch its native job. The current runtime remains selected while preparation runs.", "Cancel the job if you change your mind. For an uncertain response, refresh jobs and inspect the recorded job ID before another action."],
-      expect: "The prepared installation appears in the Versions list marked Installed, with your current selection intact.",
-      target: "versions",
-      action: "Prepare an eligible build"
-    },
-    {
-      title: "Prepare the selection",
-      description: "Guard checks the target and compatible data before offering a commit.",
-      instructions: ["Save any pending CIGAR preference edits, then click Prepare selection beside the target installation.", "Wait for that selection job to become ready. Its preparation can be cancelled without choosing the target.", "If Guard requires a saved-data choice or recovery, follow the diagnostic. Do not clear data just to bypass a refusal."],
-      expect: "A current native selection job offers Switch now, or Select & keep CIGAR off.",
-      target: "versions",
-      action: "Review selection readiness"
-    },
-    {
-      title: "Choose the switch boundary",
-      description: "A live switch briefly pauses CIGAR and ends existing context authority.",
-      instructions: ["For a live runtime, finish current context work and acknowledge that sources and app connections will need fresh access.", "Click Switch now and provide Guard's settings proof when required. Refresh jobs if the response is uncertain; the browser never retries the change automatically.", "If CIGAR is off, Select & keep CIGAR off commits only the selection. It does not turn CIGAR on."],
-      expect: "The selected runtime changes only after your explicit commit. Your Guard command approvals remain available.",
-      target: "versions",
-      action: "Review the explicit switch"
-    },
-    {
-      title: "Reconnect the scopes you need",
-      description: "Saved evidence does not restore source or app permission.",
-      instructions: ["If you selected while off, return to Settings, choose your enabled preference, save and explicitly start CIGAR.", "Use the live runtime status to confirm readiness before granting workspace access.", "Grant only the intended workspace sources and pair the current app connection again when needed."],
-      expect: "Your intended sources and apps have fresh access to the selected runtime.",
-      target: "access",
-      action: "Review projects & AI apps"
-    },
-    {
-      title: "Use the last good build deliberately",
-      description: "Rollback prepares current compatible data for the previous verified installation.",
-      instructions: ["In Updates, choose Prepare last good build when you need to return to the retained installation.", "Wait for the rollback selection job, then commit it explicitly with the same reconnect acknowledgement when live.", "Use Recover job for interrupted work. Recovery does not re-grant context access. Your Guard approvals remain in place."],
-      expect: "You know where to inspect a rollback or interrupted job before taking another action.",
-      target: "versions",
-      action: "Inspect rollback & recovery"
-    }
-  ]
-};
-const CIGAR_FULL_NAME = "Context Intelligence Graph Agentic Runtime";
-const CIGAR_TUTORIALS = [
-  {
-    id: "first-brief",
-    title: "Prepare your first cited brief",
-    level: "Start here",
-    description: "Go from a running runtime to useful evidence for one workspace.",
-    outcome: "A context brief whose sources and revisions you can inspect.",
-    steps: [
-      {
-        title: "Turn on CIGAR",
-        description: "One click. Guard gets Python ready, downloads the approved CIGAR copy, checks it and starts it.",
-        instructions: ["Click Turn on CIGAR at the top of this page. If Guard asks for your approval password, enter it once; it covers every step.", "Watch the steps tick off. You can stop at any point and nothing stays turned on.", "Later, if you want to switch versions yourself, use Updates."],
-        expect: "The status says Ready.",
-        target: "runtime",
-        action: "Open Settings",
-        tip: "CIGAR uses its own copy of Python 3.14. Guard can keep using the Python it already has."
-      },
-      {
-        title: "Choose a small evidence set",
-        description: "Pick the sources that can answer your question before granting workspace access.",
-        instructions: ["Open Advanced in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
-        expect: "Your intended source preferences are saved and the runtime is Ready.",
-        target: "runtime",
-        action: "Choose source preferences",
-        tip: "A document preference allows you to choose files later. It does not grant access to the whole workspace."
-      },
-      {
-        title: "Grant one workspace access",
-        description: "A grant connects a workspace and a consumer to the evidence you explicitly select.",
-        instructions: ["In Projects & AI apps, click Choose a project folder and browse to your project. Folders that look like projects are marked.", "Under What should CIGAR read?, keep the suggested notes such as the README, or browse to tick others. Untick everything to use only Guard's own safety facts.", "Click Give CIGAR access and confirm when Guard asks for your approval password."],
-        expect: "A Context access section appears for your chosen workspace.",
-        target: "access",
-        action: "Open Projects & AI apps",
-        tip: "Choose only relevant sources. Environment files and credential stores are not valid context sources."
-      },
-      {
-        title: "Ask one concrete question",
-        description: "Tell CIGAR what evidence you need for the task in front of you.",
-        instructions: ["Fill What would you like context about? with one focused question.", "For native facts only, try the example below. If you granted project docs, ask about a specific documented workflow, file, or rule.", "Click Prepare cited context in the section for the workspace you want to use."],
-        expect: "Prepared context contains excerpts and citations. If relevant evidence is missing, refine the question or select better sources.",
-        target: "access",
-        action: "Prepare context in your workspace",
-        question: "Which native Guard policy and decision facts apply to this workspace?",
-        tip: "The brief is evidence prepared for your question. Your review or authorized AI app can use that evidence to reason about the task."
-      },
-      {
-        title: "Read the evidence behind it",
-        description: "Use the citations to decide whether the brief supports your task.",
-        instructions: ["Read the excerpts in Prepared context, then open Sources and revisions.", "Check the source names, line ranges, and document revisions. A citation identifies the evidence checked when the brief was prepared.", "For a pending command in Inbox, request its context brief when available, inspect the evidence, and make your Guard approval decision separately."],
-        expect: "You can trace a useful statement back to its admitted source. A brief never grants command permission.",
-        target: "access",
-        action: "Inspect your prepared context"
-      },
-      {
-        title: "Keep context current",
-        description: "Fresh sources make the next brief useful as your work changes.",
-        instructions: ["After editing a selected document, click Refresh selected files, then Prepare cited context again.", "Use Withdraw beside a file or Revoke workspace access when it is no longer needed.", "Stopping or restarting the runtime ends active access. Grant the workspace again when needed; saved evidence never restores permission."],
-        expect: "You know how to prepare a fresh brief and remove its source access.",
-        target: "access",
-        action: "Review workspace access",
-        tip: "Use Privacy to inspect or remove saved evidence. Memory is the default and ends with the runtime."
-      }
-    ]
-  },
-  {
-    id: "ai-apps",
-    title: "Give an AI app scoped context",
-    level: "After your first brief",
-    description: "Choose sources for an app, match its real connection code, and pair it explicitly.",
-    outcome: "One authorized Guard MCP connection with access to a chosen workspace.",
-    steps: [
-      {
-        title: "Enable app context deliberately",
-        description: "App access is a separate feature choice from review briefs.",
-        instructions: ["In Settings, enable Context for AI apps. Choose source preferences before granting access.", "Keep Share context between paired AI connections off while you try a single connection.", "Save your changes. If CIGAR is off, click Turn on CIGAR. Confirm the status says Ready."],
-        expect: "Context for AI apps is saved and the runtime is Ready.",
-        target: "runtime",
-        action: "Choose AI app preferences"
-      },
-      {
-        title: "Grant sources for that app",
-        description: "A dashboard grant and an app grant have different consumers.",
-        instructions: ["In Projects & AI apps, choose the project folder and tick the notes your app needs.", "Under Which app can use it?, pick Codex, Claude Code, or Cursor.", "Click Give CIGAR access and check the app and folder in the confirmation."],
-        expect: "A workspace grant names the app you chose.",
-        target: "access",
-        action: "Choose the app's sources"
-      },
-      {
-        title: "Identify the real connection",
-        description: "Use the local Guard MCP server configured in your app.",
-        instructions: ["In the app's Guard MCP connection, request get_context_status to obtain its pending connection code.", "Return to AI app context connections and click Refresh app connections.", "Match the displayed Connection code to the one from that app's actual process."],
-        expect: "The same code appears in your app and the pending connection shown here.",
-        target: "access",
-        action: "Find the pending connection",
-        tip: "This screen does not install an app connection. Choosing an app label is a permission choice; matching the real code identifies the connection you are authorizing."
-      },
-      {
-        title: "Authorize one connection",
-        description: "Pair the verified connection with the workspace grant you intended.",
-        instructions: ["Under the matched connection, choose its Workspace and app grant.", "Click Authorize context connection and confirm the connection code, app, and workspace when prompted.", "Look for Grant assigned. A running runtime alone does not grant app access."],
-        expect: "The intended connection shows Grant assigned for the chosen workspace.",
-        target: "access",
-        action: "Authorize the matched connection",
-        tip: "Connections have short leases. If one expires or the runtime restarts, reconnect and pair its current code."
-      },
-      {
-        title: "Ask the app to use its context",
-        description: "Make evidence use part of a focused task request.",
-        instructions: ["Ask the authorized app to request Guard context for a specific workspace task, using the example below as a starting point.", "Check the app's cited sources and ask it to identify missing evidence rather than assume an answer.", "Use Revoke context connection when you are finished. Add sharing only when you need it, with separate reviewed-note permissions."],
-        expect: "The app can request context within its grant. Missing access or evidence is reported explicitly.",
-        target: "access",
-        action: "Review app access",
-        question: "Use your Guard context tools for this workspace to explain the relevant project rules. Cite the evidence you receive and identify anything the available context does not establish."
-      }
-    ]
-  },
-  {
-    id: "execution",
-    title: "Understand execution context",
-    level: "Advanced · supported routes only",
-    description: "Learn the optional native preparation path for Pi and Oh My Pi captured-Bash actions.",
-    outcome: "An understanding of the route requirements and how to inspect an execution-context observation.",
-    steps: [
-      {
-        title: "Check the route first",
-        description: "Execution context has a narrower scope than general review briefs.",
-        instructions: ["Use an existing supported native captured-Bash route for Pi or Oh My Pi on macOS.", "Check the execution capability and Native execution context panel in Settings.", "This candidate has local native preparation checks. Full delivery from external apps has not yet been qualified."],
-        expect: "You know whether the preparation route is available in this build.",
-        target: "runtime",
-        action: "Inspect execution availability",
-        tip: "You can read this walkthrough even when the route is unavailable. Review briefs and paired app context have their own controls."
-      },
-      {
-        title: "Choose the execution preference",
-        description: "Execution associations use native capture and policy facts.",
-        instructions: ["Open Advanced in Settings. Enable Native policy and decision facts.", "If the build offers it, enable Associate native context with execution.", "Save and start CIGAR. Inspect the Native execution context panel for preparation readiness."],
-        expect: "The panel reports the current native preparation state.",
-        target: "runtime",
-        action: "Review execution preferences"
-      },
-      {
-        title: "Scope the executor's workspace",
-        description: "Choose the app and workspace for the native route you use.",
-        instructions: ["In Projects & AI apps, choose the project folder, then pick Pi or Oh My Pi under Which app can use it?", "Tick only the notes it needs and give access to that one folder.", "A workspace grant does not install an app adapter or approve a command."],
-        expect: "The workspace grant names the intended executor consumer.",
-        target: "access",
-        action: "Inspect executor workspace access"
-      },
-      {
-        title: "Inspect the native observation",
-        description: "Keep the command decision in Guard's normal approval flow.",
-        instructions: ["Use your existing supported app route. Inspect its Guard review and choose the approval scope you intend, such as Run once or Always allow this version in this project.", "Return to Native execution context observations to inspect whether preparation or association was recorded.", "For an uncertain outcome, consult Guard's native execution record before retrying."],
-        expect: "You can distinguish context preparation, a dispatch acknowledgement, and a native execution record.",
-        target: "runtime",
-        action: "Open execution observations",
-        tip: "Context is supporting information. Guard owns command authorization and the execution record."
-      }
-    ]
-  },
-  CIGAR_UPDATE_TUTORIAL
+const FACTS = [
+  "Finds your project from the folder your AI app runs in.",
+  "Skips secrets, keys, hidden files and anything your .gitignore leaves out.",
+  "Adds nothing when nothing matches."
 ];
-function cigarTutorial(id2) {
-  return CIGAR_TUTORIALS.find((tutorial) => tutorial.id === id2) ?? CIGAR_TUTORIALS[0];
-}
-const flow = [
-  {
-    icon: HiMiniDocumentText,
-    title: "Choose the sources",
-    detail: "Start with evidence you have deliberately admitted.",
-    explanation: "Guard admits the enabled native facts, sanitized receipt facts, and individual workspace documents you authorize before they reach CIGAR.",
-    points: ["A workspace grant names its consumer and selected sources.", "Document preferences and source grants are separate choices.", "Starting a runtime grants no files, app connections, or command permissions."]
-  },
-  {
-    icon: HiMiniCircleStack,
-    title: "Build a scoped graph",
-    detail: "Keep reusable context bounded to a workspace and its access.",
-    explanation: "CIGAR's graph holds admitted source material and facts. Guard gives each workspace and consumer a bounded view of the evidence it may use, and the running runtime can reuse that graph for later questions.",
-    points: ["A graph is an organized context store; it is not permission to read more files.", "Different workspaces and app grants retain their own scope.", "Source or policy changes can invalidate an earlier view or prepared brief."]
-  },
-  {
-    icon: HiMiniSquares2X2,
-    title: "Compile a cited brief",
-    detail: "Prepare evidence for a concrete question within your budget.",
-    explanation: "Your question and allowed sources guide context preparation. The result contains selected excerpts and citations, bounded by the context limits you choose.",
-    points: ["Sources and revisions identifies source names, line ranges, and document revisions.", "A smaller budget limits the context prepared here; it does not change an AI model's own context window.", "Missing evidence calls for a better source or question. Increasing a budget cannot add facts that were never admitted."]
-  },
-  {
-    icon: HiMiniShieldCheck,
-    title: "Use it with Guard and apps",
-    detail: "Bring the evidence to a review, an authorized app, or a supported native route.",
-    explanation: "Read a cited brief in the dashboard, let a paired Guard MCP connection request scoped context, or use optional execution associations on a supported native route.",
-    points: ["Guard makes and enforces command decisions and approvals.", "Each app connection needs its own explicit workspace access.", "Shared notes and saved evidence are separate opt-ins. Neither restores an expired permission."]
-  }
-];
-function CigarGuide({ onSelect }) {
-  const [active, setActive] = reactExports.useState(0);
+function CigarHome(props) {
   const id2 = reactExports.useId();
-  const stage = flow[active];
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-guide", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-explained-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-explained-heading", children: CIGAR_FULL_NAME }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR" }),
-        " reads the project you are working in and, each time you send a prompt in Claude Code or Codex, adds the few files that match your request. A prompt about the header color brings the header and its styles; a prompt that matches nothing in the project adds nothing. It skips secrets, keys, generated folders and anything the project's .gitignore files leave out."
+  const { status, setup } = props;
+  const running = setup.run.phase === "running";
+  const copy = cigarHomeCopy(status, props.loading, running);
+  let label2 = props.loading ? "Checking" : "Status unavailable";
+  if (status) label2 = contextStatusCopy(status).label;
+  if (running) label2 = "Working";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-home", "aria-labelledby": id2 + "-title", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-home-main", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-home-top", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "cigar-status", "data-ready": status?.effective_enabled === true, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true" }),
+          label2
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "cigar-icon-button",
+            "aria-label": "Refresh status",
+            title: "Refresh status",
+            disabled: props.refreshDisabled,
+            onClick: props.onRefresh,
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true" })
+          }
+        )
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("tutorials"), children: [
-        "Try a guided walkthrough",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: id2 + "-title", children: copy.headline }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-home-detail", children: copy.detail }),
+      copy.setupHint ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => props.onOpen("runtime"), children: [
+        "Open Settings",
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-flow-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-flow-heading", children: "From your folders to a better answer" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-section-description", children: "Select a stage to explore this conceptual flow. These examples explain the process; they do not represent a graph or source grant from your workspace." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-concept-flow", children: flow.map(({ icon: Icon, title, detail }, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
+      ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CigarSetupAction,
         {
-          type: "button",
-          id: id2 + "-stage-" + index,
-          "aria-expanded": active === index,
-          "aria-controls": id2 + "-detail",
-          onClick: () => setActive(index),
-          title: detail,
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { "aria-hidden": "true" }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "cigar-eyebrow", children: [
-              "Stage ",
-              index + 1
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title })
-          ]
+          setup,
+          status,
+          disabled: props.actionDisabled,
+          canStop: props.canStop,
+          stopDisabled: props.stopDisabled,
+          onStop: props.onStop,
+          onOpen: props.onOpen
         }
-      ) }, title)) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-concept-detail", id: id2 + "-detail", role: "region", "aria-labelledby": id2 + "-stage-" + active, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: stage.title }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: stage.explanation }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "cigar-simple-list", children: stage.points.map((point) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: point }, point)) })
-      ] })
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupProgress, { setup })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-overview-grid", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-runtime-guide-heading", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-runtime-guide-heading", children: "Do I need to install anything?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. When you click Turn on CIGAR, Guard gets its own copy of Python 3.14 ready, downloads the CIGAR version it approved for this computer, checks its fingerprint and starts it. The Python you already use stays as it is." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "If the button says it is waiting for Guard's safety check" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A CIGAR version exists for your computer, but Guard has not approved it yet. Guard never installs a version it has not checked." })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Want to pick a specific version, roll back, or see what is installed? Use Updates." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("versions"), children: [
-          "Choose a version in Updates",
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-first-use-heading", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-first-use-heading", children: "Start with one workspace." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "cigar-simple-list", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Click Turn on CIGAR at the top of this page." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Open Projects & AI apps and grant context access for one workspace. Add individual files only if you want document context." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "For an available Guard review, request its context brief and inspect the cited evidence." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "When you want app context, enable that feature, save, and explicitly authorize a paired connection." })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-caption", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { "aria-hidden": "true" }),
-          "You can keep app sharing and saved evidence off while trying review briefs."
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("access"), children: [
-          "Open Projects & AI apps",
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-        ] })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-tuning-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-tuning-heading", children: "Start focused, then adjust what you need" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-effective-grid", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Use a small source set" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Choose documents that describe the task, such as the project's release guide. Keep unrelated files out of the grant and add sources when evidence is missing." })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Tune the context size" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Smaller context is a useful starting point for one workspace. Balanced allows more workspace capacity and a longer idle interval. These are resource preferences, not measured savings." })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Choose storage deliberately" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Memory ends with the runtime. Optional saved evidence can outlive it, has retention controls, and uses private local files without Guard encryption. Restored evidence still needs fresh access grants." })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("runtime"), children: [
-        "Review context preferences",
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card cigar-faq", "aria-labelledby": "cigar-faq-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-faq-heading", children: "Common questions" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Does turning on CIGAR give it access to all my files?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. Workspace documents require the document preference and explicit access to selected sources. Starting a runtime grants no document access." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Does CIGAR save me tokens or make my AI faster?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR does not promise either. It hands over the few pieces that answer a question, inside a size limit you set, instead of whole files, and shows where each piece came from." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Why did I get an empty or unhelpful brief?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Check that the intended workspace and consumer have a current grant, that the right files are selected, and that the question is specific. Native facts alone do not contain your project's release guide. Refresh selected files after edits and prepare context again." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "What should I do after a source or connection changes?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Refresh changed files and prepare a new brief. For a runtime restart, revoked workspace, or expired connection, grant or pair access again as appropriate. An earlier citation describes the evidence checked at preparation time." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "What happens when CIGAR is stopped or unavailable?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Guard continues protecting commands under its existing policy and approvals. Turn off CIGAR to cancel context work. Memory context and active access end when the runtime stops." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Can two AI apps share context?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Sharing is a separate opt-in for supported paired connections in the same app and workspace. Each connection requires access, and shared notes require your review." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "What is saved on disk?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Memory is the default. Optional saved evidence uses private local SQLite files without Guard encryption and can outlive a runtime. Privacy provides retention, diagnostics, and removal controls. Restoring evidence never restores app access or approvals." })
-      ] })
-    ] })
-  ] });
-}
-function CigarOverview({ status, onSelect }) {
-  const steps = cigarSetupSteps(status);
-  const current = steps.findIndex((step) => !step.complete);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-overview", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cigar-why-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-why-heading", className: "cigar-overview-title", children: "What CIGAR does for you" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(CigarWhy, {})
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-overview-grid", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card cigar-setup", "aria-labelledby": "cigar-setup-heading", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-setup-heading", children: "Three steps, and only the first is needed" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-steps", children: steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { "data-complete": step.complete, "aria-current": index === current && status ? "step" : void 0, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-step-number", children: step.complete ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Done: " })
-          ] }) : index + 1 }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: step.title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step.description }),
-            step.action ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect(step.tab), children: [
-              step.action,
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-            ] }) : null
-          ] })
-        ] }, step.title)) })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "cigar-card cigar-boundaries", "aria-labelledby": "cigar-boundaries-heading", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { "aria-hidden": "true" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-boundaries-heading", children: "You stay in charge." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { "aria-hidden": "true" }),
-            "Off until you turn it on, and off again with one click"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { "aria-hidden": "true" }),
-            "Reads only the folders you pick"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { "aria-hidden": "true" }),
-            "Keeps notes in memory unless you choose to save them"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { "aria-hidden": "true" }),
-            "Guard still decides what your AI may do"
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("guide"), children: [
-          "See how CIGAR works",
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-        ] })
-      ] })
-    ] })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "cigar-facts", "aria-label": "What CIGAR does", children: FACTS.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { "aria-hidden": "true" }),
+      fact
+    ] }, fact)) })
   ] });
 }
 const key = "hol-guard:cigar-tutorial:v1";
@@ -5658,182 +5724,37 @@ function useCigarTutorial() {
   }
   return { active, progress, tutorial: cigarTutorial(progress.tutorial), begin, move, exit: () => setActive(false) };
 }
-function CigarTutorials(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-guide", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card cigar-learning-intro", "aria-labelledby": "cigar-tutorials-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAcademicCap, { "aria-hidden": "true" }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-tutorials-heading", children: "Make CIGAR useful for your next task" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR" }),
-          " stands for ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: CIGAR_FULL_NAME }),
-          ". Start with one question and one workspace, then add app access or execution context when you need it."
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-learning-caption", children: "Guidance stays with your chosen step as you move between sections. It explains the steps; you choose every setting, start, and access grant." })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-benefits", children: CIGAR_TUTORIALS.map((tutorial) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "cigar-card cigar-benefit", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: tutorial.level }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: tutorial.title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: tutorial.description }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-learning-caption", children: [
-        tutorial.steps.length,
-        " guided steps"
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-lesson-outcome", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "What you will learn" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: tutorial.outcome })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => props.onBegin(tutorial.id, props.progress.tutorial === tutorial.id && props.progress.step > 0), children: [
-        props.progress.tutorial === tutorial.id && props.progress.step > 0 ? "Resume walkthrough" : "Start walkthrough",
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "sr-only", children: [
-          ": ",
-          tutorial.title
-        ] })
-      ] })
-    ] }, tutorial.id)) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-effective-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-effective-heading", children: "A useful brief starts with a focused question" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-effective-grid", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Name the decision" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Ask which release rules apply to a change, which documented steps to follow, or which native policy facts affect a workspace." })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Choose evidence that can answer it" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Start with one or two relevant documents and the native facts you need. Add sources when a specific gap appears." })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Use citations as your check" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Inspect source names, line ranges, and revisions. Refresh after edits and ask the app to identify missing evidence." })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Try a specific task instead of a broad request" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "For selected release docs: “Which release steps and approval rules are documented for this project?” For native facts only: “Which Guard policy facts apply to this workspace?”" })
-      ] })
-    ] })
-  ] });
-}
-function CigarWalkthrough(props) {
-  const id2 = reactExports.useId();
-  const [copyMessage, setCopyMessage] = reactExports.useState("");
-  const step = props.tutorial.steps[props.step];
-  const last = props.step === props.tutorial.steps.length - 1;
-  const liveStatus = props.status ? contextStatusCopy(props.status).label : "Status unavailable";
-  reactExports.useEffect(() => {
-    setCopyMessage("");
-  }, [props.step, props.tutorial.id]);
-  async function copyQuestion() {
-    if (!step.question) return;
-    try {
-      if (!navigator.clipboard) throw new Error("clipboard_unavailable");
-      await navigator.clipboard.writeText(step.question);
-      setCopyMessage("Question copied. Paste it into the context question field or your authorized app.");
-    } catch {
-      setCopyMessage("Select the example text and copy it with your usual keyboard or touch controls.");
-    }
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "cigar-card cigar-walkthrough", "aria-labelledby": id2 + "-title", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-walkthrough-close", onClick: props.onExit, "aria-label": "Exit walkthrough", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { "aria-hidden": "true" }) }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: id2 + "-title", children: props.tutorial.title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-learning-caption", children: [
-      "Step ",
-      props.step + 1,
-      " of ",
-      props.tutorial.steps.length,
-      " · learning progress"
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "cigar-lesson-index", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { children: [
-        "All ",
-        props.tutorial.steps.length,
-        " steps"
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-lesson-steps", "aria-label": "Walkthrough steps", children: props.tutorial.steps.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", "aria-current": props.step === index ? "step" : void 0, onClick: () => props.onMove(index), children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: index + 1 }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: item.title })
-      ] }) }, item.title)) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-lesson-body", "aria-live": "polite", "aria-atomic": "false", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: step.title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step.description }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-simple-list", children: step.instructions.map((instruction) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: instruction }, instruction)) }),
-      step.question ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-example-question", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Example question" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step.question }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => void copyQuestion(), children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, { "aria-hidden": "true" }),
-          "Copy question"
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", className: "cigar-learning-caption", children: copyMessage })
-      ] }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-lesson-outcome", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "What to look for" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step.expect })
-      ] }),
-      step.tip ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-learning-tip", children: step.tip }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: props.onOpen, children: [
-        step.action,
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-lesson-navigation", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-button", disabled: props.step === 0, onClick: () => props.onMove(props.step - 1), children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowLeft, { "aria-hidden": "true" }),
-        "Back"
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-button", onClick: () => last ? props.onExit() : props.onMove(props.step + 1), children: [
-        last ? "Finish walkthrough" : "Next step",
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-learning-caption", children: [
-      "Live runtime: ",
-      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: liveStatus }),
-      props.dirty ? " · unsaved preferences" : "",
-      ". Reading ahead does not complete setup or grant access."
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-text-button", onClick: () => props.onMove(0), children: "Restart this walkthrough" })
-  ] });
-}
 function CigarWorkspace(props) {
   const [tab, setTab] = reactExports.useState(() => cigarTabFromSearch(typeof window === "undefined" ? "" : window.location.search));
-  const id2 = reactExports.useId();
+  const lastAdvanced = reactExports.useRef(tab === "overview" ? "runtime" : tab);
   const panel = reactExports.useRef(null);
   const walkthroughAnchor = reactExports.useRef(null);
   const lesson = useCigarTutorial();
   const status = props.status;
   const canStop = props.stopAvailable ?? Boolean(status?.requested_enabled || status?.effective_enabled || status?.job);
-  const actionDisabled = props.disabled || props.busy || props.loading;
-  const running = props.setup.run.phase === "running";
-  let stripLabel = props.loading ? "Checking" : "Status unavailable";
-  if (status) stripLabel = contextStatusCopy(status).label;
-  if (running) stripLabel = "Working";
-  const stripDetail = running ? "Guard is turning CIGAR on. You can keep browsing." : status?.effective_enabled ? (status.runtime ? "CIGAR " + status.runtime.package_version : "CIGAR") + " is running on this computer. It reads only the folders you pick." : "CIGAR is off. One click turns it on; Guard handles the setup.";
   reactExports.useEffect(() => {
-    const sync = () => setTab(cigarTabFromSearch(window.location.search));
+    const sync = () => {
+      const next = cigarTabFromSearch(window.location.search);
+      if (next !== "overview") lastAdvanced.current = next;
+      setTab(next);
+    };
     return subscribeDashboardLocation(sync);
   }, []);
   function select(next, focusPanel = true) {
+    if (next !== "overview") lastAdvanced.current = next;
     setTab(next);
     const url = new URL(window.location.href);
     url.searchParams.set("section", next);
     window.history.replaceState({}, "", url.pathname + url.search + url.hash);
-    if (focusPanel) window.requestAnimationFrame(() => panel.current?.focus());
+    if (focusPanel && next !== "overview") window.requestAnimationFrame(() => panel.current?.focus());
   }
-  function moveTab(event, index) {
-    let next;
-    if (event.key === "ArrowRight") next = (index + 1) % CIGAR_TABS.length;
-    else if (event.key === "ArrowLeft") next = (index + CIGAR_TABS.length - 1) % CIGAR_TABS.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = CIGAR_TABS.length - 1;
-    else return;
-    event.preventDefault();
-    select(CIGAR_TABS[next].value, false);
-    document.getElementById(id2 + "-tab-" + CIGAR_TABS[next].value)?.focus();
+  function toggleAdvanced() {
+    if (tab === "overview") {
+      select(lastAdvanced.current, false);
+      return;
+    }
+    if (lesson.active) lesson.exit();
+    select("overview", false);
   }
   function focusWalkthrough() {
     window.requestAnimationFrame(() => {
@@ -5853,130 +5774,62 @@ function CigarWorkspace(props) {
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-workspace", "data-testid": "cigar-workspace", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "cigar-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h1", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { "aria-hidden": "true" }),
-          "CIGAR"
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A context helper for your AI that runs on your computer." })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h1", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { "aria-hidden": "true" }),
+        "CIGAR"
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-heading-actions", children: [
-        canStop ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-button", disabled: props.disabled || props.busy, onClick: props.onStop, children: "Turn off CIGAR" }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-button", disabled: props.disabled || props.busy || props.loading, onClick: props.onRefresh, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true" }),
-          "Refresh status"
-        ] })
-      ] })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Gives your AI app the project files that match what you ask." })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "cigar-beta-note", "aria-label": "CIGAR beta status", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-beta-note__chip", children: "Beta" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR is still being iterated on. Screens and settings may change between releases." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: "https://github.com/hashgraph-online/hol-cigar/issues", target: "_blank", rel: "noopener noreferrer", children: "Share feedback" })
-    ] }),
-    tab === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-hero", "aria-labelledby": "cigar-hero-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-hero-copy", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "cigar-hero-heading", children: [
-          "Give your AI the right pages,",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("br", { className: "hidden sm:block" }),
-          " not the whole book."
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Think of CIGAR as a librarian on your computer. When you ask Claude Code or Codex for a change, CIGAR finds the few files in your project that match and hands them over with your request, so your AI starts in the right place." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupAction, { setup: props.setup, status, disabled: actionDisabled, tone: "hero", onOpen: select }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-hero-actions", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-hero-link", onClick: () => select("guide"), children: [
-            "How it works",
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-hero-link", onClick: () => select("tutorials"), children: [
-            "Take a walkthrough",
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-          ] })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupProgress, { setup: props.setup, status, loading: props.loading })
-    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-strip", "aria-label": "CIGAR status", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-strip-copy", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "cigar-status", "data-ready": status?.effective_enabled === true, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true" }),
-          stripLabel
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: stripDetail })
-      ] }),
-      tab === "access" && status?.effective_enabled ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupAction, { setup: props.setup, status, disabled: actionDisabled, onOpen: select })
-    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CigarHome,
+      {
+        status,
+        setup: props.setup,
+        loading: props.loading,
+        actionDisabled: props.disabled || props.busy || props.loading,
+        canStop,
+        stopDisabled: props.disabled || props.busy,
+        refreshDisabled: props.disabled || props.busy || props.loading,
+        onStop: props.onStop,
+        onRefresh: props.onRefresh,
+        onOpen: select
+      }
+    ),
     props.error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", role: "alert", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR needs attention" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: props.error })
     ] }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "cigar-tabs", role: "tablist", "aria-label": "CIGAR sections", children: CIGAR_TABS.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CigarAdvanced,
       {
-        id: id2 + "-tab-" + item.value,
-        type: "button",
-        role: "tab",
-        "aria-selected": tab === item.value,
-        "aria-controls": id2 + "-panel",
-        tabIndex: tab === item.value ? 0 : -1,
-        onKeyDown: (event) => moveTab(event, index),
-        onClick: () => select(item.value, false),
-        children: item.label
-      },
-      item.value
-    )) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-learning-layout" + (lesson.active ? " has-walkthrough" : ""), children: [
-      lesson.active ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: walkthroughAnchor, tabIndex: -1, className: "cigar-walkthrough-anchor", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-        CigarWalkthrough,
-        {
-          tutorial: lesson.tutorial,
-          step: lesson.progress.step,
-          status,
-          dirty: props.dirty,
-          onMove: moveTutorial,
-          onOpen: () => select(lesson.tutorial.steps[lesson.progress.step].target),
-          onExit: () => {
-            lesson.exit();
-            select("tutorials");
-          }
+        tab,
+        status,
+        dirty: props.dirty,
+        lesson,
+        versions: props.versions,
+        controls: props.controls,
+        access: props.access,
+        data: props.data,
+        panelRef: panel,
+        walkthroughRef: walkthroughAnchor,
+        onToggle: toggleAdvanced,
+        onSelect: select,
+        onBegin: beginTutorial,
+        onMove: moveTutorial,
+        onExitLesson: () => {
+          lesson.exit();
+          select("guide");
         }
-      ) }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: panel, id: id2 + "-panel", role: "tabpanel", "aria-labelledby": id2 + "-tab-" + tab, tabIndex: -1, className: "cigar-panel", children: [
-        tab === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarOverview, { status, onSelect: select }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: tab !== "runtime", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-intro", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Settings" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR works well with the recommended settings. Change these only if you want to." })
-          ] }),
-          props.controls
-        ] }),
-        tab === "versions" ? props.versions : null,
-        tab === "access" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-intro", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Projects & AI apps" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Pick the project folders CIGAR may read, one at a time. Then connect an AI app if you want. Each step asks you first." })
-          ] }),
-          !status?.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-note", children: cigarWaking(status) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Waking up CIGAR" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Your projects and AI apps come back in a moment." })
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Turn on CIGAR first" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Projects and AI apps open up as soon as CIGAR is on. Use the button above." })
-          ] }) }) : null,
-          props.access
-        ] }) : null,
-        tab === "data" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-intro", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Privacy" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "By default, CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes." })
-          ] }),
-          props.data
-        ] }) : null,
-        tab === "tutorials" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarTutorials, { progress: lesson.progress, onBegin: beginTutorial }) : null,
-        tab === "guide" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarGuide, { onSelect: select }) : null
-      ] })
-    ] }),
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { className: "cigar-footer", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Guard still decides what your AI may do. CIGAR only helps explain, using the folders you pick." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        "Guard still decides what your AI may do. CIGAR only adds context. CIGAR is in beta:",
+        " ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: "https://github.com/hashgraph-online/hol-cigar/issues", target: "_blank", rel: "noopener noreferrer", children: "share feedback" }),
+        "."
+      ] }),
       props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Unsaved changes" }) : null
     ] })
   ] });
