@@ -43,11 +43,13 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     let Ok(shim_dir) = resolve(&posix_root(guard_home.join("package-shims").join("bin"))) else {
         return Ok(json!({ "refused": "shim_unverified" }));
     };
+    let shim_dir = long_names(shim_dir);
     let mut kept = Vec::new();
     for entry in path.split(separator).filter(|entry| !entry.is_empty()) {
         let resolved = expand_user(entry, user_home.as_deref())
             .map(|expanded| posix_root(launch_cwd.join(expanded)))
-            .and_then(|joined| resolve(&joined).ok());
+            .and_then(|joined| resolve(&joined).ok())
+            .map(long_names);
         let Some(resolved) = resolved else {
             return Ok(json!({ "refused": "path_unverified" }));
         };
@@ -99,6 +101,31 @@ fn posix_root(path: PathBuf) -> PathBuf {
         .filter(|rest| cfg!(unix) && rest.starts_with('/') && !rest.starts_with("//"))
         .map(PathBuf::from);
     collapsed.unwrap_or(path)
+}
+
+/// Windows also names a directory by its 8.3 short name (`PROGRA~1`), which
+/// Python's `Path.resolve` expands to the long one. The longest existing
+/// prefix is canonicalized there so both spellings compare equal; a missing
+/// tail is kept as it was resolved.
+fn long_names(path: PathBuf) -> PathBuf {
+    if cfg!(windows) {
+        canonical_prefix(&path).unwrap_or(path)
+    } else {
+        path
+    }
+}
+
+fn canonical_prefix(path: &Path) -> Option<PathBuf> {
+    let mut missing = Vec::new();
+    let mut existing = path;
+    loop {
+        if let Ok(mut canonical) = std::fs::canonicalize(existing) {
+            canonical.extend(missing.iter().rev());
+            return Some(canonical);
+        }
+        missing.push(existing.file_name()?);
+        existing = existing.parent()?;
+    }
 }
 
 /// Python compares Windows paths without regard to case, and a link whose

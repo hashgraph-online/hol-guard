@@ -178,6 +178,18 @@ fn verbatim_windows_spellings_compare_as_their_plain_form() {
 }
 
 #[test]
+fn the_existing_prefix_is_canonicalized_and_a_missing_tail_kept() {
+    let layout = layout();
+    let canonical_tools = fs::canonicalize(&layout.tools).expect("canonical tools");
+    let missing = layout.tools.join("missing").join("bin");
+    assert_eq!(
+        canonical_prefix(&missing),
+        Some(canonical_tools.join("missing").join("bin"))
+    );
+    assert_eq!(canonical_prefix(&layout.tools), Some(canonical_tools));
+}
+
+#[test]
 fn malformed_requests_are_invalid() {
     let layout = layout();
     let valid = json!({
