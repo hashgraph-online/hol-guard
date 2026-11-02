@@ -915,6 +915,12 @@
           "src/codex_plugin_scanner/guard/durable_io.py"
         ],
         "reason": "Reviewed and retained in runtime scope: the retired Python command activity lifecycle imported it at load, so it counted as eager. It is now reached lazily through the Codex hook integrity and repair writers, which fsync a directory after a durable write. It runs while Guard records state, so it stays counted as runtime."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/cli/command_extension_listing.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: the CLI reaches it lazily when `command extensions` runs, so the import graph counts it as lazy. It is transport and presentation only -- it asks the daemon for the delivered catalog over the same route `command controls` uses, falls back to the packaged catalog when nothing answers, and renders what comes back. The native read model still owns the catalog, so nothing here re-derives an extension."
       }
     ],
     "tests": {
