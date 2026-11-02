@@ -57,6 +57,11 @@ fn exec_that_can_reach_a_registry_keeps_its_review() {
         "pnpm --filter ../sibling exec vitest run",
         "pnpm --filter app exec npm install zod",
         "pnpm exec pnpm add zod",
+        // A selector spelled behind the verb carries a value, and the
+        // program is the word behind that value rather than the value
+        // itself.
+        "pnpm exec --filter app npx cowsay",
+        "pnpm exec --filter=app npx cowsay",
         // A fetching program behind the verb reaches the registry the verb
         // itself does not, whichever word spells the fetch.
         "pnpm exec npm exec cowsay",

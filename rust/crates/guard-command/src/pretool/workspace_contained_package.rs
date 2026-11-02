@@ -144,16 +144,29 @@ fn scan_reaches_a_registry(manager: &str, scanned: &[&str]) -> bool {
 /// Whether a pnpm or yarn `exec` runs a program that reaches a registry itself.
 /// `arguments` is the segment's whole argument list and `verb` the index of the
 /// verb within it, so the target behind `pnpm exec -- npx <package>` is read
-/// rather than hidden by the separator. An `exec` whose target cannot be read
-/// at all keeps the review it had: there is no program for this to answer for.
+/// rather than hidden by the separator, and the options in front of it are
+/// read the way the selector walk reads them, so the value a selector carries
+/// is not mistaken for the program. An `exec` whose target cannot be read at
+/// all keeps the review it had: there is no program for this to answer for.
 fn exec_runs_a_fetcher(manager: &str, arguments: &[&str], verb: usize) -> bool {
     if !matches!(manager, "pnpm" | "yarn") || arguments.get(verb) != Some(&"exec") {
         return false;
     }
-    arguments[verb + 1..]
-        .iter()
-        .find(|word| !word.starts_with('-'))
-        .is_none_or(|target| target_keeps_its_review(target))
+    let behind = arguments.get(verb + 1..).unwrap_or_default();
+    let behind = match behind.split_first() {
+        Some((&"--", rest)) => rest,
+        _ => behind,
+    };
+    match behind.get(options::skip_inert_options(manager, behind)) {
+        // The walk stops at the first option this route does not read, and a
+        // value-taking one hides the target behind its value: the first word
+        // after `pnpm exec --filter app` is the selector's value, not the
+        // program. An option left unread is one this reading cannot answer
+        // for, so the command keeps the review it had.
+        Some(word) if word.starts_with('-') => true,
+        Some(target) => target_keeps_its_review(target),
+        None => true,
+    }
 }
 
 /// The index of the verb a workspace selector stands in front of. `yarn
