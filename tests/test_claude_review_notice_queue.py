@@ -49,6 +49,7 @@ class _RowStore(StoreApprovalsMixin):
 
     def __init__(self, reply: object) -> None:
         self.reply = reply
+        self.guard_home = Path("/nonexistent/guard-home")
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.reads: list[str] = []
 

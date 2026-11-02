@@ -239,11 +239,13 @@ def request_scope_contract(request: Mapping[str, object], *, guard_home: Path | 
     return request_scope_contracts([request], guard_home=guard_home)[0]
 
 
-def scope_payload_for_request(request: Mapping[str, object], contract: ApprovalScopeContract) -> dict[str, object]:
+def scope_payload_for_request(
+    request: Mapping[str, object], contract: ApprovalScopeContract, *, guard_home: Path | None = None
+) -> dict[str, object]:
     """Attach non-resident approval hints to a contract already derived."""
 
     payload = contract.to_dict()
-    temporary_mcp_approval = temporary_mcp_approval_payload(request)
+    temporary_mcp_approval = temporary_mcp_approval_payload(request, guard_home=guard_home)
     if temporary_mcp_approval is not None:
         payload["temporary_mcp_approval"] = temporary_mcp_approval
     local_tool_approval = local_tool_approval_payload(request)
@@ -282,7 +284,7 @@ def request_scope_contract_payloads(
 ) -> list[dict[str, object]]:
     payloads: list[dict[str, object]] = []
     for request, contract in zip(requests, request_scope_contracts(requests, guard_home=guard_home), strict=True):
-        payloads.append(scope_payload_for_request(request, contract))
+        payloads.append(scope_payload_for_request(request, contract, guard_home=guard_home))
     return payloads
 
 

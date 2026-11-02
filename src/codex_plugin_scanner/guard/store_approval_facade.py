@@ -160,7 +160,7 @@ class StoreApprovalsMixin:
         row = queued["row"]
         if not isinstance(row, dict):
             return None
-        hinted = _with_approval_hints(row)
+        hinted = _with_approval_hints([row], self.guard_home)[0]
         response = queued.get("response")
         if isinstance(response, dict):
             hinted["hook_response"] = response
