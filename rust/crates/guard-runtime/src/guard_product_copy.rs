@@ -61,11 +61,11 @@ struct Cloud<'a> {
     shared_proof_recorded: bool,
 }
 
-struct Urls {
-    dashboard: String,
-    connect: String,
-    inbox: String,
-    fleet: String,
+pub(crate) struct Urls {
+    pub(crate) dashboard: String,
+    pub(crate) connect: String,
+    pub(crate) inbox: String,
+    pub(crate) fleet: String,
 }
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {
@@ -258,7 +258,7 @@ fn runtime_status(approval_center_url: Option<&str>, runtime_state_present: bool
 }
 
 /// `_resolve_guard_urls`: the Guard pages on the sync URL's origin.
-fn guard_urls(sync_url: Option<&str>) -> Urls {
+pub(crate) fn guard_urls(sync_url: Option<&str>) -> Urls {
     let origin = sync_url
         .filter(|url| !url.is_empty())
         .map(urlsplit)

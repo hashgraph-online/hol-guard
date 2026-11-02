@@ -96,7 +96,26 @@ from .value_coercion import coerce_non_negative_int
 
 _LOGGER = logging.getLogger(__name__)
 _EVENT_SUMMARY_FIELDS = ("status", "sync_skipped", "sync_reason", "next_retry_after")
+_GUARD_URL_FIELDS = ("dashboard_url", "inbox_url", "fleet_url", "connect_url")
 _CLOUD_STATUS_UNAVAILABLE = "HOL Guard could not load the Guard Cloud status from its native runtime."
+_HEADLINE_UNAVAILABLE = {
+    "headline_state": "degraded",
+    "headline_label": "Degraded",
+    "headline_detail": "HOL Guard could not load the protection headline from its native runtime.",
+}
+# The two headlines that need no protection report keep their copy when the
+# native runtime is out, so an offline runtime or a waiting decision is never
+# hidden behind the degraded fallback.
+_HEADLINE_SETUP = {
+    "headline_state": "setup",
+    "headline_label": "Setup required",
+    "headline_detail": "The local Guard runtime is offline. Start the daemon or rerun hol-guard bootstrap.",
+}
+_HEADLINE_NEEDS_DECISION = {
+    "headline_state": "needs_decision",
+    "headline_label": "Decision needed",
+    "headline_detail": "One or more actions are waiting for a decision in the current review queue.",
+}
 # Artifact metadata the resident reads for a queued request.
 _QUEUE_METADATA_KEYS = ("raw_command_text", "command_text", "command_rule_matches", "extension_allow_hint")
 
@@ -1173,9 +1192,10 @@ def _build_runtime_snapshot(
         # goes to the log at debug.
         _LOGGER.debug("protection health report unavailable: %s", error)
         protection_health = None
-    headline_state = _resolve_runtime_headline_state(
+    headline = _runtime_headline(
+        store,
         pending_count=pending_count,
-        runtime_state=health_runtime_state,
+        runtime_state_present=health_runtime_state is not None,
         protection_state=str(protection_health["state"]) if protection_health is not None else "",
     )
     return {
@@ -1195,9 +1215,7 @@ def _build_runtime_snapshot(
         },
         "next_request_id": next_request_id,
         "receipt_count": store.count_receipts(),
-        "headline_state": headline_state,
-        "headline_label": _runtime_headline_label(headline_state),
-        "headline_detail": _runtime_headline_detail(headline_state),
+        **headline,
         "thread_count": threading.active_count(),
         "items": pending_requests,
         "latest_receipts": latest_receipts,
@@ -1355,7 +1373,6 @@ def _build_runtime_cloud_context(
     policy_defaults = policy_bundle.get("policyDefaults")
     remote_policy = policy_defaults if isinstance(policy_defaults, dict) else {}
     policy_bundle_last_error = _sync_payload_dict(store, "policy_bundle_last_error")
-    cloud_policy_last_ack_at = _cloud_policy_last_ack_at(store, policy_bundle)
     remote_payload_active = any((sync_summary, remote_policy, alert_preferences))
     cloud_state = resolve_guard_cloud_state(
         sync_configured=cloud_profile is not None,
@@ -1364,7 +1381,6 @@ def _build_runtime_cloud_context(
         oauth_repair_required=oauth_repair_required,
         connect_retry_required=connect_retry_required,
     )
-    dashboard_url, inbox_url, fleet_url, connect_url = _resolve_guard_urls(sync_url)
     cloud_status = _runtime_cloud_status(
         store,
         latest_connect_state,
@@ -1374,7 +1390,10 @@ def _build_runtime_cloud_context(
         connect_retry_required=connect_retry_required,
         connect_retry_refresh_race=connect_retry_refresh_race,
         shared_proof_recorded=bool(sync_summary) or remote_payload_active,
+        policy_ack=_policy_ack_facts(store, policy_bundle),
+        sync_url=sync_url if isinstance(sync_url, str) else None,
     )
+    guard_urls = {key: cloud_status[key] for key in _GUARD_URL_FIELDS}
     oauth_credentials = store.get_oauth_local_credentials(allow_primary=True)
     cloud_user_profile: dict[str, str] | None = None
     cloud_plan_id: str | None = None
@@ -1402,21 +1421,15 @@ def _build_runtime_cloud_context(
             "cloud_user_profile": cloud_user_profile,
             "workspace_id": cloud_workspace_id,
             "plan_id": cloud_plan_id,
-            "dashboard_url": dashboard_url,
-            "inbox_url": inbox_url,
-            "fleet_url": fleet_url,
-            "connect_url": connect_url,
+            **guard_urls,
         },
-        "dashboard_url": dashboard_url,
-        "inbox_url": inbox_url,
-        "fleet_url": fleet_url,
-        "connect_url": connect_url,
+        **guard_urls,
         "cloud_policy_bundle_hash": _optional_string(policy_bundle.get("bundleHash")),
         "cloud_policy_bundle_version": _optional_string(policy_bundle.get("bundleVersion")),
         "cloud_policy_rollout_state": _optional_string(policy_bundle.get("rolloutState")),
         "cloud_policy_sync_error": cached_policy_bundle_error
         or _optional_string(policy_bundle_last_error.get("reason")),
-        "cloud_policy_last_ack_at": cloud_policy_last_ack_at,
+        "cloud_policy_last_ack_at": cloud_status["cloud_policy_last_ack_at"],
         "team_policy_active": False,
         "proof_status": cloud_status["proof_status"],
     }
@@ -1432,6 +1445,8 @@ def _runtime_cloud_status(
     connect_retry_required: bool,
     connect_retry_refresh_race: bool,
     shared_proof_recorded: bool,
+    policy_ack: dict[str, object],
+    sync_url: str | None,
 ) -> dict[str, Any]:
     """Ask the native runtime for the snapshot's Guard Cloud status copy.
 
@@ -1462,6 +1477,8 @@ def _runtime_cloud_status(
                     _sync_payload_dict(store, "sync_summary").get("synced_at"),
                     _sync_payload_dict(store, "runtime_session_summary").get("synced_at"),
                 ],
+                "policy_ack": policy_ack,
+                "sync_url": sync_url,
             },
             guard_home=store.guard_home,
         )
@@ -1485,9 +1502,35 @@ def _runtime_cloud_status(
                 "last_synced_at": None,
                 "next_retry_after": None,
             },
+            "cloud_policy_last_ack_at": None,
+            **_fallback_guard_urls(sync_url),
         }
     status["proof_status"] = {**status["proof_status"], **proof}
     return status
+
+
+def _fallback_guard_urls(sync_url: str | None) -> dict[str, str]:
+    """The Guard page links on the configured sync origin when the runtime is out.
+
+    The published links are the fallback only without a usable sync URL, so a
+    machine paired with another Guard Cloud never links to the public one.
+    """
+
+    parsed = urlparse(sync_url or "")
+    if not parsed.scheme or not parsed.netloc:
+        return {
+            "dashboard_url": GUARD_DASHBOARD_URL,
+            "inbox_url": GUARD_INBOX_URL,
+            "fleet_url": GUARD_FLEET_URL,
+            "connect_url": GUARD_CONNECT_URL,
+        }
+    dashboard_url = f"{parsed.scheme}://{parsed.netloc}/guard"
+    return {
+        "dashboard_url": dashboard_url,
+        "inbox_url": f"{dashboard_url}/inbox",
+        "fleet_url": f"{dashboard_url}/protect",
+        "connect_url": f"{dashboard_url}/connect",
+    }
 
 
 def _is_runtime_cloud_status(status: object) -> TypeGuard[dict[str, Any]]:
@@ -1499,6 +1542,8 @@ def _is_runtime_cloud_status(status: object) -> TypeGuard[dict[str, Any]]:
         and isinstance(status.get("cloud_state_label"), str)
         and isinstance(status.get("cloud_state_detail"), str)
         and isinstance(status.get("cloud_sync_health"), dict)
+        and isinstance(status.get("cloud_policy_last_ack_at", 0), (str, type(None)))
+        and all(isinstance(status.get(key), str) for key in _GUARD_URL_FIELDS)
     )
 
 
@@ -1507,27 +1552,19 @@ def _sync_payload_dict(store: GuardStore, key: str) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _cloud_policy_last_ack_at(store: GuardStore, policy_bundle: dict[str, object]) -> str | None:
-    acknowledgement = _sync_payload_dict(store, "policy_bundle_ack")
-    bundle_hash = _optional_string(policy_bundle.get("bundleHash"))
-    bundle_version = _optional_string(policy_bundle.get("bundleVersion"))
-    if bundle_hash is None or bundle_version is None:
-        return None
+def _policy_ack_facts(store: GuardStore, policy_bundle: dict[str, object]) -> dict[str, object]:
+    """The facts the native runtime checks the policy bundle acknowledgement against."""
+
     try:
-        device_id = str(store.get_device_metadata()["installation_id"])
+        device_id: str | None = str(store.get_device_metadata()["installation_id"])
     except (KeyError, OSError, RuntimeError, TypeError, ValueError):
-        return None
-    applied_at = _optional_string(acknowledgement.get("appliedAt"))
-    if (
-        acknowledgement.get("bundleHash") != bundle_hash
-        or acknowledgement.get("bundleVersion") != bundle_version
-        or acknowledgement.get("deviceId") != device_id
-        or acknowledgement.get("status") != "synced"
-        or applied_at is None
-        or _parse_timestamp(applied_at) is None
-    ):
-        return None
-    return applied_at
+        device_id = None
+    return {
+        "acknowledgement": _sync_payload_dict(store, "policy_bundle_ack"),
+        "bundle_hash": _optional_string(policy_bundle.get("bundleHash")),
+        "bundle_version": _optional_string(policy_bundle.get("bundleVersion")),
+        "device_id": device_id,
+    }
 
 
 def _build_runtime_device_context(store: GuardStore) -> dict[str, object]:
@@ -1568,71 +1605,41 @@ def _connect_state_proof(value: object) -> dict[str, object]:
     }
 
 
-def _parse_timestamp(value: str) -> datetime | None:
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed
-
-
-def _resolve_guard_urls(sync_url: object) -> tuple[str, str, str, str]:
-    if not isinstance(sync_url, str) or not sync_url:
-        return GUARD_DASHBOARD_URL, GUARD_INBOX_URL, GUARD_FLEET_URL, GUARD_CONNECT_URL
-    parsed = urlparse(sync_url)
-    if not parsed.scheme or not parsed.netloc:
-        return GUARD_DASHBOARD_URL, GUARD_INBOX_URL, GUARD_FLEET_URL, GUARD_CONNECT_URL
-    origin = f"{parsed.scheme}://{parsed.netloc}"
-    dashboard_url = f"{origin}/guard"
-    return (
-        dashboard_url,
-        f"{dashboard_url}/inbox",
-        f"{dashboard_url}/protect",
-        f"{dashboard_url}/connect",
-    )
-
-
-def _resolve_runtime_headline_state(
+def _runtime_headline(
+    store: GuardStore,
     *,
     pending_count: int,
-    runtime_state: dict[str, object] | None,
+    runtime_state_present: bool,
     protection_state: str,
-) -> str:
-    if runtime_state is None:
-        return "setup"
+) -> dict[str, object]:
+    """Ask the native runtime for the snapshot headline.
+
+    The headline is display only, so an unavailable runtime still reports
+    setup and a waiting decision, and otherwise reports degraded rather than
+    claiming protection.
+    """
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        reply = native_runner_authority(
+            "runtime_headline",
+            {
+                "pending_count": pending_count,
+                "runtime_state_present": runtime_state_present,
+                "protection_state": protection_state,
+            },
+            guard_home=store.guard_home,
+        )
+    except NativeRunnerAuthorityError as error:
+        _LOGGER.debug("runtime headline unavailable: %s", error)
+        reply = None
+    if isinstance(reply, dict) and all(isinstance(reply.get(key), str) for key in _HEADLINE_UNAVAILABLE):
+        return {key: reply[key] for key in _HEADLINE_UNAVAILABLE}
+    if not runtime_state_present:
+        return dict(_HEADLINE_SETUP)
     if pending_count > 0:
-        return "needs_decision"
-    if protection_state in {"protected", "partial"}:
-        return protection_state
-    return "degraded"
-
-
-def _runtime_headline_label(headline_state: str) -> str:
-    labels = {
-        "setup": "Setup required",
-        "protected": "Protected",
-        "partial": "Partial",
-        "degraded": "Degraded",
-        "needs_decision": "Decision needed",
-        "local_only": "Local only",
-        "connected": "Connected",
-    }
-    return labels.get(headline_state, "Local only")
-
-
-def _runtime_headline_detail(headline_state: str) -> str:
-    details = {
-        "setup": "The local Guard runtime is offline. Start the daemon or rerun hol-guard bootstrap.",
-        "protected": "This machine is protected and the local queue is clear.",
-        "partial": "Core protection checks pass, but complete local evidence health cannot be proven.",
-        "degraded": "One or more required protection checks failed or remain unproven.",
-        "needs_decision": "One or more actions are waiting for a decision in the current review queue.",
-        "local_only": "This machine is protected locally and can connect later when shared memory matters.",
-        "connected": "This machine is connected to Guard Cloud. Local Guard is sending the first shared proof now.",
-    }
-    return details.get(headline_state, "Complete local protection cannot be proven.")
+        return dict(_HEADLINE_NEEDS_DECISION)
+    return dict(_HEADLINE_UNAVAILABLE)
 
 
 def bulk_allow_read_only_once(

@@ -13,17 +13,24 @@
 //! - `pending_events`, the count of events not yet uploaded;
 //! - `event_summary`, the stored Guard events v1 summary;
 //! - `synced_at`, the `synced_at` values of the event, sync and runtime
-//!   session summaries.
+//!   session summaries;
+//! - `policy_ack`: the stored policy bundle acknowledgement, the synced
+//!   bundle's `bundle_hash` and `bundle_version`, and this machine's
+//!   `device_id`, each `null` when it is missing;
+//! - `sync_url`, the configured sync URL, or `null` when sync is off.
 //!
 //! The answer carries `proof_status` (without the proof fields the caller
-//! already holds), `cloud_state_label`, `cloud_state_detail` and
-//! `cloud_sync_health`.
+//! already holds), `cloud_state_label`, `cloud_state_detail`,
+//! `cloud_sync_health`, `cloud_policy_last_ack_at` and the Guard pages on the
+//! sync URL's origin: `dashboard_url`, `inbox_url`, `fleet_url` and
+//! `connect_url`.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Map, Value};
 
 use crate::daemon_lifecycle_text::py_strip;
+use crate::guard_product_copy::guard_urls;
 use crate::policy_bundle_time::from_isoformat;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
@@ -74,6 +81,16 @@ fn dispatch_at(args: &Value, now: i64) -> KindResult {
         .get("synced_at")
         .and_then(Value::as_array)
         .ok_or(ERR_INVALID)?;
+    let policy_ack = args
+        .get("policy_ack")
+        .and_then(Value::as_object)
+        .ok_or(ERR_INVALID)?;
+    let last_ack_at = policy_last_ack_at(policy_ack)?;
+    let urls = match args.get("sync_url") {
+        Some(Value::String(url)) => guard_urls(Some(url.as_str())),
+        Some(Value::Null) => guard_urls(None),
+        _ => return Err(ERR_INVALID),
+    };
     Ok(json!({
         "proof_status": proof_status(connect_state),
         "cloud_state_label": cloud_state_label(cloud_state),
@@ -86,7 +103,42 @@ fn dispatch_at(args: &Value, now: i64) -> KindResult {
             synced_at,
             now,
         ),
+        "cloud_policy_last_ack_at": last_ack_at,
+        "dashboard_url": urls.dashboard,
+        "inbox_url": urls.inbox,
+        "fleet_url": urls.fleet,
+        "connect_url": urls.connect,
     }))
+}
+
+/// `_cloud_policy_last_ack_at`: the acknowledgement's `appliedAt` when it
+/// records this device syncing the current bundle at a parseable time.
+fn policy_last_ack_at(policy_ack: &Map<String, Value>) -> Result<Option<&str>, &'static str> {
+    let nullable_text = |key: &str| match policy_ack.get(key) {
+        Some(Value::String(value)) => Ok(Some(value.as_str())),
+        Some(Value::Null) => Ok(None),
+        _ => Err(ERR_INVALID),
+    };
+    let acknowledgement = policy_ack
+        .get("acknowledgement")
+        .and_then(Value::as_object)
+        .ok_or(ERR_INVALID)?;
+    let bundle_hash = nullable_text("bundle_hash")?.filter(|value| !value.is_empty());
+    let bundle_version = nullable_text("bundle_version")?.filter(|value| !value.is_empty());
+    let device_id = nullable_text("device_id")?;
+    let (Some(bundle_hash), Some(bundle_version), Some(device_id)) =
+        (bundle_hash, bundle_version, device_id)
+    else {
+        return Ok(None);
+    };
+    let field = |key: &str| acknowledgement.get(key).and_then(Value::as_str);
+    let applied_at = text(acknowledgement, "appliedAt");
+    let acknowledged = field("bundleHash") == Some(bundle_hash)
+        && field("bundleVersion") == Some(bundle_version)
+        && field("deviceId") == Some(device_id)
+        && field("status") == Some("synced");
+    Ok(applied_at
+        .filter(|value| acknowledged && from_isoformat(&value.replace('Z', "+00:00")).is_some()))
 }
 
 /// `_optional_string`: a non-empty string, unstripped.

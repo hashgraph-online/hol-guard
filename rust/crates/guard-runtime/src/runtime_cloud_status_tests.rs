@@ -17,6 +17,13 @@ fn args() -> Value {
         "pending_events": 0,
         "event_summary": {},
         "synced_at": [],
+        "policy_ack": {
+            "acknowledgement": {},
+            "bundle_hash": null,
+            "bundle_version": null,
+            "device_id": null,
+        },
+        "sync_url": null,
     })
 }
 
@@ -226,6 +233,83 @@ fn latest_timestamp_compares_instants_and_keeps_the_first_tie() {
     assert_eq!(latest_sync_timestamp(&[json!("x"), Value::Null]), None);
 }
 
+fn acknowledged() -> Value {
+    let mut args = args();
+    args["policy_ack"] = json!({
+        "acknowledgement": {
+            "bundleHash": "hash-1",
+            "bundleVersion": "7",
+            "deviceId": "device-1",
+            "status": "synced",
+            "appliedAt": "2026-01-01T12:00:00Z",
+        },
+        "bundle_hash": "hash-1",
+        "bundle_version": "7",
+        "device_id": "device-1",
+    });
+    args
+}
+
+fn last_ack_at(args: &Value) -> Value {
+    status(args)["cloud_policy_last_ack_at"].clone()
+}
+
+#[test]
+fn policy_ack_time_needs_this_device_and_the_current_bundle() {
+    assert_eq!(last_ack_at(&args()), Value::Null);
+    assert_eq!(last_ack_at(&acknowledged()), "2026-01-01T12:00:00Z");
+    for (key, value) in [
+        ("bundleHash", json!("hash-2")),
+        ("bundleVersion", json!(7)),
+        ("deviceId", json!("device-2")),
+        ("status", json!("pending")),
+        ("appliedAt", json!("")),
+        ("appliedAt", json!("not a time")),
+    ] {
+        let mut args = acknowledged();
+        args["policy_ack"]["acknowledgement"][key] = value;
+        assert_eq!(last_ack_at(&args), Value::Null, "{key}");
+    }
+    for key in ["bundle_hash", "bundle_version", "device_id"] {
+        let mut args = acknowledged();
+        args["policy_ack"][key] = Value::Null;
+        assert_eq!(last_ack_at(&args), Value::Null, "{key}");
+    }
+    let mut empty_hash = acknowledged();
+    empty_hash["policy_ack"]["bundle_hash"] = json!("");
+    empty_hash["policy_ack"]["acknowledgement"]["bundleHash"] = json!("");
+    assert_eq!(last_ack_at(&empty_hash), Value::Null);
+    // A naive time is read as UTC, as Python's `fromisoformat` accepts it.
+    let mut naive = acknowledged();
+    naive["policy_ack"]["acknowledgement"]["appliedAt"] = json!("2026-01-01T12:00:00");
+    assert_eq!(last_ack_at(&naive), "2026-01-01T12:00:00");
+}
+
+#[test]
+fn guard_pages_follow_the_sync_origin() {
+    let defaults = status(&args());
+    assert_eq!(defaults["dashboard_url"], "https://hol.org/guard");
+    assert_eq!(defaults["inbox_url"], "https://hol.org/guard/inbox");
+    assert_eq!(defaults["fleet_url"], "https://hol.org/guard/protect");
+    assert_eq!(defaults["connect_url"], "https://hol.org/guard/connect");
+    let mut staging = args();
+    staging["sync_url"] = json!("https://staging.example.test:8443/api/guard/receipts/sync");
+    let staging = status(&staging);
+    assert_eq!(
+        staging["dashboard_url"],
+        "https://staging.example.test:8443/guard"
+    );
+    assert_eq!(
+        staging["connect_url"],
+        "https://staging.example.test:8443/guard/connect"
+    );
+    for relative in ["", "/api/guard/receipts/sync"] {
+        let mut args = args();
+        args["sync_url"] = json!(relative);
+        assert_eq!(status(&args)["dashboard_url"], "https://hol.org/guard");
+    }
+}
+
 #[test]
 fn malformed_arguments_are_refused() {
     let mut cases = Vec::new();
@@ -236,6 +320,8 @@ fn malformed_arguments_are_refused() {
         "event_summary",
         "synced_at",
         "connect_state",
+        "policy_ack",
+        "sync_url",
     ] {
         let mut missing = args();
         missing.as_object_mut().unwrap().remove(key);
@@ -250,6 +336,25 @@ fn malformed_arguments_are_refused() {
     let mut listed = args();
     listed["connect_state"] = json!([]);
     cases.push(listed);
+    let mut sync_url = args();
+    sync_url["sync_url"] = json!(1);
+    cases.push(sync_url);
+    let mut ack_list = args();
+    ack_list["policy_ack"]["acknowledgement"] = json!([]);
+    cases.push(ack_list);
+    for key in [
+        "acknowledgement",
+        "bundle_hash",
+        "bundle_version",
+        "device_id",
+    ] {
+        let mut missing = args();
+        missing["policy_ack"].as_object_mut().unwrap().remove(key);
+        cases.push(missing);
+    }
+    let mut numeric_hash = args();
+    numeric_hash["policy_ack"]["bundle_hash"] = json!(1);
+    cases.push(numeric_hash);
     for case in cases {
         assert_eq!(dispatch_at(&case, NOW), Err(ERR_INVALID), "{case}");
     }
