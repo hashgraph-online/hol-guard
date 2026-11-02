@@ -169,7 +169,7 @@ fn lookup(
     let key = (request.root.clone(), request.app.clone());
     let prompt = hashed(&request.query);
     let flight = {
-        let mut running = flights().lock().ok()?;
+        let running = flights().lock().ok()?;
         match running.get(&key) {
             Some(flight) if flight.prompt == prompt => Some(Arc::clone(flight)),
             Some(_) => return None,
