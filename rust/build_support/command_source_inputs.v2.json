@@ -444,6 +444,7 @@
       "src/pretool/helm_usage.rs",
       "src/pretool/help_probes.rs",
       "src/pretool/hidden_listing.rs",
+      "src/pretool/hidden_listing_marker.rs",
       "src/pretool/home_hidden_listing.rs",
       "src/pretool/hooks_path_writes.rs",
       "src/pretool/http_reads.rs",

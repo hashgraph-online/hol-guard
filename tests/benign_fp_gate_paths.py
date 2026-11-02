@@ -128,14 +128,24 @@ def is_credential_like(relative: str) -> bool:
     return any(_CREDENTIAL_NAME.search(part) for part in relative.split("/") if part)
 
 
+# Leaf names a case reads for the number inside them. A lock directory's
+# marker is one, and ``otp`` is the file that holds a number and is not a
+# marker, which is the pair the read rule has to tell apart.
+_NUMERIC_BODIES = frozenset({"pid", "port", "generation", "otp"})
+
+
 def is_marker_file(relative: str) -> bool:
-    """Whether this path is the marker a lock directory holds.
+    """Whether this path is read for the number inside it.
 
     A ``.d`` lock directory holds the number a running process left behind,
     never folders, and a read of that number is admitted by what the file
-    holds, so the planter has to write one rather than a placeholder note.
+    holds and what it is called, so the planter has to write a number rather
+    than a placeholder note.
     """
-    return any(part.endswith(".d") for part in relative.split("/")[:-1])
+    return (
+        any(part.endswith(".d") for part in relative.split("/")[:-1])
+        or posixpath.basename(relative) in _NUMERIC_BODIES
+    )
 
 
 def is_file_like(relative: str) -> bool:
