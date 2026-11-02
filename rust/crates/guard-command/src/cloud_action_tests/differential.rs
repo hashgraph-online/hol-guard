@@ -97,7 +97,9 @@ fn the_retained_corpus_still_holds() {
             case.id
         );
         for other in &case.distinct {
-            assert_ne!(answer(&evaluator, other).0, first.0, "{}: {other}", case.id);
+            let identity = answer(&evaluator, other).0;
+            assert!(identity.is_string(), "{}: {other}: {identity:?}", case.id);
+            assert_ne!(identity, first.0, "{}: {other}", case.id);
         }
     }
 }
@@ -125,25 +127,28 @@ fn equivalent_spellings_share_one_identity_and_one_decision() {
 fn changing_any_one_leaf_changes_the_identity() {
     let evaluator = evaluator();
     for seed in 0..SEEDS {
-        let mut rng = Rng::new(seed);
-        let arguments = object(&mut rng, 3);
+        let arguments = object(&mut Rng::new(seed), 3);
+        let before = answer(&evaluator, &arguments.to_string());
+        assert!(before.0.is_string(), "seed {seed}: {before:?}");
         let mut paths = Vec::new();
         leaves(&arguments, &mut Vec::new(), &mut paths);
-        let path = &paths[rng.below(paths.len())];
-        let mut edited = arguments.clone();
-        let mut slot = &mut edited;
-        for step in path {
-            slot = match step {
-                Value::String(key) => &mut slot[key.as_str()],
-                _ => &mut slot[step.as_u64().unwrap() as usize],
-            };
-        }
-        *slot = changed(slot);
-        let before = answer(&evaluator, &arguments.to_string());
-        let after = answer(&evaluator, &edited.to_string());
-        if before.0 == after.0 {
-            let case = json!({"distinct": [arguments.to_string(), edited.to_string()]});
-            panic!("{}", retain("sensitivity", seed, case));
+        for path in &paths {
+            let mut edited = arguments.clone();
+            let mut slot = &mut edited;
+            for step in path {
+                slot = match step {
+                    Value::String(key) => &mut slot[key.as_str()],
+                    _ => &mut slot[step.as_u64().unwrap() as usize],
+                };
+            }
+            *slot = changed(slot);
+            let after = answer(&evaluator, &edited.to_string());
+            // A rejected edit has no identity, so it would differ without
+            // proving a second valid action.
+            if !after.0.is_string() || before.0 == after.0 {
+                let case = json!({"distinct": [arguments.to_string(), edited.to_string()]});
+                panic!("{}", retain("sensitivity", seed, case));
+            }
         }
     }
 }
@@ -178,11 +183,11 @@ fn modelled(
     rule: Option<GuardAction>,
     missing: bool,
     consent: bool,
-) -> (GuardAction, &'static [&'static str]) {
-    let mut action = match (effect, rule) {
-        ("admin", _) => GuardAction::Block,
-        (_, Some(rule)) => rule,
-        (_, None) => effect_floor(effect),
+) -> (GuardAction, Vec<&'static str>) {
+    let (mut action, base) = match (effect, rule) {
+        ("admin", _) => (GuardAction::Block, "admin_effect_unsupported"),
+        (_, Some(rule)) => (rule, "policy_rule"),
+        (_, None) => (effect_floor(effect), "effect_floor"),
     };
     if missing && action.severity() < GuardAction::SandboxRequired.severity() {
         action = GuardAction::SandboxRequired;
@@ -197,7 +202,9 @@ fn modelled(
         (true, false) if action == GuardAction::SandboxRequired => &["capability_unavailable"],
         _ => &[],
     };
-    (action, raised)
+    let mut reasons = vec![base];
+    reasons.extend_from_slice(raised);
+    (action, reasons)
 }
 
 #[test]
@@ -254,7 +261,7 @@ fn every_capability_subset_and_rule_matches_the_decision_order() {
                         request["saved_consents"] = json!([consent("c", "always", &identity)]);
                     }
                     let result = run(&evaluator, &request);
-                    let (action, raised) =
+                    let (action, reasons) =
                         modelled(effect, rule_action, !missing.is_empty(), consent_given);
                     let context = format!(
                         "{action_id} present={present:?} rule={rule_action:?} consent={consent_given}: {result}"
@@ -275,12 +282,7 @@ fn every_capability_subset_and_rule_matches_the_decision_order() {
                         matches!(action, GuardAction::Allow | GuardAction::Warn),
                         "{context}"
                     );
-                    let reasons = result["reason_codes"].as_array().unwrap();
-                    assert_eq!(
-                        &reasons[1..],
-                        &json!(raised).as_array().unwrap()[..],
-                        "{context}"
-                    );
+                    assert_eq!(result["reason_codes"], json!(reasons), "{context}");
                     checked += 1;
                 }
             }
