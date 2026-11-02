@@ -503,12 +503,15 @@ BUN_TEST = (
     "const add = (a: number, b: number) => a + b;\n\n"
     'test("adds", () => {\n  expect(add(2, 3)).toBe(5);\n});\n'
 )
+# The only line that file prints, so a run which never evaluated it cannot
+# show it however the host reports the command's status.
+BUN_TEST_SCRIPT_MARKER = "app routing ok"
 # The same workspace file, written the way a project writes a test it runs
 # directly: its own assertions, no runner import. `bun test` still discovers
 # it, and `bun <file>` runs it and prints, so the case proves the command
 # works rather than only which decision it takes.
 BUN_TEST_SCRIPT = (
-    "const route = (path: string) => path.replace(/^\\/+/, \"\");\n\n"
+    'const route = (path: string) => path.replace(/^\\/+/, "");\n\n'
     "function check(ok: boolean, message: string): void {\n"
     "  if (!ok) {\n"
     "    throw new Error(message);\n"
@@ -516,7 +519,7 @@ BUN_TEST_SCRIPT = (
     "}\n\n"
     'check(route("/apps") === "apps", "leading slash is trimmed");\n'
     'check(route("apps") === "apps", "a bare segment is unchanged");\n'
-    'console.log("app routing ok");\n'
+    f'console.log("{BUN_TEST_SCRIPT_MARKER}");\n'
 )
 HOME_SKILL_DOC = "# Synthetic home skill\nInert reference text for the home skill document.\n"
 
