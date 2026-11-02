@@ -278,6 +278,59 @@ fn a_repositorys_own_documents_read_from_hidden_directories() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// A marker a running process left behind carries no extension, so the
+/// document screen refuses it. Asking who holds a lock is ordinary work.
+#[test]
+fn a_repositorys_own_process_markers_read_from_hidden_directories() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let repo = home.join("app");
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    for (marker, body) in [
+        (".deploy-production.lock.d/pid", "48213\n"),
+        (".cache/dev-server/port", "3017"),
+        (".turbo/generation", " 12 \n"),
+    ] {
+        plant(&repo.join(marker), body);
+        assert!(read(&repo.join(marker), &home, &repo), "{marker}");
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+/// The number is the whole proof: anything a marker file could not hold
+/// keeps the review it already had.
+#[test]
+fn a_hidden_file_that_is_not_a_process_marker_keeps_its_review() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let repo = home.join("app");
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    // A line of digits is a marker; a page of them is something else.
+    let long = "7".repeat(65);
+    for (name, body) in [
+        // A word beside the number, and a number the file never carries.
+        (".state/holder", "pid 48213\n"),
+        (".state/owner", "deploy\n"),
+        // An empty file is not a marker either; the work-tree rule above
+        // answers for those, and only inside a hidden *name*.
+        (".state/blank", ""),
+        (".state/dump", long.as_str()),
+    ] {
+        plant(&repo.join(name), body);
+        assert!(!read(&repo.join(name), &home, &repo), "{name}");
+    }
+    // Every other screen still runs: a marker inside a credential store, and
+    // one in a sibling checkout the session is not working in, keep their
+    // review.
+    plant(&repo.join(".aws/sso/cache/pid"), "48213\n");
+    assert!(!read(&repo.join(".aws/sso/cache/pid"), &home, &repo));
+    let other = home.join("other");
+    std::fs::create_dir_all(other.join(".git")).unwrap();
+    plant(&other.join(".deploy.lock.d/pid"), "48213\n");
+    assert!(!read(&other.join(".deploy.lock.d/pid"), &home, &repo));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn the_administrative_tree_and_guarded_names_keep_their_review() {
     let root = fixture_root();

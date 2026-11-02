@@ -42176,6 +42176,38 @@
       "expect": "allow"
     },
     {
+      "id": "cat-lock-directory-marker",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${WORKTREE}/signup-funnel/.deploy.lock.d/pid"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "read-lock-directory-marker",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${WORKTREE}/signup-funnel/.deploy.lock.d/pid"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "observed-grep-24",
       "fix_area": "shell",
       "harnesses": [

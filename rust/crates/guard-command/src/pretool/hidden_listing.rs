@@ -89,6 +89,55 @@ pub(in crate::pretool) fn repository_hidden_source_document(
         && repository_hidden_below(canonical, home_dir, cwd, true)
 }
 
+/// The largest marker file this reading opens. A process identifier, a port
+/// number and a lock's generation all fit in a line; a file larger than that
+/// is holding something other than a marker.
+const LONGEST_MARKER_FILE: u64 = 64;
+
+/// Whether `canonical` is a marker file a running process left behind: a
+/// small regular file whose whole content is a number.
+///
+/// A lock directory holds the pid of whoever took it, a dev server writes its
+/// port beside its state, and a deploy sentinel records the generation it is
+/// on. None of them carries an extension, so the document-extension screen
+/// refuses them all, and an agent that asks who holds a lock is doing
+/// ordinary work.
+///
+/// The number is the whole proof. A file read this way is opened twice — once
+/// here and once by the command itself — so this cannot be a promise about
+/// what the command will see; it is a bound on what the file is. Digits and
+/// whitespace inside a line hold no key, token or password, and the output
+/// review reads the file again and scans it in full, so a file rewritten
+/// between the two reads is caught there rather than released.
+fn numeric_marker_file(canonical: &Path) -> bool {
+    if !std::fs::symlink_metadata(canonical)
+        .is_ok_and(|metadata| metadata.is_file() && metadata.len() <= LONGEST_MARKER_FILE)
+    {
+        return false;
+    }
+    let Ok(bytes) = std::fs::read(canonical) else {
+        return false;
+    };
+    bytes.iter().any(u8::is_ascii_digit)
+        && bytes
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || byte.is_ascii_whitespace())
+}
+
+/// Whether `canonical` is such a marker file inside the repository's own
+/// hidden tree, such as the pid inside a lock directory the checkout holds.
+///
+/// Every screen the hidden content read applies runs here too; the only thing
+/// this rule stands in for is the document extension, which a marker never
+/// carries.
+pub(in crate::pretool) fn repository_hidden_marker_file(
+    canonical: &Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    numeric_marker_file(canonical) && repository_hidden_below(canonical, home_dir, cwd, true)
+}
+
 /// Directories a repository publishes a plugin manifest from. Neither is a
 /// harness directory: a harness loads a plugin the user installed, never the
 /// manifest of the checkout it is working in.

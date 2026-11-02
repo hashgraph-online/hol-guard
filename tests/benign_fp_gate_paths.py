@@ -128,8 +128,20 @@ def is_credential_like(relative: str) -> bool:
     return any(_CREDENTIAL_NAME.search(part) for part in relative.split("/") if part)
 
 
+def is_marker_file(relative: str) -> bool:
+    """Whether this path is the marker a lock directory holds.
+
+    A ``.d`` lock directory holds the number a running process left behind,
+    never folders, and a read of that number is admitted by what the file
+    holds, so the planter has to write one rather than a placeholder note.
+    """
+    return any(part.endswith(".d") for part in relative.split("/")[:-1])
+
+
 def is_file_like(relative: str) -> bool:
     name = posixpath.basename(relative)
+    if is_marker_file(relative):
+        return True
     if name in _KNOWN_FILES or (name.endswith("rc") and name.startswith(".")):
         return True
     # A package manager's shim directory holds executables, never folders. A
@@ -254,7 +266,8 @@ def materialise(roots: dict[str, Path], document: dict[str, object] | None = Non
             continue
         if is_file_like(relative):
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(f"# {target.name}\nSynthetic placeholder content.\n", encoding="utf-8")
+            body = "4242\n" if is_marker_file(relative) else f"# {target.name}\nSynthetic placeholder content.\n"
+            target.write_text(body, encoding="utf-8")
         else:
             target.mkdir(parents=True, exist_ok=True)
             directories.append(target)
