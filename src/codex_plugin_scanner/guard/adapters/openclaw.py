@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -21,7 +22,6 @@ from .base import (
     detection_request,
 )
 from .cloud_identity import cloud_agent_identity_environment, cloud_agent_identity_hints
-from .openclaw_config import load_config
 from .openclaw_support import (
     config_path,
     install_state,
@@ -93,7 +93,7 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         request = {
             **detection_request(self.harness, context),
             "config_path": str(path),
-            "payload": json.dumps(load_config(path)),
+            "user_home": os.path.expanduser("~"),
         }
         artifacts, found_paths = native_adapter_detection("openclaw_detect", request)
         return HarnessDetection(
