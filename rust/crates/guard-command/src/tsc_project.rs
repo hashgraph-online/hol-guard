@@ -47,42 +47,56 @@ const MAX_EXTENDS_DEPTH: usize = 4;
 /// beside the project even under `--noEmit`, and the two diagnostic options
 /// write their trace and profile wherever they are pointed.
 ///
-/// tsc reads an option's name without regard to case, so this reading does
-/// too: an option that reaches the compiler under any spelling has to reach
-/// this check under the same one.
+/// tsc reads an option's name without regard to case or to how many dashes
+/// it was written with, so this reading does too: an option that reaches the
+/// compiler under any spelling has to reach this check under the same one.
 fn emitting_argument(arguments: &[String]) -> bool {
-    arguments.iter().any(|word| {
-        let lowered = word.to_ascii_lowercase();
-        let name = lowered.split('=').next().unwrap_or(lowered.as_str());
-        matches!(
-            name,
-            "-b" | "--build"
-                | "-i"
-                | "--incremental"
-                | "--composite"
-                | "--tsbuildinfofile"
-                | "--generatetrace"
-                | "--generatecpuprofile"
-        )
-    })
+    arguments
+        .iter()
+        .filter_map(|word| option_name(word))
+        .any(|name| {
+            matches!(
+                name.as_str(),
+                "b" | "build"
+                    | "i"
+                    | "incremental"
+                    | "composite"
+                    | "tsbuildinfofile"
+                    | "generatetrace"
+                    | "generatecpuprofile"
+            )
+        })
+}
+
+/// An option's name as tsc's own parser reads it.
+///
+/// `parseCommandLine` takes the word after one leading dash or two, drops
+/// any value attached with `=`, and looks the rest up without regard to
+/// case, so `-incremental`, `--Incremental` and `--incremental=true` are one
+/// option to the compiler. A word carrying no dash names a file instead, and
+/// a word that is nothing but dashes names no option at all.
+fn option_name(word: &str) -> Option<String> {
+    let name = word.strip_prefix("--").or_else(|| word.strip_prefix('-'))?;
+    let name = name.split('=').next().unwrap_or(name);
+    (!name.is_empty()).then(|| name.to_ascii_lowercase())
 }
 
 /// The config file a run reads, as a path relative to the run directory.
 ///
-/// `-p`/`--project` names it, in either the separated or the attached
-/// spelling; a run that names none reads `tsconfig.json`. A value naming a
-/// directory is the directory's own `tsconfig.json`, which is how tsc reads
-/// it.
+/// `-p`/`--project` names it, under any spelling the compiler accepts and in
+/// either the separated or the attached form; a run that names none reads
+/// `tsconfig.json`. A value naming a directory is the directory's own
+/// `tsconfig.json`, which is how tsc reads it.
 fn config_path(arguments: &[String], directory: &Path) -> Option<PathBuf> {
     let mut words = arguments.iter();
     let mut named = None;
     while let Some(word) = words.next() {
-        let value = match word.as_str() {
-            "-p" | "--project" => words.next()?.as_str(),
-            other => match other.strip_prefix("--project=") {
-                Some(value) => value,
-                None => continue,
-            },
+        if !option_name(word).is_some_and(|name| matches!(name.as_str(), "p" | "project")) {
+            continue;
+        }
+        let value = match word.split_once('=') {
+            Some((_, attached)) => attached,
+            None => words.next()?.as_str(),
         };
         if value.is_empty() || value.starts_with('-') || named.is_some() {
             return None;

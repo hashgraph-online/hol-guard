@@ -183,6 +183,16 @@ fn a_build_info_option_on_the_command_line_gives_no_verdict() {
         "--Incremental",
         "--TSBUILDINFOFILE",
         "--BUILD",
+        // The parser takes the name after one leading dash as readily as
+        // after two, so every long option has a single-dash spelling that
+        // reaches the compiler just the same.
+        "-incremental",
+        "-composite",
+        "-tsBuildInfoFile",
+        "-generateTrace",
+        "-build",
+        "-INCREMENTAL",
+        "-incremental=true",
         // Both diagnostic options write where they are pointed, whatever the
         // project says about emitting.
         "--generateTrace",
@@ -214,6 +224,58 @@ fn a_project_named_from_the_run_directory_is_read() {
         &["--project=./tsconfig.check.json"],
         &directory
     ));
+}
+
+/// `-p` is one spelling of `--project`, and the compiler reads every other
+/// one too. A reading that matched only the two canonical forms would answer
+/// from the default `tsconfig.json` while the run compiles the named project.
+#[test]
+fn a_project_named_under_any_spelling_is_the_one_read() {
+    let (_root, directory) = project();
+    plant(
+        &directory,
+        "tsconfig.json",
+        r#"{"compilerOptions":{"noEmit":true}}"#,
+    );
+    // The named project writes a build-info file, so a run that reaches it
+    // gets no verdict; only a reading that fell back to the default would
+    // call this run a clean type check.
+    plant(
+        &directory,
+        "tsconfig.build.json",
+        r#"{"compilerOptions":{"noEmit":true,"incremental":true}}"#,
+    );
+
+    for spelling in ["-project", "--Project", "-P", "--PROJECT"] {
+        assert!(
+            !reads_no_emit(&[spelling, "tsconfig.build.json"], &directory),
+            "{spelling}"
+        );
+    }
+    for attached in [
+        "-project=tsconfig.build.json",
+        "-p=tsconfig.build.json",
+        "--Project=tsconfig.build.json",
+    ] {
+        assert!(!reads_no_emit(&[attached], &directory), "{attached}");
+    }
+}
+
+/// A word that carries no dash names a file to compile, not an option, and a
+/// word that is nothing but dashes names nothing at all. Neither may be read
+/// as the project or as a build-info option.
+#[test]
+fn a_word_that_names_no_option_is_left_alone() {
+    let (_root, directory) = project();
+    plant(
+        &directory,
+        "tsconfig.json",
+        r#"{"compilerOptions":{"noEmit":true}}"#,
+    );
+
+    for word in ["incremental", "build", "--", "-", "src/incremental.ts"] {
+        assert!(reads_no_emit(&[word], &directory), "{word}");
+    }
 }
 
 /// tsc opens an `extends` name as written before it appends `.json`, so a
