@@ -763,6 +763,11 @@ mod openclaw_mcp;
 mod openclaw_skills;
 #[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
+#[path = "adapters/opencode_plugin_render.rs"]
+mod opencode_plugin_render;
+#[cfg(test)]
+#[path = "adapters/opencode_plugin_render_tests.rs"]
+mod opencode_plugin_render_tests;
 mod orphaned_worker_reap;
 mod ownership_acl_verdict;
 mod package_approval_hash_op;

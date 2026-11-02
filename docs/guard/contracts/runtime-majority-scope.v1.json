@@ -803,7 +803,6 @@
           "src/codex_plugin_scanner/guard/adapters/opencode.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_artifacts.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_pretool.py",
-          "src/codex_plugin_scanner/guard/adapters/opencode_v2_entrypoint.py",
           "src/codex_plugin_scanner/guard/adapters/paseo.py",
           "src/codex_plugin_scanner/guard/adapters/paseo_config.py",
           "src/codex_plugin_scanner/guard/adapters/paseo_install.py",

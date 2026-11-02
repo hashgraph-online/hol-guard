@@ -34,6 +34,7 @@ use super::muse_detect;
 use super::oci_bundle_op as oci;
 use super::openclaw_detect;
 use super::opencode_detect;
+use super::opencode_plugin_render;
 use super::pi_detect;
 use super::runner_authority_signature as signature;
 use super::zcode_detect;
@@ -169,6 +170,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "openclaw_detect" => openclaw_detect::detect(args),
         "cursor_detect" => cursor_detect::detect(args),
         "opencode_detect" => opencode_detect::detect(args),
+        "opencode_plugin_render" => opencode_plugin_render::render(args),
         _ => Err(ERR_KIND),
     }
 }

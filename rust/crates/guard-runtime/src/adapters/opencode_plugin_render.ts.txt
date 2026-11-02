@@ -1,6 +1,146 @@
-"""Generated OpenCode process lifecycle helpers."""
+// Managed by HOL Guard. Re-run `hol-guard install opencode` after moving Guard home.
+import { spawn as nodeSpawn } from "node:child_process";
+import { accessSync, constants as fsConstants, lstatSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { join as joinPath, resolve as resolvePath } from "node:path";
 
-OPENCODE_PROCESS_TEMPLATE = """function waitForGuardProcessExit(
+const GUARD_HOME = __GUARD_HOME__;
+const GUARD_PYTHON = __GUARD_PYTHON__;
+const GUARD_FROZEN = __GUARD_FROZEN__;
+const GUARD_NATIVE_BRIDGE: {
+  runtimePath: string;
+  bootstrap: string;
+  config: Record<string, unknown>;
+} | null = __GUARD_NATIVE_BRIDGE__;
+const GUARD_HOOK_LAUNCHER = __GUARD_HOOK_LAUNCHER__;
+const GUARD_HOOK_ENV = __GUARD_HOOK_ENV__;
+const GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__;
+const GUARD_TASKKILL_PATH = __GUARD_TASKKILL_PATH__;
+const INTERCEPT_TOOLS = new Set(__INTERCEPT_TOOLS__);
+const GUARD_HOOK_TIMEOUT_MS = 30_000;
+const GUARD_WINDOWS_JOB_MARKER = "HOL_GUARD_WINDOWS_JOB_CONTAINED\n";
+let fallbackInFlight = false;
+let fallbackContainmentFailed = false;
+
+const GUARD_RUNTIME_MISSING =
+  "HOL Guard's OpenCode plugin cannot find the Guard runtime that generated it. " +
+  "Run `hol-guard install opencode` in a host terminal outside OpenCode, then restart OpenCode.";
+
+export function resolveGuardPythonTarget(): string {
+  try {
+    const invocationStat = lstatSync(GUARD_PYTHON.invocationPath, { bigint: true });
+    let invocationType = "other";
+    if (invocationStat.isSymbolicLink()) {
+      invocationType = "symlink";
+    } else if (invocationStat.isFile()) {
+      invocationType = "file";
+    }
+    if (invocationType !== "file" && invocationType !== "symlink") {
+      throw new Error("invocation is not a file");
+    }
+    const resolved = realpathSync(GUARD_PYTHON.invocationPath);
+    const targetStat = lstatSync(resolved, { bigint: true });
+    if (!targetStat.isFile() || realpathSync(resolved) !== resolved) {
+      throw new Error("target is not a regular file");
+    }
+    // Guard updates replace the interpreter in place. Keep reviewing with the
+    // same launcher path instead of blocking every OpenCode shell tool.
+    return resolved;
+  } catch {
+    throw new Error(GUARD_RUNTIME_MISSING);
+  }
+}
+
+// The native runtime answers a hook from the Guard daemon and runs the Python
+// bridge for everything else. A missing or non-executable runtime keeps the
+// Python launcher.
+export function resolveGuardNativeRuntime(): string | null {
+  if (GUARD_NATIVE_BRIDGE === null || process.platform === "win32") {
+    return null;
+  }
+  try {
+    const resolved = realpathSync(GUARD_NATIVE_BRIDGE.runtimePath);
+    if (!lstatSync(resolved).isFile()) {
+      return null;
+    }
+    accessSync(resolved, fsConstants.X_OK);
+    return resolved;
+  } catch {
+    return null;
+  }
+}
+
+function nativeHookArgs(pythonTarget: string, guardArgv: string[]): string[] {
+  if (GUARD_NATIVE_BRIDGE === null) {
+    throw new Error("HOL Guard native hook bridge is not installed");
+  }
+  const config = { ...GUARD_NATIVE_BRIDGE.config, python_executable: pythonTarget, cli_args: guardArgv };
+  return ["bounded-hook-bridge", pythonTarget, "-I", "-c", GUARD_NATIVE_BRIDGE.bootstrap, JSON.stringify(config)];
+}
+
+export function verifyGuardPythonIdentity(): void {
+  resolveGuardPythonTarget();
+}
+
+export function isGuardSelfRepairCommand(command: string): boolean {
+  const normalized = command.trim();
+  if (/[&|;`$<>()\n]/.test(normalized)) {
+    return false;
+  }
+  const argv = normalized.split(/\s+/);
+  const binary = argv[0] ?? "";
+  const name = binary.replace(/\\/g, "/").split("/").pop() ?? "";
+  if (name !== "hol-guard" && name !== "hol-guard.exe") {
+    return false;
+  }
+  const rest = argv.slice(1).join(" ");
+  return rest === "update" || rest === "doctor" || rest === "start" || rest === "install opencode";
+}
+
+function hookProcessEnv(guardArgv: string[]) {
+  const env: Record<string, string> = { ...GUARD_HOOK_ENV };
+  for (const key of GUARD_INHERIT_ENV_KEYS) {
+    const value = process.env[key];
+    if (typeof value === "string" && value.length > 0) {
+      env[key] = value;
+    }
+  }
+  env.HOL_GUARD_HOOK_ARGV = JSON.stringify(guardArgv);
+  return env;
+}
+
+function normalizeCommand(command: unknown): string | null {
+  if (typeof command === "string" && command.trim()) {
+    return command.trim();
+  }
+  if (Array.isArray(command) && command.length > 0 && command.every((part) => typeof part === "string")) {
+    return command.join(" ");
+  }
+  return null;
+}
+
+function effectiveWorkingDirectory(directory: string, workdir: unknown): string {
+  // Directory names can contain spaces. Review the same path the tool uses.
+  const baseDirectory = directory || process.cwd();
+  if (workdir === undefined) return baseDirectory;
+  if (typeof workdir !== "string") {
+    throw new Error("HOL Guard could not review this command: workdir must be a string.");
+  }
+  let target = workdir;
+  if (process.platform === "win32") {
+    const drive = target.match(/^\/(?:(?:cygdrive|mnt)\/)?([a-zA-Z])(?:\/|$)/)
+      ?? target.match(/^\/([a-zA-Z]):(?:[\\/]|$)/);
+    if (drive) target = `${drive[1].toUpperCase()}:/${target.slice(drive[0].length)}`;
+  }
+  if (target === "~") {
+    target = homedir();
+  } else if (target.startsWith("~/") || (process.platform === "win32" && target.startsWith("~\\"))) {
+    target = joinPath(homedir(), target.slice(2));
+  }
+  return resolvePath(baseDirectory, target);
+}
+
+function waitForGuardProcessExit(
   proc: ReturnType<typeof nodeSpawn>,
   timeoutMs: number,
 ): Promise<boolean> {
@@ -305,4 +445,3 @@ export async function spawnGuardProcess(options: {
   });
 }
 
-"""
