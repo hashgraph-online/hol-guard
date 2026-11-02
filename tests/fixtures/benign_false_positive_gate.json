@@ -15026,6 +15026,38 @@
       "expect": "allow_or_review"
     },
     {
+      "id": "login-shell-system-path-pytest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "/bin/zsh -lc 'pytest -q'"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "login-shell-inline-cd-npm-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash -lc 'cd dashboard && npm test'"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
       "id": "shell-inline-fail-fast-separate-npm",
       "fix_area": "shell",
       "harnesses": [
