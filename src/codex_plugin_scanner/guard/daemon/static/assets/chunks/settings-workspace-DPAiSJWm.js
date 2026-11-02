@@ -3919,7 +3919,6 @@ function FolderPickerDialog({ open, initialPath, onCancel, onChoose }) {
 const RECENT_PROJECTS_KEY = "guard.cigar.recent-projects.v1";
 const MAX_RECENT_PROJECTS = 4;
 const MAX_FILES = 32;
-const MAX_PRESET_FOLDERS = 8;
 function browserStore() {
   try {
     return typeof window === "undefined" ? null : window.localStorage;
@@ -3961,7 +3960,7 @@ function forgetProject(workspace, store = browserStore()) {
 }
 function presetFolders(preset) {
   const folders = preset.filter((relative) => relative.includes("/")).map((relative) => relative.slice(0, relative.lastIndexOf("/")));
-  return [...new Set(folders)].slice(0, MAX_PRESET_FOLDERS);
+  return [...new Set(folders)].slice(0, MAX_FILES);
 }
 function keptFiles(preset, listing) {
   const present = /* @__PURE__ */ new Set([
@@ -3984,6 +3983,7 @@ function ProjectFilesPicker({ workspace, selected, onChange, disabled = false, p
   const [loading, setLoading] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
   const request = reactExports.useRef(null);
+  const presetCheck = reactExports.useRef(null);
   const latest = reactExports.useRef(onChange);
   latest.current = onChange;
   const remembered = reactExports.useRef(preset);
@@ -4014,12 +4014,17 @@ function ProjectFilesPicker({ workspace, selected, onChange, disabled = false, p
         latest.current(value.suggested.map((item) => item.relative).slice(0, MAX_PROJECT_FILES));
         return;
       }
-      const signal = request.current?.signal;
-      void Promise.all(presetFolders(preset2).map((folder) => listProjectFiles(workspace, folder, signal).then((found) => found.files, () => []))).then((nested) => {
-        if (!signal?.aborted) latest.current(keptFiles(preset2, { files: [...value.files, ...nested.flat()], suggested: value.suggested }).slice(0, MAX_PROJECT_FILES));
+      const check = new AbortController();
+      presetCheck.current?.abort();
+      presetCheck.current = check;
+      void Promise.all(presetFolders(preset2).map((folder) => listProjectFiles(workspace, folder, check.signal).then((found) => found.files, () => []))).then((nested) => {
+        if (!check.signal.aborted) latest.current(keptFiles(preset2, { files: [...value.files, ...nested.flat()], suggested: value.suggested }).slice(0, MAX_PROJECT_FILES));
       });
     });
-    return () => request.current?.abort();
+    return () => {
+      request.current?.abort();
+      presetCheck.current?.abort();
+    };
   }, [workspace]);
   const full = selected.length >= MAX_PROJECT_FILES;
   const toggle = (relative, on) => onChange(on ? [...selected, relative] : selected.filter((item) => item !== relative));

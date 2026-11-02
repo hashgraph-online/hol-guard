@@ -21,6 +21,8 @@ export function ProjectFilesPicker({ workspace, selected, onChange, disabled = f
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
+  // Browsing must not cancel the check of remembered files.
+  const presetCheck = useRef<AbortController | null>(null);
   const latest = useRef(onChange);
   latest.current = onChange;
   const remembered = useRef(preset);
@@ -45,13 +47,15 @@ export function ProjectFilesPicker({ workspace, selected, onChange, disabled = f
       const preset = remembered.current;
       if (!preset) { latest.current(value.suggested.map((item) => item.relative).slice(0, MAX_PROJECT_FILES)); return; }
       // A project added back from Recent keeps last time's files that are still readable.
-      const signal = request.current?.signal;
-      void Promise.all(presetFolders(preset).map((folder) => listProjectFiles(workspace, folder, signal).then((found) => found.files, () => [])))
+      const check = new AbortController();
+      presetCheck.current?.abort();
+      presetCheck.current = check;
+      void Promise.all(presetFolders(preset).map((folder) => listProjectFiles(workspace, folder, check.signal).then((found) => found.files, () => [])))
         .then((nested) => {
-          if (!signal?.aborted) latest.current(keptFiles(preset, { files: [...value.files, ...nested.flat()], suggested: value.suggested }).slice(0, MAX_PROJECT_FILES));
+          if (!check.signal.aborted) latest.current(keptFiles(preset, { files: [...value.files, ...nested.flat()], suggested: value.suggested }).slice(0, MAX_PROJECT_FILES));
         });
     });
-    return () => request.current?.abort();
+    return () => { request.current?.abort(); presetCheck.current?.abort(); };
     // A new folder starts a fresh selection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace]);

@@ -35,7 +35,7 @@ assert.deepEqual(keptFiles(["README.md", "gone.md", "big.md", "docs/plan.md", "s
   suggested: [{ relative: "docs/plan.md", size: 4 }],
 }), ["README.md", "docs/plan.md"], "files that vanished or can no longer be read are dropped, even in a subfolder");
 assert.deepEqual(presetFolders(["README.md", "docs/a.md", "docs/b.md", "src/deep/c.md"]), ["docs", "src/deep"]);
-assert.equal(presetFolders(Array.from({ length: 20 }, (_, index) => `d${index}/x.md`)).length, 8, "checking old files stays bounded");
+assert.equal(presetFolders(Array.from({ length: 40 }, (_, index) => `d${index}/x.md`)).length, 32, "every remembered file can be checked, and no more");
 assert.deepEqual(clearRecentProjects(store), []);
 assert.deepEqual(readRecentProjects(store), [], "deleting everything forgets recent projects too");
 

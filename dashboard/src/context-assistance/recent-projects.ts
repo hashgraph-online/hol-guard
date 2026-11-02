@@ -11,7 +11,6 @@ type Store = Pick<Storage, "getItem" | "setItem">;
 export const RECENT_PROJECTS_KEY = "guard.cigar.recent-projects.v1";
 export const MAX_RECENT_PROJECTS = 4;
 const MAX_FILES = 32;
-const MAX_PRESET_FOLDERS = 8;
 
 function browserStore(): Store | null {
   try {
@@ -66,7 +65,7 @@ export function forgetProject(workspace: string, store: Store | null = browserSt
 /** Folders holding remembered files below the top folder, to check they are still there. */
 export function presetFolders(preset: string[]): string[] {
   const folders = preset.filter((relative) => relative.includes("/")).map((relative) => relative.slice(0, relative.lastIndexOf("/")));
-  return [...new Set(folders)].slice(0, MAX_PRESET_FOLDERS);
+  return [...new Set(folders)].slice(0, MAX_FILES);
 }
 
 /**
