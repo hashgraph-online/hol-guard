@@ -1,5 +1,5 @@
 //! Read-only containment receipts for harnesses that can route a contained
-//! execution (`omp`, `zcode`). A receipt is rendered only for a fully
+//! execution (`omp`, `zcode`, `grok`). A receipt is rendered only for a fully
 //! characterised Rust `sandbox-required` verdict; anything else falls back to
 //! the ordinary deny rendering.
 
@@ -150,7 +150,7 @@ pub(super) fn receipt(
     // so the receipt it checks must be the one the other sinks read.
     if !matches!(
         canonical,
-        "omp" | "pi" | "zcode" | "claude-code" | "codex" | "cursor"
+        "omp" | "pi" | "zcode" | "claude-code" | "codex" | "cursor" | "grok"
     ) || text("minimum_action") != Some("sandbox-required")
         || text("policy_action") != Some("sandbox-required")
         || text("decision") != Some("deny")
@@ -195,7 +195,10 @@ pub(super) fn receipt(
             .and_then(Value::as_str)?;
         receipt.insert("command_binding_digest".into(), json!(digest));
     }
-    if matches!(canonical, "zcode" | "claude-code" | "codex" | "cursor") {
+    if matches!(
+        canonical,
+        "zcode" | "claude-code" | "codex" | "cursor" | "grok"
+    ) {
         receipt.insert(
             "hookSpecificOutput".into(),
             json!({

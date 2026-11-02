@@ -450,10 +450,11 @@ fn answer(
 
     // Only a `PreToolUse` under custom rules reads its payload after the edge.
     let rule_payload = (pre_tool && custom_rules).then(|| payload.clone());
-    // Claude Code and ZCode apply `updatedInput`, so the daemon routes their
-    // sandbox requirements to contained execution with the sink command it
-    // binds.
-    let contained = pre_tool && (request.harness == CLAUDE_CODE || request.harness == ZCODE);
+    // Claude Code, ZCode and Grok apply `updatedInput`, so the daemon routes
+    // their sandbox requirements to contained execution with the sink command
+    // it binds.
+    let contained = pre_tool
+        && (request.harness == CLAUDE_CODE || request.harness == ZCODE || request.harness == GROK);
     let sink_command = binding.contained_sink_command.clone().filter(|_| contained);
     let guard_home = request.guard_home.clone();
     // The daemon reads a reviewed `PreToolUse` against the exact-action
