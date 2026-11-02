@@ -973,6 +973,24 @@
       "reason": "native_node_tool_readonly_containment_required"
     },
     {
+      "name": "tsx-test-files-script",
+      "scripts": {
+        "test": "tsx --test src/a.test.ts"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "tsx-entry-script",
+      "scripts": {
+        "test": "tsx src/main.ts"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": null
+    },
+    {
       "name": "bun-test-script",
       "scripts": {
         "test": "bun test"

@@ -74,12 +74,14 @@ _TOOL_SCRIPTS = {"lint": "eslint .", "typecheck": "tsc --noEmit", "format": "pre
 # `test:` family. The third spells the same finishing Vitest run with the
 # option rather than the verb, which is how a project that passes reporting
 # options writes it, and the fourth names Bun's own runner, which is what a
-# Bun project's test entry holds.
+# Bun project's test entry holds. The fifth names the test files tsx runs,
+# which is how a project without a runner package spells its suite.
 _TEST_FAMILY_SCRIPTS = {
     "test:unit": "vitest run tests/",
     "test:types": "tsc --noEmit",
     "test:ci": "vitest --run --reporter dot",
     "test:bun": "bun test",
+    "test:tsx": "tsx --test tests/sample.test.ts",
 }
 _INSTALLED_PACKAGES = _NODE_PACKAGES | {name: version for name, (version, _) in _NODE_TOOLS.items()}
 

@@ -10,7 +10,7 @@ mod tests;
 
 use crate::contained_argv::{
     bun_test_runs_once, bun_test_script_once, jest_contained_call, mocha_contained_call,
-    program_name, vitest_runs_once,
+    program_name, tsx_test_invocation, vitest_runs_once,
 };
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
 use crate::sfrs_shlex::{split_with, SCRIPT_LEXER};
@@ -153,6 +153,7 @@ pub(crate) fn script_tokens(
     // manifest that spells it that way names the same finishing run. Bun too:
     // `bun test` is the runner a Bun project's own `test` entry names, and
     // `bun <file>.test.ts` loads one of the files that run already discovers.
+    // `tsx` names the test files it runs the same way at either spelling.
     let passthrough = trailing.get(1..).unwrap_or_default();
     let runner = tokens[0].as_str();
     let rest = &tokens[1..];
@@ -178,7 +179,13 @@ pub(crate) fn script_tokens(
             _ => bun_test_script_once(&call),
         }
     };
-    if !node && !vitest && !jest && !mocha && !bun {
+    let tsx = program_name(runner) == "tsx" && {
+        let call: Vec<String> = std::iter::once(runner.to_owned())
+            .chain(rest.iter().chain(passthrough.iter()).cloned())
+            .collect();
+        tsx_test_invocation(&call).ok().flatten().is_some()
+    };
+    if !node && !vitest && !jest && !mocha && !bun && !tsx {
         // A project may name a read-only tool run for the suite it checks,
         // such as a `test:types` entry holding `tsc --noEmit`. The words the
         // manifest declares are the run either way, so the body goes back as

@@ -96,6 +96,33 @@ fn a_vitest_script_resolves_on_every_spelling_that_finishes_its_run() {
 }
 
 #[test]
+fn a_tsx_script_resolves_the_test_files_it_names() {
+    let manifest = scripts(json!({ "test": "tsx --test src/a.test.ts" }));
+    assert_eq!(
+        resolve(&words(&["npm", "test"]), Some(&manifest)).unwrap(),
+        words(&["tsx", "--test", "src/a.test.ts"])
+    );
+    let plain = scripts(json!({ "test": "tsx src/a.test.ts" }));
+    assert_eq!(
+        resolve(&words(&["yarn", "test"]), Some(&plain)).unwrap(),
+        words(&["tsx", "src/a.test.ts"])
+    );
+    let appended = scripts(json!({ "test": "tsx --test" }));
+    assert_eq!(
+        resolve(
+            &words(&["npm", "test", "--", "src/a.test.ts"]),
+            Some(&appended)
+        )
+        .unwrap(),
+        words(&["tsx", "--test", "src/a.test.ts"])
+    );
+    let outside = scripts(json!({ "test": "tsx --test ../other/a.test.ts" }));
+    assert!(resolve(&words(&["npm", "test"]), Some(&outside)).is_err());
+    let entry = scripts(json!({ "test": "tsx src/main.ts" }));
+    assert!(resolve(&words(&["npm", "test"]), Some(&entry)).is_err());
+}
+
+#[test]
 fn a_bun_script_resolves_the_runner_a_bun_project_names() {
     let manifest = scripts(json!({ "test": "bun test" }));
     assert_eq!(
