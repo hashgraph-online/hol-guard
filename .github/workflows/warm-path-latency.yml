@@ -184,7 +184,7 @@ jobs:
           cat mcp-relay-bench.md >> "$GITHUB_STEP_SUMMARY"
           # A broken probe is a measurement problem; latency and deferral rates are never gated here.
           python3 -c 'import json, sys; d = json.load(open("mcp-relay-bench.json")); sys.exit("error" in d)'
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: ${{ !cancelled() }}
         with:
           name: warm-path-latency

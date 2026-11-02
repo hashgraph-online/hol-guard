@@ -53,7 +53,7 @@ jobs:
       - name: Record request for custodian review
         id: request
         run: uv run --no-sync python scripts/approval/workspace_review_authority_workflow.py record-request --request authority-request.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: workspace-review-authority-request
           path: authority-request.json
@@ -110,7 +110,7 @@ jobs:
           HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
           HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
         run: uv run --no-sync python scripts/approval/issue_workspace_review_authority.py --request authority-request.json --expected-request-sha256 "$EXPECTED_REQUEST_DIGEST" --output workspace-review-authority.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: workspace-review-authority
           path: workspace-review-authority.json

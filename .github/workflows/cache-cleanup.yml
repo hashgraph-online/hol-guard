@@ -44,7 +44,7 @@ jobs:
             --protected-archives "$RUNNER_TEMP/protected-archives.json" \
             --report "$RUNNER_TEMP/cache-prune-plan.json" > "$RUNNER_TEMP/prune.txt"
       - name: Retain the cleanup plan before deleting any cache
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: cache-cleanup-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -78,7 +78,7 @@ jobs:
           echo "Deleted $deleted superseded or idle cache entries; $failed failed" >> "$GITHUB_STEP_SUMMARY"
       - name: Retain final source verification
         if: always() && steps.delete.outcome != 'skipped'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: cache-cleanup-verification-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/cache-prune-verification.json

@@ -92,7 +92,7 @@ jobs:
       - name: Build the native runtime
         run: cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
       - name: Retain the runtime for the delivery jobs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: extension-delivery-runtime-${{ github.sha }}
           path: rust/target/release/hol-guard-runtime
@@ -195,7 +195,7 @@ jobs:
             cp "$PROVENANCE_BUNDLE" extension-distribution/legacy/extension-artifacts.intoto.jsonl
           fi
       - name: Retain verified snapshot evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: extension-artifacts-${{ github.sha }}
           path: |
