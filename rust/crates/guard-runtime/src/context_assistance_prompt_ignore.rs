@@ -7,7 +7,8 @@
 //! slash before its end is anchored to its file's folder, and `*`, `?`,
 //! `[...]` and `**` work as in Git. Deeper files override shallower ones and
 //! the last matching line in a file wins. An ignore file that exists but
-//! cannot be read keeps its whole folder out, rather than guessing.
+//! cannot be read, holds more than `MAX_RULES` rules, or has a pattern that
+//! cannot be compiled keeps its whole folder out, rather than guessing.
 use regex::{Regex, RegexBuilder};
 use std::path::Path;
 use std::rc::Rc;
@@ -40,14 +41,22 @@ pub(crate) fn root_chain(root: &Path) -> Result<Chain, ()> {
 }
 
 /// `chain` plus the ignore file at `file`, whose folder is `base` in the
-/// project. `Err` when the file exists but cannot be read.
+/// project. `Err` when the file exists but cannot be fully honoured.
 pub(crate) fn extend(chain: Chain, file: &Path, base: &str) -> Result<Chain, ()> {
     if std::fs::symlink_metadata(file).is_err() {
         return Ok(chain);
     }
     let read = guard_secure_fs::read_bounded(file, MAX_IGNORE_BYTES).map_err(|_| ())?;
     let text = String::from_utf8_lossy(&read.bytes);
-    let rules: Vec<Rule> = text.lines().filter_map(parse).take(MAX_RULES).collect();
+    let mut rules = Vec::new();
+    for line in text.lines() {
+        if let Some(rule) = parse(line)? {
+            rules.push(rule);
+        }
+        if rules.len() > MAX_RULES {
+            return Err(());
+        }
+    }
     if rules.is_empty() {
         return Ok(chain);
     }
@@ -86,10 +95,12 @@ fn within<'a>(relative: &'a str, base: &str) -> Option<&'a str> {
     relative.strip_prefix(base)?.strip_prefix('/')
 }
 
-fn parse(line: &str) -> Option<Rule> {
+/// `Ok(None)` for a blank or comment line, `Err` for a pattern that cannot
+/// be compiled.
+fn parse(line: &str) -> Result<Option<Rule>, ()> {
     let line = trim_trailing_spaces(line.strip_suffix('\r').unwrap_or(line));
     if line.is_empty() || line.starts_with('#') {
-        return None;
+        return Ok(None);
     }
     let (negated, line) = match line.strip_prefix('!') {
         Some(rest) => (true, rest),
@@ -100,7 +111,7 @@ fn parse(line: &str) -> Option<Rule> {
         None => (false, line),
     };
     if line.is_empty() {
-        return None;
+        return Ok(None);
     }
     let basename = !line.contains('/');
     let line = line.strip_prefix('/').unwrap_or(line);
@@ -109,13 +120,13 @@ fn parse(line: &str) -> Option<Rule> {
         .case_insensitive(cfg!(any(windows, target_os = "macos")))
         .size_limit(1 << 20)
         .build()
-        .ok()?;
-    Some(Rule {
+        .map_err(|_| ())?;
+    Ok(Some(Rule {
         pattern,
         negated,
         dir_only,
         basename,
-    })
+    }))
 }
 
 /// Trailing spaces are dropped unless escaped with a backslash.

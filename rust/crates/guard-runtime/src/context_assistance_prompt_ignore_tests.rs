@@ -96,3 +96,23 @@ fn git_info_exclude_counts_and_an_unreadable_file_is_an_error() {
     fs::write(root.join(".gitignore"), "x\n".repeat(MAX_IGNORE_BYTES)).unwrap();
     assert!(root_chain(root).is_err());
 }
+
+#[test]
+fn rules_it_cannot_fully_honour_keep_the_folder_out() {
+    let (_dir, root) = folder();
+    let file = root.join(".gitignore");
+    let many: String = (0..=MAX_RULES)
+        .map(|index| format!("file{index}\n"))
+        .collect();
+    fs::write(&file, many).unwrap();
+    assert!(extend(None, &file, "").is_err(), "too many rules");
+    let at_limit: String = (0..MAX_RULES)
+        .map(|index| format!("file{index}\n"))
+        .collect();
+    fs::write(&file, at_limit).unwrap();
+    assert!(extend(None, &file, "").is_ok());
+    assert!(
+        parse(&format!("{}x", "a?".repeat(200_000))).is_err(),
+        "too large to compile"
+    );
+}
