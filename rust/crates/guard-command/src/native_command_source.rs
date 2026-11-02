@@ -15,6 +15,8 @@ mod capabilities;
 mod catalog;
 #[path = "native_command_source_cloud_binding.rs"]
 mod cloud_binding;
+#[path = "native_command_source_cloud_binding_artifact.rs"]
+mod cloud_binding_artifact;
 #[path = "native_command_source_contract.rs"]
 mod contract;
 #[path = "native_command_source_evaluation_batch.rs"]
@@ -50,6 +52,11 @@ pub use catalog::{
 pub use cloud_binding::{
     admit_binding_contribution, parse_binding_contribution, BindingResourceInput,
     CloudBindingContribution, CloudBindingInput, CloudSupport,
+};
+pub use cloud_binding_artifact::{
+    binding_artifact_compatibility, read_binding_artifact, ArtifactAction, ArtifactResource,
+    ArtifactTarget, BindingArtifact, BindingArtifactCompatibility, BindingArtifactMetadata,
+    MAX_ARTIFACT_BYTES, SUPPORTED_ARTIFACT_COMPILER_VERSIONS,
 };
 pub use contract::{descriptor_schema, source_schema};
 pub use evaluation_batch::evaluate_batch;

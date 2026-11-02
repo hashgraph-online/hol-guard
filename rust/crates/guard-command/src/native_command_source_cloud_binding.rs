@@ -25,12 +25,12 @@ use std::collections::BTreeSet;
 
 pub(super) const BINDING_CONTRIBUTION_SCHEMA: &str = "guard.cloud-action-binding-contribution.v1";
 pub const BINDING_ARTIFACT_SCHEMA: &str = "guard.cloud-action-binding-artifact.v1";
-const BINDING_ARTIFACT_COMPILER_VERSION: u64 = 1;
-const BINDING_ARTIFACT_DOMAIN: &[u8] = b"hol-guard.cloud-action-binding-artifact.v1\0";
-const BINDING_MEANING_DOMAIN: &[u8] = b"hol-guard.cloud-action-binding-meaning.v1\0";
-const MAX_BINDINGS_PER_EXTENSION: usize = 256;
+pub(super) const BINDING_ARTIFACT_COMPILER_VERSION: u64 = 1;
+pub(super) const BINDING_ARTIFACT_DOMAIN: &[u8] = b"hol-guard.cloud-action-binding-artifact.v1\0";
+pub(super) const BINDING_MEANING_DOMAIN: &[u8] = b"hol-guard.cloud-action-binding-meaning.v1\0";
+pub(super) const MAX_BINDINGS_PER_EXTENSION: usize = 256;
 /// Every hosted executor must pin egress and bound output; mirrors binding admission.
-const EXECUTABLE_FLOOR: [TargetCapability; 2] = [
+pub(super) const EXECUTABLE_FLOOR: [TargetCapability; 2] = [
     TargetCapability::EgressPinned,
     TargetCapability::BoundedOutput,
 ];

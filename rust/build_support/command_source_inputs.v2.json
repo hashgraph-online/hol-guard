@@ -212,6 +212,7 @@
       "src/native_command_source_baseline.rs",
       "src/native_command_source_capabilities.rs",
       "src/native_command_source_cloud_binding.rs",
+      "src/native_command_source_cloud_binding_artifact.rs",
       "src/native_command_source_catalog.rs",
       "src/native_command_source_contract.rs",
       "src/native_command_source_evaluation_batch.rs",
