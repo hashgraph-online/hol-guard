@@ -281,13 +281,15 @@ fn render(picked: &[PickedExcerpt], found: &[String], words: &[String]) -> Optio
     }
     let mut out = String::from(HEADER);
     for excerpt in &kept {
+        let text = excerpt.text.trim_end();
+        let fence = fence_for(text);
         let block = format!(
-            "\n\n{} (lines {}-{})\n```{}\n{}\n```",
+            "\n\n{} (lines {}-{})\n{fence}{}\n{}\n{fence}",
             excerpt.path,
             excerpt.start_line,
             excerpt.end_line,
             language(&excerpt.path),
-            excerpt.text.trim_end(),
+            text,
         );
         if out.len() + block.len() > MAX_CONTEXT_CHARS {
             break;
@@ -306,6 +308,13 @@ fn render(picked: &[PickedExcerpt], found: &[String], words: &[String]) -> Optio
         out.push_str(&others.join(", "));
     }
     Some(out)
+}
+
+/// A backtick fence longer than any backtick run in `text`, so file
+/// contents that hold their own fences cannot close the block early.
+fn fence_for(text: &str) -> String {
+    let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
+    "`".repeat(longest.max(2) + 1)
 }
 
 fn language(path: &str) -> &'static str {

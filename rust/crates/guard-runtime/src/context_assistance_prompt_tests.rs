@@ -109,3 +109,16 @@ fn code_fences_name_the_language() {
     assert_eq!(language("app/main.py"), "python");
     assert_eq!(language("README"), "");
 }
+
+#[test]
+fn a_fence_inside_an_excerpt_cannot_close_the_block() {
+    assert_eq!(fence_for("plain"), "```");
+    assert_eq!(fence_for("a ``` b"), "````");
+    let picked = [excerpt(
+        "README.md",
+        "Header usage:\n```tsx\n<Header />\n```",
+    )];
+    let rendered = render(&picked, &[], &words(&["header"])).unwrap();
+    assert!(rendered.contains("README.md (lines 1-3)\n````markdown\nHeader usage:"));
+    assert!(rendered.ends_with("<Header />\n```\n````"));
+}
