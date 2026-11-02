@@ -344,6 +344,7 @@ mod guard_config_update_settings;
 mod guard_config_update_value;
 mod guard_home_resolve;
 mod guard_paths;
+mod guard_product_copy;
 mod guard_shim_profile;
 mod guard_store_advisory_cache;
 #[cfg(test)]
