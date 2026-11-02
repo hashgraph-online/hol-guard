@@ -119,7 +119,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
             <SettingsToggleRow label="Review briefs" description="Prepare cited context to help you understand a request. Guard's approval choices stay available."
               checked={value.features.review_briefs} disabled={editingDisabled}
               onChange={(review_briefs) => props.onChange({ ...value, features: { ...value.features, review_briefs } })} />
-            <SettingsToggleRow label="Context for AI apps" description="Allow scoped context tools for apps you authorize. Sharing between agents requires a separate choice."
+            <SettingsToggleRow label="Context for AI apps" description="Add the project files that match each prompt in Claude Code and Codex, and allow context tools for apps you authorize. Sharing between agents is a separate choice."
               checked={value.features.agent_context} disabled={editingDisabled}
               onChange={(agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })} />
             <div>

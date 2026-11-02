@@ -99,16 +99,13 @@ HOOK_EVENT_CAPABILITIES: dict[str, tuple[HarnessEventCapability, ...]] = {
         _capability(
             "claude-code",
             "UserPromptSubmit",
-            "none",
-            "unsupported",
-            ("unavailable",),
-            "No Guard UserPromptSubmit hook is installed; prompt submission is outside this declared boundary.",
-            "Do not infer prompt interception unless a future Claude Code contract adds and verifies this hook.",
-            (
-                "Guard does not install a Claude Code UserPromptSubmit hook, so native prompt submission is not "
-                + "intercepted.",
-            ),
-            "src/codex_plugin_scanner/guard/adapters/contracts.py:claude-code.known_blind_spots",
+            "native_hook",
+            "screening",
+            ("observe", "block", "approval"),
+            "Prompt hook failures return a bounded response that lets the prompt continue.",
+            "Claude Code must expose UserPromptSubmit and preserve the Guard hook response schema.",
+            ("Prompt screening does not prove downstream model or host request rewriting.",),
+            "src/codex_plugin_scanner/guard/contracts/claude-hook-groups.v1.json:runtime_groups",
         ),
     ),
     "cursor": (

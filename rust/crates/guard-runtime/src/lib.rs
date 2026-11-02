@@ -226,6 +226,8 @@ mod context_assistance_execution;
 mod context_assistance_history;
 mod context_assistance_notifications;
 mod context_assistance_op;
+mod context_assistance_prompt;
+mod context_assistance_prompt_files;
 mod context_assistance_service;
 mod context_digest;
 mod context_digest_json;

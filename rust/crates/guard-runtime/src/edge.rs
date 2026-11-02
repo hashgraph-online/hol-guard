@@ -415,19 +415,13 @@ fn evaluate_validated_envelope(
     if event_name == "PreToolUse" {
         crate::command_policy_repair::apply_at_edge(&mut result, policy_snapshot, &envelope.source);
     }
-    let mut harness_response = guard_command::hook_responses::render_edge_response(
+    let harness_response = crate::context_assistance_prompt::harness_response(
+        &envelope,
         &harness,
         &event_name,
         &result,
-        envelope.recording_only,
-    )
-    .map(Value::Object);
-    if let Some(response) = harness_response.as_mut().filter(|_| {
-        event_name == "UserPromptSubmit" && harness == "claude-code" && !envelope.recording_only
-    }) {
-        // Guard's Claude Code notice outside Watch; the typed result's reason is always text.
-        let _ = crate::hook_direct::claude_prompt_text::brand(response, &result);
-    }
+        origin_store,
+    );
     let guard_home = origin_store.map(crate::policy_store::PolicySnapshotStore::guard_home);
     let (local_cli_rule, review_evidence) = crate::edge_review_evidence::beside(
         &envelope,

@@ -25,7 +25,7 @@ export function CigarGuide({ onSelect }: { onSelect: (tab: CigarTab) => void }) 
   return <div className="cigar-guide">
     <section className="cigar-card" aria-labelledby="cigar-explained-heading">
       <h2 id="cigar-explained-heading">{CIGAR_FULL_NAME}</h2>
-      <p><strong>CIGAR</strong> prepares reusable, scoped evidence for Guard and the AI apps you authorize. Think of it as the context layer behind a task: you choose what it can use, ask a focused question, and inspect the sources behind the prepared brief.</p>
+      <p><strong>CIGAR</strong> reads the project you are working in and, each time you send a prompt in Claude Code or Codex, adds the few files that match your request. A prompt about the header color brings the header and its styles; a prompt that matches nothing in the project adds nothing. Secrets, keys, and ignored or generated folders are never read.</p>
       <button type="button" className="cigar-text-button" onClick={() => onSelect("tutorials")}>Try a guided walkthrough<HiMiniArrowRight aria-hidden="true" /></button>
     </section>
     <section className="cigar-card" aria-labelledby="cigar-flow-heading">
