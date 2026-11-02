@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BA_dXntm.js","assets/chunks/home-protection-module-CgfgfOJQ.js","assets/chunks/supply-chain-protection-stats-C7fAEb4P.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-B_4JP5sD.js","assets/chunks/harness-version-label-CPAsSqyA.js","assets/chunks/connect-guard-cloud-button-sWNubUNf.js","assets/chunks/settings-save-proof-modal-D4TJjc9y.js","assets/chunks/settings-workspace-CH-iZJgG.js","assets/chunks/confirm-dialog-Cs5DC4oq.js","assets/chunks/extensions-workspace-6KRq1wb4.js","assets/chunks/app-detail-workspace-Bn3dpe7z.js","assets/chunks/policy-workspace-page-YmGxjqob.js","assets/chunks/about-workspace-DGZA0WFE.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BA_dXntm.js","assets/chunks/home-protection-module-CgfgfOJQ.js","assets/chunks/supply-chain-protection-stats-C7fAEb4P.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-B_4JP5sD.js","assets/chunks/harness-version-label-CPAsSqyA.js","assets/chunks/connect-guard-cloud-button-sWNubUNf.js","assets/chunks/settings-save-proof-modal-D4TJjc9y.js","assets/chunks/settings-workspace-f7zoRg5E.js","assets/chunks/confirm-dialog-Cs5DC4oq.js","assets/chunks/extensions-workspace-6KRq1wb4.js","assets/chunks/app-detail-workspace-Bn3dpe7z.js","assets/chunks/policy-workspace-page-YmGxjqob.js","assets/chunks/about-workspace-DGZA0WFE.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -21864,12 +21864,13 @@ const SHELL_NAV_ITEMS = [
   },
   {
     href: "/cigar",
-    label: "CIGAR",
-    shortLabel: "CIGAR",
+    label: "Context",
+    shortLabel: "Context",
     description: "Local context, setup, sources, and AI app access",
     view: "cigar",
     group: "primary",
-    icon: HiMiniCircleStack
+    icon: HiMiniCircleStack,
+    badge: "Beta"
   },
   {
     href: "/extensions",
@@ -22001,6 +22002,18 @@ function NavigationLink(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-shell-navigation-link__icon", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, {}) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-shell-navigation-link__label", children: props.variant === "bottom" ? props.item.shortLabel : props.item.label }),
         props.variant === "drawer" ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-shell-navigation-link__description", children: props.item.description }) : null,
+        props.item.badge ? (
+          // Decorative status chip: the link's aria-label already names the
+          // destination, matching how the Inbox count badge is announced.
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "span",
+            {
+              className: "guard-shell-navigation-link__badge guard-shell-navigation-link__flag",
+              "aria-hidden": "true",
+              children: props.item.badge
+            }
+          )
+        ) : null,
         props.item.view === "inbox" && props.queuedCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-shell-navigation-link__badge", "aria-hidden": "true", children: queueCountDisplay(props.queuedCount) }) : null
       ]
     }
@@ -38266,7 +38279,7 @@ function RuntimeGate(props) {
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-BA_dXntm.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-B_4JP5sD.js"), true ? __vite__mapDeps([6,7,8,5,9]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CH-iZJgG.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-f7zoRg5E.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
   () => __vitePreload(() => import("./chunks/extensions-workspace-6KRq1wb4.js"), true ? __vite__mapDeps([12,11]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
