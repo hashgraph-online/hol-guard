@@ -19,6 +19,8 @@ export function CigarVersionJobsPanel(props: Props) {
     {props.jobs.map((job) => {
       const pending = cigarJobPending(job);
       const attention = job.recovery_available || job.phase === "failed" || job.phase === "recovery_required";
+      let tone: "amber" | "blue" | "slate" = pending ? "blue" : "slate";
+      if (attention) tone = "amber";
       return <article key={job.job_id} aria-label={operation[job.operation] + " " + job.job_id}
         className={"guard-surface-in space-y-3 rounded-2xl border p-4 sm:p-5 " + (attention ? "border-amber-300/70 bg-amber-50/50" : "border-brand-blue/20 bg-brand-blue/[0.03]")}>
         <div className="flex flex-wrap items-center gap-2.5">
@@ -26,7 +28,7 @@ export function CigarVersionJobsPanel(props: Props) {
             {attention ? <HiMiniExclamationTriangle className="size-4" /> : <HiMiniArrowPath className={"size-4" + (pending ? " motion-safe:animate-spin" : "")} />}
           </span>
           <h4 className="font-semibold text-brand-dark">{operation[job.operation]}</h4>
-          <span role="status"><Tag tone={attention ? "amber" : pending ? "blue" : "slate"}>{job.phase.replaceAll("_", " ")}{job.cancel_requested ? " · cancellation requested" : ""}</Tag></span>
+          <span role="status"><Tag tone={tone}>{job.phase.replaceAll("_", " ")}{job.cancel_requested ? " · cancellation requested" : ""}</Tag></span>
         </div>
         {job.family === "selection" ? <div className="space-y-2 text-sm leading-6 text-brand-dark/75">
           <p className="break-all text-xs text-brand-dark/55">Target: {job.target_runtime_id}</p>

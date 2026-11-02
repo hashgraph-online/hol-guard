@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BEvKhWTD.js","assets/chunks/home-protection-module-CANjTunq.js","assets/chunks/supply-chain-protection-stats-DfVtGkjL.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-DztkJ4qz.js","assets/chunks/harness-version-label-DLHQPsG7.js","assets/chunks/connect-guard-cloud-button-Dh1EACz2.js","assets/chunks/settings-save-proof-modal-DWkfO5xd.js","assets/chunks/settings-workspace-Chnz7vlL.js","assets/chunks/confirm-dialog-D_YTXeN9.js","assets/chunks/extensions-workspace-CAMEB68-.js","assets/chunks/app-detail-workspace-D4YdA5lr.js","assets/chunks/policy-workspace-page-B6AQVnEK.js","assets/chunks/about-workspace-CMN7AGdE.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BEvKhWTD.js","assets/chunks/home-protection-module-CANjTunq.js","assets/chunks/supply-chain-protection-stats-DfVtGkjL.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-DztkJ4qz.js","assets/chunks/harness-version-label-DLHQPsG7.js","assets/chunks/connect-guard-cloud-button-Dh1EACz2.js","assets/chunks/settings-save-proof-modal-DWkfO5xd.js","assets/chunks/settings-workspace-B5KocqpA.js","assets/chunks/confirm-dialog-D_YTXeN9.js","assets/chunks/extensions-workspace-CAMEB68-.js","assets/chunks/app-detail-workspace-D4YdA5lr.js","assets/chunks/policy-workspace-page-B6AQVnEK.js","assets/chunks/about-workspace-CMN7AGdE.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -23692,11 +23692,15 @@ function SelectMenu(props) {
     } else if (key === "Home" || key === "End" || key === "PageUp" || key === "PageDown") {
       event.preventDefault();
       setActive(key === "Home" || key === "PageUp" ? first() : last());
+    } else if (key === " " && typed.current.text && Date.now() - typed.current.at <= 600) {
+      event.preventDefault();
+      typeahead(key);
     } else if (key === "Enter" || key === " ") {
       event.preventDefault();
       choose(active);
     } else if (key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       hide();
     } else if (key === "Tab") {
       hide();
@@ -38446,7 +38450,7 @@ function RuntimeGate(props) {
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-BEvKhWTD.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-DztkJ4qz.js"), true ? __vite__mapDeps([6,7,8,5,9]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-Chnz7vlL.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-B5KocqpA.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
   () => __vitePreload(() => import("./chunks/extensions-workspace-CAMEB68-.js"), true ? __vite__mapDeps([12,11]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))

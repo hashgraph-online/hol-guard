@@ -126,11 +126,16 @@ export function SelectMenu<T extends string>(props: SelectMenuProps<T>) {
     } else if (key === "Home" || key === "End" || key === "PageUp" || key === "PageDown") {
       event.preventDefault();
       setActive(key === "Home" || key === "PageUp" ? first() : last());
+    } else if (key === " " && typed.current.text && Date.now() - typed.current.at <= 600) {
+      event.preventDefault();
+      typeahead(key);
     } else if (key === "Enter" || key === " ") {
       event.preventDefault();
       choose(active);
     } else if (key === "Escape") {
+      // Close only the menu; an enclosing dialog must not also close.
       event.preventDefault();
+      event.stopPropagation();
       hide();
     } else if (key === "Tab") {
       hide();

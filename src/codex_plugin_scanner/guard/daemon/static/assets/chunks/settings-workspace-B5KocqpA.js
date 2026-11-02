@@ -1,4 +1,4 @@
-import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as shellHref, c as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b4 as HiMiniPauseCircle, b5 as listContextAgentSessions, h as harnessDisplayName, b6 as HiMiniLink, b7 as revokeContextAgentSession, b8 as authorizeContextAgentSession, b9 as ContextAssistanceApiError, ba as ask, bb as parseContextScope, bc as validContextBrokerRevision, bd as listContextWorkspaces, be as HiMiniFolderOpen, bf as HiMiniFolder, u as HiMiniDocumentText, bg as grantContextWorkspace, bh as manageContextWorkspace, bi as compileWorkspaceContext, bj as isCigarProducerVersion, bk as isCigarCoreLabel, w as HiMiniArrowRight, k as HiMiniCheck, m as HiMiniHandRaised, bl as HiMiniBookOpen, M as HiMiniClipboardDocument, bm as HiMiniArrowLeft, bn as HiMiniAcademicCap, bo as subscribeDashboardLocation, bp as HiMiniArrowUpCircle, a5 as HiMiniSparkles, bq as isGuardDemoMode, br as fetchWithGuardAuth, bs as parseContextAssistanceStatus, bt as isCigarBuildIdentity, bu as fetchContextInstallations, bv as HiMiniCloudArrowDown, f as fetchContextAssistance, a as controlContextAssistance, bw as commitDashboardLocation, bx as HiMiniArrowDownTray, by as downloadBlob, bz as savedEvidenceCopy, bA as guardAwareHref, bB as fetchContextData, bC as forgetContextHistory, bD as forgetSavedEvidence, bE as resolveProtectionLevelCopy, aA as fetchSettings, bF as fetchRuntimeSnapshot, bG as clearHarnessWatchOverrides, bH as withHarnessPosturePatch, P as updateSettings, bI as clearPolicy, bJ as clearReviewQueue, bK as revokeApprovalGateCooldown, bL as disableApprovalGateTotp, bM as importSettings, bN as resetSettings, bO as enrollApprovalGateTotp, bP as verifyApprovalGateTotp, bQ as clearEvidence, bR as exportDiagnostics, bS as repairApprovalCenter, bT as exportSettings, bU as setupDesktopNotifications, a7 as EmptyState, bV as settingsWatchBannerModel, bW as WorkspacePageHeader, Z as WatchProtectionBanner, t as HiMiniMagnifyingGlass, bX as navigateFromAnchor, g as HiMiniChevronDown, bY as humanizeList, bZ as isProtectionPosture, b_ as deriveProtectionPosture, b$ as normalizeHarnessPostures, c0 as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as shellHref, c as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b4 as HiMiniPauseCircle, b5 as listContextAgentSessions, h as harnessDisplayName, b6 as HiMiniLink, b7 as revokeContextAgentSession, b8 as authorizeContextAgentSession, b9 as ContextAssistanceApiError, ba as ask, bb as parseContextScope, bc as validContextBrokerRevision, bd as listContextWorkspaces, be as HiMiniFolderOpen, bf as HiMiniFolder, u as HiMiniDocumentText, bg as grantContextWorkspace, bh as manageContextWorkspace, bi as compileWorkspaceContext, bj as isCigarProducerVersion, bk as isCigarCoreLabel, w as HiMiniArrowRight, k as HiMiniCheck, m as HiMiniHandRaised, bl as HiMiniBookOpen, M as HiMiniClipboardDocument, bm as HiMiniArrowLeft, bn as HiMiniAcademicCap, bo as subscribeDashboardLocation, a5 as HiMiniSparkles, bp as HiMiniArrowUpCircle, bq as isGuardDemoMode, br as fetchWithGuardAuth, bs as parseContextAssistanceStatus, bt as isCigarBuildIdentity, bu as fetchContextInstallations, bv as HiMiniCloudArrowDown, f as fetchContextAssistance, a as controlContextAssistance, bw as commitDashboardLocation, bx as HiMiniArrowDownTray, by as downloadBlob, bz as savedEvidenceCopy, bA as guardAwareHref, bB as fetchContextData, bC as forgetContextHistory, bD as forgetSavedEvidence, bE as resolveProtectionLevelCopy, aA as fetchSettings, bF as fetchRuntimeSnapshot, bG as clearHarnessWatchOverrides, bH as withHarnessPosturePatch, P as updateSettings, bI as clearPolicy, bJ as clearReviewQueue, bK as revokeApprovalGateCooldown, bL as disableApprovalGateTotp, bM as importSettings, bN as resetSettings, bO as enrollApprovalGateTotp, bP as verifyApprovalGateTotp, bQ as clearEvidence, bR as exportDiagnostics, bS as repairApprovalCenter, bT as exportSettings, bU as setupDesktopNotifications, a7 as EmptyState, bV as settingsWatchBannerModel, bW as WorkspacePageHeader, Z as WatchProtectionBanner, t as HiMiniMagnifyingGlass, bX as navigateFromAnchor, g as HiMiniChevronDown, bY as humanizeList, bZ as isProtectionPosture, b_ as deriveProtectionPosture, b$ as normalizeHarnessPostures, c0 as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-DWkfO5xd.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
 import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-D_YTXeN9.js";
@@ -2749,11 +2749,11 @@ const OS = { darwin: "macOS", linux: "Linux", windows: "Windows", win32: "Window
 const ARCH = { arm64: "Apple silicon", aarch64: "Arm", x86_64: "Intel", amd64: "Intel", x64: "Intel" };
 function platformLabel(platform2) {
   if (!platform2) return "Unknown computer";
-  const [os, ...rest] = platform2.split("-");
-  const arch = rest.join("-");
+  const [os, arch = ""] = platform2.split("-");
   const name = OS[os];
   if (!name) return platform2;
-  const chip = os === "darwin" ? ARCH[arch] : arch === "arm64" || arch === "aarch64" ? "Arm" : ARCH[arch];
+  const arm = arch === "arm64" || arch === "aarch64";
+  const chip = arm && os !== "darwin" ? "Arm" : ARCH[arch];
   return chip ? name + " · " + chip : name;
 }
 function CigarRuntimeSelection(props) {
@@ -2807,6 +2807,15 @@ function Fact({ term, children }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-sm font-medium text-brand-dark", children })
   ] });
 }
+function markerFor(running, attention) {
+  if (running) return [HiMiniCheckCircle, "bg-brand-green-bg text-brand-green-text"];
+  if (attention) return [HiMiniExclamationTriangle, "bg-amber-100 text-amber-700"];
+  return [HiMiniPauseCircle, "bg-brand-dark/[0.06] text-brand-dark/55"];
+}
+function availabilityText(loading, copy) {
+  if (loading) return "Checking availability…";
+  return copy ? `${copy.label}. ${copy.detail}` : "Availability has not been verified.";
+}
 function ContextSettingsControls(props) {
   const { value, status, installations } = props;
   const titleId = reactExports.useId();
@@ -2820,7 +2829,7 @@ function ContextSettingsControls(props) {
   const runtime = status?.runtime ?? status?.last_check;
   const running = status?.effective_enabled === true;
   const attention = !running && Boolean(status?.requested_enabled && !status.job);
-  const [Icon, tone] = running ? [HiMiniCheckCircle, "bg-brand-green-bg text-brand-green-text"] : attention ? [HiMiniExclamationTriangle, "bg-amber-100 text-amber-700"] : [HiMiniPauseCircle, "bg-brand-dark/[0.06] text-brand-dark/55"];
+  const [Icon, tone] = markerFor(running, attention);
   const effective = status?.effective_preferences ?? value;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("section", { "aria-labelledby": titleId, className: "guard-surface-in rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-x-6 gap-y-4", children: [
@@ -2828,7 +2837,7 @@ function ContextSettingsControls(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-10 shrink-0 items-center justify-center rounded-full " + tone, children: props.loading || status?.job ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-5 motion-safe:animate-spin" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "size-5" }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-1.5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: titleId, className: "text-lg font-semibold tracking-[-0.01em] text-brand-dark", children: runtime ? "CIGAR " + runtime.package_version : "CIGAR runtime" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-[62ch] text-sm leading-6 text-brand-dark/75", role: "status", "aria-live": "polite", children: props.loading ? "Checking availability…" : statusCopy ? `${statusCopy.label}. ${statusCopy.detail}` : "Availability has not been verified." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-[62ch] text-sm leading-6 text-brand-dark/75", role: "status", "aria-live": "polite", children: availabilityText(props.loading, statusCopy) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "CIGAR uses its own copy of Python 3.14. Guard sets it up for you when you click Turn on CIGAR." })
         ] })
       ] }),
@@ -3810,7 +3819,7 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
               children: "Grant review source access"
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: hint$1, children: "Guard asks before anything is shared." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: hint$1, children: "CIGAR reads only this folder and the files you list." })
         ] })
       ] })
     ] }) : null,
@@ -3840,6 +3849,9 @@ function canCommitCigarJob(job, status) {
 }
 function cigarJobPending(job) {
   return job.worker_live === true || !job.recovery_available && !["ready", "completed", "cancelled", "failed", "recovery_required"].includes(job.phase);
+}
+function cigarJobActive(job) {
+  return cigarJobPending(job) || job.can_commit || job.recovery_available || job.phase === "recovery_required";
 }
 function cigarBuildBlock(catalog, build, updates) {
   if (build.withdrawn) return "This build has been withdrawn.";
@@ -4450,7 +4462,7 @@ const CIGAR_TUTORIALS = [
       {
         title: "Choose a small evidence set",
         description: "Pick the sources that can answer your question before granting workspace access.",
-        instructions: ["Open Sources, limits and runtime details in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
+        instructions: ["Open Advanced in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
         expect: "Your intended source preferences are saved and the runtime is Ready.",
         target: "runtime",
         action: "Choose source preferences",
@@ -4565,7 +4577,7 @@ const CIGAR_TUTORIALS = [
       {
         title: "Choose the execution preference",
         description: "Execution associations use native capture and policy facts.",
-        instructions: ["Open Sources, limits and runtime details. Enable Native policy and decision facts.", "If the build offers it, enable Associate native context with execution.", "Save and start CIGAR. Inspect the Native execution context panel for preparation readiness."],
+        instructions: ["Open Advanced in Settings. Enable Native policy and decision facts.", "If the build offers it, enable Associate native context with execution.", "Save and start CIGAR. Inspect the Native execution context panel for preparation readiness."],
         expect: "The panel reports the current native preparation state.",
         target: "runtime",
         action: "Review execution preferences"
@@ -4997,7 +5009,9 @@ function CigarWorkspace(props) {
   const canStop = props.stopAvailable ?? Boolean(status?.requested_enabled || status?.effective_enabled || status?.job);
   const actionDisabled = props.disabled || props.busy || props.loading;
   const running = props.setup.run.phase === "running";
-  const stripLabel = running ? "Working" : status ? contextStatusCopy(status).label : props.loading ? "Checking" : "Status unavailable";
+  let stripLabel = props.loading ? "Checking" : "Status unavailable";
+  if (status) stripLabel = contextStatusCopy(status).label;
+  if (running) stripLabel = "Working";
   const stripDetail = running ? "Guard is turning CIGAR on. You can keep browsing." : status?.effective_enabled ? (status.runtime ? "CIGAR " + status.runtime.package_version : "CIGAR") + " is running on this computer. It reads only the folders you pick." : "CIGAR is off. One click turns it on; Guard handles the setup.";
   reactExports.useEffect(() => {
     const sync = () => setTab(cigarTabFromSearch(window.location.search));
@@ -5433,6 +5447,8 @@ function CigarVersionJobsPanel(props) {
     props.jobs.map((job) => {
       const pending = cigarJobPending(job);
       const attention = job.recovery_available || job.phase === "failed" || job.phase === "recovery_required";
+      let tone = pending ? "blue" : "slate";
+      if (attention) tone = "amber";
       return /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "article",
         {
@@ -5442,7 +5458,7 @@ function CigarVersionJobsPanel(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2.5", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-8 items-center justify-center rounded-full " + (attention ? "bg-amber-100 text-amber-700" : "bg-brand-blue/10 text-brand-blue"), children: attention ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "size-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4" + (pending ? " motion-safe:animate-spin" : "") }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "font-semibold text-brand-dark", children: operation[job.operation] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: attention ? "amber" : pending ? "blue" : "slate", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone, children: [
                 job.phase.replaceAll("_", " "),
                 job.cancel_requested ? " · cancellation requested" : ""
               ] }) })
@@ -5646,25 +5662,69 @@ function CigarUpdatePreferencesPanel({ value, builds, disabled, onAction }) {
     }), children: "Save update preferences" })
   ] });
 }
+function compareCigarVersions(a, b) {
+  const parse = (v) => {
+    const [core, pre = ""] = v.replace(/^v/, "").split("-", 2);
+    return { parts: core.split(".").map((n) => Number.parseInt(n, 10) || 0), pre };
+  };
+  const x = parse(a), y = parse(b);
+  for (let i = 0; i < Math.max(x.parts.length, y.parts.length); i += 1) {
+    const d = (x.parts[i] ?? 0) - (y.parts[i] ?? 0);
+    if (d) return d;
+  }
+  if (x.pre === y.pre) return 0;
+  if (!x.pre) return 1;
+  if (!y.pre) return -1;
+  return x.pre < y.pre ? -1 : 1;
+}
 function cigarStanding(status, data) {
   const selectedId = status?.preferences.runtime_id ?? "";
   const installed = data?.installations.find((item) => item.runtime_id === selectedId);
   const running = status?.runtime?.active === true && status.effective_enabled;
   const version = running ? status.runtime.package_version : installed?.sdk_version ?? (selectedId ? status?.last_check?.package_version : void 0);
-  if (!version) return { kind: "none" };
+  if (!version) return { kind: "none", installed: data?.installations.length ?? 0 };
   const host = data?.catalog.host_platform;
-  const newest = data?.catalog.builds.find((build) => !build.withdrawn && build.channel === "stable" && build.platforms.some((platform2) => platform2.platform === host)) ?? null;
-  const behind = newest !== null && newest.identity.sdk_version !== version && (installed?.build_id ?? null) !== newest.identity.build_id;
-  return { kind: behind ? "behind" : "current", version, running, newest: newest?.identity.sdk_version ?? null };
+  let newest = null;
+  for (const build of data?.catalog.builds ?? []) {
+    if (build.withdrawn || build.channel !== "stable" || !build.platforms.some((platform2) => platform2.platform === host)) continue;
+    if (!newest || compareCigarVersions(build.identity.sdk_version, newest.identity.sdk_version) > 0) newest = build;
+  }
+  const behind = newest !== null && compareCigarVersions(newest.identity.sdk_version, version) > 0;
+  const block = behind && data ? cigarBuildBlock(data.catalog, newest, data.updates) : null;
+  return { kind: behind ? "behind" : "current", version, running, newest: newest?.identity.sdk_version ?? null, block };
+}
+const markers = {
+  behind: [HiMiniArrowUpCircle, "bg-brand-blue/10 text-brand-blue"],
+  none: [HiMiniSparkles, "bg-brand-dark/[0.06] text-brand-dark/55"],
+  running: [HiMiniCheckCircle, "bg-brand-green-bg text-brand-green-text"],
+  off: [HiMiniPauseCircle, "bg-brand-dark/[0.06] text-brand-dark/55"]
+};
+function markerKey(standing) {
+  if (standing.kind !== "current") return standing.kind;
+  return standing.running ? "running" : "off";
 }
 function Marker({ standing }) {
-  const [Icon, tone] = standing.kind === "behind" ? [HiMiniArrowUpCircle, "bg-brand-blue/10 text-brand-blue"] : standing.kind === "none" ? [HiMiniSparkles, "bg-brand-dark/[0.06] text-brand-dark/55"] : standing.running ? [HiMiniCheckCircle, "bg-brand-green-bg text-brand-green-text"] : [HiMiniPauseCircle, "bg-brand-dark/[0.06] text-brand-dark/55"];
+  const [Icon, tone] = markers[markerKey(standing)];
   return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex size-10 shrink-0 items-center justify-center rounded-full " + tone, "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "size-5" }) });
+}
+function standingBody(standing) {
+  if (standing.kind === "none") {
+    return standing.installed ? "A version is installed but none is selected. Pick one under Versions below, or turn on CIGAR and Guard picks for you." : "Nothing is installed yet. Turn on CIGAR and Guard installs the version it approved for this computer. You don't need to pick one here.";
+  }
+  if (standing.kind === "behind") {
+    return standing.block ? `CIGAR ${standing.newest} is listed, but it can't be prepared yet: ${standing.block} Your current version keeps working.` : `CIGAR ${standing.newest} is ready to prepare. Your current version keeps working until you choose to switch.`;
+  }
+  return standing.running ? "This is the newest version Guard has approved for this computer. Nothing to do." : "This version is installed but CIGAR is off. Turn it on from the top of the page whenever you like.";
+}
+function standingTitle(standing, loading) {
+  if (standing.kind !== "none") return standing.version;
+  if (loading) return "Checking this computer…";
+  return standing.installed ? "Installed, not selected" : "Not installed yet";
 }
 function CigarVersionStatusBand({ status, data, loading, actions }) {
   const standing = cigarStanding(status, data);
   const surface = standing.kind === "behind" ? "border-brand-blue/20 bg-brand-blue/[0.04]" : "border-brand-dark/10 bg-white";
-  const body = standing.kind === "none" ? "Nothing is installed yet. Turn on CIGAR and Guard installs the version it approved for this computer. You don't need to pick one here." : standing.kind === "behind" ? `CIGAR ${standing.newest} is ready to prepare. Your current version keeps working until you choose to switch.` : standing.running ? "This is the newest version Guard has approved for this computer. Nothing to do." : "This version is installed but CIGAR is off. Turn it on from the top of the page whenever you like.";
+  const body = standingBody(standing);
   const python = status?.runtime?.interpreter.version ?? status?.last_check?.interpreter.version;
   const catalog = data?.catalog.catalog;
   return /* @__PURE__ */ jsxRuntimeExports.jsx("section", { "aria-labelledby": "cigar-version-standing", className: "guard-surface-in rounded-2xl border p-4 sm:p-5 " + surface, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-x-6 gap-y-4", children: [
@@ -5672,7 +5732,7 @@ function CigarVersionStatusBand({ status, data, loading, actions }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(Marker, { standing }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { id: "cigar-version-standing", className: "flex flex-wrap items-center gap-x-3 gap-y-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: standing.kind === "none" ? "text-xl font-semibold leading-tight tracking-[-0.01em] text-brand-dark" : "font-mono text-[1.75rem] font-semibold leading-none tracking-[-0.02em] tabular-nums text-brand-dark", children: standing.kind === "none" ? loading ? "Checking this computer…" : "Not installed yet" : standing.version }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: standing.kind === "none" ? "text-xl font-semibold leading-tight tracking-[-0.01em] text-brand-dark" : "font-mono text-[1.75rem] font-semibold leading-none tracking-[-0.02em] tabular-nums text-brand-dark", children: standingTitle(standing, loading) }),
           standing.kind !== "none" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: standing.running ? "green" : "slate", children: standing.running ? "Running" : "Off" }) : null,
           standing.kind === "behind" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: "Update available" }) : null
         ] }),
@@ -5990,6 +6050,7 @@ function CigarVersionsPanel(props) {
   const changesDisabled = disabled || versions.uncertain;
   const selectionDisabled = changesDisabled || props.locked || props.dirty || !props.status || Boolean(props.status.job);
   const catalog = data?.catalog.catalog;
+  const activeJobs = data?.jobs.filter(cigarJobActive) ?? [];
   function choose(action) {
     if (disabled || action.input.action !== "cancel" && versions.uncertain) return;
     if (action.input.action !== "cancel" && props.gate?.enabled) setApproval(action);
@@ -6040,7 +6101,7 @@ function CigarVersionsPanel(props) {
     ] }) : null,
     props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: notice, children: "You can prepare builds now. Save your CIGAR preference edits before preparing or committing a selection." }) : null,
     data ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      data.jobs.length ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarVersionJobsPanel, { jobs: data.jobs, status: props.status, disabled, selectionDisabled, onAction: choose }) : null,
+      activeJobs.length ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarVersionJobsPanel, { jobs: activeJobs, status: props.status, disabled, selectionDisabled, onAction: choose }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx(CigarVersionBuildsPanel, { data, status: props.status, disabled: changesDisabled, selectionDisabled, onAction: choose }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group rounded-2xl border border-brand-dark/10 bg-white", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 hover:bg-surface-1 sm:px-5 [&::-webkit-details-marker]:hidden", children: [
@@ -6603,6 +6664,28 @@ function Row({ title, body, action }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0", children: action })
   ] });
 }
+const CONFIRM = {
+  history: {
+    title: "Clear prepared context history?",
+    label: "Clear history",
+    description: "Deletes retained historical briefs. Current contexts and source permissions stay available. Guard approvals and evidence are unchanged."
+  },
+  saved: {
+    title: "Remove saved evidence?",
+    label: "Remove saved evidence",
+    description: "Ends current context access and removes saved source evidence and reviewed notes, including inactive stores. Check and start the runtime and grant access again to continue. Guard approvals and evidence are unchanged."
+  },
+  data: {
+    title: "Clear all context data?",
+    label: "Clear context data",
+    description: "Closes context graphs and deletes retained briefs, saved evidence, native context origins, source grants and app connections. Grant access again to continue. Guard approvals and evidence are unchanged."
+  },
+  recheck: {
+    title: "Recheck context runtime?",
+    label: "Recheck runtime",
+    description: "Ends current context access and checks the selected runtime again. An enabled preference may start a fresh runtime. Grant source and app access again afterward."
+  }
+};
 function contextDiagnostics(status, data) {
   const runtime = status.runtime ?? status.last_check;
   const code = (value) => value === null ? null : /^[a-z0-9_]{1,160}$/.test(value) ? value : "redacted_diagnostic";
@@ -6823,7 +6906,7 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": "cigar-data-danger", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "cigar-data-danger", className: versionHeading, children: "Delete or turn off" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Each of these asks you first. Guard approvals and evidence are never touched." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Deleting asks you first. Guard approvals and evidence are never touched." })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "divide-y divide-red-200/70 overflow-hidden rounded-2xl border border-red-200 bg-red-50/30", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -6864,9 +6947,9 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
     confirm ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ConfirmDialog,
       {
-        title: confirm === "history" ? "Clear prepared context history?" : confirm === "saved" ? "Remove saved evidence?" : confirm === "data" ? "Clear all context data?" : "Recheck context runtime?",
-        description: confirm === "history" ? "Deletes retained historical briefs. Current contexts and source permissions stay available. Guard approvals and evidence are unchanged." : confirm === "saved" ? "Ends current context access and removes saved source evidence and reviewed notes, including inactive stores. Check and start the runtime and grant access again to continue. Guard approvals and evidence are unchanged." : confirm === "data" ? "Closes context graphs and deletes retained briefs, saved evidence, native context origins, source grants and app connections. Grant access again to continue. Guard approvals and evidence are unchanged." : "Ends current context access and checks the selected runtime again. An enabled preference may start a fresh runtime. Grant source and app access again afterward.",
-        confirmLabel: confirm === "history" ? "Clear history" : confirm === "saved" ? "Remove saved evidence" : confirm === "data" ? "Clear context data" : "Recheck runtime",
+        title: CONFIRM[confirm].title,
+        description: CONFIRM[confirm].description,
+        confirmLabel: CONFIRM[confirm].label,
         tone: confirm === "recheck" ? "default" : "destructive",
         onCancel: () => setConfirm(null),
         onConfirm: () => execute(confirm)

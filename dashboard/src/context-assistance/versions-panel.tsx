@@ -3,7 +3,7 @@ import { HiMiniArrowPath, HiMiniChevronRight, HiMiniCloudArrowDown } from "react
 import type { GuardApprovalGatePublicConfig } from "../guard-types";
 import { SettingsSaveProofModal } from "../settings-save-proof-modal";
 import type { ContextAssistanceStatus } from "./types";
-import { cigarVersionJobId } from "./versions-actions";
+import { cigarJobActive, cigarVersionJobId } from "./versions-actions";
 import { CigarVersionBuildsPanel } from "./versions-builds-panel";
 import { CigarVersionJobsPanel } from "./versions-jobs-panel";
 import { CigarUpdatePreferencesPanel } from "./versions-preferences-panel";
@@ -22,6 +22,7 @@ export function CigarVersionsPanel(props: Props) {
   const changesDisabled = disabled || versions.uncertain;
   const selectionDisabled = changesDisabled || props.locked || props.dirty || !props.status || Boolean(props.status.job);
   const catalog = data?.catalog.catalog;
+  const activeJobs = data?.jobs.filter(cigarJobActive) ?? [];
   function choose(action: CigarVersionAction) {
     if (disabled || action.input.action !== "cancel" && versions.uncertain) return;
     if (action.input.action !== "cancel" && props.gate?.enabled) setApproval(action);
@@ -45,7 +46,7 @@ export function CigarVersionsPanel(props: Props) {
     {versions.tracking ? <p className="break-all text-xs text-brand-dark/60">Last submitted job: {versions.tracking}. Refresh jobs to confirm its outcome.</p> : null}
     {props.dirty ? <p role="status" className={notice}>You can prepare builds now. Save your CIGAR preference edits before preparing or committing a selection.</p> : null}
     {data ? <>
-      {data.jobs.length ? <CigarVersionJobsPanel jobs={data.jobs} status={props.status} disabled={disabled} selectionDisabled={selectionDisabled} onAction={choose} /> : null}
+      {activeJobs.length ? <CigarVersionJobsPanel jobs={activeJobs} status={props.status} disabled={disabled} selectionDisabled={selectionDisabled} onAction={choose} /> : null}
       <CigarVersionBuildsPanel data={data} status={props.status} disabled={changesDisabled} selectionDisabled={selectionDisabled} onAction={choose} />
       <details className="group rounded-2xl border border-brand-dark/10 bg-white">
         <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 hover:bg-surface-1 sm:px-5 [&::-webkit-details-marker]:hidden">

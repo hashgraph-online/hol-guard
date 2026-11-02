@@ -41,7 +41,7 @@ test("private saved evidence survives runtime restart with fresh grants and can 
       const toggle = page.getByRole("switch", { name: label, exact: true });
       if (await toggle.getAttribute("aria-checked") === "true") await toggle.click();
     }
-    await page.getByText("Sources, limits and runtime details", { exact: true }).click();
+    await page.getByText("Sources, limits, storage and runtime details", { exact: true }).click();
     await chooseMenuOption(page.getByRole("combobox", { name: "Evidence storage", exact: true }), "sqlite");
     await page.getByRole("spinbutton", { name: "Context history, saved evidence and shared-note retention in hours", exact: true }).fill("1");
     const files = page.getByRole("switch", { name: "Allow selected workspace documents", exact: true });

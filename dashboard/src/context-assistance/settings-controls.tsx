@@ -43,6 +43,15 @@ function Fact({ term, children }: { term: string; children: ReactNode }) {
   return <div className="rounded-xl bg-surface-1 px-3 py-2.5"><dt className="text-xs text-slate-500">{term}</dt><dd className="mt-0.5 text-sm font-medium text-brand-dark">{children}</dd></div>;
 }
 
+function markerFor(running: boolean, attention: boolean) {
+  if (running) return [HiMiniCheckCircle, "bg-brand-green-bg text-brand-green-text"] as const;
+  if (attention) return [HiMiniExclamationTriangle, "bg-amber-100 text-amber-700"] as const;
+  return [HiMiniPauseCircle, "bg-brand-dark/[0.06] text-brand-dark/55"] as const;
+}
+function availabilityText(loading: boolean, copy: { label: string; detail: string } | null | undefined): string {
+  if (loading) return "Checking availability…";
+  return copy ? `${copy.label}. ${copy.detail}` : "Availability has not been verified.";
+}
 export function ContextSettingsControls(props: ContextSettingsControlsProps) {
   const { value, status, installations } = props;
   const titleId = useId();
@@ -56,8 +65,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
   const runtime = status?.runtime ?? status?.last_check;
   const running = status?.effective_enabled === true;
   const attention = !running && Boolean(status?.requested_enabled && !status.job);
-  const [Icon, tone] = running ? [HiMiniCheckCircle, "bg-brand-green-bg text-brand-green-text"]
-    : attention ? [HiMiniExclamationTriangle, "bg-amber-100 text-amber-700"] : [HiMiniPauseCircle, "bg-brand-dark/[0.06] text-brand-dark/55"];
+  const [Icon, tone] = markerFor(running, attention);
   const effective = status?.effective_preferences ?? value;
   return (
     <div className="space-y-8">
@@ -70,7 +78,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
             <div className="min-w-0 space-y-1.5">
               <h3 id={titleId} className="text-lg font-semibold tracking-[-0.01em] text-brand-dark">{runtime ? "CIGAR " + runtime.package_version : "CIGAR runtime"}</h3>
               <p className="max-w-[62ch] text-sm leading-6 text-brand-dark/75" role="status" aria-live="polite">
-                {props.loading ? "Checking availability…" : statusCopy ? `${statusCopy.label}. ${statusCopy.detail}` : "Availability has not been verified."}
+                {availabilityText(props.loading, statusCopy)}
               </p>
               <p className={caption}>CIGAR uses its own copy of Python 3.14. Guard sets it up for you when you click Turn on CIGAR.</p>
             </div>

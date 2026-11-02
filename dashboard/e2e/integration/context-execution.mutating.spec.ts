@@ -42,7 +42,7 @@ test("execution opt-in and browser approvals reach the installed native executor
       const toggle = page.getByRole("switch", { name: label, exact: true });
       if (await toggle.getAttribute("aria-checked") === "true") await toggle.click();
     }
-    await page.getByText("Sources, limits and runtime details", { exact: true }).click();
+    await page.getByText("Sources, limits, storage and runtime details", { exact: true }).click();
     const execution = page.getByRole("switch", { name: "Associate native context with execution", exact: true });
     await expect(execution).toHaveAttribute("aria-checked", "false");
     await execution.focus();

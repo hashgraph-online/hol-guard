@@ -38,7 +38,7 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
   await page.keyboard.press("Space");
   await expect(toggle).toHaveAttribute("aria-checked", "true");
   await page.getByRole("switch", { name: "Context for AI apps", exact: true }).click();
-  await page.getByText("Sources, limits and runtime details", { exact: true }).click();
+  await page.getByText("Sources, limits, storage and runtime details", { exact: true }).click();
   await page.getByRole("switch", { name: "Allow selected workspace documents" }).click();
   await saveWithProof(page, state);
   expect((await status()).effective_enabled).toBe(false);

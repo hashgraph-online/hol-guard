@@ -39,7 +39,9 @@ export function CigarWorkspace(props: CigarWorkspaceProps) {
   const canStop = props.stopAvailable ?? Boolean(status?.requested_enabled || status?.effective_enabled || status?.job);
   const actionDisabled = props.disabled || props.busy || props.loading;
   const running = props.setup.run.phase === "running";
-  const stripLabel = running ? "Working" : status ? contextStatusCopy(status).label : props.loading ? "Checking" : "Status unavailable";
+  let stripLabel = props.loading ? "Checking" : "Status unavailable";
+  if (status) stripLabel = contextStatusCopy(status).label;
+  if (running) stripLabel = "Working";
   const stripDetail = running ? "Guard is turning CIGAR on. You can keep browsing."
     : status?.effective_enabled ? (status.runtime ? "CIGAR " + status.runtime.package_version : "CIGAR") + " is running on this computer. It reads only the folders you pick."
     : "CIGAR is off. One click turns it on; Guard handles the setup.";

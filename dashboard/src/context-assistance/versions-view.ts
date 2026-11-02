@@ -19,10 +19,11 @@ const ARCH: Record<string, string> = { arm64: "Apple silicon", aarch64: "Arm", x
 /** "darwin-arm64" reads as "macOS · Apple silicon"; unknown tags pass through untouched. */
 export function platformLabel(platform: string | null | undefined): string {
   if (!platform) return "Unknown computer";
-  const [os, ...rest] = platform.split("-");
-  const arch = rest.join("-");
+  // Linux tags carry a libc suffix ("linux-x64-gnu", "linux-arm64-musl"); the chip is the first token.
+  const [os, arch = ""] = platform.split("-");
   const name = OS[os];
   if (!name) return platform;
-  const chip = os === "darwin" ? ARCH[arch] : arch === "arm64" || arch === "aarch64" ? "Arm" : ARCH[arch];
+  const arm = arch === "arm64" || arch === "aarch64";
+  const chip = arm && os !== "darwin" ? "Arm" : ARCH[arch];
   return chip ? name + " · " + chip : name;
 }

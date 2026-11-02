@@ -208,7 +208,7 @@ export function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllo
         <div className="flex flex-wrap items-center gap-3 border-t border-brand-dark/[0.07] pt-4">
           <button className={versionPrimary} type="button" disabled={!workspace.trim() || fileCount > 32}
             onClick={() => { if (gate?.enabled) setProofOpen(true); else void grant(); }}>Grant review source access</button>
-          <p className={hint}>Guard asks before anything is shared.</p>
+          <p className={hint}>CIGAR reads only this folder and the files you list.</p>
         </div>
       </fieldset>
     </section> : null}

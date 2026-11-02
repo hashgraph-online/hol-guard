@@ -23,6 +23,16 @@ function Row({ title, body, action }: { title: string; body: string; action: Rea
     <div className="shrink-0">{action}</div></li>;
 }
 type Action = "history" | "data" | "saved" | "recheck";
+const CONFIRM: Record<Action, { title: string; description: string; label: string }> = {
+  history: { title: "Clear prepared context history?", label: "Clear history",
+    description: "Deletes retained historical briefs. Current contexts and source permissions stay available. Guard approvals and evidence are unchanged." },
+  saved: { title: "Remove saved evidence?", label: "Remove saved evidence",
+    description: "Ends current context access and removes saved source evidence and reviewed notes, including inactive stores. Check and start the runtime and grant access again to continue. Guard approvals and evidence are unchanged." },
+  data: { title: "Clear all context data?", label: "Clear context data",
+    description: "Closes context graphs and deletes retained briefs, saved evidence, native context origins, source grants and app connections. Grant access again to continue. Guard approvals and evidence are unchanged." },
+  recheck: { title: "Recheck context runtime?", label: "Recheck runtime",
+    description: "Ends current context access and checks the selected runtime again. An enabled preference may start a fresh runtime. Grant source and app access again afterward." },
+};
 type Props = { savedEnabled: boolean; disabled: boolean; onStopped: (value: GuardContextAssistanceConfig) => void; onBusyChange: (busy: boolean) => void };
 
 export function contextDiagnostics(status: ContextAssistanceStatus, data: ContextDataSummary | null) {
@@ -172,7 +182,7 @@ export function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBu
       </section>
       <section className="space-y-3" aria-labelledby="cigar-data-danger">
         <div><h3 id="cigar-data-danger" className={versionHeading}>Delete or turn off</h3>
-          <p className={versionLead}>Each of these asks you first. Guard approvals and evidence are never touched.</p></div>
+          <p className={versionLead}>Deleting asks you first. Guard approvals and evidence are never touched.</p></div>
         <ul className="divide-y divide-red-200/70 overflow-hidden rounded-2xl border border-red-200 bg-red-50/30">
           <Row title="Prepared context history" body="Deletes retained historical briefs. Current contexts and source permissions stay."
             action={<button className={danger} type="button" disabled={busy || disabled || !ready || !data?.history_entries} onClick={() => setConfirm("history")}>Clear context history</button>} />
@@ -185,12 +195,7 @@ export function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBu
         </ul>
       </section>
     </div>
-    {confirm ? <ConfirmDialog title={confirm === "history" ? "Clear prepared context history?" : confirm === "saved" ? "Remove saved evidence?" : confirm === "data" ? "Clear all context data?" : "Recheck context runtime?"}
-      description={confirm === "history" ? "Deletes retained historical briefs. Current contexts and source permissions stay available. Guard approvals and evidence are unchanged."
-        : confirm === "saved" ? "Ends current context access and removes saved source evidence and reviewed notes, including inactive stores. Check and start the runtime and grant access again to continue. Guard approvals and evidence are unchanged."
-        : confirm === "data" ? "Closes context graphs and deletes retained briefs, saved evidence, native context origins, source grants and app connections. Grant access again to continue. Guard approvals and evidence are unchanged."
-        : "Ends current context access and checks the selected runtime again. An enabled preference may start a fresh runtime. Grant source and app access again afterward."}
-      confirmLabel={confirm === "history" ? "Clear history" : confirm === "saved" ? "Remove saved evidence" : confirm === "data" ? "Clear context data" : "Recheck runtime"}
+    {confirm ? <ConfirmDialog title={CONFIRM[confirm].title} description={CONFIRM[confirm].description} confirmLabel={CONFIRM[confirm].label}
       tone={confirm === "recheck" ? "default" : "destructive"} onCancel={() => setConfirm(null)} onConfirm={() => execute(confirm)} /> : null}
   </div>;
 }
