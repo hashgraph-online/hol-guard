@@ -787,6 +787,14 @@
    "body": "c4f2341b990a"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Windows has no stale-copy hand-off yet: a stale bounded bridge (ZCode, Copilot, Kimi, Devin, OpenClaw, Hermes) that misses the resident keeps the hook and takes the daemon path, exactly as before this arm existed. Nothing is decided differently; the hook only stays on the slower route. The Unix arm is pinned by bounded_hook_bridge_successor_tests.rs and hook_bridge_successor_tests.rs.",
+   "file": "rust/crates/guard-runtime/src/bounded_hook_bridge.rs",
+   "item": "fn successor_route( _config: &BridgeConfig, _prepared: &Prepared, _python_argv: &[String], _raw: &[u8], _deadline: Instant, ) -> Option<Route>",
+   "cfg": "not(unix)",
+   "body": "3d33baed3530"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/cisco_containment.rs",
    "item": "fn mode_of(meta: &std::fs::Metadata) -> u32",
    "verdict": "posix-primitive",

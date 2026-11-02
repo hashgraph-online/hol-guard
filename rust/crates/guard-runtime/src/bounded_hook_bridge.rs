@@ -70,8 +70,13 @@ const HOOK_DEADLINE: &str = "daemon hook deadline exhausted";
 
 #[path = "bounded_hook_bridge_config.rs"]
 mod config;
+#[cfg(unix)]
+#[path = "bounded_hook_bridge_successor.rs"]
+mod successor;
 pub(crate) use config::{config_argument, parse_launch_config, BridgeConfig};
 use config::{frozen_launch, positive_seconds};
+#[cfg(unix)]
+use successor::successor_route;
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Input {
@@ -194,8 +199,22 @@ pub(crate) enum Route {
     },
 }
 
-/// The daemon path of `run_bounded_cli_hook` after the input was read.
+/// [`route_hook_from`] for a bridge that never hands its hook on.
+#[cfg(all(test, unix))]
 pub(crate) fn route_hook(config: &BridgeConfig, raw: &[u8], deadline: Instant) -> Route {
+    route_hook_from(config, raw, deadline, None)
+}
+
+/// The daemon path of `run_bounded_cli_hook` after the input was read: a
+/// live resident's answer, else the answer of the newer bridge the resident
+/// runs, else the daemon's. `python_argv` is the hook's command, which a
+/// newer bridge is run with.
+pub(crate) fn route_hook_from(
+    config: &BridgeConfig,
+    raw: &[u8],
+    deadline: Instant,
+    python_argv: Option<&[String]>,
+) -> Route {
     let prepared = match prepare(raw) {
         Ok(prepared) => prepared,
         Err(refused) => return refused,
@@ -212,6 +231,11 @@ pub(crate) fn route_hook(config: &BridgeConfig, raw: &[u8], deadline: Instant) -
         Ok(route) => return route,
         Err(miss) => miss,
     };
+    if let (DirectMiss::NoResident, Some(python_argv)) = (miss, python_argv) {
+        if let Some(route) = successor_route(config, &prepared, python_argv, raw, deadline) {
+            return route;
+        }
+    }
     let left = remaining(deadline);
     let failed = match daemon_target(&config.guard_home, &config.harness) {
         None => None,
@@ -236,6 +260,17 @@ pub(crate) fn route_hook(config: &BridgeConfig, raw: &[u8], deadline: Instant) -
         }
     };
     restarted_route(config, prepared, deadline, budget, failed.as_ref(), miss)
+}
+
+#[cfg(not(unix))]
+fn successor_route(
+    _config: &BridgeConfig,
+    _prepared: &Prepared,
+    _python_argv: &[String],
+    _raw: &[u8],
+    _deadline: Instant,
+) -> Option<Route> {
+    None
 }
 
 /// The route once no daemon answered: start one with the configured
@@ -439,7 +474,10 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
     let Input::Read(raw) = read_hook_input(deadline) else {
         return fail(&config.harness, DEFAULT_EVENT, false);
     };
-    emit(&config.harness, route_hook(&config, &raw, deadline))
+    emit(
+        &config.harness,
+        route_hook_from(&config, &raw, deadline, Some(python_argv)),
+    )
 }
 
 /// `main_from_argv` for a config the native bridge does not serve: the
