@@ -168,7 +168,14 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
     if request.guard_home.is_empty() {
         return Err(ERR_INVALID);
     }
-    dispatch(&request.kind, &request.args)
+    match request.kind.as_str() {
+        // Kinds that write under the Guard home take the home the resident
+        // verified for this request, never one from their arguments.
+        "package_firewall_refresh_claim" => {
+            crate::package_firewall_refresh::dispatch(&request.args, &request.guard_home)
+        }
+        _ => dispatch(&request.kind, &request.args),
+    }
 }
 
 pub(crate) fn evaluate_runner_authority(

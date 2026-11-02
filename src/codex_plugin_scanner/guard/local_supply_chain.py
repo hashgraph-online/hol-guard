@@ -13,7 +13,6 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -121,8 +120,6 @@ _CLOUD_AUDIT_JOB_POLL_TIMEOUT_SECONDS = 20
 _CLOUD_AUDIT_SYNC_PAGE_SIZE = 25
 # The job fields the native summary reads; the rest of a cloud reply stays here.
 _AUDIT_JOB_SUMMARY_FIELDS = ("status", "totalPackages", "processedCount", "error")
-_PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS = 300.0
-_PACKAGE_FIREWALL_REFRESH_STATE_FILE = "package-firewall-refresh.json"
 _PACKAGE_FIREWALL_REFRESH_LOCK = threading.Lock()
 
 
@@ -243,33 +240,16 @@ def _parse_package_intent_native(
     raise NativeProtectRequestError("native_package_intent_malformed")
 
 
-def _package_firewall_refresh_state_path(guard_home: Path) -> Path:
-    return guard_home / _PACKAGE_FIREWALL_REFRESH_STATE_FILE
-
-
-def _read_package_firewall_refresh_state(guard_home: Path) -> dict[str, object]:
-    path = _package_firewall_refresh_state_path(guard_home)
+def _claim_package_firewall_refresh(guard_home: Path, now: float) -> bool:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _write_package_firewall_refresh_state(guard_home: Path, last_attempt: float) -> None:
-    path = _package_firewall_refresh_state_path(guard_home)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        tmp_path.write_text(
-            json.dumps({"last_refresh_attempt_at": last_attempt}, sort_keys=True, separators=(",", ":")),
-            encoding="utf-8",
+        answer = native_runner_authority(
+            "package_firewall_refresh_claim",
+            {"now": now},
+            guard_home=guard_home,
         )
-        tmp_path.replace(path)
-    finally:
-        if tmp_path.exists():
-            with suppress(OSError):
-                tmp_path.unlink()
+    except NativeRunnerAuthorityError:
+        return False
+    return answer.get("refresh") is True
 
 
 def build_local_supply_chain_posture(
@@ -337,14 +317,8 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
     now_iso = datetime.now(timezone.utc).isoformat()
     now = time.time()
     with _PACKAGE_FIREWALL_REFRESH_LOCK:
-        state = _read_package_firewall_refresh_state(store.guard_home)
-        last_refresh_at = state.get("last_refresh_attempt_at")
-        if (
-            isinstance(last_refresh_at, (int, float))
-            and (now - float(last_refresh_at)) < _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS
-        ):
+        if not _claim_package_firewall_refresh(store.guard_home, now):
             return entitlement
-        _write_package_firewall_refresh_state(store.guard_home, now)
     auth_context: dict[str, object] | None = None
     try:
         auth_context = _resolve_guard_sync_auth_context(store)

@@ -753,6 +753,7 @@ mod package_config_mirror;
 mod package_context_build_op;
 mod package_evaluation_compose_op;
 mod package_evaluation_view_op;
+mod package_firewall_refresh;
 mod package_intent_extract_op;
 mod package_policy_resolve_op;
 mod package_posture_op;
