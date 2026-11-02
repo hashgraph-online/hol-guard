@@ -33,6 +33,16 @@ runs:
     working-directory: ${{ env.PI_EXACT_SDK_ROOT }}
     run: |
       npm ci --ignore-scripts --no-audit --no-fund
+  - name: Download native command evaluators
+    uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    with:
+      name: pytest-native-command-evaluators
+      path: rust/target/release
+  - name: Bind the compiled native runtime
+    shell: bash
+    run: |
+      chmod 0755 rust/target/release/hol-guard-runtime rust/target/release/guard-command-source
+      echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
   - name: Run actual SDK continuation module with zero-skip enforcement
     shell: bash
     run: |

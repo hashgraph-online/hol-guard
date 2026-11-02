@@ -67,9 +67,7 @@ def render_pi_extension_source(
         args["contained_sink_command"] = list(runtime.contained_sink_command)
         args["contained_request_root"] = runtime.contained_request_root
     # Rendering is pure: it must not create the Guard home before install publishes it.
-    answer = native_runner_authority(
-        "pi_extension_render", args, guard_home=_resolve_existing_digest_home(guard_home)
-    )
+    answer = native_runner_authority("pi_extension_render", args, guard_home=_resolve_existing_digest_home(guard_home))
     source = answer.get("source")
     if not isinstance(source, str):
         raise NativeRunnerAuthorityError("Pi extension render answer is malformed")
