@@ -60,6 +60,10 @@ WORKSPACE_FIND_CASE = "omp-native-shell-find-exec-grep-workspace-absolute"
 BUN_ENTRY_CASE = "omp-native-shell-linked-modules-bun-entry"
 # Both spellings of that launcher print the same build, so one check answers for either.
 BUN_ENTRY_CASES = frozenset({BUN_ENTRY_CASE, HOME_BUN_ENTRY_CASE})
+# The same build with its own status echoed after it. `| tail -15` answers with the
+# pipeline's status and the `echo` answers with `tail`'s, so neither reports the build;
+# the oracle asks for the build line and the status the run printed.
+STATUS_TAIL_BUILD_CASE = "omp-native-shell-build-then-report-its-status"
 # Oh My Pi's bash tool adds its wall-time notice only to runs at least this long (milliseconds).
 WALL_TIME_NOTICE_MIN_MS = 1000
 # Every value in the fixture's local configuration files starts with this.
@@ -270,6 +274,14 @@ def _bun_entry_build_match(calls: list[dict[str, Any]]) -> bool:
     return text is not None and VITE_BUILD_MARKER in text
 
 
+def _status_tail_build_match(calls: list[dict[str, Any]]) -> bool:
+    """The build finished, and the run printed the status it finished with."""
+    if len(calls) != 1:
+        return False
+    text = _text(calls[0])
+    return text is not None and VITE_BUILD_MARKER in text and "build=0" in text
+
+
 def _bun_test_file_match(calls: list[dict[str, Any]]) -> bool:
     """Bun evaluated the named file, rather than exiting cleanly without reading it."""
     if len(calls) != 1:
@@ -302,6 +314,8 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
         return _workspace_find_match(calls)
     if scenario.id in WORKSPACE_RUNNER_CASES:
         return _workspace_runner_match(scenario, calls)
+    if scenario.id == STATUS_TAIL_BUILD_CASE:
+        return _status_tail_build_match(calls)
     if scenario.id in BUN_ENTRY_CASES:
         return _bun_entry_build_match(calls)
     if scenario.id == BUN_TEST_FILE_CASE:
