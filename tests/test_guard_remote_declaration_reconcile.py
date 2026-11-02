@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import harness_mcp_remote
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import persist_discovered_harness_mcp_servers
 from codex_plugin_scanner.guard.adapters.harness_mcp_remote import (
     MAX_DISCOVERED_MCP_SERVERS,
@@ -16,6 +17,7 @@ from codex_plugin_scanner.guard.adapters.harness_mcp_remote import (
 from codex_plugin_scanner.guard.daemon import local_cli_api
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 
 
 class _Store:
@@ -85,6 +87,33 @@ def test_a_failed_record_skips_reconciliation() -> None:
     store = _Store(refuse=True)
     _persist(store, [_detection("codex", ("echo-mcp", "https://mcp.example.test/mcp"))])
     assert store.reconciled == []
+
+
+def test_remote_origins_come_from_the_native_runtime_in_one_batch() -> None:
+    detections = [
+        _detection(
+            "codex",
+            ("echo-mcp", "https://user:pw@MCP.Example.Test/v1/a1b2c3d4e5?key=secret"),
+            ("local-sock", "file:///tmp/sock"),
+        )
+    ]
+    remote = _remote_servers(detections)
+    assert [server.origin for server in remote] == ["https://mcp.example.test/v1/[masked]"]
+
+
+@pytest.mark.parametrize("answer", [None, {"origins": []}, {"origins": [1]}, {"origins": "x"}])
+def test_an_unusable_origin_answer_fails_the_remote_read(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
+    def native(*_args: object, **_kwargs: object) -> object:
+        if answer is None:
+            raise NativeRunnerAuthorityError("runtime unavailable")
+        return answer
+
+    monkeypatch.setattr(harness_mcp_remote, "native_runner_authority", native)
+    detections = [_detection("codex", ("echo-mcp", "https://mcp.example.test/mcp"))]
+    with pytest.raises(ValueError):
+        _ = _remote_servers(detections)
+    # A config with no remote servers never asks the runtime.
+    assert _remote_servers([_detection("codex")]) == ()
 
 
 def test_no_scan_means_no_reconciliation() -> None:
