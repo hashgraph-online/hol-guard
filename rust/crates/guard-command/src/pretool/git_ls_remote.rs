@@ -59,14 +59,22 @@ fn printing_option(argument: &str) -> bool {
     }
 }
 
+/// The sort keys a listing orders by without reading an object. A remote
+/// advertises each ref's name and the object id it points at, so ordering on
+/// either of those needs nothing the listing does not already have.
+///
+/// Every other key is an object's own field, and reaching it opens two doors
+/// this proof does not hold shut: `signature` runs the configured
+/// `gpg.program` over the object, and in a partial clone any object field
+/// sends Git to the promisor remote for an object it is missing, which is a
+/// transport the origin proof never saw. So the keys are named rather than
+/// spelled, and a key this list does not hold keeps its review.
+const SORT_KEYS: [&str; 4] = ["refname", "objectname", "version:refname", "v:refname"];
+
 /// A `--sort` key: one field name, optionally reversed with a leading `-`.
 fn sort_key(value: &str) -> bool {
     let key = value.strip_prefix('-').unwrap_or(value);
-    !key.is_empty()
-        && key.len() <= 40
-        && key.chars().all(|character| {
-            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | ':' | '.')
-        })
+    SORT_KEYS.contains(&key)
 }
 
 /// A ref pattern: the characters a ref name and a glob over one are spelled

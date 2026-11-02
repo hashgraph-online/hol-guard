@@ -18,9 +18,11 @@ fn plain_origin_listing_is_a_listing() {
     ])));
     assert!(listing(&arguments(&[
         "--symref",
-        "--sort=-committerdate",
+        "--sort=-refname",
         "origin"
     ])));
+    assert!(listing(&arguments(&["--sort=version:refname", "origin"])));
+    assert!(listing(&arguments(&["--sort=objectname", "origin"])));
     assert!(listing(&arguments(&["origin", "--", "main"])));
 }
 
@@ -46,6 +48,22 @@ fn an_option_that_runs_a_program_keeps_the_review() {
     assert!(!listing(&arguments(&["--server-option=option", "origin"])));
     assert!(!listing(&arguments(&["--sort=committerdate;id", "origin"])));
     assert!(!listing(&arguments(&["--sort=", "origin"])));
+    // `signature` verifies the object by running the configured signing
+    // program, and every other object field reaches the object itself, which
+    // in a partial clone is a fetch from a remote this proof never read.
+    for key in [
+        "signature:grade",
+        "-signature:signer",
+        "committerdate",
+        "-authordate",
+        "taggerdate",
+        "contents:subject",
+    ] {
+        assert!(
+            !listing(&arguments(&[&format!("--sort={key}"), "origin"])),
+            "{key}"
+        );
+    }
 }
 
 #[test]

@@ -563,6 +563,16 @@ fn parse<'a>(
     }
 }
 
+/// Whether no pager is configured for the listing itself.
+///
+/// Git pages `ls-remote` as it pages any other builtin, under that command's
+/// own `pager.ls-remote` key, so the fetch's key says nothing about it. With
+/// one set and stdout a terminal, an approved listing starts the program it
+/// names.
+fn listing_pager_free(effective: &config::GitConfig) -> bool {
+    !pull::pager_enabled(effective, "ls-remote")
+}
+
 fn prove(
     executable: &str,
     leading: &[String],
@@ -601,7 +611,7 @@ fn prove(
     // question. Asking it for the fetch's inert hooks and absent submodules
     // would keep the review on repositories that have them for no reason.
     if operation.listing {
-        return transport_proven(&effective, &repository, &probe);
+        return transport_proven(&effective, &repository, &probe) && listing_pager_free(&effective);
     }
     // Initialized submodules are fetched on demand with their own config
     // and hooks, which this probe does not read.
