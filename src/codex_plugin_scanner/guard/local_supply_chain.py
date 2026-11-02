@@ -60,7 +60,6 @@ from .runtime.package_execution_policy import is_execution_permitted
 from .runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
-    redact_package_request_token,
 )
 from .runtime.package_protect_projection import (
     LOCAL_SUPPLY_CHAIN_HARNESS as _LOCAL_SUPPLY_CHAIN_HARNESS,
@@ -451,6 +450,7 @@ def _build_package_protect_authority(
     additional_policy_context: dict[str, object] | None,
     external_archive_network_authorized: bool = False,
     invoking_harness: str | None = None,
+    redacted_command: str | None = None,
 ) -> _PackageProtectAuthority | None:
     try:
         launch_cwd = workspace_dir.expanduser().resolve(strict=True)
@@ -482,7 +482,9 @@ def _build_package_protect_authority(
         # cached install verdict the native parser already carries is the whole
         # answer whichever route reached protect.
         return None
-    sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
+    if redacted_command is None:
+        redacted_command = redacted_command_text(command, guard_home=store.guard_home)
+    sanitized_intent = replace(intent, redacted_command=redacted_command)
     artifact = build_package_request_artifact(
         _LOCAL_SUPPLY_CHAIN_HARNESS,
         sanitized_intent,
@@ -644,6 +646,9 @@ def _final_package_protect_authority(
         additional_policy_context=additional_context,
         external_archive_network_authorized=saved_approval_claimed,
         invoking_harness=initial.invoking_harness,
+        # The same argv redacts to the same text; reusing it keeps a resident
+        # round-trip out of the window after a saved approval is claimed.
+        redacted_command=initial.intent.redacted_command,
     )
     stored_policy = None
     if (
@@ -1016,8 +1021,21 @@ def _evaluation_uses_saved_package_approval(evaluation: Any) -> bool:
     return any(reason.get("code") == "saved_package_approval" for reason in evaluation.reasons)
 
 
-def redacted_command_tokens(command: Sequence[str]) -> tuple[str, ...]:
-    return tuple(_redact_command_token(str(token)) for token in command)
+def redacted_command_text(command: Sequence[str], *, guard_home: Path) -> str:
+    """The command text a receipt stores, as the resident redacts and joins it."""
+
+    from .native_protect_request import NativeProtectRequestError
+
+    try:
+        answer = native_runner_authority(
+            "package_command_redaction", {"command": [str(token) for token in command]}, guard_home=guard_home
+        )
+    except NativeRunnerAuthorityError as error:
+        raise NativeProtectRequestError("native_package_command_redaction_unavailable") from error
+    text = answer.get("text")
+    if not isinstance(text, str):
+        raise NativeProtectRequestError("native_package_command_redaction_malformed")
+    return text
 
 
 def _build_command_execution_payload(
@@ -1316,19 +1334,6 @@ def _package_manager_for_scan(manifest_paths: Sequence[str]) -> str:
 
 def _protect_action_for_policy_action(policy_action: object) -> GuardAction:
     return normalize_guard_action(policy_action, unknown_action="block")
-
-
-def _redact_command_token(token: str) -> str:
-    token = redact_package_request_token(token)
-    if "=" in token:
-        key, _, _ = token.partition("=")
-        if any(fragment in key.lower() for fragment in ("token", "secret", "api_key", "api-key", "password")):
-            return f"{key}=*****"
-    if ":" in token:
-        key, _, _ = token.partition(":")
-        if any(fragment in key.lower() for fragment in ("token", "secret", "api_key", "api-key", "password")):
-            return f"{key}: *****"
-    return redact_text(token).text
 
 
 def _int_value(value: object) -> int | None:
