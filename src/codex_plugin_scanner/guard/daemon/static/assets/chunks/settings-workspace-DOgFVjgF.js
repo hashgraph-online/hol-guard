@@ -4396,6 +4396,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
   const [error, setError] = reactExports.useState(null);
   const request = reactExports.useRef(null);
   const revision = reactExports.useRef(0);
+  const failed = reactExports.useRef(false);
   const id2 = reactExports.useId();
   reactExports.useEffect(() => {
     const generation2 = ++revision.current;
@@ -4404,6 +4405,10 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
     setPrevious(null);
     setBusy(false);
     setError(null);
+    if (failed.current) {
+      failed.current = false;
+      setLoaded(false);
+    }
     if (!listable) {
       setScopes([]);
       setLoaded(false);
@@ -4417,8 +4422,10 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
         setLoaded(true);
       }
     }).catch((cause) => {
-      if (revision.current !== generation2 || controller.signal.aborted || !ready) return;
-      setError(cause instanceof Error ? cause.message : "Context access is unavailable.");
+      if (revision.current !== generation2 || controller.signal.aborted) return;
+      const reason = cause instanceof Error ? cause.message : "Context access is unavailable.";
+      failed.current = true;
+      setError(ready ? reason : "Your folders appear once CIGAR is running.");
       setLoaded(true);
     });
     return () => {
@@ -4498,7 +4505,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       !listable ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty, children: "Turn on CIGAR to pick project folders. Folders you already picked come back when it is on." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "cigar-note", children: error }) : null,
         !ready ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-brand-dark/70", children: "CIGAR is starting. You can change folders once it is running." }) : null,
-        !loaded ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: empty, children: "Loading your folders…" }) : scopes.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: empty, children: [
+        !loaded ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: empty, children: "Loading your folders…" }) : scopes.length === 0 ? !error && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: empty, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolderOpen, { "aria-hidden": "true", className: "mx-auto mb-2 size-6 text-brand-dark/35" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No projects yet." }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/55", children: "Choose a folder below to get started." })

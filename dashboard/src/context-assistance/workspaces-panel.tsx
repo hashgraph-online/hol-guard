@@ -31,21 +31,25 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
   const [error, setError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
   const revision = useRef(0);
+  // A list that failed while CIGAR started is asked again, not shown empty.
+  const failed = useRef(false);
   const id = useId();
 
   useEffect(() => {
     const generation = ++revision.current;
     request.current?.abort();
     setBrief(null); setPrevious(null); setBusy(false); setError(null);
+    if (failed.current) { failed.current = false; setLoaded(false); }
     if (!listable) { setScopes([]); setLoaded(false); return; }
     // Listed again once CIGAR is running, so a slow start still shows saved folders.
     const controller = new AbortController(); request.current = controller;
     void listContextWorkspaces(controller.signal).then((values) => {
       if (revision.current === generation) { setScopes(values); setLoaded(true); }
     }).catch((cause) => {
+      if (revision.current !== generation || controller.signal.aborted) return;
       // While CIGAR starts the list is asked again once it runs; a failure then is final.
-      if (revision.current !== generation || controller.signal.aborted || !ready) return;
-      setError(cause instanceof Error ? cause.message : "Context access is unavailable."); setLoaded(true);
+      const reason = cause instanceof Error ? cause.message : "Context access is unavailable.";
+      failed.current = true; setError(ready ? reason : "Your folders appear once CIGAR is running."); setLoaded(true);
     });
     return () => { revision.current += 1; controller.abort(); };
   }, [listable, ready, generation]);
@@ -107,7 +111,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
       {!listable ? <p className={empty}>Turn on CIGAR to pick project folders. Folders you already picked come back when it is on.</p> : <>
         {error ? <p role="alert" className="cigar-note">{error}</p> : null}
         {!ready ? <p role="status" className="text-sm text-brand-dark/70">CIGAR is starting. You can change folders once it is running.</p> : null}
-        {!loaded ? <p role="status" className={empty}>Loading your folders…</p> : scopes.length === 0 ? <div className={empty}><HiMiniFolderOpen aria-hidden="true" className="mx-auto mb-2 size-6 text-brand-dark/35" /><p>No projects yet.</p><p className="mt-1 text-xs text-brand-dark/55">Choose a folder below to get started.</p></div> : <>
+        {!loaded ? <p role="status" className={empty}>Loading your folders…</p> : scopes.length === 0 ? !error && <div className={empty}><HiMiniFolderOpen aria-hidden="true" className="mx-auto mb-2 size-6 text-brand-dark/35" /><p>No projects yet.</p><p className="mt-1 text-xs text-brand-dark/55">Choose a folder below to get started.</p></div> : <>
           <div><label htmlFor={`${id}-query`} className={fieldLabel}>What would you like context about?</label>
             <input id={`${id}-query`} className={versionField} maxLength={4096} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="For example: how releases are reviewed" /></div>
           <ul className="space-y-3">{scopes.map((scope) => <li key={scope.scope_id}><section className={"space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : "border-brand-dark/10 bg-white")} aria-label={`Context access for ${scope.workspace}`}>
