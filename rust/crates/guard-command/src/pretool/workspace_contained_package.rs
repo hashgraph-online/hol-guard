@@ -112,20 +112,49 @@ const REGISTRY_VERBS: &[&str] = &[
     "doctor",
 ];
 
-/// Whether `argument` reaches a registry when `manager` is the one reading it.
+/// Whether any word in `scanned` reaches a registry when `manager` reads it.
 /// Every word in [`REGISTRY_VERBS`] does for most of them, and `exec` is the
 /// exception the manager decides: `npm exec` installs the package it names
 /// when the project does not already hold it, the way `npx` does, while pnpm
 /// and yarn run only what the project installed and fetch under `dlx`. Their
-/// `exec` therefore reaches no registry, and a run spelled with it — `pnpm
-/// exec vitest run`, or the same run pinned to one package with `--filter` —
-/// is the local work the sandbox bounds.
-fn reaches_a_registry(manager: &str, argument: &str) -> bool {
-    let argument = argument.to_ascii_lowercase();
-    if argument == "exec" && matches!(manager, "pnpm" | "yarn") {
-        return false;
-    }
-    REGISTRY_VERBS.contains(&argument.as_str())
+/// `exec` therefore reaches no registry of its own, and a run spelled with it
+/// — `pnpm exec vitest run`, or the same run pinned to one package with
+/// `--filter` — is the local work the sandbox bounds.
+///
+/// What that `exec` runs still decides the rest. A fetching program behind it
+/// — `pnpm exec npm exec <package>`, `pnpm exec npx <package>` — reaches the
+/// registry the outer verb does not, and the fetch is the command's effect
+/// whichever word spells it, so the exemption is read against the program
+/// after the verb rather than against the verb alone.
+fn scan_reaches_a_registry(manager: &str, scanned: &[&str]) -> bool {
+    scanned.iter().enumerate().any(|(index, argument)| {
+        let argument = argument.to_ascii_lowercase();
+        if argument == "exec" && matches!(manager, "pnpm" | "yarn") {
+            return scanned[index + 1..]
+                .iter()
+                .find(|word| !word.starts_with('-'))
+                .is_some_and(|target| runs_its_own_fetch(target));
+        }
+        REGISTRY_VERBS.contains(&argument.as_str())
+    })
+}
+
+/// Whether `target` names a program that fetches the package it is given.
+/// The managers reach a registry through their own verbs, and a package
+/// runner fetches the package it names outright, so neither is the installed
+/// project tool a contained `exec` runs.
+fn runs_its_own_fetch(target: &str) -> bool {
+    let name = super::super::executable_basename(target).to_ascii_lowercase();
+    PACKAGE_RUNNERS.contains(&name.as_str()) || manager_program(&name)
+}
+
+/// Whether `name` runs a manager this module decides a verb for.
+fn manager_program(name: &str) -> bool {
+    NODE_MANAGERS.contains(&name)
+        || PYTHON_MANAGERS.contains(&name)
+        || super::vendored::VENDORED_MANAGERS.contains(&name)
+        || matches!(name, "uv" | "go" | "cargo")
+        || maven_executable(name)
 }
 
 /// Where a literal `target` below the workspace moves a run that stands in
@@ -156,11 +185,7 @@ pub(super) fn names_a_manager(model: &CanonicalCommandV1) -> bool {
     model.segments.iter().any(|segment| {
         segment.executable.as_deref().is_some_and(|executable| {
             let name = super::super::executable_basename(executable).to_ascii_lowercase();
-            NODE_MANAGERS.contains(&name.as_str())
-                || PYTHON_MANAGERS.contains(&name.as_str())
-                || super::vendored::VENDORED_MANAGERS.contains(&name.as_str())
-                || matches!(name.as_str(), "uv" | "go" | "cargo")
-                || maven_executable(&name)
+            manager_program(&name)
         })
     })
 }
@@ -346,9 +371,7 @@ pub(super) fn local_package_work(
             && (leading_verb || version_probe)
             && !workspace_fanout
             && !positional_init
-            && !scanned
-                .iter()
-                .any(|argument| reaches_a_registry(&name, argument))
+            && !scan_reaches_a_registry(&name, scanned)
     })
 }
 
