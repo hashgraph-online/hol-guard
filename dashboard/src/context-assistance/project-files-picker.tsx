@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { HiMiniCheck, HiMiniChevronRight, HiMiniDocumentText, HiMiniFolder } from "react-icons/hi2";
 import { formatFileSize, listProjectFiles, type ProjectFile, type ProjectFileListing } from "./folders-api";
-import { keptFiles, presetFolders } from "./recent-projects";
+import { keptFiles, presetFolders, withoutVanished } from "./recent-projects";
 
 export const MAX_PROJECT_FILES = 32;
 type Props = { workspace: string; selected: string[]; onChange: (paths: string[]) => void; disabled?: boolean; preset?: string[] | null };
@@ -27,6 +27,8 @@ export function ProjectFilesPicker({ workspace, selected, onChange, disabled = f
   latest.current = onChange;
   const remembered = useRef(preset);
   remembered.current = preset;
+  const chosen = useRef(selected);
+  chosen.current = selected;
 
   function load(path: string, onLoaded: (value: ProjectFileListing) => void) {
     request.current?.abort();
@@ -52,7 +54,9 @@ export function ProjectFilesPicker({ workspace, selected, onChange, disabled = f
       presetCheck.current = check;
       void Promise.all(presetFolders(preset).map((folder) => listProjectFiles(workspace, folder, check.signal).then((found) => found.files, () => [])))
         .then((nested) => {
-          if (!check.signal.aborted) latest.current(keptFiles(preset, { files: [...value.files, ...nested.flat()], suggested: value.suggested }).slice(0, MAX_PROJECT_FILES));
+          if (check.signal.aborted) return;
+          const kept = keptFiles(preset, { files: [...value.files, ...nested.flat()], suggested: value.suggested });
+          latest.current(withoutVanished(chosen.current, preset, kept).slice(0, MAX_PROJECT_FILES));
         });
     });
     return () => { request.current?.abort(); presetCheck.current?.abort(); };

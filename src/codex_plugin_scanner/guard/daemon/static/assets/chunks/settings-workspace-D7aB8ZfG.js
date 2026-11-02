@@ -3969,6 +3969,11 @@ function keptFiles(preset, listing) {
   ]);
   return preset.filter((relative) => present.has(relative)).slice(0, MAX_FILES);
 }
+function withoutVanished(selection, preset, kept) {
+  const present = new Set(kept);
+  const gone = new Set(preset.filter((relative) => !present.has(relative)));
+  return selection.filter((relative) => !gone.has(relative));
+}
 const MAX_PROJECT_FILES = 32;
 const REASONS = { too_large: "Too big", not_text: "Not text", empty: "Empty" };
 const chip = "inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-sm transition-colors duration-150 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-blue/40 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 motion-reduce:transition-none";
@@ -3988,6 +3993,8 @@ function ProjectFilesPicker({ workspace, selected, onChange, disabled = false, p
   latest.current = onChange;
   const remembered = reactExports.useRef(preset);
   remembered.current = preset;
+  const chosen = reactExports.useRef(selected);
+  chosen.current = selected;
   function load(path, onLoaded) {
     request.current?.abort();
     const controller = new AbortController();
@@ -4018,7 +4025,9 @@ function ProjectFilesPicker({ workspace, selected, onChange, disabled = false, p
       presetCheck.current?.abort();
       presetCheck.current = check;
       void Promise.all(presetFolders(preset2).map((folder) => listProjectFiles(workspace, folder, check.signal).then((found) => found.files, () => []))).then((nested) => {
-        if (!check.signal.aborted) latest.current(keptFiles(preset2, { files: [...value.files, ...nested.flat()], suggested: value.suggested }).slice(0, MAX_PROJECT_FILES));
+        if (check.signal.aborted) return;
+        const kept = keptFiles(preset2, { files: [...value.files, ...nested.flat()], suggested: value.suggested });
+        latest.current(withoutVanished(chosen.current, preset2, kept).slice(0, MAX_PROJECT_FILES));
       });
     });
     return () => {

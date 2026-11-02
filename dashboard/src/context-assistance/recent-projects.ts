@@ -79,3 +79,13 @@ export function keptFiles(preset: string[], listing: Pick<ProjectFileListing, "f
   ]);
   return preset.filter((relative) => present.has(relative)).slice(0, MAX_FILES);
 }
+
+/**
+ * The remembered-file check can finish after someone has started picking, so
+ * it only drops remembered files that are gone and leaves every other pick.
+ */
+export function withoutVanished(selection: string[], preset: string[], kept: string[]): string[] {
+  const present = new Set(kept);
+  const gone = new Set(preset.filter((relative) => !present.has(relative)));
+  return selection.filter((relative) => !gone.has(relative));
+}
