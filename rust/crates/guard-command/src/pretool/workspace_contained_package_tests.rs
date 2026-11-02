@@ -27,6 +27,13 @@ fn pnpm_and_yarn_exec_run_in_the_workspace_sandbox() {
         "pnpm recursive exec vitest run",
         "pnpm multi exec vitest run",
         "pnpm m exec vitest run",
+        // The unread-option screen is the selector's question alone. With no
+        // selector the leading word is the one the route already read, so a
+        // version probe keeps the admission it had.
+        "npm -v",
+        "npm -V",
+        "pnpm -v",
+        "yarn --version",
         // A script of the project's own named `exec` is the script it is.
         "pnpm run exec",
         // The target is read past a `--` separator, and reading it there must
