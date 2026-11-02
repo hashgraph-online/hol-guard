@@ -300,6 +300,11 @@ mod developer_inspection_host;
 mod device_key_helper;
 #[path = "adapters/detection/devin_detect.rs"]
 mod devin_detect;
+#[path = "adapters/detection/devin_jsonc.rs"]
+mod devin_jsonc;
+#[cfg(all(test, unix))]
+#[path = "adapters/detection/devin_jsonc_tests.rs"]
+mod devin_jsonc_tests;
 mod direct_tool_context_op;
 #[cfg(test)]
 mod direct_tool_context_tests;

@@ -6,8 +6,9 @@ event groups are Claude-Code-shaped: ``{"<Event>": [{"matcher": <regex>,
 "hooks": [{"type": "command", "command": ..., "timeout": 30}]}]}``.
 Config files are JSONC (comments and trailing commas are allowed); Guard only
 ever writes strict JSON and refuses to rewrite a JSONC file it cannot
-preserve byte-for-byte. The native ``devin_detect`` kind inventories hooks,
-MCP servers and skills with the same JSONC rules.
+preserve byte-for-byte. The native ``devin_jsonc`` kind applies the JSONC
+rules, and ``devin_detect`` inventories hooks, MCP servers and skills with
+them.
 """
 
 from __future__ import annotations
@@ -15,6 +16,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
+
+from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
 DEVIN_DIR = ".devin"
 DEVIN_CONFIG_FILE = "config.json"
@@ -47,71 +51,6 @@ def is_guard_managed_hook_command(command: object) -> bool:
         or ("__guard-bounded-hook" in command and '"harness":"devin"' in normalized)
         or ("managed/bounded-hooks/devin.py" in normalized.replace("\\", "/"))
     )
-
-
-def _strip_jsonc_syntax(text: str) -> str:
-    """Remove ``//``/``/* */`` comments and trailing commas outside strings."""
-
-    output: list[str] = []
-    index = 0
-    in_string = False
-    length = len(text)
-    while index < length:
-        char = text[index]
-        if in_string:
-            output.append(char)
-            if char == "\\" and index + 1 < length:
-                output.append(text[index + 1])
-                index += 2
-                continue
-            if char == '"':
-                in_string = False
-            index += 1
-            continue
-        if char == '"':
-            in_string = True
-            output.append(char)
-            index += 1
-            continue
-        if char == "/" and index + 1 < length:
-            nxt = text[index + 1]
-            if nxt == "/":
-                index += 2
-                while index < length and text[index] not in "\r\n":
-                    index += 1
-                continue
-            if nxt == "*":
-                index += 2
-                while index + 1 < length and not (text[index] == "*" and text[index + 1] == "/"):
-                    index += 1
-                index += 2
-                continue
-        if char == ",":
-            lookahead = index + 1
-            while lookahead < length:
-                if text[lookahead] in " \t\r\n":
-                    lookahead += 1
-                    continue
-                if text[lookahead] == "/" and lookahead + 1 < length:
-                    nxt = text[lookahead + 1]
-                    if nxt == "/":
-                        lookahead += 2
-                        while lookahead < length and text[lookahead] not in "\r\n":
-                            lookahead += 1
-                        continue
-                    if nxt == "*":
-                        lookahead += 2
-                        while lookahead + 1 < length and not (text[lookahead] == "*" and text[lookahead + 1] == "/"):
-                            lookahead += 1
-                        lookahead += 2
-                        continue
-                break
-            if lookahead < length and text[lookahead] in "]}":
-                index += 1
-                continue
-        output.append(char)
-        index += 1
-    return "".join(output)
 
 
 @dataclass(frozen=True)
@@ -150,28 +89,30 @@ def load_devin_jsonc(path: Path) -> DevinJsonDocument:
 
 
 def parse_devin_jsonc(text: str) -> DevinJsonDocument:
-    """Parse an already captured generation with the same JSONC inventory rules."""
+    """Parse an already captured generation with the native JSONC inventory rules."""
 
-    if not text.strip():
-        return DevinJsonDocument(payload={}, had_comments=False, parse_failed=False, exists=True)
+    answer = native_runner_authority("devin_jsonc", {"text": text})
+    source = answer.get("source")
+    had_comments = answer.get("had_comments")
+    parse_failed = answer.get("parse_failed")
+    if not (source is None or isinstance(source, str)) or not isinstance(had_comments, bool):
+        raise NativeRunnerAuthorityError("Devin JSONC answer is malformed")
+    if not isinstance(parse_failed, bool):
+        raise NativeRunnerAuthorityError("Devin JSONC answer is malformed")
     try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    else:
-        if isinstance(payload, dict):
-            return DevinJsonDocument(payload=payload, had_comments=False, parse_failed=False, exists=True)
-        return DevinJsonDocument(payload={}, had_comments=False, parse_failed=True, exists=True)
-    stripped = _strip_jsonc_syntax(text)
-    if not stripped.strip():
-        return DevinJsonDocument(payload={}, had_comments=True, parse_failed=False, exists=True)
-    try:
-        payload = json.loads(stripped)
-    except json.JSONDecodeError:
-        return DevinJsonDocument(payload={}, had_comments=False, parse_failed=True, exists=True)
-    if isinstance(payload, dict):
-        return DevinJsonDocument(payload=payload, had_comments=True, parse_failed=False, exists=True)
-    return DevinJsonDocument(payload={}, had_comments=True, parse_failed=True, exists=True)
+        payload: object = json.loads(source) if source is not None else {}
+    except (ValueError, RecursionError) as error:
+        # The native parser caps nesting below CPython's recursion limit, but a
+        # deep caller stack can still exhaust it while decoding.
+        raise NativeRunnerAuthorityError("Devin JSONC answer is malformed") from error
+    if not isinstance(payload, dict):
+        raise NativeRunnerAuthorityError("Devin JSONC answer is malformed")
+    return DevinJsonDocument(
+        payload=cast("dict[str, object]", payload),
+        had_comments=had_comments,
+        parse_failed=parse_failed,
+        exists=True,
+    )
 
 
 __all__ = [
