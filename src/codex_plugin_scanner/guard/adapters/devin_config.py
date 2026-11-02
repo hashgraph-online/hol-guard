@@ -99,7 +99,12 @@ def parse_devin_jsonc(text: str) -> DevinJsonDocument:
         raise NativeRunnerAuthorityError("Devin JSONC answer is malformed")
     if not isinstance(parse_failed, bool):
         raise NativeRunnerAuthorityError("Devin JSONC answer is malformed")
-    payload: object = json.loads(source) if source is not None else {}
+    try:
+        payload: object = json.loads(source) if source is not None else {}
+    except (ValueError, RecursionError) as error:
+        # The native parser caps nesting below CPython's recursion limit, but a
+        # deep caller stack can still exhaust it while decoding.
+        raise NativeRunnerAuthorityError("Devin JSONC answer is malformed") from error
     if not isinstance(payload, dict):
         raise NativeRunnerAuthorityError("Devin JSONC answer is malformed")
     return DevinJsonDocument(

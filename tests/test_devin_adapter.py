@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
+from codex_plugin_scanner.guard.adapters import devin_config, get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.devin import DevinHarnessAdapter
 from codex_plugin_scanner.guard.adapters.devin_config import (
@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.adapters.devin_config import (
     load_devin_jsonc,
 )
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 
 FIXTURES = Path(__file__).parent / "fixtures" / "devin"
 
@@ -689,3 +690,13 @@ class TestDevinManagedMarker:
         assert is_guard_managed_hook_command("echo hi") is False
         assert is_guard_managed_hook_command(None) is False
         assert is_guard_managed_hook_command(42) is False
+
+
+def test_python_decode_recursion_becomes_a_native_answer_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def deep_answer(kind: str, args: dict[str, object]) -> dict[str, object]:
+        assert kind == "devin_jsonc"
+        return {"source": "[" * 5000 + "]" * 5000, "had_comments": False, "parse_failed": False}
+
+    monkeypatch.setattr(devin_config, "native_runner_authority", deep_answer)
+    with pytest.raises(NativeRunnerAuthorityError, match="malformed"):
+        devin_config.parse_devin_jsonc("{}")
