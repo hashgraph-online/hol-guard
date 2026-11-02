@@ -21,6 +21,7 @@ mod aibom_report_summaries_op;
 mod aibom_skill_rules;
 mod aibom_skills;
 mod aibom_symlink;
+mod aibom_trust_claims;
 #[cfg(all(test, unix))]
 mod aibom_vectors_tests;
 #[path = "adapters/detection/antigravity_detect.rs"]
