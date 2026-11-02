@@ -5,6 +5,7 @@ import { ContextAgentsPanel } from "./agents-panel";
 import { ContextNotesPanel } from "./notes-panel";
 import type { SettingsSaveProofCredentials } from "../settings-save-proof-modal";
 import { AddProjectPanel, type AddProjectInput } from "./add-project-panel";
+import { clearRecentProjects } from "./recent-projects";
 import { HiMiniArrowPath, HiMiniChevronRight, HiMiniDocumentText, HiMiniFolder, HiMiniFolderOpen } from "react-icons/hi2";
 import { Tag } from "../approval-center-primitives";
 import { versionButton, versionField, versionHeading, versionLead, versionPrimary, versionQuiet } from "./versions-view";
@@ -21,6 +22,8 @@ export function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllo
   const [query, setQuery] = useState("");
   const [brief, setBrief] = useState<{ scope: ContextWorkspaceScope; value: ContextBrief } | null>(null);
   const [previous, setPrevious] = useState<ContextBrief | null>(null);
+  // Remounts the add panel so a cleared recent list is not shown again.
+  const [cleared, setCleared] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
@@ -79,6 +82,7 @@ export function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllo
       const values = await listContextWorkspaces(signal);
       if (!signal.aborted) setScopes(values);
       if (action === "revoke" || action === "clear" || action === "withdraw") setPrevious(null);
+      if (action === "clear" && !signal.aborted) { clearRecentProjects(); setCleared((value) => value + 1); }
     });
   }
 
@@ -161,8 +165,9 @@ export function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllo
         </section> : null}
       </>}
     </section>
-    {ready ? <AddProjectPanel busy={busy} dirty={dirty} documentsAllowed={documentsAllowed} agentsAllowed={agentsAllowed} sharingAllowed={sharingAllowed}
-      executionAllowed={executionAllowed} gate={gate} error={error} first={scopes.length === 0} onGrant={grant} /> : null}
+    {ready ? <AddProjectPanel key={cleared} busy={busy} dirty={dirty} documentsAllowed={documentsAllowed} agentsAllowed={agentsAllowed} sharingAllowed={sharingAllowed}
+      executionAllowed={executionAllowed} gate={gate} error={error} first={scopes.length === 0}
+      active={scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace)} onGrant={grant} /> : null}
     <ContextAgentsPanel ready={ready} enabled={agentsAllowed} dirty={dirty} generation={generation} scopes={scopes} gate={gate} />
   </div>;
 }

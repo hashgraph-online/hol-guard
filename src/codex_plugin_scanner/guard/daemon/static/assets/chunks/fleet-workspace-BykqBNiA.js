@@ -2,7 +2,7 @@ import { ai as isUnsupportedPlatformCheck, h as harnessDisplayName, j as jsxRunt
 import { H as HarnessVersionLabel, u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus, s as setupStatusFor, a as versionCompatibilityFor } from "./harness-version-label-KFI6LZvz.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-q5ZpYwb7.js";
 import { a as SUPPORTED_APPS_BRIEF, d as defaultConnectHarness, A as APP_STATUS_LABELS } from "./app-catalog-Ca_M7GbC.js";
-import { G as GuardRepairControl, S as SettingsSaveProofModal, H as HarnessPostureChoiceLabel } from "./settings-save-proof-modal-Fu6v3Dtb.js";
+import { G as GuardRepairControl, S as SettingsSaveProofModal, H as HarnessPostureChoiceLabel } from "./settings-save-proof-modal-Nqs1ShEa.js";
 const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
 function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, urls) {
   const hasApps = activeInstallCount > 0;

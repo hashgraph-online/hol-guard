@@ -1,17 +1,20 @@
 import { useId, useState } from "react";
-import { HiMiniCodeBracketSquare, HiMiniFolderPlus } from "react-icons/hi2";
+import { HiMiniClock, HiMiniCodeBracketSquare, HiMiniFolderPlus, HiMiniXMark } from "react-icons/hi2";
 import type { GuardApprovalGatePublicConfig } from "../guard-types";
 import { harnessDisplayName } from "../approval-center-utils";
 import { commitDashboardLocation } from "../dashboard-location";
 import { SettingsSaveProofModal, type SettingsSaveProofCredentials } from "../settings-save-proof-modal";
 import { FolderPickerDialog } from "./folder-picker";
 import { MAX_PROJECT_FILES, ProjectFilesPicker } from "./project-files-picker";
+import { forgetProject, readRecentProjects, rememberProject, type RecentProject } from "./recent-projects";
 import { versionButton, versionHeading, versionLead, versionPrimary } from "./versions-view";
 
 export type AddProjectInput = { workspace: string; files: string[]; app: string; notes?: { read: boolean; propose: boolean } };
 type Props = {
   busy: boolean; dirty: boolean; documentsAllowed: boolean; agentsAllowed: boolean; sharingAllowed: boolean; executionAllowed: boolean;
   gate: GuardApprovalGatePublicConfig | null; error: string | null; first: boolean;
+  /** Folders that already have access, so Recent only offers ones that need adding back. */
+  active?: string[];
   onGrant: (input: AddProjectInput, credentials?: SettingsSaveProofCredentials) => Promise<boolean>;
 };
 type AppOption = { value: string; label: string; description: string };
@@ -42,7 +45,7 @@ export function proofDetail(input: AddProjectInput, executionAllowed: boolean, s
   return `CIGAR can read ${files} in ${folderName(input.workspace)}${who}, plus Guard's own safety facts for that folder. Nothing else in it is opened.${execution}${notes}`;
 }
 
-export function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharingAllowed, executionAllowed, gate, error, first, onGrant }: Props) {
+export function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharingAllowed, executionAllowed, gate, error, first, active = [], onGrant }: Props) {
   const id = useId();
   const [workspace, setWorkspace] = useState<string | null>(null);
   const [files, setFiles] = useState<string[]>([]);
@@ -51,6 +54,9 @@ export function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, 
   const [notesPropose, setNotesPropose] = useState(false);
   const [picking, setPicking] = useState(false);
   const [proofOpen, setProofOpen] = useState(false);
+  const [recent, setRecent] = useState<RecentProject[]>(() => readRecentProjects());
+  const [preset, setPreset] = useState<string[] | null>(null);
+  const shortcuts = recent.filter((project) => !active.includes(project.workspace));
   const apps = projectAppOptions(agentsAllowed, executionAllowed);
   const chosenApp = apps.some((option) => option.value === app) ? app : "dashboard";
   const input: AddProjectInput | null = workspace ? {
@@ -60,11 +66,17 @@ export function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, 
 
   async function grant(credentials?: SettingsSaveProofCredentials) {
     if (!input) return;
-    if (await onGrant(input, credentials)) { setProofOpen(false); setWorkspace(null); setFiles([]); }
+    if (await onGrant(input, credentials)) {
+      setRecent(rememberProject(input)); setProofOpen(false); setWorkspace(null); setFiles([]); setPreset(null);
+    }
+  }
+
+  function reuse(project: RecentProject) {
+    setPreset(project.files); setFiles(project.files); setApp(project.app); setWorkspace(project.workspace);
   }
 
   return <section className="space-y-5 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-6" aria-labelledby={`${id}-add`}>
-    <div><h3 id={`${id}-add`} className={versionHeading}>{first ? "Add your first project" : "Add a project"}</h3>
+    <div><h3 id={`${id}-add`} className={versionHeading}>{first && !shortcuts.length ? "Add your first project" : "Add a project"}</h3>
       <p className={versionLead}>Choose a folder and the notes CIGAR may read. Secret files, like passwords and keys, are always skipped.</p></div>
 
     <fieldset disabled={busy || dirty} className="space-y-6">
@@ -83,9 +95,11 @@ export function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, 
           <span className="mt-0.5 block text-sm text-brand-dark/65">Browse to the folder you work in. Nothing is read until you say so.</span></span>
       </button>}
 
+      {!workspace && shortcuts.length ? <RecentProjects projects={shortcuts} onReuse={reuse} onForget={(path) => setRecent(forgetProject(path))} /> : null}
+
       {workspace ? <div className="guard-surface-in space-y-2.5">
         <h4 className={question}>What should CIGAR read?</h4>
-        {documentsAllowed ? <ProjectFilesPicker workspace={workspace} selected={files} onChange={setFiles} disabled={busy || dirty} />
+        {documentsAllowed ? <ProjectFilesPicker workspace={workspace} selected={files} onChange={setFiles} disabled={busy || dirty} preset={preset} />
           : <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-surface-1/70 px-4 py-3">
             <p className="min-w-0 flex-1 text-sm leading-6 text-brand-dark/70">Reading project files is off, so CIGAR uses only Guard's own safety facts here. Turn on “Allow selected workspace documents” in Settings to pick notes.</p>
             <button type="button" className={versionButton} onClick={openSettings}>Open Settings</button>
@@ -117,9 +131,29 @@ export function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, 
     </fieldset>
 
     <FolderPickerDialog open={picking} initialPath={workspace} onCancel={() => setPicking(false)}
-      onChoose={(path) => { setPicking(false); if (path !== workspace) { setFiles([]); setWorkspace(path); } }} />
+      onChoose={(path) => { setPicking(false); if (path !== workspace) { setPreset(null); setFiles([]); setWorkspace(path); } }} />
     <SettingsSaveProofModal open={proofOpen && !!input} mode="verify-save" gate={gate} title="Confirm CIGAR access"
       detail={input ? proofDetail(input, executionAllowed, sharingAllowed) : ""} confirmLabel="Give access"
       error={error} pending={busy} onCancel={() => { if (!busy) setProofOpen(false); }} onConfirm={(credentials) => void grant(credentials)} />
   </section>;
+}
+
+/** Projects this browser added before, offered back after Guard restarts. */
+export function RecentProjects({ projects, onReuse, onForget }: { projects: RecentProject[]; onReuse: (project: RecentProject) => void; onForget: (workspace: string) => void }) {
+  return <div className="guard-surface-in space-y-2.5">
+    <h4 className={question}>Recent projects</h4>
+    <ul className="grid gap-2 sm:grid-cols-2">{projects.map((project) => {
+      const name = folderName(project.workspace);
+      const who = project.app === "dashboard" ? "this page" : harnessDisplayName(project.app);
+      return <li key={project.workspace} className="flex items-center rounded-xl border border-brand-dark/10 bg-white transition-colors hover:border-brand-dark/25 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-blue/40">
+        <button type="button" className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-l-xl p-2.5 text-left focus-visible:outline-none" title={project.workspace} onClick={() => onReuse(project)}>
+          <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-dark/[0.05] text-brand-dark/55"><HiMiniClock className="size-4" /></span>
+          <span className="min-w-0"><span className="block truncate text-sm font-semibold text-brand-dark">{name}</span>
+            <span className="block truncate text-xs text-brand-dark/60">{plural(project.files.length, "file")} · for {who}</span></span>
+        </button>
+        <button type="button" aria-label={`Remove ${name} from this list`} className="mr-1.5 flex size-9 shrink-0 items-center justify-center rounded-lg text-brand-dark/40 hover:bg-brand-dark/[0.05] hover:text-brand-dark focus-visible:outline-none" onClick={() => onForget(project.workspace)}>
+          <HiMiniXMark className="size-4" /></button>
+      </li>;
+    })}</ul>
+  </div>;
 }
