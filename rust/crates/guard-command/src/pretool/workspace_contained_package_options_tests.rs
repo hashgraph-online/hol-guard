@@ -249,3 +249,43 @@ fn an_option_that_widens_the_run_still_hides_the_verb() {
         );
     }
 }
+
+/// bun's workspace selector names which of the workspace's own packages the
+/// script runs in, so it does not hide the verb behind it. pnpm's `--filter`
+/// already read this way; without bun's the same run stayed outside the
+/// sandbox and went to review.
+#[test]
+fn a_bun_workspace_selector_does_not_hide_the_verb() {
+    for (arguments, verb) in [
+        (vec!["--filter", "app", "test"], "test"),
+        (vec!["--filter=app", "test"], "test"),
+        (vec!["-F", "app", "test"], "test"),
+        (vec!["-F", "@acme/web", "run", "build"], "run"),
+        (vec!["--filter", "./packages/app", "test"], "test"),
+        (vec!["--filter", "*", "test"], "test"),
+        (vec!["--silent", "--filter", "app", "test"], "test"),
+        (vec!["--filter", "app", "--bun", "test"], "test"),
+    ] {
+        let skipped = skip_inert_options("bun", &arguments);
+        assert_eq!(arguments.get(skipped).copied(), Some(verb), "{arguments:?}");
+    }
+}
+
+/// A bun selector reaching out of the workspace is judged the way pnpm's is:
+/// what it names would be a project the workspace does not hold, whose
+/// scripts the sandbox would then run unreviewed.
+#[test]
+fn a_bun_selector_leaving_the_workspace_still_hides_the_verb() {
+    for arguments in [
+        vec!["--filter", "../sibling", "test"],
+        vec!["--filter=/opt/other", "test"],
+        vec!["-F", "~/other", "test"],
+        vec!["--filter", "app{../sibling}", "test"],
+        vec!["--filter", "$TARGET", "test"],
+        // bun reads its own list; `--cwd` moves the project the verb works on
+        // and is rewritten by `package_directory_flags` instead.
+        vec!["--cwd", "packages/app", "test"],
+    ] {
+        assert_eq!(skip_inert_options("bun", &arguments), 0, "{arguments:?}");
+    }
+}

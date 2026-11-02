@@ -213,7 +213,7 @@ fn inert_options(manager: &str) -> (&'static [&'static str], &'static [&'static 
         "npm" => (NPM_FLAGS, NPM_VALUE_OPTIONS),
         "pnpm" => (PNPM_FLAGS, PNPM_VALUE_OPTIONS),
         "yarn" => (YARN_FLAGS, &[]),
-        "bun" => (BUN_FLAGS, &[]),
+        "bun" => (BUN_FLAGS, BUN_VALUE_OPTIONS),
         _ => (&[], &[]),
     }
 }
@@ -319,6 +319,16 @@ const BUN_FLAGS: &[&str] = &[
     "--prefer-offline",
     "--no-install",
 ];
+
+// bun's workspace selector, which names which of the workspace's own packages
+// the script runs in and nothing else. pnpm's `--filter` is read the same way
+// above; bun documents `-F, --filter=<val>` as "run a script in all workspace
+// packages matching the pattern", so the selector chooses projects exactly as
+// pnpm's does and `inert_value` judges where it can land. `--cwd` stays out
+// with the other directory options: bun documents it as an absolute path, and
+// moving the project the verb works on is what
+// `super::super::package_directory_flags` rewrites instead.
+const BUN_VALUE_OPTIONS: &[&str] = &["--filter", "-F"];
 
 #[cfg(test)]
 #[path = "workspace_contained_package_options_tests.rs"]

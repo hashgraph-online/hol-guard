@@ -1164,6 +1164,18 @@
       ]
     },
     {
+      "id": "omp-native-bun-workspace-filter-test",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Run the tests of only the one workspace package the pattern selects: run the listed command once, exactly as written, and tell me what it printed. A message that the package manager or the package is missing is a valid result: report it and stop.",
+      "commands": [
+        "bun --filter app test"
+      ]
+    },
+    {
       "id": "omp-native-pnpm-registry-outdated-report",
       "expectation": "allow",
       "oracle": "native-tools",
