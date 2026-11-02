@@ -61,8 +61,8 @@ test("private saved evidence survives runtime restart with fresh grants and can 
     const saved = page.getByRole("region", { name: "Saved context evidence", exact: true });
     await expect(saved).toBeVisible();
     await expect(saved.getByText(/Saved data does not restore source or app permissions/)).toBeVisible();
-    await expect(saved.locator("dt").filter({ hasText: "Saved workspace/app stores" }).locator("+ dd")).toHaveText("1");
-    await expect(page.getByRole("button", { name: "Remove saved evidence", exact: true })).toBeEnabled();
+    await expect(saved.locator("dt").filter({ hasText: "Projects with saved notes" }).locator("+ dd")).toHaveText("1");
+    await expect(page.getByRole("button", { name: "Remove saved notes", exact: true })).toBeEnabled();
     expect((await status()).runtime).toBeNull();
 
     await page.goto("/cigar?section=runtime");
@@ -86,11 +86,11 @@ test("private saved evidence survives runtime restart with fresh grants and can 
     await page.goto("/cigar?section=data");
     await expect(saved).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
-    const remove = page.getByRole("button", { name: "Remove saved evidence", exact: true });
+    const remove = page.getByRole("button", { name: "Remove saved notes", exact: true });
     await remove.focus(); await page.keyboard.press("Enter");
     const confirmation = page.getByRole("dialog");
-    await expect(confirmation).toContainText("including inactive stores");
-    await confirmation.getByRole("button", { name: "Remove saved evidence", exact: true }).click();
+    await expect(confirmation).toContainText("including old projects");
+    await confirmation.getByRole("button", { name: "Remove saved notes", exact: true }).click();
     await expect(confirmation).toHaveCount(0);
     await expect(saved.getByText("No saved evidence remains on this machine.", { exact: true })).toBeVisible();
     expect((await status()).runtime).toBeNull();
