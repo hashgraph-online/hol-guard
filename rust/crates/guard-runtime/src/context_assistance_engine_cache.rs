@@ -77,6 +77,9 @@ impl Engine {
             let _ = scope.graph.close(runtime);
         }
         self.scopes.insert(id.into(), scope);
+        if result.is_ok() {
+            self.remember_pick(id, None);
+        }
         result
     }
     pub(super) fn sweep_saved(&self) -> Result<(), RuntimeError> {

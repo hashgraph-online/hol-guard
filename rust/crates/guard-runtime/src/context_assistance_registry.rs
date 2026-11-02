@@ -16,6 +16,8 @@ use guard_cigar_release::{Feature, SealedInstallationReceipt};
 pub(crate) mod catalog;
 #[path = "context_assistance_installation_key.rs"]
 mod owner_key;
+#[path = "context_assistance_picked_folders.rs"]
+pub(crate) mod picked;
 #[path = "context_assistance_install_jobs.rs"]
 mod preparation;
 #[path = "context_assistance_switch_store.rs"]

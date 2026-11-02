@@ -54,6 +54,7 @@ impl Engine {
             }
         }
         let id = self.admit_scope(runtime, root, app, policy, sources, shared_notes)?;
+        self.remember_pick(&id, Some(shared_notes));
         Ok(metadata(&id, &self.scopes[&id]))
     }
 
