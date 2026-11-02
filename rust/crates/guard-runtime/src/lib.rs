@@ -200,6 +200,7 @@ mod consumer_capability_delta;
 mod consumer_evidence;
 mod consumer_incident;
 mod consumer_low_trust_floor;
+mod consumer_mode_contract;
 mod consumer_outcome;
 mod consumer_result;
 mod consumer_url;

@@ -1,96 +1,51 @@
-"""Consumer-mode Guard contract generation."""
+"""Consumer-mode Guard contract generation.
+
+The scanner runs here; the native runtime owns the ``guard-consumer.v2``
+contract built from its result (the ``consumer_mode_contract`` kind).
+"""
 
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import asdict
 from pathlib import Path
 
-from ...models import (
-    SEVERITY_ORDER,
-    IntegrationResult,
-    ScanOptions,
-    Severity,
-)
+from ...models import ScanOptions, ScanResult
 from ...scanner import scan_plugin
+from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+_UNAVAILABLE_MESSAGE = "Guard could not build the install-time scan contract. Check that the Guard daemon is running."
+_CONTRACT_KEYS = (
+    "schema_version",
+    "generated_at",
+    "install_target",
+    "artifact_snapshot",
+    "capability_manifest",
+    "artifact_diff",
+    "provenance_record",
+    "trust_evidence_bundle",
+    "policy_recommendation",
+    "install_verdict",
+    "abom_entry",
+    "threat_intelligence",
+    "cisco_evidence",
+)
 
 
-def _artifact_hash(payload: dict[str, object]) -> str:
-    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
-
-
-def _install_recommendation(
-    highest_severity: Severity,
-    score: int,
-    finding_titles: list[str],
-) -> tuple[str, str]:
-    if highest_severity in {Severity.CRITICAL, Severity.HIGH} or score < 60:
-        reason = "Install-time scan found severe findings that need review before you trust this artifact."
-        return ("block", reason)
-    if finding_titles:
-        reason = "Install-time scan found non-blocking findings that should be reviewed before install."
-        return ("review", reason)
-    return ("allow", "Install-time scan found no blocking issues in the local artifact.")
-
-
-def _is_applicable_cisco_mcp_integration(integration: IntegrationResult) -> bool:
-    return "cisco-mcp-scanner" in integration.name and (
-        "targets_scanned" in integration.metadata or "scan_mode" in integration.metadata
-    )
-
-
-def _resolve_cisco_status(integrations: tuple[IntegrationResult, ...]) -> str:
-    statuses = {integration.status for integration in integrations}
-    for status in ("failed", "unavailable", "enabled", "skipped"):
-        if status in statuses:
-            return status
-    return "skipped"
-
-
-def _target_count(integrations: tuple[IntegrationResult, ...]) -> int:
-    total = 0
-    for integration in integrations:
-        raw_count = integration.metadata.get("targets_scanned")
-        if raw_count is None:
-            continue
-        try:
-            total += int(raw_count)
-        except ValueError:
-            continue
-    return total
-
-
-def _build_cisco_summary(status: str, finding_count: int, target_count: int) -> str:
-    if status == "enabled":
-        return (
-            f"{finding_count} finding across {target_count} local MCP target(s)"
-            if finding_count == 1
-            else f"{finding_count} findings across {target_count} local MCP target(s)"
-        )
-    if status == "skipped":
-        return f"Cisco MCP scanning disabled for {target_count} local MCP target(s)"
-    if status == "unavailable":
-        return f"Cisco MCP scanner unavailable for {target_count} local MCP target(s)"
-    return f"Cisco MCP scan failed for {target_count} local MCP target(s)"
-
-
-def _extract_cisco_evidence(integrations: tuple[IntegrationResult, ...]) -> dict[str, object] | None:
-    applicable_integrations = tuple(
-        integration for integration in integrations if _is_applicable_cisco_mcp_integration(integration)
-    )
-    if not applicable_integrations:
-        return None
-    finding_count = sum(integration.findings_count for integration in applicable_integrations)
-    target_count = _target_count(applicable_integrations)
-    status = _resolve_cisco_status(applicable_integrations)
+def _scan_args(scan_result: ScanResult) -> dict[str, object]:
+    trust_report = scan_result.trust_report
     return {
-        "mode": "offline-only",
-        "status": status,
-        "finding_count": finding_count,
-        "target_count": target_count,
-        "summary": _build_cisco_summary(status, finding_count, target_count),
-        "integrations": [asdict(integration) for integration in applicable_integrations],
+        "score": scan_result.score,
+        "grade": scan_result.grade,
+        "timestamp": scan_result.timestamp,
+        "plugin_dir": scan_result.plugin_dir,
+        "scope": scan_result.scope,
+        "ecosystems": list(scan_result.ecosystems),
+        "packages": [asdict(package) for package in scan_result.packages],
+        "category_names": [category.name for category in scan_result.categories],
+        "findings": [{"title": finding.title, "severity": finding.severity.value} for finding in scan_result.findings],
+        "severity_counts": scan_result.severity_counts,
+        "integrations": [asdict(integration) for integration in scan_result.integrations],
+        "trust_total": None if trust_report is None else trust_report.total,
     }
 
 
@@ -102,85 +57,19 @@ def build_consumer_mode_contract(
     """Build the stable consumer-mode payload for a local artifact."""
 
     scan_result = scan_plugin(target, options=options)
-    summary_payload: dict[str, object] = {
-        "path": str(target),
-        "score": scan_result.score,
-        "grade": scan_result.grade,
-        "ecosystems": list(scan_result.ecosystems),
-        "packages": [asdict(package) for package in scan_result.packages],
-    }
-    artifact_hash = _artifact_hash(summary_payload)
-    finding_titles = [finding.title for finding in scan_result.findings[:10]]
-    highest_severity = max(
-        (finding.severity for finding in scan_result.findings),
-        key=lambda severity: SEVERITY_ORDER[severity],
-        default=Severity.INFO,
-    )
-    recommendation, recommendation_reason = _install_recommendation(
-        highest_severity=highest_severity,
-        score=scan_result.score,
-        finding_titles=finding_titles,
-    )
-    trust_score = None
-    if scan_result.trust_report is not None:
-        trust_score = scan_result.trust_report.total
-    abom_entry = {
-        "artifact_id": f"preflight:{target.name}",
-        "artifact_name": target.name,
-        "artifact_type": scan_result.scope,
-        "path": str(target),
-        "ecosystems": list(scan_result.ecosystems),
-        "packages": [asdict(package) for package in scan_result.packages],
-    }
-    payload: dict[str, object] = {
-        "schema_version": "guard-consumer.v2",
-        "generated_at": scan_result.timestamp,
-        "install_target": {
-            "path": str(target),
-            "intended_harness": intended_harness,
-        },
-        "artifact_snapshot": {
-            "path": str(target),
-            "artifact_hash": artifact_hash,
-            "score": scan_result.score,
-            "grade": scan_result.grade,
-        },
-        "capability_manifest": {
-            "ecosystems": list(scan_result.ecosystems),
-            "packages": [asdict(package) for package in scan_result.packages],
-            "category_names": [category.name for category in scan_result.categories],
-        },
-        "artifact_diff": {
-            "changed": False,
-            "changed_fields": [],
-        },
-        "provenance_record": {
-            "scope": scan_result.scope,
-            "plugin_dir": scan_result.plugin_dir,
-            "trust_score": trust_score,
-        },
-        "trust_evidence_bundle": {
-            "findings": finding_titles,
-            "severity_counts": scan_result.severity_counts,
-            "integrations": [asdict(integration) for integration in scan_result.integrations],
-        },
-        "policy_recommendation": {
-            "action": recommendation,
-            "reason": recommendation_reason,
-        },
-        "install_verdict": {
-            "action": recommendation,
-            "reason": recommendation_reason,
-            "can_install": recommendation == "allow",
-        },
-        "abom_entry": abom_entry,
-        "threat_intelligence": {
-            "verdict_source": "local-scan",
-            "highest_severity": highest_severity.value,
-            "finding_count": len(scan_result.findings),
-        },
-    }
-    cisco_evidence = _extract_cisco_evidence(scan_result.integrations)
-    if cisco_evidence is not None:
-        payload["cisco_evidence"] = cisco_evidence
-    return payload
+    try:
+        answer = native_runner_authority(
+            "consumer_mode_contract",
+            {
+                "target": str(target),
+                "target_name": target.name,
+                "intended_harness": intended_harness,
+                "scan": _scan_args(scan_result),
+            },
+        )
+    except NativeRunnerAuthorityError as error:
+        raise RuntimeError(_UNAVAILABLE_MESSAGE) from error
+    contract = answer.get("contract")
+    if not isinstance(contract, dict):
+        raise RuntimeError(_UNAVAILABLE_MESSAGE)
+    return {key: contract[key] for key in _CONTRACT_KEYS if key in contract}
