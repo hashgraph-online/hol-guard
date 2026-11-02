@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.cli import command_extension_listing as listing
 from codex_plugin_scanner.guard.cli import commands_dispatch_local as dispatch
 from codex_plugin_scanner.guard.cli import extension_controls_commands as controls
 from codex_plugin_scanner.guard.cli import render
@@ -106,10 +107,49 @@ def test_full_listing_prefers_the_delivered_catalog(monkeypatch: pytest.MonkeyPa
 
     assert exit_code == 0
     assert payload["source"] == "delivered"
-    assert payload["schema_version"] == CATALOG_LIST_SCHEMA
+    assert payload["schema_version"] == "guard.extension-control-catalog.v1"
     assert payload["native_catalog_digest"] == "sha256:delivered"
     assert payload["snapshot_id"] == "snapshot-1"
     assert [item["extension_id"] for item in payload["extensions"]] == [_CORE_ID, DELIVERED_ONLY_ID]
+
+
+def test_an_index_listing_keeps_the_index_schema_it_was_served(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A v2 daemon answers with index summaries, and the envelope says so."""
+
+    index = {
+        "schema_version": CATALOG_LIST_SCHEMA,
+        "native_catalog_digest": "sha256:delivered",
+        "snapshot_id": "snapshot-1",
+        "extensions": [_delivered_entry(DELIVERED_ONLY_ID)],
+    }
+    monkeypatch.setattr(controls, "_client", lambda _: _DeliveredClient((DELIVERED_ONLY_ID,)))
+    monkeypatch.setattr(listing, "catalog_list", lambda _: index)
+
+    exit_code, payload = _run(_extensions_args(tmp_path, None), monkeypatch)
+
+    assert exit_code == 0
+    assert payload["source"] == "delivered"
+    assert payload["schema_version"] == CATALOG_LIST_SCHEMA
+    assert payload["snapshot_id"] == "snapshot-1"
+
+
+def test_a_malformed_older_catalog_is_a_fault_not_a_missing_extension(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Reading one extension from a broken catalog reports the fault, not an unknown id."""
+
+    class _MalformedClient:
+        def extension_control_catalog(self) -> dict[str, object]:
+            return {"schema_version": "guard.extension-control-catalog.v1", "extensions": "not-a-list"}
+
+    monkeypatch.setattr(controls, "_client", lambda _: _MalformedClient())
+
+    with pytest.raises(GuardDaemonResponseSchemaError):
+        _run(_extensions_args(tmp_path, DELIVERED_ONLY_ID), monkeypatch)
 
 
 def test_full_listing_falls_back_to_the_packaged_catalog_without_a_daemon(

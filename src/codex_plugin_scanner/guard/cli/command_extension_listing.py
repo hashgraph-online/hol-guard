@@ -34,7 +34,7 @@ from ..daemon.client import (
 )
 from ..runtime.command_extensions import COMMAND_EXTENSION_SCHEMA_VERSION
 from ..runtime.command_inspection import command_extensions_payload
-from .extension_catalog_reads import CATALOG_LIST_SCHEMA, catalog_list, catalog_show
+from .extension_catalog_reads import catalog_list, catalog_show
 
 DELIVERED_SOURCE = "delivered"
 # A ``ValueError`` is the daemon's own answer that it has no such extension.
@@ -82,7 +82,7 @@ def _delivered_envelope(
     extensions: list[dict[str, object]],
     source_payload: dict[str, object],
     *,
-    schema_version: str = COMMAND_EXTENSION_SCHEMA_VERSION,
+    schema_version: object = COMMAND_EXTENSION_SCHEMA_VERSION,
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "schema_version": schema_version,
@@ -114,10 +114,12 @@ def _delivered_extension(guard_home: Path, extension_id: str) -> dict[str, objec
 def _delivered_listing(guard_home: Path) -> dict[str, object]:
     """Every delivered extension as the daemon's index summary of it.
 
-    The index carries what a roster shows -- identity, version, counts, trust
-    class and purpose -- and leaves the rules and permissions to a detail read,
-    so the envelope declares the index schema rather than the packaged one. A
-    reader that wants a packaged-shaped entry asks for the extension by id.
+    A daemon serving the v2 index answers with what a roster shows -- identity,
+    version, counts, trust class and purpose -- and leaves the rules and
+    permissions to a detail read, while an older daemon answers with the full
+    packaged shape. The envelope repeats whichever schema version the daemon
+    declared, so a reader can tell the two apart. A reader that wants a
+    packaged-shaped entry from either daemon asks for the extension by id.
     """
 
     listing = _read_delivered(guard_home, catalog_list)
@@ -127,7 +129,7 @@ def _delivered_listing(guard_home: Path) -> dict[str, object]:
     return _delivered_envelope(
         [item for item in extensions if isinstance(item, dict)],
         listing,
-        schema_version=CATALOG_LIST_SCHEMA,
+        schema_version=listing.get("schema_version") or COMMAND_EXTENSION_SCHEMA_VERSION,
     )
 
 
