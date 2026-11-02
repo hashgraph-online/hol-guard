@@ -26,17 +26,18 @@ pub(crate) fn contained_runner_call(arguments: &[String]) -> bool {
 /// does.
 ///
 /// Three readings keep that narrow. Vitest's parser stops at `--`, so only
-/// the words before it name options. The first operand selects the command
-/// whatever options precede it, so a word naming a command this reading does
-/// not model leaves the call at review even with `--run` on the line. And the
-/// last watch spelling wins, so an option that turns the watch back on keeps
-/// the review wherever it stands.
+/// the words before it name options. CAC takes the command from the first
+/// operand and hands every other spelling to the default command, whose
+/// operands are test filters, so a word naming a command this reading does
+/// not model leaves the call at review wherever it stands, while a filter
+/// beside `--run` runs once the way `run` does. And the last watch spelling
+/// wins, so an option that turns the watch back on keeps the review wherever
+/// it stands.
 pub(crate) fn vitest_runs_once(arguments: &[String]) -> bool {
     let arguments = before_terminator(arguments);
     let rest = match arguments.split_first() {
         Some((verb, _)) if verb == "run" => return true,
         Some((verb, rest)) if matches!(verb.as_str(), "related" | "bench") => rest,
-        Some((verb, _)) if !verb.starts_with('-') => return false,
         _ => arguments,
     };
     !names_another_command(rest) && vitest_asked_not_to_watch(rest)
@@ -51,7 +52,9 @@ const UNMODELED_VITEST_COMMANDS: &[&str] = &["dev", "init", "list", "typecheck",
 ///
 /// Vitest takes the command from the first operand, and the reading cannot
 /// tell an operand from the value of an option it does not model, so a value
-/// spelled like one of these names keeps its call at review.
+/// spelled like one of these names keeps its call at review. That is the one
+/// screen the command needs: every other first operand is a filter the
+/// default command reads, which is the pass `run` names.
 fn names_another_command(arguments: &[String]) -> bool {
     arguments
         .iter()
