@@ -381,6 +381,13 @@ fn a_runner_told_not_to_watch_runs_once() {
         "npx vitest related src/a.ts --run",
         "npx vitest bench --run",
         "vitest --run src",
+        // CAC hands a first operand it has no command for to the default
+        // command, whose operands are test filters, so these are the same
+        // one pass `vitest run` names and the spelling `jest` and `mocha`
+        // were already contained in.
+        "npx vitest src/a.test.ts --run",
+        "npx vitest src/a.test.ts src/b.test.ts --no-watch",
+        "vitest math --watch=false",
         "node node_modules/vitest/vitest.mjs --run",
     ] {
         assert_eq!(
@@ -397,7 +404,8 @@ fn a_runner_left_watching_keeps_its_review() {
     // one pass only in a spelling the runner's own parser does not read is
     // still a watching run: mri spends no word on a declared boolean, the last
     // watch option on the line wins, nothing after `--` is an option at all,
-    // and the first operand picks the command however many options precede it.
+    // and a word naming a command the reading does not model keeps its review
+    // wherever it stands.
     for command in [
         "npx jest --watch",
         "npx jest --watchAll=true",
@@ -409,11 +417,19 @@ fn a_runner_left_watching_keeps_its_review() {
         "npx vitest --watch false",
         "npx vitest --watch=false --watch",
         "npx vitest --no-watch -w",
+        // mri reads a `--no-` prefix as the option set to false, so `--no-run`
+        // undoes the `--run` before it and leaves Vitest watching.
+        "npx vitest --run --no-run",
+        "npx vitest --no-watch --no-run",
         "npx vitest -- --run",
         "npx vitest --run init",
         "npx vitest --run watch",
         "npx vitest related src/a.ts",
         "npx vitest init --run",
+        // A filter is not the pass: without a watch-off spelling Vitest keeps
+        // watching the files the filter selected.
+        "npx vitest src/a.test.ts",
+        "npx vitest src/a.test.ts --run --watch",
         "node node_modules/vitest/vitest.mjs --watch",
     ] {
         assert_eq!(reason(command), None, "{command}");
