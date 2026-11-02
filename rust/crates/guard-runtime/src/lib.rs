@@ -125,6 +125,13 @@ mod claude_hook_bridge_http_text;
 mod claude_hook_bridge_render;
 mod claude_hook_bridge_transport;
 mod claude_hook_bridge_url;
+#[path = "adapters/claude_hook_config.rs"]
+mod claude_hook_config;
+#[cfg(test)]
+#[path = "adapters/claude_hook_config_tests.rs"]
+mod claude_hook_config_tests;
+#[path = "adapters/claude_hook_plan.rs"]
+mod claude_hook_plan;
 mod claude_session_start;
 mod claude_session_start_contract;
 mod claude_session_start_live;

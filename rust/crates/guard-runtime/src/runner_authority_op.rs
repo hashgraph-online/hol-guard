@@ -19,6 +19,7 @@ use serde_json::Value;
 use super::aibom_op as aibom;
 use super::antigravity_detect;
 use super::claude_code_detect;
+use super::claude_hook_config;
 use super::cline_detect;
 use super::codex_detect;
 use super::context_digest_json::write_canonical_json_with_limit;
@@ -159,6 +160,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "codex_detect" => codex_detect::detect(args),
         "copilot_detect" => copilot_detect::detect(args),
         "claude_code_detect" => claude_code_detect::detect(args),
+        "claude_hook_config" => claude_hook_config::dispatch(args),
         "cline_detect" => cline_detect::detect(args),
         "gemini_detect" => gemini_detect::detect(args),
         "antigravity_detect" => antigravity_detect::detect(args),
