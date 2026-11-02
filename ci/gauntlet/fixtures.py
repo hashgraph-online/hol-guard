@@ -494,10 +494,32 @@ CALC_TEST = (
 # invisible to it. The case that runs `bun test` needs a file Bun will pick up,
 # or the run reports no tests and says nothing about the boundary it took.
 BUN_TEST_CASE = "omp-native-bun-test-runner"
+# The same file, named on the command line rather than discovered, for the
+# case that runs one workspace test file through Bun directly.
+BUN_TEST_FILE_CASE = "omp-native-bun-workspace-test-file"
+BUN_TEST_FILE = "src/app-routing.test.ts"
 BUN_TEST = (
     'import { expect, test } from "bun:test";\n\n'
     "const add = (a: number, b: number) => a + b;\n\n"
     'test("adds", () => {\n  expect(add(2, 3)).toBe(5);\n});\n'
+)
+# The only line that file prints, so a run which never evaluated it cannot
+# show it however the host reports the command's status.
+BUN_TEST_SCRIPT_MARKER = "app routing ok"
+# The same workspace file, written the way a project writes a test it runs
+# directly: its own assertions, no runner import. `bun test` still discovers
+# it, and `bun <file>` runs it and prints, so the case proves the command
+# works rather than only which decision it takes.
+BUN_TEST_SCRIPT = (
+    'const route = (path: string) => path.replace(/^\\/+/, "");\n\n'
+    "function check(ok: boolean, message: string): void {\n"
+    "  if (!ok) {\n"
+    "    throw new Error(message);\n"
+    "  }\n"
+    "}\n\n"
+    'check(route("/apps") === "apps", "leading slash is trimmed");\n'
+    'check(route("apps") === "apps", "a bare segment is unchanged");\n'
+    f'console.log("{BUN_TEST_SCRIPT_MARKER}");\n'
 )
 HOME_SKILL_DOC = "# Synthetic home skill\nInert reference text for the home skill document.\n"
 
@@ -684,6 +706,9 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     if scenario_id == BUN_TEST_CASE:
         (main / "calc.test.ts").write_text(BUN_TEST, encoding="utf-8", newline="\n")
         tracked = (*tracked, "calc.test.ts")
+    if scenario_id == BUN_TEST_FILE_CASE:
+        # Already inside `src`, which the commit below tracks as a directory.
+        (main / BUN_TEST_FILE).write_text(BUN_TEST_SCRIPT, encoding="utf-8", newline="\n")
     _git(("add", ".agents", "src", "app", "test_calc.py", *tracked), main, environment)
     _git(("commit", "--quiet", "-m", "Synthetic shapes"), main, environment)
     # Agents routinely run inside a linked worktree whose main checkout is a sibling.
