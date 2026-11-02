@@ -4384,8 +4384,10 @@ function RecentProjects({ projects, onReuse, onForget }) {
 const fieldLabel = "text-sm font-medium text-brand-dark";
 const empty = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-8 text-center text-sm text-brand-dark/70";
 const summary$1 = "inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark [&::-webkit-details-marker]:hidden";
-function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate }) {
+function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate }) {
   const [scopes, setScopes] = reactExports.useState([]);
+  const [loaded, setLoaded] = reactExports.useState(false);
+  const listable = ready || waking;
   const [query, setQuery] = reactExports.useState("");
   const [brief, setBrief] = reactExports.useState(null);
   const [previous, setPrevious] = reactExports.useState(null);
@@ -4398,24 +4400,30 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
   reactExports.useEffect(() => {
     const generation2 = ++revision.current;
     request.current?.abort();
-    setScopes([]);
     setBrief(null);
     setPrevious(null);
     setBusy(false);
     setError(null);
-    if (!ready) return;
+    if (!listable) {
+      setScopes([]);
+      setLoaded(false);
+      return;
+    }
     const controller = new AbortController();
     request.current = controller;
     void listContextWorkspaces(controller.signal).then((values) => {
-      if (revision.current === generation2) setScopes(values);
+      if (revision.current === generation2) {
+        setScopes(values);
+        setLoaded(true);
+      }
     }).catch((cause) => {
-      if (revision.current === generation2 && !controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Context access is unavailable.");
+      if (revision.current === generation2 && !controller.signal.aborted && ready) setError(cause instanceof Error ? cause.message : "Context access is unavailable.");
     });
     return () => {
       revision.current += 1;
       controller.abort();
     };
-  }, [ready, generation]);
+  }, [listable, ready, generation]);
   async function perform(operation2) {
     if (busy || !ready) return;
     const generation2 = ++revision.current;
@@ -4464,8 +4472,12 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
   }
   const refreshScopes = () => void perform(async (signal) => {
     const values = await listContextWorkspaces(signal);
-    if (!signal.aborted) setScopes(values);
+    if (!signal.aborted) {
+      setScopes(values);
+      setLoaded(true);
+    }
   });
+  const locked = busy || !ready;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-4", "aria-labelledby": `${id2}-projects`, "aria-busy": busy, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-end justify-between gap-x-6 gap-y-2", children: [
@@ -4474,16 +4486,17 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Folders CIGAR may read. Access ends when you turn CIGAR off." })
         ] }),
         ready ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet, type: "button", disabled: busy, onClick: refreshScopes, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet, type: "button", disabled: locked, onClick: refreshScopes, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "size-4" }),
             "Refresh context access"
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: busy || scopes.length === 0, onClick: () => manage("clear"), children: "Clear all context data" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: locked || scopes.length === 0, onClick: () => manage("clear"), children: "Clear all context data" })
         ] }) : null
       ] }),
-      !ready ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty, children: "Turn on CIGAR to pick project folders. Folders you already picked come back when it is on." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      !listable ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty, children: "Turn on CIGAR to pick project folders. Folders you already picked come back when it is on." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "cigar-note", children: error }) : null,
-        scopes.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: empty, children: [
+        !ready ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-brand-dark/70", children: "CIGAR is starting. You can change folders once it is running." }) : null,
+        !loaded ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: empty, children: "Loading your folders…" }) : scopes.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: empty, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolderOpen, { "aria-hidden": "true", className: "mx-auto mb-2 size-6 text-brand-dark/35" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No projects yet." }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/55", children: "Choose a folder below to get started." })
@@ -4525,13 +4538,13 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
                 /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { "aria-hidden": "true", className: "size-4 shrink-0 text-brand-dark/40" }),
                 source.path
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet + " min-h-9 px-2.5 text-xs", type: "button", disabled: busy, onClick: () => manage("withdraw", scope.scope_id, source.source_id), children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet + " min-h-9 px-2.5 text-xs", type: "button", disabled: locked, onClick: () => manage("withdraw", scope.scope_id, source.source_id), children: [
                 "Withdraw ",
                 source.path
               ] })
             ] }, source.source_id)) }) : null,
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionPrimary, type: "button", disabled: busy || dirty || scope.revoked, onClick: () => void perform(async (signal) => {
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionPrimary, type: "button", disabled: locked || dirty || scope.revoked, onClick: () => void perform(async (signal) => {
                 const value = await compileWorkspaceContext(scope.scope_id, query, signal);
                 if (!signal.aborted) {
                   if (brief) setPrevious(brief.value);
@@ -4540,14 +4553,14 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
                   setScopes((values) => values.map((item) => item.scope_id === current.scope_id ? current : item));
                 }
               }), children: "Prepare cited context" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionButton, type: "button", disabled: busy || scope.revoked, onClick: () => manage("refresh", scope.scope_id), children: "Refresh selected files" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: busy, onClick: () => manage("revoke", scope.scope_id), children: "Revoke workspace access" })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionButton, type: "button", disabled: locked || scope.revoked, onClick: () => manage("refresh", scope.scope_id), children: "Refresh selected files" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: locked, onClick: () => manage("revoke", scope.scope_id), children: "Revoke workspace access" })
             ] }),
             !scope.revoked && scope.sharing?.mode === "shared_broker" && scope.sharing.notes.read ? /* @__PURE__ */ jsxRuntimeExports.jsx(
               ContextNotesPanel,
               {
                 scope,
-                disabled: busy || dirty,
+                disabled: locked || dirty,
                 gate,
                 onChanged: () => {
                   setBrief(null);
@@ -4908,9 +4921,6 @@ function cigarTabFromSearch(search) {
 function cigarWaking(status) {
   if (!status || status.effective_enabled) return false;
   return status.diagnostic === "runtime_resting" || status.requested_enabled && status.job?.operation === "activate";
-}
-function cigarFoldersReady(status) {
-  return status?.effective_enabled === true || cigarWaking(status);
 }
 function cigarHelpsPrompts(status) {
   const effective = status?.effective_preferences;
@@ -7269,7 +7279,8 @@ function ContextAssistanceSettings(props) {
   const access = /* @__PURE__ */ jsxRuntimeExports.jsx(
     ContextWorkspacesPanel,
     {
-      ready: cigarFoldersReady(status),
+      ready: status?.effective_enabled === true,
+      waking: cigarWaking(status),
       generation: status?.generation ?? null,
       dirty,
       documentsAllowed: status?.effective_preferences.sources.workspace_documents === true,

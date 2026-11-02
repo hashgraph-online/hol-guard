@@ -15,10 +15,13 @@ import { compileWorkspaceContext, grantContextWorkspace, listContextWorkspaces, 
 const fieldLabel = "text-sm font-medium text-brand-dark";
 const empty = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-8 text-center text-sm text-brand-dark/70";
 const summary = "inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark [&::-webkit-details-marker]:hidden";
-type Props = { ready: boolean; generation: string | null; dirty: boolean; documentsAllowed: boolean; agentsAllowed: boolean; sharingAllowed?: boolean; executionAllowed?: boolean; gate: GuardApprovalGatePublicConfig | null };
+// `ready` means CIGAR is running and folders can change; `waking` lists saved folders read-only while it rests or starts.
+type Props = { ready: boolean; waking?: boolean; generation: string | null; dirty: boolean; documentsAllowed: boolean; agentsAllowed: boolean; sharingAllowed?: boolean; executionAllowed?: boolean; gate: GuardApprovalGatePublicConfig | null };
 
-export function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate }: Props) {
+export function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate }: Props) {
   const [scopes, setScopes] = useState<ContextWorkspaceScope[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const listable = ready || waking;
   const [query, setQuery] = useState("");
   const [brief, setBrief] = useState<{ scope: ContextWorkspaceScope; value: ContextBrief } | null>(null);
   const [previous, setPrevious] = useState<ContextBrief | null>(null);
@@ -33,16 +36,17 @@ export function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllo
   useEffect(() => {
     const generation = ++revision.current;
     request.current?.abort();
-    setScopes([]); setBrief(null); setPrevious(null); setBusy(false); setError(null);
-    if (!ready) return;
+    setBrief(null); setPrevious(null); setBusy(false); setError(null);
+    if (!listable) { setScopes([]); setLoaded(false); return; }
+    // Listed again once CIGAR is running, so a slow start still shows saved folders.
     const controller = new AbortController(); request.current = controller;
     void listContextWorkspaces(controller.signal).then((values) => {
-      if (revision.current === generation) setScopes(values);
+      if (revision.current === generation) { setScopes(values); setLoaded(true); }
     }).catch((cause) => {
-      if (revision.current === generation && !controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Context access is unavailable.");
+      if (revision.current === generation && !controller.signal.aborted && ready) setError(cause instanceof Error ? cause.message : "Context access is unavailable.");
     });
     return () => { revision.current += 1; controller.abort(); };
-  }, [ready, generation]);
+  }, [listable, ready, generation]);
 
   async function perform(operation: (signal: AbortSignal) => Promise<void>) {
     if (busy || !ready) return;
@@ -86,20 +90,22 @@ export function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllo
     });
   }
 
-  const refreshScopes = () => void perform(async (signal) => { const values = await listContextWorkspaces(signal); if (!signal.aborted) setScopes(values); });
+  const refreshScopes = () => void perform(async (signal) => { const values = await listContextWorkspaces(signal); if (!signal.aborted) { setScopes(values); setLoaded(true); } });
+  const locked = busy || !ready;
   return <div className="space-y-8">
     <section className="space-y-4" aria-labelledby={`${id}-projects`} aria-busy={busy}>
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div><h3 id={`${id}-projects`} className={versionHeading}>Your projects</h3>
           <p className={versionLead}>Folders CIGAR may read. Access ends when you turn CIGAR off.</p></div>
         {ready ? <div className="flex flex-wrap gap-2">
-          <button className={versionQuiet} type="button" disabled={busy} onClick={refreshScopes}><HiMiniArrowPath aria-hidden="true" className="size-4" />Refresh context access</button>
-          <button className={versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800"} type="button" disabled={busy || scopes.length === 0} onClick={() => manage("clear")}>Clear all context data</button>
+          <button className={versionQuiet} type="button" disabled={locked} onClick={refreshScopes}><HiMiniArrowPath aria-hidden="true" className="size-4" />Refresh context access</button>
+          <button className={versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800"} type="button" disabled={locked || scopes.length === 0} onClick={() => manage("clear")}>Clear all context data</button>
         </div> : null}
       </div>
-      {!ready ? <p className={empty}>Turn on CIGAR to pick project folders. Folders you already picked come back when it is on.</p> : <>
+      {!listable ? <p className={empty}>Turn on CIGAR to pick project folders. Folders you already picked come back when it is on.</p> : <>
         {error ? <p role="alert" className="cigar-note">{error}</p> : null}
-        {scopes.length === 0 ? <div className={empty}><HiMiniFolderOpen aria-hidden="true" className="mx-auto mb-2 size-6 text-brand-dark/35" /><p>No projects yet.</p><p className="mt-1 text-xs text-brand-dark/55">Choose a folder below to get started.</p></div> : <>
+        {!ready ? <p role="status" className="text-sm text-brand-dark/70">CIGAR is starting. You can change folders once it is running.</p> : null}
+        {!loaded ? <p role="status" className={empty}>Loading your folders…</p> : scopes.length === 0 ? <div className={empty}><HiMiniFolderOpen aria-hidden="true" className="mx-auto mb-2 size-6 text-brand-dark/35" /><p>No projects yet.</p><p className="mt-1 text-xs text-brand-dark/55">Choose a folder below to get started.</p></div> : <>
           <div><label htmlFor={`${id}-query`} className={fieldLabel}>What would you like context about?</label>
             <input id={`${id}-query`} className={versionField} maxLength={4096} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="For example: how releases are reviewed" /></div>
           <ul className="space-y-3">{scopes.map((scope) => <li key={scope.scope_id}><section className={"space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : "border-brand-dark/10 bg-white")} aria-label={`Context access for ${scope.workspace}`}>
@@ -124,11 +130,11 @@ export function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllo
             {scope.sources.length ? <ul className="divide-y divide-brand-dark/[0.07] rounded-xl border border-brand-dark/[0.08]">
               {scope.sources.map((source) => <li key={source.source_id} className="flex flex-wrap items-center justify-between gap-2 py-1 pl-3 pr-1 text-sm">
                 <span className="flex min-w-0 items-center gap-2 break-all font-mono text-xs text-brand-dark/80"><HiMiniDocumentText aria-hidden="true" className="size-4 shrink-0 text-brand-dark/40" />{source.path}</span>
-                <button className={versionQuiet + " min-h-9 px-2.5 text-xs"} type="button" disabled={busy} onClick={() => manage("withdraw", scope.scope_id, source.source_id)}>Withdraw {source.path}</button>
+                <button className={versionQuiet + " min-h-9 px-2.5 text-xs"} type="button" disabled={locked} onClick={() => manage("withdraw", scope.scope_id, source.source_id)}>Withdraw {source.path}</button>
               </li>)}
             </ul> : null}
             <div className="flex flex-wrap gap-2">
-              <button className={versionPrimary} type="button" disabled={busy || dirty || scope.revoked} onClick={() => void perform(async (signal) => {
+              <button className={versionPrimary} type="button" disabled={locked || dirty || scope.revoked} onClick={() => void perform(async (signal) => {
                 const value = await compileWorkspaceContext(scope.scope_id, query, signal);
                 if (!signal.aborted) {
                   if (brief) setPrevious(brief.value);
@@ -137,10 +143,10 @@ export function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllo
                   setScopes((values) => values.map((item) => item.scope_id === current.scope_id ? current : item));
                 }
               })}>Prepare cited context</button>
-              <button className={versionButton} type="button" disabled={busy || scope.revoked} onClick={() => manage("refresh", scope.scope_id)}>Refresh selected files</button>
-              <button className={versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800"} type="button" disabled={busy} onClick={() => manage("revoke", scope.scope_id)}>Revoke workspace access</button>
+              <button className={versionButton} type="button" disabled={locked || scope.revoked} onClick={() => manage("refresh", scope.scope_id)}>Refresh selected files</button>
+              <button className={versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800"} type="button" disabled={locked} onClick={() => manage("revoke", scope.scope_id)}>Revoke workspace access</button>
             </div>
-            {!scope.revoked && scope.sharing?.mode === "shared_broker" && scope.sharing.notes.read ? <ContextNotesPanel scope={scope} disabled={busy || dirty} gate={gate}
+            {!scope.revoked && scope.sharing?.mode === "shared_broker" && scope.sharing.notes.read ? <ContextNotesPanel scope={scope} disabled={locked || dirty} gate={gate}
               onChanged={() => { setBrief(null); setPrevious(null); refreshScopes(); }} /> : null}
           </section></li>)}</ul>
         </>}
