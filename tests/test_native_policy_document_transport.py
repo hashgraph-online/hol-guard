@@ -29,6 +29,7 @@ def _resident(monkeypatch, mutation=None, result=None):
     monkeypatch.setattr(client, "validate_native_binary", lambda _: identity)
     monkeypatch.setattr(client, "_resolve_digest_home", lambda _: Path("document-home").absolute())
     monkeypatch.setattr(client, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(client, "ensure_resident_prerequisite", lambda home: True)
     calls = []
 
     def reply(**kwargs):
@@ -87,6 +88,23 @@ def test_document_preserves_one_absolute_deadline_and_expected_runtime_identity(
     request = json.loads(calls[0]["payload"])["request"]
     assert 0 < request["budget_ms"] <= 1000
     assert request["action"] == {"kind": "policy_document", "body": {"query": "canonical", "input": {"value": {}}}}
+
+
+def test_document_provisions_the_resident_prerequisite_for_a_new_home(monkeypatch):
+    calls, _ = _resident(monkeypatch)
+    homes = []
+    monkeypatch.setattr(client, "ensure_resident_prerequisite", lambda home: homes.append(home) or True)
+    assert client.policy_query("canonical", {"value": {}}) == {}
+    assert homes == [Path("document-home").absolute()]
+    assert len(calls) == 1
+
+
+def test_document_refuses_before_transport_when_the_prerequisite_cannot_be_provisioned(monkeypatch):
+    calls, _ = _resident(monkeypatch)
+    monkeypatch.setattr(client, "ensure_resident_prerequisite", lambda home: False)
+    with pytest.raises(client.NativePolicyDocumentError, match="native_policy_document_unavailable"):
+        client.policy_query("canonical", {"value": {}})
+    assert not calls
 
 
 @pytest.mark.parametrize("case", ["deadline", "runtime_change", "missing_binary", "nonfinite"])

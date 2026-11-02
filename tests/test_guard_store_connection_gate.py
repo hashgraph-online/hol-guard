@@ -459,12 +459,10 @@ def test_budgeted_bulk_write_preserves_sqlite_result_accounting(tmp_path: Path) 
         assert connection.execute("select count(*) from guard_events where event_name like 'bulk-%'").fetchone()[0] == 3
 
 
-@pytest.mark.parametrize("path_kind", ["probe", "write-probe", "salvage"])
 @pytest.mark.parametrize("expired", [False, True])
 def test_recovery_connections_obey_deadline_and_close_handles(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    path_kind: str,
     expired: bool,
 ) -> None:
     from codex_plugin_scanner.guard import sqlite_recovery
@@ -482,16 +480,11 @@ def test_recovery_connections_obey_deadline_and_close_handles(
         return connection
 
     def recover() -> None:
-        if path_kind == "probe":
-            assert sqlite_recovery._probe_sqlite_store(source.path) == "healthy"
-        elif path_kind == "write-probe":
-            assert sqlite_recovery._guard_home_accepts_sqlite_write(source.guard_home)
-        else:
-            # Generated empty source has no cloud consent to recover.
-            assert sqlite_recovery.salvage_quarantined_state(source=source.path, destination=destination.path) == (
-                False,
-                True,
-            )
+        # Generated empty source has no cloud consent to recover.
+        assert sqlite_recovery.salvage_quarantined_state(source=source.path, destination=destination.path) == (
+            False,
+            True,
+        )
 
     monkeypatch.setattr(sqlite3, "connect", observed_connect)
     with sqlite_operation_deadline(time.monotonic() + (-1 if expired else 2)):

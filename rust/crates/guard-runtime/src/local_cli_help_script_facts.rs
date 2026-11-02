@@ -1,6 +1,7 @@
 //! What a script's code says about how it may be read and run, before Guard
 //! runs it: whether it answers `--help` itself, which command-line frameworks
-//! it builds on, and the local modules it imports.
+//! it builds on, whether it serves MCP or is an installed package's
+//! entry-point wrapper, and the local modules it imports.
 //!
 //! Guard runs `script --help` only for a script whose own code shows that it
 //! answers `--help`. A script that never looks for `--help` treats it as an
@@ -50,6 +51,13 @@ impl HelpHandler {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Facts {
     pub(crate) help: HelpHandler,
+    /// The code imports an MCP server library or answers `tools/list`, so
+    /// launching it with its own arguments starts a server, not a command.
+    pub(crate) mcp_server: bool,
+    /// When the whole script is the console-script wrapper pip, uv or Poetry
+    /// writes for a package's entry point, the module it imports its function
+    /// from: the code that runs lives in that installed package.
+    pub(crate) entry_point: Option<String>,
     /// Local modules the script imports, as `./`-relative paths.
     pub(crate) imports: Vec<String>,
     /// Commander, yargs, cac or sade: `.command('name')` names a subcommand.
@@ -138,6 +146,48 @@ static OTHER_FRAMEWORK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"\brequire\s+["'](?:optparse|thor|slop)["']|\bpod2usage\b|\bThor\b"#).unwrap()
 });
 
+/// The server side of an MCP library, imported from JavaScript, Python or
+/// Ruby, or a handler that dispatches on the `tools/list` method. A client
+/// imports the same SDK and sends `tools/list`, so neither the bare SDK nor a
+/// quoted method name counts.
+static MCP_SERVER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r#"(?:\brequire\s*\(\s*|\bfrom\s*|\bimport\s*\(?\s*)["'](?:@modelcontextprotocol/sdk/server/|@modelcontextprotocol/server["'/]|fastmcp["'/]|mcp-framework["'/])"#,
+        r"|^from\s+(?:mcp\.server|fastmcp)\b|^from\s+mcp\s+import\b.*\b(?:FastMCP|Server)\b",
+        r"|^import\s+(?:[\w.]+(?:\s+as\s+\w+)?\s*,\s*)*(?:mcp\.server|fastmcp)\b",
+        r#"|\brequire\s*\(?\s*["'](?:mcp|fast_mcp|fast-mcp)["']"#,
+        r#"|(?:===?|\bcase|\bwhen)\s*["']tools/list["']|["']tools/list["']\s*(?:===?|:|=>)"#,
+    ))
+    .unwrap()
+});
+
+/// The one import of an entry-point wrapper, `from package import function`.
+/// Its module follows the dotted-name grammar the Python bridge accepts.
+static WRAPPER_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^from\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+import\s+(\w+)$").unwrap()
+});
+
+/// The longest `entry_point` the Python bridge accepts.
+const ENTRY_POINT_CHARS: usize = 200;
+
+/// The wrapper's last line, `sys.exit(function())` or `sys.exit(object.attr())`.
+static WRAPPER_EXIT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^sys\.exit\(\s*([A-Za-z_]\w*)(?:\.\w+)*\(\)\s*\)$").unwrap());
+
+/// Every other code line a generated wrapper holds: its two imports, the
+/// `__main__` guard, and the fix-ups that drop `-script.pyw` or `.exe` from
+/// `sys.argv[0]`.
+static WRAPPER_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r"^(?:import\s+(?:re|sys)",
+        r#"|if\s+__name__\s*==\s*["']__main__["']\s*:"#,
+        r#"|(?:if|elif)\s+sys\.argv\[0\]\.endswith\(\s*["'][\w.-]+["']\s*\)\s*:"#,
+        r"|sys\.argv\[0\]\s*=\s*sys\.argv\[0\]\[:-\d+\]",
+        r#"|sys\.argv\[0\]\s*=\s*re\.sub\(\s*r?["'][^"']*["']\s*,\s*(?:""|'')\s*,\s*sys\.argv\[0\]\s*\))$"#,
+    ))
+    .unwrap()
+});
+
 static JS_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)["'](\./[^"'\s]+)["']"#).unwrap()
 });
@@ -146,7 +196,14 @@ static RUBY_IMPORT: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"\brequire_relative\s*\(?\s*["']([^"'\s]+)["']"#).unwrap());
 
 static PY_FROM_IMPORT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^from\s+([A-Za-z_][\w.]*)\s+import\b").unwrap());
+    LazyLock::new(|| Regex::new(r"^from\s+(\.?[A-Za-z_][\w.]*)\s+import\b").unwrap());
+
+/// `from . import server, tools as t`: the names are modules beside this one.
+static PY_FROM_DOT_IMPORT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^from\s+\.\s+import\s+\(?([^()]+)\)?$").unwrap());
+
+static PY_NAME: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([A-Za-z_]\w*)(?:\s+as\s+\w+)?$").unwrap());
 
 static PY_IMPORT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^import\s+(.+)$").unwrap());
 
@@ -158,6 +215,7 @@ static PY_MODULE: LazyLock<Regex> =
 pub(super) fn facts(raw: &[&str], lines: &[Option<String>]) -> Facts {
     let mut facts = Facts::default();
     let mut seen: HashSet<String> = HashSet::new();
+    let mut code_lines: Vec<&str> = Vec::new();
     for (index, line) in raw.iter().enumerate() {
         if lines.get(index).is_some_and(Option::is_some) {
             continue;
@@ -167,13 +225,70 @@ pub(super) fn facts(raw: &[&str], lines: &[Option<String>]) -> Facts {
             continue;
         }
         read_help(line, &raw[index..], &mut facts);
+        facts.mcp_server |= MCP_SERVER.is_match(code(line));
+        code_lines.push(py_strip(code(line)));
         for import in imports(line) {
             if facts.imports.len() < MAX_IMPORTS && seen.insert(import.clone()) {
                 facts.imports.push(import);
             }
         }
     }
+    facts.entry_point = entry_point(&code_lines);
     facts
+}
+
+/// The module a generated entry-point wrapper imports from, when `code` is
+/// that wrapper and nothing else: one `from module import function`, a
+/// `sys.exit` that calls that function, and only wrapper boilerplate around
+/// them.
+fn entry_point(code: &[&str]) -> Option<String> {
+    let mut imported: Option<(&str, &str)> = None;
+    let mut called: Option<&str> = None;
+    for &line in code {
+        if let Some(found) = WRAPPER_IMPORT.captures(line) {
+            let module = found.get(1).map_or("", |module| module.as_str());
+            let name = found.get(2).map_or("", |name| name.as_str());
+            if imported.replace((module, name)).is_some() {
+                return None;
+            }
+        } else if let Some(found) = WRAPPER_EXIT.captures(line) {
+            let name = found.get(1).map_or("", |name| name.as_str());
+            if called.replace(name).is_some() {
+                return None;
+            }
+        } else if !WRAPPER_LINE.is_match(line) {
+            return None;
+        }
+    }
+    match (imported, called) {
+        (Some((module, name)), Some(call)) if name == call && module.len() <= ENTRY_POINT_CHARS => {
+            Some(module.to_owned())
+        }
+        _ => None,
+    }
+}
+
+/// The code before a trailing `#` or `//` comment, outside any quotes. Cutting
+/// at a `#` or `//` that was not a comment only loses evidence.
+fn code(line: &str) -> &str {
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for (at, ch) in line.char_indices() {
+        if let Some(open) = quote {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == open {
+                quote = None;
+            }
+        } else if matches!(ch, '"' | '\'' | '`') {
+            quote = Some(ch);
+        } else if ch == '#' || line[at..].starts_with("//") {
+            return &line[..at];
+        }
+    }
+    line
 }
 
 fn read_help(line: &str, rest: &[&str], facts: &mut Facts) {
@@ -235,8 +350,17 @@ fn imports(line: &str) -> Vec<String> {
         };
         found.push(file);
     }
-    let python_module = |module: &str| format!("./{}.py", module.replace('.', "/"));
-    if let Some(captures) = PY_FROM_IMPORT.captures(line) {
+    // `from .server import serve` names a module beside this one, as a
+    // package's own modules import each other.
+    let python_module =
+        |module: &str| format!("./{}.py", module.trim_start_matches('.').replace('.', "/"));
+    if let Some(captures) = PY_FROM_DOT_IMPORT.captures(line) {
+        for part in captures[1].split(',') {
+            if let Some(name) = PY_NAME.captures(py_strip(part)) {
+                found.push(python_module(&name[1]));
+            }
+        }
+    } else if let Some(captures) = PY_FROM_IMPORT.captures(line) {
         found.push(python_module(&captures[1]));
     } else if let Some(captures) = PY_IMPORT.captures(line) {
         for part in captures[1].split(',') {

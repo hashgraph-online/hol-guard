@@ -313,10 +313,22 @@ fn only_imports_inside_the_scripts_folder_are_local() {
         "// import './commented.mjs';\n",
     );
     assert_eq!(imports(node), vec!["./lib/run.mjs", "./lazy.mjs"]);
-    let python = "from helpers import usage\nimport os, tools.cli as cli\nfrom . import nope\n";
+    let python = concat!(
+        "from helpers import usage\nimport os, tools.cli as cli\n",
+        "from .server import serve\nfrom ..up import nope\nfrom .. import nope\n",
+        "from . import config, tools as t\nfrom . import (state)\n",
+    );
     assert_eq!(
         imports(python),
-        vec!["./helpers.py", "./os.py", "./tools/cli.py"]
+        vec![
+            "./helpers.py",
+            "./os.py",
+            "./tools/cli.py",
+            "./server.py",
+            "./config.py",
+            "./tools.py",
+            "./state.py",
+        ]
     );
     let ruby = "require_relative 'lib/cmd'\nrequire_relative \"../up\"\n";
     assert_eq!(imports(ruby), vec!["./lib/cmd.rb"]);
@@ -397,4 +409,79 @@ yargs(process.argv.slice(2))
 } });
 "#;
     assert_eq!(ids(node), vec!["--force", "-f"]);
+}
+
+#[test]
+fn mcp_server_libraries_and_tools_list_handlers_are_evidence() {
+    let serves = |source: &str| script_facts(source, &["tool".to_owned()]).mcp_server;
+    for source in [
+        "import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';\n",
+        "const { Server } = require(\"@modelcontextprotocol/sdk/server/index.js\");\n",
+        "const sdk = await import('@modelcontextprotocol/sdk/server/stdio.js');\n",
+        "import { FastMCP } from 'fastmcp';\n",
+        "from mcp.server.fastmcp import FastMCP\n",
+        "try:\n    import fastmcp\nexcept ImportError:\n    pass\n",
+        "import sys, fastmcp\n",
+        "from mcp import FastMCP\n",
+        "import { McpServer } from \"@modelcontextprotocol/server\";\n",
+        "require 'mcp'\n",
+        "require('mcp')\n",
+        "if (request.method === 'tools/list') { reply(tools); }\n",
+        "if message[\"method\"] == \"tools/list\":\n    send(tools)\n",
+        "match method:\n    case \"tools/list\":\n        send(tools)\n",
+        "when 'tools/list' then reply(tools)\n",
+        "HANDLERS = {\"tools/list\": list_tools}\n",
+    ] {
+        assert!(serves(source), "{source}");
+    }
+    for source in [
+        "import mcp_helpers\n",
+        "from mcpx import run\n",
+        "import { deploy } from './mcp.mjs';\n",
+        "// import { Server } from '@modelcontextprotocol/sdk';\n",
+        "# from mcp.server import Server\n",
+        "console.log('ship tools to the list');\n",
+        "import sys\nprint(sys.argv)\n",
+        "from mcp import ClientSession, StdioServerParameters\n",
+        "import mcp\n",
+        "const { Client } = require('@modelcontextprotocol/sdk/client/index.js');\n",
+        "await session.send({\"method\": \"tools/list\"})\n",
+        "client.request({ method: 'tools/list' });\n",
+        "print('tools/list')\n",
+        "deploy()  # if method == 'tools/list'\n",
+        "deploy(); // case 'tools/list':\n",
+    ] {
+        assert!(!serves(source), "{source}");
+    }
+}
+
+/// What pip writes for `mcp-server-git = "mcp_server_git:main"`.
+const PIP_WRAPPER: &str = "#!/opt/tools/bin/python3\n# -*- coding: utf-8 -*-\nimport re\nimport sys\nfrom mcp_server_git import main\nif __name__ == '__main__':\n    sys.argv[0] = re.sub(r'(-script\\.pyw|\\.exe)?$', '', sys.argv[0])\n    sys.exit(main())\n";
+
+/// What uv writes for an entry point named `pkg.cli:app.run`.
+const UV_WRAPPER: &str = "#!/opt/tools/bin/python\nimport sys\nfrom pkg.cli import app\nif __name__ == \"__main__\":\n    if sys.argv[0].endswith(\"-script.pyw\"):\n        sys.argv[0] = sys.argv[0][:-11]\n    elif sys.argv[0].endswith(\".exe\"):\n        sys.argv[0] = sys.argv[0][:-4]\n    sys.exit(app.run())\n";
+
+#[test]
+fn only_a_generated_wrapper_is_an_entry_point() {
+    let wraps = |source: &str| script_facts(source, &["tool".to_owned()]).entry_point;
+    assert_eq!(wraps(PIP_WRAPPER).as_deref(), Some("mcp_server_git"));
+    assert_eq!(wraps(UV_WRAPPER).as_deref(), Some("pkg.cli"));
+    for source in [
+        PIP_WRAPPER.replace("sys.exit(main())", "main()\n    sys.exit(main())"),
+        PIP_WRAPPER.replace("sys.exit(main())", "sys.exit(other())"),
+        PIP_WRAPPER.replace("import re\n", "import re\nimport os\n"),
+        PIP_WRAPPER.replace("import main\n", "import main\nfrom shutil import rmtree\n"),
+        PIP_WRAPPER.replace(
+            "re.sub(r'(-script\\.pyw|\\.exe)?$', '', sys.argv[0])",
+            "os.system('deploy')",
+        ),
+        PIP_WRAPPER.replace("from mcp_server_git import main\n", ""),
+        "from ship import deploy\ndeploy()\n".to_owned(),
+        "import sys\nprint(sys.argv)\n".to_owned(),
+        PIP_WRAPPER.replace("from mcp_server_git", "from mcp..git"),
+        PIP_WRAPPER.replace("from mcp_server_git", "from mcp_server_git."),
+        PIP_WRAPPER.replace("mcp_server_git", &"a".repeat(201)),
+    ] {
+        assert_eq!(wraps(&source), None, "{source}");
+    }
 }

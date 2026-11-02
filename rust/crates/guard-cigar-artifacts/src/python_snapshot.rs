@@ -4,7 +4,6 @@ use crate::{paths, InstallError, PreparationControl};
 use guard_cigar_release::InterpreterBinding;
 use std::{
     collections::BTreeMap,
-    fs,
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
@@ -16,6 +15,7 @@ pub struct VerifiedPythonSnapshot {
     binding: InterpreterBinding,
     entries: BTreeMap<String, Stamp>,
 }
+#[cfg(unix)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct Stamp {
     dev: u64,
@@ -28,10 +28,25 @@ pub(super) struct Stamp {
     mtime: (i64, i64),
     ctime: (i64, i64),
 }
-pub(super) fn stamp(metadata: &fs::Metadata) -> Result<Stamp, InstallError> {
+/// Windows has no change time in `std`, so a same-user rewrite that restores
+/// the last-write time is caught only by full-byte verification, which every
+/// Windows recheck performs (see `metadata_cache_supported`).
+#[cfg(windows)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct Stamp {
+    id: crate::host::FileId,
+    attributes: u32,
+    size: u64,
+    created: u64,
+    written: u64,
+}
+/// Stamp `path` itself; a link at `path` is stamped, not followed.
+pub(super) fn stamp(path: &Path) -> Result<Stamp, InstallError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
+        let metadata =
+            std::fs::symlink_metadata(path).map_err(|_| InstallError::ArtifactUnreadable)?;
         Ok(Stamp {
             dev: metadata.dev(),
             ino: metadata.ino(),
@@ -44,10 +59,17 @@ pub(super) fn stamp(metadata: &fs::Metadata) -> Result<Stamp, InstallError> {
             ctime: (metadata.ctime(), metadata.ctime_nsec()),
         })
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        let _ = metadata;
-        Err(InstallError::PlatformUnsupported)
+        let (id, attributes, size, created, written) =
+            crate::host::stamp(path).map_err(|_| InstallError::ArtifactUnreadable)?;
+        Ok(Stamp {
+            id,
+            attributes,
+            size,
+            created,
+            written,
+        })
     }
 }
 impl VerifiedPythonSnapshot {
@@ -125,19 +147,14 @@ impl VerifiedPythonSnapshot {
         paths::private_directory(&self.root)?;
         for (name, expected) in &self.entries {
             checkpoint()?;
-            let path = self.root.join(name);
-            let actual =
-                fs::symlink_metadata(path).map_err(|_| InstallError::ArtifactUnreadable)?;
-            if stamp(&actual)? != *expected {
+            if stamp(&self.root.join(name))? != *expected {
                 return Err(InstallError::TreeMismatch);
             }
         }
         // Repeat the root check to catch ancestor/root replacement during the
         // scan. Directory entries below it are also bound individually.
         paths::private_directory(&self.root)?;
-        let root =
-            fs::symlink_metadata(&self.root).map_err(|_| InstallError::ArtifactUnreadable)?;
-        if self.entries.get("") != Some(&stamp(&root)?) {
+        if self.entries.get("") != Some(&stamp(&self.root)?) {
             return Err(InstallError::TreeMismatch);
         }
         checkpoint()

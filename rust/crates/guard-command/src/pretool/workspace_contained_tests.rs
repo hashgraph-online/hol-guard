@@ -78,6 +78,9 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
         "rmdir node_modules/zod-dir",
         "rm -d build",
         "yarn build",
+        // Printing the project's own workspaces runs nothing in them.
+        "yarn workspaces list",
+        "yarn workspaces list --json",
         "pnpm run test:unit",
         // These Git forms keep every uncommitted change reachable.
         "git switch -c feature/login-form",
@@ -280,6 +283,13 @@ fn commands_with_network_privilege_or_escape_stay_at_review() {
         "npm install-test",
         "yarn add zod",
         "yarn workspace web add zod",
+        // `focus` installs, `foreach` runs a command of its own in each
+        // workspace, and a bare `workspaces` names neither, so the subcommand
+        // still has to say what runs.
+        "yarn workspaces focus",
+        "yarn workspaces focus web",
+        "yarn workspaces foreach run build",
+        "yarn workspaces",
         "pnpm dlx create-vite",
         "npm exec foo",
         "npx foo",

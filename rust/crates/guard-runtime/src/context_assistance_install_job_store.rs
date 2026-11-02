@@ -2,7 +2,6 @@
 use super::*;
 use guard_cigar_release::ReleaseBinding;
 use std::time::{SystemTime, UNIX_EPOCH};
-#[cfg(unix)]
 #[path = "context_assistance_preparation_lease.rs"]
 mod lifecycle_lease;
 
@@ -146,7 +145,6 @@ pub(super) fn directory(home: &Path, name: &str, create: bool) -> Result<PathBuf
     ) {
         return Err(error("install_path_invalid"));
     }
-    #[cfg(unix)]
     if matches!(name, "switch-jobs" | "catalog-jobs" | "catalog-downloads")
         || (!create && matches!(name, "jobs" | "python-jobs"))
     {
@@ -235,7 +233,6 @@ fn atomic_replacement(path: &Path, cause: &guard_secure_fs::SecureReadError) -> 
     if matches!(cause, SecureReadError::TooLarge) {
         return false;
     }
-    #[cfg(unix)]
     if replacement_candidate(path) {
         return true;
     }
@@ -243,6 +240,18 @@ fn atomic_replacement(path: &Path, cause: &guard_secure_fs::SecureReadError) -> 
     false
 }
 fn replacement_candidate(path: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        let Some(parent) = path
+            .parent()
+            .and_then(|parent| fs::symlink_metadata(parent).ok())
+        else {
+            return false;
+        };
+        fs::symlink_metadata(path).is_ok_and(|meta| {
+            parent.is_dir() && guard_cigar_artifacts::host::private_file(path, &meta)
+        })
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -260,11 +269,6 @@ fn replacement_candidate(path: &Path) -> bool {
                 && meta.permissions().mode() & 0o077 == 0
                 && meta.permissions().mode() & 0o400 != 0
         })
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = path;
-        false
     }
 }
 pub(super) fn temporary_name(name: &str) -> bool {
@@ -379,15 +383,7 @@ pub(super) fn list(home: &Path) -> Result<Vec<Job>, String> {
     Ok(jobs)
 }
 pub(super) fn lease(home: &Path) -> Result<fs::File, String> {
-    #[cfg(unix)]
-    {
-        lifecycle_lease::acquire(home)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = home;
-        Err(error("install_platform_unqualified"))
-    }
+    lifecycle_lease::acquire(home)
 }
 pub(super) fn cancel_path(home: &Path, job_id: &str) -> Result<PathBuf, String> {
     if !valid_id(job_id) {

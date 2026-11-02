@@ -202,16 +202,19 @@ fn names_config_loader(arguments: &[String]) -> bool {
 /// it runs. Only the manifest read is this side's work: the script's words go
 /// back to the classifier, which gates them as the run they spell.
 fn route(argv: &[String], workspace: &Path, cwd: &Path) -> Result<Tool, RestrictedPytestError> {
+    // The run directory travels with the request: a `tsc` run reads its
+    // no-emit mode from the project it names, and the route has to see the
+    // same project the run will.
     let first = ask(
         "node_tool_route",
-        json!({ "command": argv, "script_body": null, "windows": false }),
+        json!({ "command": argv, "script_body": null, "windows": false, "cwd": cwd }),
     )?;
     let reply = match script_task(&first) {
         Some(task) => {
             let body = script_body(task, workspace, cwd)?;
             let second = ask(
                 "node_tool_route",
-                json!({ "command": argv, "script_body": body, "windows": false }),
+                json!({ "command": argv, "script_body": body, "windows": false, "cwd": cwd }),
             )?;
             if script_task(&second).is_some() {
                 return Err(invalid_command(

@@ -259,7 +259,7 @@ impl Owner {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "context_assistance_initial_journal_tests.rs"]
 mod tests;
 

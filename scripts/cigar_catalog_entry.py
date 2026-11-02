@@ -22,6 +22,16 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
 FEATURES = ("graph", "sharing", "persistence", "execution_context")
+# Catalog platform -> (platform_system, sys_platform, platform_machine, os_name).
+PLATFORMS = {
+    "darwin-arm64": ("Darwin", "darwin", "arm64", "posix"),
+    "darwin-x64": ("Darwin", "darwin", "x86_64", "posix"),
+    "linux-x64-gnu": ("Linux", "linux", "x86_64", "posix"),
+    "linux-arm64-gnu": ("Linux", "linux", "aarch64", "posix"),
+    "linux-x64-musl": ("Linux", "linux", "x86_64", "posix"),
+    "linux-arm64-musl": ("Linux", "linux", "aarch64", "posix"),
+    "win32-x64": ("Windows", "win32", "AMD64", "nt"),
+}
 
 MAX_FILES = 8192
 MAX_BYTES = 256 * 1024 * 1024
@@ -171,9 +181,9 @@ def draft(args: argparse.Namespace) -> dict:
             "extra": "",
         }
     )
-    system, machine = {"darwin-arm64": ("Darwin", "arm64")}[args.platform]
+    system, sys_platform, machine, os_name = PLATFORMS[args.platform]
     environment.update(
-        {"platform_system": system, "sys_platform": "darwin", "platform_machine": machine, "os_name": "posix"}
+        {"platform_system": system, "sys_platform": sys_platform, "platform_machine": machine, "os_name": os_name}
     )
     for path in [args.sdk_wheel, *args.dependency_wheel]:
         lock, files, deps, python_requires = inspect_wheel(path)
@@ -213,7 +223,8 @@ def draft(args: argparse.Namespace) -> dict:
     release = json.loads(all_files["cigar_sdk/release.json"])
     native_root = "cigar_sdk/_native/" + args.platform + "/"
     worker = json.loads(all_files[native_root + "manifest.json"])
-    worker_digest = sha256(all_files[native_root + "cigar-context-worker"])
+    worker_name = "cigar-context-worker.exe" if args.platform == "win32-x64" else "cigar-context-worker"
+    worker_digest = sha256(all_files[native_root + worker_name])
     if (
         release["version"] != locks[0]["version"]
         or worker["sdk_release"] != locks[0]["version"]
@@ -278,7 +289,7 @@ def main() -> None:
         help="Optional exact files.pythonhosted.org content-addressed origin for a supplied dependency wheel",
     )
     parser.add_argument("--release-manifest", type=Path, required=True)
-    parser.add_argument("--platform", choices=["darwin-arm64"], required=True)
+    parser.add_argument("--platform", choices=sorted(PLATFORMS), required=True)
     parser.add_argument("--build-id", required=True)
     parser.add_argument("--release-tag", help="Exact upstream release tag; defaults to v plus the SDK version")
     parser.add_argument(

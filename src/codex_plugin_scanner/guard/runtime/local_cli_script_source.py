@@ -121,6 +121,9 @@ def _local_module(folder: Path, entry: str, suffix: str) -> Path | None:
     # `import './cli'` names the file without the suffix it shares with the script.
     if suffix and not Path(relative).suffix:
         candidates.append(folder / f"{relative}{suffix}")
+    # `from server import mcp` reads ./server.py, which may be a package.
+    if relative.endswith(".py"):
+        candidates.append(folder / relative[: -len(".py")] / "__init__.py")
     for candidate in candidates:
         try:
             resolved = candidate.resolve(strict=True)

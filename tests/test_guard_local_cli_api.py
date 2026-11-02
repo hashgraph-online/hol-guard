@@ -64,12 +64,8 @@ print(\"\"\"Commands:
 """,
         encoding="utf-8",
     )
-    # A pasted launch is first tried as an MCP server, which runs it by design;
-    # that probe answers "not MCP" here so the help discovery is what is checked.
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
-        lambda *_args, **_kwargs: None,
-    )
+    # A pasted launch is tried as an MCP server first. That launch passes the
+    # script its real arguments, so it must never happen without MCP evidence.
     service = LocalCliApiService(store=GuardStore(home))
     result = service.recognize({"command": f"python3 {script} deploy"})
     assert not ran.exists()

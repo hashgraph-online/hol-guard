@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_hooks import _hook_source
+from codex_plugin_scanner.guard.adapters.cline_hooks import _worker_config
 from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source
 
 
@@ -45,11 +45,14 @@ print(json.dumps({"decision":"block","reason":"blocked by arbitration test"}))
     return path, log
 
 
-def _run_hook(source: str, tmp_path: Path, payload: dict[str, object], *, log: Path) -> dict[str, object]:
-    worker = tmp_path / "hook.py"
-    worker.write_text(source, encoding="utf-8")
+def _run_hook(config: str, tmp_path: Path, payload: dict[str, object], *, log: Path) -> dict[str, object]:
+    runtime = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if not runtime or not os.path.isfile(runtime):
+        pytest.skip("the native Cline hook worker needs the built runtime")
+    worker = tmp_path / "PreToolUse.json"
+    worker.write_text(config, encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, str(worker)],
+        [runtime, "cline-hook-worker", str(worker)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -95,9 +98,9 @@ def test_native_hook_is_noop_when_plugin_is_selected(tmp_path: Path) -> None:
     context = _context(tmp_path)
     _activate(context, "plugin")
     guard, log = _fake_guard(tmp_path)
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
 
-    response = _run_hook(source, tmp_path, _pretool_payload(), log=log)
+    response = _run_hook(config, tmp_path, _pretool_payload(), log=log)
 
     assert response["cancel"] is False
     assert not log.exists()
@@ -106,9 +109,9 @@ def test_native_hook_is_noop_when_plugin_is_selected(tmp_path: Path) -> None:
 def test_native_hook_fails_closed_when_transport_state_is_missing(tmp_path: Path) -> None:
     context = _context(tmp_path)
     guard, log = _fake_guard(tmp_path)
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
 
-    response = _run_hook(source, tmp_path, _pretool_payload(), log=log)
+    response = _run_hook(config, tmp_path, _pretool_payload(), log=log)
 
     assert response["cancel"] is True
     assert "transport state is unavailable" in response["errorMessage"]
@@ -163,7 +166,7 @@ def test_plugin_fails_closed_when_transport_state_is_missing(tmp_path: Path) -> 
 def test_selected_transport_is_the_only_guard_caller(tmp_path: Path) -> None:
     context = _context(tmp_path)
     guard, log = _fake_guard(tmp_path)
-    native = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    native = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
     plugin = _plugin_source(context, [sys.executable, str(guard)])
 
     _activate(context, "hooks")

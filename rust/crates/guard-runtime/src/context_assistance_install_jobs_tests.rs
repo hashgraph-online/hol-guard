@@ -224,8 +224,14 @@ mod private_python;
 #[path = "context_assistance_install_jobs_actual_tests.rs"]
 mod actual;
 
+#[path = "context_assistance_one_click_actual_tests.rs"]
+mod one_click_actual;
+
 fn metadata_interpreter(fixture: &Fixture) -> interpreters::Interpreter {
+    #[cfg(unix)]
     let python = PathBuf::from("/not-executed/python3.14");
+    #[cfg(windows)]
+    let python = PathBuf::from(r"C:\not-executed\python.exe");
     let facts = InterpreterFacts {
         schema: "guard-cigar-interpreter.v1".into(),
         implementation: "cpython".into(),

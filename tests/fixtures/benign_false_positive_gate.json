@@ -7140,7 +7140,8 @@
         "codex",
         "zcode",
         "claude-code",
-        "omp"
+        "omp",
+        "grok"
       ],
       "tool": "shell",
       "tool_input": {
@@ -7200,6 +7201,20 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "grok-contained-bun-vitest-entry",
+      "fix_area": "shell",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun node_modules/vitest/vitest.mjs run"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "session-vitest-bun-entry",
@@ -25418,6 +25433,40 @@
       "expect": "allow"
     },
     {
+      "id": "toolchain-tsc-generated-project-pipe",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "./node_modules/.bin/tsc -p tsconfig.check.json 2>&1 | tail -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "toolchain-tsc-current-directory-project",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "./node_modules/.bin/tsc -p . 2>&1 | tail -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
       "id": "toolchain-npm-run-typecheck",
       "fix_area": "shell",
       "harnesses": [
@@ -25725,6 +25774,199 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "toolchain-npx-eslint-explicit-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx eslint src/index.ts src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-npx-eslint-max-warnings",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx eslint --max-warnings=0 src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-npx-tsc-project-short",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsc -p tsconfig.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-pnpm-monorepo-npx-tsc",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsc -p tsconfig.json"
+      },
+      "cwd": "pnpm_monorepo",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-npx-lint-staged",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx lint-staged"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-npx-tsc-project-long-noemit",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsc --project tsconfig.json --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-npx-tsx-run-source",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsx src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "package-test-dashdash-reporter-tail",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm test -- --reporter=verbose"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pytest-keyword-filter-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pytest -k fixture tests/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pytest-exit-first-short-traceback",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pytest -x --tb=short tests/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npx-jest-bare-run-in-band",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx jest --runInBand"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npx-mocha-test-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx mocha tests/"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "toolchain-npm-exec-tsc-noemit",
@@ -30478,6 +30720,54 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-yarn-workspaces-without-a-subcommand",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn workspaces"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "package-yarn-workspaces-list",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn workspaces list"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "package-yarn-workspaces-list-json",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn workspaces list --json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
     },
     {
       "id": "neg-inert-pnpm-filter-directory-selector",
@@ -41931,6 +42221,38 @@
       "tool": "shell",
       "tool_input": {
         "command": "ls ${WORKTREE}/signup-funnel/.deploy.lock.d"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cat-lock-directory-marker",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${WORKTREE}/signup-funnel/.deploy.lock.d/pid"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "read-lock-directory-marker",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${WORKTREE}/signup-funnel/.deploy.lock.d/pid"
       },
       "cwd": "worktree",
       "expect": "allow"

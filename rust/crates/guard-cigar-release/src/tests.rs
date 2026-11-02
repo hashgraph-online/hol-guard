@@ -12,6 +12,8 @@ pub(super) fn document() -> CatalogDocument {
     document.builds[0].identity.build_id = "synthetic-qualified-0_14_1".into();
     document.issued_at = 900;
     document.expires_at = 2000;
+    // Synthetic fixtures describe one platform; bundled coverage is separate.
+    document.builds[0].platforms.truncate(1);
     let platform = &mut document.builds[0].platforms[0];
     platform.qualification = Qualification::GuardQualified;
     platform.package_tree_sha256 = Some("5".repeat(64));
@@ -82,14 +84,42 @@ fn bundled_public_build_activates_with_every_feature_listed() {
     let all = [
         Feature::Graph,
         Feature::Sharing,
-        Feature::Persistence,
         Feature::ExecutionContext,
+        Feature::Persistence,
     ];
-    for platform in &catalog.document().builds[0].platforms {
+    let platforms: Vec<_> = catalog.document().builds[0]
+        .platforms
+        .iter()
+        .map(|platform| platform.platform.as_str())
+        .collect();
+    assert_eq!(
+        platforms,
+        [
+            "darwin-arm64",
+            "darwin-x64",
+            "linux-x64-gnu",
+            "linux-arm64-gnu",
+            "linux-x64-musl",
+            "linux-arm64-musl",
+            "win32-x64"
+        ]
+    );
+    for platform in platforms {
+        let features = &all[..if platform == "win32-x64" { 2 } else { 4 }];
         assert!(catalog
-            .for_activation(build_id(&catalog), &platform.platform, false, &all)
+            .for_activation(build_id(&catalog), platform, false, features)
             .unwrap()
             .activation_qualified());
+        let python = catalog
+            .document()
+            .interpreters
+            .iter()
+            .find(|build| build.platform == platform)
+            .unwrap();
+        assert!(catalog
+            .interpreter_for_setup(&python.build_id, platform)
+            .unwrap()
+            .setup_qualified());
     }
 }
 

@@ -17,8 +17,9 @@ use super::common::{
 };
 use crate::effect_decision::{PositiveProof, ProofRequirement, ProofRoute};
 
-pub(crate) const CONTAINMENT_SCHEMA_VERSION: &str = "guard.containment.v1";
-pub(crate) const CONTAINMENT_POLICY_VERSION: &str = "guard.containment-policy.v1";
+pub(crate) use crate::containment_compatibility::{
+    CONTAINMENT_POLICY_VERSION, CONTAINMENT_SCHEMA_VERSION,
+};
 
 static SHA256: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[0-9a-f]{64}\z").unwrap());
 static STABLE_ID: LazyLock<Regex> =

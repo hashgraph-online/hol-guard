@@ -64,6 +64,10 @@ assert.deepEqual(install.stages, ["python", "download", "check", "start"]);
 assert.equal(install.build_id, qualified.builds[0].identity.build_id);
 assert.equal(install.python_build_id, qualified.interpreter_builds[0].build_id);
 assert.equal(install.approval, true);
+for (const host of ["darwin-x64", "linux-x64-gnu", "linux-arm64-musl", "win32-x64"]) {
+  const plan = planCigarSetup(data({ catalog: { ...qualified, host_platform: host } }), open);
+  assert.ok(plan.kind === "run" && plan.python_build_id?.endsWith(host), `${host} gets its own Python build`);
+}
 const interpreter = { interpreter_id: "python:host", python_version: [3, 14, 7] as [number, number, number], platform: "darwin-arm64",
   implementation: "cpython", abi: "cp314", managed: false, build_id: null };
 const reuse = planCigarSetup(data({ interpreters: [interpreter] }), open);

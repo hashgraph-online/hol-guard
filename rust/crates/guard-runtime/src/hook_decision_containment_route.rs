@@ -42,7 +42,7 @@ const SHELL_TOOLS: [&str; 5] = [
 /// only by its bridge, which first confirms the running Codex applies it,
 /// and Cursor only by its silent `preToolUse` probe for `Shell`, whose
 /// `updated_input` Cursor applies before `beforeShellExecution` runs.
-const ROUTED_HARNESSES: [&str; 2] = ["zcode", "claude-code"];
+const ROUTED_HARNESSES: [&str; 3] = ["zcode", "claude-code", "grok"];
 const BRIDGE_HARNESSES: [&str; 2] = ["codex", "cursor"];
 /// The sink command is quoted for Git Bash, or PowerShell for Codex; any
 /// other harness on Windows keeps its single review.

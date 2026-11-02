@@ -1,4 +1,4 @@
-"""Harness version discovery, acknowledgement storage, and the cached service."""
+"""Harness version discovery and the cached service."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.harness_versions import acknowledgements, service
+from codex_plugin_scanner.guard.harness_versions import service
 from codex_plugin_scanner.guard.harness_versions.compatibility import STATE_UNTESTED, STATE_VERSION_UNKNOWN
 from codex_plugin_scanner.guard.harness_versions.discovery import (
+    VersionObservation,
     observation_identity_changed,
     observe_harness_version,
 )
-from codex_plugin_scanner.guard.harness_versions.manifest import ManifestLoad, parse_manifest
 from tests.test_guard_harness_version_coverage import FIXTURE, GUARD, PLATFORM
 
 PACKAGE = "@oh-my-pi/pi-coding-agent"
@@ -36,6 +36,8 @@ def _install(root: Path, version: object, *, name: str = PACKAGE) -> Path:
     (package_root / "package.json").write_text(json.dumps({"name": name, "version": version}), encoding="utf-8")
     cli = package_root / "dist" / "cli.js"
     cli.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+    # A PATH lookup only returns an executable file, as an install leaves it.
+    cli.chmod(0o755)
     return cli
 
 
@@ -45,19 +47,22 @@ def _link_bun(context: HarnessContext, target: Path) -> None:
     (bin_dir / "omp").symlink_to(target)
 
 
-def _no_probe(*_args: object, **_kwargs: object) -> dict[str, object]:
-    raise AssertionError("package metadata must be preferred over running the harness")
-
-
-def _observe(context: HarnessContext, **kwargs: object):
-    options: dict[str, object] = {"which": lambda _name: None, "run_probe": _no_probe, "clock": lambda: 1000.0}
+def _observe(context: HarnessContext, **kwargs: object) -> VersionObservation:
+    options: dict[str, object] = {"clock": lambda: 1000.0}
     options.update(kwargs)
     return observe_harness_version("omp", context, **options)  # type: ignore[arg-type]
 
 
+def _on_path(monkeypatch: pytest.MonkeyPatch, executable: Path) -> None:
+    link_dir = executable.parents[4] / "path-bin"
+    link_dir.mkdir(exist_ok=True)
+    (link_dir / "omp").symlink_to(executable)
+    monkeypatch.setenv("PATH", str(link_dir))
+
+
 @pytest.fixture(autouse=True)
 def _isolated_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # The service re-checks installs with the real PATH; keep a developer's own omp out of it.
+    # Discovery reads the real PATH; keep a developer's own omp out of it.
     monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
 
 
@@ -68,15 +73,20 @@ def _reset_service_cache() -> Iterator[None]:
     service._observations.clear()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="symlinked bun shim fixture")
 class TestDiscovery:
+    """The native runtime holds the full discovery table; these pin the shim."""
+
     def test_reads_trusted_package_metadata(self, tmp_path: Path) -> None:
         context = _context(tmp_path)
         _link_bun(context, _install(tmp_path / "bun", "18.8.3"))
         observation = _observe(context)
         assert observation.state == "observed"
-        assert observation.version is not None and observation.version.canonical == "18.8.3"
+        assert observation.version == "18.8.3"
         assert observation.source == "package-metadata"
+        assert observation.observed_at == 1000.0
         assert observation.installation_id and str(tmp_path) not in observation.installation_id
+        assert not (context.guard_home / "runtime").exists()
 
     def test_missing_executable_is_unknown(self, tmp_path: Path) -> None:
         observation = _observe(_context(tmp_path))
@@ -95,118 +105,104 @@ class TestDiscovery:
         observation = _observe(context)
         assert (observation.state, observation.reason) == ("unavailable", "metadata_unavailable")
 
-    def test_disagreeing_installations_are_ambiguous(self, tmp_path: Path) -> None:
+    def test_disagreeing_installations_are_ambiguous(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         context = _context(tmp_path)
         _link_bun(context, _install(tmp_path / "bun", "18.11.2"))
-        npm_cli = _install(tmp_path / "npm", "18.8.3")
-        observation = _observe(context, which=lambda _name: str(npm_cli))
+        _on_path(monkeypatch, _install(tmp_path / "npm", "18.8.3"))
+        observation = _observe(context)
         assert (observation.state, observation.reason) == ("ambiguous", "multiple_installations")
         assert observation.version is None
+        assert len(observation.candidates) == 2
 
-    def test_agreeing_installations_are_observed(self, tmp_path: Path) -> None:
+    def test_agreeing_installations_are_observed(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         context = _context(tmp_path)
         _link_bun(context, _install(tmp_path / "bun", "18.8.3"))
-        npm_cli = _install(tmp_path / "npm", "18.8.3")
-        assert _observe(context, which=lambda _name: str(npm_cli)).state == "observed"
+        _on_path(monkeypatch, _install(tmp_path / "npm", "18.8.3"))
+        assert _observe(context).state == "observed"
 
-    def test_guard_shim_is_not_treated_as_the_harness(self, tmp_path: Path) -> None:
+    def test_guard_shim_is_not_treated_as_the_harness(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         context = _context(tmp_path)
         shim = context.guard_home / "bin" / "omp"
         shim.parent.mkdir(parents=True)
-        shim.write_text("#!/bin/sh\n", encoding="utf-8")
-        assert _observe(context, which=lambda _name: str(shim)).reason == "executable_missing"
+        shim.write_text("#!/bin/sh\necho 9.9.9\n", encoding="utf-8")
+        shim.chmod(0o755)
+        monkeypatch.setenv("PATH", str(shim.parent))
+        assert _observe(context).reason == "executable_missing"
 
-    def _standalone(self, tmp_path: Path) -> tuple[HarnessContext, Path]:
+    def test_standalone_binary_uses_the_bounded_probe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         context = _context(tmp_path)
         binary = tmp_path / "standalone" / "omp"
         binary.parent.mkdir()
-        binary.write_bytes(b"\x7fELF")
-        return context, binary
-
-    @pytest.mark.parametrize(
-        ("result", "state", "reason"),
-        [
-            ({"ok": True, "stdout": "omp 18.8.3\n"}, "observed", None),
-            ({"ok": True, "stdout": "omp/18.11.2\n"}, "observed", None),
-            ({"ok": False, "timed_out": True}, "unavailable", "probe_timeout"),
-            ({"ok": False, "stdout": ""}, "unavailable", "probe_failed"),
-            ({"ok": True, "stdout": "omp 18.8.3 18.8.4"}, "unavailable", "banner_malformed"),
-        ],
-    )
-    def test_standalone_binary_uses_bounded_probe(
-        self, tmp_path: Path, result: dict[str, object], state: str, reason: str | None
-    ) -> None:
-        context, binary = self._standalone(tmp_path)
-        calls: list[tuple[list[str], dict[str, object]]] = []
-
-        def probe(argv: list[str], **kwargs: object) -> dict[str, object]:
-            calls.append((argv, kwargs))
-            return result
-
-        observation = _observe(context, which=lambda _name: str(binary), run_probe=probe)
-        assert (observation.state, observation.reason) == (state, reason)
-        argv, kwargs = calls[0]
-        assert argv == [str(binary.resolve()), "--version"]
-        assert kwargs["timeout_seconds"] == 3
-        assert Path(str(kwargs["cwd"])).is_relative_to(context.guard_home)
-        assert set(kwargs["env"]) <= {"PATH", "HOME", "NO_COLOR", "SYSTEMROOT", "TEMP", "TMP"}  # type: ignore[arg-type]
+        binary.write_text("#!/bin/sh\necho omp/18.11.2\n", encoding="utf-8")
+        binary.chmod(0o755)
+        monkeypatch.setenv("PATH", str(binary.parent))
+        observation = _observe(context)
+        assert (observation.state, observation.version, observation.source) == (
+            "observed",
+            "18.11.2",
+            "version-probe",
+        )
 
     def test_replaced_package_changes_identity(self, tmp_path: Path) -> None:
         context = _context(tmp_path)
         cli = _install(tmp_path / "bun", "18.8.3")
         _link_bun(context, cli)
         observation = _observe(context)
-        assert not observation_identity_changed(observation)
+        assert not observation_identity_changed(observation, context)
         package_json = cli.parent.parent / "package.json"
         package_json.write_text(json.dumps({"name": PACKAGE, "version": "18.11.20"}), encoding="utf-8")
         os.utime(package_json, ns=(1, 1))
-        assert observation_identity_changed(observation)
+        assert observation_identity_changed(observation, context)
 
-    def test_new_installation_on_path_changes_identity(self, tmp_path: Path) -> None:
+    def test_new_installation_on_path_changes_identity(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         context = _context(tmp_path)
         _link_bun(context, _install(tmp_path / "bun", "18.8.3"))
         observation = _observe(context)
-        assert not observation_identity_changed(observation, context, which=lambda _name: None)
-        second = _install(tmp_path / "npm", "18.11.2")
-        assert observation_identity_changed(observation, context, which=lambda _name: str(second))
+        assert not observation_identity_changed(observation, context)
+        _on_path(monkeypatch, _install(tmp_path / "npm", "18.11.2"))
+        assert observation_identity_changed(observation, context)
 
 
-class TestAcknowledgementStore:
-    KEY = "a" * 64
-
-    def test_record_and_clear(self, tmp_path: Path) -> None:
-        acknowledgements.record_acknowledgement(tmp_path, harness="omp", key=self.KEY)
-        assert acknowledgements.acknowledged_keys(tmp_path, "omp") == {self.KEY}
-        if os.name != "nt":
-            assert (tmp_path / acknowledgements.ACKNOWLEDGEMENTS_FILENAME).stat().st_mode & 0o777 == 0o600
-        acknowledgements.record_acknowledgement(tmp_path, harness="omp", key="b" * 64)
-        assert acknowledgements.acknowledged_keys(tmp_path, "omp") == {"b" * 64}
-        assert acknowledgements.clear_acknowledgements(tmp_path, harness="omp") == 1
-        assert acknowledgements.acknowledged_keys(tmp_path, "omp") == frozenset()
-
-    @pytest.mark.parametrize(
-        "content",
-        [b"{not json", b'{"version": 2, "items": []}', b"\xff\xfe", b'{"version": 1, "items": {}}', b"x" * 20000],
+def test_without_a_runtime_the_version_is_unknown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", lambda *_a, **_k: None)
+    context = _context(tmp_path)
+    observation = _observe(context)
+    assert (observation.state, observation.version, observation.reason) == (
+        "unavailable",
+        None,
+        "runtime_unavailable",
     )
-    def test_corrupt_store_acknowledges_nothing(self, tmp_path: Path, content: bytes) -> None:
-        (tmp_path / acknowledgements.ACKNOWLEDGEMENTS_FILENAME).write_bytes(content)
-        assert acknowledgements.acknowledged_keys(tmp_path, "omp") == frozenset()
+    # An observation the runtime cannot confirm is never reused.
+    assert observation_identity_changed(observation, context)
 
-    def test_rejects_malformed_keys(self, tmp_path: Path) -> None:
-        with pytest.raises(ValueError):
-            acknowledgements.record_acknowledgement(tmp_path, harness="omp", key="../../etc")
+
+def test_an_unsupported_harness_never_starts_the_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("the runtime was started")
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", refuse)
+    observation = VersionObservation("hermes", "unavailable", None, "none", None, "discovery_unsupported", 1000.0)
+    assert not observation_identity_changed(observation, _context(tmp_path))
+
+
+def _fixture_manifest(context: HarnessContext) -> Path:
+    path = context.home_dir / "coverage.json"
+    path.write_text(json.dumps(FIXTURE), encoding="utf-8")
+    return path
 
 
 class TestService:
     def _compat(self, context: HarnessContext, **kwargs: object) -> dict[str, object]:
         options: dict[str, object] = {
-            "manifest_load": ManifestLoad(parse_manifest(FIXTURE), None),
             "guard_version": GUARD,
             "platform": PLATFORM,
             "observe": lambda harness, ctx, clock: _observe(ctx, clock=clock),
             "clock": lambda: 1000.0,
         }
         options.update(kwargs)
+        if "manifest_path" not in options:
+            # Writing the fixture again would change its stamp and miss the decision cache.
+            options["manifest_path"] = _fixture_manifest(context)
         return service.compatibility_for("omp", context, **options)  # type: ignore[arg-type]
 
     def test_acknowledge_flow_and_version_change(self, tmp_path: Path) -> None:
@@ -214,7 +210,7 @@ class TestService:
         cli = _install(tmp_path / "bun", "18.11.2")
         _link_bun(context, cli)
         options = {
-            "manifest_load": ManifestLoad(parse_manifest(FIXTURE), None),
+            "manifest_path": _fixture_manifest(context),
             "guard_version": GUARD,
             "platform": PLATFORM,
             "observe": lambda harness, ctx, clock: _observe(ctx, clock=clock),
@@ -248,12 +244,12 @@ class TestService:
                 "omp",
                 "a" * 64,
                 context,
-                manifest_load=ManifestLoad(parse_manifest(FIXTURE), None),
+                manifest_path=_fixture_manifest(context),
                 guard_version=GUARD,
                 platform=PLATFORM,
                 observe=lambda harness, ctx, clock: _observe(ctx, clock=clock),
             )
-        assert not (context.guard_home / acknowledgements.ACKNOWLEDGEMENTS_FILENAME).exists()
+        assert not (context.guard_home / "harness-version-acknowledgements.json").exists()
 
     def test_cache_expires_and_invalidates(self, tmp_path: Path) -> None:
         context = _context(tmp_path)
@@ -271,6 +267,46 @@ class TestService:
         service.invalidate(context.guard_home, "omp")
         self._compat(context, observe=observe)
         assert len(calls) == 3
+
+    def test_identical_inputs_reuse_one_decision(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        context = _context(tmp_path)
+        _link_bun(context, _install(tmp_path / "bun", "18.11.2"))
+        manifest = _fixture_manifest(context)
+        decide = service.decide_compatibility
+        calls: list[object] = []
+
+        def counted(**fields: object) -> dict[str, object]:
+            calls.append(fields["now"])
+            return decide(**fields)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(service, "decide_compatibility", counted)
+        first = self._compat(context, manifest_path=manifest)
+        first["state"] = "tampered"
+        assert self._compat(context, manifest_path=manifest)["state"] == STATE_UNTESTED
+        assert len(calls) == 1, "a list read must not ask the runtime again for an unchanged row"
+
+        later = 1000.0 + service.DECISION_TTL_SECONDS
+        key = self._compat(context, manifest_path=manifest, clock=lambda: later)["acknowledgement"]["key"]  # type: ignore[index]
+        assert len(calls) == 2, "a decision expires"
+
+        service.acknowledge(
+            "omp",
+            key,
+            context,
+            manifest_path=manifest,
+            guard_version=GUARD,
+            platform=PLATFORM,
+            observe=lambda harness, ctx, clock: _observe(ctx, clock=clock),
+            clock=lambda: later,
+        )
+        acked = self._compat(context, manifest_path=manifest, clock=lambda: later)
+        assert acked["acknowledgement"]["acknowledged"] is True  # type: ignore[index]
+
+        manifest.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        os.utime(manifest, ns=(1, 1))
+        before = len(calls)
+        _ = self._compat(context, manifest_path=manifest, clock=lambda: later)
+        assert len(calls) == before + 1, "an edited manifest is decided again"
 
 
 def _imports(path: Path) -> set[str]:

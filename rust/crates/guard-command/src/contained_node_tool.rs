@@ -17,9 +17,17 @@
 #[path = "contained_node_tool_tests.rs"]
 mod tests;
 
+#[path = "node_tool_modes.rs"]
+pub(crate) mod node_tool_modes;
+
+pub(crate) use node_tool_modes::{
+    config_declares_no_emit, entry_tool, local_package_entry, supported_tool, supported_tool_in,
+};
+
 use crate::pretool::{manager_local_bin_arguments, manager_script_task};
 use crate::restricted_command::RestrictedPytestError;
 use serde_json::{json, Value};
+use std::path::Path;
 
 /// A refused command, and the sandbox reason a refusal that is not about the
 /// command itself carries instead.
@@ -101,68 +109,6 @@ fn program_name(argument: &str, windows: bool) -> String {
         }
         _ => name.to_owned(),
     }
-}
-
-/// Prettier publishes one entrypoint per major, and version 2 remains common
-/// enough to name: Prettier 3 moved its executable into `bin/`.
-pub(crate) const PRETTIER_ENTRIES: [&str; 2] =
-    ["prettier/bin/prettier.cjs", "prettier/bin-prettier.js"];
-
-/// Every supported tool and the entrypoints its published versions install.
-/// A tool that publishes one entrypoint per major is installed under
-/// whichever spelling its version uses, so every spelling is named and the
-/// caller keeps the one the nearest project installs.
-const TOOL_ENTRIES: &[(&str, &[&str])] = &[
-    ("eslint", &["eslint/bin/eslint.js"]),
-    ("tsc", &["typescript/bin/tsc"]),
-    ("vite", &["vite/bin/vite.js"]),
-    ("prettier", &PRETTIER_ENTRIES),
-];
-
-/// A local file path with a `node_modules` component naming one tool's
-/// published entrypoint: `node_modules/<entry>`, `./node_modules/<entry>` or
-/// `<dir>/node_modules/<entry>`.
-pub(crate) fn local_package_entry(entry: &str, package_entry: &str) -> bool {
-    entry
-        .strip_suffix(package_entry)
-        .and_then(|prefix| prefix.strip_suffix("node_modules/"))
-        .is_some_and(|prefix| prefix.is_empty() || prefix.ends_with('/'))
-}
-
-/// Whether a Prettier command asks only whether the files are formatted.
-/// `--check` and `--list-different` print and exit; every other spelling may
-/// reach `--write`, which rewrites each file it visits.
-pub(crate) fn prettier_checks(arguments: &[String]) -> bool {
-    arguments.iter().any(|argument| {
-        matches!(
-            argument.as_str(),
-            "--check" | "-c" | "--list-different" | "-l"
-        )
-    })
-}
-
-/// The admitted tool of this name and the entrypoints it publishes.
-pub(crate) fn tool_entries(name: &str) -> Option<(&'static str, &'static [&'static str])> {
-    TOOL_ENTRIES.iter().copied().find(|(tool, _)| *tool == name)
-}
-
-/// The supported tool a name stands for, the entrypoints it publishes and
-/// the mode it runs in, or `None` when the tool or its mode is not one of the
-/// supported runs.
-pub(crate) fn supported_tool(
-    name: &str,
-    arguments: &[String],
-) -> Option<(&'static str, &'static [&'static str], ToolMode)> {
-    let mode = match name {
-        "eslint" => ToolMode::Report,
-        "tsc" if arguments.iter().any(|word| word == "--noEmit") => ToolMode::Report,
-        // Only a checking mode reports instead of rewriting the files it visits.
-        "prettier" if prettier_checks(arguments) => ToolMode::Report,
-        "vite" if arguments.first().is_some_and(|word| word == "build") => ToolMode::Build,
-        _ => return None,
-    };
-    let (tool, entries) = tool_entries(name)?;
-    Some((tool, entries, mode))
 }
 
 /// Whether any supported tool could take every word the manager passed on.
@@ -297,33 +243,35 @@ fn bounded_heap(argument: &str) -> Option<bool> {
     Some(bounded)
 }
 
-/// The tool a `node` command starts, from the entrypoint it names, or `""`
-/// when the entrypoint belongs to no supported tool.
-pub(crate) fn entry_tool(entry: &str) -> &'static str {
-    TOOL_ENTRIES
-        .iter()
-        .find(|(_, entries)| {
-            entries
-                .iter()
-                .any(|published| local_package_entry(entry, published))
-        })
-        .map_or("", |(tool, _)| *tool)
-}
-
 /// Where the gate lands once a tool name and its arguments are known.
 fn gate(
     name: &str,
-    arguments: Vec<String>,
+    mut arguments: Vec<String>,
     runtime_arguments: Vec<String>,
     expected_entry: Option<String>,
+    directory: Option<&Path>,
 ) -> NodeToolRoute {
-    let Some((name, entries, mode)) = supported_tool(name, &arguments) else {
+    // One reading of the project answers both questions: whether the run is
+    // one this route admits, and whether the `--noEmit` it is admitted for
+    // has to be written back onto its command line. Asking the filesystem
+    // twice would let a config written between the two answers admit a run
+    // whose arguments never carried the option.
+    let from_config = config_declares_no_emit(name, &arguments, directory);
+    let Some((name, entries, mode)) =
+        node_tool_modes::supported_tool_declared(name, &arguments, from_config)
+    else {
         return invalid(
             "Only local ESLint, no-emit TypeScript and Prettier in a checking mode are supported.",
         );
     };
     if writes_or_chains(&arguments) {
         return invalid("The lint/typecheck input has write or shell effects.");
+    }
+    // The project declared the no-emit mode this route admitted, so the run
+    // carries it on its own command line. Whatever the file says by the time
+    // the run starts, the process that starts cannot emit.
+    if from_config {
+        arguments.push("--noEmit".to_owned());
     }
     NodeToolRoute::Tool {
         name,
@@ -345,6 +293,7 @@ pub(crate) fn node_tool_route(
     command: &[String],
     script_body: Option<&[String]>,
     windows: bool,
+    directory: Option<&Path>,
 ) -> NodeToolRoute {
     if let Some(tokens) = script_body {
         let Some((name, arguments)) = tokens.split_first() else {
@@ -366,10 +315,10 @@ pub(crate) fn node_tool_route(
             );
         }
         arguments.extend_from_slice(tail);
-        return gate(name, arguments, Vec::new(), None);
+        return gate(name, arguments, Vec::new(), None, directory);
     }
     let Some((program, rest)) = command.split_first() else {
-        return gate("", Vec::new(), Vec::new(), None);
+        return gate("", Vec::new(), Vec::new(), None, directory);
     };
     let mut name = program_name(program, windows);
     let mut arguments = rest.to_vec();
@@ -433,7 +382,13 @@ pub(crate) fn node_tool_route(
         name = entry_tool(&entry).to_owned();
         expected_entry = Some(entry);
     }
-    gate(&name, arguments, runtime_arguments, expected_entry)
+    gate(
+        &name,
+        arguments,
+        runtime_arguments,
+        expected_entry,
+        directory,
+    )
 }
 
 /// The routing request as the caller spells it: the platform the command was
@@ -448,6 +403,13 @@ pub(crate) fn route_request(
         .get("windows")
         .and_then(Value::as_bool)
         .unwrap_or(cfg!(windows));
+    // The directory the run starts in, when the caller knows it. Without one
+    // a `tsc` run is read from its command line alone.
+    let directory = input
+        .get("cwd")
+        .and_then(Value::as_str)
+        .filter(|cwd| !cwd.is_empty())
+        .map(Path::new);
     let body = input.get("script_body").cloned().unwrap_or(Value::Null);
     let script_body = if body.is_null() {
         None
@@ -459,7 +421,7 @@ pub(crate) fn route_request(
             )
         })?)
     };
-    route_reply(command, script_body.as_deref(), windows)
+    route_reply(command, script_body.as_deref(), windows, directory)
 }
 
 /// The route as the sink reads it: one reading of the spelling, the tool it
@@ -468,8 +430,9 @@ pub(crate) fn route_reply(
     command: &[String],
     script_body: Option<&[String]>,
     windows: bool,
+    directory: Option<&Path>,
 ) -> Result<Value, RestrictedPytestError> {
-    match node_tool_route(command, script_body, windows) {
+    match node_tool_route(command, script_body, windows, directory) {
         NodeToolRoute::Script { task } => Ok(json!({ "kind": "script", "task": task })),
         NodeToolRoute::Tool {
             name,

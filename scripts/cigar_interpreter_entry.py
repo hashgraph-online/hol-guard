@@ -34,7 +34,7 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def admit(name: str, directory: bool, namespace: dict) -> str:
+def admit(name: str, directory: bool, namespace: dict, fold_case: bool = True) -> str:
     name = name.rstrip("/") if directory else name
     if not name or not name.isascii() or len(name) > 1024 or len(name.split("/")) > 24:
         raise ValueError("unsafe interpreter path")
@@ -56,10 +56,11 @@ def admit(name: str, directory: bool, namespace: dict) -> str:
         prefix.append(part)
         path = "/".join(prefix)
         is_dir = directory or index + 1 < len(name.split("/"))
-        previous = namespace.get(path.lower())
+        key = path.lower() if fold_case else path
+        previous = namespace.get(key)
         if previous is not None and (previous[0] != path or not previous[1] or not is_dir):
             raise ValueError("interpreter path collision")
-        namespace[path.lower()] = (path, is_dir)
+        namespace[key] = (path, is_dir)
     return name
 
 
@@ -83,7 +84,7 @@ def resolve(name: str, target: str, hard: bool) -> str:
     return admit("/".join(parts), False, {})
 
 
-def inspect_archive(data: bytes) -> tuple[dict, int, str]:
+def inspect_archive(data: bytes, fold_case: bool = True) -> tuple[dict, int, str]:
     inflater = zlib.decompressobj(31)
     raw = inflater.decompress(data, MAX_BYTES + 1)
     if len(raw) > MAX_BYTES or not inflater.eof or inflater.unused_data or inflater.unconsumed_tail:
@@ -108,7 +109,7 @@ def inspect_archive(data: bytes) -> tuple[dict, int, str]:
                 continue
             if not member.name.startswith("python/"):
                 raise ValueError("unsafe interpreter root")
-            name = admit(member.name[7:], member.isdir(), namespace)
+            name = admit(member.name[7:], member.isdir(), namespace, fold_case)
             if member.isdir():
                 continue
             if member.isreg():
@@ -183,7 +184,8 @@ def draft(args: argparse.Namespace) -> dict:
         or asset["digest"] != "sha256:" + sha256(data)
     ):
         raise ValueError("interpreter differs from supplied release metadata")
-    files, total, tree = inspect_archive(data)
+    # Linux trees keep names that differ only by case; only macOS and Windows fold.
+    files, total, tree = inspect_archive(data, not args.platform.startswith("linux-"))
     executable = "python.exe" if args.platform == "win32-x64" else "bin/python3.14"
     if executable not in files or not files[executable][2]:
         raise ValueError("missing executable interpreter")

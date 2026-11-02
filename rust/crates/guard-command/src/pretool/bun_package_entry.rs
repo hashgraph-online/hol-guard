@@ -54,7 +54,7 @@ mod tests {
     fn reason(command: &str) -> Option<&'static str> {
         let model = model(command);
         let spelled = node_spelling(&model);
-        super::super::super::readonly_test_reason(spelled.as_ref().unwrap_or(&model))
+        super::super::super::readonly_test_reason(spelled.as_ref().unwrap_or(&model), None)
     }
 
     #[test]

@@ -69,6 +69,6 @@ pub(in super::super) fn begin(
     Ok(job)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "context_assistance_initial_recovery_progress_tests.rs"]
 mod tests;

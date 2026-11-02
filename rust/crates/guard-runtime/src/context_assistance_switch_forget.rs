@@ -12,7 +12,7 @@ pub(crate) struct DataRemoval {
     intent: Vec<u8>,
 }
 impl DataRemoval {
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn fail_next_after_legacy() {
         AFTER_LEGACY.with(|f| f.set(true));
     }

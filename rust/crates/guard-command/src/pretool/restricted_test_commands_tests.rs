@@ -12,7 +12,7 @@ fn parsed(command: &str) -> crate::CanonicalCommandV1 {
 }
 
 fn reason(command: &str) -> Option<&'static str> {
-    readonly_test_reason(&parsed(command))
+    readonly_test_reason(&parsed(command), None)
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn the_node_test_reason_carries_bun_s_package_protection_permission() {
         "bun test -t adds",
     ] {
         let model = parsed(command);
-        let found = readonly_test_reason(&model);
+        let found = readonly_test_reason(&model, None);
         assert_eq!(
             found,
             Some("native_node_test_readonly_containment_required"),
@@ -270,7 +270,7 @@ fn admission_and_the_route_read_one_tool_table() {
         ("npx vite build --output-file dist/log", None),
     ] {
         let words: Vec<String> = command.split(' ').map(str::to_owned).collect();
-        let routed = match node_tool_route(&words, None, false) {
+        let routed = match node_tool_route(&words, None, false, None) {
             NodeToolRoute::Tool { mode, .. } => Some(mode),
             _ => None,
         };

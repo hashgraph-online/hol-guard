@@ -57,7 +57,6 @@ pub(crate) struct History {
     current_producer: Option<Value>,
 }
 impl History {
-    #[cfg(unix)]
     pub(crate) fn set_current_producer(
         &mut self,
         producer: &guard_context_assistance::EvidenceUpgradeProducer,
@@ -66,7 +65,6 @@ impl History {
     }
     /// Preserve original timestamps, SDK labels and already-known producers.
     /// Newly attached provenance still counts toward the original byte bounds.
-    #[cfg(unix)]
     pub(crate) fn for_upgrade(
         mut self,
         producer: &guard_context_assistance::EvidenceUpgradeProducer,

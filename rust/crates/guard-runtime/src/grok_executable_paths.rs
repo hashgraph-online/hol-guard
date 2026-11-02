@@ -231,7 +231,7 @@ pub(crate) fn lenient(path: &Path, cwd: &Path) -> PathBuf {
 }
 
 #[cfg(windows)]
-fn strip_verbatim(path: PathBuf) -> PathBuf {
+pub(crate) fn strip_verbatim(path: PathBuf) -> PathBuf {
     let text = path.to_string_lossy();
     if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
         PathBuf::from(format!(r"\\{unc}"))
@@ -243,7 +243,7 @@ fn strip_verbatim(path: PathBuf) -> PathBuf {
 }
 
 #[cfg(not(windows))]
-fn strip_verbatim(path: PathBuf) -> PathBuf {
+pub(crate) fn strip_verbatim(path: PathBuf) -> PathBuf {
     path
 }
 

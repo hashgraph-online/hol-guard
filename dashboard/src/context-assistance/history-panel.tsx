@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { SelectMenu } from "../select-menu";
 import { guardAwareHref } from "../guard-api";
 import { harnessDisplayName } from "../approval-center-utils";
 import { fetchContextAssistance } from "./api";
@@ -102,13 +103,11 @@ export function ContextHistoryPanel({ decisionId, harness }: Props) {
     </div>
     {error ? <p role="status" className="text-sm text-slate-600">{error}</p> : null}
     {open && !busy && !error && scopes.length === 0 ? <p className="text-sm text-slate-600">No authorized workspace has available context history.</p> : null}
-    {open && scopes.length > 0 ? <label className="block text-sm text-slate-600" htmlFor={id}>Context workspace and app
-      <select id={id} className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 px-2 text-sm" disabled={busy} value={scope?.scope_id ?? ""}
-        onChange={(event) => { const selected = scopes.find((scope) => scope.scope_id === event.target.value); if (selected) void perform((signal) => choose(selected, signal)); }}>
-        {!scope ? <option value="">Choose authorized context access</option> : null}
-        {scopes.map((scope) => <option key={scope.scope_id} value={scope.scope_id}>{scope.workspace} · {scope.app === "dashboard" ? "Guard dashboard" : harnessDisplayName(scope.app)}</option>)}
-      </select>
-    </label> : null}
+    {open && scopes.length > 0 ? <div><span id={id + "-label"} className="text-sm text-slate-600">Context workspace and app</span>
+      <SelectMenu id={id} labelledBy={id + "-label"} className="mt-1 w-full" disabled={busy} value={scope?.scope_id ?? ""} placeholder="Choose authorized context access"
+        options={scopes.map((item) => ({ value: item.scope_id, label: item.workspace + " · " + (item.app === "dashboard" ? "Guard dashboard" : harnessDisplayName(item.app)) }))}
+        onChange={(value) => { const selected = scopes.find((item) => item.scope_id === value); if (selected) void perform((signal) => choose(selected, signal)); }} />
+    </div> : null}
     {scope && !busy && entries.length === 0 ? <p className="text-sm text-slate-600">No prepared context is retained for this selection.</p> : null}
     {scope && summary && summary.dropped !== "0" ? <p role="status" className="text-sm text-slate-600">Some prepared observations were omitted by history limits. This is a bounded window; Guard's evidence log is separate.</p> : null}
     <ul className="space-y-2">{entries.map((entry, index) => <li key={entry.history_id}>

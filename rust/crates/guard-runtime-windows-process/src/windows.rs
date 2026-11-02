@@ -69,7 +69,9 @@ pub use directory_binding::{
     bind_directory, bind_private_directory, bind_readonly_directory, create_private_directory,
     path_is_within, PrivateDirectoryBinding,
 };
-pub use file_identity::{is_single_link_file, is_single_link_handle, remove_file_if_same};
+pub use file_identity::{
+    is_single_link_file, is_single_link_handle, remove_file_if_same, rename_no_replace,
+};
 pub use job_guard::{attach_suspended_process, ChildJobGuard, ResourceLimits};
 pub use private_files::{
     create_private_file, delete_private_file_handle, open_private_directory, open_private_file,

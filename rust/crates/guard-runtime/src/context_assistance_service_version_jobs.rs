@@ -1,7 +1,6 @@
 //! Route all bounded preparation/switch jobs through one operator contract.
 //! Progress never authorizes a runtime; the live coordinator owns every effect.
 use super::*;
-#[cfg(unix)]
 use crate::policy_store::context_assistance_registry::switching::jobs as switches;
 use std::path::Path;
 
@@ -15,19 +14,10 @@ fn generation(raw: &str) -> Result<u64, String> {
         .ok_or_else(invalid)
 }
 fn is_switch(home: &Path, id: &str) -> Result<bool, String> {
-    #[cfg(unix)]
-    {
-        Ok(switches::get(home, id)?.is_some())
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (home, id);
-        Ok(false)
-    }
+    Ok(switches::get(home, id)?.is_some())
 }
 pub(super) fn list(service: &Service, home: &Path) -> Result<Value, String> {
     let mut values = service.updates.list(home)?;
-    #[cfg(unix)]
     for job in switches::list(home)? {
         if values.iter().any(|v| v["job_id"] == job.request.job_id) {
             return Err("native_context_assistance_switch_idempotency_conflict".into());
@@ -47,14 +37,12 @@ pub(super) fn list(service: &Service, home: &Path) -> Result<Value, String> {
 }
 pub(super) fn get(service: &Service, home: &Path, id: &str) -> Result<Value, String> {
     if is_switch(home, id)? {
-        #[cfg(unix)]
         return service.switch_job(home, id);
     }
     service.updates.get(home, id)
 }
 pub(super) fn cancel(service: &Service, home: &Path, id: &str) -> Result<Value, String> {
     if is_switch(home, id)? {
-        #[cfg(unix)]
         return service.cancel_switch(home, id);
     }
     service.updates.cancel(home, id)
@@ -67,12 +55,7 @@ pub(super) fn recover(
 ) -> Result<Value, String> {
     if is_switch(home, id)? {
         let generation = generation(expected.ok_or_else(invalid)?)?;
-        #[cfg(unix)]
         return service.reconcile_switch(home, id, generation);
-        #[cfg(not(unix))]
-        {
-            let _ = generation;
-        }
     }
     if expected.is_some() {
         return Err(invalid());
@@ -87,25 +70,17 @@ pub(super) fn prepare(
     expected: &str,
 ) -> Result<Value, String> {
     let generation = generation(expected)?;
-    #[cfg(unix)]
-    {
-        match target {
-            Some(target) => service.prepare_switch(
-                home,
-                switches::SwitchRequest {
-                    job_id: id.into(),
-                    target_runtime_id: target.into(),
-                    expected_generation: generation,
-                    rollback: false,
-                },
-            ),
-            None => service.prepare_rollback(home, id, generation),
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (service, home, id, target, generation);
-        Err("native_context_assistance_switch_platform_unsupported".into())
+    match target {
+        Some(target) => service.prepare_switch(
+            home,
+            switches::SwitchRequest {
+                job_id: id.into(),
+                target_runtime_id: target.into(),
+                expected_generation: generation,
+                rollback: false,
+            },
+        ),
+        None => service.prepare_rollback(home, id, generation),
     }
 }
 pub(super) fn commit(
@@ -116,13 +91,5 @@ pub(super) fn commit(
     reconnect: bool,
 ) -> Result<Value, String> {
     let generation = generation(expected)?;
-    #[cfg(unix)]
-    {
-        service.commit_switch(home, id, generation, reconnect)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (service, home, id, generation, reconnect);
-        Err("native_context_assistance_switch_platform_unsupported".into())
-    }
+    service.commit_switch(home, id, generation, reconnect)
 }

@@ -71,6 +71,9 @@ pub(super) fn run() -> Result<(), String> {
         {
             std::process::exit(cursor_hook_bridge::run(python_argv))
         }
+        [command, config] if command == cline_hook_worker::WORKER_COMMAND => {
+            std::process::exit(cline_hook_worker::run(config))
+        }
         [command, config] if command == pi_hook_bridge::BRIDGE_COMMAND => {
             std::process::exit(pi_hook_bridge::run(config))
         }
@@ -106,6 +109,16 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if desktop_notification::is_command(command) && flag == "--stdin" => {
             let response = desktop_notification::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if harness_version_compat::is_command(command) && flag == "--stdin" => {
+            let response = harness_version_compat::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag]
+            if harness_version_compat::discovery::is_command(command) && flag == "--stdin" =>
+        {
+            let response = harness_version_compat::discovery::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if hook_removal_sweep::is_command(command) && flag == "--stdin" => {
@@ -208,6 +221,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = onefile_extraction_reclaim::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if resident_state_prune::is_command(command) && flag == "--stdin" => {
+            let response = resident_state_prune::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if device_key_helper::is_command(command) && flag == "--stdin" => {
             let response = device_key_helper::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -298,12 +315,20 @@ pub(super) fn run() -> Result<(), String> {
             let response = sqlite_store_salvage::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if sqlite_store_probe::is_command(command) && flag == "--stdin" => {
+            let response = sqlite_store_probe::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if guard_home_resolve::is_command(command) && flag == "--stdin" => {
             let response = guard_home_resolve::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if hook_launch_scan::is_command(command) && flag == "--stdin" => {
             let response = hook_launch_scan::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if copilot_hook_commands::is_command(command) && flag == "--stdin" => {
+            let response = copilot_hook_commands::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if command == "compile-business-policy" && flag == "--stdin" => {

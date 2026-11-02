@@ -27,7 +27,6 @@ pub(crate) fn failure(error: RuntimeError) -> Value {
         "invalid_records":null,"expired_slots":null,"diagnostic":error.code(),"authority_restored":false,
         "storage":"private_posix_files"})
 }
-#[cfg(unix)]
 pub(crate) fn describe(
     cache: Option<&guard_context_assistance::EvidenceCache>,
 ) -> Result<Value, RuntimeError> {
@@ -54,75 +53,43 @@ pub(crate) fn describe(
     )
 }
 pub(crate) fn validate_generations(home: &Path) -> Result<(), RuntimeError> {
-    #[cfg(unix)]
     crate::policy_store::context_assistance_registry::switching::scope_index::validate_present(
         home,
     )?;
-    #[cfg(unix)]
     if let Some(store) = guard_context_assistance::EvidenceGenerationStore::existing(home)? {
         store.list()?;
     }
-    #[cfg(not(unix))]
-    let _ = home;
     Ok(())
 }
 pub(crate) fn inspect(home: &Path) -> Value {
-    #[cfg(unix)]
-    {
-        let result =
-            crate::policy_store::context_assistance_registry::switching::DataRemoval::check_clear(
-                home,
-            )
+    let result =
+        crate::policy_store::context_assistance_registry::switching::DataRemoval::check_clear(home)
             .and_then(|_| guard_context_assistance::EvidenceCache::existing(home))
             .and_then(|cache| describe(cache.as_ref()))
             .and_then(|value| {
                 validate_generations(home)?;
                 Ok(value)
             });
-        result.unwrap_or_else(failure)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = home;
-        failure(RuntimeError::PlatformUnqualified)
-    }
+    result.unwrap_or_else(failure)
 }
-#[cfg(any(test, not(unix)))]
+#[cfg(all(test, unix))]
 pub(crate) fn remove(home: &Path) -> Result<(), RuntimeError> {
-    #[cfg(unix)]
-    {
-        let removal =
-            crate::policy_store::context_assistance_registry::switching::DataRemoval::acquire(
-                home,
-            )?;
-        removal.remove()
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = home;
-        Err(RuntimeError::PlatformUnqualified)
-    }
+    let removal =
+        crate::policy_store::context_assistance_registry::switching::DataRemoval::acquire(home)?;
+    removal.remove()
 }
 /// Retention housekeeping never starts the SDK, including while off. Active
 /// cache ownership returns busy; its actor maintains that cache independently.
 pub(crate) fn sweep(home: &Path, retention_hours: u32) -> Result<(), RuntimeError> {
-    #[cfg(unix)]
-    {
-        // Prepared copies expire even while the original cache has a live
-        // actor. This maintenance is independent of optional SDK authority.
-        if let Some(store) = guard_context_assistance::EvidenceGenerationStore::existing(home)? {
-            store.sweep(retention_hours, now_ms())?;
-        }
-        if let Some(cache) = guard_context_assistance::EvidenceCache::existing(home)? {
-            cache.sweep(retention_hours, now_ms())?;
-        }
-        Ok(())
+    // Prepared copies expire even while the original cache has a live
+    // actor. This maintenance is independent of optional SDK authority.
+    if let Some(store) = guard_context_assistance::EvidenceGenerationStore::existing(home)? {
+        store.sweep(retention_hours, now_ms())?;
     }
-    #[cfg(not(unix))]
-    {
-        let _ = (home, retention_hours);
-        Ok(())
+    if let Some(cache) = guard_context_assistance::EvidenceCache::existing(home)? {
+        cache.sweep(retention_hours, now_ms())?;
     }
+    Ok(())
 }
 pub(crate) fn empty_summary(saved: Value, history: bool, removed: bool) -> Value {
     json!({"schema":"guard-cigar-data-summary.v2","storage":"memory","history_storage":"memory","data_role":true,

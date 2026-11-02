@@ -30,7 +30,9 @@ def canonical_cline_state_path(
     if not recorded.is_absolute():
         return None
     if worker:
-        candidates = (context.guard_home / "managed" / "cline" / "hook-workers" / f"{event}.py",)
+        # Native worker configs are `.json`; earlier installs wrote Python workers.
+        workers = context.guard_home / "managed" / "cline" / "hook-workers"
+        candidates = (workers / f"{event}.json", workers / f"{event}.py")
     else:
         suffix = ".ps1" if os.name == "nt" else ""
         roots = list(cline_hook_roots(context))

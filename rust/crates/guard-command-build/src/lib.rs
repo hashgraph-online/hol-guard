@@ -90,6 +90,8 @@ mod contained_run_prefix;
 #[cfg(unix)]
 #[path = "../../guard-command/src/contained_runner/mod.rs"]
 pub mod contained_runner;
+#[path = "../../guard-command/src/containment_compatibility.rs"]
+mod containment_compatibility;
 #[path = "../../guard-command/src/contributed_mcp_decision.rs"]
 pub mod contributed_mcp_decision;
 #[path = "../../guard-command/src/contributed_mcp_url.rs"]
@@ -351,6 +353,8 @@ pub mod source_cli;
 pub mod supply_chain_package_eval;
 #[path = "../../guard-command/src/target_identities.rs"]
 pub mod target_identities;
+#[path = "../../guard-command/src/tsc_project.rs"]
+mod tsc_project;
 #[path = "../../guard-command/src/typescript_launch_evidence.rs"]
 pub mod typescript_launch_evidence;
 #[path = "../../guard-command/src/vite_output.rs"]
