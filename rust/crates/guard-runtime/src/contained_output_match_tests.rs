@@ -99,11 +99,28 @@ fn a_matcher_prints_back_the_pipeline_bytes() {
     );
 }
 
+/// Whether this host trusts a `cut` to run at all.
+#[cfg(unix)]
+fn cut_installed() -> bool {
+    crate::contained_workspace_sink::matched(b"", "cut", &[])
+        .is_ok_and(|(_, _, status)| status != 127)
+}
+
 /// A `cut` stage reaches the runtime like a matcher does: the Python sink
 /// applies only `head` and `tail` itself.
 #[cfg(unix)]
 #[test]
 fn a_cut_stage_reshapes_each_line_it_is_given() {
+    if !cut_installed() {
+        // A host that trusts no `cut` answers as a shell does for any program
+        // it cannot find, and there is no transform left to observe.
+        let answer = run(&request("cut", &["-d", ":", "-f1"], b"a:1\n")).expect("answer");
+        assert_eq!(
+            answer,
+            json!({ "stdout": "", "stderr": "hol-guard: cut: not found\n", "status": 127 })
+        );
+        return;
+    }
     let answer = run(&request("cut", &["-d", ":", "-f1"], b"a:1\nb:2\n")).expect("answer");
     assert_eq!(stdout(&answer), b"a\nb\n");
     assert_eq!(
