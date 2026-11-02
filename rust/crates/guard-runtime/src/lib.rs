@@ -908,6 +908,7 @@ mod supply_chain_eval_caller;
 mod supply_chain_eval_rounds;
 mod supply_chain_eval_seams;
 mod supply_chain_eval_transport;
+mod surface_server_handshake;
 mod system_proxies;
 mod tool_action_identity_op;
 mod totp;
