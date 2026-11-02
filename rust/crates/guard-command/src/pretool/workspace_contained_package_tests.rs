@@ -103,3 +103,31 @@ fn exec_that_can_reach_a_registry_keeps_its_review() {
         assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
     }
 }
+
+/// A manager's own version or usage probe prints and exits, so the walk that
+/// looks for a verb behind a workspace selector must not read the probe's
+/// option as a selector's hidden one. No selector stands in front of `npm -V`:
+/// the option is the whole command, and the screen that keeps a selector from
+/// carrying in an unread option has nothing to screen. The admission itself
+/// differs by host and by manager -- several of these are read as exactly safe
+/// long before this route -- so what is pinned here is that none of them is
+/// sent back to the package review.
+#[test]
+fn a_version_probe_is_not_read_as_a_selector_hiding_an_option() {
+    let ws = workspace("version-probe", true);
+    for command in [
+        "npm -V",
+        "npm --version",
+        "npm -h",
+        "npm --help",
+        "pnpm -V",
+        "yarn --version",
+        "bun -V",
+    ] {
+        assert_ne!(
+            reason("omp", command, &ws, true),
+            "native_package_review",
+            "{command}"
+        );
+    }
+}

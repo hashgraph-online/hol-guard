@@ -486,10 +486,17 @@ pub(super) fn local_package_work(
         // walk never read, and the selector in front of it would otherwise
         // carry the command in on the leading word alone. A selector standing
         // in front of an unread option therefore keeps the command out.
+        //
+        // Only a selector that moved the index is screened here. Where none
+        // stands in front of the verb the word at `verb` is the verb itself,
+        // which `leading_verb` and `version_probe` already read: `npm -V`
+        // stops the walk on an option because the probe is the whole command,
+        // and there is no selector carrying anything past it.
         let selected = verb_behind_a_selector(&name, &arguments, verb);
-        let selector_hides_an_option = arguments
-            .get(selected)
-            .is_some_and(|argument| argument.starts_with('-'));
+        let selector_hides_an_option = selected != verb
+            && arguments
+                .get(selected)
+                .is_some_and(|argument| argument.starts_with('-'));
         !behind.is_empty()
             && (leading_verb || version_probe)
             && !workspace_fanout
