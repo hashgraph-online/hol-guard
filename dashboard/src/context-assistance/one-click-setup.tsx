@@ -32,7 +32,10 @@ export function CigarSetupAction({ setup, status, disabled, canStop, stopDisable
   if (status?.effective_enabled) return off ? <div className="cigar-setup-action">{off}</div> : null;
   if (setup.run.phase === "running") {
     return <div className="cigar-setup-action">
-      <button type="button" className="cigar-button" onClick={setup.stop}>Stop setup</button>
+      <div className="cigar-setup-buttons">
+        <button type="button" className="cigar-button" onClick={setup.stop}>Stop setup</button>
+        {off}
+      </div>
       <p className="cigar-setup-caption" role="status">{CIGAR_SETUP_STAGE_LABELS[setup.run.stage]}…</p>
     </div>;
   }

@@ -5517,7 +5517,10 @@ function CigarSetupAction({ setup, status, disabled, canStop, stopDisabled, onSt
   if (status?.effective_enabled) return off ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-setup-action", children: off }) : null;
   if (setup.run.phase === "running") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-action", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-button", onClick: setup.stop, children: "Stop setup" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-buttons", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-button", onClick: setup.stop, children: "Stop setup" }),
+        off
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-setup-caption", role: "status", children: [
         CIGAR_SETUP_STAGE_LABELS[setup.run.stage],
         "…"
