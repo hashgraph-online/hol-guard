@@ -131,8 +131,16 @@ pub fn compile_source_stream(
     let mut bindings = Vec::with_capacity(header.cloud_bindings);
     for offset in 0..header.cloud_bindings {
         let record = first_binding + offset;
+        // Bindings are retained until every source has arrived, so they draw on
+        // the same compact-byte budget as the sources they extend.
         let parsed = frame(&mut reader)
-            .and_then(|bytes| cloud_binding::parse_binding_contribution(&bytes))
+            .and_then(|bytes| {
+                let compact = json::compact_record(
+                    &json::decode(&bytes).map_err(|_| "cloud_binding_json_invalid")?,
+                    &mut remaining,
+                )?;
+                cloud_binding::parse_binding_contribution(&compact)
+            })
             .map_err(|code| SourceStreamError {
                 code,
                 record: Some(record),
@@ -350,24 +358,93 @@ mod tests {
         })
     }
 
+    /// The complete authored inventory, as the release build streams it.
+    fn release_stream(bindings: &[Value]) -> Vec<u8> {
+        use crate::native_command_program::authored_test_support::{sources, trust_map};
+        let sources = sources();
+        let mut trust = trust_map();
+        let (mut commands, mut servers) = (Vec::new(), Vec::new());
+        for (metadata, bytes) in &sources {
+            for (class, ids) in metadata["trust"]["classes"].as_object().unwrap() {
+                trust["classes"][class]
+                    .as_array_mut()
+                    .unwrap()
+                    .extend(ids.as_array().unwrap().iter().cloned());
+            }
+            if metadata["kind"] == "command" {
+                commands.push(bytes);
+            } else {
+                servers.push(bytes);
+            }
+        }
+        let mut stream = MAGIC.to_vec();
+        append(
+            &mut stream,
+            &serde_json::to_vec(&json!({
+                "schema": "guard.command-extension-source-stream.v1",
+                "sources": commands.len(),
+                "mcp_sources": servers.len(),
+                "cloud_bindings": bindings.len(),
+                "trust": trust,
+            }))
+            .unwrap(),
+        );
+        for bytes in commands.into_iter().chain(servers) {
+            append(&mut stream, bytes);
+        }
+        for binding in bindings {
+            append(&mut stream, &serde_json::to_vec(binding).unwrap());
+        }
+        stream
+    }
+
     #[test]
     fn cloud_binding_records_are_optional_and_resolve_against_the_stream() {
-        let source = include_bytes!("../tests/fixtures/command-source-example.v1.json");
-        let legacy = compile_source_stream(input(source).as_slice());
-        let empty = compile_source_stream(binding_stream(&[]).as_slice());
-        let bound = compile_source_stream(
-            binding_stream(&[binding("command.example-cli", "example.resource.destroy")])
-                .as_slice(),
-        );
-        // Bindings never change the compiled local catalog in this version.
-        let digest = |result: Result<CompiledSourceCatalog, SourceStreamError>| {
-            result
-                .map(|catalog| catalog.source_digest)
-                .map_err(|error| error.code)
+        let compile = |bindings: &[Value]| {
+            compile_source_stream(release_stream(bindings).as_slice())
+                .unwrap_or_else(|error| panic!("release stream must compile: {}", error.code))
         };
-        let legacy = digest(legacy);
-        assert_eq!(digest(empty), legacy);
-        assert_eq!(digest(bound), legacy);
+        let legacy = compile(&[]);
+        let bound = compile(&[json!({
+            "schemaVersion": "guard.cloud-action-binding-contribution.v1",
+            "extensionId": "mcp.instapods",
+            "bindings": [{
+                "actionId": "instapods.pod.delete",
+                "tool": "delete_pod",
+                "effect": "destructive",
+                "requiredCapabilities": ["egress-pinned", "bounded-output"],
+                "cloudSupport": "cloud-executable"
+            }]
+        })]);
+        // Bindings never change the compiled local catalog in this version.
+        assert_eq!(bound.source_digest, legacy.source_digest);
+        assert_eq!(bound.program, legacy.program);
+    }
+
+    #[test]
+    fn binding_records_draw_on_the_shared_retention_budget() {
+        // Each record stays under the per-record cap, but together they exceed
+        // what the stream may retain once the sources are counted.
+        let segment = "x".repeat(100);
+        let tool = "t".repeat(256);
+        let large: Vec<Value> = (0..100)
+            .map(|index| {
+                json!({
+                    "schemaVersion": "guard.cloud-action-binding-contribution.v1",
+                    "extensionId": format!("mcp.filler-{index}"),
+                    "bindings": (0..256).map(|action| json!({
+                        "actionId": format!("filler.a{action}.{segment}"),
+                        "tool": tool,
+                        "effect": "read",
+                        "requiredCapabilities": [],
+                        "cloudSupport": "portable-policy"
+                    })).collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        let error = compile_source_stream(release_stream(&large).as_slice()).unwrap_err();
+        assert_eq!(error.code, "command_source_catalog_work_budget_exceeded");
+        assert!(error.record.is_some());
     }
 
     #[test]
