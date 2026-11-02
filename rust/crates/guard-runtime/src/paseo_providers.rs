@@ -10,9 +10,10 @@
 //! carries the message Python raises, and never a JSON snippet or an
 //! environment value.
 
+use std::collections::HashMap;
 use std::fs;
-use std::io::ErrorKind;
-use std::path::{Component, Path};
+use std::io::{ErrorKind, Read};
+use std::path::Path;
 
 use guard_runtime_pyjson::{parse_unique, PyVal};
 use serde_json::{json, Value};
@@ -152,15 +153,34 @@ fn read_config(spelled: &str) -> Result<Vec<(String, PyVal)>, String> {
     match fs::symlink_metadata(path) {
         Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
         Err(_) => return Err(unreadable()),
+        Ok(metadata) if !metadata.file_type().is_file() => return Err(unreadable()),
         Ok(_) => {}
     }
-    let read =
-        guard_secure_fs::read_stable(path, MAX_CONFIG_BYTES, false).map_err(|_| unreadable())?;
-    let text = std::str::from_utf8(&read.bytes).map_err(|_| unreadable())?;
+    let bytes = read_bounded(path).ok_or_else(unreadable)?;
+    let text = std::str::from_utf8(&bytes).map_err(|_| unreadable())?;
     match parse_unique(text) {
         Ok(PyVal::Dict(entries)) => Ok(entries),
         _ => Err(unreadable()),
     }
+}
+
+/// The bounded read of `read_config_object`. Python refuses links,
+/// non-regular and oversized files and nothing else, so a hard-linked
+/// configuration still reads: Guard never writes this file.
+fn read_bounded(path: &Path) -> Option<Vec<u8>> {
+    let file = fs::File::open(path).ok()?;
+    let metadata = file.metadata().ok()?;
+    if !metadata.is_file() || metadata.len() > MAX_CONFIG_BYTES as u64 {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_CONFIG_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if bytes.len() > MAX_CONFIG_BYTES || fs::symlink_metadata(path).ok()?.file_type().is_symlink() {
+        return None;
+    }
+    Some(bytes)
 }
 
 /// `_object_field`: an absent field is an empty object; any other
@@ -226,27 +246,29 @@ fn is_default_xdg(value: &str, xdg_default: &str) -> bool {
     if !value.starts_with('/') {
         return false;
     }
-    let Some(default) = posix_path_text(Path::new(xdg_default)) else {
+    let Some(default) = posix_path_text(xdg_default) else {
         return false;
     };
     normpath(value) == default
 }
 
-/// `str(PurePosixPath(path))`: repeated separators and `.` parts collapse,
-/// while `..` stays.
-fn posix_path_text(path: &Path) -> Option<String> {
-    let mut parts: Vec<&str> = Vec::new();
-    let mut absolute = false;
-    for component in path.components() {
-        match component {
-            Component::RootDir => absolute = true,
-            Component::CurDir => {}
-            Component::ParentDir => parts.push(".."),
-            Component::Normal(part) => parts.push(part.to_str()?),
-            Component::Prefix(_) => return None,
-        }
+/// `str(PurePosixPath(path))` for an absolute path: repeated separators
+/// and `.` parts collapse, `..` stays, and exactly two leading slashes are
+/// kept as POSIX allows.
+fn posix_path_text(text: &str) -> Option<String> {
+    if !text.starts_with('/') {
+        return None;
     }
-    absolute.then(|| format!("/{}", parts.join("/")))
+    let root = if text.starts_with("//") && !text.starts_with("///") {
+        "//"
+    } else {
+        "/"
+    };
+    let parts: Vec<&str> = text
+        .split('/')
+        .filter(|part| !matches!(*part, "" | "."))
+        .collect();
+    Some(format!("{root}{}", parts.join("/")))
 }
 
 /// `redirects` inside `_override_reason`.
@@ -268,13 +290,17 @@ fn merged_env<'v>(
     raw: &'v [(String, PyVal)],
 ) -> Result<Vec<(&'v str, &'v PyVal)>, String> {
     let mut env: Vec<(&str, &PyVal)> = Vec::new();
+    let mut positions: HashMap<&str, usize> = HashMap::new();
     for (key, value) in object_field(inherited, "env")?
         .iter()
         .chain(object_field(raw, "env")?)
     {
-        match env.iter_mut().find(|(name, _)| *name == key.as_str()) {
-            Some(slot) => slot.1 = value,
-            None => env.push((key.as_str(), value)),
+        match positions.get(key.as_str()) {
+            Some(&index) => env[index].1 = value,
+            None => {
+                positions.insert(key.as_str(), env.len());
+                env.push((key.as_str(), value));
+            }
         }
     }
     Ok(env)

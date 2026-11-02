@@ -249,6 +249,63 @@ fn a_linked_configuration_is_unreadable() {
 }
 
 #[test]
+fn a_hard_linked_configuration_still_reads() {
+    let home = tempfile::tempdir().unwrap();
+    let config = home.path().join(".paseo/config.json");
+    write(
+        &config,
+        r#"{"agents":{"providers":{"pi":{"enabled":false}}}}"#,
+    );
+    fs::hard_link(&config, home.path().join("dotfiles-config.json")).unwrap();
+    let answer = ask(&config, home.path(), json!({}));
+    assert_eq!(by_id(&answer, "pi")["enabled"], false);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_double_slash_home_keeps_its_default_xdg_directory() {
+    let config = Path::new("/nonexistent-paseo/config.json");
+    let answer = |value: &str| {
+        let env = json!({"XDG_CONFIG_HOME": value});
+        dispatch(&json!({
+            "config_path": config.to_str().unwrap(),
+            "xdg_default": "//home/alice/.config",
+            "environ": env,
+        }))
+        .unwrap()
+    };
+    assert_eq!(
+        reason(&answer("//home/alice/.config"), "opencode"),
+        Value::Null
+    );
+    assert_eq!(
+        reason(&answer("/home/alice/.config"), "opencode"),
+        CURRENT_ENV_REASON
+    );
+}
+
+#[test]
+fn a_large_provider_environment_merges_in_order() {
+    let home = tempfile::tempdir().unwrap();
+    let config = home.path().join(".paseo/config.json");
+    let base: serde_json::Map<String, Value> = (0..20_000)
+        .map(|index| (format!("K{index}"), json!("base")))
+        .collect();
+    let mut over = serde_json::Map::new();
+    over.insert("K5".to_owned(), json!("child"));
+    over.insert("PI_CODING_AGENT_DIR".to_owned(), json!("/elsewhere"));
+    let text = json!({"agents": {"providers": {
+        "pi": {"env": base},
+        "work-pi": {"extends": "pi", "env": over},
+    }}})
+    .to_string();
+    write(&config, &text);
+    let answer = ask(&config, home.path(), json!({}));
+    assert_eq!(reason(&answer, "pi"), Value::Null);
+    assert_eq!(reason(&answer, "work-pi"), PROVIDER_ENV_REASON);
+}
+
+#[test]
 fn malformed_requests_are_refused() {
     for args in [
         json!([]),
