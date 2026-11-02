@@ -201,3 +201,26 @@ fn a_command_hook_reaches_the_wake_only_for_resting_execution_context() {
     );
     drop(guard);
 }
+
+#[test]
+fn a_new_session_wakes_project_context_only_when_it_is_on() {
+    let home = home();
+    let service = Service::default();
+    let mut settings = saved_on(&service);
+    service.warm_prompt_lane(home.path());
+    assert!(
+        lock(&service.state).unwrap().woke.is_none(),
+        "project context off: nothing starts"
+    );
+    settings.effective.features.agent_context = true;
+    settings.effective.sources.workspace_documents = true;
+    settings.verification_permitted = true;
+    service.configure(settings).unwrap();
+    service.warm_prompt_lane(home.path());
+    assert!(lock(&service.state).unwrap().woke.is_some());
+    assert_eq!(
+        service.status().unwrap()["requested_enabled"],
+        true,
+        "waking never changes consent"
+    );
+}
