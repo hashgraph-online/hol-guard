@@ -112,7 +112,9 @@ impl Engine {
 
     /// Removing access must reach the disk: when the smaller record cannot
     /// be written the record is deleted, and the request fails only when
-    /// neither works.
+    /// neither works. The removal stays in memory either way, so the next
+    /// write that succeeds also drops the stale entry instead of saving the
+    /// revoked access again.
     fn drop_saved(&mut self, change: impl FnOnce(&mut Picks) -> bool) -> Result<(), RuntimeError> {
         if !self.picked.as_mut().is_some_and(change) {
             return Ok(());

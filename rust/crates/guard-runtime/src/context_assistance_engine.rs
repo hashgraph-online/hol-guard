@@ -345,7 +345,8 @@ impl Engine {
                 Ok(json!({"session_id":session_id,"revoked":true}))
             }
             Request::Revoke { scope_id } => {
-                self.forget_pick(&scope_id)?;
+                // The live folder closes even when its record cannot be updated.
+                let forgotten = self.forget_pick(&scope_id);
                 let scope = self
                     .scopes
                     .get_mut(&scope_id)
@@ -353,7 +354,7 @@ impl Engine {
                 scope.clear_contexts();
                 close_graph(runtime, &mut scope.graph)?;
                 self.scopes.remove(&scope_id);
-                Ok(json!({"revoked":true, "scope_id":scope_id}))
+                forgotten.map(|_| json!({"revoked":true, "scope_id":scope_id}))
             }
             other => self.scoped(runtime, other),
         }?;

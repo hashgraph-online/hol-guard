@@ -85,12 +85,16 @@ impl Engine {
             let _ = scope.graph.close(runtime);
         }
         self.scopes.insert(id.into(), scope);
+        // A withdrawn file leaves the record before anything else is saved,
+        // also when the withdrawal failed part way.
+        let forgotten = match withdrawn_file.filter(|_| changed) {
+            Some((root, file)) => self.forget_source(&root, &file),
+            None => Ok(()),
+        };
         if result.is_ok() {
             self.remember_pick(id, None);
-        } else if let Some((root, file)) = withdrawn_file.filter(|_| changed) {
-            let _ = self.forget_source(&root, &file);
         }
-        result
+        result.and_then(|value| forgotten.map(|_| value))
     }
     pub(super) fn sweep_saved(&self) -> Result<(), RuntimeError> {
         if let Some(cache) = &self.cache {
