@@ -100,6 +100,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "shell_request_authority" => crate::shell_request_authority_op::dispatch(args),
         "guard_product_copy" => crate::guard_product_copy::dispatch(args),
         "consumer_mode_contract" => crate::consumer_mode_contract::dispatch(args),
+        "aibom_trust_claims" => crate::aibom_trust_claims::dispatch(args),
         "detector_authority" => detector::detector_authority(args),
         "detector_composition" => detector::detector_composition(args),
         "skill_content_risk" => detector::skill_content_risk(args),
