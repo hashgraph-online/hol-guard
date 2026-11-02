@@ -14,6 +14,7 @@ import pytest
 from codex_plugin_scanner.guard.cli import commands_dispatch_local as dispatch
 from codex_plugin_scanner.guard.cli import extension_controls_commands as controls
 from codex_plugin_scanner.guard.cli import render
+from codex_plugin_scanner.guard.cli.command_extension_listing import command_extensions_title
 from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
@@ -163,5 +164,36 @@ def test_an_extension_missing_from_both_catalogs_stays_unknown(
 def test_rendered_title_names_the_catalog_the_payload_came_from(source: str, expected: str) -> None:
     payload = {"source": source, "extensions": [_delivered_entry(DELIVERED_ONLY_ID)]}
 
-    assert render._command_extensions_title(payload) == expected
+    assert command_extensions_title(payload) == expected
     assert render._plain_text_command_extensions(payload).startswith(f"{expected} (1)")
+
+
+def test_discovery_never_writes_the_guard_home_the_listing_reports_on(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Real endpoint discovery runs, and the inspected home comes back untouched.
+
+    Deciding whether a live daemon matches this runtime can refresh Guard's
+    private runtime fingerprint cache under the invoking user's own home. That
+    cache is runtime bookkeeping; the home the listing reports on stays as the
+    inspection found it, cache file present or missing.
+    """
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    state_path = guard_home / "daemon-state.json"
+    state_path.write_text('{"compatibility_version": "guard.daemon.v0", "port": 1, "pid": 1}\n', encoding="utf-8")
+    before = sorted(entry.name for entry in guard_home.iterdir())
+
+    private_home = tmp_path / "private-home"
+    private_home.mkdir()
+    monkeypatch.setenv("HOME", str(private_home))
+    monkeypatch.setenv("USERPROFILE", str(private_home))
+    monkeypatch.setattr(Path, "home", classmethod(lambda _: private_home))
+
+    exit_code, payload = _run(_extensions_args(guard_home, None), monkeypatch)
+
+    assert exit_code == 0
+    assert payload["source"] == "built-in"
+    assert sorted(entry.name for entry in guard_home.iterdir()) == before

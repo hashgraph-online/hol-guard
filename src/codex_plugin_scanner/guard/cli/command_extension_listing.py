@@ -8,16 +8,21 @@ delivered catalog through the same daemon route ``command controls list``
 and ``command controls show`` already use, and fall back to the packaged
 catalog when no daemon is answering.
 
-``command extensions`` is a stateless inspection: it never starts a daemon
-and never writes Guard state, so a device with no running daemon still
-reports the packaged catalog instead of failing. This module is CLI
-transport and presentation; the daemon's native read model owns the
+``command extensions`` stays an inspection: it never starts a daemon, never
+writes the Guard home it reports on, and a device with no running daemon
+still gets the packaged catalog instead of an error. Reaching a daemon that
+is already running shares the endpoint discovery ``command controls`` uses,
+and that discovery may refresh the runtime fingerprint cache under the
+invoking user's own home while it decides whether the live daemon matches
+this runtime. That cache is Guard's private runtime bookkeeping, not state
+for the inspected home, and the command adds nothing to it. This module is
+CLI transport and presentation; the daemon's native read model owns the
 catalog and nothing here re-derives an extension.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TypeVar
 
@@ -104,3 +109,11 @@ def command_extensions_listing(guard_home: Path, extension_id: str | None = None
         return _delivered_listing(guard_home)
     except _CATALOG_UNAVAILABLE:
         return command_extensions_payload(None)
+
+
+def command_extensions_title(payload: Mapping[str, object]) -> str:
+    """Name the catalog a listing payload came from, packaged or delivered."""
+
+    if str(payload.get("source") or "") == DELIVERED_SOURCE:
+        return "Delivered command safety extensions"
+    return "Built-in command safety extensions"
