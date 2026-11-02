@@ -3919,6 +3919,7 @@ function FolderPickerDialog({ open, initialPath, onCancel, onChoose }) {
 const RECENT_PROJECTS_KEY = "guard.cigar.recent-projects.v1";
 const MAX_RECENT_PROJECTS = 4;
 const MAX_FILES = 32;
+const MAX_PRESET_FOLDERS = 8;
 function browserStore() {
   try {
     return typeof window === "undefined" ? null : window.localStorage;
@@ -3952,15 +3953,22 @@ function rememberProject(project, store = browserStore()) {
   const row2 = { workspace: project.workspace, files: project.files.slice(0, MAX_FILES), app: project.app };
   return write([row2, ...readRecentProjects(store).filter((item) => item.workspace !== row2.workspace)].slice(0, MAX_RECENT_PROJECTS), store);
 }
+function clearRecentProjects(store = browserStore()) {
+  return write([], store);
+}
 function forgetProject(workspace, store = browserStore()) {
   return write(readRecentProjects(store).filter((item) => item.workspace !== workspace), store);
+}
+function presetFolders(preset) {
+  const folders = preset.filter((relative) => relative.includes("/")).map((relative) => relative.slice(0, relative.lastIndexOf("/")));
+  return [...new Set(folders)].slice(0, MAX_PRESET_FOLDERS);
 }
 function keptFiles(preset, listing) {
   const present = /* @__PURE__ */ new Set([
     ...listing.files.filter((file) => file.available).map((file) => file.relative),
     ...listing.suggested.map((item) => item.relative)
   ]);
-  return preset.filter((relative) => relative.includes("/") || present.has(relative)).slice(0, MAX_FILES);
+  return preset.filter((relative) => present.has(relative)).slice(0, MAX_FILES);
 }
 const MAX_PROJECT_FILES = 32;
 const REASONS = { too_large: "Too big", not_text: "Not text", empty: "Empty" };
@@ -4001,8 +4009,15 @@ function ProjectFilesPicker({ workspace, selected, onChange, disabled = false, p
     load("", (value) => {
       setRoot(value);
       setListing(value);
-      const chosen = remembered.current ? keptFiles(remembered.current, value) : value.suggested.map((item) => item.relative);
-      latest.current(chosen.slice(0, MAX_PROJECT_FILES));
+      const preset2 = remembered.current;
+      if (!preset2) {
+        latest.current(value.suggested.map((item) => item.relative).slice(0, MAX_PROJECT_FILES));
+        return;
+      }
+      const signal = request.current?.signal;
+      void Promise.all(presetFolders(preset2).map((folder) => listProjectFiles(workspace, folder, signal).then((found) => found.files, () => []))).then((nested) => {
+        if (!signal?.aborted) latest.current(keptFiles(preset2, { files: [...value.files, ...nested.flat()], suggested: value.suggested }).slice(0, MAX_PROJECT_FILES));
+      });
     });
     return () => request.current?.abort();
   }, [workspace]);
@@ -4360,6 +4375,7 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
   const [query, setQuery] = reactExports.useState("");
   const [brief, setBrief] = reactExports.useState(null);
   const [previous, setPrevious] = reactExports.useState(null);
+  const [cleared, setCleared] = reactExports.useState(0);
   const [busy, setBusy] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
   const request = reactExports.useRef(null);
@@ -4426,6 +4442,10 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
       const values = await listContextWorkspaces(signal);
       if (!signal.aborted) setScopes(values);
       if (action === "revoke" || action === "clear" || action === "withdraw") setPrevious(null);
+      if (action === "clear" && !signal.aborted) {
+        clearRecentProjects();
+        setCleared((value) => value + 1);
+      }
     });
   }
   const refreshScopes = () => void perform(async (signal) => {
@@ -4573,7 +4593,8 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
         first: scopes.length === 0,
         active: scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace),
         onGrant: grant
-      }
+      },
+      cleared
     ) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(ContextAgentsPanel, { ready, enabled: agentsAllowed, dirty, generation, scopes, gate })
   ] });
@@ -7455,7 +7476,7 @@ const CONFIRM = {
   data: {
     title: "Delete everything CIGAR knows?",
     label: "Delete everything",
-    description: "Deletes past answers, saved notes, project access and app connections. You can set it up again anytime. Guard's approvals and records are not touched."
+    description: "Deletes past answers, saved notes, project access, app connections and the recent projects this page remembers. You can set it up again anytime. Guard's approvals and records are not touched."
   },
   recheck: {
     title: "Start CIGAR fresh?",
@@ -7577,6 +7598,7 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
         if (!signal.aborted) setMessage("Saved notes removed. Turn CIGAR on and add your projects again to keep going.");
       } else if (action === "data") {
         await manageContextWorkspace("clear", void 0, void 0, signal);
+        clearRecentProjects();
         await refresh(signal);
         if (!signal.aborted) setMessage("Everything CIGAR knew is deleted. Add a project to start again.");
       } else {
@@ -7639,25 +7661,25 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Just counts. Your files, questions and folder names are never shown here." })
         ] }),
         data ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-2 gap-2 sm:grid-cols-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Projects with access", value: data.active_scopes }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Projects with access (per app)", value: data.active_scopes }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Files it can read", value: data.selected_files }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Answers ready", value: data.current_contexts }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Past answers kept", value: data.history_entries }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Space used by past answers", value: data.history_encoded_bytes.toLocaleString() + " bytes" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Connected apps", value: data.agent_sessions })
         ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70", children: "Counts show up while CIGAR is on." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption, children: "CIGAR keeps at most 8 past answers (512 KiB) for each project, and clears them after the time you chose in Settings." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption, children: "CIGAR keeps at most 8 past answers (512 KiB) for each project and app, and clears them after the time you chose in Settings." })
       ] }),
       data?.saved_evidence ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-5", role: "region", "aria-label": "Saved context evidence", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-semibold text-brand-dark", children: "Saved notes" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-brand-dark/75", children: savedEvidenceCopy(data.saved_evidence) }),
         data.saved_evidence.slots !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-2 gap-2 sm:grid-cols-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Projects with saved notes", value: data.saved_evidence.slots }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Projects with saved notes (per app)", value: data.saved_evidence.slots }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Space used (bytes)", value: data.saved_evidence.bytes?.toLocaleString() ?? "Unavailable" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Notes still saving", value: data.saved_evidence.unresolved_writes ?? "Unavailable" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Expired, waiting to clear", value: data.saved_evidence.expired_slots ?? "Unavailable" })
         ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption, children: "Saved notes use at most 8 projects and about 550 MB of disk." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption, children: "Saved notes cover at most 8 projects (each app counts separately) and use about 550 MB of disk." })
       ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": "cigar-data-fix", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "cigar-data-fix", className: versionHeading, children: "Fix a problem" }),
@@ -7706,7 +7728,7 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
             Row,
             {
               title: "Everything CIGAR knows",
-              body: "Deletes past answers, saved notes, project access and app connections. You can set it up again anytime.",
+              body: "Deletes past answers, saved notes, project access, app connections and recent projects. You can set it up again anytime.",
               action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled || !ready && !data?.saved_evidence, onClick: () => setConfirm("data"), children: "Delete everything" })
             }
           ),

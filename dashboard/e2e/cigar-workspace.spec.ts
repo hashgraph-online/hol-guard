@@ -276,6 +276,16 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("checkbox", { name: /AGENTS\.md/ })).not.toBeChecked();
     await expect(page.getByText("2 picked · up to 32", { exact: true })).toBeVisible();
     expect(calls.filter((call) => call.path === "/v1/context-assistance/workspace-grant")).toHaveLength(1);
+    // Access is still confirmed again, and the new grant carries last time's choice.
+    await page.getByRole("button", { name: "Give CIGAR access", exact: true }).click();
+    const again = page.getByRole("dialog", { name: "Confirm CIGAR access" });
+    await expect(again).toContainText("CIGAR can read 2 files in my-app");
+    await again.getByLabel("Approval password").fill("cigar-ui-test-proof");
+    await again.getByRole("button", { name: "Give access", exact: true }).click();
+    await expect.poll(() => calls.filter((call) => call.path === "/v1/context-assistance/workspace-grant").length).toBe(2);
+    const regrant = calls.filter((call) => call.path === "/v1/context-assistance/workspace-grant")[1];
+    expect(regrant.body.input).toMatchObject({ action: "grant", app: "dashboard", workspace: "/Users/you/Projects/my-app", sources: ["README.md", "docs/design.md"] });
+    await expect(page.getByRole("button", { name: "Revoke workspace access", exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   });
 }

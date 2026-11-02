@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { HiMiniCheck, HiMiniChevronRight, HiMiniDocumentText, HiMiniFolder } from "react-icons/hi2";
 import { formatFileSize, listProjectFiles, type ProjectFile, type ProjectFileListing } from "./folders-api";
-import { keptFiles } from "./recent-projects";
+import { keptFiles, presetFolders } from "./recent-projects";
 
 export const MAX_PROJECT_FILES = 32;
 type Props = { workspace: string; selected: string[]; onChange: (paths: string[]) => void; disabled?: boolean; preset?: string[] | null };
@@ -42,9 +42,14 @@ export function ProjectFilesPicker({ workspace, selected, onChange, disabled = f
     setRoot(null); setListing(null); setBrowsing(false);
     load("", (value) => {
       setRoot(value); setListing(value);
-      // A project added back from Recent keeps the files chosen last time.
-      const chosen = remembered.current ? keptFiles(remembered.current, value) : value.suggested.map((item) => item.relative);
-      latest.current(chosen.slice(0, MAX_PROJECT_FILES));
+      const preset = remembered.current;
+      if (!preset) { latest.current(value.suggested.map((item) => item.relative).slice(0, MAX_PROJECT_FILES)); return; }
+      // A project added back from Recent keeps last time's files that are still readable.
+      const signal = request.current?.signal;
+      void Promise.all(presetFolders(preset).map((folder) => listProjectFiles(workspace, folder, signal).then((found) => found.files, () => [])))
+        .then((nested) => {
+          if (!signal?.aborted) latest.current(keptFiles(preset, { files: [...value.files, ...nested.flat()], suggested: value.suggested }).slice(0, MAX_PROJECT_FILES));
+        });
     });
     return () => request.current?.abort();
     // A new folder starts a fresh selection.

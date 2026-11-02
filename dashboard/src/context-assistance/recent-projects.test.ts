@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { RecentProjects } from "./add-project-panel";
-import { forgetProject, keptFiles, MAX_RECENT_PROJECTS, readRecentProjects, RECENT_PROJECTS_KEY, rememberProject } from "./recent-projects";
+import { clearRecentProjects, forgetProject, keptFiles, MAX_RECENT_PROJECTS, presetFolders, readRecentProjects, RECENT_PROJECTS_KEY, rememberProject } from "./recent-projects";
 
 const memory = () => {
   const values = new Map<string, string>();
@@ -33,7 +33,11 @@ assert.deepEqual(readRecentProjects(null), []);
 assert.deepEqual(keptFiles(["README.md", "gone.md", "big.md", "docs/plan.md", "src/notes.md"], {
   files: [{ name: "README.md", relative: "README.md", size: 9, available: true, reason: null }, { name: "big.md", relative: "big.md", size: 1e6, available: false, reason: "too_large" }],
   suggested: [{ relative: "docs/plan.md", size: 4 }],
-}), ["README.md", "docs/plan.md", "src/notes.md"], "files that vanished or can no longer be read are dropped");
+}), ["README.md", "docs/plan.md"], "files that vanished or can no longer be read are dropped, even in a subfolder");
+assert.deepEqual(presetFolders(["README.md", "docs/a.md", "docs/b.md", "src/deep/c.md"]), ["docs", "src/deep"]);
+assert.equal(presetFolders(Array.from({ length: 20 }, (_, index) => `d${index}/x.md`)).length, 8, "checking old files stays bounded");
+assert.deepEqual(clearRecentProjects(store), []);
+assert.deepEqual(readRecentProjects(store), [], "deleting everything forgets recent projects too");
 
 const html = renderToStaticMarkup(createElement(RecentProjects, {
   projects: [{ workspace: "/code/app", files: ["README.md"], app: "codex" }, { workspace: "C:\\code\\site", files: [], app: "dashboard" }],

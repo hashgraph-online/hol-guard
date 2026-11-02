@@ -11,6 +11,7 @@ type Store = Pick<Storage, "getItem" | "setItem">;
 export const RECENT_PROJECTS_KEY = "guard.cigar.recent-projects.v1";
 export const MAX_RECENT_PROJECTS = 4;
 const MAX_FILES = 32;
+const MAX_PRESET_FOLDERS = 8;
 
 function browserStore(): Store | null {
   try {
@@ -53,18 +54,29 @@ export function rememberProject(project: RecentProject, store: Store | null = br
   return write([row, ...readRecentProjects(store).filter((item) => item.workspace !== row.workspace)].slice(0, MAX_RECENT_PROJECTS), store);
 }
 
+/** Forgets every remembered project, as part of deleting what CIGAR knows. */
+export function clearRecentProjects(store: Store | null = browserStore()): RecentProject[] {
+  return write([], store);
+}
+
 export function forgetProject(workspace: string, store: Store | null = browserStore()): RecentProject[] {
   return write(readRecentProjects(store).filter((item) => item.workspace !== workspace), store);
 }
 
+/** Folders holding remembered files below the top folder, to check they are still there. */
+export function presetFolders(preset: string[]): string[] {
+  const folders = preset.filter((relative) => relative.includes("/")).map((relative) => relative.slice(0, relative.lastIndexOf("/")));
+  return [...new Set(folders)].slice(0, MAX_PRESET_FOLDERS);
+}
+
 /**
- * Keeps the remembered files that are still there and readable. Files below
- * the top folder are kept as chosen; a grant that cannot find one says so.
+ * Keeps the remembered files that are still there and readable, so one that
+ * was deleted never makes the whole grant fail.
  */
 export function keptFiles(preset: string[], listing: Pick<ProjectFileListing, "files" | "suggested">): string[] {
   const present = new Set([
     ...listing.files.filter((file) => file.available).map((file) => file.relative),
     ...listing.suggested.map((item) => item.relative),
   ]);
-  return preset.filter((relative) => relative.includes("/") || present.has(relative)).slice(0, MAX_FILES);
+  return preset.filter((relative) => present.has(relative)).slice(0, MAX_FILES);
 }

@@ -8,6 +8,7 @@ import type { GuardContextAssistanceConfig } from "../guard-types";
 import { controlContextAssistance, fetchContextAssistance } from "./api";
 import { fetchContextData, forgetContextHistory, forgetSavedEvidence, type ContextDataSummary } from "./history-api";
 import { manageContextWorkspace } from "./workspaces-api";
+import { clearRecentProjects } from "./recent-projects";
 import { contextStatusCopy } from "./status";
 import type { ContextAssistanceStatus } from "./types";
 import { savedEvidenceCopy } from "./saved-evidence";
@@ -29,7 +30,7 @@ const CONFIRM: Record<Action, { title: string; description: string; label: strin
   saved: { title: "Remove saved notes?", label: "Remove saved notes",
     description: "Deletes everything CIGAR saved on this computer, including old projects, and ends current access. Turn CIGAR on and add your projects again to keep going. Guard's approvals and records are not touched." },
   data: { title: "Delete everything CIGAR knows?", label: "Delete everything",
-    description: "Deletes past answers, saved notes, project access and app connections. You can set it up again anytime. Guard's approvals and records are not touched." },
+    description: "Deletes past answers, saved notes, project access, app connections and the recent projects this page remembers. You can set it up again anytime. Guard's approvals and records are not touched." },
   recheck: { title: "Start CIGAR fresh?", label: "Start fresh",
     description: "Ends current access and checks CIGAR again. If it is turned on, it starts fresh. Add your projects again afterward." },
 };
@@ -104,6 +105,7 @@ export function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBu
         if (!signal.aborted) setMessage("Saved notes removed. Turn CIGAR on and add your projects again to keep going.");
       } else if (action === "data") {
         await manageContextWorkspace("clear", undefined, undefined, signal);
+        clearRecentProjects();
         await refresh(signal);
         if (!signal.aborted) setMessage("Everything CIGAR knew is deleted. Add a project to start again.");
       } else {
@@ -151,25 +153,25 @@ export function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBu
         <div><h3 id="cigar-data-held" className={versionHeading}>What CIGAR is holding</h3>
           <p className={versionLead}>Just counts. Your files, questions and folder names are never shown here.</p></div>
         {data ? <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <Stat term="Projects with access" value={data.active_scopes} />
+          <Stat term="Projects with access (per app)" value={data.active_scopes} />
           <Stat term="Files it can read" value={data.selected_files} />
           <Stat term="Answers ready" value={data.current_contexts} />
           <Stat term="Past answers kept" value={data.history_entries} />
           <Stat term="Space used by past answers" value={data.history_encoded_bytes.toLocaleString() + " bytes"} />
           <Stat term="Connected apps" value={data.agent_sessions} />
         </dl> : <p className="rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70">Counts show up while CIGAR is on.</p>}
-        <p className={caption}>CIGAR keeps at most 8 past answers (512 KiB) for each project, and clears them after the time you chose in Settings.</p>
+        <p className={caption}>CIGAR keeps at most 8 past answers (512 KiB) for each project and app, and clears them after the time you chose in Settings.</p>
       </section>
       {data?.saved_evidence ? <section className="space-y-3 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-5" role="region" aria-label="Saved context evidence">
         <h4 className="text-sm font-semibold text-brand-dark">Saved notes</h4>
         <p role="status" className="text-sm text-brand-dark/75">{savedEvidenceCopy(data.saved_evidence)}</p>
         {data.saved_evidence.slots !== null ? <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Stat term="Projects with saved notes" value={data.saved_evidence.slots} />
+          <Stat term="Projects with saved notes (per app)" value={data.saved_evidence.slots} />
           <Stat term="Space used (bytes)" value={data.saved_evidence.bytes?.toLocaleString() ?? "Unavailable"} />
           <Stat term="Notes still saving" value={data.saved_evidence.unresolved_writes ?? "Unavailable"} />
           <Stat term="Expired, waiting to clear" value={data.saved_evidence.expired_slots ?? "Unavailable"} />
         </dl> : null}
-        <p className={caption}>Saved notes use at most 8 projects and about 550 MB of disk.</p>
+        <p className={caption}>Saved notes cover at most 8 projects (each app counts separately) and use about 550 MB of disk.</p>
       </section> : null}
       <section className="space-y-3" aria-labelledby="cigar-data-fix">
         <h3 id="cigar-data-fix" className={versionHeading}>Fix a problem</h3>
@@ -188,7 +190,7 @@ export function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBu
             action={<button className={danger} type="button" disabled={busy || disabled || !ready || !data?.history_entries} onClick={() => setConfirm("history")}>Clear past answers</button>} />
           {removable ? <Row title="Saved notes" body="Deletes what CIGAR saved on this computer, including old projects."
             action={<button className={danger} type="button" disabled={busy || disabled} onClick={() => setConfirm("saved")}>Remove saved notes</button>} /> : null}
-          <Row title="Everything CIGAR knows" body="Deletes past answers, saved notes, project access and app connections. You can set it up again anytime."
+          <Row title="Everything CIGAR knows" body="Deletes past answers, saved notes, project access, app connections and recent projects. You can set it up again anytime."
             action={<button className={danger} type="button" disabled={busy || disabled || (!ready && !data?.saved_evidence)} onClick={() => setConfirm("data")}>Delete everything</button>} />
           {offAvailable ? <Row title="Turn CIGAR off" body="Stops CIGAR now. Projects lose access until you turn it back on."
             action={<button className={danger} type="button" disabled={busy || disabled} onClick={stop}>Turn CIGAR off</button>} /> : null}
