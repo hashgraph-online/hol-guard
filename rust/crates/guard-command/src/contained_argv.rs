@@ -166,11 +166,17 @@ pub fn node_script_index(command: &[String], start: usize) -> Option<usize> {
         .map(|_| index)
 }
 
-/// A tsx test run split at its script: the Node test-runner flags ahead of
-/// the script, the script itself, and the arguments the script is passed.
-fn tsx_test_parts(
-    command: &[String],
-) -> Result<Option<(&[String], &String, &[String])>, RestrictedPytestError> {
+/// A tsx test run split at its script.
+struct TsxTestParts<'a> {
+    /// The Node test-runner flags ahead of the script.
+    flags: &'a [String],
+    /// The script the run names.
+    script: &'a String,
+    /// The arguments the script is passed.
+    arguments: &'a [String],
+}
+
+fn tsx_test_parts(command: &[String]) -> Result<Option<TsxTestParts<'_>>, RestrictedPytestError> {
     let name = basename(command);
     let Some(mut args) = command.get(1..) else {
         return Ok(None);
@@ -197,21 +203,25 @@ fn tsx_test_parts(
     Ok(rest
         .first()
         .filter(|value| named_test_script(value, true))
-        .map(|script| (flags, script, &rest[1..])))
+        .map(|script| TsxTestParts {
+            flags,
+            script,
+            arguments: &rest[1..],
+        }))
 }
 
 /// The test script a tsx run names, and the arguments the script is passed.
 pub fn tsx_test_invocation(
     command: &[String],
 ) -> Result<Option<(String, Vec<String>)>, RestrictedPytestError> {
-    Ok(tsx_test_parts(command)?.map(|(_, script, rest)| (script.clone(), rest.to_vec())))
+    Ok(tsx_test_parts(command)?.map(|parts| (parts.script.clone(), parts.arguments.to_vec())))
 }
 
 /// The Node test-runner flags a tsx run carries, which the sink re-emits in
 /// front of the script. Node reads them nowhere else: behind the script they
 /// are the script's own arguments, and the run is no longer a test run.
 pub fn tsx_test_runner_flags(command: &[String]) -> Result<Vec<String>, RestrictedPytestError> {
-    Ok(tsx_test_parts(command)?.map_or_else(Vec::new, |(flags, _, _)| flags.to_vec()))
+    Ok(tsx_test_parts(command)?.map_or_else(Vec::new, |parts| parts.flags.to_vec()))
 }
 
 pub fn python_runtime_args(command: &[String]) -> Option<Vec<String>> {
