@@ -155,23 +155,35 @@ pub fn compile_source_stream(
     {
         return Err("command_source_stream_trailing_data".into());
     }
-    resolve_bindings(&bindings, &commands, &servers)?;
+    let resolved = resolve_bindings(&bindings, &commands, &servers)?;
     let commands: Vec<_> = commands.iter().map(Vec::as_slice).collect();
     let servers: Vec<_> = servers.iter().map(Vec::as_slice).collect();
-    Ok(catalog::compile_catalog_with_mcp(
-        &commands, &servers, &trust,
-    )?)
+    let mut output = catalog::compile_catalog_with_mcp(&commands, &servers, &trust)?;
+    if !resolved.is_empty() {
+        let program_digest = output.program["program_digest"]
+            .as_str()
+            .ok_or("command_source_encoding_failed")?;
+        output.cloud_bindings = Some(cloud_binding::compile_artifact(&resolved, program_digest)?);
+    }
+    Ok(output)
 }
 
 /// Each binding contribution extends exactly one extension in the same
 /// stream, at most once, and an action ID names one hosted action stream-wide.
-fn resolve_bindings(
-    bindings: &[(usize, cloud_binding::CloudBindingContribution)],
+fn resolve_bindings<'a>(
+    bindings: &'a [(usize, cloud_binding::CloudBindingContribution)],
     commands: &[Vec<u8>],
     servers: &[Vec<u8>],
-) -> Result<(), SourceStreamError> {
+) -> Result<
+    Vec<(
+        &'a cloud_binding::CloudBindingContribution,
+        cloud_binding::BindingTarget,
+    )>,
+    SourceStreamError,
+> {
+    let mut resolved = Vec::with_capacity(bindings.len());
     if bindings.is_empty() {
-        return Ok(());
+        return Ok(resolved);
     }
     let mut sources = BTreeMap::new();
     for (bytes, server) in commands
@@ -211,8 +223,9 @@ fn resolve_bindings(
         }
         let target = cloud_binding::BindingTarget::from_source(bytes, *server).map_err(fail)?;
         cloud_binding::resolve(contribution, &target).map_err(fail)?;
+        resolved.push((contribution, target));
     }
-    Ok(())
+    Ok(resolved)
 }
 
 #[cfg(test)]
@@ -405,7 +418,7 @@ mod tests {
                 .unwrap_or_else(|error| panic!("release stream must compile: {}", error.code))
         };
         let legacy = compile(&[]);
-        let bound = compile(&[json!({
+        let binding = json!({
             "schemaVersion": "guard.cloud-action-binding-contribution.v1",
             "extensionId": "mcp.instapods",
             "bindings": [{
@@ -415,10 +428,33 @@ mod tests {
                 "requiredCapabilities": ["egress-pinned", "bounded-output"],
                 "cloudSupport": "cloud-executable"
             }]
-        })]);
+        });
+        let bound = compile(std::slice::from_ref(&binding));
         // Bindings never change the compiled local catalog in this version.
         assert_eq!(bound.source_digest, legacy.source_digest);
         assert_eq!(bound.program, legacy.program);
+
+        // Without bindings the build output is exactly what it was before.
+        assert!(legacy.cloud_bindings.is_none());
+        assert!(serde_json::to_value(&legacy)
+            .unwrap()
+            .get("cloud_bindings")
+            .is_none());
+
+        let artifact = bound.cloud_bindings.as_ref().unwrap();
+        assert_eq!(artifact["program_digest"], bound.program["program_digest"]);
+        assert_eq!(artifact["actions"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            serde_json::to_value(&bound).unwrap()["cloud_bindings"],
+            *artifact
+        );
+        // The same input compiles to the same artifact.
+        assert_eq!(
+            compile(std::slice::from_ref(&binding))
+                .cloud_bindings
+                .as_ref(),
+            Some(artifact)
+        );
     }
 
     #[test]

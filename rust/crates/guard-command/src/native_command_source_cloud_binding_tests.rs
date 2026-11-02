@@ -221,3 +221,170 @@ fn hosted_execution_never_targets_a_command_line_or_local_server() {
     local["bindings"][0]["cloudSupport"] = json!("portable-policy");
     assert!(admit_binding_contribution(&bytes(local), LOCAL_MCP, true).is_ok());
 }
+
+const PROGRAM: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+
+fn compile(pairs: &[(Value, &[u8], bool)], program: &str) -> Result<Value, &'static str> {
+    let parsed: Vec<_> = pairs
+        .iter()
+        .map(|(binding, source, server)| {
+            (
+                parse_binding_contribution(&bytes(binding.clone())).unwrap(),
+                BindingTarget::from_source(source, *server).unwrap(),
+            )
+        })
+        .collect();
+    let resolved: Vec<_> = parsed
+        .iter()
+        .map(|(contribution, target)| (contribution, target.clone()))
+        .collect();
+    compile_artifact(&resolved, program)
+}
+
+fn action<'a>(artifact: &'a Value, id: &str) -> &'a Value {
+    artifact["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|action| action["action_id"] == id)
+        .unwrap()
+}
+
+#[test]
+fn compiles_the_same_artifact_whatever_order_contributions_arrive_in() {
+    let forward = compile(
+        &[
+            (command_binding(), COMMAND_SOURCE, false),
+            (remote_binding(), REMOTE_MCP, true),
+        ],
+        PROGRAM,
+    )
+    .unwrap();
+    let reversed = compile(
+        &[
+            (remote_binding(), REMOTE_MCP, true),
+            (command_binding(), COMMAND_SOURCE, false),
+        ],
+        PROGRAM,
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::to_vec(&forward).unwrap(),
+        serde_json::to_vec(&reversed).unwrap()
+    );
+    assert_eq!(forward["schema"], BINDING_ARTIFACT_SCHEMA);
+    assert_eq!(forward["compiler_version"], 1);
+    assert_eq!(forward["program_digest"], PROGRAM);
+    let digest = forward["artifact_digest"].as_str().unwrap();
+    assert!(digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_hexdigit()));
+    let ids: Vec<_> = forward["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|action| action["action_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["example.resource.destroy", "instapods.pod.delete"]);
+
+    assert_eq!(
+        action(&forward, "example.resource.destroy")["target"],
+        json!({"kind": "command-permission", "permission_id": PERMISSION})
+    );
+    let remote = action(&forward, "instapods.pod.delete");
+    assert_eq!(
+        remote["target"],
+        json!({"kind": "mcp-tool", "tool": "delete_pod", "endpoint": "https://app.instapods.com/api/mcp"})
+    );
+    assert_eq!(
+        remote["required_capabilities"],
+        json!(["egress-pinned", "resource-allowlist", "bounded-output"])
+    );
+    assert_eq!(remote["cloud_support"], "cloud-executable");
+    assert_eq!(remote["resource"], Value::Null);
+}
+
+#[test]
+fn binding_digest_tracks_what_an_action_does_not_how_policy_treats_it() {
+    let digest_of = |binding: Value, source: &[u8], program: &str| {
+        let artifact = compile(&[(binding, source, true)], program).unwrap();
+        (
+            action(&artifact, "instapods.pod.delete")["binding_digest"].clone(),
+            artifact["artifact_digest"].clone(),
+        )
+    };
+    let (base, base_artifact) = digest_of(remote_binding(), REMOTE_MCP, PROGRAM);
+
+    // A tool-state change is policy: the action still means the same thing.
+    let mut stricter: Value = serde_json::from_slice(REMOTE_MCP).unwrap();
+    stricter["tools"][0]["state"] = json!("block");
+    let (same, _) = digest_of(remote_binding(), &bytes(stricter), PROGRAM);
+    assert_eq!(same, base);
+
+    // A new program changes the artifact, not the action's meaning.
+    let other_program = "2".repeat(64);
+    let (same, artifact) = digest_of(remote_binding(), REMOTE_MCP, &other_program);
+    assert_eq!(same, base);
+    assert_ne!(artifact, base_artifact);
+
+    // An equivalent spelling of the endpoint is the same endpoint.
+    let mut spelled: Value = serde_json::from_slice(REMOTE_MCP).unwrap();
+    spelled["launch"]["url"] = json!("https://APP.instapods.com:443/api/mcp");
+    let (same, _) = digest_of(remote_binding(), &bytes(spelled), PROGRAM);
+    assert_eq!(same, base);
+
+    let mut moved: Value = serde_json::from_slice(REMOTE_MCP).unwrap();
+    moved["launch"]["url"] = json!("https://app.instapods.com/api/mcp-v2");
+    let mut gentler = remote_binding();
+    gentler["bindings"][0]["effect"] = json!("write");
+    let mut scoped = remote_binding();
+    scoped["bindings"][0]["resource"] = json!({"kind": "pod", "argument": "pod_id"});
+    for (binding, source) in [
+        (remote_binding(), bytes(moved)),
+        (gentler, REMOTE_MCP.to_vec()),
+        (scoped, REMOTE_MCP.to_vec()),
+    ] {
+        assert_ne!(digest_of(binding, &source, PROGRAM).0, base);
+    }
+}
+
+#[test]
+fn artifact_holds_no_more_actions_than_the_runtime_loads() {
+    let contributions: Vec<_> = (0..=MAX_BINDINGS / 256)
+        .map(|index| {
+            let contribution = parse_binding_contribution(&bytes(json!({
+                "schemaVersion": BINDING_CONTRIBUTION_SCHEMA,
+                "extensionId": format!("command.filler-{index}"),
+                "bindings": (0..256).map(|action| json!({
+                    "actionId": format!("filler{index}.a{action}"),
+                    "permissionId": PERMISSION,
+                    "effect": "read",
+                    "requiredCapabilities": [],
+                    "cloudSupport": "portable-policy"
+                })).collect::<Vec<_>>()
+            })))
+            .unwrap();
+            let target = BindingTarget {
+                extension_id: contribution.extension_id.clone(),
+                kind: TargetKind::Command {
+                    permissions: BTreeSet::from([PERMISSION.to_owned()]),
+                },
+            };
+            (contribution, target)
+        })
+        .collect();
+    let resolved: Vec<_> = contributions
+        .iter()
+        .map(|(contribution, target)| (contribution, target.clone()))
+        .collect();
+    assert!(resolved.len() * 256 > MAX_BINDINGS);
+    assert_eq!(
+        compile_artifact(&resolved, PROGRAM).unwrap_err(),
+        "cloud_binding_artifact_limit"
+    );
+    assert_eq!(
+        compile_artifact(&resolved[..MAX_BINDINGS / 256], PROGRAM).unwrap()["actions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        MAX_BINDINGS
+    );
+}
