@@ -353,7 +353,47 @@ pub(super) fn inline_shell_script(raw: &str) -> Option<String> {
     if !INLINE_SHELLS.contains(&shell.as_str()) {
         return None;
     }
-    let [script] = carries_script(rest)? else {
+    let [script] = carries_script(rest, INERT_SHELL_FLAGS)? else {
+        return None;
+    };
+    if script.trim().is_empty() {
+        return None;
+    }
+    Some(script.clone())
+}
+
+/// Shells whose `-c` script names the programs they run, while the shell
+/// still reads a startup file this text does not hold before running it.
+const STARTUP_SHELLS: &[&str] = &["ash", "bash", "dash", "sh", "zsh"];
+
+/// The option letters read in front of such a script: the inert ones, and the
+/// login and interactive flags, which pick the startup files the shell reads
+/// and never which words the script is.
+const STARTUP_SHELL_FLAGS: &str = "eilux";
+
+/// The script a shell is told to run, for the spellings
+/// [`inline_shell_script`] leaves unmodelled.
+///
+/// `bash -lc 'npm test'` sources the profile files first, and `zsh -c 'npm
+/// test'` reads `~/.zshenv` whatever option it is given, so for both the
+/// script is not the whole command and the invocation keeps the wrapper's own
+/// uncertainty. The script still names the programs the shell is told to run,
+/// and those are the owners a review floor collects: until it was read the
+/// pair blocked outright, with no approval left to give them, while `bash -c
+/// 'npm test'` beside them modelled exactly and ran.
+pub(crate) fn startup_shell_script(raw: &str) -> Option<String> {
+    if raw.len() > crate::MAX_COMMAND_BYTES
+        || raw.contains(['$', '`', '\n', '\r'])
+        || carries_unquoted_operator(raw)
+    {
+        return None;
+    }
+    let tokens = crate::shell_tokens(raw, false).ok()?;
+    let (shell, rest) = tokens.split_first()?;
+    if !STARTUP_SHELLS.contains(&shell.as_str()) {
+        return None;
+    }
+    let [script] = carries_script(rest, STARTUP_SHELL_FLAGS)? else {
         return None;
     };
     if script.trim().is_empty() {
@@ -370,8 +410,9 @@ pub(super) fn inline_shell_script(raw: &str) -> Option<String> {
 /// its letters, and `-c` takes the script as the next word wherever in the
 /// bundle it sits. `-e` stops the script at its first failure and changes
 /// nothing about which programs the words name. The walk refuses any other
-/// letter, so `-l`, `-i`, `-s` and `-o` keep the paths they have.
-fn carries_script(words: &[String]) -> Option<&[String]> {
+/// letter, so `-s` and `-o` keep the paths they have, and `-l` and `-i` keep
+/// them unless the caller reads the startup files they ask for.
+fn carries_script<'a>(words: &'a [String], inert: &str) -> Option<&'a [String]> {
     let mut index = 0;
     loop {
         let word = words.get(index)?.strip_prefix('-')?;
@@ -386,7 +427,7 @@ fn carries_script(words: &[String]) -> Option<&[String]> {
             ),
             None => (word.to_string(), false),
         };
-        if !flags.chars().all(|flag| INERT_SHELL_FLAGS.contains(flag)) {
+        if !flags.chars().all(|flag| inert.contains(flag)) {
             return None;
         }
         if closes {

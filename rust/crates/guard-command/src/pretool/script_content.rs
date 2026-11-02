@@ -361,6 +361,25 @@ pub(crate) fn prefixed_launch(model: &CanonicalCommandV1, context: PathContext<'
         && structure(model, context).is_some()
 }
 
+/// Whether the command is one shell invocation whose `-c` script this scan
+/// read and models, where the shell reads a startup file before running it:
+/// `bash -lc 'npm test'` and `zsh -c 'npm test'`.
+///
+/// The startup file runs words this text does not hold, so the script is not
+/// the whole command and the invocation keeps its uncertainty - which is why
+/// the parser models only the spellings that read no startup file. The script
+/// does name the programs the shell is told to run, and those are the owners
+/// a review floor needs: without them the pair blocked outright, with no
+/// approval left to give them, while `bash -c 'npm test'` beside them
+/// modelled exactly and ran.
+pub(crate) fn shell_script_launch(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
+    model.uncertainty_reason.as_deref() == Some("transparent_wrapper_not_yet_supported")
+        && model.wrapper_chain.is_empty()
+        && !model.path_overridden
+        && crate::parser_wrappers::startup_shell_script(&model.normalized_text)
+            .is_some_and(|script| text_structure(&script, context).is_some())
+}
+
 /// The sources of the program, when the command is one interpreter launch,
 /// with no wrapper or environment prefix, whose inline source or program fed
 /// on standard input this scan read. The interpreter then runs only that

@@ -374,6 +374,13 @@ impl CompiledNativeCommandControls {
                 // command the prefix runs is the one the text already names,
                 // and its own programs count toward the owners below.
                 None if crate::pretool::prefixed_launch(command, context) => {}
+                // A shell told to run a script in its own words leaves no
+                // segments either, so the interpreter looks like one reading
+                // a file nobody opened. The script is in this text and its
+                // programs are already among the owners below; what the
+                // startup file adds is exactly the uncertainty a review card
+                // is for.
+                None if crate::pretool::shell_script_launch(command, context) => {}
                 None if compound::redirected_launch(command, context) => {}
                 None => named.extend(
                     compound::listed_inline_sources(&bare, sourced_bounded, context)?
@@ -777,7 +784,9 @@ fn reviewable_structure(
             // exactly on its own. Without that reading the launcher made the
             // command stricter than the same words without it - a block with
             // no approval, where the bare spelling ran.
-            (prefix::launch_only(&literal) || crate::pretool::prefixed_launch(command, context))
+            (prefix::launch_only(&literal)
+                || crate::pretool::prefixed_launch(command, context)
+                || crate::pretool::shell_script_launch(command, context))
                 && (!moves_data(&literal) || literal_redirects_only(normalized))
         }
         // An unquoted `${NAME}` expands to a value the shell splits into
@@ -1516,6 +1525,10 @@ mod funsub_tests;
 #[cfg(test)]
 #[path = "native_command_unmodeled_prefix_tests.rs"]
 mod prefix_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_startup_shell_tests.rs"]
+mod startup_shell_tests;
 
 #[cfg(test)]
 #[path = "native_command_unmodeled_operands_tests.rs"]
