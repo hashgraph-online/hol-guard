@@ -150,11 +150,77 @@ fn stdin_arguments(arguments: &[String], switches: &str) -> bool {
     }
 }
 
+/// Whether `program <arguments>` only reshapes the text of the stage before
+/// it, for a pipeline the sink rejoins and the sandbox's own shell runs stage
+/// by stage.
+///
+/// A rejoined stage is never peeled off and applied in process, so the sink
+/// cannot vouch for what it reads: it is the shell in the containment root
+/// that runs it. Each program here therefore has to read standard input and
+/// nothing else. `head`, `tail` and the matchers already have that reading,
+/// and the rest earn it by taking no operand, because every one of them opens
+/// an operand as a file. Anything else -- a shell, an interpreter, `xargs` --
+/// would make the program that finally runs a different one from the program
+/// the containment proof screened.
+pub(in crate::pretool) fn rejoined_stage(program: &str, arguments: &[String]) -> bool {
+    match program {
+        "head" | "tail" => head_tail_arguments(arguments),
+        "grep" | "egrep" | "fgrep" => stdin_arguments(arguments, GREP_SWITCHES),
+        "rg" => stdin_arguments(arguments, RG_SWITCHES),
+        "wc" => text_filter(arguments, "clmwL", &[]),
+        "cut" => text_filter(arguments, "sn", &["-b", "-c", "-f", "-d"]),
+        // `-o` and `-T` name a file and a directory to write, and `-S` sizes a
+        // buffer, so none of the three is a switch here.
+        "sort" => text_filter(arguments, "bcdfghiMnrsuVz", &["-k", "-t"]),
+        "uniq" => text_filter(arguments, "cdiuz", &["-f", "-s", "-w"]),
+        // `tr` has no file operand at all: it reads standard input whatever it
+        // is given, so its operands are the character sets they look like.
+        "tr" => true,
+        _ => false,
+    }
+}
+
+/// Whether `arguments` are switches and bounded option values only.
+///
+/// `switches` are the single letters that change the shape of the text, and
+/// `valued` the options taking one value, attached or as the word after. An
+/// operand is refused outright: every program this serves reads it as a file,
+/// which is a read the containment proof never screened.
+fn text_filter(arguments: &[String], switches: &str, valued: &[&str]) -> bool {
+    let mut index = 0;
+    while index < arguments.len() {
+        let argument = arguments[index].as_str();
+        index += 1;
+        let Some(flags) = argument.strip_prefix('-') else {
+            return false;
+        };
+        if flags.is_empty() {
+            return false;
+        }
+        if let Some(attached) = valued
+            .iter()
+            .find_map(|option| argument.strip_prefix(*option))
+        {
+            if attached.is_empty() {
+                if index >= arguments.len() {
+                    return false;
+                }
+                index += 1;
+            }
+            continue;
+        }
+        if !flags.chars().all(|flag| switches.contains(flag)) {
+            return false;
+        }
+    }
+    true
+}
+
 /// Plain words the sink lexes into the same arguments: no `$` or backquote
 /// anywhere, no control character but a tab, and outside quotes only word
 /// characters and blanks. Globs, braces, `~`, escapes, redirects and
 /// operators all leave the filter to review.
-pub(super) fn plain_source(source: &str) -> bool {
+pub(in crate::pretool) fn plain_source(source: &str) -> bool {
     let mut quote: Option<char> = None;
     let mut chars = source.chars();
     while let Some(current) = chars.next() {
@@ -188,7 +254,9 @@ pub(super) fn plain_source(source: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{head_tail_bound, plain_source, stdin_arguments, GREP_SWITCHES, RG_SWITCHES};
+    use super::{
+        head_tail_bound, plain_source, rejoined_stage, stdin_arguments, GREP_SWITCHES, RG_SWITCHES,
+    };
 
     fn words(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_owned()).collect()
@@ -339,6 +407,63 @@ mod tests {
             &["notes.txt"],
         ] {
             assert_eq!(head_tail_bound(&words(arguments)), None, "{arguments:?}");
+        }
+    }
+
+    #[test]
+    fn a_rejoined_stage_reshapes_what_it_reads_on_standard_input() {
+        for (program, arguments) in [
+            ("cut", &["-c1-120"][..]),
+            ("cut", &["-d", ":", "-f1"]),
+            ("cut", &["-d:", "-f", "1", "-s"]),
+            ("sort", &[]),
+            ("sort", &["-u"]),
+            ("sort", &["-rn"]),
+            ("sort", &["-k2,2", "-t:"]),
+            ("uniq", &["-c"]),
+            ("uniq", &["-f", "2", "-w10"]),
+            ("wc", &["-l"]),
+            ("tr", &["-d", "\\r"]),
+            ("head", &["-40"]),
+            ("tail", &["-n", "15"]),
+            ("grep", &["-v", "ok"]),
+            ("rg", &["-c", "FAIL"]),
+        ] {
+            assert!(
+                rejoined_stage(program, &words(arguments)),
+                "{program} {arguments:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_stage_that_names_a_file_or_runs_a_program_is_not_rejoined() {
+        for (program, arguments) in [
+            ("head", &["/etc/passwd"][..]),
+            ("head", &["-5", "/etc/passwd"]),
+            ("tail", &["-f", "/var/log/system.log"]),
+            ("cut", &["-f1", "/etc/passwd"]),
+            ("sort", &["/etc/passwd"]),
+            // `-o`, `-T` and `-S` name a file, a directory and a size.
+            ("sort", &["-o", "out.txt"]),
+            ("sort", &["-oout.txt"]),
+            ("sort", &["--output=out.txt"]),
+            ("sort", &["-T", "/tmp"]),
+            ("sort", &["-S", "1G"]),
+            ("uniq", &["notes.txt"]),
+            ("wc", &["-l", "/etc/passwd"]),
+            ("grep", &["FAIL", "build.log"]),
+            ("sh", &[]),
+            ("bash", &["-s"]),
+            ("xargs", &["rm"]),
+            ("tee", &["out.txt"]),
+            ("awk", &["{print $1}"]),
+            ("sed", &["-i", "s/a/b/", "notes.txt"]),
+        ] {
+            assert!(
+                !rejoined_stage(program, &words(arguments)),
+                "{program} {arguments:?}"
+            );
         }
     }
 }

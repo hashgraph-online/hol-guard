@@ -614,54 +614,98 @@ fn lexical(path: &Path) -> PathBuf {
 
 /// `a && b && c` of plain words, rejoined, or `None` for any other shape.
 ///
-/// Each command may bound its own output with one `| head` or `| tail` of a
-/// line or byte count, optionally after `2>&1`. The filter stays in the
-/// rejoined text, where the sandbox's shell applies it to that command alone,
-/// as the issued text did.
+/// Each command may send its stderr to stdout or to `/dev/null`, and may pipe
+/// its output through further stages of plain words. Those stages stay in the
+/// rejoined text, where the sandbox's shell applies each to the command before
+/// it, exactly as the issued text did. Rejoining is what lets a pipeline whose
+/// filters the peel has no grammar for still run in the root the `cd` named,
+/// so an ordinary `| cut` or `| sort` reads as the same work as `| head`.
+///
+/// A lone command is rejoined only when the peel refuses its pipeline, so a
+/// shape the peel already reads keeps its narrower sink.
 fn joined_list(tokens: &[Token]) -> Option<String> {
     let mut commands = Vec::new();
     for command in tokens.split(|token| operator(token) == Some("&&")) {
-        let (words, filter) = match command
-            .iter()
-            .position(|token| operator(token) == Some("|"))
+        let mut stages = Vec::new();
+        for (index, stage) in command
+            .split(|token| operator(token) == Some("|"))
+            .enumerate()
         {
-            Some(index) => (&command[..index], Some(&command[index + 1..])),
-            None => (command, None),
-        };
-        let (words, merged) = match words.split_last() {
-            Some((last, rest)) if operator(last) == Some("2>&1") => (rest, true),
-            _ => (words, false),
-        };
-        if words.is_empty()
-            || (merged && filter.is_none())
-            || words.iter().any(|token| {
-                token.1
-                    || token
-                        .0
-                        .chars()
-                        .any(|character| ARGUMENT_REJECT.contains(character))
-            })
-        {
-            return None;
-        }
-        let mut text = shlex_join(words.iter().map(|token| token.0.as_str()));
-        if merged {
-            text.push_str(" 2>&1");
-        }
-        if let Some(filter) = filter {
-            let (program, arguments) = filter.split_first()?;
-            let program = word(program);
-            if !matches!(program, "head" | "tail") || arguments.iter().any(|token| token.1) {
-                return None;
+            let (words, redirect) = if index == 0 {
+                stderr_redirect(stage)
+            } else {
+                let (program, arguments) = stage.split_first()?;
+                let arguments: Vec<String> =
+                    arguments.iter().map(|token| token.0.clone()).collect();
+                if program.1 || !output_filters::rejoined_stage(&program.0, &arguments) {
+                    return None;
+                }
+                (stage, None)
+            };
+            let mut text = plain_words(words)?;
+            if let Some(redirect) = redirect {
+                text.push(' ');
+                text.push_str(redirect);
             }
-            let arguments: Vec<String> = arguments.iter().map(|token| token.0.clone()).collect();
-            let (count, bytes) = output_filters::head_tail_bound(&arguments)?;
-            let unit = if bytes { "-c" } else { "-n" };
-            text.push_str(&format!(" | {program} {unit} {count}"));
+            stages.push(text);
         }
-        commands.push(text);
+        commands.push(stages.join(" | "));
     }
-    (commands.len() >= 2).then(|| commands.join(" && "))
+    let piped = tokens.iter().any(|token| operator(token) == Some("|"));
+    if commands.len() < 2 && !(piped && peel_declines(tokens)) {
+        return None;
+    }
+    Some(commands.join(" && "))
+}
+
+/// One command's words, quoted back into text, or `None` when a word is an
+/// operator or carries one inside quotes. A `;`, `|`, `<`, `>` or `&` that the
+/// sandbox's shell would read again cannot be rejoined as the word it was.
+fn plain_words(tokens: &[Token]) -> Option<String> {
+    if tokens.is_empty()
+        || tokens.iter().any(|token| {
+            token.1
+                || token
+                    .0
+                    .chars()
+                    .any(|character| ARGUMENT_REJECT.contains(character))
+        })
+    {
+        return None;
+    }
+    Some(shlex_join(tokens.iter().map(|token| token.0.as_str())))
+}
+
+/// A trailing `2>&1` or `2>/dev/null` split off a command's words, with the
+/// text to re-emit after them.
+///
+/// `2>&1` lexes as one operator token; `2>/dev/null` lexes as `2`, `>` and the
+/// path, because `/` ends no word. Each shape therefore needs its own reading.
+fn stderr_redirect(tokens: &[Token]) -> (&[Token], Option<&'static str>) {
+    if let Some((last, rest)) = tokens.split_last() {
+        if operator(last) == Some("2>&1") {
+            return (rest, Some("2>&1"));
+        }
+    }
+    if let [rest @ .., number, redirect, target] = tokens {
+        if !number.1
+            && number.0.as_str() == "2"
+            && operator(redirect) == Some(">")
+            && word(target) == "/dev/null"
+        {
+            return (rest, Some(QUIET_SUFFIX));
+        }
+    }
+    (tokens, None)
+}
+
+/// Whether the filter peel refuses this command's pipeline, leaving the rejoin
+/// as the only reading that runs it in the root the `cd` named.
+fn peel_declines(tokens: &[Token]) -> bool {
+    tokens
+        .iter()
+        .position(|token| operator(token) == Some("|"))
+        .is_some_and(|index| filter_chain(&tokens[index + 1..]).is_err())
 }
 
 /// Where a bare `node -e <program>` or `python3 -c <program>` holds its

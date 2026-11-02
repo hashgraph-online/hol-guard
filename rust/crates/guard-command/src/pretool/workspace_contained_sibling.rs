@@ -37,11 +37,11 @@ fn sibling_list(
     let target = super::super::segment_proof::verified_cwd_list_context(model, context, true)?;
     let workspace = std::fs::canonicalize(context.cwd?).ok()?;
     let target = PathBuf::from(target);
-    // The sink joins only an `&&` list after a sibling root; any pipe but a
-    // command's own output bound would leave the `cd` to run under the
-    // session workspace's profile.
+    // The sink rejoins an `&&` list after a sibling root and runs it there.
+    // A shape it would not rejoin must not be admitted here, or the `cd`
+    // would run under the session workspace's profile instead.
     if target.starts_with(&workspace)
-        || !joined_filters(model)
+        || !joined_filters(model, context)
         || super::super::contained_wrapper::sibling_project_root(&target, context.home_dir?)
             .as_deref()
             != Some(target.as_path())
@@ -53,45 +53,51 @@ fn sibling_list(
     Some((target, rest))
 }
 
-/// Whether every pipe in the list is one `| head -N` or `| tail -N` on the
-/// command before it, optionally after `2>&1`: the only filter the sink keeps
-/// when it joins two or more commands, leaving it in the text the root runs.
-/// One command after the `cd` takes no pipe here; `sibling_cd_root` reads
-/// that shape, as the sink peels its filter itself.
-fn joined_filters(model: &CanonicalCommandV1) -> bool {
-    let commands = model
+/// Whether the sink rejoins this list whole rather than peeling a filter out
+/// of it.
+///
+/// Each command may pipe its output through further stages of plain words.
+/// The sink leaves those pipes in the text the root runs, so the root's shell
+/// applies each stage to the command before it, exactly as the issued text
+/// did; an ordinary `| cut` or `| sort` is then the same work as `| head`. A
+/// lone command whose filter the sink peels itself is left to
+/// `sibling_cd_root`, which reads that shape, so asking the peel here is what
+/// keeps the classifier from admitting a list the sink would refuse.
+fn joined_filters(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
+    if !model
         .segments
         .iter()
-        .filter(|segment| segment.pipeline_index == 0)
-        .count();
-    if commands < 3 {
-        return model
-            .segments
-            .iter()
-            .all(|segment| segment.pipeline_index == 0);
+        .any(|segment| segment.pipeline_index > 0)
+    {
+        return true;
+    }
+    if !model
+        .segments
+        .iter()
+        .all(|segment| segment.pipeline_index == 0 || plain_stage(model, segment))
+    {
+        return false;
     }
     model
         .segments
         .iter()
-        .enumerate()
-        .all(|(index, segment)| match segment.pipeline_index {
-            0 => {
-                segment.arguments.last().map(String::as_str) != Some("2>&1")
-                    || model
-                        .segments
-                        .get(index + 1)
-                        .is_some_and(|next| next.pipeline_index == 1)
-            }
-            1 => {
-                matches!(segment.executable.as_deref(), Some("head" | "tail"))
-                    && segment.environment_names.is_empty()
-                    && segment.wrapper_chain.is_empty()
-                    && !segment.path_overridden
-                    && super::super::contained_wrapper::output_filters::head_tail_arguments(
-                        &segment.arguments,
-                    )
-            }
-            _ => false,
+        .filter(|segment| segment.pipeline_index == 0)
+        .count()
+        >= 3
+        || super::super::contained_wrapper::contained_core(model, context).is_none()
+}
+
+/// One pipeline stage the sink rejoins as the words the text spelled: a plain
+/// program, with no wrapper, environment prefix or `PATH` override, and no
+/// character the root's shell would read as anything but a word.
+fn plain_stage(model: &CanonicalCommandV1, segment: &CommandSegmentV1) -> bool {
+    segment.executable.as_deref().is_some_and(|program| {
+        super::super::contained_wrapper::output_filters::rejoined_stage(program, &segment.arguments)
+    }) && segment.environment_names.is_empty()
+        && segment.wrapper_chain.is_empty()
+        && !segment.path_overridden
+        && super::super::contained_wrapper::segment_source(model, segment).is_some_and(|source| {
+            super::super::contained_wrapper::output_filters::plain_source(&source)
         })
 }
 

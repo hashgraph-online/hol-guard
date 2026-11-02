@@ -40,6 +40,14 @@ fn filter_chain(model: &CanonicalCommandV1, segments: &[CommandSegmentV1]) -> Op
     Some(filters.len())
 }
 
+/// The text one segment occupies in the command, as the sink lexes it.
+pub(super) fn segment_source(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+) -> Option<String> {
+    text(model, segment.span.start, segment.span.end)
+}
+
 /// A final `; echo "exit=$?"`: the sink prints the label and status itself.
 ///
 /// The shell prints a single-quoted or backslash-escaped `$?` literally, and
