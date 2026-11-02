@@ -142,6 +142,25 @@ fn a_start_that_cannot_be_queued_is_shown_instead_of_resting() {
     assert_eq!(status["requested_enabled"], true, "consent is unchanged");
 }
 
+#[test]
+fn a_restarted_resident_remembers_a_saved_opt_in_before_any_request() {
+    let home = home();
+    let service = Service::default();
+    service.restore(home.path());
+    let status = service.status().unwrap();
+    assert_eq!(status["requested_enabled"], true);
+    assert_eq!(status["diagnostic"], "runtime_resting");
+    let unreadable = tempfile::tempdir().unwrap();
+    std::fs::write(
+        unreadable.path().join("config.toml"),
+        "[context_assistance\n",
+    )
+    .unwrap();
+    let fresh = Service::default();
+    fresh.restore(unreadable.path());
+    assert_eq!(fresh.status().unwrap()["requested_enabled"], false);
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn a_command_hook_reaches_the_wake_only_for_resting_execution_context() {

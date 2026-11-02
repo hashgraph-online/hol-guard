@@ -41,6 +41,18 @@ pub(super) fn resting(state: &State) -> bool {
 }
 
 impl Service {
+    /// Loads the saved choice when the resident starts, so the first command
+    /// after a restart can wake a resting CIGAR without waiting for the
+    /// dashboard or an agent to ask first. An unreadable file leaves it off.
+    pub(crate) fn restore(&self, home: &std::path::Path) {
+        let Ok(generation) = self.configuration_generation() else {
+            return;
+        };
+        if let Ok(settings) = crate::guard_config_load::context_assistance_config(home) {
+            let _ = self.configure_at(settings, generation);
+        }
+    }
+
     /// Starts verification for a resting opt-in without waiting for it.
     pub(crate) fn wake(
         &self,
