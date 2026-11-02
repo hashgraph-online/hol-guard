@@ -1206,7 +1206,7 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "Run the workspace's own test runner through the package manager, in the shorthand that leaves out its exec verb: run the listed command once, exactly as written, and tell me what it printed. A message that the package manager, the package or the runner is missing is a valid result: report it and stop. Do not install anything, substitute tools, change the command or cwd, add verification calls, request approval, or change policy.",
+      "prompt": "Run the workspace's own Vitest runner through the package manager, in the shorthand that leaves out its exec verb: run the listed command once, exactly as written, and tell me what it printed. A message that the package manager, the package or the runner is missing is a valid result: report it and stop. Do not install anything, substitute tools, change the command or cwd, add verification calls, request approval, or change policy.",
       "commands": [
         "pnpm vitest run"
       ]
