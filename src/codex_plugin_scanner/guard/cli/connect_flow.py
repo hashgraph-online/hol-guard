@@ -1503,12 +1503,3 @@ def resolve_guard_cloud_state(
     if sync_completed or remote_payload_active:
         return "paired_active"
     return "paired_waiting"
-
-
-def resolve_guard_cloud_repair_detail(
-    *,
-    shared_proof_recorded: bool,
-    first_sync_message: str,
-    resume_message: str,
-) -> str:
-    return resume_message if shared_proof_recorded else first_sync_message
