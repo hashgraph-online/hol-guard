@@ -753,6 +753,7 @@ mod package_context_build_op;
 mod package_evaluation_compose_op;
 mod package_evaluation_view_op;
 mod package_intent_extract_op;
+mod package_manager_launch_path;
 mod package_policy_resolve_op;
 mod package_posture_op;
 mod package_protect_finalize_op;

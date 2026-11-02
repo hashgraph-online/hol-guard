@@ -465,27 +465,26 @@ def _package_manager_launch_environment(
 ) -> dict[str, str]:
     """Exclude Guard's interception shim from the reviewed and executed package-manager path."""
 
-    launch_environment = dict(environment)
+    user_home = os.path.expanduser("~")
     try:
-        shim_dir = (guard_home / "package-shims" / "bin").expanduser().resolve()
-    except (OSError, RuntimeError, ValueError):
-        raise ValueError("Guard's package shim path could not be verified") from None
-    path_entries = environment.get("PATH", "").split(os.pathsep)
-    filtered_entries: list[str] = []
-    for entry in path_entries:
-        if not entry:
-            continue
-        try:
-            path_entry = Path(entry).expanduser()
-            if not path_entry.is_absolute():
-                path_entry = launch_cwd / path_entry
-            resolved_entry = path_entry.resolve()
-        except (OSError, RuntimeError, ValueError):
-            raise ValueError("package manager PATH could not be verified") from None
-        if resolved_entry != shim_dir:
-            filtered_entries.append(entry)
-    launch_environment["PATH"] = os.pathsep.join(filtered_entries)
-    return launch_environment
+        answer = native_runner_authority(
+            "package_manager_launch_path",
+            {
+                "guard_home": str(guard_home.expanduser().absolute()),
+                "launch_cwd": str(launch_cwd),
+                "user_home": user_home if os.path.isabs(user_home) else None,
+                "separator": os.pathsep,
+                "path": environment.get("PATH", ""),
+            },
+            guard_home=guard_home,
+        )
+    except NativeRunnerAuthorityError:
+        answer = {}
+    if answer.get("refused") == "shim_unverified":
+        raise ValueError("Guard's package shim path could not be verified")
+    if not isinstance(launch_path := answer.get("path"), str):
+        raise ValueError("package manager PATH could not be verified")
+    return {**environment, "PATH": launch_path}
 
 
 @binds_store_guard_home
