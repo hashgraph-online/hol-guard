@@ -64,14 +64,14 @@ Evidence:
 
 ## Surface schema ↔ runtime method-list negotiated contract
 
-The prior blocker ("surface schema method list and runtime method list require an explicit negotiated contract") is resolved by the existing handshake. `initialize_client()` in `runtime/surface_server.py:60` returns both lists in one response: `schema.methods` (advertised surface methods) and `server_capabilities.methods` (the implemented runtime methods from `SERVER_METHODS`). Protocol negotiation uses same-major-version matching (the native `surface_server_handshake` kind), and the response carries `protocol_version`, `schema_version`, and the negotiated version. A 2.x client calling `initialize` receives the full implemented-method list and the negotiated protocol version; the three schema-advertised but unimplemented methods (`operation/item/add`, `client/attach`, `client/heartbeat`) are absent from `SERVER_METHODS` and therefore are never routed.
+The prior blocker ("surface schema method list and runtime method list require an explicit negotiated contract") is resolved by the existing handshake. `initialize_client()` in `runtime/surface_server.py:55` returns both lists in one response: `schema.methods` (advertised surface methods) and `server_capabilities.methods` (the implemented runtime methods from `SERVER_METHODS`). Protocol negotiation uses same-major-version matching (the native `surface_server_handshake` kind), and the response carries `protocol_version`, `schema_version`, and the negotiated version. A 2.x client calling `initialize` receives the full implemented-method list and the negotiated protocol version; the three schema-advertised but unimplemented methods (`operation/item/add`, `client/attach`, `client/heartbeat`) are absent from `SERVER_METHODS` and therefore are never routed.
 
 Evidence:
 
-- `runtime/surface_server.py:21-38` — `SERVER_METHODS` (16 implemented methods).
-- `runtime/surface_server.py:60-114` — `initialize_client()` returns `schema`, `server_capabilities.methods`, and `negotiated_version`.
-- `schemas/surface_server.py:165-175` — advertised method list.
-- Both files byte-identical to 2.2.
+- `runtime/surface_server.py:16-33` — `SERVER_METHODS` (16 implemented methods).
+- `runtime/surface_server.py:55-93` — `initialize_client()` returns `schema`, `server_capabilities.methods`, and `negotiated_version`.
+- `rust/crates/guard-runtime/src/surface_server_handshake.rs:83-93` — advertised method list, now served by the native `surface_server_handshake` kind.
+- Both method lists match the `v2.2.99` tag entry for entry; the advertised list moved from `schemas/surface_server.py` to the native runtime.
 - Characterization tests `tests/test_guard_release_3_0_compatibility.py::TestSurfaceRuntimeNegotiationContract` pin the handshake contract: both method lists returned together, unimplemented advertised methods never routed, and same-major-version protocol negotiation (accepted and rejected).
 
 ## Archived receipt-rollup reconstruction
