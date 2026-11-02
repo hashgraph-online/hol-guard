@@ -26,6 +26,7 @@ from ..native_daemon_handler import (
     native_supply_chain_error,
 )
 from ..native_hook_artifact_compose import NativeHookComposeError
+from ..native_runner_authority import NativeRunnerAuthorityError
 from ..package_firewall_entitlement import (
     PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE,
     PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE_MESSAGE,
@@ -70,6 +71,8 @@ from .server_control_connect_state import (
     _repair_detected_package_shims,
     _resolve_package_firewall_connect_flow,
 )
+
+SUPPLY_CHAIN_WORKSPACE_UNAVAILABLE = "supply_chain_workspace_unavailable"
 
 
 class _SupplyChainRoutes:
@@ -125,7 +128,11 @@ class _SupplyChainRoutes:
         )
         if access is None:
             return
-        audit_workspace_dir = self._resolve_supply_chain_workspace_dir({})
+        try:
+            audit_workspace_dir = self._resolve_supply_chain_workspace_dir({})
+        except NativeRunnerAuthorityError:
+            self._write_supply_chain_workspace_unavailable("status")
+            return
         self._write_json(
             {
                 "actions": access.action_states,
@@ -150,7 +157,11 @@ class _SupplyChainRoutes:
             return
 
         entitlement = self._supply_chain_entitlement()
-        context = self._supply_chain_context(payload)
+        try:
+            context = self._supply_chain_context(payload)
+        except NativeRunnerAuthorityError:
+            self._write_supply_chain_workspace_unavailable("repair_all")
+            return
         current_status = package_shim_status(context)
         access = self._package_firewall_access(
             entitlement,
@@ -226,6 +237,9 @@ class _SupplyChainRoutes:
                 payload,
                 reject_invalid_explicit=operation == "audit",
             )
+        except NativeRunnerAuthorityError:
+            self._write_supply_chain_workspace_unavailable(operation)
+            return
         except ValueError as error:
             self._write_json(self._supply_chain_value_error_payload(operation, str(error)), status=400)
             return
@@ -403,6 +417,9 @@ class _SupplyChainRoutes:
                 {"workspace_dir": selected},
                 reject_invalid_explicit=True,
             )
+        except NativeRunnerAuthorityError:
+            self._write_supply_chain_workspace_unavailable("choose-folder")
+            return
         except ValueError as error:
             self._write_json(self._supply_chain_value_error_payload("choose-folder", str(error)), status=400)
             return
@@ -438,6 +455,7 @@ class _SupplyChainRoutes:
             allowed_roots=allowed_roots,
             managed_workspace_dirs=managed_workspace_dirs,
             reject_invalid_explicit=reject_invalid_explicit,
+            guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
         )
 
     def _supply_chain_context(
@@ -454,6 +472,18 @@ class _SupplyChainRoutes:
             home_dir=Path.home().resolve(),
             workspace_dir=workspace_dir,
             guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
+        )
+
+    def _write_supply_chain_workspace_unavailable(self, operation: str) -> None:
+        """The native runtime could not resolve the workspace; not a bad folder."""
+
+        self._write_json(
+            {
+                "error": SUPPLY_CHAIN_WORKSPACE_UNAVAILABLE,
+                "message": "Guard could not check the project folder right now. Try again in a moment.",
+                "operation": operation,
+            },
+            status=503,
         )
 
     @staticmethod

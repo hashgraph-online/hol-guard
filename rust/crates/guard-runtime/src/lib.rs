@@ -905,6 +905,7 @@ mod store_quarantine_forensics;
 mod store_vectors_support_tests;
 mod strict_json;
 mod supervisor_verdict;
+mod supply_chain_audit_workspace;
 mod supply_chain_bundle_verify_op;
 #[cfg(test)]
 mod supply_chain_cloud_vectors_tests;
