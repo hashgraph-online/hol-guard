@@ -96,3 +96,23 @@ fn malformed_requests_are_refused() {
         assert_eq!(document(&args), Err(ERR_INVALID));
     }
 }
+
+#[test]
+fn a_lone_surrogate_in_a_key_still_answers_the_source_python_decodes() {
+    for (text, source, had_comments) in [
+        (
+            r#"{"\ud800": 1, "b": "\udc00"}"#,
+            r#"{"\ud800": 1, "b": "\udc00"}"#,
+            false,
+        ),
+        ("// c\n{\"\\ud800\": [1,],}", "\n{\"\\ud800\": [1]}", true),
+    ] {
+        let answer = document(&json!({ "text": text })).unwrap();
+        assert_eq!(
+            answer,
+            json!({"source": source, "had_comments": had_comments, "parse_failed": false})
+        );
+    }
+    let answer = document(&json!({"text": r#"{"\ud800": 1"#})).unwrap();
+    assert_eq!(answer["parse_failed"], true);
+}

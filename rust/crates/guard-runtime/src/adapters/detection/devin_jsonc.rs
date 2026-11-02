@@ -10,7 +10,9 @@ use serde_json::{json, Value};
 
 use super::adapter_inventory::ERR_VALUE;
 use super::context_digest::python_strip;
-use super::pyjson::{parse_marking_lone_surrogates, JsonFailure, PyVal};
+use super::pyjson::{
+    parse_mapping_lone_surrogates, parse_marking_lone_surrogates, JsonFailure, PyVal,
+};
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 
 /// One `parse_devin_jsonc` outcome. `source` is the text whose object is the
@@ -30,7 +32,11 @@ pub(crate) fn document(args: &Value) -> KindResult {
         .and_then(|fields| fields.get("text"))
         .and_then(Value::as_str)
         .ok_or(ERR_INVALID)?;
-    let parsed = parse(text)?;
+    // Python decodes `source` itself, so a lone surrogate CPython keeps in a
+    // key or value only has to parse here, never to survive as a value.
+    let parsed = parse_with(text, |text| {
+        parse_mapping_lone_surrogates(text).map(|mapped| mapped.value)
+    })?;
     Ok(json!({
         "source": parsed.source,
         "had_comments": parsed.had_comments,
@@ -115,8 +121,11 @@ fn strip_jsonc_syntax(text: &str) -> String {
 /// One `json.loads` attempt: `Ok(None)` on a syntax error, the object or an
 /// unparsed marker otherwise. Integer-limit and depth failures raise in
 /// Python, so they are refused.
-fn loads(text: &str) -> Result<Option<Option<PyVal>>, &'static str> {
-    match parse_marking_lone_surrogates(text) {
+fn loads(
+    text: &str,
+    parser: impl Fn(&str) -> Result<PyVal, JsonFailure>,
+) -> Result<Option<Option<PyVal>>, &'static str> {
+    match parser(text) {
         Ok(value @ PyVal::Dict(_)) => Ok(Some(Some(value))),
         Ok(_) => Ok(Some(None)),
         Err(JsonFailure::Syntax) => Ok(None),
@@ -137,12 +146,20 @@ fn outcome(found: Option<(PyVal, String)>, had_comments: bool, parse_failed: boo
     }
 }
 
-/// `parse_devin_jsonc`.
+/// `parse_devin_jsonc`, with a lone surrogate in a value marked by
+/// `LONE_SURROGATE_MARK` and one in a key refused.
 pub(crate) fn parse(text: &str) -> Result<Parsed, &'static str> {
+    parse_with(text, parse_marking_lone_surrogates)
+}
+
+fn parse_with(
+    text: &str,
+    parser: impl Fn(&str) -> Result<PyVal, JsonFailure>,
+) -> Result<Parsed, &'static str> {
     if python_strip(text).is_empty() {
         return Ok(outcome(None, false, false));
     }
-    if let Some(parsed) = loads(text)? {
+    if let Some(parsed) = loads(text, &parser)? {
         let failed = parsed.is_none();
         let found = parsed.map(|payload| (payload, text.to_owned()));
         return Ok(outcome(found, false, failed));
@@ -151,7 +168,7 @@ pub(crate) fn parse(text: &str) -> Result<Parsed, &'static str> {
     if python_strip(&stripped).is_empty() {
         return Ok(outcome(None, true, false));
     }
-    Ok(match loads(&stripped)? {
+    Ok(match loads(&stripped, &parser)? {
         None => outcome(None, false, true),
         Some(None) => outcome(None, true, true),
         Some(Some(payload)) => outcome(Some((payload, stripped)), true, false),
