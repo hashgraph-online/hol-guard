@@ -7,6 +7,7 @@ import { ContextAgentProbe } from "./context-agent-probe";
 import { execFileSync } from "node:child_process";
 import { contextHistoryAndRepairFlow, clearContextFromRepair } from "./context-history-flow";
 import { contextSharingFlow } from "./context-sharing-flow";
+import { chooseMenuOption } from "../select-menu";
 
 async function saveWithProof(page: import("@playwright/test").Page, state: IntegrationState) {
   const label = new URL(page.url()).pathname === "/cigar" ? "Save CIGAR preferences" : "Save settings";
@@ -98,7 +99,7 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     expect(pending.data.phase).toBe("pending");
     expect(JSON.stringify(pending)).not.toContain("credential");
     expect((await probe.request("get_guard_context", { query: "release procedure" })).ok).toBe(false);
-    await page.getByRole("combobox", { name: "Context consumer", exact: true }).selectOption("codex");
+    await chooseMenuOption(page.getByRole("combobox", { name: "Context consumer", exact: true }), "codex");
     await page.getByLabel("Files relative to the workspace, one per line").fill("README.md");
     await page.getByRole("button", { name: "Grant review source access" }).click();
     const appSourceProof = page.getByRole("dialog");
@@ -108,11 +109,11 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     await page.getByRole("button", { name: "Refresh app connections", exact: true }).click();
     const connection = page.getByRole("region", { name: `Context connection ${pending.data.session_id}`, exact: true });
     await expect(connection.getByText("Waiting for your permission", { exact: false })).toBeVisible();
-    await connection.getByRole("combobox", { name: "Workspace and app grant", exact: true }).selectOption({ index: 1 });
+    await chooseMenuOption(connection.getByRole("combobox", { name: "Workspace and app grant", exact: true }), { index: 0 });
     const unprovedPair = await page.request.post(`${state.origin}/v1/context-assistance/workspace-grant`, {
       headers: { "x-guard-token": state.daemonToken }, data: { input: {
         action: "authorize_agent", session_id: pending.data.session_id,
-        scope_id: await connection.getByRole("combobox", { name: "Workspace and app grant", exact: true }).inputValue(),
+        scope_id: await connection.getByRole("combobox", { name: "Workspace and app grant", exact: true }).getAttribute("data-value"),
       } },
     });
     expect([401, 403, 423]).toContain(unprovedPair.status());
@@ -135,7 +136,7 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     expect(agentBrief.citations.length).toBeGreaterThanOrEqual(2);
     expect((await probe.request("explain_guard_context", { snapshot_id: agentBrief.snapshot_id })).ok).toBe(true);
     expect((await probe.request("get_guard_context", { query: "release procedure", scope_id: "foreign", app: "cursor" })).ok).toBe(false);
-    await page.getByRole("combobox", { name: "Context consumer", exact: true }).selectOption("dashboard");
+    await chooseMenuOption(page.getByRole("combobox", { name: "Context consumer", exact: true }), "dashboard");
     await page.getByLabel("Files relative to the workspace, one per line").fill("README.md");
     await page.getByRole("button", { name: "Grant review source access" }).click();
     const reviewSourceProof = page.getByRole("dialog");

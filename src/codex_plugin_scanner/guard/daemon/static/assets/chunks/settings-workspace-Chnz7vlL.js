@@ -1,8 +1,8 @@
-import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, S as SectionLabel, ab as useFocusTrap, aZ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a_ as ApprovalProofFieldInputs, a$ as isApprovalProofSubmitDisabled, b0 as buildApprovalProofCredentials, b1 as changeCloudReviewSettings, b2 as shellHref, c as contextStatusCopy, b3 as listContextAgentSessions, h as harnessDisplayName, b4 as revokeContextAgentSession, b5 as authorizeContextAgentSession, b6 as ContextAssistanceApiError, b7 as ask, b8 as parseContextScope, b9 as validContextBrokerRevision, ba as listContextWorkspaces, bb as manageContextWorkspace, bc as grantContextWorkspace, bd as compileWorkspaceContext, be as isCigarProducerVersion, bf as isCigarCoreLabel, w as HiMiniArrowRight, k as HiMiniCheck, m as HiMiniHandRaised, bg as HiMiniBookOpen, u as HiMiniDocumentText, v as HiMiniCheckCircle, M as HiMiniClipboardDocument, bh as HiMiniArrowLeft, bi as HiMiniAcademicCap, bj as subscribeDashboardLocation, bk as isGuardDemoMode, bl as fetchWithGuardAuth, bm as parseContextAssistanceStatus, bn as isCigarBuildIdentity, bo as fetchContextInstallations, f as fetchContextAssistance, a as controlContextAssistance, bp as commitDashboardLocation, bq as savedEvidenceCopy, br as downloadBlob, bs as guardAwareHref, bt as fetchContextData, bu as forgetContextHistory, bv as forgetSavedEvidence, bw as resolveProtectionLevelCopy, aA as fetchSettings, bx as fetchRuntimeSnapshot, by as clearHarnessWatchOverrides, bz as withHarnessPosturePatch, P as updateSettings, bA as clearPolicy, bB as clearReviewQueue, bC as revokeApprovalGateCooldown, bD as disableApprovalGateTotp, bE as importSettings, bF as resetSettings, bG as enrollApprovalGateTotp, bH as verifyApprovalGateTotp, bI as clearEvidence, bJ as exportDiagnostics, bK as repairApprovalCenter, bL as exportSettings, bM as setupDesktopNotifications, a7 as EmptyState, bN as settingsWatchBannerModel, bO as WorkspacePageHeader, Z as WatchProtectionBanner, t as HiMiniMagnifyingGlass, bP as navigateFromAnchor, g as HiMiniChevronDown, ad as HiMiniExclamationTriangle, bQ as humanizeList, bR as isProtectionPosture, bS as deriveProtectionPosture, bT as normalizeHarnessPostures, bU as approvalGateCooldownLabel } from "../guard-dashboard.js";
-import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-D4TJjc9y.js";
+import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as shellHref, c as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b4 as HiMiniPauseCircle, b5 as listContextAgentSessions, h as harnessDisplayName, b6 as HiMiniLink, b7 as revokeContextAgentSession, b8 as authorizeContextAgentSession, b9 as ContextAssistanceApiError, ba as ask, bb as parseContextScope, bc as validContextBrokerRevision, bd as listContextWorkspaces, be as HiMiniFolderOpen, bf as HiMiniFolder, u as HiMiniDocumentText, bg as grantContextWorkspace, bh as manageContextWorkspace, bi as compileWorkspaceContext, bj as isCigarProducerVersion, bk as isCigarCoreLabel, w as HiMiniArrowRight, k as HiMiniCheck, m as HiMiniHandRaised, bl as HiMiniBookOpen, M as HiMiniClipboardDocument, bm as HiMiniArrowLeft, bn as HiMiniAcademicCap, bo as subscribeDashboardLocation, bp as HiMiniArrowUpCircle, a5 as HiMiniSparkles, bq as isGuardDemoMode, br as fetchWithGuardAuth, bs as parseContextAssistanceStatus, bt as isCigarBuildIdentity, bu as fetchContextInstallations, bv as HiMiniCloudArrowDown, f as fetchContextAssistance, a as controlContextAssistance, bw as commitDashboardLocation, bx as HiMiniArrowDownTray, by as downloadBlob, bz as savedEvidenceCopy, bA as guardAwareHref, bB as fetchContextData, bC as forgetContextHistory, bD as forgetSavedEvidence, bE as resolveProtectionLevelCopy, aA as fetchSettings, bF as fetchRuntimeSnapshot, bG as clearHarnessWatchOverrides, bH as withHarnessPosturePatch, P as updateSettings, bI as clearPolicy, bJ as clearReviewQueue, bK as revokeApprovalGateCooldown, bL as disableApprovalGateTotp, bM as importSettings, bN as resetSettings, bO as enrollApprovalGateTotp, bP as verifyApprovalGateTotp, bQ as clearEvidence, bR as exportDiagnostics, bS as repairApprovalCenter, bT as exportSettings, bU as setupDesktopNotifications, a7 as EmptyState, bV as settingsWatchBannerModel, bW as WorkspacePageHeader, Z as WatchProtectionBanner, t as HiMiniMagnifyingGlass, bX as navigateFromAnchor, g as HiMiniChevronDown, bY as humanizeList, bZ as isProtectionPosture, b_ as deriveProtectionPosture, b$ as normalizeHarnessPostures, c0 as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-DWkfO5xd.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
-import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-Cs5DC4oq.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-sWNubUNf.js";
+import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-D_YTXeN9.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-Dh1EACz2.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
   if (typeof count2 === "number" && count2 > 0) {
@@ -17,9 +17,9 @@ function removalOutcomeMessage(report) {
   }
   return "Guard hooks were removed. Your coding apps now run without Guard protection.";
 }
-function AffectedList({ items, label }) {
+function AffectedList({ items, label: label2 }) {
   if (items.length === 0) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "flex flex-wrap gap-1.5", "aria-label": label, children: items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: describeAffectedHarness(item) }) }, item.harness)) });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "flex flex-wrap gap-1.5", "aria-label": label2, children: items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: describeAffectedHarness(item) }) }, item.harness)) });
 }
 function remainingHooksMessage(report) {
   const remaining = report.post_state?.remaining_harnesses ?? [];
@@ -2254,7 +2254,7 @@ function SettingsFormSection({ title, description, children }) {
   ] });
 }
 function SettingsToggleRow({
-  label,
+  label: label2,
   description,
   checked,
   onChange,
@@ -2269,7 +2269,7 @@ function SettingsToggleRow({
   }, [checked, disabled, onChange]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-4 py-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: labelId, className: "guard-settings-body font-medium text-brand-dark", children: label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: labelId, className: "guard-settings-body font-medium text-brand-dark", children: label2 }),
       description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: descriptionId, className: "guard-settings-caption mt-0.5 text-slate-500", children: description }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2294,7 +2294,7 @@ function SettingsToggleRow({
   ] });
 }
 function SettingsSelectRow({
-  label,
+  label: label2,
   description,
   value,
   options,
@@ -2305,7 +2305,7 @@ function SettingsSelectRow({
   const descriptionId = reactExports.useId();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: selectId, className: "guard-settings-body font-medium text-brand-dark", children: label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: selectId, className: "guard-settings-body font-medium text-brand-dark", children: label2 }),
       description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: descriptionId, className: "guard-settings-caption mt-0.5 text-slate-500", children: description }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2318,6 +2318,27 @@ function SettingsSelectRow({
         "aria-describedby": description ? descriptionId : void 0,
         className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60",
         children: options.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option.value, children: option.label }, option.value))
+      }
+    )
+  ] });
+}
+function SettingsMenuRow({ label: label2, description, value, options, onChange, disabled = false }) {
+  const labelId = reactExports.useId();
+  const descriptionId = reactExports.useId();
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_240px] md:items-center", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: labelId, className: "guard-settings-body font-medium text-brand-dark", children: label2 }),
+      description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: descriptionId, className: "guard-settings-caption mt-0.5 text-slate-500", children: description }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SelectMenu,
+      {
+        labelledBy: labelId,
+        describedBy: description ? descriptionId : void 0,
+        value,
+        options,
+        disabled,
+        onChange
       }
     )
   ] });
@@ -2714,41 +2735,82 @@ function ContextExecutionPanel({ status }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Up to 32 metadata observations remain in memory for five minutes. Entries can be omitted; this is a context check record. Guard's native journal owns execution, approvals and uncertain outcomes." })
   ] });
 }
-const versionButton = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
-const versionField = "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark";
-const versionCard = "space-y-3 rounded-xl border border-slate-200 bg-white p-4";
+const control = "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none";
+const versionButton = control + " border border-slate-200 bg-white text-brand-dark hover:border-slate-300 hover:bg-slate-50";
+const versionPrimary = control + " border border-transparent bg-brand-blue text-white shadow-sm shadow-brand-blue/20 hover:bg-brand-blue/90";
+const versionQuiet = control + " text-brand-dark/80 hover:bg-brand-dark/[0.05] hover:text-brand-dark";
+const versionField = "mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark transition-colors hover:border-brand-blue/40 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:bg-slate-50";
+const versionList = "divide-y divide-brand-dark/[0.07] overflow-hidden rounded-2xl border border-brand-dark/10 bg-white";
+const versionHeading = "text-base font-semibold tracking-[-0.01em] text-brand-dark";
+const versionLead = "mt-1 max-w-[62ch] text-sm leading-6 text-brand-dark/70";
 const versionBytes = (bytes) => (bytes / 1048576).toFixed(1) + " MiB";
 const installationLabel = (qualification2) => qualification2 === "guard_qualified" ? "checked on this computer" : "local development build";
+const OS = { darwin: "macOS", linux: "Linux", windows: "Windows", win32: "Windows" };
+const ARCH = { arm64: "Apple silicon", aarch64: "Arm", x86_64: "Intel", amd64: "Intel", x64: "Intel" };
+function platformLabel(platform2) {
+  if (!platform2) return "Unknown computer";
+  const [os, ...rest] = platform2.split("-");
+  const arch = rest.join("-");
+  const name = OS[os];
+  if (!name) return platform2;
+  const chip = os === "darwin" ? ARCH[arch] : arch === "arm64" || arch === "aarch64" ? "Arm" : ARCH[arch];
+  return chip ? name + " · " + chip : name;
+}
 function CigarRuntimeSelection(props) {
   const id2 = props.status?.preferences.runtime_id ?? props.value.runtime_id;
   const selected = props.installations?.find((item) => item.runtime_id === id2);
   const pending = props.status !== null && props.value.runtime_id !== id2;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Selected runtime" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all text-sm text-slate-600", children: id2 || "No runtime selected" }),
-    selected ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
-      selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : "",
-      "Python ",
-      selected.python_version.join("."),
-      " · ",
-      selected.platform,
-      " · ",
-      installationLabel(selected.qualification)
-    ] }) : null,
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 py-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-x-6 gap-y-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-[1_1_16rem]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-body font-medium text-brand-dark", children: "Selected runtime" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 break-all font-mono text-sm text-brand-dark/80", children: id2 || "No runtime selected" }),
+        selected ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "guard-settings-caption mt-0.5 text-slate-500", children: [
+          selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : "",
+          "Python ",
+          selected.python_version.join("."),
+          " · ",
+          platformLabel(selected.platform),
+          " · ",
+          installationLabel(selected.qualification)
+        ] }) : null
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+        props.onManage ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onManage, children: "Choose or switch runtime" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: versionButton, href: shellHref("/cigar?section=versions"), children: "Choose or switch runtime" }),
+        props.installations !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionQuiet, disabled: props.disabled, onClick: props.onRefresh, children: "Refresh runtime list" }) : null
+      ] })
+    ] }),
     props.installations?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No registered CIGAR runtime is available in this profile. Python 3.14 may already be installed; use Updates to inspect approved builds and registration options." }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Choose, prepare and switch runtimes in Updates. A separate selection job protects your current runtime and data." }),
-    props.onManage ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onManage, children: "Choose or switch runtime" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: versionButton + " inline-flex items-center", href: shellHref("/cigar?section=versions"), children: "Choose or switch runtime" }),
-    props.installations !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onRefresh, children: "Refresh runtime list" }) : null,
-    pending ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "text-sm text-amber-800", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption text-slate-500", children: "Choose, prepare and switch runtimes in Updates. A separate selection job protects your current runtime and data." }),
+    pending ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A pending runtime choice is in this form. Use the current selection before preparing a different runtime in Updates." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onRestore, children: "Use current selection" })
     ] }) : null
   ] });
 }
-const buttonClass = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const note = "rounded-xl border border-brand-dark/10 bg-surface-1 px-4 py-3 text-sm leading-6 text-brand-dark/75";
+const caption$1 = "text-xs leading-5 text-slate-500";
+const PROFILES = [
+  { value: "low_memory", label: "Smaller context", description: "One project at a time. Stops after two idle minutes." },
+  { value: "balanced", label: "Balanced", description: "Two projects at a time. Stops after ten idle minutes." },
+  { value: "custom", label: "Custom limits", description: "Set your own limits under Advanced." }
+];
+function Group({ title, children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-semibold text-brand-dark", children: title }),
+    children
+  ] });
+}
+function Fact({ term, children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl bg-surface-1 px-3 py-2.5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-500", children: term }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-sm font-medium text-brand-dark", children })
+  ] });
+}
 function ContextSettingsControls(props) {
   const { value, status, installations } = props;
   const titleId = reactExports.useId();
+  const storageId = reactExports.useId();
   const statusCopy = status ? contextStatusCopy(status) : null;
   const selected = installations?.some((item) => item.runtime_id === value?.runtime_id) === true;
   const disabled = props.disabled || props.busy;
@@ -2756,284 +2818,307 @@ function ContextSettingsControls(props) {
   const checkDisabled = disabled || props.dirty || !status?.verification_permitted || Boolean(status?.job) || !value?.runtime_id;
   const stopped = !value?.enabled && !status?.requested_enabled && !status?.job && !status?.effective_enabled;
   const runtime = status?.runtime ?? status?.last_check;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsFormSection, { title: "Context assistance", description: "Optional local context from CIGAR helps explain work using the sources you authorize.", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 py-4", "aria-labelledby": titleId, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { id: titleId, className: "text-sm font-semibold text-brand-dark", children: runtime ? "CIGAR " + runtime.package_version : "CIGAR runtime" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", role: "status", "aria-live": "polite", children: props.loading ? "Checking availability…" : statusCopy ? `${statusCopy.label}. ${statusCopy.detail}` : "Availability has not been verified." })
+  const running = status?.effective_enabled === true;
+  const attention = !running && Boolean(status?.requested_enabled && !status.job);
+  const [Icon, tone] = running ? [HiMiniCheckCircle, "bg-brand-green-bg text-brand-green-text"] : attention ? [HiMiniExclamationTriangle, "bg-amber-100 text-amber-700"] : [HiMiniPauseCircle, "bg-brand-dark/[0.06] text-brand-dark/55"];
+  const effective = status?.effective_preferences ?? value;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("section", { "aria-labelledby": titleId, className: "guard-surface-in rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-x-6 gap-y-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-[1_1_20rem] items-start gap-3.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-10 shrink-0 items-center justify-center rounded-full " + tone, children: props.loading || status?.job ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-5 motion-safe:animate-spin" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "size-5" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-1.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: titleId, className: "text-lg font-semibold tracking-[-0.01em] text-brand-dark", children: runtime ? "CIGAR " + runtime.package_version : "CIGAR runtime" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-[62ch] text-sm leading-6 text-brand-dark/75", role: "status", "aria-live": "polite", children: props.loading ? "Checking availability…" : statusCopy ? `${statusCopy.label}. ${statusCopy.detail}` : "Availability has not been verified." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "CIGAR uses its own copy of Python 3.14. Guard sets it up for you when you click Turn on CIGAR." })
+        ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: buttonClass, disabled: disabled || props.loading, onClick: props.onRefresh, children: "Refresh status" })
-    ] }),
-    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "text-sm text-red-700", children: props.error }) : null,
-    props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: "Save settings before checking or starting this runtime." }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-      status?.requested_enabled && !status.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          className: buttonClass + " border-brand-blue bg-brand-blue/10",
-          disabled: checkDisabled || !status.effective_preferences.enabled,
-          onClick: () => props.onControl("activate"),
-          children: "Start context assistance"
-        }
-      ) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: buttonClass, disabled: checkDisabled, onClick: () => props.onControl("recheck"), children: "Check selected runtime" }),
-      !stopped ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: buttonClass, disabled, onClick: () => props.onControl("stop"), children: "Turn off now" }) : null
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "CIGAR uses its own copy of Python 3.14. Guard sets it up for you when you click Turn on CIGAR." }),
-    props.locked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Your organization manages these preferences. You can still turn context assistance off." }) : null,
-    status?.restriction ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Policy restrictions apply. Your saved choices are retained; effective limits are shown below." }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: [
+        status?.requested_enabled && !status.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: versionPrimary,
+            disabled: checkDisabled || !status.effective_preferences.enabled,
+            onClick: () => props.onControl("activate"),
+            children: "Start context assistance"
+          }
+        ) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: checkDisabled, onClick: () => props.onControl("recheck"), children: "Check selected runtime" }),
+        !stopped ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled, onClick: () => props.onControl("stop"), children: "Turn off now" }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            "aria-label": "Refresh runtime status",
+            title: "Refresh runtime status",
+            disabled: disabled || props.loading,
+            onClick: props.onRefresh,
+            className: "inline-flex size-11 items-center justify-center rounded-lg text-brand-dark/70 hover:bg-brand-dark/[0.05] hover:text-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-50",
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "size-4" })
+          }
+        )
+      ] })
+    ] }) }),
+    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "cigar-note", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR needs attention" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: props.error })
+    ] }) : null,
+    props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: note, children: "Save settings before checking or starting this runtime." }) : null,
+    props.locked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: note, children: "Your organization manages these preferences. You can still turn context assistance off." }) : null,
+    status?.restriction ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: note, children: "Policy restrictions apply. Your saved choices are retained; effective limits are shown below." }) : null,
     value ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        SettingsToggleRow,
-        {
-          label: "Use CIGAR on this machine",
-          checked: value.enabled,
-          description: "Lets CIGAR run on this computer. The Turn on CIGAR button sets this for you.",
-          disabled: editingDisabled || !value.enabled && !selected,
-          onChange: (enabled) => props.onChange({ ...value, enabled })
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        CigarRuntimeSelection,
-        {
-          value,
-          status,
-          installations,
-          disabled,
-          onManage: props.onManageVersions,
-          onRefresh: props.onChooseRuntime,
-          onRestore: () => {
-            if (status) props.onChange({
-              ...value,
-              runtime_id: status.preferences.runtime_id,
-              enabled: value.enabled && Boolean(status.preferences.runtime_id)
-            });
-          }
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        SettingsSelectRow,
-        {
-          label: "Context size",
-          value: value.resource_profile,
-          disabled: editingDisabled,
-          description: "Smaller context uses one workspace and stops after two idle minutes. Balanced allows two workspaces and ten idle minutes.",
-          options: [{ value: "low_memory", label: "Smaller context" }, { value: "balanced", label: "Balanced" }, { value: "custom", label: "Custom limits" }],
-          onChange: (event) => props.onChange(withContextProfile(value, event.target.value))
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        SettingsToggleRow,
-        {
-          label: "Review briefs",
-          description: "Prepare cited context to help you understand a request. Guard's approval choices stay available.",
-          checked: value.features.review_briefs,
-          disabled: editingDisabled,
-          onChange: (review_briefs) => props.onChange({ ...value, features: { ...value.features, review_briefs } })
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        SettingsToggleRow,
-        {
-          label: "Context for AI apps",
-          description: "Allow scoped context tools for apps you authorize. Sharing between agents requires a separate choice.",
-          checked: value.features.agent_context,
-          disabled: editingDisabled,
-          onChange: (agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        SettingsToggleRow,
-        {
-          label: "Share context between paired AI connections",
-          description: "Separate connections for the same app and workspace can use shared context. Notes require explicit access and your review before sharing. Saving this change ends existing context grants; pair connections again after starting the runtime.",
-          checked: value.features.shared_agents,
-          disabled: editingDisabled || !value.features.agent_context || status?.capabilities?.shared_agents !== true,
-          onChange: (shared_agents) => props.onChange({ ...value, features: { ...value.features, shared_agents } })
-        }
-      ),
-      !value.features.agent_context ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Enable Context for AI apps before choosing sharing." }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-lg border border-slate-100 p-3 text-sm", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer font-medium text-brand-dark", children: "Sources, limits and runtime details" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(SettingsFormSection, { title: "Runtime", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           SettingsToggleRow,
           {
-            label: "Associate native context with execution",
-            description: "Add a short context check to supported native captured-Bash commands. Requires native facts and fresh app/workspace access. Guard proceeds under its existing authorization when the association is unavailable.",
-            checked: value.features.execution_context === true,
-            disabled: editingDisabled || value.features.execution_context !== true && (status?.capabilities?.execution_context !== true || !value.sources.native_policy_facts),
-            onChange: (execution_context) => props.onChange({ ...value, features: { ...value.features, execution_context } })
-          }
-        ),
-        status?.capabilities?.execution_context !== true ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "This native execution route is unavailable in the current build. Review briefs and scoped context tools have their own controls." }) : null,
-        !value.sources.native_policy_facts ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Enable native policy and decision facts to choose execution associations." }) : null,
-        value.resource_profile === "custom" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "mt-3 grid gap-3 sm:grid-cols-2", disabled: editingDisabled, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "mb-2 font-medium text-brand-dark", children: "Custom limits" }),
-          [
-            ["context_tokens", "Context token budget", 64, 16384],
-            ["reserve_tokens", "Reserved tokens", 0, value.limits.context_tokens - 1],
-            ["max_active_workspaces", "Active workspaces", 1, 8],
-            ["idle_shutdown_seconds", "Idle shutdown in seconds", 30, 3600]
-          ].map(([key2, label, min, max]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "text-sm text-slate-600", children: [
-            label,
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "number",
-                min,
-                max,
-                step: 1,
-                value: value.limits[key2],
-                className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 px-3 py-2 text-brand-dark",
-                onChange: (event) => {
-                  const next = event.target.valueAsNumber;
-                  if (Number.isSafeInteger(next)) props.onChange({ ...value, limits: { ...value.limits, [key2]: next } });
-                }
-              }
-            )
-          ] }, key2))
-        ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          SettingsToggleRow,
-          {
-            label: "Native policy and decision facts",
-            description: "Use admitted policy facts and native evaluation metadata. Up to 64 recent native decisions stay in local memory for five minutes.",
-            checked: value.sources.native_policy_facts,
-            disabled: editingDisabled,
-            onChange: (native_policy_facts) => props.onChange({
-              ...value,
-              features: { ...value.features, execution_context: native_policy_facts && value.features.execution_context === true },
-              sources: { ...value.sources, native_policy_facts }
-            })
+            label: "Use CIGAR on this machine",
+            checked: value.enabled,
+            description: "Lets CIGAR run on this computer. The Turn on CIGAR button sets this for you.",
+            disabled: editingDisabled || !value.enabled && !selected,
+            onChange: (enabled) => props.onChange({ ...value, enabled })
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          SettingsToggleRow,
+          CigarRuntimeSelection,
           {
-            label: "Sanitized receipt facts",
-            description: "Use sanitized facts from Guard's local history.",
-            checked: value.sources.sanitized_receipt_facts,
-            disabled: editingDisabled,
-            onChange: (sanitized_receipt_facts) => props.onChange({ ...value, sources: { ...value.sources, sanitized_receipt_facts } })
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-slate-600", children: "Workspace documents require explicit source access. Runtime activation grants no document access." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          SettingsToggleRow,
-          {
-            label: "Allow selected workspace documents",
-            description: "After saving, choose each folder and file in Workspace context access. Files are read only with an explicit grant.",
-            checked: value.sources.workspace_documents,
-            disabled: editingDisabled,
-            onChange: (workspace_documents) => props.onChange({ ...value, sources: {
-              ...value.sources,
-              workspace_documents,
-              source_set_id: workspace_documents ? value.sources.source_set_id || "selected-workspaces" : value.sources.source_set_id
-            } })
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block text-sm text-slate-600", children: [
-          "Evidence storage",
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "select",
-            {
-              value: value.storage.mode,
-              disabled: editingDisabled,
-              className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 px-3 py-2 text-brand-dark",
-              onChange: (event) => props.onChange({ ...value, storage: { ...value.storage, mode: event.target.value === "sqlite" ? "sqlite" : "memory" } }),
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "memory", children: "Memory only (recommended)" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "sqlite", disabled: status?.capabilities?.private_persistence !== true, children: "Save evidence locally" })
-              ]
+            value,
+            status,
+            installations,
+            disabled,
+            onManage: props.onManageVersions,
+            onRefresh: props.onChooseRuntime,
+            onRestore: () => {
+              if (status) props.onChange({
+                ...value,
+                runtime_id: status.preferences.runtime_id,
+                enabled: value.enabled && Boolean(status.preferences.runtime_id)
+              });
             }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Memory data ends when the runtime stops. Saved evidence uses private local files, with no Guard encryption; it can outlive the runtime until retention or removal. Restoring it never restores app access or approvals. Saving a storage change ends current context access." }),
-        status?.capabilities?.private_persistence !== true ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Saved evidence activation is unavailable in this build. Existing saved data can be removed in Data & repair." }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block text-sm text-slate-600", children: [
-          "Context history, saved evidence and shared-note retention in hours",
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(SettingsFormSection, { title: "What CIGAR helps with", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SettingsMenuRow,
+          {
+            label: "Context size",
+            value: value.resource_profile,
+            disabled: editingDisabled,
+            options: PROFILES,
+            description: "How much CIGAR keeps ready at once. Smaller suits most laptops.",
+            onChange: (profile) => props.onChange(withContextProfile(value, profile))
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SettingsToggleRow,
+          {
+            label: "Review briefs",
+            description: "Prepare cited context to help you understand a request. Guard's approval choices stay available.",
+            checked: value.features.review_briefs,
+            disabled: editingDisabled,
+            onChange: (review_briefs) => props.onChange({ ...value, features: { ...value.features, review_briefs } })
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SettingsToggleRow,
+          {
+            label: "Context for AI apps",
+            description: "Allow scoped context tools for apps you authorize. Sharing between agents requires a separate choice.",
+            checked: value.features.agent_context,
+            disabled: editingDisabled,
+            onChange: (agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
+            SettingsToggleRow,
             {
-              type: "number",
-              min: 1,
-              max: 720,
-              step: 1,
-              value: value.storage.retention_hours,
-              disabled: editingDisabled,
-              className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 px-3 py-2 text-brand-dark",
-              onChange: (event) => {
-                const retention_hours = event.target.valueAsNumber;
-                if (Number.isSafeInteger(retention_hours)) props.onChange({ ...value, storage: { ...value.storage, retention_hours } });
-              }
+              label: "Share context between paired AI connections",
+              description: "Separate connections for the same app and workspace can use shared context. Notes require explicit access and your review before sharing. Saving this change ends existing context grants; pair connections again after starting the runtime.",
+              checked: value.features.shared_agents,
+              disabled: editingDisabled || !value.features.agent_context || status?.capabilities?.shared_agents !== true,
+              onChange: (shared_agents) => props.onChange({ ...value, features: { ...value.features, shared_agents } })
             }
-          )
+          ),
+          !value.features.agent_context ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1 + " pb-3", children: "Enable Context for AI apps before choosing sharing." }) : null
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group rounded-2xl border border-brand-dark/10 bg-white", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 hover:bg-surface-1 sm:px-5 [&::-webkit-details-marker]:hidden", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-4 shrink-0 text-brand-dark/50 transition-transform group-open:rotate-90 motion-reduce:transition-none" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: "Advanced" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-xs text-brand-dark/60", children: "Sources, limits, storage and runtime details" })
+          ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Memory data also ends when access is revoked, the runtime stops, or Guard restarts. Changing preferences requires fresh grants." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid gap-2 sm:grid-cols-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Effective context budget" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { children: [
-              (status?.effective_preferences ?? value).limits.context_tokens,
-              " tokens, including ",
-              (status?.effective_preferences ?? value).limits.reserve_tokens,
-              " reserved"
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Effective workspace limit" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: (status?.effective_preferences ?? value).limits.max_active_workspaces })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Effective idle shutdown" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { children: [
-              (status?.effective_preferences ?? value).limits.idle_shutdown_seconds,
-              " seconds"
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Storage" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: value.storage.mode === "memory" ? "Memory only" : "Private persistence requested" })
-          ] }),
-          runtime ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Last verified Python" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { children: [
-                runtime.interpreter.version.join("."),
-                " · ",
-                runtime.interpreter.platform
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8 border-t border-brand-dark/[0.07] px-4 py-5 sm:px-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(Group, { title: "Sources", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divide-y divide-slate-100", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                SettingsToggleRow,
+                {
+                  label: "Native policy and decision facts",
+                  description: "Use admitted policy facts and native evaluation metadata. Up to 64 recent native decisions stay in local memory for five minutes.",
+                  checked: value.sources.native_policy_facts,
+                  disabled: editingDisabled,
+                  onChange: (native_policy_facts) => props.onChange({
+                    ...value,
+                    features: { ...value.features, execution_context: native_policy_facts && value.features.execution_context === true },
+                    sources: { ...value.sources, native_policy_facts }
+                  })
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                SettingsToggleRow,
+                {
+                  label: "Sanitized receipt facts",
+                  description: "Use sanitized facts from Guard's local history.",
+                  checked: value.sources.sanitized_receipt_facts,
+                  disabled: editingDisabled,
+                  onChange: (sanitized_receipt_facts) => props.onChange({ ...value, sources: { ...value.sources, sanitized_receipt_facts } })
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                SettingsToggleRow,
+                {
+                  label: "Allow selected workspace documents",
+                  description: "After saving, choose each folder and file in Workspace context access. Files are read only with an explicit grant.",
+                  checked: value.sources.workspace_documents,
+                  disabled: editingDisabled,
+                  onChange: (workspace_documents) => props.onChange({ ...value, sources: {
+                    ...value.sources,
+                    workspace_documents,
+                    source_set_id: workspace_documents ? value.sources.source_set_id || "selected-workspaces" : value.sources.source_set_id
+                  } })
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  SettingsToggleRow,
+                  {
+                    label: "Associate native context with execution",
+                    description: "Add a short context check to supported native captured-Bash commands. Requires native facts and fresh app/workspace access. Guard proceeds under its existing authorization when the association is unavailable.",
+                    checked: value.features.execution_context === true,
+                    disabled: editingDisabled || value.features.execution_context !== true && (status?.capabilities?.execution_context !== true || !value.sources.native_policy_facts),
+                    onChange: (execution_context) => props.onChange({ ...value, features: { ...value.features, execution_context } })
+                  }
+                ),
+                status?.capabilities?.execution_context !== true ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1 + " pb-2", children: "This native execution route is unavailable in the current build. Review briefs and scoped context tools have their own controls." }) : null,
+                !value.sources.native_policy_facts ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1 + " pb-2", children: "Enable native policy and decision facts to choose execution associations." }) : null
               ] })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Qualification" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: "Local development candidate" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Workspace documents require explicit source access. Runtime activation grants no document access." })
+          ] }),
+          value.resource_profile === "custom" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "grid gap-4 sm:grid-cols-2", disabled: editingDisabled, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "mb-3 text-sm font-semibold text-brand-dark", children: "Custom limits" }),
+            [
+              ["context_tokens", "Context token budget", 64, 16384],
+              ["reserve_tokens", "Reserved tokens", 0, value.limits.context_tokens - 1],
+              ["max_active_workspaces", "Active workspaces", 1, 8],
+              ["idle_shutdown_seconds", "Idle shutdown in seconds", 30, 3600]
+            ].map(([key2, label2, min, max]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "text-sm font-medium text-brand-dark", children: [
+              label2,
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "number",
+                  min,
+                  max,
+                  step: 1,
+                  value: value.limits[key2],
+                  className: versionField + " tabular-nums",
+                  onChange: (event) => {
+                    const next = event.target.valueAsNumber;
+                    if (Number.isSafeInteger(next)) props.onChange({ ...value, limits: { ...value.limits, [key2]: next } });
+                  }
+                }
+              )
+            ] }, key2))
+          ] }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(Group, { title: "Storage", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: storageId, className: "text-sm font-medium text-brand-dark", children: "Evidence storage" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  SelectMenu,
+                  {
+                    labelledBy: storageId,
+                    className: "mt-1.5 w-full",
+                    value: value.storage.mode,
+                    disabled: editingDisabled,
+                    options: [
+                      { value: "memory", label: "Memory only (recommended)", description: "Notes disappear when CIGAR stops." },
+                      { value: "sqlite", label: "Save evidence locally", description: status?.capabilities?.private_persistence === true ? "Private local files that can outlive the runtime." : "Not available in this build.", disabled: status?.capabilities?.private_persistence !== true }
+                    ],
+                    onChange: (mode2) => props.onChange({ ...value, storage: { ...value.storage, mode: mode2 } })
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block text-sm font-medium text-brand-dark", children: [
+                "Retention in hours",
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "number",
+                    min: 1,
+                    max: 720,
+                    step: 1,
+                    value: value.storage.retention_hours,
+                    disabled: editingDisabled,
+                    className: versionField + " tabular-nums",
+                    "aria-describedby": storageId + "-retention",
+                    onChange: (event) => {
+                      const retention_hours = event.target.valueAsNumber;
+                      if (Number.isSafeInteger(retention_hours)) props.onChange({ ...value, storage: { ...value.storage, retention_hours } });
+                    }
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: storageId + "-retention", className: caption$1 + " mt-1 block font-normal", children: "Applies to context history, saved evidence and shared notes." })
+              ] })
             ] }),
-            value.features.shared_agents ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Shared context check" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: runtime.shared_compile_verified ? "Verified with an independent local client" : "Check and start the selected runtime" })
-            ] }) : null,
-            value.storage.mode === "sqlite" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Saved evidence check" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: runtime.persistence_compile_verified ? "Verified write, restart and fresh-grant recovery" : "Check and start the selected runtime" })
-            ] }) : null,
-            value.features.execution_context ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Execution SDK check" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: runtime.execution_handoff_verified ? "Verified submission, host review, binding and one-time context take" : "Check and start the selected runtime" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Memory data ends when the runtime stops. Saved evidence uses private local files, with no Guard encryption; it can outlive the runtime until retention or removal. Restoring it never restores app access or approvals. Saving a storage change ends current context access." }),
+            status?.capabilities?.private_persistence !== true ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Saved evidence activation is unavailable in this build. Existing saved data can be removed in Data & repair." }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Memory data also ends when access is revoked, the runtime stops, or Guard restarts. Changing preferences requires fresh grants." })
+          ] }),
+          effective ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Group, { title: "In effect now", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid gap-2 sm:grid-cols-2 lg:grid-cols-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(Fact, { term: "Effective context budget", children: [
+                effective.limits.context_tokens,
+                " tokens, including ",
+                effective.limits.reserve_tokens,
+                " reserved"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { term: "Effective workspace limit", children: effective.limits.max_active_workspaces }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(Fact, { term: "Effective idle shutdown", children: [
+                effective.limits.idle_shutdown_seconds,
+                " seconds"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { term: "Storage", children: value.storage.mode === "memory" ? "Memory only" : "Private persistence requested" }),
+              runtime ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs(Fact, { term: "Last verified Python", children: [
+                  runtime.interpreter.version.join("."),
+                  " · ",
+                  runtime.interpreter.platform
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { term: "Qualification", children: "Local development candidate" }),
+                value.features.shared_agents ? /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { term: "Shared context check", children: runtime.shared_compile_verified ? "Verified with an independent local client" : "Check and start the selected runtime" }) : null,
+                value.storage.mode === "sqlite" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { term: "Saved evidence check", children: runtime.persistence_compile_verified ? "Verified write, restart and fresh-grant recovery" : "Check and start the selected runtime" }) : null,
+                value.features.execution_context ? /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { term: "Execution SDK check", children: runtime.execution_handoff_verified ? "Verified submission, host review, binding and one-time context take" : "Check and start the selected runtime" }) : null
+              ] }) : null
+            ] }),
+            status?.diagnostic ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: caption$1 + " break-words", children: [
+              "Diagnostic: ",
+              status.diagnostic
             ] }) : null
           ] }) : null
-        ] }),
-        status?.diagnostic ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 break-words text-xs text-slate-500", children: [
-          "Diagnostic: ",
-          status.diagnostic
-        ] }) : null
+        ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ContextExecutionPanel, { status })
-    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Update Guard to a native core with context assistance support before choosing these settings." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Context is supporting information. Guard keeps command protection and approval decisions in its native execution flow." })
-  ] }) });
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: note, children: "Update Guard to a native core with context assistance support before choosing these settings." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Context is supporting information. Guard keeps command protection and approval decisions in its native execution flow." })
+  ] });
 }
-const button$3 = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
+const empty$1 = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70";
 function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate }) {
   const [sessions, setSessions] = reactExports.useState([]);
   const [selected, setSelected] = reactExports.useState({});
@@ -3045,6 +3130,7 @@ function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate })
   const request = reactExports.useRef(null);
   const pending = reactExports.useRef(false);
   const allowed = ready && enabled;
+  const idBase = reactExports.useId();
   const confirmationScope = scopes.find((scope) => scope.scope_id === selected[confirm?.session_id ?? ""]);
   const refresh = reactExports.useCallback(async () => {
     if (!allowed || pending.current) return;
@@ -3107,54 +3193,70 @@ function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate })
       }
     }
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "AI app context connections", className: "space-y-3 rounded-lg border border-slate-200 p-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-semibold text-brand-dark", children: "AI app context connections" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Use Guard's MCP server in your app, then match the connection code from get_context_status before granting access. Pairing authenticates that MCP process; the app label is your permission choice. A running runtime alone grants no app access." }),
-    !allowed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Enable Context for AI apps, save settings and start a verified runtime to pair a connection." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      error || statusError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "text-sm text-red-700", children: error ?? statusError }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button$3, type: "button", disabled: busy, onClick: () => {
+  const grants = scopes.filter((scope) => !scope.revoked && scope.app !== "dashboard").map((scope) => ({
+    value: scope.scope_id,
+    label: harnessDisplayName(scope.app) + " · " + scope.workspace
+  }));
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "AI app context connections", className: "space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-end justify-between gap-x-6 gap-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: versionHeading, children: "AI app context connections" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Use Guard's MCP server in your app, then match the connection code from get_context_status before granting access. Pairing authenticates that MCP process; the app label is your permission choice. A running runtime alone grants no app access." })
+      ] }),
+      allowed ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet, type: "button", disabled: busy, onClick: () => {
         setError(null);
         void refresh();
-      }, children: "Refresh app connections" }),
-      sessions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No context connection is waiting or paired." }) : sessions.map((session) => /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-2 border-t border-slate-100 pt-3", "aria-label": `Context connection ${session.session_id}`, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all font-mono text-xs text-slate-600", children: [
-          "Connection code: ",
-          session.session_id
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
-          session.phase === "pending" ? "Waiting for your permission" : "Grant assigned",
-          " · expires in ",
-          Math.ceil(session.expires_in_seconds / 60),
-          " minutes."
-        ] }),
-        session.phase === "pending" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block text-sm text-slate-600", children: [
-            "Workspace and app grant",
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "select",
-              {
-                className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm",
-                disabled: busy || dirty,
-                value: selected[session.session_id] ?? "",
-                onChange: (event) => setSelected((values) => ({ ...values, [session.session_id]: event.target.value })),
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "Choose a grant" }),
-                  scopes.filter((scope) => !scope.revoked && scope.app !== "dashboard").map((scope) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: scope.scope_id, children: [
-                    harnessDisplayName(scope.app),
-                    " · ",
-                    scope.workspace
-                  ] }, scope.scope_id))
-                ]
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button$3, type: "button", disabled: busy || dirty || !selected[session.session_id], onClick: () => {
-            if (gate?.enabled) setConfirm(session);
-            else void perform(session);
-          }, children: "Authorize context connection" })
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: scopes.find((scope) => scope.scope_id === session.scope_id)?.workspace ?? "This grant is unavailable. Revoke it and pair again." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button$3, type: "button", disabled: busy, onClick: () => void perform(session, void 0, true), children: "Revoke context connection" })
-      ] }, session.session_id))
+      }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "size-4" }),
+        "Refresh app connections"
+      ] }) : null
+    ] }),
+    !allowed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty$1, children: "Enable Context for AI apps, save settings and start a verified runtime to pair a connection." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      error || statusError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "cigar-note", children: error ?? statusError }) : null,
+      sessions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty$1, children: "No context connection is waiting or paired." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-3", children: sessions.map((session) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "section",
+        {
+          className: "space-y-3 rounded-2xl border p-4 sm:p-5 " + (session.phase === "pending" ? "border-brand-blue/25 bg-brand-blue/[0.03]" : "border-brand-dark/10 bg-white"),
+          "aria-label": `Context connection ${session.session_id}`,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-9 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLink, { className: "size-4" }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: session.phase === "pending" ? "attention" : "green", children: session.phase === "pending" ? "Waiting for your permission" : "Grant assigned" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-brand-dark/60", children: [
+                "expires in ",
+                Math.ceil(session.expires_in_seconds / 60),
+                " minutes"
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all font-mono text-xs text-brand-dark/70", children: [
+              "Connection code: ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-brand-dark", children: session.session_id })
+            ] }),
+            session.phase === "pending" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: `${idBase}-${session.session_id}`, className: "text-sm font-medium text-brand-dark", children: "Workspace and app grant" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  SelectMenu,
+                  {
+                    labelledBy: `${idBase}-${session.session_id}`,
+                    className: "mt-1.5 w-full",
+                    disabled: busy || dirty,
+                    placeholder: "Choose a grant",
+                    value: selected[session.session_id] ?? "",
+                    options: grants,
+                    onChange: (value) => setSelected((values) => ({ ...values, [session.session_id]: value }))
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionPrimary, type: "button", disabled: busy || dirty || !selected[session.session_id], onClick: () => {
+                if (gate?.enabled) setConfirm(session);
+                else void perform(session);
+              }, children: "Authorize context connection" })
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all text-sm text-brand-dark/75", children: scopes.find((scope) => scope.scope_id === session.scope_id)?.workspace ?? "This grant is unavailable. Revoke it and pair again." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: busy, onClick: () => void perform(session, void 0, true), children: "Revoke context connection" })
+          ]
+        }
+      ) }, session.session_id)) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       SettingsSaveProofModal,
@@ -3215,7 +3317,7 @@ async function decideContextProposal(scopeId, proposalId, admit, proof, signal) 
 async function clearContextNotes(scopeId, signal) {
   return ask("workspace-access", { action: "clear_notes", scope_id: scopeId }, void 0, signal);
 }
-const button$2 = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
+const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
 function ContextNotesPanel({ scope, disabled, gate, onChanged }) {
   const [proposals, setProposals] = reactExports.useState([]);
   const [detail, setDetail] = reactExports.useState(null);
@@ -3301,8 +3403,8 @@ function ContextNotesPanel({ scope, disabled, gate, onChanged }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Connections expire after five minutes. Notes stay in memory for the configured retention period and are cleared when their source basis changes, access ends, or assistance stops." }),
     error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "text-sm text-red-700", children: error }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: button$2, disabled: busy || disabled, onClick: refresh, children: "Refresh proposals" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: button$2, disabled: busy || disabled, onClick: () => void perform(async (signal) => {
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: button, disabled: busy || disabled, onClick: refresh, children: "Refresh proposals" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: button, disabled: busy || disabled, onClick: () => void perform(async (signal) => {
         await clearContextNotes(scope.scope_id, signal);
         if (!signal.aborted) {
           setDetail(null);
@@ -3322,7 +3424,7 @@ function ContextNotesPanel({ scope, disabled, gate, onChanged }) {
         proposal.bytes,
         " bytes"
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: button$2, disabled: busy || disabled, onClick: () => void perform(async (signal) => {
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: button, disabled: busy || disabled, onClick: () => void perform(async (signal) => {
         const value = await loadContextProposal(scope.scope_id, proposal.proposal_id, signal);
         if (!signal.aborted) setDetail(value);
       }), children: [
@@ -3369,11 +3471,11 @@ function ContextNotesPanel({ scope, disabled, gate, onChanged }) {
         "."
       ] }),
       detail.state === "pending" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: button$2, disabled: busy || disabled || !admittable, onClick: () => {
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: button, disabled: busy || disabled || !admittable, onClick: () => {
           if (gate?.enabled) setProofOpen(true);
           else void decide(true);
         }, children: "Admit shared note" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: button$2, disabled: busy || disabled, onClick: () => void decide(false), children: "Reject proposal" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: button, disabled: busy || disabled, onClick: () => void decide(false), children: "Reject proposal" }),
         !admittable ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-amber-800", children: "Admission needs unchanged, safely readable sources and the current notes revision." }) : null
       ] }) : null
     ] }) : null,
@@ -3396,8 +3498,12 @@ function ContextNotesPanel({ scope, disabled, gate, onChanged }) {
     )
   ] });
 }
-const button$1 = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
-const field = "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark";
+const fieldLabel = "text-sm font-medium text-brand-dark";
+const hint$1 = "mt-1 text-xs leading-5 text-brand-dark/60";
+const empty = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-8 text-center text-sm text-brand-dark/70";
+const step = "flex items-start gap-3.5";
+const stepMark = "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-dark text-xs font-semibold tabular-nums text-white";
+const summary$1 = "inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark [&::-webkit-details-marker]:hidden";
 function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate }) {
   const [scopes, setScopes] = reactExports.useState([]);
   const [workspace, setWorkspace] = reactExports.useState("");
@@ -3488,172 +3594,226 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
       if (action === "revoke" || action === "clear" || action === "withdraw") setPrevious(null);
     });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(SettingsFormSection, { title: "Workspace context access", description: "Choose each workspace and file used for local review context. Source access ends when you turn assistance off.", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4 py-4", "aria-busy": busy, children: !ready ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Start a verified context runtime to manage sources. Existing Guard approvals remain available." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "text-sm text-red-700", children: error }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Context uses the native Guard facts you enable and files you select. Environment files, credential stores, detected secrets and unsafe paths are excluded. Guard stores context locally using your Evidence storage preference." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { disabled: busy || dirty, className: "grid gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-sm font-semibold text-brand-dark", children: "Add review sources" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: `${id2}-app`, className: "text-sm text-slate-600", children: [
-          "Context consumer",
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { id: `${id2}-app`, className: field, value: app, onChange: (event) => setApp(event.target.value), children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "dashboard", children: "Guard dashboard" }),
-            agentsAllowed ? ["codex", "claude-code", "cursor"].map((name) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: name, children: [
-              harnessDisplayName(name),
-              " · paired MCP connection"
-            ] }, name)) : null,
-            executionAllowed ? ["pi", "omp"].map((name) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: name, children: [
-              harnessDisplayName(name),
-              " · native captured-Bash executor"
-            ] }, name)) : null
-          ] })
+  const fileCount = paths.split(/\r?\n/).filter((path) => path.trim()).length;
+  const consumers = [
+    { value: "dashboard", label: "Guard dashboard", description: "Only you, from this page." },
+    ...agentsAllowed ? ["codex", "claude-code", "cursor"].map((name) => ({ value: name, label: harnessDisplayName(name), description: "Paired MCP connection" })) : [],
+    ...executionAllowed ? ["pi", "omp"].map((name) => ({ value: name, label: harnessDisplayName(name), description: "Native captured-Bash executor" })) : []
+  ];
+  const refreshScopes = () => void perform(async (signal) => {
+    const values = await listContextWorkspaces(signal);
+    if (!signal.aborted) setScopes(values);
+  });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-4", "aria-labelledby": `${id2}-projects`, "aria-busy": busy, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-end justify-between gap-x-6 gap-y-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: `${id2}-projects`, className: versionHeading, children: "Your projects" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Folders CIGAR may read. Access ends when you turn CIGAR off." })
         ] }),
-        executionAllowed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Execution associations apply to Pi and Oh My Pi through Guard's native captured-Bash executor on macOS. Granting access does not install an app adapter." }) : null,
-        sharingAllowed && app !== "dashboard" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 text-sm text-slate-600", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 items-center gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
+        ready ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet, type: "button", disabled: busy, onClick: refreshScopes, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "size-4" }),
+            "Refresh context access"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: busy || scopes.length === 0, onClick: () => manage("clear"), children: "Clear all context data" })
+        ] }) : null
+      ] }),
+      !ready ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty, children: "Start a verified context runtime to manage sources. Existing Guard approvals remain available." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "cigar-note", children: error }) : null,
+        scopes.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: empty, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolderOpen, { "aria-hidden": "true", className: "mx-auto mb-2 size-6 text-brand-dark/35" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No workspace has context access." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/55", children: "Add your first project below." })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: `${id2}-query`, className: fieldLabel, children: "What would you like context about?" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: `${id2}-query`, className: versionField, maxLength: 4096, value: query, onChange: (event) => setQuery(event.target.value), placeholder: "For example: how releases are reviewed" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-3", children: scopes.map((scope) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : "border-brand-dark/10 bg-white"), "aria-label": `Context access for ${scope.workspace}`, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolder, { className: "size-4" }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1 space-y-1.5", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-sm font-semibold text-brand-dark", children: scope.workspace }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1.5", children: [
+                  scope.revoked ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "amber", children: "Access revoked" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: scope.app === "dashboard" ? "Review context" : harnessDisplayName(scope.app) }),
+                  !scope.revoked ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: "local memory" }) : null,
+                  scope.native_policy_facts ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: "Guard policy facts" }) : null,
+                  scope.sharing?.mode === "shared_broker" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "green", children: "Shared context" }) : null
+                ] })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 text-sm leading-6 text-brand-dark/70", children: [
+              scope.revoked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Access revoked by policy. Grant access again to continue." }) : null,
+              scope.sharing?.mode === "shared_broker" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                "Shared context · ",
+                scope.sharing.notes.read ? "reviewed notes allowed" : "shared notes not granted",
+                scope.sharing.notes.propose ? " · connection proposals allowed" : "",
+                ". Each paired connection has a five-minute lease."
+              ] }) : null,
+              scope.receipt_window?.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                "Recent native receipt facts: ",
+                scope.receipt_window.retained,
+                " of at most 16 retained. This window covers recorded decisions in this exact workspace, not execution confirmation or a complete activity history."
+              ] }) : null,
+              scope.receipt_window?.enabled && scope.receipt_window.dropped !== "0" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-amber-800", children: "Some optional receipt updates were missed. Earlier context was invalidated; durable Guard evidence is unchanged." }) : null
+            ] }),
+            scope.sources.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "divide-y divide-brand-dark/[0.07] rounded-xl border border-brand-dark/[0.08]", children: scope.sources.map((source) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-wrap items-center justify-between gap-2 py-1 pl-3 pr-1 text-sm", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex min-w-0 items-center gap-2 break-all font-mono text-xs text-brand-dark/80", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { "aria-hidden": "true", className: "size-4 shrink-0 text-brand-dark/40" }),
+                source.path
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet + " min-h-9 px-2.5 text-xs", type: "button", disabled: busy, onClick: () => manage("withdraw", scope.scope_id, source.source_id), children: [
+                "Withdraw ",
+                source.path
+              ] })
+            ] }, source.source_id)) }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionPrimary, type: "button", disabled: busy || dirty || scope.revoked, onClick: () => void perform(async (signal) => {
+                const value = await compileWorkspaceContext(scope.scope_id, query, signal);
+                if (!signal.aborted) {
+                  if (brief) setPrevious(brief.value);
+                  const current = value.scope ?? scope;
+                  setBrief({ scope: current, value: value.brief });
+                  setScopes((values) => values.map((item) => item.scope_id === current.scope_id ? current : item));
+                }
+              }), children: "Prepare cited context" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionButton, type: "button", disabled: busy || scope.revoked, onClick: () => manage("refresh", scope.scope_id), children: "Refresh selected files" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: busy, onClick: () => manage("revoke", scope.scope_id), children: "Revoke workspace access" })
+            ] }),
+            !scope.revoked && scope.sharing?.mode === "shared_broker" && scope.sharing.notes.read ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ContextNotesPanel,
               {
-                type: "checkbox",
-                checked: notesRead,
-                onChange: (event) => {
-                  setNotesRead(event.target.checked);
-                  if (!event.target.checked) setNotesPropose(false);
+                scope,
+                disabled: busy || dirty,
+                gate,
+                onChanged: () => {
+                  setBrief(null);
+                  setPrevious(null);
+                  refreshScopes();
                 }
               }
-            ),
-            "Allow reviewed shared notes in this app's context"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 items-center gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "checkbox",
-                checked: notesPropose,
-                disabled: !notesRead,
-                onChange: (event) => setNotesPropose(event.target.checked)
-              }
-            ),
-            "Allow paired connections to propose shared notes"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Proposals require a current context snapshot and your separate review. Pair each connection after granting access. Connections expire after five minutes." })
-        ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: `${id2}-workspace`, className: "text-sm text-slate-600", children: [
-          "Workspace folder",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: `${id2}-workspace`, className: field, value: workspace, onChange: (event) => setWorkspace(event.target.value), placeholder: "Absolute workspace path", autoComplete: "off" })
+            ) : null
+          ] }) }, scope.scope_id)) })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: `${id2}-sources`, className: "text-sm text-slate-600", children: [
-          "Files relative to the workspace, one per line",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { id: `${id2}-sources`, className: field, rows: 3, value: paths, onChange: (event) => setPaths(event.target.value), placeholder: "README.md\ndocs/design.md", disabled: !documentsAllowed })
-        ] }),
-        !documentsAllowed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Enable selected workspace documents in Context assistance and save settings to add files. You can still use native Guard facts." }) : null,
-        dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: "Save your context preferences before granting access." }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            className: button$1,
-            type: "button",
-            disabled: !workspace.trim() || paths.split(/\r?\n/).filter((path) => path.trim()).length > 32,
-            onClick: () => {
-              if (gate?.enabled) setProofOpen(true);
-              else void grant();
-            },
-            children: "Grant review source access"
-          }
-        )
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button$1, type: "button", disabled: busy, onClick: () => void perform(async (signal) => {
-          const values = await listContextWorkspaces(signal);
-          if (!signal.aborted) setScopes(values);
-        }), children: "Refresh context access" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button$1, type: "button", disabled: busy || scopes.length === 0, onClick: () => manage("clear"), children: "Clear all context data" })
-      ] }),
-      scopes.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No workspace has context access." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: `${id2}-query`, className: "block text-sm text-slate-600", children: [
-          "What would you like context about?",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: `${id2}-query`, className: field, maxLength: 4096, value: query, onChange: (event) => setQuery(event.target.value) })
-        ] }),
-        scopes.map((scope) => /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3 rounded-lg border border-slate-200 p-3", "aria-label": `Context access for ${scope.workspace}`, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all text-sm font-semibold text-brand-dark", children: scope.workspace }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: scope.revoked ? "Access revoked by policy. Grant access again to continue." : `${scope.app === "dashboard" ? "Review context" : harnessDisplayName(scope.app)} · local memory` }),
-          scope.native_policy_facts ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Includes native Guard policy and decision facts." }) : null,
-          scope.sharing?.mode === "shared_broker" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
-            "Shared context · ",
-            scope.sharing.notes.read ? "reviewed notes allowed" : "shared notes not granted",
-            scope.sharing.notes.propose ? " · connection proposals allowed" : "",
-            ". Each paired connection has a five-minute lease."
-          ] }) : null,
-          scope.receipt_window?.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
-            "Recent native receipt facts: ",
-            scope.receipt_window.retained,
-            " of at most 16 retained. This window covers recorded decisions in this exact workspace, not execution confirmation or a complete activity history."
-          ] }) : null,
-          scope.receipt_window?.enabled && scope.receipt_window.dropped !== "0" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-amber-800", children: "Some optional receipt updates were missed. Earlier context was invalidated; durable Guard evidence is unchanged." }) : null,
-          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-2", children: scope.sources.map((source) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-wrap items-center justify-between gap-2 text-sm", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-all", children: source.path }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: button$1, type: "button", disabled: busy, onClick: () => manage("withdraw", scope.scope_id, source.source_id), children: [
-              "Withdraw ",
-              source.path
+        brief ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Prepared context", className: "guard-surface-in space-y-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-semibold text-brand-dark", children: "Cited context" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "slate", children: [
+              brief.value.rendered_tokens,
+              " tokens"
             ] })
-          ] }, source.source_id)) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button$1, type: "button", disabled: busy || dirty || scope.revoked, onClick: () => void perform(async (signal) => {
-              const value = await compileWorkspaceContext(scope.scope_id, query, signal);
-              if (!signal.aborted) {
-                if (brief) setPrevious(brief.value);
-                const current = value.scope ?? scope;
-                setBrief({ scope: current, value: value.brief });
-                setScopes((values) => values.map((item) => item.scope_id === current.scope_id ? current : item));
-              }
-            }), children: "Prepare cited context" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button$1, type: "button", disabled: busy || scope.revoked, onClick: () => manage("refresh", scope.scope_id), children: "Refresh selected files" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button$1, type: "button", disabled: busy, onClick: () => manage("revoke", scope.scope_id), children: "Revoke workspace access" })
           ] }),
-          !scope.revoked && scope.sharing?.mode === "shared_broker" && scope.sharing.notes.read ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ContextNotesPanel,
-            {
-              scope,
-              disabled: busy || dirty,
-              gate,
-              onChanged: () => {
-                setBrief(null);
-                setPrevious(null);
-                void perform(async (signal) => {
-                  const values = await listContextWorkspaces(signal);
-                  if (!signal.aborted) setScopes(values);
-                });
-              }
-            }
-          ) : null
-        ] }, scope.scope_id))
-      ] }),
-      brief ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Prepared context", className: "space-y-3 rounded-lg border border-slate-200 p-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-semibold text-brand-dark", children: "Cited context" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
-          "Supporting data verified when prepared. Use a fresh context after files or access change. ",
-          brief.value.rendered_tokens,
-          " tokens."
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-96 space-y-3 overflow-auto text-sm text-slate-700", children: brief.value.excerpts.map((excerpt, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "whitespace-pre-wrap break-words", children: excerpt.text }, index)) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-sm font-semibold", children: "Sources and revisions" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-2 text-sm", children: brief.value.citations.map((citation, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-            brief.scope.sources.find((source) => source.source_id === citation.source)?.path ?? (citation.source === "guard:notes" ? "Reviewed shared notes" : citation.source === "guard:receipts" ? "Native Guard receipt facts" : "Native Guard policy facts"),
-            ", lines ",
-            citation.start_line,
-            "–",
-            citation.end_line,
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block break-all text-xs text-slate-500", children: citation.document_digest })
-          ] }, `${citation.node_id}-${index}`)) })
-        ] }),
-        previous ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-sm font-semibold", children: "Compare with earlier context" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "my-2 text-sm text-slate-600", children: "Earlier context is historical and may no longer apply." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-64 space-y-3 overflow-auto text-sm", children: previous.excerpts.map((excerpt, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "whitespace-pre-wrap break-words", children: excerpt.text }, index)) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Supporting data verified when prepared. Use a fresh context after files or access change." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-96 space-y-3 overflow-auto rounded-xl bg-white p-3 text-sm leading-6 text-slate-700", children: brief.value.excerpts.map((excerpt, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "whitespace-pre-wrap break-words", children: excerpt.text }, index)) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: summary$1, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-4 transition-transform group-open:rotate-90 motion-reduce:transition-none" }),
+              "Sources and revisions"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-2 pl-5 text-sm", children: brief.value.citations.map((citation, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+              brief.scope.sources.find((source) => source.source_id === citation.source)?.path ?? (citation.source === "guard:notes" ? "Reviewed shared notes" : citation.source === "guard:receipts" ? "Native Guard receipt facts" : "Native Guard policy facts"),
+              ", lines ",
+              citation.start_line,
+              "–",
+              citation.end_line,
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block break-all font-mono text-xs text-slate-500", children: citation.document_digest })
+            ] }, `${citation.node_id}-${index}`)) })
+          ] }),
+          previous ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group/prev", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: summary$1, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-4 transition-transform group-open/prev:rotate-90 motion-reduce:transition-none" }),
+              "Compare with earlier context"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "my-2 pl-5 text-sm text-slate-600", children: "Earlier context is historical and may no longer apply." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-64 space-y-3 overflow-auto pl-5 text-sm", children: previous.excerpts.map((excerpt, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "whitespace-pre-wrap break-words", children: excerpt.text }, index)) })
+          ] }) : null
         ] }) : null
-      ] }) : null
-    ] }) }),
+      ] })
+    ] }),
+    ready ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-4 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-6", "aria-labelledby": `${id2}-add`, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: `${id2}-add`, className: versionHeading, children: "Add a project" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Environment files, credential stores, detected secrets and unsafe paths are always skipped. Context uses the native Guard facts you enable and the files you pick." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { disabled: busy || dirty, className: "space-y-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "sr-only", children: "Add review sources" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "space-y-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: step, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: stepMark, "aria-hidden": "true", children: "1" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: `${id2}-workspace`, className: fieldLabel, children: "Workspace folder" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: `${id2}-workspace`, className: versionField + " font-mono", value: workspace, onChange: (event) => setWorkspace(event.target.value), placeholder: "/Users/you/projects/my-app", autoComplete: "off", spellCheck: false, "aria-describedby": `${id2}-workspace-hint` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: `${id2}-workspace-hint`, className: hint$1, children: "The full path to the project folder." })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: step, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: stepMark, "aria-hidden": "true", children: "2" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: `${id2}-sources`, className: fieldLabel, children: "Files relative to the workspace, one per line" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { id: `${id2}-sources`, className: versionField + " font-mono", rows: 3, value: paths, onChange: (event) => setPaths(event.target.value), placeholder: "README.md\ndocs/design.md", disabled: !documentsAllowed, spellCheck: false }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: hint$1, children: documentsAllowed ? `Up to 32 files. ${fileCount ? fileCount + " selected." : "Optional."}` : "Enable selected workspace documents in Context assistance and save settings to add files. You can still use native Guard facts." })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: step, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: stepMark, "aria-hidden": "true", children: "3" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1 space-y-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: `${id2}-app-label`, className: fieldLabel, children: "Context consumer" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SelectMenu, { labelledBy: `${id2}-app-label`, className: "w-full sm:max-w-md", value: app, options: consumers, onChange: setApp, disabled: busy || dirty }),
+              executionAllowed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: hint$1, children: "Execution associations apply to Pi and Oh My Pi through Guard's native captured-Bash executor on macOS. Granting access does not install an app adapter." }) : null,
+              sharingAllowed && app !== "dashboard" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 rounded-xl border border-brand-dark/10 bg-surface-1 px-3 py-2 text-sm text-brand-dark/80", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 cursor-pointer items-center gap-3", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      type: "checkbox",
+                      className: "size-4 accent-brand-blue",
+                      checked: notesRead,
+                      onChange: (event) => {
+                        setNotesRead(event.target.checked);
+                        if (!event.target.checked) setNotesPropose(false);
+                      }
+                    }
+                  ),
+                  "Allow reviewed shared notes in this app's context"
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 cursor-pointer items-center gap-3", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      type: "checkbox",
+                      className: "size-4 accent-brand-blue",
+                      checked: notesPropose,
+                      disabled: !notesRead,
+                      onChange: (event) => setNotesPropose(event.target.checked)
+                    }
+                  ),
+                  "Allow paired connections to propose shared notes"
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: hint$1 + " pb-1", children: "Proposals require a current context snapshot and your separate review. Pair each connection after granting access. Connections expire after five minutes." })
+              ] }) : null
+            ] })
+          ] })
+        ] }),
+        dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "cigar-note", children: "Save your context preferences before granting access." }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3 border-t border-brand-dark/[0.07] pt-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              className: versionPrimary,
+              type: "button",
+              disabled: !workspace.trim() || fileCount > 32,
+              onClick: () => {
+                if (gate?.enabled) setProofOpen(true);
+                else void grant();
+              },
+              children: "Grant review source access"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: hint$1, children: "Guard asks before anything is shared." })
+        ] })
+      ] })
+    ] }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(ContextAgentsPanel, { ready, enabled: agentsAllowed, dirty, generation, scopes, gate }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       SettingsSaveProofModal,
@@ -3662,7 +3822,7 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
         mode: "verify-save",
         gate,
         title: "Confirm source access",
-        detail: `Grant ${app === "dashboard" ? "Guard dashboard" : harnessDisplayName(app)} context access for ${workspace.trim()}. Allow the enabled native Guard facts and ${paths.split(/\r?\n/).filter((path) => path.trim()).length} selected workspace files.${executionAllowed && (app === "pi" || app === "omp") ? " Execution associations use native capture facts. This does not approve commands or install an app adapter." : ""}${sharingAllowed && app !== "dashboard" ? ` Reviewed shared notes: ${notesRead ? "allowed" : "not granted"}. Connection note proposals: ${notesPropose ? "allowed, subject to your separate review" : "not granted"}.` : ""}`,
+        detail: `Grant ${app === "dashboard" ? "Guard dashboard" : harnessDisplayName(app)} context access for ${workspace.trim()}. Allow the enabled native Guard facts and ${fileCount} selected workspace files.${executionAllowed && (app === "pi" || app === "omp") ? " Execution associations use native capture facts. This does not approve commands or install an app adapter." : ""}${sharingAllowed && app !== "dashboard" ? ` Reviewed shared notes: ${notesRead ? "allowed" : "not granted"}. Connection note proposals: ${notesPropose ? "allowed, subject to your separate review" : "not granted"}.` : ""}`,
         confirmLabel: "Grant source access",
         error,
         pending: busy,
@@ -4231,7 +4391,7 @@ const CIGAR_UPDATE_TUTORIAL = {
       title: "Prepare beside your current runtime",
       description: "Downloading and verifying a replacement does not select or enable it.",
       instructions: ["Choose a registered Python interpreter for an available SDK build, or explicitly prepare an eligible private Python build first.", "Click Prepare this build and watch its native job. The current runtime remains selected while preparation runs.", "Cancel the job if you change your mind. For an uncertain response, refresh jobs and inspect the recorded job ID before another action."],
-      expect: "The prepared installation appears in Registered installations, with your current selection intact.",
+      expect: "The prepared installation appears in the Versions list marked Installed, with your current selection intact.",
       target: "versions",
       action: "Prepare an eligible build"
     },
@@ -4596,7 +4756,7 @@ function CigarGuide({ onSelect }) {
 }
 function CigarOverview({ status, onSelect }) {
   const steps = cigarSetupSteps(status);
-  const current = steps.findIndex((step) => !step.complete);
+  const current = steps.findIndex((step2) => !step2.complete);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-overview", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cigar-why-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-why-heading", className: "cigar-overview-title", children: "What CIGAR does for you" }),
@@ -4605,20 +4765,20 @@ function CigarOverview({ status, onSelect }) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-overview-grid", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card cigar-setup", "aria-labelledby": "cigar-setup-heading", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-setup-heading", children: "Three steps, and only the first is needed" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-steps", children: steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { "data-complete": step.complete, "aria-current": index === current && status ? "step" : void 0, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-step-number", children: step.complete ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-steps", children: steps.map((step2, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { "data-complete": step2.complete, "aria-current": index === current && status ? "step" : void 0, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-step-number", children: step2.complete ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { "aria-hidden": "true" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Done: " })
           ] }) : index + 1 }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: step.title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step.description }),
-            step.action ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect(step.tab), children: [
-              step.action,
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: step2.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step2.description }),
+            step2.action ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect(step2.tab), children: [
+              step2.action,
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
             ] }) : null
           ] })
-        ] }, step.title)) })
+        ] }, step2.title)) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "cigar-card cigar-boundaries", "aria-labelledby": "cigar-boundaries-heading", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { "aria-hidden": "true" }) }),
@@ -4681,8 +4841,8 @@ function useCigarTutorial() {
     setActive(true);
     return next;
   }
-  function move(step) {
-    return save(parseTutorialProgress({ ...progress, step }));
+  function move(step2) {
+    return save(parseTutorialProgress({ ...progress, step: step2 }));
   }
   return { active, progress, tutorial: cigarTutorial(progress.tutorial), begin, move, exit: () => setActive(false) };
 }
@@ -4748,17 +4908,17 @@ function CigarTutorials(props) {
 function CigarWalkthrough(props) {
   const id2 = reactExports.useId();
   const [copyMessage, setCopyMessage] = reactExports.useState("");
-  const step = props.tutorial.steps[props.step];
+  const step2 = props.tutorial.steps[props.step];
   const last = props.step === props.tutorial.steps.length - 1;
   const liveStatus = props.status ? contextStatusCopy(props.status).label : "Status unavailable";
   reactExports.useEffect(() => {
     setCopyMessage("");
   }, [props.step, props.tutorial.id]);
   async function copyQuestion() {
-    if (!step.question) return;
+    if (!step2.question) return;
     try {
       if (!navigator.clipboard) throw new Error("clipboard_unavailable");
-      await navigator.clipboard.writeText(step.question);
+      await navigator.clipboard.writeText(step2.question);
       setCopyMessage("Question copied. Paste it into the context question field or your authorized app.");
     } catch {
       setCopyMessage("Select the example text and copy it with your usual keyboard or touch controls.");
@@ -4786,12 +4946,12 @@ function CigarWalkthrough(props) {
       ] }) }, item.title)) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-lesson-body", "aria-live": "polite", "aria-atomic": "false", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: step.title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step.description }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-simple-list", children: step.instructions.map((instruction) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: instruction }, instruction)) }),
-      step.question ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-example-question", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: step2.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step2.description }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-simple-list", children: step2.instructions.map((instruction) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: instruction }, instruction)) }),
+      step2.question ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-example-question", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Example question" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step.question }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step2.question }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => void copyQuestion(), children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, { "aria-hidden": "true" }),
           "Copy question"
@@ -4800,11 +4960,11 @@ function CigarWalkthrough(props) {
       ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-lesson-outcome", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "What to look for" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step.expect })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step2.expect })
       ] }),
-      step.tip ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-learning-tip", children: step.tip }) : null,
+      step2.tip ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-learning-tip", children: step2.tip }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: props.onOpen, children: [
-        step.action,
+        step2.action,
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
       ] })
     ] }),
@@ -4836,6 +4996,9 @@ function CigarWorkspace(props) {
   const status = props.status;
   const canStop = props.stopAvailable ?? Boolean(status?.requested_enabled || status?.effective_enabled || status?.job);
   const actionDisabled = props.disabled || props.busy || props.loading;
+  const running = props.setup.run.phase === "running";
+  const stripLabel = running ? "Working" : status ? contextStatusCopy(status).label : props.loading ? "Checking" : "Status unavailable";
+  const stripDetail = running ? "Guard is turning CIGAR on. You can keep browsing." : status?.effective_enabled ? (status.runtime ? "CIGAR " + status.runtime.package_version : "CIGAR") + " is running on this computer. It reads only the folders you pick." : "CIGAR is off. One click turns it on; Guard handles the setup.";
   reactExports.useEffect(() => {
     const sync = () => setTab(cigarTabFromSearch(window.location.search));
     return subscribeDashboardLocation(sync);
@@ -4869,8 +5032,8 @@ function CigarWorkspace(props) {
     select(cigarTutorial(progress.tutorial).steps[progress.step].target, false);
     focusWalkthrough();
   }
-  function moveTutorial(step) {
-    const progress = lesson.move(step);
+  function moveTutorial(step2) {
+    const progress = lesson.move(step2);
     select(cigarTutorial(progress.tutorial).steps[progress.step].target, false);
     focusWalkthrough();
   }
@@ -4891,7 +5054,7 @@ function CigarWorkspace(props) {
         ] })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-hero", "aria-labelledby": "cigar-hero-heading", children: [
+    tab === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-hero", "aria-labelledby": "cigar-hero-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-hero-copy", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "cigar-hero-heading", children: [
           "Give your AI the right pages,",
@@ -4912,6 +5075,15 @@ function CigarWorkspace(props) {
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupProgress, { setup: props.setup, status, loading: props.loading })
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-strip", "aria-label": "CIGAR status", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-strip-copy", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "cigar-status", "data-ready": status?.effective_enabled === true, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true" }),
+          stripLabel
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: stripDetail })
+      ] }),
+      tab === "access" && status?.effective_enabled ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupAction, { setup: props.setup, status, disabled: actionDisabled, onOpen: select })
     ] }),
     props.error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", role: "alert", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR needs attention" }),
@@ -4955,11 +5127,6 @@ function CigarWorkspace(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Settings" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR works well with the recommended settings. Change these only if you want to." })
           ] }),
-          !props.loading && !status?.effective_enabled && props.setup.run.phase !== "running" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR is off" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Turn it on first. Guard sets everything up for you." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupAction, { setup: props.setup, status, disabled: actionDisabled, onOpen: select })
-          ] }) : null,
           props.controls
         ] }),
         tab === "versions" ? props.versions : null,
@@ -4970,8 +5137,7 @@ function CigarWorkspace(props) {
           ] }),
           !status?.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Turn on CIGAR first" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Projects and AI apps open up as soon as CIGAR is on." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupAction, { setup: props.setup, status, disabled: actionDisabled, onOpen: select })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Projects and AI apps open up as soon as CIGAR is on. Use the button above." })
           ] }) : null,
           props.access
         ] }) : null,
@@ -4993,186 +5159,254 @@ function CigarWorkspace(props) {
     ] })
   ] });
 }
+const CHANNEL = { stable: "Stable", preview: "Preview", local_candidate: "Local build" };
+const summary = "flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-brand-dark/75 hover:text-brand-dark [&::-webkit-details-marker]:hidden";
+function Row$1(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-wrap items-start gap-x-4 gap-y-3 px-4 py-4 sm:px-5", "aria-labelledby": props.describedBy ? props.titleId + " " + props.describedBy : props.titleId, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-[1_1_18rem] space-y-1.5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { id: props.titleId, className: "font-mono text-sm font-semibold tabular-nums text-brand-dark", children: props.title }),
+        props.tags
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-brand-dark/65", children: props.meta }),
+      props.reason,
+      props.extra
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: props.action })
+  ] });
+}
 function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, onAction }) {
   const [python, setPython] = reactExports.useState("");
   const id2 = reactExports.useId(), catalog = data.catalog;
+  const selectedId = status?.preferences.runtime_id ?? "";
   const registered = data.interpreters.filter((p) => p.platform === catalog.host_platform);
   const interpreter = registered.find((p) => p.interpreter_id === python) ?? registered[0];
   const activeSelection = data.jobs.some((job) => job.family === "selection" && (cigarJobPending(job) || job.recovery_available));
   const selectionBlocked = selectionDisabled || !status || activeSelection;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": id2 + "-installed", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: id2 + "-installed", className: "font-semibold text-brand-dark", children: "Registered installations" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Prepare a selection alongside your current runtime. Guard verifies the target and saved data before it offers a switch." }),
-      !data.installations.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Prepare an available SDK build below, or register an approved bundle with the Guard CLI." }) : null,
-      data.installations.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: versionCard, "aria-labelledby": id2 + "-installed-" + item.runtime_id, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h4", { id: id2 + "-installed-" + item.runtime_id, className: "font-semibold text-brand-dark", children: [
-          "CIGAR ",
-          item.sdk_version ?? "registered bundle",
-          item.runtime_id === status?.preferences.runtime_id ? status.runtime?.active ? " · selected · running" : " · selected" : ""
+  const matched = /* @__PURE__ */ new Set();
+  const installationFor = (build) => {
+    const found = data.installations.find((item) => item.build_id === build.identity.build_id);
+    if (found) matched.add(found.runtime_id);
+    return found;
+  };
+  const inUseTag = (item) => item.runtime_id === selectedId ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "green", children: status?.runtime?.active ? "In use · running" : "In use" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: "Installed" });
+  const prepareSelection = (item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      type: "button",
+      className: versionButton,
+      disabled: selectionBlocked || item.runtime_id === selectedId,
+      onClick: () => {
+        if (status) onAction({
+          input: { action: "prepare_switch", job_id: cigarVersionJobId(), target_runtime_id: item.runtime_id, expected_generation: status.generation },
+          title: "Prepare CIGAR selection",
+          detail: "Verify this target and its data without committing a runtime switch. CIGAR stays off if it is off now."
+        });
+      },
+      children: "Prepare selection"
+    }
+  );
+  const buildRows = catalog.builds.map((build) => {
+    const buildId = build.identity.build_id, installed = installationFor(build);
+    const reason = installed ? null : cigarBuildBlock(catalog, build, data.updates), host = build.platforms.find((p) => p.platform === catalog.host_platform);
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Row$1,
+      {
+        titleId: id2 + "-build-" + buildId,
+        describedBy: id2 + "-build-id-" + buildId,
+        title: "CIGAR " + build.identity.sdk_version,
+        tags: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          installed ? inUseTag(installed) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: build.channel === "stable" ? "slate" : "attention", children: CHANNEL[build.channel] }),
+          build.withdrawn ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "red", children: "Withdrawn" }) : null
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
+        meta: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           "Core ",
-          item.core_version ?? "not reported",
-          " · Python ",
-          item.python_version.join("."),
+          build.identity.core_version,
           " · ",
-          item.platform,
-          " · ",
-          item.managed ? "Guard managed" : "externally registered",
-          " · ",
-          installationLabel(item.qualification)
+          host ? "download " + versionBytes(host.download_bytes) : "not built for this computer",
+          installed ? " · " + installationLabel(installed.qualification) : ""
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-xs text-slate-600", children: [
-          "Build: ",
-          item.build_id ?? "legacy registration"
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            className: versionButton,
-            disabled: selectionBlocked || item.runtime_id === status?.preferences.runtime_id,
-            onClick: () => {
-              if (status) onAction({
-                input: { action: "prepare_switch", job_id: cigarVersionJobId(), target_runtime_id: item.runtime_id, expected_generation: status.generation },
-                title: "Prepare CIGAR selection",
-                detail: "Verify this target and its data without committing a runtime switch. CIGAR stays off if it is off now."
-              });
-            },
-            children: "Prepare selection"
-          }
-        )
-      ] }, item.runtime_id)),
-      status?.preferences.runtime_id ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          className: versionButton,
-          disabled: selectionBlocked,
-          onClick: () => {
-            if (status) onAction({
-              input: { action: "prepare_rollback", job_id: cigarVersionJobId(), expected_generation: status.generation },
-              title: "Prepare last good CIGAR build",
-              detail: "Verify the last good installation and current data. Guard will offer a separate explicit rollback switch when it is ready."
-            });
-          },
-          children: "Prepare last good build"
-        }
-      ) : null,
-      activeSelection ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: "Finish, cancel or recover the current selection job before preparing another." }) : null
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": id2 + "-builds", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: id2 + "-builds", className: "font-semibold text-brand-dark", children: "Available SDK builds" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Preparing downloads a separate, verified installation. It keeps your current runtime selected." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block text-sm text-slate-600", children: [
-        "Python for SDK preparation",
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { className: versionField, disabled: disabled || !registered.length, value: interpreter?.interpreter_id ?? "", onChange: (event) => setPython(event.target.value), children: [
-          !registered.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "No Python interpreter registered for this host" }) : null,
-          registered.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: p.interpreter_id, children: [
-            "Python ",
-            p.python_version.join("."),
-            " · ",
-            p.managed ? "Guard managed" : "registered",
-            " · ",
-            p.interpreter_id
-          ] }, p.interpreter_id))
-        ] })
-      ] }),
-      !catalog.builds.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No SDK builds are available in this catalog." }) : null,
-      catalog.builds.map((build) => {
-        const reason = cigarBuildBlock(catalog, build, data.updates), host = build.platforms.find((p) => p.platform === catalog.host_platform);
-        return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: versionCard, "aria-labelledby": id2 + "-build-" + build.identity.build_id + " " + id2 + "-build-id-" + build.identity.build_id, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("h4", { id: id2 + "-build-" + build.identity.build_id, className: "font-semibold text-brand-dark", children: [
-            "CIGAR ",
-            build.identity.sdk_version,
-            " · ",
-            build.channel.replaceAll("_", " "),
-            build.withdrawn ? " · withdrawn" : ""
+        reason: reason ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: id2 + "-build-reason-" + buildId, className: "text-sm text-amber-800", children: reason }) : null,
+        extra: /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group text-xs text-brand-dark/60", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "inline-flex min-h-8 cursor-pointer list-none items-center gap-1 font-medium hover:text-brand-dark [&::-webkit-details-marker]:hidden", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" }),
+            "Build identity"
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { id: id2 + "-build-id-" + build.identity.build_id, className: "break-all text-sm text-slate-600", children: [
-            "Build: ",
-            build.identity.build_id
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
-            "Core ",
-            build.identity.core_version,
-            " · ",
-            host ? "available for this host" : "no artifact for this host",
-            host ? " · download " + versionBytes(host.download_bytes) : ""
-          ] }),
-          reason ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: id2 + "-build-reason-" + build.identity.build_id, className: "text-sm text-amber-800", children: reason }) : null,
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              className: versionButton,
-              "aria-describedby": reason ? id2 + "-build-reason-" + build.identity.build_id : void 0,
-              disabled: disabled || reason !== null || !interpreter,
-              onClick: () => {
-                if (interpreter) onAction({
-                  input: { action: "install", job_id: cigarVersionJobId(), build_id: build.identity.build_id, interpreter_id: interpreter.interpreter_id },
-                  title: "Prepare CIGAR build",
-                  detail: "Download and verify this SDK in a separate managed installation. Keep the selected runtime in place."
-                });
-              },
-              children: "Prepare this build"
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "text-xs text-slate-600", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer", children: "Build identity" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 space-y-0.5 break-all pl-5 font-mono", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { id: id2 + "-build-id-" + buildId, children: [
+              "Build: ",
+              buildId
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
               "Source: ",
               build.identity.source_revision
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
               "Manifest: ",
               build.identity.manifest_sha256
             ] }),
-            host ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all", children: [
+            host ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
               "Worker: ",
               host.worker_sha256
             ] }) : null
           ] })
-        ] }, build.identity.build_id);
-      })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": id2 + "-python", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: id2 + "-python", className: "font-semibold text-brand-dark", children: "Private Python builds" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Guard can prepare its own Python alongside your existing interpreters. Your system Python is unchanged." }),
-      !catalog.interpreter_builds.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No private Python builds are listed." }) : null,
-      catalog.interpreter_builds.map((build) => {
-        const reason = cigarPythonBlock(catalog, build), present = data.interpreters.some((p) => p.build_id === build.build_id);
-        return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: versionCard, "aria-labelledby": id2 + "-python-" + build.build_id + " " + id2 + "-python-id-" + build.build_id, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("h4", { id: id2 + "-python-" + build.build_id, className: "font-semibold text-brand-dark", children: [
-            "Python ",
-            build.python_version.join("."),
-            " · ",
-            build.platform
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { id: id2 + "-python-id-" + build.build_id, className: "break-all text-xs text-slate-600", children: [
-            build.build_id,
-            " · download ",
-            versionBytes(build.archive_bytes)
-          ] }),
-          reason ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: id2 + "-python-reason-" + build.build_id, className: "text-sm text-amber-800", children: reason }) : null,
+        ] }),
+        action: installed ? prepareSelection(installed) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: versionButton,
+            "aria-describedby": reason ? id2 + "-build-reason-" + buildId : void 0,
+            disabled: disabled || reason !== null || !interpreter,
+            onClick: () => {
+              if (interpreter) onAction({
+                input: { action: "install", job_id: cigarVersionJobId(), build_id: buildId, interpreter_id: interpreter.interpreter_id },
+                title: "Prepare CIGAR build",
+                detail: "Download and verify this SDK in a separate managed installation. Keep the selected runtime in place."
+              });
+            },
+            children: "Prepare this build"
+          }
+        )
+      },
+      buildId
+    );
+  });
+  const looseRows = data.installations.filter((item) => !matched.has(item.runtime_id)).map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    Row$1,
+    {
+      titleId: id2 + "-installed-" + item.runtime_id,
+      title: "CIGAR " + (item.sdk_version ?? "registered bundle"),
+      tags: inUseTag(item),
+      meta: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        "Core ",
+        item.core_version ?? "not reported",
+        " · Python ",
+        item.python_version.join("."),
+        " · ",
+        item.managed ? "Guard managed" : "added outside Guard",
+        " · ",
+        installationLabel(item.qualification)
+      ] }),
+      extra: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all font-mono text-xs text-brand-dark/50", children: [
+        "Build: ",
+        item.build_id ?? "legacy registration"
+      ] }),
+      action: prepareSelection(item)
+    },
+    item.runtime_id
+  ));
+  const pythonRow = (build) => {
+    const reason = cigarPythonBlock(catalog, build), present = data.interpreters.some((p) => p.build_id === build.build_id);
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Row$1,
+      {
+        titleId: id2 + "-python-" + build.build_id,
+        describedBy: id2 + "-python-id-" + build.build_id,
+        title: "Python " + build.python_version.join("."),
+        tags: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          present ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "green", children: "Ready" }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: platformLabel(build.platform) })
+        ] }),
+        meta: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { id: id2 + "-python-id-" + build.build_id, className: "break-all", children: [
+          build.build_id,
+          " · download ",
+          versionBytes(build.archive_bytes)
+        ] }),
+        reason: reason && build.platform === catalog.host_platform ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: id2 + "-python-reason-" + build.build_id, className: "text-sm text-amber-800", children: reason }) : null,
+        action: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: versionButton,
+            "aria-describedby": reason && build.platform === catalog.host_platform ? id2 + "-python-reason-" + build.build_id : void 0,
+            disabled: disabled || present || reason !== null,
+            onClick: () => onAction({
+              input: { action: "setup_interpreter", job_id: cigarVersionJobId(), build_id: build.build_id },
+              title: "Prepare private Python",
+              detail: "Download and verify the catalog's immutable Python build. Leave your system Python and current CIGAR selection unchanged."
+            }),
+            children: present ? "Python registered" : "Prepare private Python"
+          }
+        )
+      },
+      build.build_id
+    );
+  };
+  const hostPython = catalog.interpreter_builds.filter((b) => !catalog.host_platform || b.platform === catalog.host_platform);
+  const otherPython = catalog.interpreter_builds.filter((b) => catalog.host_platform && b.platform !== catalog.host_platform);
+  const pythonOptions = registered.map((p) => ({
+    value: p.interpreter_id,
+    label: "Python " + p.python_version.join(".") + (p.managed ? " · set up by Guard" : " · already on this computer"),
+    description: p.interpreter_id
+  }));
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": id2 + "-builds", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-end justify-between gap-x-6 gap-y-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: id2 + "-builds", className: versionHeading, children: "Versions" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Preparing a version downloads it next to the one you have. Nothing changes until you switch." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full sm:w-72", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: id2 + "-python-label", className: "text-xs font-medium text-brand-dark/65", children: "Python for SDK preparation" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
+            SelectMenu,
             {
-              type: "button",
-              className: versionButton,
-              "aria-describedby": reason ? id2 + "-python-reason-" + build.build_id : void 0,
-              disabled: disabled || present || reason !== null,
-              onClick: () => onAction({
-                input: { action: "setup_interpreter", job_id: cigarVersionJobId(), build_id: build.build_id },
-                title: "Prepare private Python",
-                detail: "Download and verify the catalog's immutable Python build. Leave your system Python and current CIGAR selection unchanged."
-              }),
-              children: present ? "Python registered" : "Prepare private Python"
+              labelledBy: id2 + "-python-label",
+              className: "mt-1.5 w-full",
+              value: interpreter?.interpreter_id ?? "",
+              disabled: disabled || !registered.length,
+              placeholder: "No Python interpreter registered for this host",
+              options: pythonOptions,
+              onChange: setPython
             }
           )
-        ] }, build.build_id);
-      })
+        ] })
+      ] }),
+      !catalog.builds.length && !data.installations.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-dashed border-brand-dark/15 p-5 text-sm text-brand-dark/65", children: "No SDK builds are available in this catalog." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: versionList, children: [
+        buildRows,
+        looseRows
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-x-4 gap-y-2", children: [
+        selectedId ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: versionButton,
+            disabled: selectionBlocked,
+            onClick: () => {
+              if (status) onAction({
+                input: { action: "prepare_rollback", job_id: cigarVersionJobId(), expected_generation: status.generation },
+                title: "Prepare last good CIGAR build",
+                detail: "Verify the last good installation and current data. Guard will offer a separate explicit rollback switch when it is ready."
+              });
+            },
+            children: "Prepare last good build"
+          }
+        ) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-brand-dark/60", children: activeSelection ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", children: "Finish, cancel or recover the current selection job before preparing another." }) : "Something wrong after a switch? Go back to the last version that worked." })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": id2 + "-python", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: id2 + "-python", className: versionHeading, children: "Python for CIGAR" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "CIGAR runs on its own private copy of Python. Your system Python is never touched." })
+      ] }),
+      !catalog.interpreter_builds.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/65", children: "No private Python builds are listed." }) : null,
+      hostPython.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: versionList, children: hostPython.map(pythonRow) }) : null,
+      otherPython.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: summary, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-4 transition-transform group-open:rotate-90 motion-reduce:transition-none" }),
+          "Builds for other computers ",
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-normal text-brand-dark/50", children: [
+            "(",
+            otherPython.length,
+            ")"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: versionList + " mt-2 opacity-90", children: otherPython.map(pythonRow) })
+      ] }) : null
     ] })
   ] });
 }
@@ -5186,119 +5420,146 @@ const operation = {
   select: "Select first runtime",
   recover: "Recover selection"
 };
+const time = (ms) => /* @__PURE__ */ jsxRuntimeExports.jsx("time", { dateTime: new Date(ms).toISOString(), children: new Date(ms).toLocaleString() });
 function CigarVersionJobsPanel(props) {
   const [acknowledged, setAcknowledged] = reactExports.useState(null);
   const id2 = reactExports.useId();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": id2 + "-heading", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: id2 + "-heading", className: "font-semibold text-brand-dark", children: "Preparation & selection jobs" }),
-    !props.jobs.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No CIGAR update jobs have been recorded." }) : null,
-    props.jobs.map((job) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: versionCard, "aria-label": operation[job.operation] + " " + job.job_id, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "font-semibold text-brand-dark", children: operation[job.operation] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", role: "status", children: [
-        job.phase.replaceAll("_", " "),
-        job.cancel_requested ? " · cancellation requested" : ""
-      ] }),
-      job.family === "selection" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-sm text-slate-600", children: [
-          "Target: ",
-          job.target_runtime_id
-        ] }),
-        job.keeps_disabled ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
-          job.operation === "recover" ? "Recovery keeps CIGAR off." : "Selecting this runtime keeps CIGAR off.",
-          " Start it separately when you are ready."
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Switching briefly pauses CIGAR. Context access and app connections require fresh grants afterward. Your Guard approvals remain in place." }),
-        job.can_commit ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          job.reconnect_required ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 items-center gap-3 text-sm text-slate-600", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "checkbox",
-                checked: acknowledged === job.job_id + ":" + job.expected_generation,
-                disabled: props.selectionDisabled,
-                onChange: (event) => setAcknowledged(event.target.checked ? job.job_id + ":" + job.expected_generation : null)
-              }
-            ),
-            "I am ready to reconnect context sources and apps."
-          ] }) : null,
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              className: versionButton,
-              disabled: props.selectionDisabled || !canCommitCigarJob(job, props.status) || job.reconnect_required && acknowledged !== job.job_id + ":" + job.expected_generation,
-              onClick: () => props.onAction({
-                input: { action: "commit", job_id: job.job_id, expected_generation: job.expected_generation, reconnect: job.reconnect_required },
-                title: job.keeps_disabled ? "Select CIGAR runtime" : "Switch CIGAR now",
-                detail: job.keeps_disabled ? "Commit the verified selection and keep CIGAR off." : "Switch to the verified runtime now. Reconnect context sources and apps after the switch."
-              }),
-              children: job.keeps_disabled ? "Select & keep CIGAR off" : "Switch now"
-            }
-          ),
-          !canCommitCigarJob(job, props.status) ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-amber-800", children: "The live selection changed. Refresh status and jobs before continuing." }) : null
-        ] }) : null
-      ] }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-        cigarJobPending(job) && !job.cancel_requested ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            className: versionButton,
-            disabled: props.disabled,
-            onClick: () => props.onAction({ input: { action: "cancel", job_id: job.job_id }, title: "Cancel CIGAR job", detail: "Ask Guard to cancel this job and finish its cleanup." }),
-            children: "Cancel job"
-          }
-        ) : null,
-        job.recovery_available ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            className: versionButton,
-            disabled: props.disabled || !props.status,
-            onClick: () => props.onAction({
-              input: {
-                action: "recover",
-                job_id: job.job_id,
-                ...job.family === "selection" && props.status ? { expected_generation: props.status.generation } : {}
-              },
-              title: "Recover interrupted CIGAR work",
-              detail: "Ask Guard to reconcile the interrupted operation. Recovery never restores old context grants or approvals."
-            }),
-            children: "Recover job"
-          }
-        ) : null
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "text-xs text-slate-600", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer", children: "Job details" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all", children: [
-          "Job: ",
-          job.job_id
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all", children: [
-          "Diagnostic: ",
-          job.code
-        ] }),
-        job.family === "selection" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
-          "Expected generation: ",
-          job.expected_generation
-        ] }) : null,
-        job.family === "selection" && job.recovery_attempt ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
-            "Recovery deadline: ",
-            /* @__PURE__ */ jsxRuntimeExports.jsx("time", { dateTime: new Date(job.recovery_attempt.deadline_at_ms).toISOString(), children: new Date(job.recovery_attempt.deadline_at_ms).toLocaleString() })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
-            "Original preparation deadline: ",
-            /* @__PURE__ */ jsxRuntimeExports.jsx("time", { dateTime: new Date(job.deadline_at_ms).toISOString(), children: new Date(job.deadline_at_ms).toLocaleString() })
-          ] })
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
-          "Deadline: ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("time", { dateTime: new Date(job.deadline_at_ms).toISOString(), children: new Date(job.deadline_at_ms).toLocaleString() })
-        ] }),
-        job.family === "selection" && job.cleanup_pending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Cleanup is still pending. Wait before another switch." }) : null
-      ] })
-    ] }, job.job_id))
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: id2 + "-heading", className: versionHeading, children: "In progress" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Work Guard is doing for you. Each change waits for your go-ahead before it touches the version in use." })
+    ] }),
+    !props.jobs.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/65", children: "No CIGAR update jobs have been recorded." }) : null,
+    props.jobs.map((job) => {
+      const pending = cigarJobPending(job);
+      const attention = job.recovery_available || job.phase === "failed" || job.phase === "recovery_required";
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "article",
+        {
+          "aria-label": operation[job.operation] + " " + job.job_id,
+          className: "guard-surface-in space-y-3 rounded-2xl border p-4 sm:p-5 " + (attention ? "border-amber-300/70 bg-amber-50/50" : "border-brand-blue/20 bg-brand-blue/[0.03]"),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2.5", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-8 items-center justify-center rounded-full " + (attention ? "bg-amber-100 text-amber-700" : "bg-brand-blue/10 text-brand-blue"), children: attention ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "size-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4" + (pending ? " motion-safe:animate-spin" : "") }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "font-semibold text-brand-dark", children: operation[job.operation] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: attention ? "amber" : pending ? "blue" : "slate", children: [
+                job.phase.replaceAll("_", " "),
+                job.cancel_requested ? " · cancellation requested" : ""
+              ] }) })
+            ] }),
+            job.family === "selection" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 text-sm leading-6 text-brand-dark/75", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-xs text-brand-dark/55", children: [
+                "Target: ",
+                job.target_runtime_id
+              ] }),
+              job.keeps_disabled ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                job.operation === "recover" ? "Recovery keeps CIGAR off." : "Selecting this runtime keeps CIGAR off.",
+                " Start it separately when you are ready."
+              ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Switching briefly pauses CIGAR. Context access and app connections require fresh grants afterward. Your Guard approvals remain in place." }),
+              job.can_commit ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                job.reconnect_required ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-brand-dark/10 bg-white px-3", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      type: "checkbox",
+                      className: "size-4 accent-brand-blue",
+                      checked: acknowledged === job.job_id + ":" + job.expected_generation,
+                      disabled: props.selectionDisabled,
+                      onChange: (event) => setAcknowledged(event.target.checked ? job.job_id + ":" + job.expected_generation : null)
+                    }
+                  ),
+                  "I am ready to reconnect context sources and apps."
+                ] }) : null,
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: versionPrimary,
+                    disabled: props.selectionDisabled || !canCommitCigarJob(job, props.status) || job.reconnect_required && acknowledged !== job.job_id + ":" + job.expected_generation,
+                    onClick: () => props.onAction({
+                      input: { action: "commit", job_id: job.job_id, expected_generation: job.expected_generation, reconnect: job.reconnect_required },
+                      title: job.keeps_disabled ? "Select CIGAR runtime" : "Switch CIGAR now",
+                      detail: job.keeps_disabled ? "Commit the verified selection and keep CIGAR off." : "Switch to the verified runtime now. Reconnect context sources and apps after the switch."
+                    }),
+                    children: job.keeps_disabled ? "Select & keep CIGAR off" : "Switch now"
+                  }
+                ),
+                !canCommitCigarJob(job, props.status) ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-amber-800", children: "The live selection changed. Refresh status and jobs before continuing." }) : null
+              ] }) : null
+            ] }) : null,
+            pending && !job.cancel_requested || job.recovery_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+              pending && !job.cancel_requested ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: versionButton,
+                  disabled: props.disabled,
+                  onClick: () => props.onAction({ input: { action: "cancel", job_id: job.job_id }, title: "Cancel CIGAR job", detail: "Ask Guard to cancel this job and finish its cleanup." }),
+                  children: "Cancel job"
+                }
+              ) : null,
+              job.recovery_available ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  className: versionButton,
+                  disabled: props.disabled || !props.status,
+                  onClick: () => props.onAction({
+                    input: {
+                      action: "recover",
+                      job_id: job.job_id,
+                      ...job.family === "selection" && props.status ? { expected_generation: props.status.generation } : {}
+                    },
+                    title: "Recover interrupted CIGAR work",
+                    detail: "Ask Guard to reconcile the interrupted operation. Recovery never restores old context grants or approvals."
+                  }),
+                  children: "Recover job"
+                }
+              ) : null
+            ] }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group text-xs text-brand-dark/60", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "inline-flex min-h-8 cursor-pointer list-none items-center gap-1 font-medium hover:text-brand-dark [&::-webkit-details-marker]:hidden", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" }),
+                "Job details"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 space-y-0.5 pl-5", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all", children: [
+                  "Job: ",
+                  job.job_id
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all", children: [
+                  "Diagnostic: ",
+                  job.code
+                ] }),
+                job.family === "selection" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                  "Expected generation: ",
+                  job.expected_generation
+                ] }) : null,
+                job.family === "selection" && job.recovery_attempt ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                    "Recovery deadline: ",
+                    time(job.recovery_attempt.deadline_at_ms)
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                    "Original preparation deadline: ",
+                    time(job.deadline_at_ms)
+                  ] })
+                ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                  "Deadline: ",
+                  time(job.deadline_at_ms)
+                ] }),
+                job.family === "selection" && job.cleanup_pending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Cleanup is still pending. Wait before another switch." }) : null
+              ] })
+            ] })
+          ]
+        },
+        job.job_id
+      );
+    })
   ] });
 }
+const label = "text-sm font-medium text-brand-dark";
+const hint = "mt-1 text-xs leading-5 text-brand-dark/60";
 function CigarUpdatePreferencesPanel({ value, builds, disabled, onAction }) {
   const [draft, setDraft] = reactExports.useState(value.requested);
   const id2 = reactExports.useId();
@@ -5307,76 +5568,73 @@ function CigarUpdatePreferencesPanel({ value, builds, disabled, onAction }) {
   }, [value.revision]);
   const locked = (key2) => disabled || value.locked_settings.some((k) => k === "context_assistance_updates" || k === "context_assistance_updates." + key2);
   const changed = JSON.stringify(draft) !== JSON.stringify(value.requested);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: versionCard, "aria-labelledby": id2 + "-heading", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: id2 + "-heading", className: "font-semibold text-brand-dark", children: "Update preferences" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Preparing a build leaves your current selection in place. This Guard build requires an explicit switch and keeps the last good build." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block text-sm text-slate-600", children: [
-      "Update mode",
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "select",
-        {
-          className: versionField,
-          value: draft.mode,
-          disabled: locked("mode"),
-          onChange: (event) => setDraft({ ...draft, mode: event.target.value }),
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "manual", children: "Manual" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "notify", disabled: true, children: "Notify · delivery unavailable" }),
-            draft.mode === "prepare" ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "prepare", disabled: true, children: "Automatic preparation · unavailable" }) : null
-          ]
-        }
-      )
+  const modes = [
+    { value: "manual", label: "Manual", description: "You decide when to prepare and switch." },
+    { value: "notify", label: "Notify", description: "Not available in this Guard version.", disabled: true },
+    ...draft.mode === "prepare" ? [{ value: "prepare", label: "Automatic preparation", description: "Not available in this Guard version.", disabled: true }] : []
+  ];
+  const pins = [
+    { value: "", label: "No pin", description: "Any approved version can be prepared." },
+    ...draft.pinned_build && !builds.some((b) => b.identity.build_id === draft.pinned_build) ? [{ value: draft.pinned_build, label: draft.pinned_build, description: "No longer in the version list" }] : [],
+    ...builds.map((b) => ({ value: b.identity.build_id, label: "CIGAR " + b.identity.sdk_version + (b.withdrawn ? " · withdrawn" : ""), description: b.identity.build_id }))
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-5", "aria-labelledby": id2 + "-heading", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { id: id2 + "-heading", className: "font-semibold text-brand-dark", children: "Update preferences" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: hint, children: "Preparing a build leaves your current selection in place. This Guard build requires an explicit switch and keeps the last good build." })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Update notifications and automatic preparation are not available in this Guard build." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 items-center gap-3 text-sm text-slate-600", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          type: "checkbox",
-          checked: draft.allow_preview,
-          disabled: locked("allow_preview"),
-          onChange: (event) => setDraft({ ...draft, allow_preview: event.target.checked })
-        }
-      ),
-      "Allow preview selections"
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-5 sm:grid-cols-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: id2 + "-mode", className: label, children: "Update mode" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SelectMenu,
+          {
+            labelledBy: id2 + "-mode",
+            className: "mt-1.5 w-full",
+            value: draft.mode,
+            options: modes,
+            disabled: locked("mode"),
+            onChange: (mode2) => setDraft({ ...draft, mode: mode2 })
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: hint, children: "Update notifications and automatic preparation are not available in this Guard build." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: id2 + "-pin", className: label, children: "Pin to a build" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SelectMenu,
+          {
+            labelledBy: id2 + "-pin",
+            className: "mt-1.5 w-full",
+            value: draft.pinned_build ?? "",
+            options: pins,
+            disabled: locked("pinned_build"),
+            onChange: (pin) => {
+              const { pinned_build: _pin, ...rest } = draft;
+              setDraft(pin ? { ...rest, pinned_build: pin } : rest);
+            }
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: hint + " break-all", children: [
+          "Effective pin: ",
+          value.effective.pinned_build ?? "none",
+          ". Last good build: ",
+          value.effective.retain_last_good ? "retained" : "retention disabled by saved policy",
+          "."
+        ] })
+      ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Preview installation still needs release qualification and support in Guard." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block text-sm text-slate-600", children: [
-      "Pin to a build",
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "select",
-        {
-          className: versionField,
-          value: draft.pinned_build ?? "",
-          disabled: locked("pinned_build"),
-          onChange: (event) => {
-            const { pinned_build: _pin, ...rest } = draft;
-            setDraft(event.target.value ? { ...rest, pinned_build: event.target.value } : rest);
-          },
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "No pin" }),
-            draft.pinned_build && !builds.some((b) => b.identity.build_id === draft.pinned_build) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: draft.pinned_build, children: [
-              draft.pinned_build,
-              " · unavailable in catalog"
-            ] }) : null,
-            builds.map((b) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: b.identity.build_id, children: [
-              b.identity.sdk_version,
-              " · ",
-              b.identity.build_id,
-              b.withdrawn ? " · withdrawn" : ""
-            ] }, b.identity.build_id))
-          ]
-        }
-      )
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-sm text-slate-600", children: [
-      "Effective pin: ",
-      value.effective.pinned_build ?? "none",
-      ". Last good build: ",
-      value.effective.retain_last_good ? "retained" : "retention disabled by saved policy",
-      "."
-    ] }),
-    value.locked_settings.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Your organization manages some update preferences. Effective values may differ from your saved choices." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-dark/10 px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SettingsToggleRow,
+      {
+        label: "Allow preview selections",
+        checked: draft.allow_preview,
+        disabled: locked("allow_preview"),
+        description: "Preview installation still needs release qualification and support in Guard.",
+        onChange: (allow_preview) => setDraft({ ...draft, allow_preview })
+      }
+    ) }),
+    value.locked_settings.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Your organization manages some update preferences. Effective values may differ from your saved choices." }) : null,
     value.diagnostic ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "break-all text-sm text-amber-800", children: [
       "Update preference diagnostic: ",
       value.diagnostic
@@ -5387,6 +5645,50 @@ function CigarUpdatePreferencesPanel({ value, builds, disabled, onAction }) {
       detail: "Save these update choices without changing or starting the selected runtime."
     }), children: "Save update preferences" })
   ] });
+}
+function cigarStanding(status, data) {
+  const selectedId = status?.preferences.runtime_id ?? "";
+  const installed = data?.installations.find((item) => item.runtime_id === selectedId);
+  const running = status?.runtime?.active === true && status.effective_enabled;
+  const version = running ? status.runtime.package_version : installed?.sdk_version ?? (selectedId ? status?.last_check?.package_version : void 0);
+  if (!version) return { kind: "none" };
+  const host = data?.catalog.host_platform;
+  const newest = data?.catalog.builds.find((build) => !build.withdrawn && build.channel === "stable" && build.platforms.some((platform2) => platform2.platform === host)) ?? null;
+  const behind = newest !== null && newest.identity.sdk_version !== version && (installed?.build_id ?? null) !== newest.identity.build_id;
+  return { kind: behind ? "behind" : "current", version, running, newest: newest?.identity.sdk_version ?? null };
+}
+function Marker({ standing }) {
+  const [Icon, tone] = standing.kind === "behind" ? [HiMiniArrowUpCircle, "bg-brand-blue/10 text-brand-blue"] : standing.kind === "none" ? [HiMiniSparkles, "bg-brand-dark/[0.06] text-brand-dark/55"] : standing.running ? [HiMiniCheckCircle, "bg-brand-green-bg text-brand-green-text"] : [HiMiniPauseCircle, "bg-brand-dark/[0.06] text-brand-dark/55"];
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex size-10 shrink-0 items-center justify-center rounded-full " + tone, "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "size-5" }) });
+}
+function CigarVersionStatusBand({ status, data, loading, actions }) {
+  const standing = cigarStanding(status, data);
+  const surface = standing.kind === "behind" ? "border-brand-blue/20 bg-brand-blue/[0.04]" : "border-brand-dark/10 bg-white";
+  const body = standing.kind === "none" ? "Nothing is installed yet. Turn on CIGAR and Guard installs the version it approved for this computer. You don't need to pick one here." : standing.kind === "behind" ? `CIGAR ${standing.newest} is ready to prepare. Your current version keeps working until you choose to switch.` : standing.running ? "This is the newest version Guard has approved for this computer. Nothing to do." : "This version is installed but CIGAR is off. Turn it on from the top of the page whenever you like.";
+  const python = status?.runtime?.interpreter.version ?? status?.last_check?.interpreter.version;
+  const catalog = data?.catalog.catalog;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("section", { "aria-labelledby": "cigar-version-standing", className: "guard-surface-in rounded-2xl border p-4 sm:p-5 " + surface, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-x-6 gap-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-[1_1_20rem] items-start gap-3.5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Marker, { standing }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { id: "cigar-version-standing", className: "flex flex-wrap items-center gap-x-3 gap-y-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: standing.kind === "none" ? "text-xl font-semibold leading-tight tracking-[-0.01em] text-brand-dark" : "font-mono text-[1.75rem] font-semibold leading-none tracking-[-0.02em] tabular-nums text-brand-dark", children: standing.kind === "none" ? loading ? "Checking this computer…" : "Not installed yet" : standing.version }),
+          standing.kind !== "none" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: standing.running ? "green" : "slate", children: standing.running ? "Running" : "Off" }) : null,
+          standing.kind === "behind" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: "Update available" }) : null
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-[62ch] text-sm leading-6 text-brand-dark/75", children: body }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "flex flex-wrap gap-x-4 gap-y-1 text-xs text-brand-dark/60", "aria-label": "This computer", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: platformLabel(data?.catalog.host_platform ?? status?.runtime?.interpreter.platform) }),
+          python ? /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+            "Python ",
+            python.join(".")
+          ] }) : null,
+          catalog ? /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: catalog.fresh_for_preparation ? "Version list is current" : "Version list needs a refresh" }) : null
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: actions })
+  ] }) });
 }
 const object$4 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const readRoutes = {
@@ -5678,6 +5980,7 @@ function useCigarVersions(capture) {
   }
   return { data, loading, busy, error, uncertain, tracking, refresh, perform };
 }
+const notice = "rounded-xl border border-brand-dark/10 bg-surface-1 px-4 py-3 text-sm leading-6 text-brand-dark/75";
 function CigarVersionsPanel(props) {
   const versions = useCigarVersions(props.captureStatus);
   const [approval, setApproval] = reactExports.useState(null);
@@ -5686,6 +5989,7 @@ function CigarVersionsPanel(props) {
   const disabled = props.disabled || versions.busy || versions.loading;
   const changesDisabled = disabled || versions.uncertain;
   const selectionDisabled = changesDisabled || props.locked || props.dirty || !props.status || Boolean(props.status.job);
+  const catalog = data?.catalog.catalog;
   function choose(action) {
     if (disabled || action.input.action !== "cancel" && versions.uncertain) return;
     if (action.input.action !== "cancel" && props.gate?.enabled) setApproval(action);
@@ -5696,92 +6000,124 @@ function CigarVersionsPanel(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Updates" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Guard handles this for you when you turn CIGAR on. Come here only to pick a specific version, check for new ones, or go back to an earlier one. Opening this page changes nothing." })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled || versions.busy || versions.loading, onClick: () => void versions.refresh(), children: "Refresh versions & jobs" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CigarVersionStatusBand, { status: props.status, data, loading: versions.loading, actions: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
           type: "button",
           className: versionButton,
-          disabled: changesDisabled || !data?.catalog.catalog.remote_feed_configured || !data.catalog.catalog.trust_configured || Boolean(data.catalog.catalog.feed_diagnostic),
+          disabled: changesDisabled || !catalog?.remote_feed_configured || !catalog.trust_configured || Boolean(catalog.feed_diagnostic),
           onClick: () => choose({
             input: { action: "refresh_catalog", job_id: cigarVersionJobId() },
             title: "Check for CIGAR catalog updates",
             detail: "Fetch the configured signed release catalog. This does not prepare or switch an SDK."
           }),
-          children: "Check for catalog updates"
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowDown, { "aria-hidden": "true", className: "size-4" }),
+            "Check for catalog updates"
+          ]
         }
-      )
-    ] }),
-    versions.loading ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: "Reading CIGAR versions and job metadata…" }) : null,
-    versions.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: "Submitting the selected action. Preparation continues as a native job." }) : null,
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: versionQuiet, disabled: props.disabled || versions.busy || versions.loading, onClick: () => void versions.refresh(), children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "size-4" + (versions.loading ? " motion-safe:animate-spin" : "") }),
+        "Refresh versions & jobs"
+      ] })
+    ] }) }),
+    versions.loading && !data ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "space-y-3", "aria-label": "Reading CIGAR versions and job metadata…", children: [
+      [0, 1, 2].map((row) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-16 rounded-2xl bg-brand-dark/[0.04] motion-safe:animate-pulse" }, row)),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Reading CIGAR versions and job metadata…" })
+    ] }) : null,
+    versions.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: notice, children: "Submitting the selected action. Preparation continues as a native job." }) : null,
     versions.error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "cigar-note", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR updates need attention" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: versions.error }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Refresh versions and jobs before submitting another change." })
     ] }) : null,
-    versions.tracking ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-xs text-slate-600", children: [
+    versions.tracking ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-xs text-brand-dark/60", children: [
       "Last submitted job: ",
       versions.tracking,
       ". Refresh jobs to confirm its outcome."
     ] }) : null,
-    props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: "You can prepare builds now. Save your CIGAR preference edits before preparing or committing a selection." }) : null,
+    props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: notice, children: "You can prepare builds now. Save your CIGAR preference edits before preparing or committing a selection." }) : null,
     data ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: versionCard, "aria-label": "CIGAR release catalog", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
-          "Catalog: ",
-          data.catalog.catalog.source,
-          " · ",
-          data.catalog.catalog.fresh_for_preparation ? "current for preparation" : "refresh required",
-          " · Guard host: ",
-          data.catalog.host_platform ?? "not reported by this Guard build"
-        ] }),
-        !data.catalog.catalog.remote_feed_configured ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "A remote release feed is not configured. Guard can still use eligible bundled entries." }) : null,
-        data.catalog.catalog.diagnostic ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-sm text-amber-800", children: [
-          "Catalog diagnostic: ",
-          data.catalog.catalog.diagnostic
-        ] }) : null,
-        data.catalog.catalog.trust_diagnostic || data.catalog.catalog.feed_diagnostic ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-sm text-amber-800", children: [
-          "Catalog update configuration: ",
-          data.catalog.catalog.trust_diagnostic ?? data.catalog.catalog.feed_diagnostic
-        ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "text-sm text-slate-600", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer", children: "Import a signed catalog" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "Use a catalog signed by an already trusted release key. Importing metadata never selects or starts a runtime." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-2 block", children: [
-            "Signed catalog JSON",
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "textarea",
-              {
-                className: versionField,
-                rows: 4,
-                maxLength: 2e6,
-                value: signedCatalog,
-                disabled: changesDisabled,
-                onChange: (event) => setSignedCatalog(event.target.value),
-                spellCheck: false
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              className: versionButton,
-              disabled: changesDisabled || !signedCatalog.trim() || !data.catalog.catalog.trust_configured,
-              onClick: () => choose({
-                input: { action: "import_catalog", signed_catalog: signedCatalog },
-                title: "Import signed CIGAR catalog",
-                detail: "Verify and publish this release metadata using Guard's existing trusted keys. Leave the selected runtime unchanged."
-              }),
-              children: "Verify & import catalog"
-            }
-          )
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(CigarVersionJobsPanel, { jobs: data.jobs, status: props.status, disabled, selectionDisabled, onAction: choose }),
+      data.jobs.length ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarVersionJobsPanel, { jobs: data.jobs, status: props.status, disabled, selectionDisabled, onAction: choose }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx(CigarVersionBuildsPanel, { data, status: props.status, disabled: changesDisabled, selectionDisabled, onAction: choose }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(CigarUpdatePreferencesPanel, { value: data.updates, builds: data.catalog.builds, disabled: changesDisabled, onAction: choose })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group rounded-2xl border border-brand-dark/10 bg-white", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 hover:bg-surface-1 sm:px-5 [&::-webkit-details-marker]:hidden", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-4 shrink-0 text-brand-dark/50 transition-transform group-open:rotate-90 motion-reduce:transition-none" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: "Advanced" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-xs text-brand-dark/60", children: "Update preferences, pinning and the release catalog" })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8 border-t border-brand-dark/[0.07] px-4 py-5 sm:px-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CigarUpdatePreferencesPanel, { value: data.updates, builds: data.catalog.builds, disabled: changesDisabled, onAction: choose }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3 border-t border-brand-dark/[0.07] pt-6", "aria-label": "CIGAR release catalog", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "font-semibold text-brand-dark", children: "Release catalog" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid gap-3 text-sm sm:grid-cols-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-brand-dark/55", children: "Source" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "font-medium capitalize text-brand-dark", children: data.catalog.catalog.source })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-brand-dark/55", children: "Freshness" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "font-medium text-brand-dark", children: data.catalog.catalog.fresh_for_preparation ? "current for preparation" : "refresh required" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-brand-dark/55", children: "Guard host" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "font-mono text-xs leading-5 text-brand-dark", children: data.catalog.host_platform ?? "not reported by this Guard build" })
+              ] })
+            ] }),
+            !data.catalog.catalog.remote_feed_configured ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "A remote release feed is not configured. Guard can still use eligible bundled entries." }) : null,
+            data.catalog.catalog.diagnostic ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-sm text-amber-800", children: [
+              "Catalog diagnostic: ",
+              data.catalog.catalog.diagnostic
+            ] }) : null,
+            data.catalog.catalog.trust_diagnostic || data.catalog.catalog.feed_diagnostic ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-sm text-amber-800", children: [
+              "Catalog update configuration: ",
+              data.catalog.catalog.trust_diagnostic ?? data.catalog.catalog.feed_diagnostic
+            ] }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group/import text-sm text-brand-dark/75", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 font-semibold text-brand-dark/80 hover:text-brand-dark [&::-webkit-details-marker]:hidden", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-4 transition-transform group-open/import:rotate-90 motion-reduce:transition-none" }),
+                "Import a signed catalog"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 pl-5", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Use a catalog signed by an already trusted release key. Importing metadata never selects or starts a runtime." }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block text-xs font-medium text-brand-dark/65", children: [
+                  "Signed catalog JSON",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "textarea",
+                    {
+                      className: versionField + " font-mono text-xs",
+                      rows: 4,
+                      maxLength: 2e6,
+                      value: signedCatalog,
+                      disabled: changesDisabled,
+                      onChange: (event) => setSignedCatalog(event.target.value),
+                      spellCheck: false
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: versionButton,
+                    disabled: changesDisabled || !signedCatalog.trim() || !data.catalog.catalog.trust_configured,
+                    onClick: () => choose({
+                      input: { action: "import_catalog", signed_catalog: signedCatalog },
+                      title: "Import signed CIGAR catalog",
+                      detail: "Verify and publish this release metadata using Guard's existing trusted keys. Leave the selected runtime unchanged."
+                    }),
+                    children: "Verify & import catalog"
+                  }
+                )
+              ] })
+            ] })
+          ] })
+        ] })
+      ] })
     ] }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       SettingsSaveProofModal,
@@ -6250,7 +6586,23 @@ function ContextAssistanceSettings(props) {
     access
   ] });
 }
-const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
+const caption = "text-xs leading-5 text-brand-dark/60";
+const danger = "inline-flex min-h-11 items-center justify-center rounded-lg border border-red-200 bg-white px-3.5 py-2 text-sm font-semibold text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none";
+function Stat({ term, value }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-dark/[0.08] bg-white px-3.5 py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-brand-dark/60", children: term }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-lg font-semibold tabular-nums text-brand-dark", children: value })
+  ] });
+}
+function Row({ title, body, action }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4 sm:px-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-[1_1_16rem]", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-5 text-brand-dark/65", children: body })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0", children: action })
+  ] });
+}
 function contextDiagnostics(status, data) {
   const runtime = status.runtime ?? status.last_check;
   const code = (value) => value === null ? null : /^[a-z0-9_]{1,160}$/.test(value) ? value : "redacted_diagnostic";
@@ -6312,8 +6664,8 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
     if (signal.aborted) return;
     setStatus(value);
     setData(null);
-    const summary = await fetchContextData(signal);
-    if (!signal.aborted) setData(summary);
+    const summary2 = await fetchContextData(signal);
+    if (!signal.aborted) setData(summary2);
   }
   async function perform(operation2, changes = false) {
     if (busy || disabled) return;
@@ -6390,60 +6742,124 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
   }
   const ready = Boolean(status?.effective_enabled);
   const copy = status ? contextStatusCopy(status) : { label: "Status unavailable", detail: "Refresh context status to inspect this optional feature." };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(SettingsFormSection, { title: "Context data and repair", description: "Inspect or clear optional context separately from Guard approvals and evidence.", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "region", "aria-label": "Context data and repair controls", className: "space-y-3 py-4", "aria-busy": busy, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm font-semibold text-brand-dark", children: copy.label }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: copy.detail }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
-        "Prepared contexts and history use local memory. ",
-        status?.capabilities?.private_persistence ? "Optional saved evidence uses private local files, with no Guard encryption. It remains after the runtime stops until expiry cleanup or removal. Guard removes expired evidence while running or before reuse after launch. Permissions must be granted again after restart." : "This build cannot activate saved evidence. Existing saved evidence can still be inspected and removed below."
-      ] }),
-      data ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-2 gap-2 text-sm text-slate-600", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Active workspace/app grants" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: data.active_scopes }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Selected files" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: data.selected_files }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Current contexts" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: data.current_contexts }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Prepared history entries" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: data.history_entries }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Encoded history payload" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { children: [
-          data.history_encoded_bytes.toLocaleString(),
-          " bytes"
+  const offAvailable = Boolean(savedEnabled || status?.requested_enabled || status?.effective_enabled || status?.job);
+  const removable = Boolean(data?.saved_evidence && data.saved_evidence.status !== "empty" && data.saved_evidence.status !== "unsupported");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "region", "aria-label": "Context data and repair controls", className: "space-y-8", "aria-busy": busy, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "guard-surface-in rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-5", "aria-label": "Context data status", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-x-6 gap-y-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-[1_1_20rem] items-start gap-3.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-10 shrink-0 items-center justify-center rounded-full " + (ready ? "bg-brand-green-bg text-brand-green-text" : "bg-brand-dark/[0.06] text-brand-dark/55"), children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "size-5" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-1.5", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xs font-semibold uppercase tracking-[0.08em] text-brand-dark/55", children: "Context data and repair" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-lg font-semibold tracking-[-0.01em] text-brand-dark", children: copy.label }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-[62ch] text-sm leading-6 text-brand-dark/75", children: copy.detail }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: caption + " max-w-[70ch]", children: [
+              "Prepared contexts and history use local memory. ",
+              status?.capabilities?.private_persistence ? "Optional saved evidence uses private local files, with no Guard encryption. It remains after the runtime stops until expiry cleanup or removal. Guard removes expired evidence while running or before reuse after launch. Permissions must be granted again after restart." : "This build cannot activate saved evidence. Existing saved evidence can still be inspected and removed below."
+            ] })
+          ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "App connections" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: data.agent_sessions })
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Live context counts are available while a verified runtime is ready." }),
-      data?.saved_evidence ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 text-sm text-slate-600", role: "region", "aria-label": "Saved context evidence", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", children: savedEvidenceCopy(data.saved_evidence) }),
-        data.saved_evidence.slots !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-2 gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Saved workspace/app stores" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: data.saved_evidence.slots }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Saved file bytes" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: data.saved_evidence.bytes?.toLocaleString() ?? "Unavailable" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Note writes to reconcile" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: data.saved_evidence.unresolved_writes ?? "Unavailable" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Expired stores awaiting cleanup" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: data.saved_evidence.expired_slots ?? "Unavailable" })
-        ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Saved evidence is limited to eight stores and 528 MiB of logical file bytes, including database journals. This does not measure process memory." })
-      ] }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "History is limited to eight entries and 512 KiB of encoded payload per workspace/app grant, with the configured retention period. These counts do not measure process memory or execution safety." }),
-      message2 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: message2 }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button, type: "button", disabled: busy || disabled, onClick: () => void perform(refresh), children: "Refresh context data" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button, type: "button", disabled: busy || disabled || !ready || !data?.history_entries, onClick: () => setConfirm("history"), children: "Clear context history" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button, type: "button", disabled: busy || disabled || !ready && !data?.saved_evidence, onClick: () => setConfirm("data"), children: "Clear all context data" }),
-        data?.saved_evidence && data.saved_evidence.status !== "empty" && data.saved_evidence.status !== "unsupported" ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button, type: "button", disabled: busy || disabled, onClick: () => setConfirm("saved"), children: "Remove saved evidence" }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button, type: "button", disabled: busy || disabled || !status?.verification_permitted || !status?.preferences.runtime_id || Boolean(status.job), onClick: () => setConfirm("recheck"), children: "Recheck context runtime" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button, type: "button", disabled: busy || !status, onClick: () => {
-          if (status) downloadBlob(new Blob([JSON.stringify(contextDiagnostics(status, data), null, 2)], { type: "application/json" }), "guard-context-diagnostics.json");
-        }, children: "Export context diagnostics" }),
-        savedEnabled || status?.requested_enabled || status?.effective_enabled || status?.job ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button, type: "button", disabled: busy || disabled, onClick: stop, children: "Turn off context assistance" }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: `${button} inline-flex items-center`, href: guardAwareHref("/cigar?section=runtime"), children: "Manage context setup" })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet, type: "button", disabled: busy || disabled, onClick: () => void perform(refresh), children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "size-4" }),
+            "Refresh context data"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet, type: "button", disabled: busy || !status, onClick: () => {
+            if (status) downloadBlob(new Blob([JSON.stringify(contextDiagnostics(status, data), null, 2)], { type: "application/json" }), "guard-context-diagnostics.json");
+          }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { "aria-hidden": "true", className: "size-4" }),
+            "Export context diagnostics"
+          ] })
+        ] })
+      ] }) }),
+      message2 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "rounded-xl border border-brand-dark/10 bg-surface-1 px-4 py-3 text-sm leading-6 text-brand-dark/75", children: message2 }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": "cigar-data-held", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "cigar-data-held", className: versionHeading, children: "What CIGAR is holding" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Counts only. Guard never shows source text, queries or paths here." })
+        ] }),
+        data ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-2 gap-2 sm:grid-cols-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Active workspace/app grants", value: data.active_scopes }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Selected files", value: data.selected_files }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Current contexts", value: data.current_contexts }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Prepared history entries", value: data.history_entries }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Encoded history payload", value: data.history_encoded_bytes.toLocaleString() + " bytes" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "App connections", value: data.agent_sessions })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70", children: "Live context counts are available while a verified runtime is ready." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption, children: "History is limited to eight entries and 512 KiB of encoded payload per workspace/app grant, with the configured retention period. These counts do not measure process memory or execution safety." })
       ] }),
-      !ready ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "If a runtime is unavailable, turn off assistance to release its context. Rechecking requires an enrolled Python 3.14 runtime." }) : null
+      data?.saved_evidence ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-5", role: "region", "aria-label": "Saved context evidence", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-semibold text-brand-dark", children: "Saved evidence" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-brand-dark/75", children: savedEvidenceCopy(data.saved_evidence) }),
+        data.saved_evidence.slots !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-2 gap-2 sm:grid-cols-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Saved workspace/app stores", value: data.saved_evidence.slots }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Saved file bytes", value: data.saved_evidence.bytes?.toLocaleString() ?? "Unavailable" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Note writes to reconcile", value: data.saved_evidence.unresolved_writes ?? "Unavailable" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Expired stores awaiting cleanup", value: data.saved_evidence.expired_slots ?? "Unavailable" })
+        ] }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption, children: "Saved evidence is limited to eight stores and 528 MiB of logical file bytes, including database journals. This does not measure process memory." })
+      ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": "cigar-data-fix", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "cigar-data-fix", className: versionHeading, children: "Fix a problem" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: versionList, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Row,
+            {
+              title: "Check the runtime again",
+              body: !ready ? "If a runtime is unavailable, turn off assistance to release its context. Rechecking requires an enrolled Python 3.14 runtime." : "Ends current context access, then checks the selected runtime. Grant access again afterward.",
+              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionButton, type: "button", disabled: busy || disabled || !status?.verification_permitted || !status?.preferences.runtime_id || Boolean(status.job), onClick: () => setConfirm("recheck"), children: "Recheck context runtime" })
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Row,
+            {
+              title: "Change setup",
+              body: "Runtime, sources, limits and storage live in Settings.",
+              action: /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: versionButton, href: guardAwareHref("/cigar?section=runtime"), children: "Manage context setup" })
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": "cigar-data-danger", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "cigar-data-danger", className: versionHeading, children: "Delete or turn off" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Each of these asks you first. Guard approvals and evidence are never touched." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "divide-y divide-red-200/70 overflow-hidden rounded-2xl border border-red-200 bg-red-50/30", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Row,
+            {
+              title: "Prepared context history",
+              body: "Deletes retained historical briefs. Current contexts and source permissions stay.",
+              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled || !ready || !data?.history_entries, onClick: () => setConfirm("history"), children: "Clear context history" })
+            }
+          ),
+          removable ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Row,
+            {
+              title: "Saved evidence",
+              body: "Removes saved source evidence and reviewed notes, including inactive stores.",
+              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled, onClick: () => setConfirm("saved"), children: "Remove saved evidence" })
+            }
+          ) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Row,
+            {
+              title: "Everything CIGAR knows",
+              body: "Deletes briefs, saved evidence, source grants and app connections. You can grant access again later.",
+              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled || !ready && !data?.saved_evidence, onClick: () => setConfirm("data"), children: "Clear all context data" })
+            }
+          ),
+          offAvailable ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Row,
+            {
+              title: "Turn CIGAR off",
+              body: "Stops the runtime now and ends all context access.",
+              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled, onClick: stop, children: "Turn off context assistance" })
+            }
+          ) : null
+        ] })
+      ] })
     ] }),
     confirm ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ConfirmDialog,

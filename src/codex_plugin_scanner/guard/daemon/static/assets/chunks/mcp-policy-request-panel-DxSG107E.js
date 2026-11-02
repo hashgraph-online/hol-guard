@@ -1,5 +1,5 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/business-policy-recovery-panel-C3u-DdED.js","assets/guard-dashboard.js","assets/index.css"])))=>i.map(i=>d[i]);
-import { dO as fetchGuardApi, dL as GuardHarnessActionError, j as jsxRuntimeExports, r as reactExports, eX as fetchMcpPolicyRequest, b0 as buildApprovalProofCredentials, eY as resolveMcpPolicyRequest, a7 as EmptyState, A as ActionButton, i as HiMiniArrowPath, a$ as isApprovalProofSubmitDisabled, bO as WorkspacePageHeader, af as Badge, a0 as HiMiniShieldCheck, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, S as SectionLabel, dd as HiMiniClock, eZ as HiMiniDocumentPlus, e_ as HiMiniDocumentMagnifyingGlass, l as HiMiniNoSymbol, a_ as ApprovalProofFieldInputs, c1 as HiMiniKey, ez as __vitePreload } from "../guard-dashboard.js";
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/business-policy-recovery-panel-Bo7J3RbY.js","assets/guard-dashboard.js","assets/index.css"])))=>i.map(i=>d[i]);
+import { dW as fetchGuardApi, dT as GuardHarnessActionError, j as jsxRuntimeExports, r as reactExports, e$ as fetchMcpPolicyRequest, b1 as buildApprovalProofCredentials, f0 as resolveMcpPolicyRequest, a7 as EmptyState, A as ActionButton, i as HiMiniArrowPath, b0 as isApprovalProofSubmitDisabled, bW as WorkspacePageHeader, af as Badge, a0 as HiMiniShieldCheck, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, S as SectionLabel, dl as HiMiniClock, f1 as HiMiniDocumentPlus, f2 as HiMiniDocumentMagnifyingGlass, l as HiMiniNoSymbol, a$ as ApprovalProofFieldInputs, c9 as HiMiniKey, eG as __vitePreload } from "../guard-dashboard.js";
 const RECOVERY_SOURCE_ERRORS = /* @__PURE__ */ new Set([
   "native_business_source_installation_incoherent",
   "native_business_source_transaction_not_committed",
@@ -152,7 +152,7 @@ function PlanCountCard(props) {
     ] }) : null
   ] });
 }
-const BusinessPolicyRecoveryPanel = reactExports.lazy(() => __vitePreload(() => import("./business-policy-recovery-panel-C3u-DdED.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then(
+const BusinessPolicyRecoveryPanel = reactExports.lazy(() => __vitePreload(() => import("./business-policy-recovery-panel-Bo7J3RbY.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then(
   (module) => ({ default: module.BusinessPolicyRecoveryPanel })
 ));
 function McpPolicyRequestPanel(props) {

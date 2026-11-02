@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { ContextAgentProbe } from "./context-agent-probe";
 import { contextStatus } from "./context-status";
 import { contextPairingCapacityFlow } from "./context-pairing-capacity-flow";
+import { chooseMenuOption } from "../select-menu";
 
 export async function contextSharingFlow(page: Page, state: IntegrationState, save: (page: Page, state: IntegrationState) => Promise<void>) {
   const seed = state.seeded.context_assistance;
@@ -27,7 +28,7 @@ export async function contextSharingFlow(page: Page, state: IntegrationState, sa
       expect((await probe.request("list")).tools).not.toContain("propose_guard_context_note");
       pending.push((await probe.request("get_context_status")).data);
     }
-    await page.getByRole("combobox", { name: "Context consumer", exact: true }).selectOption("codex");
+    await chooseMenuOption(page.getByRole("combobox", { name: "Context consumer", exact: true }), "codex");
     await page.getByLabel("Workspace folder", { exact: true }).fill(state.workspace);
     await page.getByLabel("Files relative to the workspace, one per line").fill("README.md");
     await page.getByRole("checkbox", { name: "Allow reviewed shared notes in this app's context", exact: true }).check();
@@ -40,7 +41,7 @@ export async function contextSharingFlow(page: Page, state: IntegrationState, sa
     for (const connection of pending) {
       await page.getByRole("button", { name: "Refresh app connections", exact: true }).click();
       const region = page.getByRole("region", { name: `Context connection ${connection.session_id}`, exact: true });
-      await region.getByRole("combobox", { name: "Workspace and app grant", exact: true }).selectOption({ index: 1 });
+      await chooseMenuOption(region.getByRole("combobox", { name: "Workspace and app grant", exact: true }), { index: 0 });
       await region.getByRole("button", { name: "Authorize context connection", exact: true }).click();
       const proof = page.getByRole("dialog");
       await proof.getByLabel("Approval password").fill(state.approvalPassword);

@@ -4,6 +4,7 @@ import { contextStatus } from "./context-status";
 import { stopContextAssistance } from "./context-stop";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { chooseMenuOption } from "../select-menu";
 
 async function save(page: Page, state: IntegrationState) {
   await page.getByRole("region", { name: "Save CIGAR preferences" }).getByRole("button", { name: "Save CIGAR preferences", exact: true }).click();
@@ -41,7 +42,7 @@ test("private saved evidence survives runtime restart with fresh grants and can 
       if (await toggle.getAttribute("aria-checked") === "true") await toggle.click();
     }
     await page.getByText("Sources, limits and runtime details", { exact: true }).click();
-    await page.getByRole("combobox", { name: "Evidence storage", exact: true }).selectOption("sqlite");
+    await chooseMenuOption(page.getByRole("combobox", { name: "Evidence storage", exact: true }), "sqlite");
     await page.getByRole("spinbutton", { name: "Context history, saved evidence and shared-note retention in hours", exact: true }).fill("1");
     const files = page.getByRole("switch", { name: "Allow selected workspace documents", exact: true });
     if (await files.getAttribute("aria-checked") !== "true") await files.click();
