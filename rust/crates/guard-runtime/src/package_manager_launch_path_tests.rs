@@ -60,10 +60,8 @@ fn the_shim_directory_and_empty_entries_are_dropped() {
         text(&missing),
     ]
     .join(";");
-    assert_eq!(
-        launch_path(&layout, &path, ";"),
-        json!({ "path": [text(&layout.tools), text(&missing)].join(";") })
-    );
+    let kept = [text(&layout.tools), text(&missing)].join(";");
+    assert_eq!(launch_path(&layout, &path, ";"), json!({ "path": kept }));
 }
 
 #[test]
