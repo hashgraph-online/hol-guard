@@ -2234,6 +2234,25 @@ args = ["workspace-skill.js", "--changed"]
         assert output["install_target"]["intended_harness"] == "codex"
         assert output["threat_intelligence"]["verdict_source"] == "local-scan"
 
+    def test_guard_preflight_enforce_refuses_a_scan_without_a_verdict(self, tmp_path, capsys, monkeypatch):
+        target = tmp_path / "incoming-plugin"
+        target.mkdir(parents=True)
+        payload = {
+            "schema_version": "guard-consumer.v2",
+            "install_target": {"path": str(target), "intended_harness": "codex"},
+        }
+        monkeypatch.setattr(
+            guard_commands_module,
+            "run_consumer_scan",
+            lambda path, intended_harness=None, options=None: payload,
+        )
+
+        rc = main(["guard", "preflight", str(target), "--harness", "codex", "--enforce", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 2
+        assert "install_verdict" not in output
+
     def test_guard_preflight_human_output_stays_summary_first(self, tmp_path, capsys, monkeypatch):
         target = tmp_path / "incoming-plugin"
         target.mkdir(parents=True)

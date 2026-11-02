@@ -656,18 +656,6 @@
       "note": "Admits a configured state value or rejects it; it chooses nothing."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/schemas/consumer_mode.py",
-      "func": "_install_recommendation",
-      "root": "none",
-      "reading": "presentation",
-      "actions": [
-        "allow",
-        "block",
-        "review"
-      ],
-      "note": "Feeds policy_recommendation.action and can_install in the consumer-mode contract. Both are read only by the CLI report renderer; nothing gates on them."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/temporary_mcp_approvals.py",
       "func": "temporary_mcp_grant_decision",
       "root": "mcp",

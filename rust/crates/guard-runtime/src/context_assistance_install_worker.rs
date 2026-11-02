@@ -30,21 +30,18 @@ pub(super) fn policy(home: &Path) -> Result<(), String> {
 }
 pub(super) fn space(home: &Path, bytes: u64) -> Result<(), String> {
     #[cfg(unix)]
-    {
+    let available = {
         let info =
             nix::sys::statvfs::statvfs(home).map_err(|_| error("install_disk_unavailable"))?;
-        let available =
-            u128::from(info.blocks_available()).saturating_mul(u128::from(info.fragment_size()));
-        if available < u128::from(bytes).saturating_add(64 * 1024 * 1024) {
-            return Err(error("install_disk_full"));
-        }
-        Ok(())
+        u128::from(info.blocks_available()).saturating_mul(u128::from(info.fragment_size()))
+    };
+    #[cfg(windows)]
+    let available =
+        u128::from(fs2::available_space(home).map_err(|_| error("install_disk_unavailable"))?);
+    if available < u128::from(bytes).saturating_add(64 * 1024 * 1024) {
+        return Err(error("install_disk_full"));
     }
-    #[cfg(not(unix))]
-    {
-        let _ = (home, bytes);
-        Err(error("install_platform_unqualified"))
-    }
+    Ok(())
 }
 pub(super) fn child(home: &Path, parent: &str, name: &str) -> Result<PathBuf, String> {
     if !is_lower_hex(name, 64) {
@@ -61,11 +58,9 @@ pub(super) fn create_owned(home: &Path, path: &Path, job: &Job) -> Result<(), St
             .create(path)
             .map_err(|_| error("install_slot_exists"))?;
     }
-    #[cfg(not(unix))]
-    {
-        let _ = (home, path, job);
-        return Err(error("install_platform_unqualified"));
-    }
+    // Windows inherits the Guard home's owner-only access control list.
+    #[cfg(windows)]
+    fs::create_dir(path).map_err(|_| error("install_slot_exists"))?;
     let bytes = serde_json::to_vec(
         &json!({"schema":"guard-cigar-install-owner.v1", "job_id":job.request.job_id,
         "request_sha256":job.request_sha256,"slot":job.slot}),
@@ -221,6 +216,8 @@ pub(super) fn run(
     control.checkpoint().map_err(|e| error(e.code()))?;
     // One exclusive preparation lease serializes this no-overwrite publication.
     fs::rename(&stage, &destination).map_err(|_| error("install_publish_failed"))?;
+    // NTFS journals directory entries itself, and a directory cannot be
+    // opened for flushing through `File::open` there.
     #[cfg(unix)]
     {
         fs::File::open(

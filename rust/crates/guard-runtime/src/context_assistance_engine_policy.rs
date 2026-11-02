@@ -5,7 +5,6 @@ pub(super) fn effective(
     home: &std::path::Path,
     root: &SourceRoot,
 ) -> Result<ContextAssistanceConfig, RuntimeError> {
-    #[cfg(unix)]
     crate::policy_store::context_assistance_registry::switching::DataRemoval::check_clear(home)?;
     root.revalidate()?;
     let settings = crate::guard_config_load::context_assistance_for_workspace(home, root.path())

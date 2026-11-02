@@ -28,7 +28,6 @@ mod operator;
 mod store;
 #[path = "context_assistance_preparation_job_views.rs"]
 mod views;
-#[cfg(unix)]
 pub(super) fn lifecycle_directory(
     home: &Path,
     name: &str,
@@ -36,7 +35,6 @@ pub(super) fn lifecycle_directory(
 ) -> Result<PathBuf, String> {
     store::directory(home, name, create)
 }
-#[cfg(unix)]
 pub(super) fn lifecycle_read<T: serde::de::DeserializeOwned>(
     home: &Path,
     path: &Path,
@@ -44,41 +42,23 @@ pub(super) fn lifecycle_read<T: serde::de::DeserializeOwned>(
 ) -> Result<Option<T>, String> {
     store::private_read(home, path, limit, "cigar_switch_job")
 }
-#[cfg(unix)]
 pub(super) fn lifecycle_temporary_name(name: &str) -> bool {
     store::temporary_name(name)
 }
-#[cfg(unix)]
 pub(super) fn native_job_id_exists(home: &Path, id: &str) -> Result<bool, String> {
     Ok(store::get(home, id)?.is_some()
         || python_store::get(home, id)?.is_some()
         || catalog_store::get(home, id)?.is_some())
 }
-#[cfg(unix)]
 pub(super) fn total_job_count(home: &Path) -> Result<usize, String> {
     Ok(store::list(home)?.len()
         + python_store::list(home)?.len()
         + catalog_store::list(home)?.len()
         + super::switching::jobs::list(home)?.len())
 }
-#[cfg(not(unix))]
-fn total_job_count(home: &Path) -> Result<usize, String> {
-    Ok(store::list(home)?.len()
-        + python_store::list(home)?.len()
-        + catalog_store::list(home)?.len())
-}
 fn switch_job_id_exists(home: &Path, id: &str) -> Result<bool, String> {
-    #[cfg(unix)]
-    {
-        Ok(super::switching::jobs::get(home, id)?.is_some()
-            || catalog_store::get(home, id)?.is_some())
-    }
-    #[cfg(not(unix))]
-    {
-        Ok(catalog_store::get(home, id)?.is_some())
-    }
+    Ok(super::switching::jobs::get(home, id)?.is_some() || catalog_store::get(home, id)?.is_some())
 }
-#[cfg(unix)]
 pub(super) fn lifecycle_lease(home: &Path) -> Result<std::fs::File, String> {
     store::lease(home)
 }
@@ -156,7 +136,7 @@ fn state(jobs: &Jobs) -> Result<std::sync::MutexGuard<'_, State>, String> {
         .map_err(|_| error("install_worker_unavailable"))
 }
 impl Jobs {
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn install_test_catalog(
         &self,
         home: &Path,
@@ -173,7 +153,7 @@ impl Jobs {
     pub(crate) fn install(&self, home: &Path, request: InstallRequest) -> Result<Value, String> {
         self.install_from_catalog(home, request, None)
     }
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     fn install_catalog(
         &self,
         home: &Path,
@@ -240,9 +220,6 @@ impl Jobs {
         release
             .check_python_version(interpreter.facts.version)
             .map_err(|e| error(e.code()))?;
-        if !cfg!(unix) {
-            return Err(error("install_platform_unqualified"));
-        }
         let slot = match interpreter.python_bundle() {
             Some(python) => guard_cigar_install::slot_id_with_python(&release, &python.binding),
             None => guard_cigar_install::slot_id(&release, &interpreter.python_sha256),
