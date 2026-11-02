@@ -52,8 +52,12 @@ fn disagreement(evaluator: &CloudActionEvaluator, texts: &[String]) -> Option<St
 /// a message that carries it in full.
 fn retain(family: &str, seed: u64, case: Value) -> String {
     let directory = std::env::temp_dir().join("guard-cloud-action-differential");
+    retain_in(&directory, family, seed, case)
+}
+
+fn retain_in(directory: &std::path::Path, family: &str, seed: u64, case: Value) -> String {
     let path = directory.join(format!("{family}-{seed}.json"));
-    let written = std::fs::create_dir_all(&directory)
+    let written = std::fs::create_dir_all(directory)
         .and_then(|()| std::fs::write(&path, serde_json::to_vec_pretty(&case).unwrap()));
     let location = written.map_or_else(
         |error| format!("not written: {error}"),
@@ -299,6 +303,13 @@ fn a_mismatch_shrinks_to_a_minimal_retained_case() {
     let contains_planted = |value: &Value| value.to_string().contains("planted");
     let minimal = shrink(noisy, &contains_planted);
     assert_eq!(minimal, json!({"needle": {"deep": ["planted"]}}));
-    let message = retain("self-check", 0, json!({"spellings": [minimal.to_string()]}));
+    // A scratch directory of its own: the shared one keeps real mismatches.
+    let scratch = tempfile::tempdir().unwrap();
+    let message = retain_in(
+        scratch.path(),
+        "self-check",
+        0,
+        json!({"spellings": [minimal.to_string()]}),
+    );
     assert!(message.contains("planted"), "{message}");
 }
