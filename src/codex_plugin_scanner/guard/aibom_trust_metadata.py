@@ -123,12 +123,16 @@ def apply_local_trust_metadata(
     if domain is None and not cisco_layers and security is None:
         return enriched
 
-    claims = _native_trust_claims(
-        captured_at=captured_at,
-        domain=domain,
-        cisco_layers=cisco_layers,
-        security=security,
-    )
+    try:
+        claims = _native_trust_claims(
+            captured_at=captured_at,
+            domain=domain,
+            cisco_layers=cisco_layers,
+            security=security,
+        )
+    except NativeRunnerAuthorityError:
+        # One item's claims never abort the inventory; it ships without them.
+        return enriched
     if domain is not None:
         enriched["trustResolution"] = claims["resolution"]
     if claims["local_security"] is not None:
