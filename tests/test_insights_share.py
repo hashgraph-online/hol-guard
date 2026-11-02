@@ -72,3 +72,25 @@ def test_an_unavailable_resident_fails_the_share(monkeypatch: pytest.MonkeyPatch
         build_insights_share_payload({"total": 1})
     with pytest.raises(RuntimeError, match="could not prepare the insights share"):
         normalized_insights_share_url("https://hol.org/api/guard/receipts/sync")
+
+
+def test_only_the_shown_top_artifacts_reach_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[dict[str, object]] = []
+
+    def record(_kind: str, args: dict[str, object], **_kwargs: object) -> dict[str, object]:
+        sent.append(args)
+        return {"payload": {}}
+
+    monkeypatch.setattr(insights_share, "native_runner_authority", record)
+    rows = [{"name": "x" * 5000, "total": 9}, *({"name": f"a{index}", "total": 1} for index in range(6))]
+
+    insights_share.build_insights_share_payload({"top_artifacts": rows}, include_top_artifacts=True)
+    insights_share.build_insights_share_payload({"top_artifacts": rows})
+
+    shown, hidden = (args["analytics"] for args in sent)
+    assert shown["top_artifacts"] == [
+        {"name": "x" * 120, "total": 9},
+        {"name": "a0", "total": 1},
+        {"name": "a1", "total": 1},
+    ]
+    assert hidden["top_artifacts"] == []

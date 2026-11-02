@@ -13,6 +13,8 @@ from .runtime.runner_native_sync import sync_url as derived_sync_url
 if TYPE_CHECKING:
     from codex_plugin_scanner.guard.store import GuardStore
 
+_TOP_ARTIFACT_ROWS = 3
+_ARTIFACT_LABEL_CHARS = 120
 _UNAVAILABLE_MESSAGE = "Guard could not prepare the insights share. Check that the Guard daemon is running."
 
 
@@ -30,7 +32,7 @@ def build_insights_share_payload(
         answer = native_runner_authority(
             "insights_share_payload",
             {
-                "analytics": analytics,
+                "analytics": _bounded_analytics(analytics, include_top_artifacts=include_top_artifacts),
                 "include_top_artifacts": include_top_artifacts,
                 "show_display_name": show_display_name,
                 "display_name": display_name,
@@ -44,6 +46,22 @@ def build_insights_share_payload(
     if not isinstance(payload, dict):
         raise RuntimeError(_UNAVAILABLE_MESSAGE)
     return payload
+
+
+def _bounded_analytics(analytics: dict[str, object], *, include_top_artifacts: bool) -> dict[str, object]:
+    """The analytics with only the top artifacts the card can show.
+
+    The card shows at most three artifact labels of 120 characters, so longer
+    stored names never travel to the resident.
+    """
+
+    rows = analytics.get("top_artifacts") if include_top_artifacts else None
+    top_artifacts = [
+        {**row, "name": row["name"][:_ARTIFACT_LABEL_CHARS]} if isinstance(row.get("name"), str) else row
+        for row in (rows if isinstance(rows, list) else [])[:_TOP_ARTIFACT_ROWS]
+        if isinstance(row, dict)
+    ]
+    return {**analytics, "top_artifacts": top_artifacts}
 
 
 def normalized_insights_share_url(sync_url: str) -> str:
