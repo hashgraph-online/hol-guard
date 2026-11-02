@@ -49,6 +49,18 @@ impl Service {
         self.schedule(Check::Activate, home.to_path_buf()).is_ok()
     }
 
+    /// Lets a command hook reach the wake after it releases policy locks.
+    /// Never blocks: a contended service is simply asked on the next command.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn execution_resting(&self) -> bool {
+        self.state.try_lock().is_ok_and(|state| {
+            resting(&state)
+                && state.settings.effective.features.execution_context
+                && state.settings.effective.sources.native_policy_facts
+                && state.woke.is_none_or(|at| at.elapsed() >= RETRY)
+        })
+    }
+
     /// Wakes a resting runtime and waits a bounded time for its verification.
     pub(crate) fn wake_and_wait(
         &self,

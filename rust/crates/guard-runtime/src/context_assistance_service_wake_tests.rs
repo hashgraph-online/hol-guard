@@ -111,3 +111,27 @@ fn a_wake_and_a_click_share_one_pending_start() {
     );
     assert!(!service.wake(std::path::Path::new("/not-opened"), |_| true));
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_command_hook_reaches_the_wake_only_for_resting_execution_context() {
+    let service = Service::default();
+    let mut settings = saved_on(&service);
+    assert!(
+        !service.execution_resting(),
+        "execution context was never chosen"
+    );
+    settings.requested.features.execution_context = true;
+    settings.requested.sources.native_policy_facts = true;
+    settings.effective = settings.requested.clone();
+    service.configure(settings).unwrap();
+    assert!(service.execution_resting());
+    lock(&service.state).unwrap().woke = Some(Instant::now());
+    assert!(!service.execution_resting(), "one attempt per retry window");
+    let guard = lock(&service.state).unwrap();
+    assert!(
+        !service.execution_resting(),
+        "a busy service never blocks a hook"
+    );
+    drop(guard);
+}
