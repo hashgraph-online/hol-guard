@@ -117,7 +117,23 @@ pub(crate) fn terms(prompt: &str) -> Vec<String> {
         }
     }
     found.truncate(MAX_TERMS);
+    // A request for tests counts even when it comes late in a long prompt.
+    if !asks_for_tests(&found) && prompt_mentions_tests(prompt) {
+        found.truncate(MAX_TERMS - 1);
+        found.push("test".into());
+    }
     found
+}
+
+/// True when the search terms ask about tests.
+pub(crate) fn asks_for_tests(terms: &[String]) -> bool {
+    terms.iter().any(|term| TEST_WORDS.contains(&term.as_str()))
+}
+
+fn prompt_mentions_tests(prompt: &str) -> bool {
+    prompt
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|word| TEST_WORDS.contains(&singular(&word.to_lowercase()).as_str()))
 }
 
 fn singular(word: &str) -> String {
@@ -224,8 +240,7 @@ pub(crate) fn candidates(root: &Path, terms: &[String], budget: Duration) -> Vec
 /// did not ask about tests, since a test that quotes the same words would
 /// otherwise crowd out the file the request is about.
 fn ranked(mut scored: Vec<Scored>, terms: &[String]) -> Vec<String> {
-    let asks_for_tests = terms.iter().any(|term| TEST_WORDS.contains(&term.as_str()));
-    if !asks_for_tests && scored.iter().any(|item| !test_file(&item.relative)) {
+    if !asks_for_tests(terms) && scored.iter().any(|item| !test_file(&item.relative)) {
         scored.retain(|item| !test_file(&item.relative));
     }
     scored.sort_by(|a, b| {
@@ -242,10 +257,10 @@ fn ranked(mut scored: Vec<Scored>, terms: &[String]) -> Vec<String> {
 }
 
 /// A test or spec file by its usual name or folder in common languages.
-fn test_file(relative: &str) -> bool {
+pub(crate) fn test_file(relative: &str) -> bool {
     let lower = relative.to_lowercase();
     let name = lower.rsplit('/').next().unwrap_or(&lower);
-    let stem = name.split('.').next().unwrap_or(name);
+    let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
     lower.split('/').any(|part| TEST_DIRS.contains(&part))
         || name.contains(".test.")
         || name.contains(".spec.")

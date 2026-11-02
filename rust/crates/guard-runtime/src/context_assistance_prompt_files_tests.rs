@@ -51,6 +51,27 @@ fn prompt_words_skip_filler_and_keep_names() {
 }
 
 #[test]
+fn a_test_request_late_in_a_long_prompt_still_counts() {
+    let long = "change header color background spacing border radius font size weight \
+                alignment padding margin shadow and update the tests";
+    let found = terms(long);
+    assert_eq!(found.len(), MAX_TERMS);
+    assert!(asks_for_tests(&found), "{found:?}");
+    assert!(!asks_for_tests(&terms(
+        "change header color background spacing"
+    )));
+}
+
+#[test]
+fn dotted_test_names_are_tests() {
+    assert!(test_file("src/header.color_test.go"));
+    assert!(test_file("src/Header.test.tsx"));
+    assert!(test_file("tests/header.py"));
+    assert!(!test_file("src/header.color.ts"));
+    assert!(!test_file("src/contest.ts"));
+}
+
+#[test]
 fn a_color_change_finds_the_header_and_its_styles_only() {
     let (_dir, root) = canonical();
     let project = app(&root);

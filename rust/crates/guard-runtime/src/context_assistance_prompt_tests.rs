@@ -145,3 +145,17 @@ fn a_fence_inside_an_excerpt_cannot_close_the_block() {
     assert!(rendered.contains("README.md (lines 1-3)\n````markdown\nHeader usage:"));
     assert!(rendered.ends_with("<Header />\n```\n````"));
 }
+
+#[test]
+fn a_test_an_earlier_prompt_loaded_gives_way_to_the_source() {
+    let picked = [
+        excerpt("src/Header.test.tsx", "it('header color', () => {});"),
+        excerpt("src/Header.tsx", "export const Header = () => <header />;"),
+    ];
+    let rendered = render(&picked, &[], &words(&["header"])).unwrap();
+    assert!(!rendered.contains("Header.test.tsx"), "{rendered}");
+    let asked = render(&picked, &[], &words(&["header", "test"])).unwrap();
+    assert!(asked.contains("Header.test.tsx"), "{asked}");
+    let only_tests = render(&picked[..1], &[], &words(&["header"])).unwrap();
+    assert!(only_tests.contains("Header.test.tsx"), "{only_tests}");
+}
