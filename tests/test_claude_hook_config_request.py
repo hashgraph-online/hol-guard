@@ -165,6 +165,7 @@ def test_malformed_list_answers_are_refused(monkeypatch: pytest.MonkeyPatch, ans
         (lambda: config.is_guard_hook_command("x"), {"command": 1, "url": False}),
         (lambda: config.is_guard_hook_handler({}), {"guard": "yes", "argv": None, "identity": [""]}),
         (lambda: config.command_handler_argv({}), {"guard": False, "argv": [1], "identity": [""]}),
+        (lambda: config.command_handler_argv({}), {"guard": False, "identity": [""]}),
         (lambda: config.handler_identity({}), {"guard": False, "argv": None, "identity": None}),
         (lambda: config.missing_guard_hook_events({}), {"missing": None}),
         (lambda: config.merge_hook_group([], None, _GUARD), {"jobs": [[{"matcher": 5}]]}),

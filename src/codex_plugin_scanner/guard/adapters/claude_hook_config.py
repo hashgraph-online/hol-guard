@@ -344,7 +344,10 @@ def is_guard_hook_url(url: object) -> bool:
 
 
 def command_handler_argv(handler: dict[str, object]) -> tuple[str, ...] | None:
-    argv = _answer_texts(_ask("handler", handler=handler).get("argv"), optional=True)
+    answer = _ask("handler", handler=handler)
+    if "argv" not in answer:
+        raise _malformed()
+    argv = _answer_texts(answer["argv"], optional=True)
     return None if argv is None else tuple(argv)
 
 
