@@ -447,10 +447,14 @@ fn the_watch_op_needs_its_input() {
         serde_json::from_value(json!({"schema": SCHEMA, "op": "watch_auto_revert_deadlines"}))
             .unwrap();
     assert_eq!(resolve(&request).unwrap_err(), INVALID);
-    let reply = run(&json!({
+    // A partial input is refused before any op runs.
+    let partial = json!({
         "schema": SCHEMA,
         "op": "watch_auto_revert_deadlines",
         "watch": {"auto_revert_hours": 24, "protection_posture": "watch"},
-    }));
-    assert_eq!(reply["ok"], false);
+    });
+    assert_eq!(
+        run_command(partial.to_string().as_bytes()).unwrap_err(),
+        INVALID
+    );
 }

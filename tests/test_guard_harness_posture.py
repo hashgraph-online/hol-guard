@@ -93,6 +93,28 @@ def test_harness_watch_auto_revert_ignores_unparseable_stamp(tmp_path: Path) -> 
     assert watch_auto_revert_due(broken, now=later) == (False, ())
 
 
+@pytest.mark.parametrize(
+    "answer",
+    [
+        pytest.param({"harnesses": {}}, id="missing-posture-deadline"),
+        pytest.param({"protection_posture": None}, id="missing-harnesses"),
+        pytest.param({"protection_posture": "soon", "harnesses": {}}, id="text-deadline"),
+        pytest.param({"protection_posture": None, "harnesses": {"codex": True}}, id="bool-harness-deadline"),
+    ],
+)
+def test_a_malformed_watch_deadline_answer_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: dict[str, object]
+) -> None:
+    from codex_plugin_scanner.guard import harness_posture
+    from codex_plugin_scanner.guard.config_file_io import ConfigFileTrustError
+
+    monkeypatch.setattr(harness_posture, "resolve_native_guard_config", lambda _op, _fields: answer)
+    config = load_guard_config(tmp_path / ".hol-guard")
+
+    with pytest.raises(ConfigFileTrustError, match="native_guard_config_invalid"):
+        harness_posture.watch_auto_revert_due(config)
+
+
 def test_harness_watch_auto_revert_disabled_with_zero_hours(tmp_path: Path) -> None:
     guard_home = tmp_path / ".hol-guard"
     update_guard_settings(guard_home, {"watch_auto_revert_hours": 0, "harness_postures": {"codex": "watch"}})

@@ -231,6 +231,7 @@ def watch_auto_revert_due(config: GuardConfig, *, now: datetime | None = None) -
     if (
         deadlines is None
         or not all(isinstance(key, str) and type(at) is int for key, at in deadlines.items())
+        or "protection_posture" not in result
         or not (posture_at is None or type(posture_at) is int)
     ):
         raise ConfigFileTrustError("native_guard_config_invalid")
