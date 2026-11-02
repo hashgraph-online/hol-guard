@@ -27,6 +27,15 @@ impl Service {
             .is_ok_and(|state| !state.closed && chosen(&state.settings))
     }
 
+    /// Starts a resting worker in `guard_home` without waiting for it, so it
+    /// is up by the time a prompt asks. Does nothing unless project context
+    /// is on, and never turns it on.
+    pub(crate) fn warm_prompt_lane(&self, guard_home: &std::path::Path) {
+        if self.prompt_context_chosen() {
+            self.wake(guard_home, chosen);
+        }
+    }
+
     /// The live worker for a prompt, waking a resting one in `guard_home`
     /// and waiting for it until `deadline` at most.
     pub(crate) fn prompt_lane(

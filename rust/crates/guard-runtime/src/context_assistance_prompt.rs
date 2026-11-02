@@ -43,6 +43,7 @@ pub(crate) fn harness_response(
     store: Option<&PolicySnapshotStore>,
     started: Instant,
 ) -> Option<Value> {
+    warm(envelope, harness, event, store);
     let mut response = guard_command::hook_responses::render_edge_response(
         harness,
         event,
@@ -61,6 +62,33 @@ pub(crate) fn harness_response(
         attach(&mut response, envelope, harness, store, started);
     }
     Some(response)
+}
+
+/// A prompt wakes a resting worker first, so its start overlaps with the
+/// file search instead of eating the prompt's wait.
+fn warm(
+    envelope: &GuardHookEnvelopeV2,
+    harness: &str,
+    event: &str,
+    store: Option<&PolicySnapshotStore>,
+) {
+    if envelope.recording_only || event != "UserPromptSubmit" {
+        return;
+    }
+    if let Some(store) = store {
+        wake(harness, store);
+    }
+}
+
+/// A new session wakes a resting worker while the person types the first
+/// prompt. Only harnesses that receive project context wake it, and only
+/// when project context is on.
+pub(crate) fn wake(harness: &str, store: &PolicySnapshotStore) {
+    if matches!(harness, "claude-code" | "codex") {
+        store
+            .context_assistance()
+            .warm_prompt_lane(store.guard_home());
+    }
 }
 
 fn attach(
