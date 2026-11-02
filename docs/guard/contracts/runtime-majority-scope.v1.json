@@ -1958,6 +1958,9 @@
           "_policy_ack_facts",
           "_runtime_headline",
           "_HEADLINE_UNAVAILABLE",
+          "_HEADLINE_SETUP",
+          "_HEADLINE_NEEDS_DECISION",
+          "_fallback_guard_urls",
           "bulk_allow_read_only_once",
           "_optional_string",
           "_non_negative_int"
