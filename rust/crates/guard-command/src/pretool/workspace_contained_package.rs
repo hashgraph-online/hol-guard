@@ -126,17 +126,34 @@ const REGISTRY_VERBS: &[&str] = &[
 /// registry the outer verb does not, and the fetch is the command's effect
 /// whichever word spells it, so the exemption is read against the program
 /// after the verb rather than against the verb alone.
+///
+/// The program the verb runs is read by [`exec_runs_a_fetcher`], which sees the
+/// words a `--` separator hides from this scan. The word `exec` itself is
+/// exempt here wherever pnpm or yarn reads it, so a project script of their own
+/// named `exec` is not mistaken for the verb.
 fn scan_reaches_a_registry(manager: &str, scanned: &[&str]) -> bool {
-    scanned.iter().enumerate().any(|(index, argument)| {
+    scanned.iter().any(|argument| {
         let argument = argument.to_ascii_lowercase();
         if argument == "exec" && matches!(manager, "pnpm" | "yarn") {
-            return scanned[index + 1..]
-                .iter()
-                .find(|word| !word.starts_with('-'))
-                .is_some_and(|target| target_keeps_its_review(target));
+            return false;
         }
         REGISTRY_VERBS.contains(&argument.as_str())
     })
+}
+
+/// Whether a pnpm or yarn `exec` runs a program that reaches a registry itself.
+/// `arguments` is the segment's whole argument list and `verb` the index of the
+/// verb within it, so the target behind `pnpm exec -- npx <package>` is read
+/// rather than hidden by the separator. An `exec` whose target cannot be read
+/// at all keeps the review it had: there is no program for this to answer for.
+fn exec_runs_a_fetcher(manager: &str, arguments: &[&str], verb: usize) -> bool {
+    if !matches!(manager, "pnpm" | "yarn") || arguments.get(verb) != Some(&"exec") {
+        return false;
+    }
+    arguments[verb + 1..]
+        .iter()
+        .find(|word| !word.starts_with('-'))
+        .is_none_or(|target| target_keeps_its_review(target))
 }
 
 /// Whether the program a pnpm or yarn `exec` runs keeps the command's review.
@@ -149,6 +166,11 @@ fn scan_reaches_a_registry(manager: &str, scanned: &[&str]) -> bool {
 /// exec 'npm install zod'` is one word here and names its install inside it.
 /// What such a script does is the question this reading cannot answer, so it
 /// stays at review rather than passing on the shape of the word.
+///
+/// A launcher is read the same way. `pnpm exec env npx <package>` and `pnpm
+/// exec sh -c '<script>'` name a program that runs another program, so the
+/// word after the verb is not the effect; reading only that word would admit
+/// the fetch it carries.
 fn target_keeps_its_review(target: &str) -> bool {
     let shell_syntax =
         |character: char| character.is_whitespace() || SHELL_SYNTAX.contains(character);
@@ -156,8 +178,45 @@ fn target_keeps_its_review(target: &str) -> bool {
         return true;
     }
     let name = super::super::executable_basename(target).to_ascii_lowercase();
-    PACKAGE_RUNNERS.contains(&name.as_str()) || manager_program(&name)
+    PACKAGE_RUNNERS.contains(&name.as_str())
+        || manager_program(&name)
+        || LAUNCHERS.contains(&name.as_str())
 }
+
+/// Programs whose own argument is the program that runs. The effect of a
+/// command spelled through one of these is whatever it launches, which this
+/// reading does not follow, so an `exec` target naming one keeps its review.
+const LAUNCHERS: &[&str] = &[
+    "ash",
+    "bash",
+    "busybox",
+    "command",
+    "dash",
+    "doas",
+    "env",
+    "eval",
+    "exec",
+    "ionice",
+    "ksh",
+    "nice",
+    "nohup",
+    "node",
+    "nodejs",
+    "perl",
+    "python",
+    "python3",
+    "pwsh",
+    "powershell",
+    "ruby",
+    "setsid",
+    "sh",
+    "stdbuf",
+    "sudo",
+    "time",
+    "timeout",
+    "xargs",
+    "zsh",
+];
 
 /// The characters that make a word a script rather than a program name.
 const SHELL_SYNTAX: &str = "&|;<>()$`\\\"'*?[]{}!#~=";
@@ -324,17 +383,18 @@ pub(super) fn local_package_work(
             return !PACKAGE_RUNNERS.contains(&name.as_str())
                 && !super::super::generic::is_package_tool(executable);
         }
-        let arguments: Vec<&str> = segment
-            .arguments
+        let all_arguments: Vec<&str> = segment.arguments.iter().map(String::as_str).collect();
+        let arguments: Vec<&str> = all_arguments
             .iter()
-            .map(String::as_str)
+            .copied()
             .take_while(|argument| *argument != "--")
             .collect();
         // A bare `yarn` (or `yarn --frozen-lockfile`) installs, so the verb must
         // come first; `npm init <name>` runs a fetched initializer. The verb
         // is read behind the words [`options::skip_inert_options`] knows; any
         // other leading option, `--cwd dir` among them, still hides it.
-        let behind = &arguments[options::skip_inert_options(&name, &arguments)..];
+        let verb = options::skip_inert_options(&name, &arguments);
+        let behind = &arguments[verb..];
         // `yarn workspaces focus` installs the dependencies of the projects it
         // selects, and `yarn workspaces foreach` runs a command of its own in
         // each of them. The verb names neither effect, so the subcommand after
@@ -385,6 +445,7 @@ pub(super) fn local_package_work(
             && (leading_verb || version_probe)
             && !workspace_fanout
             && !positional_init
+            && !exec_runs_a_fetcher(&name, &all_arguments, verb)
             && !scan_reaches_a_registry(&name, scanned)
     })
 }

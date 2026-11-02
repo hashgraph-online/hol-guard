@@ -232,6 +232,9 @@ mod workspace_contained_effects_tests;
 #[path = "workspace_contained_git_tests.rs"]
 mod workspace_contained_git_tests;
 #[cfg(test)]
+#[path = "workspace_contained_package_tests.rs"]
+mod workspace_contained_package_tests;
+#[cfg(test)]
 #[path = "workspace_contained_runner_tests.rs"]
 mod workspace_contained_runner_tests;
 #[cfg(test)]
