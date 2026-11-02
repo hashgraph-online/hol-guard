@@ -289,3 +289,21 @@ fn a_bun_selector_leaving_the_workspace_still_hides_the_verb() {
         assert_eq!(skip_inert_options("bun", &arguments), 0, "{arguments:?}");
     }
 }
+
+/// How long a selector is must not decide how deep it is read. A value built
+/// from thousands of brace groups is read to a bound and refused when it
+/// passes one, rather than spending a call per group on the way.
+#[test]
+fn a_selector_built_from_many_brace_groups_is_read_within_a_bound() {
+    let literal_groups = "{a}".repeat(4_000);
+    let expanding_groups = "{a,b}".repeat(2_000);
+    for (value, skipped) in [(literal_groups.as_str(), 2), (expanding_groups.as_str(), 0)] {
+        let arguments = vec!["--filter", value, "build"];
+        assert_eq!(
+            skip_inert_options("pnpm", &arguments),
+            skipped,
+            "{} groups",
+            value.len()
+        );
+    }
+}

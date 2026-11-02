@@ -97,6 +97,11 @@ pub(super) fn inert_value(value: &str) -> bool {
 /// one this route cannot settle.
 const BRACE_WORDS: usize = 64;
 
+/// The most expanding brace groups a value may hold before it is read the
+/// same way. Each expansion drops one group, so this bounds how deep the walk
+/// goes as `BRACE_WORDS` bounds how wide it spreads.
+const BRACE_GROUPS: usize = 64;
+
 /// The words the shell expands `value` into, or `None` when there are more of
 /// them than this reads.
 ///
@@ -107,10 +112,10 @@ const BRACE_WORDS: usize = 64;
 /// the walk ends.
 fn expanded_words(value: &str) -> Option<Vec<String>> {
     let mut words = Vec::new();
-    expand_into(value, &mut words).then_some(words)
+    expand_into(value, &mut words, BRACE_GROUPS).then_some(words)
 }
 
-fn expand_into(value: &str, words: &mut Vec<String>) -> bool {
+fn expand_into(value: &str, words: &mut Vec<String>, groups_left: usize) -> bool {
     if words.len() == BRACE_WORDS {
         return false;
     }
@@ -118,47 +123,59 @@ fn expand_into(value: &str, words: &mut Vec<String>) -> bool {
         words.push(value.to_owned());
         return true;
     };
-    alternatives
-        .iter()
-        .all(|alternative| expand_into(&format!("{prefix}{alternative}{suffix}"), words))
+    let Some(groups_left) = groups_left.checked_sub(1) else {
+        return false;
+    };
+    alternatives.iter().all(|alternative| {
+        expand_into(
+            &format!("{prefix}{alternative}{suffix}"),
+            words,
+            groups_left,
+        )
+    })
 }
 
 /// The first balanced brace group holding a top-level comma, as the text
 /// before it, the alternatives inside it and the text after it.
+///
+/// A balanced group holding no comma is literal text, so the groups before
+/// the first expanding one are walked here rather than through a call per
+/// group: a value is only as long as the command it came from, and that
+/// length alone must not decide how deep this reads.
 fn alternative_group(value: &str) -> Option<(&str, Vec<&str>, &str)> {
-    let open = value.find('{')?;
-    let mut depth = 0usize;
-    let mut alternatives = Vec::new();
-    let mut start = open + 1;
-    for (index, character) in value[open..]
-        .char_indices()
-        .map(|(offset, character)| (offset + open, character))
-    {
-        match character {
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    if alternatives.is_empty() {
-                        // A group with no comma is literal text, so the next
-                        // group is the one to read.
-                        let (prefix, alternatives, suffix) =
-                            alternative_group(&value[index + 1..])?;
-                        let prefix = &value[..index + 1 + prefix.len()];
-                        return Some((prefix, alternatives, suffix));
+    let mut scanned = 0usize;
+    loop {
+        let open = scanned + value[scanned..].find('{')?;
+        let mut depth = 0usize;
+        let mut alternatives = Vec::new();
+        let mut start = open + 1;
+        let mut literal_end = None;
+        for (index, character) in value[open..]
+            .char_indices()
+            .map(|(offset, character)| (offset + open, character))
+        {
+            match character {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        if alternatives.is_empty() {
+                            literal_end = Some(index + 1);
+                            break;
+                        }
+                        alternatives.push(&value[start..index]);
+                        return Some((&value[..open], alternatives, &value[index + 1..]));
                     }
-                    alternatives.push(&value[start..index]);
-                    return Some((&value[..open], alternatives, &value[index + 1..]));
                 }
+                ',' if depth == 1 => {
+                    alternatives.push(&value[start..index]);
+                    start = index + 1;
+                }
+                _ => {}
             }
-            ',' if depth == 1 => {
-                alternatives.push(&value[start..index]);
-                start = index + 1;
-            }
-            _ => {}
         }
+        scanned = literal_end?;
     }
-    None
 }
 
 /// Whether `piece` can only name a place below where the command runs.
