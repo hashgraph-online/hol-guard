@@ -62,7 +62,11 @@ fn malformed_requests_are_invalid() {
         json!({ "command": ["npm", 1] }),
         json!({ "command": ["npm"], "extra": true }),
     ] {
-        assert_eq!(dispatch(&args), Err(ERR_INVALID), "{args}");
+        assert_eq!(
+            dispatch(&args),
+            Err("native_runner_authority_invalid"),
+            "{args}"
+        );
     }
     assert_eq!(
         dispatch(&json!({ "command": [] })).expect("answer"),

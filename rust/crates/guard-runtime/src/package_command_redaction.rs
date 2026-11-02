@@ -13,9 +13,9 @@ use serde_json::{json, Value};
 
 use guard_command::redacted_command_tokens::redacted_command_tokens;
 
-use crate::runner_authority_op::KindResult;
-
-const ERR_INVALID: &str = "native_package_command_redaction_invalid";
+// The shared runner-authority code: the Python client reads a code under
+// that prefix as the resident refusing a request, not as an outage.
+use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {
     let fields = args.as_object().ok_or(ERR_INVALID)?;
