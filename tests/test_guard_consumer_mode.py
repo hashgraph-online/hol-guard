@@ -11,6 +11,7 @@ from codex_plugin_scanner.checks import mcp_security as mcp_security_module
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.schemas.consumer_mode import build_consumer_mode_contract
 from codex_plugin_scanner.integrations.cisco_mcp_scanner import CiscoMcpScanSummary
 from codex_plugin_scanner.integrations.cisco_skill_scanner import CiscoIntegrationStatus
@@ -240,3 +241,127 @@ def test_guard_explain_threads_cisco_mode_for_local_paths(
     assert options.cisco_mcp_scan == "off"
     assert "Cisco static scan evidence" in output
     assert "Cisco MCP scanning disabled for 1 local MCP target(s)" in output
+
+
+def _fake_scan_result(path: Path, options: ScanOptions | None = None) -> ScanResult:
+    return ScanResult(
+        score=71,
+        grade="C",
+        categories=(),
+        timestamp="2026-04-13T00:00:00+00:00",
+        plugin_dir=str(path),
+        findings=(
+            Finding(
+                rule_id="DEMO",
+                severity=Severity.MEDIUM,
+                category="demo",
+                title="Loose permissions",
+                description="Synthetic finding.",
+            ),
+        ),
+        severity_counts={"medium": 1},
+        scope="plugin",
+        ecosystems=("codex",),
+        packages=(),
+    )
+
+
+def _complete_contract() -> dict[str, object]:
+    keys = (
+        "threat_intelligence",
+        "schema_version",
+        "generated_at",
+        "install_target",
+        "artifact_snapshot",
+        "capability_manifest",
+        "artifact_diff",
+        "provenance_record",
+        "trust_evidence_bundle",
+        "policy_recommendation",
+        "abom_entry",
+    )
+    return {**{key: {} for key in keys}, "schema_version": "guard-consumer.v2", "install_verdict": {"action": "allow"}}
+
+
+@pytest.mark.parametrize(
+    "contract",
+    [
+        {},
+        {key: value for key, value in _complete_contract().items() if key != "install_verdict"},
+        {**_complete_contract(), "install_verdict": {}},
+        {**_complete_contract(), "install_verdict": "allow"},
+    ],
+)
+def test_build_consumer_mode_contract_refuses_an_incomplete_native_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    contract: dict[str, object],
+) -> None:
+    def answer(_kind: str, _args: dict[str, object]) -> dict[str, object]:
+        return {"contract": contract}
+
+    module = "codex_plugin_scanner.guard.schemas.consumer_mode"
+    monkeypatch.setattr(f"{module}.scan_plugin", _fake_scan_result)
+    monkeypatch.setattr(f"{module}.native_runner_authority", answer)
+
+    with pytest.raises(RuntimeError, match="install-time scan contract"):
+        _ = build_consumer_mode_contract(tmp_path)
+
+
+def test_build_consumer_mode_contract_ships_the_scan_to_the_native_kind(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def fake_authority(kind: str, args: dict[str, object]) -> dict[str, object]:
+        calls.append((kind, args))
+        return {"contract": {"cisco_evidence": {}, **_complete_contract()}}
+
+    module = "codex_plugin_scanner.guard.schemas.consumer_mode"
+    monkeypatch.setattr(f"{module}.scan_plugin", _fake_scan_result)
+    monkeypatch.setattr(f"{module}.native_runner_authority", fake_authority)
+
+    payload = build_consumer_mode_contract(tmp_path, intended_harness="codex")
+
+    assert list(payload)[:2] == ["schema_version", "generated_at"]
+    assert list(payload)[-1] == "cisco_evidence"
+    assert calls == [
+        (
+            "consumer_mode_contract",
+            {
+                "target": str(tmp_path),
+                "target_name": tmp_path.name,
+                "intended_harness": "codex",
+                "scan": {
+                    "score": 71,
+                    "grade": "C",
+                    "timestamp": "2026-04-13T00:00:00+00:00",
+                    "plugin_dir": str(tmp_path),
+                    "scope": "plugin",
+                    "ecosystems": ["codex"],
+                    "packages": [],
+                    "category_names": [],
+                    "findings": [{"title": "Loose permissions", "severity": "medium"}],
+                    "severity_counts": {"medium": 1},
+                    "integrations": [],
+                    "trust_total": None,
+                },
+            },
+        )
+    ]
+
+
+def test_build_consumer_mode_contract_fails_closed_without_the_native_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def unavailable(_kind: str, _args: dict[str, object]) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    module = "codex_plugin_scanner.guard.schemas.consumer_mode"
+    monkeypatch.setattr(f"{module}.scan_plugin", _fake_scan_result)
+    monkeypatch.setattr(f"{module}.native_runner_authority", unavailable)
+
+    with pytest.raises(RuntimeError, match="install-time scan contract"):
+        _ = build_consumer_mode_contract(tmp_path)
