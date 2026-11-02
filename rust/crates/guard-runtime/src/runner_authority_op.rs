@@ -24,6 +24,7 @@ use super::context_digest_json::write_canonical_json_with_limit;
 use super::copilot_detect;
 use super::cursor_detect;
 use super::devin_detect;
+use super::devin_jsonc;
 use super::gemini_detect;
 use super::grok_detect;
 use super::hermes_detect;
@@ -158,6 +159,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "gemini_detect" => gemini_detect::detect(args),
         "antigravity_detect" => antigravity_detect::detect(args),
         "devin_detect" => devin_detect::detect(args),
+        "devin_jsonc" => devin_jsonc::document(args),
         "grok_detect" => grok_detect::detect(args),
         "kimi_detect" => kimi_detect::detect(args),
         "muse_detect" => muse_detect::detect(args),
