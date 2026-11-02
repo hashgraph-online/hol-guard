@@ -150,8 +150,15 @@ impl PnpmEntry {
 /// the same runner leave two versions there and no verdict. The `importers`
 /// block says which one *this* workspace resolved, so when `importer` names a
 /// workspace whose entry pins a release `packages` also carries, that release
-/// is the answer. Everything `packages` refuses — a patch, a checkout, a
-/// directory — is still read first and still refuses the whole file.
+/// is the answer.
+///
+/// Once a file carries that block, it is the only thing that speaks for this
+/// workspace. An entry naming a release `packages` never served, an entry
+/// naming a link or a local directory, and no entry at all each leave the
+/// file saying nothing about the installed copy, so the answer is no verdict
+/// rather than every release the monorepo happens to hold. Everything
+/// `packages` refuses — a patch, a checkout, a directory — is still read
+/// first and still refuses the whole file.
 fn pnpm_locked_versions(
     text: &str,
     dependency_name: &str,
@@ -161,6 +168,7 @@ fn pnpm_locked_versions(
     let mut inside_packages = false;
     let mut inside_patched = false;
     let mut inside_importers = false;
+    let mut saw_importers = false;
     let mut this_importer = false;
     let mut this_dependency = false;
     let mut importer_version: Option<String> = None;
@@ -178,6 +186,7 @@ fn pnpm_locked_versions(
             inside_packages = line == "packages:";
             inside_patched = line == "patchedDependencies:";
             inside_importers = line == "importers:";
+            saw_importers |= inside_importers;
             continue;
         };
         if inside_patched {
@@ -251,9 +260,15 @@ fn pnpm_locked_versions(
         versions.insert(entry.finish()?);
     }
     if let Some(version) = importer_version {
-        if versions.contains(&version) {
-            return Some(BTreeSet::from([version]));
-        }
+        return versions
+            .contains(&version)
+            .then(|| BTreeSet::from([version]));
+    }
+    // The block named no release for this workspace: it has no entry, or the
+    // entry points at a link or a local directory. Either way the file pins
+    // nothing the installed copy can be held to.
+    if saw_importers && importer.is_some() {
+        return None;
     }
     Some(versions)
 }
