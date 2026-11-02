@@ -1,4 +1,5 @@
 import { daemonApi, expect, expectNoErrorBoundary, test, type IntegrationState } from "./fixtures";
+import { addContextProject, confirmContextProject } from "./context-project";
 import type { Page } from "@playwright/test";
 import { contextStatus } from "./context-status";
 import { stopContextAssistance } from "./context-stop";
@@ -16,13 +17,8 @@ async function save(page: Page, state: IntegrationState) {
 }
 async function grant(page: Page, state: IntegrationState) {
   await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
-  await page.getByLabel("Workspace folder", { exact: true }).fill(state.workspace);
-  await page.getByLabel("Files relative to the workspace, one per line").fill("README.md");
-  await page.getByRole("button", { name: "Grant review source access", exact: true }).click();
-  const proof = page.getByRole("dialog");
-  await proof.getByLabel("Approval password").fill(state.approvalPassword);
-  await proof.getByRole("button", { name: "Grant source access", exact: true }).click();
-  await expect(proof).toHaveCount(0);
+  await addContextProject(page, state.workspace);
+  await confirmContextProject(page, state.approvalPassword);
 }
 test("private saved evidence survives runtime restart with fresh grants and can be removed while off", async ({ page, state }) => {
   test.setTimeout(240_000);

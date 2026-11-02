@@ -8,6 +8,7 @@ impl Service {
         store: &crate::policy_store::PolicySnapshotStore,
         input: Input,
     ) -> Result<Value, String> {
+        self.wake_and_wait(home, |settings| settings.effective.features.agent_context);
         let (actor, generation) = {
             let mut state = lock(&self.state)?;
             let ready = state.settings.requested.enabled

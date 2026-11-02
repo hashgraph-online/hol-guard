@@ -6,6 +6,7 @@ from typing import Any
 
 from ..approval_gate import ApprovalGateError, input_from_mapping, require_high_risk, require_settings_write
 from ..native_context_assistance import ContextAssistanceError, control, workspace
+from .context_assistance_folders import FolderError, browse
 from .context_assistance_versions_http import READ_PATHS as VERSION_READ_PATHS
 from .context_assistance_versions_http import respond as respond_versions
 
@@ -22,6 +23,7 @@ WRITE_PATHS = {
     "/v1/context-assistance/workspace": "workspace",
     "/v1/context-assistance/workspace-access": "workspace_access",
     "/v1/context-assistance/workspace-grant": "workspace_grant",
+    "/v1/context-assistance/folders": "folders",
 }
 _REFUSAL_STATUS = {
     "native_context_assistance_control_input_invalid": 400,
@@ -50,6 +52,9 @@ def _refusal(handler: Any, error: ContextAssistanceError) -> None:
 def respond(handler: Any, kind: str, payload: dict[str, object] | None = None) -> None:
     if kind == "versions" or kind.startswith("versions_"):
         respond_versions(handler, kind, payload or {})
+        return
+    if kind == "folders":
+        _respond_folders(handler, payload or {})
         return
     if kind in {"workspace", "workspace_access", "workspace_grant"}:
         _respond_workspace(handler, kind, payload or {})
@@ -80,5 +85,19 @@ def _respond_workspace(handler: Any, kind: str, payload: dict[str, object]) -> N
         return
     except ContextAssistanceError as error:
         _refusal(handler, error)
+        return
+    handler._write_json(data, extra_headers={"Cache-Control": "no-store"})
+
+
+def _respond_folders(handler: Any, payload: dict[str, object]) -> None:
+    # Names only, for the project picker; the native grant re-checks every path.
+    try:
+        data = browse(payload)
+    except FolderError as error:
+        handler._write_json(
+            {"error": "folder_unavailable", "code": error.code},
+            status=error.status,
+            extra_headers={"Cache-Control": "no-store"},
+        )
         return
     handler._write_json(data, extra_headers={"Cache-Control": "no-store"})

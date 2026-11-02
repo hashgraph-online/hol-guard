@@ -63,6 +63,13 @@ pub(super) fn await_cleanup(actor: Option<Arc<RuntimeActor<Engine>>>) -> bool {
         .is_none_or(|actor| actor.close_and_wait(Duration::from_millis(500)))
 }
 
+fn idle_elapsed(state: &State) -> bool {
+    state.last_used.elapsed()
+        >= Duration::from_secs(u64::from(
+            state.settings.effective.limits.idle_shutdown_seconds,
+        ))
+}
+
 pub(super) fn start_watcher(
     weak: Weak<Mutex<State>>,
     generation: u64,
@@ -75,38 +82,64 @@ pub(super) fn start_watcher(
             let Some(shared) = weak.upgrade() else {
                 break;
             };
-            let old = {
+            let (old, idle) = {
                 let Ok(mut state) = lock(&shared) else {
                     break;
                 };
                 if state.generation != generation || state.runtime.is_none() {
                     break;
                 }
-                if state.last_used.elapsed()
-                    >= Duration::from_secs(u64::from(
-                        state.settings.effective.limits.idle_shutdown_seconds,
-                    ))
-                {
-                    state.error = Some("runtime_idle".into());
-                    revoke_runtime(&mut state)
-                } else if !state
-                    .runtime
-                    .as_ref()
-                    .expect("runtime checked above")
-                    .status()
-                    .active
-                {
+                let runtime = state.runtime.as_ref().expect("runtime checked above");
+                if !runtime.status().active {
                     // The actor owns heartbeats/SDK calls. Only atomic liveness is
                     // read while holding the settings state.
                     state.error = Some("runtime_closed".into());
-                    revoke_runtime(&mut state)
+                    (revoke_runtime(&mut state), None)
+                } else if idle_elapsed(&state) {
+                    (None, Some(Arc::clone(runtime)))
                 } else {
-                    None
+                    (None, None)
                 }
             };
             if old.is_some() {
                 await_cleanup(old);
                 break;
+            }
+            if let Some(actor) = idle {
+                // A granted project is the user's standing choice and lives only
+                // in this worker, so only an empty worker rests. It wakes on the
+                // next request without asking again.
+                let holds = actor
+                    .call_until(Instant::now() + Duration::from_secs(2), |_, engine| {
+                        Ok(engine.holds_scopes())
+                    })
+                    .unwrap_or(true);
+                let old = {
+                    let Ok(mut state) = lock(&shared) else {
+                        break;
+                    };
+                    if state.generation != generation
+                        || !state
+                            .runtime
+                            .as_ref()
+                            .is_some_and(|r| Arc::ptr_eq(r, &actor))
+                    {
+                        break;
+                    }
+                    if holds {
+                        state.last_used = Instant::now();
+                        None
+                    } else if idle_elapsed(&state) {
+                        state.error = Some("runtime_idle".into());
+                        revoke_runtime(&mut state)
+                    } else {
+                        None
+                    }
+                };
+                if old.is_some() {
+                    await_cleanup(old);
+                    break;
+                }
             }
             let current = crate::guard_config_load::context_assistance_config(&home)
                 .unwrap_or_else(|_| AssistanceSettings::unavailable("configuration_unavailable"));

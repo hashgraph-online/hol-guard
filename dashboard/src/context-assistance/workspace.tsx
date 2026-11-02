@@ -4,7 +4,7 @@ import type { ContextAssistanceStatus, ContextInstallation } from "./types";
 import { CigarSetupAction, CigarSetupProgress, type CigarOneClick } from "./one-click-setup";
 import { CigarGuide } from "./workspace-guide";
 import { CigarOverview } from "./workspace-overview";
-import { CIGAR_TABS, cigarTabFromSearch, type CigarTab } from "./workspace-model";
+import { CIGAR_TABS, cigarTabFromSearch, cigarWaking, type CigarTab } from "./workspace-model";
 import { contextStatusCopy } from "./status";
 import { cigarTutorial, type CigarTutorialId } from "./tutorial-content";
 import { useCigarTutorial } from "./tutorial-progress";
@@ -140,7 +140,7 @@ export function CigarWorkspace(props: CigarWorkspaceProps) {
         {props.controls}
       </div>
       {tab === "versions" ? props.versions : null}
-      {tab === "access" ? <div><div className="cigar-section-intro"><h2>Projects & AI apps</h2><p>Pick the project folders CIGAR may read, one at a time. Then connect an AI app if you want. Each step asks you first.</p></div>{!status?.effective_enabled ? <div className="cigar-note"><strong>Turn on CIGAR first</strong><p>Projects and AI apps open up as soon as CIGAR is on. Use the button above.</p></div> : null}{props.access}</div> : null}
+      {tab === "access" ? <div><div className="cigar-section-intro"><h2>Projects & AI apps</h2><p>Pick the project folders CIGAR may read, one at a time. Then connect an AI app if you want. Each step asks you first.</p></div>{!status?.effective_enabled ? <div className="cigar-note">{cigarWaking(status) ? <><strong>Waking up CIGAR</strong><p>Your projects and AI apps come back in a moment.</p></> : <><strong>Turn on CIGAR first</strong><p>Projects and AI apps open up as soon as CIGAR is on. Use the button above.</p></>}</div> : null}{props.access}</div> : null}
       {tab === "data" ? <div><div className="cigar-section-intro"><h2>Privacy</h2><p>By default, CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes.</p></div>{props.data}</div> : null}
       {tab === "tutorials" ? <CigarTutorials progress={lesson.progress} onBegin={beginTutorial} /> : null}
       {tab === "guide" ? <CigarGuide onSelect={select} /> : null}
