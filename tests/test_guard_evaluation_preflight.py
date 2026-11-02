@@ -15,6 +15,7 @@ import pytest
 
 from codex_plugin_scanner.guard import evaluation_preflight as preflight_module
 from codex_plugin_scanner.guard.adapters import hook_python_subprocess as probe_module
+from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 from codex_plugin_scanner.guard.evaluation_contracts import EvaluationResult
 from codex_plugin_scanner.guard.evaluation_preflight import (
     EvaluationSetup,
@@ -176,6 +177,33 @@ def test_host_version_probe_rejects_output_beyond_profile_budget(
     assert report.status == "blocked_environment"
     assert report.reason == "host_version_output_limit"
     assert "xxxxxxxx" not in str(report.to_dict())
+
+
+def test_probe_accepts_the_full_adapter_output_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    budgets: list[int] = []
+
+    def record_budget(*_args: object, output_limit: int, **_kwargs: object) -> BoundedHookProcessResult:
+        budgets.append(output_limit)
+        return BoundedHookProcessResult(0, "", False, False)
+
+    monkeypatch.setattr(probe_module, "run_isolated_hook_process", record_budget)
+
+    probe_module.run_probe(["synthetic-agent"], cwd=tmp_path, env={}, output_limit_bytes=131072)
+
+    assert budgets == [131072]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="synthetic executable uses a POSIX shebang")
+def test_host_version_output_must_be_valid_utf8(tmp_path: Path) -> None:
+    executable = tmp_path / "synthetic-agent"
+    executable.write_text("#!/bin/sh\nprintf 'synthetic-agent 0.1.0\\377\\n'\n", encoding="utf-8")
+    executable.chmod(0o755)
+    report = preflight_evaluation(
+        _profile(tmp_path, executable), artifact_paths=_artifact_paths(_artifact(tmp_path)), allow_host_execution=True
+    )
+
+    assert report.status == "blocked_environment"
+    assert report.reason == "host_version_unavailable"
 
 
 def _host_with_delayed_child(tmp_path: Path, *, host_tail: str) -> tuple[Path, Path, Path]:

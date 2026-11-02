@@ -2,9 +2,10 @@
 
 Probes run through the same bounded runner Guard uses to launch its native
 runtime: no input, their own process group (a job object on Windows), a hard
-deadline and one byte budget that stdout and stderr share. It needs no native
-runtime, so a Python-only install can still attest its hook interpreter and
-run the evaluator's host checks.
+deadline and one byte budget that stdout and stderr share. Probe output keeps
+the exact bytes the probe wrote, so callers can still decode it strictly. It
+needs no native runtime, so a Python-only install can still attest its hook
+interpreter and run the evaluator's host checks.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from typing import Final
 from ..codex_hook_launch_runtime import run_isolated_hook_process
 
 _PROBE_TIMEOUT_SECONDS: Final = 15
-_PROBE_OUTPUT_LIMIT_BYTES: Final = 64 * 1024
+_PROBE_OUTPUT_LIMIT_BYTES: Final = 2 * 64 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +41,7 @@ def run_probe(
 ) -> ProbeResult:
     """Run a probe with no stdin and strictly bounded output and duration.
 
-    stdout and stderr share one output budget of at most 64 KiB.
+    stdout and stderr share one output budget of at most 128 KiB.
     """
 
     timeout = float(_PROBE_TIMEOUT_SECONDS) if timeout_seconds is None else timeout_seconds
@@ -66,13 +67,13 @@ def run_probe(
         timeout_seconds=float(timeout),
         output_limit=output_limit,
     )
-    capture_incomplete = result.containment_failed
+    capture_incomplete = result.containment_failed or result.capture_incomplete
     if result.returncode is None and not (result.timed_out or result.output_limit_exceeded or capture_incomplete):
         raise OSError("probe could not start")
     return ProbeResult(
         returncode=-1 if result.returncode is None else result.returncode,
-        stdout=result.stdout.encode("utf-8"),
-        stderr=result.stderr.encode("utf-8"),
+        stdout=result.stdout_bytes,
+        stderr=result.stderr_bytes,
         timed_out=result.timed_out,
         output_overflow=result.output_limit_exceeded,
         capture_incomplete=capture_incomplete,
