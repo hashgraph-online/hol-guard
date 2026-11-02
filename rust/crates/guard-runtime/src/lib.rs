@@ -131,6 +131,11 @@ mod claude_session_start_live;
 mod cli_copilot_resolution;
 mod cli_runtime_support_op;
 mod cline_hook_worker;
+#[path = "adapters/cline_plugin_render.rs"]
+mod cline_plugin_render;
+#[cfg(test)]
+#[path = "adapters/cline_plugin_render_tests.rs"]
+mod cline_plugin_render_tests;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
 mod cloud_exception_lift;
