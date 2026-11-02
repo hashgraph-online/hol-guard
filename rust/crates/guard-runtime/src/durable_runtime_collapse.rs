@@ -15,6 +15,10 @@
 //! to the current verified copy. Every pinned path still launches a Guard
 //! runtime, the current one, and the disk holds a single runtime image.
 //!
+//! A session that outlives an update still reaches the live resident: the
+//! hook bridge hands a hook from an older copy to the live copy's path when
+//! the two are the same file (`hook_bridge_successor`).
+//!
 //! The reconciliation pass still repins those artifacts: `hook-launch-scan`
 //! reads the digest in the path, not the file. An install that still uses an
 //! older digest finds that its copy no longer hashes to the digest and
@@ -22,9 +26,11 @@
 //! fresh file.
 //!
 //! Everything here is fail-closed. The current copy must be a regular file
-//! owned by this user, writable by no one else, whose bytes hash to the
-//! requested digest. An older copy is relinked only when its directory is a
-//! real directory owned by this user holding nothing but the runtime, the
+//! owned by this user, writable by no one else, in a directory no one else
+//! can write, whose bytes hash to the requested digest, and the link must
+//! name that same unchanged file. An older copy is relinked only when its
+//! directory is a private directory of this user holding nothing but the
+//! runtime, the
 //! runtime is a regular file owned by this user on the same device, and
 //! neither changed within the minimum age, so a copy another process is
 //! publishing or verifying right now is left alone. POSIX only: Windows keeps
@@ -136,7 +142,9 @@ mod posix {
     const LINK_TEMP_NAME: &str = ".hol-guard-runtime.collapse.tmp";
     /// Long past any publish or verification of a copy, which takes seconds.
     pub(super) const MIN_AGE: Duration = Duration::from_secs(24 * 60 * 60);
-    const MAX_ENTRIES: usize = 2000;
+    /// Relinks per pass; entries that are kept cost an lstat and do not count,
+    /// so every pass reaches copies an earlier pass left behind.
+    const MAX_COLLAPSES: usize = 2000;
     const TIME_BUDGET: Duration = Duration::from_secs(30);
     const MAX_ERRORS: usize = 10;
     const HASH_CHUNK: usize = 1024 * 1024;
@@ -169,7 +177,7 @@ mod posix {
         let mut report = Report::new("ok");
         let uid = nix::unistd::getuid().as_raw();
         match fs::symlink_metadata(state) {
-            Ok(metadata) if metadata.is_dir() && metadata.uid() == uid => {}
+            Ok(metadata) if private_directory(&metadata, uid) => {}
             Ok(_) => return report.unavailable("state_dir_untrusted"),
             Err(error) if error.kind() == ErrorKind::NotFound => return report,
             Err(_) => return report.unavailable("state_dir_unreadable"),
@@ -181,8 +189,8 @@ mod posix {
         let Ok(entries) = fs::read_dir(state) else {
             return report.unavailable("state_dir_unreadable");
         };
-        for (index, entry) in entries.enumerate() {
-            if index >= MAX_ENTRIES || started.elapsed() >= TIME_BUDGET {
+        for entry in entries {
+            if report.collapsed >= MAX_COLLAPSES || started.elapsed() >= TIME_BUDGET {
                 report.budget_exhausted = true;
                 break;
             }
@@ -209,12 +217,24 @@ mod posix {
         report
     }
 
+    /// A real directory of this user that no one else can add entries to.
+    fn private_directory(metadata: &Metadata, uid: u32) -> bool {
+        metadata.is_dir() && metadata.uid() == uid && metadata.permissions().mode() & 0o022 == 0
+    }
+
+    /// A regular file of this user that only this user can write and can run.
+    fn private_runtime(metadata: &Metadata, uid: u32) -> bool {
+        let mode = metadata.permissions().mode();
+        metadata.is_file() && metadata.uid() == uid && mode & 0o022 == 0 && mode & 0o100 != 0
+    }
+
     /// The current copy's metadata, when it is a private regular file of this
-    /// user whose bytes hash to `digest` and that did not change while hashed.
+    /// user, in a private directory, whose bytes hash to `digest` and that did
+    /// not change while hashed.
     fn verified_current(path: &Path, digest: &str, uid: u32) -> Option<Metadata> {
+        let directory = fs::symlink_metadata(path.parent()?).ok()?;
         let before = fs::symlink_metadata(path).ok()?;
-        let mode = before.permissions().mode();
-        if !before.is_file() || before.uid() != uid || mode & 0o022 != 0 || mode & 0o100 == 0 {
+        if !private_directory(&directory, uid) || !private_runtime(&before, uid) {
             return None;
         }
         let mut file = File::open(path).ok()?;
@@ -232,15 +252,23 @@ mod posix {
             hasher.update(&buffer[..read]);
         }
         let after = fs::symlink_metadata(path).ok()?;
-        let unchanged = same_file(&after, &before)
-            && after.len() == before.len()
-            && after.mtime() == before.mtime()
-            && after.mtime_nsec() == before.mtime_nsec();
+        // A chmod or chown changes ctime; a write changes mtime.
+        let unchanged = same_contents(&after, &before)
+            && after.mode() == before.mode()
+            && after.ctime() == before.ctime()
+            && after.ctime_nsec() == before.ctime_nsec();
         (unchanged && hex::encode(hasher.finalize()) == digest).then_some(before)
     }
 
     fn same_file(left: &Metadata, right: &Metadata) -> bool {
         left.dev() == right.dev() && left.ino() == right.ino()
+    }
+
+    fn same_contents(left: &Metadata, right: &Metadata) -> bool {
+        same_file(left, right)
+            && left.len() == right.len()
+            && left.mtime() == right.mtime()
+            && left.mtime_nsec() == right.mtime_nsec()
     }
 
     fn older_than_min_age(metadata: &Metadata, now: SystemTime) -> bool {
@@ -261,7 +289,7 @@ mod posix {
         now: SystemTime,
     ) -> Result<Outcome, &'static str> {
         let directory_metadata = fs::symlink_metadata(directory).map_err(|_| "entry_unreadable")?;
-        if !directory_metadata.is_dir() || directory_metadata.uid() != uid {
+        if !private_directory(&directory_metadata, uid) {
             return Ok(Outcome::Kept("untrusted_directory"));
         }
         let mut names: Vec<OsString> = Vec::new();
@@ -300,6 +328,14 @@ mod posix {
             fs::remove_file(&temporary).map_err(|_| "stray_link_unremovable")?;
         }
         fs::hard_link(current_path, &temporary).map_err(|_| "link_failed")?;
+        // The link must name the inode that was hashed, unchanged and still
+        // private, and the older copy must still be the file that was checked.
+        let linked = fs::symlink_metadata(&temporary)
+            .is_ok_and(|link| same_contents(&link, current) && private_runtime(&link, uid));
+        if !linked {
+            let _ = fs::remove_file(&temporary);
+            return Ok(Outcome::Kept("current_changed_during_collapse"));
+        }
         let unchanged =
             fs::symlink_metadata(&target).is_ok_and(|again| same_file(&again, &metadata));
         if !unchanged {

@@ -37,6 +37,7 @@ fn home() -> Home {
     let dir = tempfile::tempdir().expect("tempdir");
     let state = dir.path().join("native-runtime");
     fs::create_dir(&state).expect("state dir");
+    fs::set_permissions(&state, fs::Permissions::from_mode(0o700)).expect("state mode");
     let digest = digest_of(CURRENT_BYTES);
     write_runtime(&state, &digest, CURRENT_BYTES);
     Home {
@@ -132,6 +133,52 @@ fn a_current_copy_others_can_write_relinks_nothing() {
 }
 
 #[test]
+fn a_current_copy_in_a_directory_others_can_write_relinks_nothing() {
+    let home = home();
+    let old = write_runtime(&home.state, OLD_DIGEST, OLD_BYTES);
+    fs::set_permissions(
+        home.state.join(&home.digest),
+        fs::Permissions::from_mode(0o770),
+    )
+    .expect("mode");
+
+    let report = run(&home, later());
+
+    assert_eq!(report["outcome"], "unavailable");
+    assert_eq!(report["errors"], json!(["current_runtime_unverified"]));
+    assert_eq!(fs::read(&old).expect("read old"), OLD_BYTES);
+}
+
+#[test]
+fn a_state_directory_others_can_write_relinks_nothing() {
+    let home = home();
+    let old = write_runtime(&home.state, OLD_DIGEST, OLD_BYTES);
+    fs::set_permissions(&home.state, fs::Permissions::from_mode(0o775)).expect("mode");
+
+    let report = run(&home, later());
+
+    assert_eq!(report["outcome"], "unavailable");
+    assert_eq!(report["errors"], json!(["state_dir_untrusted"]));
+    assert_eq!(fs::read(&old).expect("read old"), OLD_BYTES);
+}
+
+#[test]
+fn an_older_copy_in_a_directory_others_can_write_is_kept() {
+    let home = home();
+    let old = write_runtime(&home.state, OLD_DIGEST, OLD_BYTES);
+    fs::set_permissions(
+        home.state.join(OLD_DIGEST),
+        fs::Permissions::from_mode(0o770),
+    )
+    .expect("mode");
+
+    let report = run(&home, later());
+
+    assert_eq!(report["kept"]["untrusted_directory"], 1);
+    assert_eq!(fs::read(&old).expect("read old"), OLD_BYTES);
+}
+
+#[test]
 fn a_directory_holding_anything_but_the_runtime_is_kept() {
     let home = home();
     let old = write_runtime(&home.state, OLD_DIGEST, OLD_BYTES);
@@ -171,6 +218,7 @@ fn a_symlinked_runtime_is_kept() {
     let home = home();
     let directory = home.state.join(OLD_DIGEST);
     fs::create_dir(&directory).expect("copy dir");
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).expect("dir mode");
     let elsewhere = tempfile::tempdir().expect("elsewhere");
     let target = elsewhere.path().join("runtime");
     fs::write(&target, OLD_BYTES).expect("write target");
