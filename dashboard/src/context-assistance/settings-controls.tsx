@@ -148,7 +148,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
                   <SettingsToggleRow label="Sanitized receipt facts" description="Use sanitized facts from Guard's local history."
                     checked={value.sources.sanitized_receipt_facts} disabled={editingDisabled}
                     onChange={(sanitized_receipt_facts) => props.onChange({ ...value, sources: { ...value.sources, sanitized_receipt_facts } })} />
-                  <SettingsToggleRow label="Allow selected workspace documents" description="After saving, choose each folder and file in Workspace context access. Files are read only with an explicit grant."
+                  <SettingsToggleRow label="Allow selected workspace documents" description="With Context for AI apps on, prompts in Claude Code and Codex get the files in their project that match them. Choose folders in Workspace context access to pick exact files instead."
                     checked={value.sources.workspace_documents} disabled={editingDisabled}
                     onChange={(workspace_documents) => props.onChange({ ...value, sources: { ...value.sources, workspace_documents,
                       source_set_id: workspace_documents ? value.sources.source_set_id || "selected-workspaces" : value.sources.source_set_id } })} />

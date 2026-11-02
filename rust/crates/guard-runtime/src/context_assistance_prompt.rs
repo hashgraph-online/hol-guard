@@ -91,12 +91,16 @@ fn attach(
     let Some(root) = project_root(Path::new(cwd), home, store.guard_home()) else {
         return;
     };
+    let left = || waiting_time(envelope.deadline_budget_ms).saturating_sub(started.elapsed());
+    let Some(walk) = left().checked_sub(MIN_WAIT) else {
+        return;
+    };
     let words = terms(prompt);
-    let found = candidates(&root, &words);
+    let found = candidates(&root, &words, walk);
     if found.is_empty() {
         return;
     }
-    let wait = waiting_time(envelope.deadline_budget_ms).saturating_sub(started.elapsed());
+    let wait = left();
     if wait < MIN_WAIT {
         return;
     }

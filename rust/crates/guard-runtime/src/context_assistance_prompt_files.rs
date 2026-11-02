@@ -135,8 +135,10 @@ struct Scored {
 }
 
 /// Project files that mention the prompt's words, best first. An empty
-/// result means nothing in the project matched, so no context is added.
-pub(crate) fn candidates(root: &Path, terms: &[String]) -> Vec<String> {
+/// result means nothing in the project matched, so no context is added. The
+/// walk stops after `budget` or its own time limit, whichever comes first.
+pub(crate) fn candidates(root: &Path, terms: &[String], budget: Duration) -> Vec<String> {
+    let budget = budget.min(WALK_BUDGET);
     if terms.is_empty() {
         return Vec::new();
     }
@@ -154,7 +156,7 @@ pub(crate) fn candidates(root: &Path, terms: &[String]) -> Vec<String> {
         };
         for entry in entries.flatten() {
             visited += 1;
-            if visited > MAX_VISITED || started.elapsed() > WALK_BUDGET {
+            if visited > MAX_VISITED || started.elapsed() >= budget {
                 return ranked(scored);
             }
             let name = entry.file_name().to_string_lossy().into_owned();

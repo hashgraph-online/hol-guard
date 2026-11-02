@@ -2991,7 +2991,7 @@ function ContextSettingsControls(props) {
                 SettingsToggleRow,
                 {
                   label: "Allow selected workspace documents",
-                  description: "After saving, choose each folder and file in Workspace context access. Files are read only with an explicit grant.",
+                  description: "With Context for AI apps on, prompts in Claude Code and Codex get the files in their project that match them. Choose folders in Workspace context access to pick exact files instead.",
                   checked: value.sources.workspace_documents,
                   disabled: editingDisabled,
                   onChange: (workspace_documents) => props.onChange({ ...value, sources: {
@@ -5060,12 +5060,14 @@ function CigarWhy() {
 function CigarSetupAction({ setup, status, disabled, tone = "plain", onOpen }) {
   const primary = "cigar-button cigar-button-primary" + (tone === "plain" ? " cigar-button-solid" : "");
   if (status?.effective_enabled) {
+    const { features, sources } = status.effective_preferences;
+    const caption2 = features.agent_context && sources.workspace_documents ? "CIGAR is on. Prompts in Claude Code and Codex now get the project files that match them. Pick a folder to choose exactly which files it uses." : "CIGAR is on. To give prompts the project files that match them, turn on Context for AI apps and Allow selected workspace documents in Settings.";
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-action", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: primary, onClick: () => onOpen("access"), children: [
         "Pick a project folder",
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: "CIGAR is on. Prompts in Claude Code and Codex now get the project files that match them. Pick a folder to choose exactly which files it uses." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: caption2 })
     ] });
   }
   if (setup.run.phase === "running") {

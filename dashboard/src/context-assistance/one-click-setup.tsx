@@ -41,9 +41,13 @@ type ActionProps = {
 export function CigarSetupAction({ setup, status, disabled, tone = "plain", onOpen }: ActionProps) {
   const primary = "cigar-button cigar-button-primary" + (tone === "plain" ? " cigar-button-solid" : "");
   if (status?.effective_enabled) {
+    const { features, sources } = status.effective_preferences;
+    const caption = features.agent_context && sources.workspace_documents
+      ? "CIGAR is on. Prompts in Claude Code and Codex now get the project files that match them. Pick a folder to choose exactly which files it uses."
+      : "CIGAR is on. To give prompts the project files that match them, turn on Context for AI apps and Allow selected workspace documents in Settings.";
     return <div className="cigar-setup-action">
       <button type="button" className={primary} onClick={() => onOpen("access")}>Pick a project folder<HiMiniArrowRight aria-hidden="true" /></button>
-      <p className="cigar-setup-caption">CIGAR is on. Prompts in Claude Code and Codex now get the project files that match them. Pick a folder to choose exactly which files it uses.</p>
+      <p className="cigar-setup-caption">{caption}</p>
     </div>;
   }
   if (setup.run.phase === "running") {

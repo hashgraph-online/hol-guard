@@ -54,7 +54,7 @@ fn prompt_words_skip_filler_and_keep_names() {
 fn a_color_change_finds_the_header_and_its_styles_only() {
     let (_dir, root) = canonical();
     let project = app(&root);
-    let found = candidates(&project, &terms("add a color to the header"));
+    let found = candidates(&project, &terms("add a color to the header"), WALK_BUDGET);
     assert_eq!(found[0], "src/components/Header.tsx", "{found:?}");
     assert!(found.contains(&"src/theme.css".to_owned()), "{found:?}");
     for skipped in [
@@ -72,13 +72,25 @@ fn a_color_change_finds_the_header_and_its_styles_only() {
 }
 
 #[test]
+fn no_time_left_means_no_walk() {
+    let (_dir, root) = canonical();
+    let project = app(&root);
+    assert!(candidates(
+        &project,
+        &terms("add a color to the header"),
+        Duration::ZERO
+    )
+    .is_empty());
+}
+
+#[test]
 fn an_empty_folder_or_unrelated_prompt_adds_nothing() {
     let (_dir, root) = canonical();
     let empty = root.join("fresh");
     fs::create_dir(&empty).unwrap();
-    assert!(candidates(&empty, &terms("build a to-do app")).is_empty());
+    assert!(candidates(&empty, &terms("build a to-do app"), WALK_BUDGET).is_empty());
     let project = app(&root);
-    assert!(candidates(&project, &terms("write a haiku about winter")).is_empty());
+    assert!(candidates(&project, &terms("write a haiku about winter"), WALK_BUDGET).is_empty());
 }
 
 #[test]
@@ -92,7 +104,7 @@ fn files_git_ignores_never_become_candidates() {
     fs::write(project.join("src/notes/local/header.md"), "header\n").unwrap();
     fs::write(project.join("src/notes/.gitignore"), "local/\n").unwrap();
     fs::write(project.join(".gitignore"), "*.log\nsrc/private/\n").unwrap();
-    let found = candidates(&project, &terms("the header"));
+    let found = candidates(&project, &terms("the header"), WALK_BUDGET);
     assert!(
         found.contains(&"src/notes/header.md".to_owned()),
         "{found:?}"
@@ -114,7 +126,7 @@ fn a_linked_folder_is_never_walked() {
     fs::create_dir(&outside).unwrap();
     fs::write(outside.join("header.ts"), "header\n").unwrap();
     std::os::unix::fs::symlink(&outside, project.join("linked")).unwrap();
-    let found = candidates(&project, &terms("the header"));
+    let found = candidates(&project, &terms("the header"), WALK_BUDGET);
     assert!(
         found.iter().all(|path| !path.starts_with("linked")),
         "{found:?}"

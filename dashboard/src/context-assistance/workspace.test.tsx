@@ -82,6 +82,12 @@ assert.doesNotMatch(render(), />Turn off CIGAR</);
 assert.match(render({ status: ready }), />Turn off CIGAR</);
 assert.match(render({ status: ready }), />Pick a project folder</);
 assert.match(render({ status: ready }), /CIGAR is on/);
+assert.match(render({ status: ready }), /turn on Context for AI apps and Allow selected workspace documents/,
+  "with project context off, the caption does not promise project files");
+const sharing = parseContextAssistanceStatus({ ...ready, effective_preferences: { ...ready.effective_preferences,
+  features: { ...ready.effective_preferences.features, agent_context: true },
+  sources: { ...ready.effective_preferences.sources, workspace_documents: true, source_set_id: "selected-workspaces" } } });
+assert.match(render({ status: sharing }), /Prompts in Claude Code and Codex now get the project files that match them/);
 assert.match(render({ status: saved, setup: idle({ ...install, build_id: null, python_build_id: null, runtime_id: "r", stages: ["start"], approval: false }) }), />Not started</);
 const resting = render({ status: { ...saved, diagnostic: "runtime_resting" }, setup: idle(install) });
 assert.match(resting, />Resting</);
