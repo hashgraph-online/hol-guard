@@ -44,6 +44,34 @@ pub(super) fn reason(harness: &str, command: &str, cwd: &Path, with_controls: bo
 
 pub(super) const CONTAINED: &str = "native_workspace_containment_required";
 
+/// The narrower profile the tool a command names answers with, where a host's
+/// sink claims it before the general workspace sandbox: that tool's own
+/// read-only profile, or the build-output one for a bundler that writes
+/// `dist/`. `None` where only the general workspace profile claims the run.
+pub(super) fn tool_profile(command: &str) -> Option<&'static str> {
+    if command.contains("vitest") {
+        Some("native_vitest_readonly_containment_required")
+    } else if command.contains("tsc") {
+        Some("native_node_tool_readonly_containment_required")
+    } else if command.contains("vite build") {
+        Some("native_node_build_output_containment_required")
+    } else {
+        None
+    }
+}
+
+/// Whether one of Guard's own contained sinks claims this run: the general
+/// workspace sandbox, or the narrower profile of the tool the command names.
+pub(super) fn claimed(reason: &str, command: &str) -> bool {
+    reason == CONTAINED || tool_profile(command) == Some(reason)
+}
+
+/// Whether this reason routes the command into a contained sink at all. Every
+/// contained reason code ends this way; a review reason never does.
+pub(super) fn contained(reason: &str) -> bool {
+    reason.ends_with("_containment_required")
+}
+
 #[test]
 fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
     let ws = workspace("convert", true);
