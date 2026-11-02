@@ -44,14 +44,6 @@ pub(super) fn reason(harness: &str, command: &str, cwd: &Path, with_controls: bo
 
 pub(super) const CONTAINED: &str = "native_workspace_containment_required";
 
-/// Whether this reason routes the command into one of Guard's own contained
-/// sinks: the general workspace sandbox, or one of the narrower read-only
-/// profiles a host with a sandbox claims before it. Every contained reason
-/// code ends this way; a review reason never does.
-pub(super) fn contained(reason: &str) -> bool {
-    reason.ends_with("_containment_required")
-}
-
 #[test]
 fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
     let ws = workspace("convert", true);

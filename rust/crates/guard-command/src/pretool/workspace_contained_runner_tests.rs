@@ -1,5 +1,18 @@
-use super::workspace_contained_tests::{contained, host, reason, workspace, CONTAINED};
+use super::workspace_contained_tests::{host, reason, workspace, CONTAINED};
 use std::path::Path;
+
+/// The narrower profile the tool a runner starts answers with, where a host's
+/// sink claims it before the general workspace sandbox: its own read-only
+/// profile, or the build-output one for a bundler that writes `dist/`.
+fn tool_profile(command: &str) -> &'static str {
+    if command.contains("vitest") {
+        "native_vitest_readonly_containment_required"
+    } else if command.contains("tsc") {
+        "native_node_tool_readonly_containment_required"
+    } else {
+        "native_node_build_output_containment_required"
+    }
+}
 
 fn install_tool(directory: &Path, tool: &str) {
     let bin = directory.join("node_modules/.bin");
@@ -46,11 +59,14 @@ fn runners_of_installed_project_tools_run_in_the_workspace_sandbox() {
         "cd app && npm exec vitest run",
     ] {
         let got = reason("omp", command, &ws, true);
-        // A host that runs Guard's sink claims some of these with a narrower
-        // node profile before the general workspace one; either way the run
-        // never reaches the user as a review.
+        // A host that runs Guard's sink claims some of these with the narrower
+        // profile of the tool the runner starts, before the general workspace
+        // one; either way the run never reaches the user as a review.
         if cfg!(target_os = "linux") && host() {
-            assert!(contained(&got), "{command}: {got}");
+            assert!(
+                got == CONTAINED || got == tool_profile(command),
+                "{command}: {got}"
+            );
         }
     }
 }

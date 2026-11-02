@@ -15,6 +15,7 @@ const PACKAGE_TEST: &str = "native_package_test_readonly_containment_required";
 const NODE_TOOL: &str = "native_node_tool_readonly_containment_required";
 const NODE_BUILD: &str = "native_node_build_output_containment_required";
 const WORKSPACE: &str = "native_workspace_containment_required";
+const NODE_TEST: &str = "native_node_test_readonly_containment_required";
 const HARNESSES: [&str; 3] = ["omp", "claude-code", "codex"];
 
 fn root() -> PathBuf {
@@ -120,11 +121,17 @@ fn package_script_receipts_match_the_sinks() {
                         result.reason_code
                     );
                     if result.minimum_action == "sandbox-required" {
+                        // `bun test` is Bun's own runner rather than a package
+                        // script, so its read-only profile claims the command
+                        // where a host runs that sink. Every other declined
+                        // case reaches the general workspace sandbox.
+                        let expected: &[&str] = if command == "bun test" {
+                            &[WORKSPACE, NODE_TEST]
+                        } else {
+                            &[WORKSPACE]
+                        };
                         assert!(
-                            result.reason_code == WORKSPACE
-                                || result
-                                    .reason_code
-                                    .ends_with("_readonly_containment_required"),
+                            expected.contains(&result.reason_code.as_str()),
                             "{harness}: {name}: {}",
                             result.reason_code
                         );
