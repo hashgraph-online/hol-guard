@@ -559,6 +559,32 @@ def test_runtime_snapshot_reports_cloud_status_unavailable_without_the_native_ru
     assert snapshot["cloud_pairing_state"]["connect_url"] == "https://hol.org/guard/connect"
 
 
+@pytest.mark.parametrize(
+    ("sync_url", "dashboard_url"),
+    [
+        (
+            "https://registry-staging.example.test/points/api/guard/receipts/sync",
+            "https://registry-staging.example.test/guard",
+        ),
+        (None, "https://hol.org/guard"),
+        ("not a url", "https://hol.org/guard"),
+    ],
+    ids=["configured", "absent", "unparsable"],
+)
+def test_cloud_status_fallback_links_stay_on_the_configured_sync_origin(
+    sync_url: str | None,
+    dashboard_url: str,
+) -> None:
+    from codex_plugin_scanner.guard import approvals as approvals_module
+
+    assert approvals_module._fallback_guard_urls(sync_url) == {
+        "dashboard_url": dashboard_url,
+        "inbox_url": f"{dashboard_url}/inbox",
+        "fleet_url": f"{dashboard_url}/protect",
+        "connect_url": f"{dashboard_url}/connect",
+    }
+
+
 def test_runtime_snapshot_trust_status_does_not_refresh_integrity_state(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     provision_native_verifier_key_for_store(store)

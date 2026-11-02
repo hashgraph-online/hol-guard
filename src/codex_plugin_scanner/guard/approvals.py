@@ -103,6 +103,19 @@ _HEADLINE_UNAVAILABLE = {
     "headline_label": "Degraded",
     "headline_detail": "HOL Guard could not load the protection headline from its native runtime.",
 }
+# The two headlines that need no protection report keep their copy when the
+# native runtime is out, so an offline runtime or a waiting decision is never
+# hidden behind the degraded fallback.
+_HEADLINE_SETUP = {
+    "headline_state": "setup",
+    "headline_label": "Setup required",
+    "headline_detail": "The local Guard runtime is offline. Start the daemon or rerun hol-guard bootstrap.",
+}
+_HEADLINE_NEEDS_DECISION = {
+    "headline_state": "needs_decision",
+    "headline_label": "Decision needed",
+    "headline_detail": "One or more actions are waiting for a decision in the current review queue.",
+}
 # Artifact metadata the resident reads for a queued request.
 _QUEUE_METADATA_KEYS = ("raw_command_text", "command_text", "command_rule_matches", "extension_allow_hint")
 
@@ -1490,13 +1503,34 @@ def _runtime_cloud_status(
                 "next_retry_after": None,
             },
             "cloud_policy_last_ack_at": None,
+            **_fallback_guard_urls(sync_url),
+        }
+    status["proof_status"] = {**status["proof_status"], **proof}
+    return status
+
+
+def _fallback_guard_urls(sync_url: str | None) -> dict[str, str]:
+    """The Guard page links on the configured sync origin when the runtime is out.
+
+    The published links are the fallback only without a usable sync URL, so a
+    machine paired with another Guard Cloud never links to the public one.
+    """
+
+    parsed = urlparse(sync_url or "")
+    if not parsed.scheme or not parsed.netloc:
+        return {
             "dashboard_url": GUARD_DASHBOARD_URL,
             "inbox_url": GUARD_INBOX_URL,
             "fleet_url": GUARD_FLEET_URL,
             "connect_url": GUARD_CONNECT_URL,
         }
-    status["proof_status"] = {**status["proof_status"], **proof}
-    return status
+    dashboard_url = f"{parsed.scheme}://{parsed.netloc}/guard"
+    return {
+        "dashboard_url": dashboard_url,
+        "inbox_url": f"{dashboard_url}/inbox",
+        "fleet_url": f"{dashboard_url}/protect",
+        "connect_url": f"{dashboard_url}/connect",
+    }
 
 
 def _is_runtime_cloud_status(status: object) -> TypeGuard[dict[str, Any]]:
@@ -1580,8 +1614,9 @@ def _runtime_headline(
 ) -> dict[str, object]:
     """Ask the native runtime for the snapshot headline.
 
-    The headline is display only, so an unavailable runtime reports it as
-    degraded rather than claiming protection.
+    The headline is display only, so an unavailable runtime still reports
+    setup and a waiting decision, and otherwise reports degraded rather than
+    claiming protection.
     """
     from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
@@ -1597,9 +1632,13 @@ def _runtime_headline(
         )
     except NativeRunnerAuthorityError as error:
         _LOGGER.debug("runtime headline unavailable: %s", error)
-        return dict(_HEADLINE_UNAVAILABLE)
+        reply = None
     if isinstance(reply, dict) and all(isinstance(reply.get(key), str) for key in _HEADLINE_UNAVAILABLE):
         return {key: reply[key] for key in _HEADLINE_UNAVAILABLE}
+    if not runtime_state_present:
+        return dict(_HEADLINE_SETUP)
+    if pending_count > 0:
+        return dict(_HEADLINE_NEEDS_DECISION)
     return dict(_HEADLINE_UNAVAILABLE)
 
 

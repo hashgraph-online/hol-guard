@@ -238,4 +238,38 @@ def test_an_unreachable_runtime_leaves_the_snapshot_without_a_verdict(
         runtime_state_present=True,
         protection_state="",
     )
-    assert headline["headline_state"] == "degraded"
+    assert headline == {
+        "headline_state": "degraded",
+        "headline_label": "Degraded",
+        "headline_detail": "One or more required protection checks failed or remain unproven.",
+    }
+
+
+@pytest.mark.parametrize(
+    ("runtime_state_present", "pending_count", "expected_state"),
+    [(False, 2, "setup"), (True, 2, "needs_decision"), (True, 0, "degraded")],
+)
+def test_an_unavailable_headline_keeps_setup_and_waiting_decisions(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    runtime_state_present: bool,
+    pending_count: int,
+    expected_state: str,
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority_module
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise authority_module.NativeRunnerAuthorityError("native_runtime_unavailable")
+
+    monkeypatch.setattr(authority_module, "native_runner_authority", unavailable)
+
+    headline = approvals_module._runtime_headline(
+        GuardStore(tmp_path / "guard-home"),
+        pending_count=pending_count,
+        runtime_state_present=runtime_state_present,
+        protection_state="protected",
+    )
+
+    assert headline["headline_state"] == expected_state
+    if expected_state == "degraded":
+        assert headline == approvals_module._HEADLINE_UNAVAILABLE
