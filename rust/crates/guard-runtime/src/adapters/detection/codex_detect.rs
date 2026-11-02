@@ -51,11 +51,14 @@ fn string_args(server: &HookVal) -> Option<Vec<String>> {
     }
 }
 
-const PROXY_COMMANDS: [&str; 5] = [
+/// `_GUARD_PROXY_COMMANDS`: every proxy subcommand a Guard adapter installs.
+const PROXY_COMMANDS: [&str; 7] = [
+    "cline-mcp-proxy",
     "codex-mcp-proxy",
     "opencode-mcp-proxy",
     "copilot-mcp-proxy",
     "cursor-mcp-proxy",
+    "hermes-mcp-proxy",
     "mcp-proxy",
 ];
 

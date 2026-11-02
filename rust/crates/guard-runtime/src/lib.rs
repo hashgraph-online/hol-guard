@@ -130,6 +130,11 @@ mod claude_session_start_contract;
 mod claude_session_start_live;
 mod cli_copilot_resolution;
 mod cli_runtime_support_op;
+#[path = "adapters/detection/cline_detect.rs"]
+mod cline_detect;
+#[cfg(all(test, unix))]
+#[path = "adapters/detection/cline_detect_tests.rs"]
+mod cline_detect_tests;
 mod cline_hook_worker;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
