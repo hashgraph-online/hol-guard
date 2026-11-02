@@ -182,6 +182,9 @@ pub(super) fn answer(
     if harness == CLAUDE_CODE && event == STOP {
         claude_turn_stop_answer(guard_home, payload, policy_store)?;
     }
+    if compact == "sessionstart" {
+        crate::context_assistance_prompt::wake(harness, policy_store);
+    }
     Ok(json!({ "harness_response": constant_response(harness, event) }))
 }
 
