@@ -167,6 +167,7 @@ for (const label of ["Settings", "Projects &amp; AI apps", "Updates", "Privacy",
 assert.match(settingsOpen, /Runtime controls/);
 assert.match(advancedOpen("access"), /Workspace access/);
 assert.match(advancedOpen("data"), /Context data/);
+assert.match(advancedOpen("data"), /By default, CIGAR keeps its notes in memory only/, "privacy intro must not promise memory-only storage unconditionally");
 const guide = renderToStaticMarkup(<CigarGuide onSelect={() => {}} />);
 assert.match(guide, /How CIGAR works/);
 assert.match(guide, /build a to-do app/);

@@ -82,7 +82,7 @@ export function CigarAdvanced(props: CigarAdvancedProps) {
             {props.access}
           </div> : null}
           {active === "data" ? <div>
-            <Intro title="Privacy">CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes.</Intro>
+            <Intro title="Privacy">By default, CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes.</Intro>
             {props.data}
           </div> : null}
           {active === "guide" ? <CigarGuide onSelect={props.onSelect} walkthroughs={walkthroughs} /> : null}

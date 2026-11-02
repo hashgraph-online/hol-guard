@@ -5131,7 +5131,7 @@ function CigarAdvanced(props) {
             props.access
           ] }) : null,
           active === "data" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Privacy", children: "CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Privacy", children: "By default, CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes." }),
             props.data
           ] }) : null,
           active === "guide" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarGuide, { onSelect: props.onSelect, walkthroughs }) : null
