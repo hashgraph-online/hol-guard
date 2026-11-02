@@ -60,5 +60,15 @@ def test_bounded_hook_argv_replaces_the_default_hook(tmp_path: Path, monkeypatch
 def test_malformed_render_answer_is_refused(tmp_path: Path, monkeypatch) -> None:
     _capture(monkeypatch, {"source": None})
 
-    with pytest.raises(NativeRunnerAuthorityError, match="malformed"):
+    with pytest.raises(RuntimeError, match="malformed"):
+        cline_plugin._plugin_source(_context(tmp_path), ["python", "guard"])
+
+
+def test_render_failure_is_a_runtime_error_the_install_can_fall_back_from(tmp_path: Path, monkeypatch) -> None:
+    def authority(kind: str, args: dict[str, object], *, guard_home: Path | None = None) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(cline_plugin, "native_runner_authority", authority)
+
+    with pytest.raises(RuntimeError, match="Cline plugin render failed: native_runner_authority_unavailable"):
         cline_plugin._plugin_source(_context(tmp_path), ["python", "guard"])

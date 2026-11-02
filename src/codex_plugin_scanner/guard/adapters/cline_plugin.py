@@ -73,12 +73,16 @@ def _plugin_source(context: HarnessContext, guard_cli: list[str], hook_argv: lis
         "proof_posttool": str(_proof_path(context, "posttool")),
     }
     # Rendering is pure: it must not create the Guard home before install publishes it.
-    answer = native_runner_authority(
-        "cline_plugin_render", args, guard_home=_resolve_existing_digest_home(context.guard_home)
-    )
+    try:
+        answer = native_runner_authority(
+            "cline_plugin_render", args, guard_home=_resolve_existing_digest_home(context.guard_home)
+        )
+    except NativeRunnerAuthorityError as error:
+        # A RuntimeError lets an automatic install fall back to the hooks transport.
+        raise RuntimeError(f"Cline plugin render failed: {error}") from error
     source = answer.get("source")
     if not isinstance(source, str):
-        raise NativeRunnerAuthorityError("Cline plugin render answer is malformed")
+        raise RuntimeError("Cline plugin render answer is malformed")
     return source
 
 
