@@ -67,6 +67,7 @@ from .workspace_plugin_manifest_findings import (
 )
 from .workspace_runtime_findings import (
     RUNTIME_DETECTOR,
+    WorkspaceRuntimeFindingsError,
     assessment_context_digest,
     log_probe_failure,
     observe_workspace_runtimes,
@@ -124,7 +125,12 @@ def run_next(
     )
     if claimed is None:
         return False
-    outcome = execute(store, config, claimed, clock=clock)
+    try:
+        outcome = execute(store, config, claimed, clock=clock)
+    except WorkspaceRuntimeFindingsError:
+        # The runtime detector could not answer, so the run fails now instead
+        # of holding its lease until it expires and the run repeats.
+        outcome = assessments.RunOutcome(state="failed", error_code="runtime_detector_failed")
     try:
         assessments.finish(store, claimed, outcome, now_ms=clock())
     except ValueError:

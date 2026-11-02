@@ -397,3 +397,30 @@ def test_the_digest_moves_when_a_process_is_left_on_a_replaced_build_and_when_it
     assert runtimes.runtime_identity_digest(posture()) == runtimes.runtime_identity_digest(
         {**posture(), "instances": instances(old_process())}
     ), "a process on the build that is still on disk does not move the digest"
+
+
+def test_the_projection_fails_closed_without_the_native_runtime(monkeypatch) -> None:
+    def unavailable(kind, args, guard_home=None, timeout_seconds=None):
+        raise runtimes.NativeRunnerAuthorityError("native_runtime_unavailable")
+
+    monkeypatch.setattr(runtimes, "native_runner_authority", unavailable)
+    with pytest.raises(RuntimeError, match="workspace runtimes"):
+        runtimes.project_runtime_findings(KEYS.worktree_key, posture(advisories=[advisory("affected")]))
+    with pytest.raises(RuntimeError, match="workspace runtimes"):
+        runtimes.with_runtime_coverage({"status": "complete", "reasons": [], "detectors": {}}, posture())
+    # An unanswered digest is unknown, like a failed probe, so the last answer stands.
+    assert runtimes.runtime_identity_digest(posture()) is None
+
+
+def test_the_native_runtime_receives_the_posture_and_worktree(monkeypatch) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def recorded(kind, args, guard_home=None, timeout_seconds=None):
+        calls.append((kind, args))
+        return {"findings": [], "truncated": False}
+
+    monkeypatch.setattr(runtimes, "native_runner_authority", recorded)
+    assert runtimes.project_runtime_findings(KEYS.worktree_key, posture()) == ([], False)
+    assert calls == [
+        ("workspace_runtime_findings", {"op": "findings", "worktree_key": KEYS.worktree_key, "posture": posture()})
+    ]

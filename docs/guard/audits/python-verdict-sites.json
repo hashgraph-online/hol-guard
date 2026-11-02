@@ -698,16 +698,6 @@
       "note": "A scan finding's own decision field, next to its severity and lifecycle state."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/workspace_runtime_findings.py",
-      "func": "project_runtime_findings",
-      "root": "none",
-      "reading": "labels-finding",
-      "actions": [
-        "warn"
-      ],
-      "note": "Same scan-finding record field."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/workspace_secret_findings.py",
       "func": "_finding",
       "root": "none",
