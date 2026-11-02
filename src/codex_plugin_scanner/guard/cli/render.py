@@ -667,9 +667,17 @@ def _render_command_inspection(console: Console, payload: dict[str, object]) -> 
         console.print(trace_table)
 
 
+def _command_extensions_title(payload: PayloadDict) -> str:
+    """Name the catalog the payload came from, built-in or delivered."""
+
+    if str(payload.get("source") or "") == "delivered":
+        return "Delivered command safety extensions"
+    return "Built-in command safety extensions"
+
+
 def _render_command_extensions(console: Console, payload: dict[str, object]) -> None:
     extensions = _coerce_dict_list(payload.get("extensions"))
-    table = Table(title="Built-in command safety extensions", box=box.SIMPLE_HEAD, show_lines=False)
+    table = Table(title=_command_extensions_title(payload), box=box.SIMPLE_HEAD, show_lines=False)
     table.add_column("Extension", style="bold cyan", no_wrap=True)
     table.add_column("Version", no_wrap=True)
     table.add_column("Coverage")
@@ -742,7 +750,7 @@ def _plain_text_command_inspection(payload: PayloadDict) -> str:
 
 def _plain_text_command_extensions(payload: PayloadDict) -> str:
     extensions = _coerce_dict_list(payload.get("extensions"))
-    lines = [f"Built-in command safety extensions ({len(extensions)})"]
+    lines = [f"{_command_extensions_title(payload)} ({len(extensions)})"]
     lines.extend(f"{item.get('extension_id')} {item.get('version')} - {item.get('description')}" for item in extensions)
     return "\n".join(lines)
 

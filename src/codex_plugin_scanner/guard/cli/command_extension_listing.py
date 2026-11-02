@@ -1,0 +1,106 @@
+"""Command extension listings that cover everything Guard delivers.
+
+The wheel packages only the core command catalog. Every other merged
+extension reaches a device through the daemon's delivery stream, so a
+listing that reads the packaged catalog alone reports a community
+contribution as unknown long after it has shipped. These helpers read the
+delivered catalog through the same daemon route ``command controls list``
+and ``command controls show`` already use, and fall back to the packaged
+catalog when no daemon is answering.
+
+``command extensions`` is a stateless inspection: it never starts a daemon
+and never writes Guard state, so a device with no running daemon still
+reports the packaged catalog instead of failing. This module is CLI
+transport and presentation; the daemon's native read model owns the
+catalog and nothing here re-derives an extension.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+from typing import TypeVar
+
+from ..daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
+from ..runtime.command_extensions import COMMAND_EXTENSION_SCHEMA_VERSION
+from ..runtime.command_inspection import command_extensions_payload
+from .extension_catalog_reads import catalog_list, catalog_show
+
+DELIVERED_SOURCE = "delivered"
+# Reaching the delivered catalog needs an endpoint, the native runtime that
+# verifies it and a live socket. Every one of those fails as an ``OSError`` or
+# a ``RuntimeError`` subclass -- ``GuardDaemonRequestError`` and
+# ``NativeDaemonLifecycleError`` among them -- and none of them means the
+# extension is absent, so a listing degrades to the packaged catalog instead.
+# A ``ValueError`` is the daemon's own answer that it has no such extension.
+_CATALOG_UNAVAILABLE = (OSError, RuntimeError)
+# Carried through from the delivered catalog so a reader can pin the exact
+# snapshot an entry came from, as ``command controls list`` reports it.
+_PASSTHROUGH_KEYS = ("native_catalog_digest", "snapshot_id")
+_UNKNOWN = "Unknown command safety extension: {extension_id}"
+_UNREACHABLE = (
+    "Unknown command safety extension: {extension_id}. Guard searched only the packaged core catalog because no "
+    "running daemon could serve the delivered one; start Guard and try again."
+)
+
+_Result = TypeVar("_Result")
+
+
+def _read_delivered(guard_home: Path, read: Callable[[GuardSurfaceDaemonClient], _Result]) -> _Result:
+    """Run one delivered-catalog read against an already running daemon."""
+
+    from .extension_controls_commands import _client
+
+    return read(_client(guard_home))
+
+
+def _delivered_envelope(extensions: list[dict[str, object]], source_payload: dict[str, object]) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schema_version": COMMAND_EXTENSION_SCHEMA_VERSION,
+        "source": DELIVERED_SOURCE,
+        "count": len(extensions),
+        "extensions": extensions,
+    }
+    for key in _PASSTHROUGH_KEYS:
+        value = source_payload.get(key)
+        if value is not None:
+            payload[key] = value
+    return payload
+
+
+def _delivered_extension(guard_home: Path, extension_id: str) -> dict[str, object]:
+    try:
+        extension = _read_delivered(guard_home, lambda client: catalog_show(client, extension_id))
+    except _CATALOG_UNAVAILABLE as error:
+        raise ValueError(_UNREACHABLE.format(extension_id=extension_id)) from error
+    except ValueError as error:
+        raise ValueError(_UNKNOWN.format(extension_id=extension_id)) from error
+    return _delivered_envelope([extension], {})
+
+
+def _delivered_listing(guard_home: Path) -> dict[str, object]:
+    listing = _read_delivered(guard_home, catalog_list)
+    extensions = listing.get("extensions")
+    if not isinstance(extensions, list):
+        raise GuardDaemonRequestError("daemon returned an invalid catalog")
+    return _delivered_envelope([item for item in extensions if isinstance(item, dict)], listing)
+
+
+def command_extensions_listing(guard_home: Path, extension_id: str | None = None) -> dict[str, object]:
+    """Return command extension metadata, packaged core first then delivered.
+
+    A single id resolves against the packaged catalog before the daemon, so
+    the common core lookup stays offline and its payload is unchanged. A
+    full listing prefers the delivered catalog, which is a superset of the
+    packaged one.
+    """
+
+    if extension_id is not None:
+        try:
+            return command_extensions_payload(extension_id)
+        except ValueError:
+            return _delivered_extension(guard_home, extension_id)
+    try:
+        return _delivered_listing(guard_home)
+    except _CATALOG_UNAVAILABLE:
+        return command_extensions_payload(None)
