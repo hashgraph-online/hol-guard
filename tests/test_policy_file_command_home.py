@@ -11,6 +11,14 @@ from codex_plugin_scanner.guard import native_context
 from codex_plugin_scanner.guard.cli import commands_dispatch_policy_dx as dx
 
 
+@pytest.fixture(autouse=True)
+def _unbound_home():
+    # Earlier tests in the same worker may leave a home bound for ambient digest calls.
+    token = native_context.bind_context_digest_home(None, remember=False)
+    yield
+    native_context.reset_context_digest_home(token)
+
+
 def _record_bound_home(monkeypatch: pytest.MonkeyPatch) -> list[Path | None]:
     seen: list[Path | None] = []
 
