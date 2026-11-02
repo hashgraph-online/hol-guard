@@ -10,7 +10,9 @@ import zipfile
 
 import pytest
 
-from ci.gauntlet.bundle import download, pack, unpack
+from ci.gauntlet.bundle import MAX_ENTRIES, download, pack, unpack
+from ci.gauntlet.case_retry import MAX_CASE_RETRIES
+from ci.gauntlet.catalog import MAX_SCENARIOS
 from ci.gauntlet.github_ci import initialize_gate, requires_gauntlet
 from ci.gauntlet.source_identity import validate_identity
 
@@ -117,6 +119,27 @@ def test_archive_digest_and_symlinks_are_verified(tmp_path):
         unpack(data, tmp_path / "extracted", hashlib.sha256(data).hexdigest())
     with pytest.raises(ValueError, match="digest"):
         unpack(data, tmp_path / "other", "0" * 64)
+
+
+def test_evidence_inventory_follows_the_catalog_bound(tmp_path):
+    """A run of the whole catalog, retried attempts and all, must stay importable."""
+    assert MAX_ENTRIES == MAX_SCENARIOS * (1 + MAX_CASE_RETRIES) + 2
+    full = (
+        [("summary.json", "{}"), ("summary.md", "")]
+        + [(f"cases/case-{index}.json", "{}") for index in range(MAX_SCENARIOS)]
+        + [
+            (f"superseded/case-{index}.attempt-{attempt}.json", "{}")
+            for index in range(MAX_SCENARIOS)
+            for attempt in range(1, MAX_CASE_RETRIES + 1)
+        ]
+    )
+    assert len(full) == MAX_ENTRIES
+    data = archive(full)
+    unpack(data, tmp_path / "full", hashlib.sha256(data).hexdigest())
+    assert len(list((tmp_path / "full/cases").iterdir())) == MAX_SCENARIOS
+    over = archive([*full, ("cases/one-too-many.json", "{}")])
+    with pytest.raises(ValueError, match="oversized"):
+        unpack(over, tmp_path / "over", hashlib.sha256(over).hexdigest())
 
 
 @pytest.mark.parametrize(

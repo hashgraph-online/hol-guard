@@ -22,6 +22,10 @@ from .remote_code import REMOTE_CODE_CASES
 from .supply_chain import PACKAGE_BLOCK_REASONS
 
 CATALOG = Path(__file__).with_name("scenarios.json")
+# The catalog's own bound. A run writes one case file per scenario, so `bundle`
+# derives the evidence inventory's bound from this one: raising it here raises
+# what an export and an import will carry.
+MAX_SCENARIOS = 384
 # Connector setup cases: an additive catalog, like the approve-then-retry lane's, so the omp
 # runner and the installed lane never meet an oracle they cannot judge.
 CONNECTOR_CATALOG = Path(__file__).with_name("connector_setup.json")
@@ -106,7 +110,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
     """Parse scenario data without importing candidate Python code."""
     if not isinstance(data, dict) or not isinstance(data.get("scenarios"), list):
         raise ValueError("scenario catalog must contain an array")
-    if not 1 <= len(data["scenarios"]) <= 384:
+    if not 1 <= len(data["scenarios"]) <= MAX_SCENARIOS:
         raise ValueError("scenario catalog count exceeds its bound")
     if data.get("schema") != "hol.guard-gauntlet.scenarios.v1":
         raise ValueError("unsupported Gauntlet scenario schema")
