@@ -136,6 +136,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "local_request_snapshot" => snapshot::local_request_snapshot(args),
         "supply_chain_audit_workspace_dir" => crate::supply_chain_audit_workspace::dispatch(args),
         "local_request_snapshot_items" => snapshot::local_request_snapshot_items(args),
+        "package_manager_launch_path" => crate::package_manager_launch_path::dispatch(args),
         "oci_bundle_evidence" => oci::oci_bundle_evidence(args),
         "oci_evidence_verdict" => oci::oci_evidence_verdict(args),
         "oci_bundle_digest" => oci::oci_bundle_digest(args),

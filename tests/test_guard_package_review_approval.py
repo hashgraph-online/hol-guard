@@ -115,6 +115,42 @@ def test_saved_package_approval_survives_guard_shim_repair(
         )
 
 
+def test_package_launch_path_refuses_when_the_native_answer_cannot_be_used(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answers: list[object] = [
+        {"refused": "shim_unverified"},
+        {"refused": "path_unverified"},
+        {"path": None},
+        local_supply_chain_module.NativeRunnerAuthorityError("unavailable"),
+    ]
+
+    def fake_authority(kind: str, args: dict[str, object], **_options: object) -> object:
+        assert kind == "package_manager_launch_path"
+        assert args["separator"] == os.pathsep
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(local_supply_chain_module, "native_runner_authority", fake_authority)
+    messages = [
+        "Guard's package shim path could not be verified",
+        "package manager PATH could not be verified",
+        "package manager PATH could not be verified",
+        "package manager PATH could not be verified",
+    ]
+    for message in messages:
+        with pytest.raises(ValueError, match=message):
+            local_supply_chain_module._package_manager_launch_environment(
+                {"PATH": "/bin"},
+                guard_home=tmp_path / ".hol-guard",
+                launch_cwd=tmp_path,
+            )
+    assert answers == []
+
+
 def test_saved_npx_approval_survives_guard_shim_replacement(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
