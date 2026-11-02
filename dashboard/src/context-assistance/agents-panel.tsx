@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { HiMiniArrowPath, HiMiniLink } from "react-icons/hi2";
+import { Tag } from "../approval-center-primitives";
+import { SelectMenu } from "../select-menu";
+import { versionHeading, versionLead, versionPrimary, versionQuiet } from "./versions-view";
 import type { GuardApprovalGatePublicConfig } from "../guard-types";
 import { harnessDisplayName } from "../approval-center-utils";
 import { SettingsSaveProofModal, type SettingsSaveProofCredentials } from "../settings-save-proof-modal";
@@ -6,7 +10,7 @@ import { ContextAssistanceApiError } from "./api";
 import { authorizeContextAgentSession, listContextAgentSessions, revokeContextAgentSession,
   type ContextAgentSession, type ContextWorkspaceScope } from "./workspaces-api";
 
-const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
+const empty = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70";
 type Props = { ready: boolean; enabled: boolean; dirty: boolean; generation: string | null; scopes: ContextWorkspaceScope[]; gate: GuardApprovalGatePublicConfig | null };
 
 export function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate }: Props) {
@@ -20,6 +24,7 @@ export function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, 
   const request = useRef<AbortController | null>(null);
   const pending = useRef(false);
   const allowed = ready && enabled;
+  const idBase = useId();
   const confirmationScope = scopes.find((scope) => scope.scope_id === selected[confirm?.session_id ?? ""]);
 
   const refresh = useCallback(async () => {
@@ -64,27 +69,32 @@ export function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, 
     }
   }
 
-  return <section aria-label="AI app context connections" className="space-y-3 rounded-lg border border-slate-200 p-3">
-    <h4 className="text-sm font-semibold text-brand-dark">AI app context connections</h4>
-    <p className="text-sm text-slate-600">Use Guard's MCP server in your app, then match the connection code from get_context_status before granting access. Pairing authenticates that MCP process; the app label is your permission choice. A running runtime alone grants no app access.</p>
-    {!allowed ? <p className="text-sm text-slate-600">Enable Context for AI apps, save settings and start a verified runtime to pair a connection.</p> : <>
-      {error || statusError ? <p role="alert" className="text-sm text-red-700">{error ?? statusError}</p> : null}
-      <button className={button} type="button" disabled={busy} onClick={() => { setError(null); void refresh(); }}>Refresh app connections</button>
-      {sessions.length === 0 ? <p className="text-sm text-slate-600">No context connection is waiting or paired.</p> : sessions.map((session) => <section key={session.session_id} className="space-y-2 border-t border-slate-100 pt-3" aria-label={`Context connection ${session.session_id}`}>
-        <p className="break-all font-mono text-xs text-slate-600">Connection code: {session.session_id}</p>
-        <p className="text-sm text-slate-600">{session.phase === "pending" ? "Waiting for your permission" : "Grant assigned"} · expires in {Math.ceil(session.expires_in_seconds / 60)} minutes.</p>
-        {session.phase === "pending" ? <>
-          <label className="block text-sm text-slate-600">Workspace and app grant
-            <select className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" disabled={busy || dirty}
-              value={selected[session.session_id] ?? ""} onChange={(event) => setSelected((values) => ({ ...values, [session.session_id]: event.target.value }))}>
-              <option value="">Choose a grant</option>
-              {scopes.filter((scope) => !scope.revoked && scope.app !== "dashboard").map((scope) => <option key={scope.scope_id} value={scope.scope_id}>{harnessDisplayName(scope.app)} · {scope.workspace}</option>)}
-            </select>
-          </label>
-          <button className={button} type="button" disabled={busy || dirty || !selected[session.session_id]} onClick={() => { if (gate?.enabled) setConfirm(session); else void perform(session); }}>Authorize context connection</button>
-        </> : <p className="text-sm text-slate-600">{scopes.find((scope) => scope.scope_id === session.scope_id)?.workspace ?? "This grant is unavailable. Revoke it and pair again."}</p>}
-        <button className={button} type="button" disabled={busy} onClick={() => void perform(session, undefined, true)}>Revoke context connection</button>
-      </section>)}
+  const grants = scopes.filter((scope) => !scope.revoked && scope.app !== "dashboard").map((scope) => ({ value: scope.scope_id,
+    label: harnessDisplayName(scope.app) + " · " + scope.workspace }));
+  return <section aria-label="AI app context connections" className="space-y-4">
+    <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+      <div><h3 className={versionHeading}>AI app context connections</h3>
+        <p className={versionLead}>Use Guard's MCP server in your app, then match the connection code from get_context_status before granting access. Pairing authenticates that MCP process; the app label is your permission choice. A running runtime alone grants no app access.</p></div>
+      {allowed ? <button className={versionQuiet} type="button" disabled={busy} onClick={() => { setError(null); void refresh(); }}><HiMiniArrowPath aria-hidden="true" className="size-4" />Refresh app connections</button> : null}
+    </div>
+    {!allowed ? <p className={empty}>Enable Context for AI apps, save settings and start a verified runtime to pair a connection.</p> : <>
+      {error || statusError ? <p role="alert" className="cigar-note">{error ?? statusError}</p> : null}
+      {sessions.length === 0 ? <p className={empty}>No context connection is waiting or paired.</p> : <ul className="space-y-3">{sessions.map((session) => <li key={session.session_id}><section
+        className={"space-y-3 rounded-2xl border p-4 sm:p-5 " + (session.phase === "pending" ? "border-brand-blue/25 bg-brand-blue/[0.03]" : "border-brand-dark/10 bg-white")} aria-label={`Context connection ${session.session_id}`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue"><HiMiniLink className="size-4" /></span>
+          <Tag tone={session.phase === "pending" ? "attention" : "green"}>{session.phase === "pending" ? "Waiting for your permission" : "Grant assigned"}</Tag>
+          <span className="text-xs text-brand-dark/60">expires in {Math.ceil(session.expires_in_seconds / 60)} minutes</span>
+        </div>
+        <p className="break-all font-mono text-xs text-brand-dark/70">Connection code: <span className="font-semibold text-brand-dark">{session.session_id}</span></p>
+        {session.phase === "pending" ? <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <div><span id={`${idBase}-${session.session_id}`} className="text-sm font-medium text-brand-dark">Workspace and app grant</span>
+            <SelectMenu labelledBy={`${idBase}-${session.session_id}`} className="mt-1.5 w-full" disabled={busy || dirty} placeholder="Choose a grant"
+              value={selected[session.session_id] ?? ""} options={grants} onChange={(value) => setSelected((values) => ({ ...values, [session.session_id]: value }))} /></div>
+          <button className={versionPrimary} type="button" disabled={busy || dirty || !selected[session.session_id]} onClick={() => { if (gate?.enabled) setConfirm(session); else void perform(session); }}>Authorize context connection</button>
+        </div> : <p className="break-all text-sm text-brand-dark/75">{scopes.find((scope) => scope.scope_id === session.scope_id)?.workspace ?? "This grant is unavailable. Revoke it and pair again."}</p>}
+        <button className={versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800"} type="button" disabled={busy} onClick={() => void perform(session, undefined, true)}>Revoke context connection</button>
+      </section></li>)}</ul>}
     </>}
     <SettingsSaveProofModal open={confirm !== null} mode="verify-save" gate={gate} title="Authorize AI app context"
       detail={`Grant connection ${confirm?.session_id ?? ""} access to ${confirmationScope ? `${harnessDisplayName(confirmationScope.app)} sources in ${confirmationScope.workspace}` : "the selected sources"} for this runtime session.${confirmationScope?.sharing?.mode === "shared_broker" ? ` Five-minute lease. Reviewed shared notes: ${confirmationScope.sharing.notes.read ? "allowed" : "not granted"}. Note proposals: ${confirmationScope.sharing.notes.propose ? "allowed, subject to your separate review" : "not granted"}.` : ""} This grants no command approval.`}

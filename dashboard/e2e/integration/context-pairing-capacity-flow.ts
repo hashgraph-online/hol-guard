@@ -1,6 +1,7 @@
 import type { Page, Response, Route } from "@playwright/test";
 import { daemonApi, expect, type IntegrationState } from "./fixtures";
 import { ContextAgentProbe } from "./context-agent-probe";
+import { chooseMenuOption } from "../select-menu";
 
 // A classified capacity response is injected only at the browser boundary.
 // Native saturation and removal of refused authority have separate real tests.
@@ -27,7 +28,7 @@ export async function contextPairingCapacityFlow(page: Page, state: IntegrationS
     await page.route("**/v1/context-assistance/workspace-grant", refusePairing);
     await page.getByRole("button", { name: "Refresh app connections", exact: true }).click();
     const region = page.getByRole("region", { name: `Context connection ${pending.session_id}`, exact: true });
-    await region.getByRole("combobox", { name: "Workspace and app grant", exact: true }).selectOption({ index: 1 });
+    await chooseMenuOption(region.getByRole("combobox", { name: "Workspace and app grant", exact: true }), { index: 0 });
     await region.getByRole("button", { name: "Authorize context connection", exact: true }).click();
     const proof = page.getByRole("dialog");
     await proof.getByLabel("Approval password").fill(state.approvalPassword);

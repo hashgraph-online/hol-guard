@@ -5,6 +5,7 @@ import { contextStatus } from "./context-status";
 import { stopContextAssistance } from "./context-stop";
 import { daemonApi, expect, expectNoErrorBoundary, test, type IntegrationState } from "./fixtures";
 import { decide, requestRecord } from "./inbox-helpers";
+import { chooseMenuOption, menuValues } from "../select-menu";
 
 test.use({ actionTimeout: 15_000 });
 
@@ -60,9 +61,8 @@ test("execution opt-in and browser approvals reach the installed native executor
     await expect(panel.getByText("No recent execution-context observations.", { exact: true })).toBeVisible();
     await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
     const consumer = page.getByRole("combobox", { name: "Context consumer", exact: true });
-    expect(await consumer.locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value)))
-      .toEqual(["dashboard", "pi", "omp"]);
-    await consumer.selectOption("omp");
+    expect(await menuValues(consumer)).toEqual(["dashboard", "pi", "omp"]);
+    await chooseMenuOption(consumer, "omp");
     await page.getByLabel("Workspace folder", { exact: true }).fill(state.workspace);
     await page.getByRole("button", { name: "Grant review source access", exact: true }).click();
     const grantProof = page.getByRole("dialog");

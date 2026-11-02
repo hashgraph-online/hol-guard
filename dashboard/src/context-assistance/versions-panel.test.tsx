@@ -68,7 +68,7 @@ assert.match(builds, /disabled="">Prepare this build/);
 assert.match(builds, /Build identity/);
 const preferences = renderToStaticMarkup(<CigarUpdatePreferencesPanel value={updates} builds={catalog.builds} disabled={false} onAction={noAction} />);
 assert.match(preferences, /notifications and automatic preparation are not available/);
-assert.match(preferences, /disabled="">Notify/);
+assert.match(preferences, /aria-disabled="true"[^>]*><span[^>]*>Notify</);
 assert.doesNotMatch(preferences, /Enable automatic/);
 const panel = renderToStaticMarkup(<CigarVersionsPanel status={state} gate={null} disabled={false} locked={false} dirty={false} captureStatus={() => () => {}} />);
 assert.match(panel, /<h2>Updates<\/h2>/);
