@@ -18,7 +18,8 @@ from typing import Final
 from ..codex_hook_launch_runtime import run_isolated_hook_process
 
 _PROBE_TIMEOUT_SECONDS: Final = 15
-_PROBE_OUTPUT_LIMIT_BYTES: Final = 2 * 64 * 1024
+_PROBE_OUTPUT_LIMIT_BYTES: Final = 64 * 1024
+_PROBE_MAX_OUTPUT_LIMIT_BYTES: Final = 2 * _PROBE_OUTPUT_LIMIT_BYTES
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +42,8 @@ def run_probe(
 ) -> ProbeResult:
     """Run a probe with no stdin and strictly bounded output and duration.
 
-    stdout and stderr share one output budget of at most 128 KiB.
+    stdout and stderr share one output budget: 64 KiB by default, and at most
+    128 KiB when a caller asks for more.
     """
 
     timeout = float(_PROBE_TIMEOUT_SECONDS) if timeout_seconds is None else timeout_seconds
@@ -56,7 +58,7 @@ def run_probe(
     if (
         isinstance(output_limit, bool)
         or not isinstance(output_limit, int)
-        or not 0 < output_limit <= _PROBE_OUTPUT_LIMIT_BYTES
+        or not 0 < output_limit <= _PROBE_MAX_OUTPUT_LIMIT_BYTES
     ):
         raise ValueError("invalid probe output limit")
     result = run_isolated_hook_process(
