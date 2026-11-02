@@ -128,6 +128,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "canonical_rollout" => policy::canonical_rollout(args),
         "downgrade_reference" => policy::downgrade_reference(args),
         "policy_simulation" => policy::policy_simulation(args),
+        "paseo_providers" => crate::paseo_providers::dispatch(args),
         "remote_mcp_origins" => crate::remote_mcp_origins::dispatch(args),
         "cloud_scrub_texts" => privacy::cloud_scrub_texts(args),
         "cloud_review_event_display" => privacy::cloud_review_event_display(args),
