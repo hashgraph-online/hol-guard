@@ -92,3 +92,76 @@ fn editable_installs_still_name_their_package() {
         .expect("the install must produce a package intent");
     assert_eq!(intent.targets.len(), 1);
 }
+
+fn target_identities(command: &str) -> Vec<(String, Option<String>)> {
+    let intent = parse_package_intent(command, None, None, None, None)
+        .expect("the install must produce a package intent");
+    intent
+        .targets
+        .into_iter()
+        .map(|target| {
+            (
+                target.package_name.expect("a named package"),
+                target.requested_specifier,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_local_distribution_file_names_its_own_distribution() {
+    // `uv pip install <dir>/hol_guard-3.59.0a33-py3-none-macosx_11_0_arm64.whl`
+    // asked for the package `hol-guard-3-59-0a33-py3-none-macosx-11-0-arm64`:
+    // a name the next build never repeats and no policy entry can hold.
+    for (command, distribution, version) in [
+        (
+            "uv pip install /tmp/dl/hol_guard-3.59.0a33-py3-none-macosx_11_0_arm64.whl",
+            "hol_guard",
+            "3.59.0a33",
+        ),
+        (
+            "pip install dist/hol_guard-3.59.0-py3-none-any.whl",
+            "hol_guard",
+            "3.59.0",
+        ),
+        (
+            "pip3 install ./dist/left_pad-1.2.3-5-py3-none-any.whl",
+            "left_pad",
+            "1.2.3",
+        ),
+        (
+            "uv pip install ../wheels/left_pad-1.2.3.tar.gz",
+            "left_pad",
+            "1.2.3",
+        ),
+        (
+            "pip install ./dist/left-pad-extras-1.2.3.zip",
+            "left-pad-extras",
+            "1.2.3",
+        ),
+    ] {
+        assert_eq!(
+            target_identities(command),
+            [(distribution.to_owned(), Some(version.to_owned()))],
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_path_that_names_no_distribution_keeps_its_last_component() {
+    for (command, package_name) in [
+        ("pip install ./vendor/left-pad", "left-pad"),
+        ("pip install ./dist/not-a-wheel.whl", "not-a-wheel.whl"),
+        (
+            "pip install ./dist/left_pad-dev.tar.gz",
+            "left_pad-dev.tar.gz",
+        ),
+    ] {
+        assert_eq!(
+            target_identities(command),
+            [(package_name.to_owned(), None)],
+            "{command}"
+        );
+    }
+}
