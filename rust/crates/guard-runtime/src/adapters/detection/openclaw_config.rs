@@ -5,7 +5,8 @@
 //! settings, eight levels deep and never through a file already on the
 //! include chain. Anything unreadable or not an object is an empty
 //! configuration. Input CPython raises on instead of parsing (nesting past
-//! the recursion limit, an oversized integer) is refused.
+//! the recursion limit, an oversized integer) is refused, and so is a file
+//! past the read limit.
 
 use std::fs;
 use std::io::Read;
@@ -20,6 +21,9 @@ use super::runner_authority_op::ERR_INVALID;
 const MAX_INCLUDE_DEPTH: usize = 8;
 const MAX_CONFIG_BYTES: u64 = 8 * 1024 * 1024;
 const CONFIG_SUFFIXES: [&str; 4] = ["json", "json5", "yaml", "yml"];
+/// A configuration or include past `MAX_CONFIG_BYTES` refuses the whole
+/// load instead of reporting an inventory that silently lacks it.
+pub(crate) const ERR_CONFIG_TOO_LARGE: &str = "native_runner_authority_openclaw_config_too_large";
 
 type Entries = Vec<(String, PyVal)>;
 
@@ -44,7 +48,7 @@ fn load_at(
     if seen.contains(&resolved) {
         return Ok(Vec::new());
     }
-    let Some(raw) = read_text(&resolved) else {
+    let Some(raw) = read_text(&resolved)? else {
         return Ok(Vec::new());
     };
     let PyVal::Dict(payload) = parse_config_payload(&raw)? else {
@@ -67,22 +71,30 @@ fn load_at(
 }
 
 /// `Path.read_text(encoding="utf-8")`: strict UTF-8 with universal newlines.
-/// A non-regular or oversized file is unreadable.
-fn read_text(path: &Path) -> Option<String> {
-    if !fs::metadata(path).ok()?.is_file() {
-        return None;
+/// A non-regular or unreadable file is `None`; an oversized one is refused.
+fn read_text(path: &Path) -> Result<Option<String>, &'static str> {
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => {}
+        _ => return Ok(None),
     }
+    let Ok(file) = fs::File::open(path) else {
+        return Ok(None);
+    };
     let mut bytes = Vec::new();
-    fs::File::open(path)
-        .ok()?
+    if file
         .take(MAX_CONFIG_BYTES + 1)
         .read_to_end(&mut bytes)
-        .ok()?;
-    if bytes.len() as u64 > MAX_CONFIG_BYTES {
-        return None;
+        .is_err()
+    {
+        return Ok(None);
     }
-    let text = String::from_utf8(bytes).ok()?;
-    Some(text.replace("\r\n", "\n").replace('\r', "\n"))
+    if bytes.len() as u64 > MAX_CONFIG_BYTES {
+        return Err(ERR_CONFIG_TOO_LARGE);
+    }
+    let Ok(text) = String::from_utf8(bytes) else {
+        return Ok(None);
+    };
+    Ok(Some(text.replace("\r\n", "\n").replace('\r', "\n")))
 }
 
 /// `_include_paths`: each non-blank string with a config suffix, relative to

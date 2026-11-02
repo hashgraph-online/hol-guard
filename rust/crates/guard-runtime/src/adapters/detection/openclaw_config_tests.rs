@@ -8,7 +8,7 @@ use std::fs;
 use serde_json::{json, Value};
 
 use crate::guard_store_cmd_vectors_tests::temp_home;
-use crate::openclaw_config::load;
+use crate::openclaw_config::{load, ERR_CONFIG_TOO_LARGE};
 use crate::pi_vectors_tests::{materialize, release, substitute};
 use crate::pyjson::parse_marking_lone_surrogates;
 
@@ -80,5 +80,21 @@ fn input_python_cannot_parse_is_refused() {
         fs::write(&config, text).unwrap();
         assert!(load(&config, None).is_err());
     }
+    release(&root);
+}
+
+#[test]
+fn a_configuration_past_the_read_limit_is_refused_not_dropped() {
+    let root = temp_home("occ-oversized");
+    let config = root.join("openclaw.json");
+    let padding = " ".repeat(8 * 1024 * 1024);
+    fs::write(&config, format!("{{\"a\": 1}}{padding}")).unwrap();
+    assert_eq!(load(&config, None).unwrap_err(), ERR_CONFIG_TOO_LARGE);
+    fs::write(&config, r#"{"$include": "big.json", "a": 1}"#).unwrap();
+    fs::write(root.join("big.json"), format!("{{\"b\": 1}}{padding}")).unwrap();
+    assert_eq!(load(&config, None).unwrap_err(), ERR_CONFIG_TOO_LARGE);
+    fs::write(root.join("big.json"), r#"{"b": 1}"#).unwrap();
+    let loaded = load(&config, None).unwrap().to_json().unwrap();
+    assert_eq!(loaded, json!({"b": 1, "a": 1}));
     release(&root);
 }
