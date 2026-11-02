@@ -1,0 +1,382 @@
+{
+ "schema": "guard-pi-extension-render-vectors.v1",
+ "cases": [
+  {
+   "name": "active_omp_posix",
+   "args": {
+    "variant": "active",
+    "harness": "omp",
+    "display_name": "Oh My Pi",
+    "guard_args": [
+     "--guard-home",
+     "/guard-vectors/dev/.hol-guard"
+    ],
+    "guard_home": "/guard-vectors/dev/.hol-guard",
+    "home_dir": "/guard-vectors/dev",
+    "home_dir_is_default": false,
+    "config_path": "/guard-vectors/dev/.omp/agent/settings.json",
+    "compatibility_version": 7,
+    "cli_command": "/opt/guard/bin/hol-guard",
+    "cli_args": [
+     "hook",
+     "--harness",
+     "omp"
+    ],
+    "cli_accepts_json_args": false,
+    "recovery_command": "/opt/guard/bin/hol-guard",
+    "recovery_args": [
+     "daemon",
+     "recover"
+    ],
+    "recovery_accepts_failure_kind": true,
+    "taskkill_path": null,
+    "native_hook_runtime": "/opt/guard/bin/hol-guard-runtime",
+    "contained_sink_command": [
+     "/opt/guard/bin/hol-guard",
+     "contained-sink"
+    ],
+    "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
+   },
+   "chars": 154246,
+   "sha256": "447cd84a96cb1ef900e634276e2b49caa40a35be1787d125a8ccbd55ff9c2bde"
+  },
+  {
+   "name": "active_pi_posix",
+   "args": {
+    "variant": "active",
+    "harness": "pi",
+    "display_name": "Pi",
+    "guard_args": [
+     "--guard-home",
+     "/guard-vectors/dev/.hol-guard"
+    ],
+    "guard_home": "/guard-vectors/dev/.hol-guard",
+    "home_dir": "/guard-vectors/dev",
+    "home_dir_is_default": false,
+    "config_path": "/guard-vectors/dev/.pi/agent/settings.json",
+    "compatibility_version": 7,
+    "cli_command": "/opt/guard/bin/hol-guard",
+    "cli_args": [
+     "hook",
+     "--harness",
+     "pi"
+    ],
+    "cli_accepts_json_args": false,
+    "recovery_command": "/opt/guard/bin/hol-guard",
+    "recovery_args": [
+     "daemon",
+     "recover"
+    ],
+    "recovery_accepts_failure_kind": true,
+    "taskkill_path": null,
+    "native_hook_runtime": "/opt/guard/bin/hol-guard-runtime",
+    "contained_sink_command": [
+     "/opt/guard/bin/hol-guard",
+     "contained-sink"
+    ],
+    "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
+   },
+   "chars": 146290,
+   "sha256": "f68cc4a1d8ad70634ef577e8448e6e7e121c0d299493dd2cca4183937fea8b87"
+  },
+  {
+   "name": "previous_omp_posix",
+   "args": {
+    "variant": "previous",
+    "harness": "omp",
+    "display_name": "Oh My Pi",
+    "guard_args": [
+     "--guard-home",
+     "/guard-vectors/dev/.hol-guard"
+    ],
+    "guard_home": "/guard-vectors/dev/.hol-guard",
+    "home_dir": "/guard-vectors/dev",
+    "home_dir_is_default": false,
+    "config_path": "/guard-vectors/dev/.omp/agent/settings.json",
+    "compatibility_version": 7,
+    "cli_command": "/opt/guard/bin/hol-guard",
+    "cli_args": [
+     "hook",
+     "--harness",
+     "omp"
+    ],
+    "cli_accepts_json_args": false,
+    "recovery_command": "/opt/guard/bin/hol-guard",
+    "recovery_args": [
+     "daemon",
+     "recover"
+    ],
+    "recovery_accepts_failure_kind": true,
+    "taskkill_path": null
+   },
+   "chars": 64681,
+   "sha256": "a6825add553427965673124b483a04bca925c4b88999c37a7334f7e74e9514da"
+  },
+  {
+   "name": "previous_pi_posix",
+   "args": {
+    "variant": "previous",
+    "harness": "pi",
+    "display_name": "Pi",
+    "guard_args": [
+     "--guard-home",
+     "/guard-vectors/dev/.hol-guard"
+    ],
+    "guard_home": "/guard-vectors/dev/.hol-guard",
+    "home_dir": "/guard-vectors/dev",
+    "home_dir_is_default": false,
+    "config_path": "/guard-vectors/dev/.pi/agent/settings.json",
+    "compatibility_version": 7,
+    "cli_command": "/opt/guard/bin/hol-guard",
+    "cli_args": [
+     "hook",
+     "--harness",
+     "pi"
+    ],
+    "cli_accepts_json_args": false,
+    "recovery_command": "/opt/guard/bin/hol-guard",
+    "recovery_args": [
+     "daemon",
+     "recover"
+    ],
+    "recovery_accepts_failure_kind": true,
+    "taskkill_path": null
+   },
+   "chars": 64136,
+   "sha256": "d77170a7b4806e8bf21a0a0aacc867cbc057b748906013a9f023997493846649"
+  },
+  {
+   "name": "active_omp_windows",
+   "args": {
+    "variant": "active",
+    "harness": "omp",
+    "display_name": "Oh My Pi",
+    "guard_args": [
+     "--guard-home",
+     "C:\\Users\\dev\\.hol-guard"
+    ],
+    "guard_home": "C:\\Users\\dev\\.hol-guard",
+    "home_dir": "C:\\Users\\dev",
+    "home_dir_is_default": false,
+    "config_path": "C:\\Users\\dev\\.omp\\agent\\\"quoted\" settings.json",
+    "compatibility_version": 7,
+    "cli_command": "C:\\Program Files\\HOL Guard\\hol-guard.exe",
+    "cli_args": [],
+    "cli_accepts_json_args": true,
+    "recovery_command": "C:\\Program Files\\HOL Guard\\hol-guard.exe",
+    "recovery_args": [],
+    "recovery_accepts_failure_kind": false,
+    "taskkill_path": "C:\\Windows\\System32\\taskkill.exe",
+    "native_hook_runtime": null,
+    "contained_sink_command": [],
+    "contained_request_root": ""
+   },
+   "chars": 154159,
+   "sha256": "ba1e82f06fb79a89c2313b856a6b21498ef4f51a645abc74411972921503d7f7"
+  },
+  {
+   "name": "previous_pi_windows",
+   "args": {
+    "variant": "previous",
+    "harness": "pi",
+    "display_name": "Pi",
+    "guard_args": [
+     "--guard-home",
+     "C:\\Users\\dev\\.hol-guard"
+    ],
+    "guard_home": "C:\\Users\\dev\\.hol-guard",
+    "home_dir": "C:\\Users\\dev",
+    "home_dir_is_default": false,
+    "config_path": "C:\\Users\\dev\\.omp\\agent\\\"quoted\" settings.json",
+    "compatibility_version": 7,
+    "cli_command": "C:\\Program Files\\HOL Guard\\hol-guard.exe",
+    "cli_args": [],
+    "cli_accepts_json_args": true,
+    "recovery_command": "C:\\Program Files\\HOL Guard\\hol-guard.exe",
+    "recovery_args": [],
+    "recovery_accepts_failure_kind": false,
+    "taskkill_path": "C:\\Windows\\System32\\taskkill.exe"
+   },
+   "chars": 64164,
+   "sha256": "c6a367d09ed3fa38a80c3a8b8e6fbf6b2e85b5fb37d9674fbb629901292fa61d"
+  },
+  {
+   "name": "active_pi_non_ascii",
+   "args": {
+    "variant": "active",
+    "harness": "pi",
+    "display_name": "Pi é",
+    "guard_args": [
+     "--guard-home",
+     "/guard-vectors/dév/中文/.hol-guard",
+     "🚀"
+    ],
+    "guard_home": "/guard-vectors/dév/中文/.hol-guard",
+    "home_dir": "/guard-vectors/dév",
+    "home_dir_is_default": false,
+    "config_path": "/guard-vectors/dév/😀/settings.json",
+    "compatibility_version": 7,
+    "cli_command": "/opt/guard/bin/hol-guard",
+    "cli_args": [
+     "é",
+     "tab\tnew\nline\r\f\b\u0001"
+    ],
+    "cli_accepts_json_args": false,
+    "recovery_command": "/opt/guard/bin/hol-guard",
+    "recovery_args": [
+     "daemon",
+     "recover"
+    ],
+    "recovery_accepts_failure_kind": true,
+    "taskkill_path": null,
+    "native_hook_runtime": "/opt/guard/bin/hol-guard-runtime",
+    "contained_sink_command": [
+     "/opt/guard/bin/hol-guard",
+     "contained-sink"
+    ],
+    "contained_request_root": "/guard-vectors/é/r"
+   },
+   "chars": 146372,
+   "sha256": "81317fb2e04a90aeb694dba77e6cf90e7f97d358a6fcc76b941bff4495cb9812"
+  },
+  {
+   "name": "previous_omp_non_ascii",
+   "args": {
+    "variant": "previous",
+    "harness": "omp",
+    "display_name": "Pi é",
+    "guard_args": [
+     "--guard-home",
+     "/guard-vectors/dév/中文/.hol-guard",
+     "🚀"
+    ],
+    "guard_home": "/guard-vectors/dév/中文/.hol-guard",
+    "home_dir": "/guard-vectors/dév",
+    "home_dir_is_default": false,
+    "config_path": "/guard-vectors/dév/😀/settings.json",
+    "compatibility_version": 7,
+    "cli_command": "/opt/guard/bin/hol-guard",
+    "cli_args": [
+     "é",
+     "tab\tnew\nline\r\f\b\u0001"
+    ],
+    "cli_accepts_json_args": false,
+    "recovery_command": "/opt/guard/bin/hol-guard",
+    "recovery_args": [
+     "daemon",
+     "recover"
+    ],
+    "recovery_accepts_failure_kind": true,
+    "taskkill_path": null
+   },
+   "chars": 64723,
+   "sha256": "98ba893ac66597b5fab625cbde69ac810ede433952c4b64ac16ac177aa888b2e"
+  },
+  {
+   "name": "active_omp_placeholder_spellings",
+   "args": {
+    "variant": "active",
+    "harness": "omp",
+    "display_name": "@@guard_home@@",
+    "guard_args": [
+     "--guard-home",
+     "/guard-vectors/dev/.hol-guard"
+    ],
+    "guard_home": "/guard-vectors/@@home_dir@@/@@if pi@@",
+    "home_dir": "/guard-vectors/@@guard_home@@",
+    "home_dir_is_default": false,
+    "config_path": "/@@fi@@/@@end cli_runtime_helpers@@",
+    "compatibility_version": 7,
+    "cli_command": "/opt/@@cli_args@@",
+    "cli_args": [
+     "@@display_name@@",
+     "@@"
+    ],
+    "cli_accepts_json_args": false,
+    "recovery_command": "/opt/guard/bin/hol-guard",
+    "recovery_args": [
+     "@@taskkill_path@@"
+    ],
+    "recovery_accepts_failure_kind": true,
+    "taskkill_path": null,
+    "native_hook_runtime": "/@@contained_sink_command@@",
+    "contained_sink_command": [
+     "/opt/guard/bin/hol-guard",
+     "contained-sink"
+    ],
+    "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
+   },
+   "chars": 154285,
+   "sha256": "6bd99031ca2b266221a06a3af33bad1262d1b3537c98da918066aadcd7ae8c17"
+  },
+  {
+   "name": "active_pi_default_home_fixture_name",
+   "args": {
+    "variant": "active",
+    "harness": "pi",
+    "display_name": "fixture",
+    "guard_args": [],
+    "guard_home": "/guard-vectors/dev/.hol-guard",
+    "home_dir": "/guard-vectors/dev",
+    "home_dir_is_default": true,
+    "config_path": "/guard-vectors/dev/.pi/agent/settings.json",
+    "compatibility_version": 0,
+    "cli_command": "/opt/guard/bin/hol-guard",
+    "cli_args": [
+     "hook",
+     "--harness",
+     "pi"
+    ],
+    "cli_accepts_json_args": true,
+    "recovery_command": "/opt/guard/bin/hol-guard",
+    "recovery_args": [
+     "daemon",
+     "recover"
+    ],
+    "recovery_accepts_failure_kind": false,
+    "taskkill_path": null,
+    "native_hook_runtime": "/opt/guard/bin/hol-guard-runtime",
+    "contained_sink_command": [
+     "/opt/guard/bin/hol-guard",
+     "contained-sink"
+    ],
+    "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
+   },
+   "chars": 146277,
+   "sha256": "70465345ea2b833a86e2dfa64d7b46c363dfdd043f48db31d5493cb5fff76c53"
+  },
+  {
+   "name": "previous_omp_default_home_large_version",
+   "args": {
+    "variant": "previous",
+    "harness": "omp",
+    "display_name": "O'Brien \"Pi\" `x`",
+    "guard_args": [
+     "--guard-home",
+     "/guard-vectors/dev/.hol-guard"
+    ],
+    "guard_home": "/guard-vectors/dev/.hol-guard",
+    "home_dir": "/guard-vectors/dev",
+    "home_dir_is_default": true,
+    "config_path": "/guard-vectors/dev/.omp/agent/settings.json",
+    "compatibility_version": 9007199254740992,
+    "cli_command": "/opt/guard/bin/hol-guard",
+    "cli_args": [
+     "hook",
+     "--harness",
+     "omp"
+    ],
+    "cli_accepts_json_args": false,
+    "recovery_command": "/opt/guard/bin/hol-guard",
+    "recovery_args": [
+     "daemon",
+     "recover"
+    ],
+    "recovery_accepts_failure_kind": true,
+    "taskkill_path": null
+   },
+   "chars": 64775,
+   "sha256": "bd73270c80a55038689d621472ba5fa3500c7b6f2420a864f53156cdbfef8f8b"
+  }
+ ]
+}
