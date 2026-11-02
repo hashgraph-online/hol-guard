@@ -227,20 +227,13 @@ PROBES_FOR_ABSENCE = frozenset(
 )
 
 
-# Cases that expect a review and whose path has to be there for the review to
-# be the one they measure. An absent name under the workspace is admitted
-# without a review by design, so a protection case about what a file holds
-# measures nothing until the file exists.
-PROTECTION_CASES_NEEDING_PATHS = frozenset({"cat-hidden-numeric-not-a-marker"})
-
-
 def benign_path_tokens(document: dict[str, object] | None = None) -> set[tuple[str, str]]:
     """``(root token, relative path)`` pairs named by cases whose path must exist."""
     cases = (document or json.loads(CASES_PATH.read_text(encoding="utf-8")))["cases"]
     found: set[tuple[str, str]] = set()
     created: set[tuple[str, str]] = set()
     for case in cases:
-        if case.get("expect") != "allow" and case.get("id") not in PROTECTION_CASES_NEEDING_PATHS:
+        if case.get("expect") != "allow":
             continue
         for target in creation_targets(case.get("tool", ""), case.get("tool_input", {})):
             for match in _PATH_TOKEN.finditer(target):
