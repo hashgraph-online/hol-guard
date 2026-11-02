@@ -249,7 +249,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.sha }}
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
       - name: Resolve and validate alpha version
@@ -332,7 +332,7 @@ jobs:
             scripts/sync_repo_version.py
             src/codex_plugin_scanner/version.py
           sparse-checkout-cone-mode: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
       - name: Compute PR canary version
@@ -641,7 +641,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
           enable-cache: true
@@ -1683,7 +1683,7 @@ jobs:
               required.remove("aarch64-unknown-linux-musl")
           if set(selected) != required:
               raise SystemExit("Native wheel inventory does not match the qualified source and channel")
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
           enable-cache: true
@@ -1842,7 +1842,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
           enable-cache: true
@@ -2117,7 +2117,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.pull_request != '') && github.sha || needs.build.outputs.source_sha }}
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -2253,7 +2253,7 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.pull_request != '') && github.sha || needs.build.outputs.source_sha }}
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -2501,7 +2501,7 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           ref: ${{ needs.build.outputs.source_sha }}
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -2698,7 +2698,7 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           ref: ${{ needs.build.outputs.source_sha }}
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -2991,7 +2991,7 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           ref: ${{ github.sha }}
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -3560,7 +3560,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
       - name: Sync locked release tooling
