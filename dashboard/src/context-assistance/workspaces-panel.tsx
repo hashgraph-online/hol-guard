@@ -43,7 +43,9 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
     void listContextWorkspaces(controller.signal).then((values) => {
       if (revision.current === generation) { setScopes(values); setLoaded(true); }
     }).catch((cause) => {
-      if (revision.current === generation && !controller.signal.aborted && ready) setError(cause instanceof Error ? cause.message : "Context access is unavailable.");
+      // While CIGAR starts the list is asked again once it runs; a failure then is final.
+      if (revision.current !== generation || controller.signal.aborted || !ready) return;
+      setError(cause instanceof Error ? cause.message : "Context access is unavailable."); setLoaded(true);
     });
     return () => { revision.current += 1; controller.abort(); };
   }, [listable, ready, generation]);

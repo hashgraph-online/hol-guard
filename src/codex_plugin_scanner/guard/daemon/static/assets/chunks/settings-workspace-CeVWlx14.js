@@ -4417,7 +4417,9 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
         setLoaded(true);
       }
     }).catch((cause) => {
-      if (revision.current === generation2 && !controller.signal.aborted && ready) setError(cause instanceof Error ? cause.message : "Context access is unavailable.");
+      if (revision.current !== generation2 || controller.signal.aborted || !ready) return;
+      setError(cause instanceof Error ? cause.message : "Context access is unavailable.");
+      setLoaded(true);
     });
     return () => {
       revision.current += 1;
