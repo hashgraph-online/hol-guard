@@ -19,8 +19,14 @@ from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.temporary_mcp_approvals import (
     parse_temporary_mcp_grant_selection,
     temporary_mcp_approval_payload,
-    temporary_mcp_grant_selector,
 )
+
+
+def temporary_mcp_grant_selector(server_identity_hash: str, category: str | None = None) -> str:
+    """The artifact id a server or category grant is filed under."""
+
+    suffix = f":category:{category}" if category is not None else ":server"
+    return f"mcp-temporary-grant:v1:{server_identity_hash}{suffix}"
 
 
 def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:

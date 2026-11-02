@@ -916,6 +916,7 @@ mod supply_chain_eval_seams;
 mod supply_chain_eval_transport;
 mod surface_server_handshake;
 mod system_proxies;
+mod temporary_mcp_grant;
 mod tool_action_identity_op;
 mod totp;
 mod trust_attestation_shape;

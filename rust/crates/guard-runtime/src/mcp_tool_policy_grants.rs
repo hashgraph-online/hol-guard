@@ -102,11 +102,25 @@ pub(crate) fn grant_selectors(
     {
         return Vec::new();
     }
+    vec![
+        exact_grant_selector(artifact_id, artifact_hash),
+        scope_grant_selector(identity, Some(category)),
+        scope_grant_selector(identity, None),
+    ]
+}
+
+/// `temporary_mcp_exact_grant_selector`: one exact call of one artifact.
+pub(crate) fn exact_grant_selector(artifact_id: &str, artifact_hash: &str) -> String {
     let digest =
         guard_policy_snapshot::digest_bytes(format!("{artifact_id}\0{artifact_hash}").as_bytes());
-    vec![
-        format!("{SELECTOR_PREFIX}:exact:{digest}"),
-        format!("{SELECTOR_PREFIX}:{identity}:category:{category}"),
-        format!("{SELECTOR_PREFIX}:{identity}:server"),
-    ]
+    format!("{SELECTOR_PREFIX}:exact:{digest}")
+}
+
+/// `temporary_mcp_grant_selector`: one category of a server, or the whole
+/// server when no category is named.
+pub(crate) fn scope_grant_selector(server_identity_hash: &str, category: Option<&str>) -> String {
+    match category {
+        Some(category) => format!("{SELECTOR_PREFIX}:{server_identity_hash}:category:{category}"),
+        None => format!("{SELECTOR_PREFIX}:{server_identity_hash}:server"),
+    }
 }
