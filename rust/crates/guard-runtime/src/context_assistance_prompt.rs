@@ -8,7 +8,9 @@
 //! Only an allowed prompt gets context, and only for Claude Code and Codex,
 //! whose prompt hooks read `hookSpecificOutput.additionalContext`.
 use crate::context_assistance_engine::PickedExcerpt;
-use crate::context_assistance_prompt_files::{candidates, project_root, terms};
+use crate::context_assistance_prompt_files::{
+    asks_for_tests, candidates, project_root, terms, test_file,
+};
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
 use serde_json::Value;
@@ -266,8 +268,10 @@ fn truncated(text: &str, max_bytes: usize) -> String {
 
 /// Only excerpts that mention something the prompt asked about; nothing at
 /// all when none do, so an unrelated prompt never carries project code.
+/// Tests an earlier prompt loaded give way to source here too, unless this
+/// prompt asks about tests.
 fn relevant<'a>(picked: &'a [PickedExcerpt], words: &[String]) -> Vec<&'a PickedExcerpt> {
-    picked
+    let mut found: Vec<&PickedExcerpt> = picked
         .iter()
         .filter(|excerpt| {
             let text = excerpt.text.to_lowercase();
@@ -276,7 +280,11 @@ fn relevant<'a>(picked: &'a [PickedExcerpt], words: &[String]) -> Vec<&'a Picked
                 .iter()
                 .any(|word| text.contains(word.as_str()) || path.contains(word.as_str()))
         })
-        .collect()
+        .collect();
+    if !asks_for_tests(words) && found.iter().any(|excerpt| !test_file(&excerpt.path)) {
+        found.retain(|excerpt| !test_file(&excerpt.path));
+    }
+    found
 }
 
 /// The context text, never longer than `MAX_CONTEXT_CHARS`, or `None` when

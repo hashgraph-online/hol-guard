@@ -51,6 +51,27 @@ fn prompt_words_skip_filler_and_keep_names() {
 }
 
 #[test]
+fn a_test_request_late_in_a_long_prompt_still_counts() {
+    let long = "change header color background spacing border radius font size weight \
+                alignment padding margin shadow and update the tests";
+    let found = terms(long);
+    assert_eq!(found.len(), MAX_TERMS);
+    assert!(asks_for_tests(&found), "{found:?}");
+    assert!(!asks_for_tests(&terms(
+        "change header color background spacing"
+    )));
+}
+
+#[test]
+fn dotted_test_names_are_tests() {
+    assert!(test_file("src/header.color_test.go"));
+    assert!(test_file("src/Header.test.tsx"));
+    assert!(test_file("tests/header.py"));
+    assert!(!test_file("src/header.color.ts"));
+    assert!(!test_file("src/contest.ts"));
+}
+
+#[test]
 fn a_color_change_finds_the_header_and_its_styles_only() {
     let (_dir, root) = canonical();
     let project = app(&root);
@@ -69,6 +90,42 @@ fn a_color_change_finds_the_header_and_its_styles_only() {
             "{skipped} in {found:?}"
         );
     }
+}
+
+#[test]
+fn tests_that_quote_the_request_give_way_to_the_source() {
+    let (_dir, root) = canonical();
+    let project = app(&root);
+    fs::create_dir_all(project.join("src/components/__tests__")).unwrap();
+    fs::create_dir_all(project.join("tests")).unwrap();
+    let quoted = "header color header color header color\n";
+    for test in [
+        "src/components/Header.test.tsx",
+        "src/components/__tests__/header.tsx",
+        "tests/header_color.py",
+        "src/header_color_test.go",
+        "src/header_tests.rs",
+    ] {
+        fs::write(project.join(test), quoted).unwrap();
+    }
+    let found = candidates(&project, &terms("add a color to the header"), WALK_BUDGET);
+    assert_eq!(
+        found,
+        ["src/components/Header.tsx", "src/theme.css"],
+        "no test files when the source matched"
+    );
+    let asked = candidates(&project, &terms("fix the header color tests"), WALK_BUDGET);
+    assert!(
+        asked.contains(&"src/components/Header.test.tsx".to_owned()),
+        "{asked:?}"
+    );
+    fs::remove_file(project.join("src/components/Header.tsx")).unwrap();
+    fs::remove_file(project.join("src/theme.css")).unwrap();
+    let only_tests = candidates(&project, &terms("add a color to the header"), WALK_BUDGET);
+    assert!(
+        only_tests.contains(&"tests/header_color.py".to_owned()),
+        "tests remain when nothing else matched: {only_tests:?}"
+    );
 }
 
 #[test]
