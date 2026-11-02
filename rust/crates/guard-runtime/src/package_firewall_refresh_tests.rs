@@ -6,8 +6,7 @@ use tempfile::TempDir;
 use super::*;
 
 fn claim(home: &std::path::Path, now: f64) -> Value {
-    dispatch(&json!({"guard_home": home.to_str().expect("utf-8 home"), "now": now}))
-        .expect("claim answer")
+    dispatch(&json!({"now": now}), home.to_str().expect("utf-8 home")).expect("claim answer")
 }
 
 fn stored_attempt(home: &std::path::Path) -> Value {
@@ -71,13 +70,33 @@ fn a_home_that_cannot_record_the_attempt_never_refreshes() {
 
 #[test]
 fn malformed_requests_are_invalid() {
-    for args in [
-        json!([]),
-        json!({"now": 1.0}),
-        json!({"guard_home": "relative/home", "now": 1.0}),
-        json!({"guard_home": "/home"}),
-        json!({"guard_home": "/home", "now": "1"}),
+    let dir = TempDir::new().expect("temp dir");
+    let home = dir.path().to_str().expect("utf-8 home");
+    for (args, guard_home) in [
+        (json!([]), home),
+        (json!({}), home),
+        (json!({"now": "1"}), home),
+        (json!({"now": 1.0}), "relative/home"),
+        (json!({"now": 1.0}), ""),
     ] {
-        assert_eq!(dispatch(&args), Err(ERR_INVALID), "{args}");
+        assert_eq!(dispatch(&args, guard_home), Err(ERR_INVALID), "{args}");
     }
+}
+
+#[test]
+fn overlapping_claims_for_one_home_refresh_once() {
+    let dir = TempDir::new().expect("temp dir");
+    let home = dir.path();
+    let refreshed = std::thread::scope(|scope| {
+        let claims: Vec<_> = (0..8)
+            .map(|_| scope.spawn(|| claim(home, 1_000.0)))
+            .collect();
+        claims
+            .into_iter()
+            .map(|handle| handle.join().expect("claim thread"))
+            .filter(|answer| answer == &json!({"refresh": true}))
+            .count()
+    });
+    assert_eq!(refreshed, 1);
+    assert_eq!(stored_attempt(home), json!(1_000.0));
 }

@@ -244,7 +244,7 @@ def _claim_package_firewall_refresh(guard_home: Path, now: float) -> bool:
     try:
         answer = native_runner_authority(
             "package_firewall_refresh_claim",
-            {"guard_home": str(Path(guard_home).expanduser().resolve()), "now": now},
+            {"now": now},
             guard_home=guard_home,
         )
     except NativeRunnerAuthorityError:

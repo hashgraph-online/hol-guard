@@ -133,7 +133,6 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cloud_request_payload" => snapshot::cloud_request_payload(args),
         "local_request_snapshot" => snapshot::local_request_snapshot(args),
         "local_request_snapshot_items" => snapshot::local_request_snapshot_items(args),
-        "package_firewall_refresh_claim" => crate::package_firewall_refresh::dispatch(args),
         "oci_bundle_evidence" => oci::oci_bundle_evidence(args),
         "oci_evidence_verdict" => oci::oci_evidence_verdict(args),
         "oci_bundle_digest" => oci::oci_bundle_digest(args),
@@ -168,7 +167,14 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
     if request.guard_home.is_empty() {
         return Err(ERR_INVALID);
     }
-    dispatch(&request.kind, &request.args)
+    match request.kind.as_str() {
+        // Kinds that write under the Guard home take the home the resident
+        // verified for this request, never one from their arguments.
+        "package_firewall_refresh_claim" => {
+            crate::package_firewall_refresh::dispatch(&request.args, &request.guard_home)
+        }
+        _ => dispatch(&request.kind, &request.args),
+    }
 }
 
 pub(crate) fn evaluate_runner_authority(
