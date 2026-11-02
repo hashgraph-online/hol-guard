@@ -6,6 +6,7 @@ contributing guide points at called every merged community extension unknown.
 
 from __future__ import annotations
 
+import io
 from argparse import Namespace
 from pathlib import Path
 
@@ -15,7 +16,8 @@ from codex_plugin_scanner.guard.cli import commands_dispatch_local as dispatch
 from codex_plugin_scanner.guard.cli import extension_controls_commands as controls
 from codex_plugin_scanner.guard.cli import render
 from codex_plugin_scanner.guard.cli.command_extension_listing import command_extensions_title
-from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError
+from codex_plugin_scanner.guard.cli.extension_catalog_reads import CATALOG_LIST_SCHEMA
+from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError, GuardDaemonResponseSchemaError
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
 DELIVERED_ONLY_ID = "command.master-of"
@@ -104,6 +106,7 @@ def test_full_listing_prefers_the_delivered_catalog(monkeypatch: pytest.MonkeyPa
 
     assert exit_code == 0
     assert payload["source"] == "delivered"
+    assert payload["schema_version"] == CATALOG_LIST_SCHEMA
     assert payload["native_catalog_digest"] == "sha256:delivered"
     assert payload["snapshot_id"] == "snapshot-1"
     assert [item["extension_id"] for item in payload["extensions"]] == [_CORE_ID, DELIVERED_ONLY_ID]
@@ -197,3 +200,59 @@ def test_discovery_never_writes_the_guard_home_the_listing_reports_on(
     assert exit_code == 0
     assert payload["source"] == "built-in"
     assert sorted(entry.name for entry in guard_home.iterdir()) == before
+
+
+def test_a_daemon_that_answers_badly_is_reported_rather_than_quietly_shortened(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A schema fault is a fault; only an absent daemon falls back to the packaged catalog."""
+
+    class _BrokenClient:
+        def extension_control_catalog(self) -> dict[str, object]:
+            raise GuardDaemonResponseSchemaError("daemon returned a malformed catalog", status=500)
+
+    monkeypatch.setattr(controls, "_client", lambda _: _BrokenClient())
+
+    with pytest.raises(GuardDaemonResponseSchemaError):
+        _run(_extensions_args(tmp_path, None), monkeypatch)
+
+
+def test_a_daemon_error_carrying_a_status_keeps_its_own_report(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class _ServerErrorClient:
+        def extension_control_catalog(self) -> dict[str, object]:
+            raise GuardDaemonRequestError("catalog traversal is incomplete", status=503, code="catalog_incomplete")
+
+    monkeypatch.setattr(controls, "_client", lambda _: _ServerErrorClient())
+
+    with pytest.raises(GuardDaemonRequestError) as raised:
+        _run(_extensions_args(tmp_path, DELIVERED_ONLY_ID), monkeypatch)
+
+    assert raised.value.code == "catalog_incomplete"
+
+
+def test_contributor_text_cannot_colour_or_steer_the_terminal() -> None:
+    hostile = {
+        "extension_id": "command.master-of",
+        "version": "1.0.0",
+        "description": "[bold red]owned[/] \x1b[2Jcleared\r\nsecond line",
+        "action_classes": [],
+        "rule_count": 0,
+    }
+    payload = {"source": "delivered", "extensions": [hostile]}
+
+    plain = render._plain_text_command_extensions(payload)
+
+    assert "\x1b" not in plain
+    assert "\r" not in plain and plain.count("\n") == 1
+    assert "[bold red]owned[/]" in plain
+
+    console = render.Console(file=io.StringIO(), width=200, force_terminal=True, no_color=False)
+    render._render_command_extensions(console, payload)
+    rendered = console.file.getvalue()
+
+    assert "\x1b[2J" not in rendered
+    assert "[bold red]" in rendered

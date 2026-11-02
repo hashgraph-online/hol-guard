@@ -667,6 +667,18 @@ def _render_command_inspection(console: Console, payload: dict[str, object]) -> 
         console.print(trace_table)
 
 
+# A delivered extension's text is written by whoever contributed it, so it is
+# stripped of the C0 and DEL codes a terminal would act on and handed to Rich
+# as literal Text, which parses no markup.
+_UNPRINTABLE = dict.fromkeys([*range(32), 127])
+
+
+def _literal(value: object) -> str:
+    """Contributor-supplied metadata with nothing a terminal would obey."""
+
+    return str(value or "").translate(_UNPRINTABLE)
+
+
 def _render_command_extensions(console: Console, payload: dict[str, object]) -> None:
     from .command_extension_listing import command_extensions_title
 
@@ -679,11 +691,11 @@ def _render_command_extensions(console: Console, payload: dict[str, object]) -> 
     table.add_column("Purpose")
     for extension in extensions:
         table.add_row(
-            str(extension.get("extension_id") or ""),
-            str(extension.get("version") or ""),
+            Text(_literal(extension.get("extension_id"))),
+            Text(_literal(extension.get("version"))),
             str(len(_coerce_string_list(extension.get("action_classes")))),
             str(extension.get("rule_count") or 0),
-            str(extension.get("description") or ""),
+            Text(_literal(extension.get("description"))),
         )
     console.print(table)
 
@@ -747,7 +759,10 @@ def _plain_text_command_extensions(payload: PayloadDict) -> str:
 
     extensions = _coerce_dict_list(payload.get("extensions"))
     lines = [f"{command_extensions_title(payload)} ({len(extensions)})"]
-    lines.extend(f"{item.get('extension_id')} {item.get('version')} - {item.get('description')}" for item in extensions)
+    lines.extend(
+        f"{_literal(item.get('extension_id'))} {_literal(item.get('version'))} - {_literal(item.get('description'))}"
+        for item in extensions
+    )
     return "\n".join(lines)
 
 

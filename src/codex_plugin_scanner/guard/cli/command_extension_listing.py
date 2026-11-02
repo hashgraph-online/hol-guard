@@ -26,19 +26,18 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TypeVar
 
-from ..daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
+from ..daemon.client import (
+    GuardDaemonRequestError,
+    GuardDaemonResponseSchemaError,
+    GuardDaemonTransportError,
+    GuardSurfaceDaemonClient,
+)
 from ..runtime.command_extensions import COMMAND_EXTENSION_SCHEMA_VERSION
 from ..runtime.command_inspection import command_extensions_payload
-from .extension_catalog_reads import catalog_list, catalog_show
+from .extension_catalog_reads import CATALOG_LIST_SCHEMA, catalog_list, catalog_show
 
 DELIVERED_SOURCE = "delivered"
-# Reaching the delivered catalog needs an endpoint, the native runtime that
-# verifies it and a live socket. Every one of those fails as an ``OSError`` or
-# a ``RuntimeError`` subclass -- ``GuardDaemonRequestError`` and
-# ``NativeDaemonLifecycleError`` among them -- and none of them means the
-# extension is absent, so a listing degrades to the packaged catalog instead.
 # A ``ValueError`` is the daemon's own answer that it has no such extension.
-_CATALOG_UNAVAILABLE = (OSError, RuntimeError)
 # Carried through from the delivered catalog so a reader can pin the exact
 # snapshot an entry came from, as ``command controls list`` reports it.
 _PASSTHROUGH_KEYS = ("native_catalog_digest", "snapshot_id")
@@ -51,6 +50,26 @@ _UNREACHABLE = (
 _Result = TypeVar("_Result")
 
 
+def _catalog_is_unavailable(error: Exception) -> bool:
+    """Say whether nothing served the delivered catalog, rather than served it badly.
+
+    Resolving an endpoint, verifying it against the native runtime and opening
+    the socket each fail as an ``OSError`` or a ``RuntimeError`` subclass --
+    ``NativeDaemonLifecycleError`` and the "not running" request error among
+    them -- and none of those means an extension is absent, so the listing
+    degrades to the packaged catalog. A daemon that did answer reports through
+    a request error carrying its status or code, and a schema, server or
+    traversal-integrity failure is a real fault: it propagates so the reader
+    sees it instead of a quietly shortened catalog.
+    """
+
+    if isinstance(error, OSError | GuardDaemonTransportError):
+        return True
+    if isinstance(error, GuardDaemonRequestError):
+        return error.status is None and error.code is None and not isinstance(error, GuardDaemonResponseSchemaError)
+    return isinstance(error, RuntimeError)
+
+
 def _read_delivered(guard_home: Path, read: Callable[[GuardSurfaceDaemonClient], _Result]) -> _Result:
     """Run one delivered-catalog read against an already running daemon."""
 
@@ -59,9 +78,14 @@ def _read_delivered(guard_home: Path, read: Callable[[GuardSurfaceDaemonClient],
     return read(_client(guard_home))
 
 
-def _delivered_envelope(extensions: list[dict[str, object]], source_payload: dict[str, object]) -> dict[str, object]:
+def _delivered_envelope(
+    extensions: list[dict[str, object]],
+    source_payload: dict[str, object],
+    *,
+    schema_version: str = COMMAND_EXTENSION_SCHEMA_VERSION,
+) -> dict[str, object]:
     payload: dict[str, object] = {
-        "schema_version": COMMAND_EXTENSION_SCHEMA_VERSION,
+        "schema_version": schema_version,
         "source": DELIVERED_SOURCE,
         "count": len(extensions),
         "extensions": extensions,
@@ -74,21 +98,37 @@ def _delivered_envelope(extensions: list[dict[str, object]], source_payload: dic
 
 
 def _delivered_extension(guard_home: Path, extension_id: str) -> dict[str, object]:
+    """One delivered extension in the packaged shape, read through bounded detail."""
+
     try:
         extension = _read_delivered(guard_home, lambda client: catalog_show(client, extension_id))
-    except _CATALOG_UNAVAILABLE as error:
-        raise ValueError(_UNREACHABLE.format(extension_id=extension_id)) from error
     except ValueError as error:
         raise ValueError(_UNKNOWN.format(extension_id=extension_id)) from error
+    except Exception as error:
+        if not _catalog_is_unavailable(error):
+            raise
+        raise ValueError(_UNREACHABLE.format(extension_id=extension_id)) from error
     return _delivered_envelope([extension], {})
 
 
 def _delivered_listing(guard_home: Path) -> dict[str, object]:
+    """Every delivered extension as the daemon's index summary of it.
+
+    The index carries what a roster shows -- identity, version, counts, trust
+    class and purpose -- and leaves the rules and permissions to a detail read,
+    so the envelope declares the index schema rather than the packaged one. A
+    reader that wants a packaged-shaped entry asks for the extension by id.
+    """
+
     listing = _read_delivered(guard_home, catalog_list)
     extensions = listing.get("extensions")
     if not isinstance(extensions, list):
-        raise GuardDaemonRequestError("daemon returned an invalid catalog")
-    return _delivered_envelope([item for item in extensions if isinstance(item, dict)], listing)
+        raise GuardDaemonResponseSchemaError("daemon returned an invalid catalog")
+    return _delivered_envelope(
+        [item for item in extensions if isinstance(item, dict)],
+        listing,
+        schema_version=CATALOG_LIST_SCHEMA,
+    )
 
 
 def command_extensions_listing(guard_home: Path, extension_id: str | None = None) -> dict[str, object]:
@@ -107,7 +147,9 @@ def command_extensions_listing(guard_home: Path, extension_id: str | None = None
             return _delivered_extension(guard_home, extension_id)
     try:
         return _delivered_listing(guard_home)
-    except _CATALOG_UNAVAILABLE:
+    except Exception as error:
+        if not _catalog_is_unavailable(error):
+            raise
         return command_extensions_payload(None)
 
 
