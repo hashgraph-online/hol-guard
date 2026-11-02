@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-ef4tWmjO.js","assets/chunks/home-protection-module-HCF_WQND.js","assets/chunks/supply-chain-protection-stats-DHj0Mska.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-brpYYrUm.js","assets/chunks/harness-version-label-KFI6LZvz.js","assets/chunks/connect-guard-cloud-button-q5ZpYwb7.js","assets/chunks/settings-save-proof-modal-Fu6v3Dtb.js","assets/chunks/settings-workspace-Hq6Drd90.js","assets/chunks/confirm-dialog-R8WOnNuC.js","assets/chunks/extensions-workspace-CVmsaf5H.js","assets/chunks/app-detail-workspace-BUKDFXMJ.js","assets/chunks/policy-workspace-page-QOrkxmNA.js","assets/chunks/about-workspace-DkLuuQ67.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-ef4tWmjO.js","assets/chunks/home-protection-module-HCF_WQND.js","assets/chunks/supply-chain-protection-stats-DHj0Mska.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-brpYYrUm.js","assets/chunks/harness-version-label-KFI6LZvz.js","assets/chunks/connect-guard-cloud-button-q5ZpYwb7.js","assets/chunks/settings-save-proof-modal-Fu6v3Dtb.js","assets/chunks/settings-workspace-BUumnuLD.js","assets/chunks/confirm-dialog-R8WOnNuC.js","assets/chunks/extensions-workspace-CVmsaf5H.js","assets/chunks/app-detail-workspace-BUKDFXMJ.js","assets/chunks/policy-workspace-page-QOrkxmNA.js","assets/chunks/about-workspace-DkLuuQ67.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -23898,6 +23898,10 @@ function contextStatusCopy(status) {
     label: "Resting",
     detail: "CIGAR is on. It rests when nothing needs it and wakes up on its own."
   };
+  if (status.diagnostic === "runtime_crashed") return {
+    label: "Stopped",
+    detail: "CIGAR stopped right after it started. Click Turn on CIGAR to try again."
+  };
   if (status.diagnostic === "runtime_idle") return {
     label: "Paused",
     detail: "CIGAR stopped after being idle. Click Turn on CIGAR when you need context again."
@@ -38479,7 +38483,7 @@ function RuntimeGate(props) {
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-ef4tWmjO.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-brpYYrUm.js"), true ? __vite__mapDeps([6,7,8,5,9]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-Hq6Drd90.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-BUumnuLD.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
   () => __vitePreload(() => import("./chunks/extensions-workspace-CVmsaf5H.js"), true ? __vite__mapDeps([12,11]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))

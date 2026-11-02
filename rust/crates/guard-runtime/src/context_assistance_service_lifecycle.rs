@@ -93,7 +93,7 @@ pub(super) fn start_watcher(
                 if !runtime.status().active {
                     // The actor owns heartbeats/SDK calls. Only atomic liveness is
                     // read while holding the settings state.
-                    state.error = Some("runtime_closed".into());
+                    state.error = Some(wake::closed(&state).into());
                     (revoke_runtime(&mut state), None)
                 } else if idle_elapsed(&state) {
                     (None, Some(Arc::clone(runtime)))
@@ -113,7 +113,7 @@ pub(super) fn start_watcher(
                     .call_until(Instant::now() + Duration::from_secs(2), |_, engine| {
                         Ok(engine.holds_scopes())
                     })
-                    .unwrap_or(true);
+                    .ok();
                 let old = {
                     let Ok(mut state) = lock(&shared) else {
                         break;
@@ -126,10 +126,12 @@ pub(super) fn start_watcher(
                     {
                         break;
                     }
-                    if holds {
+                    // A check that could not answer proves nothing: keep the
+                    // worker and the idle clock, and ask again next pass.
+                    if holds == Some(true) {
                         state.last_used = Instant::now();
                         None
-                    } else if idle_elapsed(&state) {
+                    } else if holds == Some(false) && idle_elapsed(&state) {
                         state.error = Some("runtime_idle".into());
                         revoke_runtime(&mut state)
                     } else {

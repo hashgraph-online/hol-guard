@@ -16,7 +16,8 @@ export async function addContextProject(page: Page, workspace: string, { app, fi
   const chosen = page.getByRole("group", { name: "Files CIGAR may read", exact: true });
   if (await page.getByText("Reading project files is off", { exact: false }).count() === 0) {
     await expect(chosen).toBeVisible();
-    for (const box of await chosen.getByRole("checkbox", { checked: true }).all()) await box.uncheck();
+    const checked = chosen.getByRole("checkbox", { checked: true });
+    while (await checked.count() > 0) await checked.first().uncheck();
     for (const file of files) await chosen.getByRole("checkbox", { name: new RegExp(`^${file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`) }).check();
     await expect(page.getByText(`${files.length} picked · up to 32`, { exact: true })).toBeVisible();
   } else expect(files).toEqual([]);

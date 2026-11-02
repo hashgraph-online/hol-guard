@@ -74,6 +74,7 @@ struct State {
     cutover: Option<upgrade::Cutover>,
     last_used: Instant,
     woke: Option<Instant>,
+    started: Option<Instant>,
     maintenance_started: bool,
     stopping: bool,
     epoch: guard_context_assistance::ContextEpoch,
@@ -96,6 +97,7 @@ impl Default for State {
             cutover: None,
             last_used: Instant::now(),
             woke: None,
+            started: None,
             maintenance_started: false,
             stopping: false,
             epoch: Default::default(),
@@ -241,6 +243,9 @@ impl Service {
                 cancel: Arc::clone(&cancel),
             });
             state.error = None;
+            if operation == Check::Activate {
+                state.started = Some(Instant::now());
+            }
             (
                 generation,
                 state.settings.clone(),

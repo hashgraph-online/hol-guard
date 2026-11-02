@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..approval_gate import ApprovalGateError, input_from_mapping, require_high_risk, require_settings_write
-from ..native_context_assistance import ContextAssistanceError, control, workspace
-from .context_assistance_folders import FolderError, browse
+from ..native_context_assistance import ContextAssistanceError, control, folders, workspace
 from .context_assistance_versions_http import READ_PATHS as VERSION_READ_PATHS
 from .context_assistance_versions_http import respond as respond_versions
 
@@ -89,14 +88,28 @@ def _respond_workspace(handler: Any, kind: str, payload: dict[str, object]) -> N
     handler._write_json(data, extra_headers={"Cache-Control": "no-store"})
 
 
+_FOLDER_STATUS = {
+    "folder_input_invalid": 400,
+    "folder_not_absolute": 400,
+    "folder_not_found": 404,
+    "folder_not_directory": 400,
+    "folder_denied": 403,
+    "folder_unreadable": 403,
+}
+
+
 def _respond_folders(handler: Any, payload: dict[str, object]) -> None:
     # Names only, for the project picker; the native grant re-checks every path.
     try:
-        data = browse(payload)
-    except FolderError as error:
+        data = folders(guard_home=handler.server.store.guard_home, payload=payload)
+    except ContextAssistanceError as error:
+        code = error.code.removeprefix("native_context_assistance_")
+        if code not in _FOLDER_STATUS:
+            _refusal(handler, error)
+            return
         handler._write_json(
-            {"error": "folder_unavailable", "code": error.code},
-            status=error.status,
+            {"error": "folder_unavailable", "code": code},
+            status=_FOLDER_STATUS[code],
             extra_headers={"Cache-Control": "no-store"},
         )
         return

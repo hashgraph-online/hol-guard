@@ -81,8 +81,14 @@ export function folderCrumbs(path: string, separator: string): { label: string; 
   const crumbs: { label: string; path: string }[] = [];
   let current = windows ? "" : "/";
   if (!windows) crumbs.push({ label: "/", path: "/" });
-  parts.forEach((part, index) => {
-    if (windows && index === 0) current = part + "\\";
+  // A network folder (\\server\share) is only usable from its share root.
+  const network = windows && /^[\\/]{2}[^\\/]/.test(path) && parts.length >= 2;
+  if (network) {
+    current = `\\\\${parts[0]}\\${parts[1]}\\`;
+    crumbs.push({ label: `\\\\${parts[0]}\\${parts[1]}`, path: current });
+  }
+  parts.slice(network ? 2 : 0).forEach((part, index) => {
+    if (windows && !network && index === 0) current = part + "\\";
     else current = current.endsWith(separator) ? current + part : current + separator + part;
     crumbs.push({ label: part, path: current });
   });

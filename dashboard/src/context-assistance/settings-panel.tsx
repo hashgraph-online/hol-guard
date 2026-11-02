@@ -127,16 +127,18 @@ export function ContextAssistanceSettings(props: Props) {
   }, [setup.busy, onBusyChange]);
 
   // A saved opt-in that went to rest wakes when someone opens CIGAR, once per
-  // runtime generation, so the page never asks the user to turn it on again.
-  const woke = useRef<string | null>(null);
+  // resting spell, so the page never asks the user to turn it on again. The
+  // latch clears only after CIGAR is running, so a start that fails is not retried.
+  const woke = useRef(false);
   const resting = status?.diagnostic === "runtime_resting" && !status.job;
   useEffect(() => {
-    if (!resting || !status || dirty || busy || setup.busy || props.disabled || woke.current === status.generation) return;
-    woke.current = status.generation;
+    if (status?.effective_enabled) woke.current = false;
+    if (!resting || dirty || busy || setup.busy || props.disabled || woke.current) return;
+    woke.current = true;
     void perform("activate");
     // perform reads the latest props and status itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resting, status?.generation, dirty, busy, setup.busy, props.disabled]);
+  }, [resting, status?.effective_enabled, dirty, busy, setup.busy, props.disabled]);
 
   async function perform(action: ContextControlAction | "installations") {
     // Stop always wins over a one-click setup that is still running.

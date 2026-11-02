@@ -91,10 +91,15 @@ export function CigarSetupProgress({ setup, status, loading }: ProgressProps) {
   const live = run.phase === "running" || run.phase === "failed" ? run : null;
   const stages = live?.stages ?? (setup.plan?.kind === "run" ? setup.plan.stages : ALL_STAGES);
   const at = live?.stage ? stages.indexOf(live.stage) : -1;
-  const heading = on ? "CIGAR is on" : run.phase === "running" ? "Turning on CIGAR" : run.phase === "failed" ? "Setup stopped"
-    : loading ? "Checking…" : "Guard does the setup for you";
-  const label = run.phase === "running" ? "Working" : status ? contextStatusCopy(status).label : "Checking";
-  let body = "Click once. Guard downloads CIGAR, makes sure it is safe and starts it. Nothing else to install.";
+  let heading = "Guard does the setup for you";
+  if (on) heading = "CIGAR is on";
+  else if (run.phase === "running") heading = "Turning on CIGAR";
+  else if (run.phase === "failed") heading = "Setup stopped";
+  else if (loading) heading = "Checking…";
+  let label = "Checking";
+  if (run.phase === "running") label = "Working";
+  else if (status) label = contextStatusCopy(status).label;
+  let body = "Click once. Guard downloads CIGAR, makes sure it is safe and starts it. It reads only the project files you pick later.";
   if (on) body = "Running on this computer. Next, pick a project folder. You can connect an AI app after that.";
   else if (run.phase !== "running" && cigarWaking(status)) body = "CIGAR rests when nothing needs it and wakes up on its own. You do not need to turn it on again.";
   else if (live?.stage) body = `${CIGAR_SETUP_STAGE_LABELS[live.stage]}… step ${at + 1} of ${stages.length}.`;
@@ -117,7 +122,7 @@ export function CigarSetupProof({ setup, gate }: ProofProps) {
   const run = setup.run;
   return <SettingsSaveProofModal open={run.phase === "proof"} mode="verify-save" gate={gate}
     title="Approve turning on CIGAR"
-    detail="Guard will download CIGAR, make sure it is the approved copy and start it on this computer. One approval covers everything."
+    detail="Guard will download CIGAR, make sure it is the approved copy and start it on this computer. You can then pick project files for it to read. It reads nothing you have not picked. One approval covers everything."
     confirmLabel="Turn on CIGAR" error={run.phase === "proof" ? run.error : null} pending={false}
     onCancel={setup.cancelProof} onConfirm={(proof) => setup.confirm({ currentPassword: proof.currentPassword, totpCode: proof.totpCode })} />;
 }

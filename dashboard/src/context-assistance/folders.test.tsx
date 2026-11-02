@@ -5,6 +5,8 @@ import { folderChoiceBlock } from "./folder-picker";
 import { folderCrumbs, formatFileSize, type FolderListing } from "./folders-api";
 
 assert.deepEqual(folderCrumbs("/Users/you/code", "/").map((crumb) => crumb.path), ["/", "/Users", "/Users/you", "/Users/you/code"]);
+assert.deepEqual(folderCrumbs("\\\\server\\share\\project", "\\").map((crumb) => crumb.path), ["\\\\server\\share\\", "\\\\server\\share\\project"],
+  "a network folder keeps its share root so every crumb can be opened");
 assert.deepEqual(folderCrumbs("C:\\Users\\you", "\\"), [
   { label: "C:", path: "C:\\" }, { label: "Users", path: "C:\\Users" }, { label: "you", path: "C:\\Users\\you" },
 ]);

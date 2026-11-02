@@ -3578,8 +3578,13 @@ function folderCrumbs(path, separator) {
   const crumbs = [];
   let current = windows ? "" : "/";
   if (!windows) crumbs.push({ label: "/", path: "/" });
-  parts.forEach((part, index) => {
-    if (windows && index === 0) current = part + "\\";
+  const network = windows && /^[\\/]{2}[^\\/]/.test(path) && parts.length >= 2;
+  if (network) {
+    current = `\\\\${parts[0]}\\${parts[1]}\\`;
+    crumbs.push({ label: `\\\\${parts[0]}\\${parts[1]}`, path: current });
+  }
+  parts.slice(network ? 2 : 0).forEach((part, index) => {
+    if (windows && !network && index === 0) current = part + "\\";
     else current = current.endsWith(separator) ? current + part : current + separator + part;
     crumbs.push({ label: part, path: current });
   });
@@ -3634,6 +3639,7 @@ function FolderPickerDialog({ open, initialPath, onCancel, onChoose }) {
   }, [hidden]);
   reactExports.useEffect(() => {
     if (!open) return;
+    setListing(null);
     go(initialPath, "jump");
     return () => request.current?.abort();
   }, [open]);
@@ -3871,7 +3877,8 @@ function FolderPickerDialog({ open, initialPath, onCancel, onChoose }) {
                             "button",
                             {
                               type: "button",
-                              className: "min-h-9 shrink-0 rounded-lg px-3 text-xs font-semibold text-brand-blue hover:bg-brand-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
+                              disabled: loading,
+                              className: "min-h-9 shrink-0 rounded-lg px-3 text-xs font-semibold text-brand-blue hover:bg-brand-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:opacity-50",
                               onClick: () => onChoose(entry.path),
                               "aria-label": `Use ${entry.name}`,
                               children: "Use"
@@ -5004,9 +5011,15 @@ function CigarSetupProgress({ setup, status, loading }) {
   const live = run.phase === "running" || run.phase === "failed" ? run : null;
   const stages = live?.stages ?? (setup.plan?.kind === "run" ? setup.plan.stages : ALL_STAGES);
   const at = live?.stage ? stages.indexOf(live.stage) : -1;
-  const heading = on ? "CIGAR is on" : run.phase === "running" ? "Turning on CIGAR" : run.phase === "failed" ? "Setup stopped" : loading ? "Checking…" : "Guard does the setup for you";
-  const label2 = run.phase === "running" ? "Working" : status ? contextStatusCopy(status).label : "Checking";
-  let body = "Click once. Guard downloads CIGAR, makes sure it is safe and starts it. Nothing else to install.";
+  let heading = "Guard does the setup for you";
+  if (on) heading = "CIGAR is on";
+  else if (run.phase === "running") heading = "Turning on CIGAR";
+  else if (run.phase === "failed") heading = "Setup stopped";
+  else if (loading) heading = "Checking…";
+  let label2 = "Checking";
+  if (run.phase === "running") label2 = "Working";
+  else if (status) label2 = contextStatusCopy(status).label;
+  let body = "Click once. Guard downloads CIGAR, makes sure it is safe and starts it. It reads only the project files you pick later.";
   if (on) body = "Running on this computer. Next, pick a project folder. You can connect an AI app after that.";
   else if (run.phase !== "running" && cigarWaking(status)) body = "CIGAR rests when nothing needs it and wakes up on its own. You do not need to turn it on again.";
   else if (live?.stage) body = `${CIGAR_SETUP_STAGE_LABELS[live.stage]}… step ${at + 1} of ${stages.length}.`;
@@ -5037,7 +5050,7 @@ function CigarSetupProof({ setup, gate }) {
       mode: "verify-save",
       gate,
       title: "Approve turning on CIGAR",
-      detail: "Guard will download CIGAR, make sure it is the approved copy and start it on this computer. One approval covers everything.",
+      detail: "Guard will download CIGAR, make sure it is the approved copy and start it on this computer. You can then pick project files for it to read. It reads nothing you have not picked. One approval covers everything.",
       confirmLabel: "Turn on CIGAR",
       error: run.phase === "proof" ? run.error : null,
       pending: false,
@@ -7209,13 +7222,14 @@ function ContextAssistanceSettings(props) {
     onBusyChange(true);
     return () => onBusyChange(false);
   }, [setup.busy, onBusyChange]);
-  const woke = reactExports.useRef(null);
+  const woke = reactExports.useRef(false);
   const resting = status?.diagnostic === "runtime_resting" && !status.job;
   reactExports.useEffect(() => {
-    if (!resting || !status || dirty || busy || setup.busy || props.disabled || woke.current === status.generation) return;
-    woke.current = status.generation;
+    if (status?.effective_enabled) woke.current = false;
+    if (!resting || dirty || busy || setup.busy || props.disabled || woke.current) return;
+    woke.current = true;
     void perform("activate");
-  }, [resting, status?.generation, dirty, busy, setup.busy, props.disabled]);
+  }, [resting, status?.effective_enabled, dirty, busy, setup.busy, props.disabled]);
   async function perform(action) {
     if (action === "stop") setup.stop();
     if (pending.current || props.disabled) return;

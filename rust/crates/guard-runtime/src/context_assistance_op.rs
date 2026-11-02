@@ -13,6 +13,7 @@ pub(crate) const WORKSPACE_FEATURE: &str = "context-assistance-workspaces-v1";
 pub(crate) const ACTION_FEATURE: &str = "context-assistance-native-decisions-v1";
 pub(crate) const HISTORY_FEATURE: &str = "context-assistance-history-v1";
 pub(crate) const VERSIONS_FEATURE: &str = "context-assistance-versions-v1";
+pub(crate) const FOLDERS_FEATURE: &str = "context-assistance-folders-v1";
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -33,6 +34,7 @@ pub(crate) enum Kind {
     Workspace,
     WorkspaceAccess,
     WorkspaceGrant,
+    Folders,
 }
 impl Kind {
     fn name(self) -> &'static str {
@@ -46,6 +48,7 @@ impl Kind {
             Self::Workspace => "workspace",
             Self::WorkspaceAccess => "workspace_access",
             Self::WorkspaceGrant => "workspace_grant",
+            Self::Folders => "folders",
         }
     }
 }
@@ -75,6 +78,12 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
         validate(request, store)?;
         let home = Path::new(&request.query.guard_home);
         let service = store.context_assistance();
+        if matches!(request.query.kind, Kind::Folders) {
+            // Names for the project picker; reads no file and changes nothing.
+            let result = folders::browse(&request.query.input)?;
+            return Ok(json!({"kind":"folders", "state":service.status()?,
+                "data":{"schema":"guard-cigar-workspace-result.v1", "data_role":true, "result":result}}));
+        }
         if matches!(request.query.kind, Kind::Stop) {
             service.stop()?;
             crate::guard_config_update::disable_context_assistance(home)?;
@@ -134,7 +143,8 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
             | Kind::Stop
             | Kind::Workspace
             | Kind::WorkspaceAccess
-            | Kind::WorkspaceGrant => {}
+            | Kind::WorkspaceGrant
+            | Kind::Folders => {}
         }
         let mut state = service.status()?;
         if matches!(request.query.kind, Kind::Installations) {
@@ -162,7 +172,11 @@ fn validate(request: &Request, store: &PolicySnapshotStore) -> Result<(), String
     store.require_guard_home(&request.query.guard_home)?;
     if !matches!(
         request.query.kind,
-        Kind::Workspace | Kind::WorkspaceAccess | Kind::WorkspaceGrant | Kind::Versions
+        Kind::Workspace
+            | Kind::WorkspaceAccess
+            | Kind::WorkspaceGrant
+            | Kind::Versions
+            | Kind::Folders
     ) && request
         .query
         .input
@@ -203,6 +217,9 @@ fn response(
     };
     crate::encode_response(&response)
 }
+
+#[path = "context_assistance_folders.rs"]
+mod folders;
 
 #[cfg(test)]
 #[path = "context_assistance_op_tests.rs"]

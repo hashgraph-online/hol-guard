@@ -112,6 +112,36 @@ fn a_wake_and_a_click_share_one_pending_start() {
     assert!(!service.wake(std::path::Path::new("/not-opened"), |_| true));
 }
 
+#[test]
+fn a_worker_that_stops_right_after_starting_is_shown_not_rested() {
+    let service = Service::default();
+    saved_on(&service);
+    let mut state = lock(&service.state).unwrap();
+    assert_eq!(wake::closed(&state), "runtime_closed", "never started here");
+    state.started = Some(Instant::now());
+    assert_eq!(wake::closed(&state), "runtime_crashed");
+    state.error = Some(wake::closed(&state).into());
+    assert!(!resting(&state), "a crash is never restarted automatically");
+    state.started = Instant::now().checked_sub(Duration::from_secs(600));
+    assert_eq!(
+        wake::closed(&state),
+        "runtime_closed",
+        "a settled worker rests"
+    );
+}
+
+#[test]
+fn a_start_that_cannot_be_queued_is_shown_instead_of_resting() {
+    let home = home();
+    std::fs::write(home.path().join("cigar-erasure.json"), "{}").unwrap();
+    let service = Service::default();
+    saved_on(&service);
+    assert!(!service.wake(home.path(), |_| true));
+    let status = service.status().unwrap();
+    assert_ne!(status["diagnostic"], "runtime_resting");
+    assert_eq!(status["requested_enabled"], true, "consent is unchanged");
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn a_command_hook_reaches_the_wake_only_for_resting_execution_context() {

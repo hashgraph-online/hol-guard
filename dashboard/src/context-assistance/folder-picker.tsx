@@ -54,6 +54,8 @@ export function FolderPickerDialog({ open, initialPath, onCancel, onChoose }: Pr
 
   useEffect(() => {
     if (!open) return;
+    // A reopened picker never offers rows from the last visit.
+    setListing(null);
     go(initialPath, "jump");
     return () => request.current?.abort();
     // Re-open from the latest choice only when the dialog opens.
@@ -174,7 +176,7 @@ export function FolderPickerDialog({ open, initialPath, onCancel, onChoose }: Pr
                   {entry.project ? <span className="rounded-full bg-brand-blue/10 px-2 py-0.5 text-xs font-semibold text-brand-blue">Project</span> : null}
                   <HiMiniChevronRight aria-hidden="true" className="size-4 shrink-0 text-brand-dark/25 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" />
                 </button>
-                {entry.project ? <button type="button" className="min-h-9 shrink-0 rounded-lg px-3 text-xs font-semibold text-brand-blue hover:bg-brand-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40"
+                {entry.project ? <button type="button" disabled={loading} className="min-h-9 shrink-0 rounded-lg px-3 text-xs font-semibold text-brand-blue hover:bg-brand-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:opacity-50"
                   onClick={() => onChoose(entry.path)} aria-label={`Use ${entry.name}`}>Use</button> : null}
               </li>)}
               {!entries.length && !loading ? <li className="px-3 py-10 text-center text-sm text-brand-dark/55">

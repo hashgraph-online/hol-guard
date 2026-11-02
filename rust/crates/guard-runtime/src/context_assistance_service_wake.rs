@@ -6,6 +6,19 @@ use super::*;
 const RETRY: Duration = Duration::from_secs(30);
 /// Callers sit behind an 8 second transport budget and still need their call.
 const WAIT: Duration = Duration::from_secs(4);
+/// A worker that stops this soon after starting is broken, not resting.
+const SETTLED: Duration = Duration::from_secs(300);
+
+/// Names a worker that stopped on its own. One that had run a while rests and
+/// wakes on demand; one that stops right after starting is shown to the user,
+/// so a crashing runtime is never restarted in a loop.
+pub(super) fn closed(state: &State) -> &'static str {
+    if state.started.is_some_and(|at| at.elapsed() < SETTLED) {
+        "runtime_crashed"
+    } else {
+        "runtime_closed"
+    }
+}
 
 /// On by the user's saved choice, with nothing running and nothing broken.
 /// A failed verification leaves its own diagnostic and is not retried here.
@@ -46,7 +59,20 @@ impl Service {
             }
             state.woke = Some(Instant::now());
         }
-        self.schedule(Check::Activate, home.to_path_buf()).is_ok()
+        let Err(error) = self.schedule(Check::Activate, home.to_path_buf()) else {
+            return true;
+        };
+        if let Ok(mut state) = lock(&self.state) {
+            if error == "native_context_assistance_busy" {
+                // Nothing started, so the next request may try again.
+                state.woke = None;
+            } else if resting(&state) {
+                // A start that cannot happen is shown instead of "resting".
+                let code = error.trim_start_matches("native_context_assistance_");
+                state.error = Some(code.to_string());
+            }
+        }
+        false
     }
 
     /// Lets a command hook reach the wake after it releases policy locks.

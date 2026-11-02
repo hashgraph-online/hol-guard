@@ -58,6 +58,7 @@ _FIELDS = {
 _WORKSPACE_OPERATION = replace(_OPERATION, feature="context-assistance-workspaces-v1", timeout_seconds=8.0)
 _WORKSPACE_SLOTS = BoundedSemaphore(2)
 _VERSIONS_OPERATION = replace(_OPERATION, feature="context-assistance-versions-v1", timeout_seconds=8.0)
+_FOLDERS_OPERATION = replace(_OPERATION, feature="context-assistance-folders-v1", timeout_seconds=8.0)
 
 
 def _validate_state(answer: dict[str, Any]) -> None:
@@ -138,7 +139,14 @@ def versions(*, guard_home: Path, payload: Mapping[str, object]) -> dict[str, An
     return {**answer["data"], "state": answer["state"]}
 
 
-def workspace(kind: str, *, guard_home: Path, payload: Mapping[str, object]) -> dict[str, Any]:
+def folders(*, guard_home: Path, payload: Mapping[str, object]) -> dict[str, Any]:
+    """Transport the native project-picker listing; Rust reads and screens every name."""
+    return workspace("folders", guard_home=guard_home, payload=payload, operation=_FOLDERS_OPERATION)["result"]
+
+
+def workspace(
+    kind: str, *, guard_home: Path, payload: Mapping[str, object], operation: ResidentOperation = _WORKSPACE_OPERATION
+) -> dict[str, Any]:
     """Frame the route-bound operation; native code validates every action and scope."""
     try:
         home = _resolve_digest_home(guard_home)
@@ -150,17 +158,17 @@ def workspace(kind: str, *, guard_home: Path, payload: Mapping[str, object]) -> 
         data = shape_fields(
             answer["data"],
             {"schema": str, "data_role": bool, "result": dict},
-            lambda: ContextAssistanceError(_WORKSPACE_OPERATION.invalid),
+            lambda: ContextAssistanceError(operation.invalid),
         )
         if data["schema"] != "guard-cigar-workspace-result.v1" or data["data_role"] is not True:
-            raise ContextAssistanceError(_WORKSPACE_OPERATION.invalid)
+            raise ContextAssistanceError(operation.invalid)
 
     answer = _decide(
         {"kind": kind, "guard_home": str(home), "input": dict(payload)},
         home,
         {"state": dict, "data": dict},
         validate,
-        operation=_WORKSPACE_OPERATION,
+        operation=operation,
         max_request_bytes=64 * 1024,
         slots=_WORKSPACE_SLOTS,
     )
