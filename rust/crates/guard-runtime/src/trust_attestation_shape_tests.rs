@@ -120,6 +120,22 @@ fn a_refused_payload_carries_the_signer_message() {
 }
 
 #[test]
+fn a_batch_answers_each_payload_in_order() {
+    let answer = dispatch(&json!({
+        "op": "payloads",
+        "payloads": [payload(), {"agentId": "agent-1"}],
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false,
+    }))
+    .expect("batch answer");
+    let results = answer["results"].as_array().expect("results");
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0]["payload"]["agentId"], "agent-1");
+    assert!(results[1]["refused"].is_string());
+}
+
+#[test]
 fn malformed_requests_are_invalid() {
     for args in [
         json!([]),
@@ -127,6 +143,10 @@ fn malformed_requests_are_invalid() {
         json!({"op": "claim_hash", "claim": "x", "require_layer_identity": true}),
         json!({"op": "claim_hash", "claim": {}}),
         json!({"op": "payload", "payload": {}, "require_signed_at": false}),
+        json!({"op": "payloads", "payloads": [[]], "require_signed_at": false,
+               "require_nonce": false, "require_subject_bindings": false}),
+        json!({"op": "payloads", "payloads": {}, "require_signed_at": false,
+               "require_nonce": false, "require_subject_bindings": false}),
         json!({"op": "payload", "payload": [], "require_signed_at": false,
                "require_nonce": false, "require_subject_bindings": false}),
     ] {

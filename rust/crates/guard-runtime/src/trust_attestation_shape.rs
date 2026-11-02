@@ -18,6 +18,9 @@
 //!   "require_nonce": bool, "require_subject_bindings": bool}` answers
 //!   `{"payload": {...}}` with the normalized payload, or `{"refused": str}`
 //!   with the message the signer raises.
+//! - `{"op": "payloads", "payloads": [...], ...}` with the same three rule
+//!   flags answers `{"results": [...]}`, one `payload` or `refused` answer per
+//!   payload in order, so the signer checks every claim of an item at once.
 
 use guard_command::attestation_payload::{validate_attestation_payload, AttestationPayloadRules};
 use guard_command::trust_claim::{trust_claim_hash, validated_local_trust_claim};
@@ -32,6 +35,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         Some("claims") => claims(args),
         Some("claim_hash") => claim_hash(args),
         Some("payload") => payload(args),
+        Some("payloads") => payloads(args),
         _ => Err(ERR_INVALID),
     }
 }
@@ -74,20 +78,37 @@ fn claim_hash(args: &Map<String, Value>) -> KindResult {
     Ok(json!({ "claim_hash": hash }))
 }
 
-fn payload(args: &Map<String, Value>) -> KindResult {
-    let payload = args
-        .get("payload")
-        .and_then(Value::as_object)
-        .ok_or(ERR_INVALID)?;
-    let rules = AttestationPayloadRules {
+fn rules(args: &Map<String, Value>) -> Result<AttestationPayloadRules, &'static str> {
+    Ok(AttestationPayloadRules {
         require_signed_at: flag(args, "require_signed_at")?,
         require_nonce: flag(args, "require_nonce")?,
         require_subject_bindings: flag(args, "require_subject_bindings")?,
-    };
+    })
+}
+
+/// `{"payload": ...}` when the rules admit `payload`, `{"refused": ...}` otherwise.
+fn verdict(payload: &Value, rules: AttestationPayloadRules) -> KindResult {
+    let payload = payload.as_object().ok_or(ERR_INVALID)?;
     Ok(match validate_attestation_payload(payload, rules) {
         Ok(normalized) => json!({ "payload": normalized }),
         Err(refused) => json!({ "refused": refused.message() }),
     })
+}
+
+fn payload(args: &Map<String, Value>) -> KindResult {
+    verdict(args.get("payload").ok_or(ERR_INVALID)?, rules(args)?)
+}
+
+fn payloads(args: &Map<String, Value>) -> KindResult {
+    let rules = rules(args)?;
+    let results = args
+        .get("payloads")
+        .and_then(Value::as_array)
+        .ok_or(ERR_INVALID)?
+        .iter()
+        .map(|payload| verdict(payload, rules))
+        .collect::<Result<Vec<Value>, _>>()?;
+    Ok(json!({ "results": results }))
 }
 
 #[cfg(test)]

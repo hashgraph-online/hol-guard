@@ -10,6 +10,11 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.native_runner_authority import (
+    NativeRunnerAuthorityError,
+    NativeRunnerAuthorityRefusalError,
+)
+from codex_plugin_scanner.guard.runtime import trust_attestation
 from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
@@ -207,6 +212,85 @@ def test_stale_locally_marked_evidence_hash_is_rejected() -> None:
     )
 
     assert "trustResolution" not in result
+
+
+def _local_claim(**identity: str) -> dict[str, object]:
+    evidence = {"source": "hol-guard-local-baseline", "capturedAt": "2026-07-16T12:00:00Z", **identity}
+    return {
+        "resolutionSource": "local",
+        "status": "local",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
+        "capturedAt": "2026-07-16T12:00:00Z",
+        **identity,
+        "provenance": {"origin": "hol-guard-local", "verificationStatus": "locally_derived", "derivation": "test"},
+        "metadata": {
+            "evidence": evidence,
+            "evidenceHash": guard_evidence_hash(evidence),
+            "evidenceSchemaVersion": "guard-aibom-local-baseline-evidence.v1",
+        },
+    }
+
+
+def _apply_local_claims(metadata: dict[str, object]) -> dict[str, object]:
+    return apply_trust_attestation_metadata(
+        metadata,
+        agent_id="codex:local",
+        adapter_id="codex",
+        adapter_version="2.0.0",
+        item_id="plugin:test",
+        item_kind="plugin",
+        content_hash="sha256:content",
+        config_path_hash="sha256:config",
+        repository_id="sha256:repository",
+        signing_config=_signing_config(),
+    )
+
+
+def test_a_claim_the_encoder_refuses_drops_alone(monkeypatch) -> None:
+    real = trust_attestation.native_runner_authority
+
+    def refuse_marked(kind: str, args: dict[str, object]) -> dict[str, object]:
+        if "refuse-me" in json.dumps(args):
+            raise NativeRunnerAuthorityRefusalError("native_runner_authority_request_too_large")
+        return real(kind, args)
+
+    monkeypatch.setattr(trust_attestation, "native_runner_authority", refuse_marked)
+    refused = _local_claim(layerId="refuse-me", layerType="adapter")
+    kept = _local_claim(layerId="layer-kept", layerType="adapter")
+
+    result = _apply_local_claims({"trustResolution": _local_claim(), "trustLayers": [refused, kept]})
+
+    assert result["trustResolution"]["metadata"]["attestationStatus"] == "signed"
+    assert [layer["layerId"] for layer in result["trustLayers"]] == ["layer-kept"]
+    assert result["trustLayers"][0]["metadata"]["attestationStatus"] == "signed"
+
+
+def test_an_unavailable_runtime_still_fails_the_item(monkeypatch) -> None:
+    def unavailable(kind: str, args: dict[str, object]) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(trust_attestation, "native_runner_authority", unavailable)
+
+    with pytest.raises(NativeRunnerAuthorityError, match="unavailable"):
+        _apply_local_claims({"trustResolution": _local_claim()})
+
+
+def test_every_signed_claim_of_an_item_is_checked_in_one_call(monkeypatch) -> None:
+    real = trust_attestation.native_runner_authority
+    ops: list[object] = []
+
+    def record(kind: str, args: dict[str, object]) -> dict[str, object]:
+        ops.append(args.get("op"))
+        return real(kind, args)
+
+    monkeypatch.setattr(trust_attestation, "native_runner_authority", record)
+    layers = [_local_claim(layerId=f"layer-{index}", layerType="adapter") for index in range(3)]
+
+    result = _apply_local_claims({"trustResolution": _local_claim(), "trustLayers": layers})
+
+    assert ops == ["claims", "payloads"]
+    assert all(layer["metadata"]["attestationStatus"] == "signed" for layer in result["trustLayers"])
 
 
 # The verifier is the native runtime's, so this test needs a provisioned
