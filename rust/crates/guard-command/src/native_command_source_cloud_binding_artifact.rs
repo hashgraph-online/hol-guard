@@ -14,9 +14,9 @@
 
 use super::cloud_binding::{
     CloudSupport, BINDING_ARTIFACT_COMPILER_VERSION, BINDING_ARTIFACT_DOMAIN,
-    BINDING_ARTIFACT_SCHEMA, BINDING_MEANING_DOMAIN, EXECUTABLE_FLOOR,
+    BINDING_ARTIFACT_SCHEMA, BINDING_MEANING_DOMAIN, EXECUTABLE_FLOOR, MAX_BINDINGS_PER_EXTENSION,
 };
-use super::{catalog, json};
+use super::{catalog, json, mcp};
 use crate::cloud_action_binding::{
     valid_action_id, valid_label, ActionEffect, TargetCapability, MAX_BINDINGS,
 };
@@ -154,10 +154,23 @@ pub fn read_binding_artifact(bytes: &[u8]) -> Result<BindingArtifact, &'static s
     if catalog::digest(BINDING_ARTIFACT_DOMAIN, &unsigned)? != document.artifact_digest {
         return Err("cloud_binding_artifact_digest_mismatch");
     }
+    // The compiler writes an artifact only for at least one contribution, and
+    // never more actions for one extension than a contribution may declare.
+    if document.actions.is_empty() {
+        return Err("cloud_binding_artifact_malformed");
+    }
     let mut actions = BTreeMap::new();
+    let mut per_extension: BTreeMap<String, usize> = BTreeMap::new();
     let mut previous: Option<String> = None;
     for raw in document.actions {
         let action = admit_action(raw)?;
+        let count = per_extension
+            .entry(action.extension_id.clone())
+            .or_default();
+        *count += 1;
+        if *count > MAX_BINDINGS_PER_EXTENSION {
+            return Err("cloud_binding_artifact_limit");
+        }
         // The compiler writes actions strictly ascending; any other order is not its output.
         if previous
             .as_deref()
@@ -194,7 +207,9 @@ fn admit_action(raw: Value) -> Result<ArtifactAction, &'static str> {
         ArtifactTarget::McpTool { tool, endpoint } => {
             valid_label(tool)
                 && match endpoint {
-                    Some(endpoint) => valid_endpoint(endpoint),
+                    // Only the compiler's canonical form of an admitted remote endpoint.
+                    Some(endpoint) => mcp::canonical_endpoint(endpoint)
+                        .is_ok_and(|canonical| canonical == *endpoint),
                     None => action.cloud_support == CloudSupport::PortablePolicy,
                 }
         }
@@ -224,12 +239,6 @@ fn admit_action(raw: Value) -> Result<ArtifactAction, &'static str> {
         return Err("cloud_binding_artifact_digest_mismatch");
     }
     Ok(action)
-}
-
-fn valid_endpoint(value: &str) -> bool {
-    value.starts_with("https://")
-        && value.len() <= 2048
-        && value.bytes().all(|byte| byte.is_ascii_graphic())
 }
 
 fn valid_digest(value: &str) -> bool {

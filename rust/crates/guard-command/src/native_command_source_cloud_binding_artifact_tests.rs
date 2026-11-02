@@ -265,7 +265,29 @@ fn rechecks_the_rules_the_compiler_enforced() {
     plain_http["actions"][1]["target"]["endpoint"] = json!("http://app.instapods.com/api/mcp");
     let mut bad_id = artifact();
     bad_id["actions"][0]["action_id"] = json!("Example");
-    for value in [command_executes, local_server_executes, plain_http, bad_id] {
+    let mut empty = artifact();
+    empty["actions"] = json!([]);
+    let mut endpoints = Vec::new();
+    for endpoint in [
+        "https://",
+        "https://127.0.0.1/mcp",
+        "https://user:secret@app.instapods.com/api/mcp",
+        "https://APP.instapods.com/api/mcp",
+    ] {
+        let mut value = artifact();
+        value["actions"][1]["target"]["endpoint"] = json!(endpoint);
+        endpoints.push(value);
+    }
+    for value in [
+        command_executes,
+        local_server_executes,
+        plain_http,
+        bad_id,
+        empty,
+    ]
+    .into_iter()
+    .chain(endpoints)
+    {
         assert_eq!(
             read_binding_artifact(&bytes(&resign(value))).unwrap_err(),
             "cloud_binding_artifact_malformed"
@@ -284,6 +306,34 @@ fn rechecks_the_rules_the_compiler_enforced() {
     assert_eq!(
         read_binding_artifact(&bytes(&resign(duplicated))).unwrap_err(),
         "cloud_binding_artifact_order_invalid"
+    );
+}
+
+#[test]
+fn refuses_more_actions_for_one_extension_than_a_contribution_declares() {
+    let with = |count: usize| {
+        let mut value = artifact();
+        let template = value["actions"][1].clone();
+        let actions: Vec<Value> = (0..count)
+            .map(|index| {
+                let mut action = template.clone();
+                action["action_id"] = json!(format!("instapods.pod.delete{index:03}"));
+                action
+            })
+            .collect();
+        value["actions"] = Value::Array(actions);
+        resign(value)
+    };
+    assert_eq!(
+        read_binding_artifact(&bytes(&with(MAX_BINDINGS_PER_EXTENSION)))
+            .unwrap()
+            .metadata
+            .action_count,
+        MAX_BINDINGS_PER_EXTENSION
+    );
+    assert_eq!(
+        read_binding_artifact(&bytes(&with(MAX_BINDINGS_PER_EXTENSION + 1))).unwrap_err(),
+        "cloud_binding_artifact_limit"
     );
 }
 
