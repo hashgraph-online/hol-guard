@@ -24,10 +24,10 @@ from .cursor_hook_config import (
     _backup_payload,
     _hooks_backup_path,
     _hooks_state_path,
-    _is_managed_hook_entry,
     _is_managed_hook_script,
     _json_object,
     _make_executable,
+    _managed_entry_flags,
     _managed_hook_entry,
     _managed_hooks_payload,
     _strip_managed_hook_entries,
@@ -411,15 +411,9 @@ def _cleanup_legacy_project_cursor_hooks(context: HarnessContext) -> None:
         if isinstance(payload, dict):
             hooks = payload.get("hooks")
             if isinstance(hooks, dict):
-                for entries in hooks.values():
-                    if not isinstance(entries, list):
-                        continue
-                    for entry in entries:
-                        if _is_managed_hook_entry(entry, command=str(script_path.resolve())):
-                            managed = True
-                            break
-                    if managed:
-                        break
+                command = str(script_path.resolve())
+                event_lists = [entries for entries in hooks.values() if isinstance(entries, list)]
+                managed = any(any(_managed_entry_flags(entries, command)) for entries in event_lists)
     if not managed:
         return
     _uninstall_cursor_hooks_at_paths(

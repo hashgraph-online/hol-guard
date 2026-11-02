@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority as authority
 from codex_plugin_scanner.guard.adapters import cursor_hook_config as config
-from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 
 _SCRIPT = Path("/var/guard-user/.cursor/hooks/hol-guard-cursor-hook.py")
 
@@ -20,7 +20,7 @@ def _fake(monkeypatch: pytest.MonkeyPatch, *answers: dict[str, object]) -> list[
         sent.append((kind, request))
         return queue.pop(0)
 
-    monkeypatch.setattr(config, "native_runner_authority", fake_native)
+    monkeypatch.setattr(authority, "native_runner_authority", fake_native)
     monkeypatch.setattr(config.codex_hook_command_line, "hook_commands_use_windows_syntax", lambda: False)
     return sent
 
@@ -124,7 +124,7 @@ def test_malformed_install_answers_are_refused(monkeypatch: pytest.MonkeyPatch, 
     _fake(monkeypatch, answer)
     payload: dict[str, object] = {"hooks": {"stop": [{"command": "x"}], "zz": "keep"}}
 
-    with pytest.raises(NativeRunnerAuthorityError):
+    with pytest.raises(RuntimeError):
         config._managed_hooks_payload(payload, {}, script_path=_SCRIPT)
 
 
@@ -133,7 +133,7 @@ def test_malformed_install_answers_are_refused(monkeypatch: pytest.MonkeyPatch, 
     [
         (lambda: config._is_managed_hook_command("x"), {"managed": 1, "structured": False, "script": None}),
         (lambda: config._live_cursor_hook_script_path("x"), {"managed": True, "structured": True, "script": 3}),
-        (lambda: config._is_managed_hook_entry({}, command="x"), {"managed": [True, False]}),
+        (lambda: config._managed_entry_flags([{}], "x"), {"managed": [True, False]}),
         (lambda: config._is_managed_hook_script("source"), {"managed": "yes"}),
         (lambda: config.managed_cursor_hook_commands({"stop": []}), {"commands": [{"command": "x"}]}),
         (lambda: config.managed_cursor_hook_commands({"stop": []}), {"commands": None}),
@@ -146,7 +146,7 @@ def test_malformed_query_answers_are_refused(
 ) -> None:
     _fake(monkeypatch, {**answer, "short_tokens": []})
 
-    with pytest.raises(NativeRunnerAuthorityError):
+    with pytest.raises(RuntimeError):
         call()  # type: ignore[operator]
 
 
@@ -165,3 +165,13 @@ def test_live_commands_keep_only_accepted_scripts_on_disk(monkeypatch: pytest.Mo
     assert config.live_cursor_hooks_use_frozen_control_plane({"stop": []}) is True
     assert sent[0][1]["hooks"] == [["stop", [{"command": "live"}]]]
     assert config.managed_cursor_hook_commands("not a dict") == ()
+
+
+def test_a_refused_request_is_a_runtime_error_repair_can_skip(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(kind: str, request: dict[str, object]) -> dict[str, object]:
+        raise authority.NativeRunnerAuthorityError("resident unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", refuse)
+    monkeypatch.setattr(config.codex_hook_command_line, "hook_commands_use_windows_syntax", lambda: False)
+    with pytest.raises(RuntimeError, match="resident unavailable"):
+        config._is_managed_hook_script("#!/usr/bin/env python3\n")

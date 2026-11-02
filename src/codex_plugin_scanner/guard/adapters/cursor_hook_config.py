@@ -22,7 +22,6 @@ from typing import cast
 from .. import codex_hook_command_line
 from ..codex_hook_command_line import render_hook_command
 from ..models import GuardArtifact
-from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from ._modules.cursor.cursor_hook_events import (
     CURSOR_FILE_MUTATION_TOOL_MATCHER,
     CURSOR_SHELL_ROUTE_TOOL_MATCHER,
@@ -204,12 +203,19 @@ def _managed_hook_entry(
     return entry
 
 
-def _malformed() -> NativeRunnerAuthorityError:
-    return NativeRunnerAuthorityError("Cursor hook config answer is malformed")
+def _malformed() -> RuntimeError:
+    return RuntimeError("Cursor hook config answer is malformed")
 
 
 def _ask_once(request: dict[str, object]) -> tuple[dict[str, object], dict[str, str]]:
-    answer: dict[str, object] = native_runner_authority("cursor_hook_config", request)
+    # Imported here so the hook bridges stay off the native runtime at import time.
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        answer: dict[str, object] = native_runner_authority("cursor_hook_config", request)
+    except NativeRunnerAuthorityError as error:
+        # Best-effort repair and rebind callers handle RuntimeError, not ValueError.
+        raise RuntimeError(f"Cursor hook config request failed: {error}") from error
     short_tokens = answer.get("short_tokens")
     if not isinstance(short_tokens, list) or not all(isinstance(token, str) for token in short_tokens):
         raise _malformed()
@@ -304,10 +310,6 @@ def _strip_managed_hook_entries(entries: object, *, script_path: Path) -> list[o
         return []
     flags = _managed_entry_flags(entries, str(script_path.resolve()))
     return [entry for entry, managed in zip(entries, flags, strict=True) if not managed]
-
-
-def _is_managed_hook_entry(entry: object, *, command: str) -> bool:
-    return _managed_entry_flags([entry], command)[0]
 
 
 def _command_facts(command: str) -> tuple[bool, bool, str | None]:
