@@ -140,7 +140,7 @@ pub(crate) fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
 pub(crate) fn evaluate_isolated(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>, String> {
     let guard_home = std::path::PathBuf::from(&envelope.source.guard_home);
     let result = validate_envelope_shape(&envelope)
-        .and_then(|_| evaluate_validated_envelope(envelope, None, None));
+        .and_then(|_| evaluate_validated_envelope(envelope, None, None, ()));
     std::fs::remove_dir_all(guard_home).expect("remove edge generation fixture");
     result
 }

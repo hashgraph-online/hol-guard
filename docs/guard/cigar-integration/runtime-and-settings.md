@@ -148,11 +148,11 @@ This part is implemented. When CIGAR is on and verified, and both `features.agen
 For each prompt the native runtime:
 
 1. Finds the project from the hook's working directory: the nearest enclosing Git repository, or the folder itself. It never uses the home folder, a folder that contains it, a top-level folder, a credential folder, or anything inside the Guard home.
-2. Pulls search words from the prompt and walks the project for files whose path or contents match, skipping secrets, keys, ignored folders and generated output.
+2. Pulls search words from the prompt and walks the project for files whose path or contents match, skipping secrets, keys, hidden files and generated output. The walk applies Git's ignore rules from `.git/info/exclude` and every `.gitignore` it meets, nested ones included, without running `git`. A folder whose `.gitignore` cannot be read is skipped whole. The global `core.excludesFile` is not read.
 3. Asks the CIGAR worker for excerpts from those files, scoped to that project and app.
 4. Keeps only excerpts that mention a word from the prompt, renders them as fenced file contents under a short header that marks them as data, and lists the other matching files by path.
 
-The answer adds nothing when the prompt is shorter than 8 characters, when no file matches (a prompt such as "build a to-do app" in an empty folder), when no excerpt mentions the request, when the prompt is blocked or needs approval, or when the lookup runs late. The lookup waits at most 2.5 seconds and leaves 250 ms of the hook's deadline for the answer. A second hook delivery of the same prompt joins the lookup already running; a different prompt for the same project goes without rather than queueing. Rendered context is capped at 12,000 characters, and a settings change or worker restart while a lookup runs discards its result.
+The answer adds nothing when the prompt is shorter than 8 characters, when no file matches (a prompt such as "build a to-do app" in an empty folder), when no excerpt mentions the request, when the prompt is blocked or needs approval, or when the lookup runs late. The lookup starts after the verdict is settled and Guard's policy locks are released. It waits at most 2.5 seconds, counts the time the hook has already spent, and leaves 250 ms of the hook's deadline for the answer. A second hook delivery of the same prompt joins the lookup already running; a different prompt for the same project goes without rather than queueing. Rendered context, including the list of other matching files, is capped at 12,000 characters, and a settings change or worker restart while a lookup runs discards its result for every hook waiting on it.
 
 ## Resource and deadline policy
 

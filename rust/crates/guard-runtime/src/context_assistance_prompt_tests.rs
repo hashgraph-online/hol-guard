@@ -60,6 +60,29 @@ fn rendered_context_stays_bounded() {
 }
 
 #[test]
+fn files_that_did_not_fit_are_listed_within_the_limit() {
+    let near_full = "header ".repeat(1_650);
+    let picked = [
+        excerpt("src/header.ts", &near_full),
+        excerpt("src/header-dropped.ts", &near_full),
+    ];
+    let mut found = words(&["src/header.ts", "src/header-dropped.ts"]);
+    found.extend((0..8).map(|index| format!("src/{}/header{index}.ts", "deep/".repeat(40))));
+    let rendered = render(&picked, &found, &words(&["header"])).unwrap();
+    assert!(rendered.len() <= MAX_CONTEXT_CHARS, "{}", rendered.len());
+    assert!(
+        rendered.contains("Other matching files: src/header-dropped.ts"),
+        "an excerpt cut for space is still named"
+    );
+    let too_big = [excerpt("src/header.ts", &"header ".repeat(2_000))];
+    assert_eq!(
+        render(&too_big, &[], &words(&["header"])),
+        None,
+        "never a header with no code under it"
+    );
+}
+
+#[test]
 fn only_an_allowed_prompt_answer_takes_context() {
     assert!(allowed(
         &json!({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}})

@@ -81,6 +81,30 @@ fn an_empty_folder_or_unrelated_prompt_adds_nothing() {
     assert!(candidates(&project, &terms("write a haiku about winter")).is_empty());
 }
 
+#[test]
+fn files_git_ignores_never_become_candidates() {
+    let (_dir, root) = canonical();
+    let project = app(&root);
+    fs::create_dir_all(project.join("src/private")).unwrap();
+    fs::create_dir_all(project.join("src/notes/local")).unwrap();
+    fs::write(project.join("src/private/header-notes.md"), "header\n").unwrap();
+    fs::write(project.join("src/notes/header.md"), "header\n").unwrap();
+    fs::write(project.join("src/notes/local/header.md"), "header\n").unwrap();
+    fs::write(project.join("src/notes/.gitignore"), "local/\n").unwrap();
+    fs::write(project.join(".gitignore"), "*.log\nsrc/private/\n").unwrap();
+    let found = candidates(&project, &terms("the header"));
+    assert!(
+        found.contains(&"src/notes/header.md".to_owned()),
+        "{found:?}"
+    );
+    for kept_out in ["src/private/header-notes.md", "src/notes/local/header.md"] {
+        assert!(
+            !found.contains(&kept_out.to_owned()),
+            "{kept_out} in {found:?}"
+        );
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn a_linked_folder_is_never_walked() {

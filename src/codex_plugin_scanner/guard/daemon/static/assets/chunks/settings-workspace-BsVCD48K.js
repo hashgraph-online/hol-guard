@@ -4762,7 +4762,7 @@ function cigarSetupSteps(status) {
     },
     {
       title: "Pick a project folder",
-      description: "Choose the folder CIGAR may read. It reads nothing else.",
+      description: "Optional. Choose exactly which files CIGAR uses for a project, instead of the ones that match each prompt.",
       complete: false,
       action: on ? "Pick a folder" : null,
       tab: "access"
@@ -5065,7 +5065,7 @@ function CigarSetupAction({ setup, status, disabled, tone = "plain", onOpen }) {
         "Pick a project folder",
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: "CIGAR is on. It reads nothing until you choose what it may use." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: "CIGAR is on. Prompts in Claude Code and Codex now get the project files that match them. Pick a folder to choose exactly which files it uses." })
     ] });
   }
   if (setup.run.phase === "running") {
@@ -5173,7 +5173,7 @@ function CigarSetupProof({ setup, gate }) {
       mode: "verify-save",
       gate,
       title: "Approve turning on CIGAR",
-      detail: "Guard will download CIGAR, make sure it is the approved copy and start it on this computer. You can then pick project files for it to read. It reads nothing you have not picked. One approval covers everything.",
+      detail: "Guard will download CIGAR, make sure it is the approved copy and start it on this computer. After that, each prompt you send in Claude Code or Codex gets the few files from that project that match it. CIGAR skips secrets, keys, generated folders and anything the project's .gitignore files leave out. Turn off Context for AI apps in Settings to stop it. One approval covers everything.",
       confirmLabel: "Turn on CIGAR",
       error: run.phase === "proof" ? run.error : null,
       pending: false,
@@ -5443,7 +5443,7 @@ function CigarGuide({ onSelect }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-explained-heading", children: CIGAR_FULL_NAME }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR" }),
-        " reads the project you are working in and, each time you send a prompt in Claude Code or Codex, adds the few files that match your request. A prompt about the header color brings the header and its styles; a prompt that matches nothing in the project adds nothing. Secrets, keys, and ignored or generated folders are never read."
+        " reads the project you are working in and, each time you send a prompt in Claude Code or Codex, adds the few files that match your request. A prompt about the header color brings the header and its styles; a prompt that matches nothing in the project adds nothing. It skips secrets, keys, generated folders and anything the project's .gitignore files leave out."
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("tutorials"), children: [
         "Try a guided walkthrough",

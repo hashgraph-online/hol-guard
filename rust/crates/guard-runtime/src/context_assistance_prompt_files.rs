@@ -5,6 +5,7 @@
 //! (a repository's own config can run code, so no `git` either). It only
 //! proposes paths: each one is read again through the CIGAR source screen,
 //! which refuses secrets, keys and credential files on its own.
+use crate::context_assistance_prompt_ignore::{extend, ignored, root_chain};
 use guard_secure_fs::{credential_directory_path, credential_named_path};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -140,12 +141,14 @@ pub(crate) fn candidates(root: &Path, terms: &[String]) -> Vec<String> {
         return Vec::new();
     }
     let started = Instant::now();
-    let ignored = ignored_names(root);
-    let mut stack = vec![(root.to_path_buf(), String::new(), 0_usize)];
+    let Ok(rules) = root_chain(root) else {
+        return Vec::new();
+    };
+    let mut stack = vec![(root.to_path_buf(), String::new(), 0_usize, rules)];
     let mut visited = 0_usize;
     let mut scanned = 0_u64;
     let mut scored = Vec::new();
-    while let Some((dir, prefix, depth)) = stack.pop() {
+    while let Some((dir, prefix, depth, rules)) = stack.pop() {
         let Ok(entries) = fs::read_dir(&dir) else {
             continue;
         };
@@ -159,7 +162,7 @@ pub(crate) fn candidates(root: &Path, terms: &[String]) -> Vec<String> {
             let Ok(kind) = entry.file_type() else {
                 continue;
             };
-            if name.starts_with('.') || ignored.matches(&name) {
+            if name.starts_with('.') {
                 continue;
             }
             let relative = if prefix.is_empty() {
@@ -167,12 +170,19 @@ pub(crate) fn candidates(root: &Path, terms: &[String]) -> Vec<String> {
             } else {
                 format!("{prefix}/{name}")
             };
+            if ignored(&rules, &relative, kind.is_dir()) {
+                continue;
+            }
             if kind.is_dir() {
                 if depth < MAX_DEPTH
                     && !SKIPPED_DIRS.contains(&name.as_str())
                     && !credential_directory_path(Path::new(&relative))
                 {
-                    stack.push((entry.path(), relative, depth + 1));
+                    // A folder whose own ignore file cannot be read stays out.
+                    let path = entry.path();
+                    if let Ok(inner) = extend(rules.clone(), &path.join(".gitignore"), &relative) {
+                        stack.push((path, relative, depth + 1, inner));
+                    }
                 }
                 continue;
             }
@@ -254,48 +264,8 @@ fn content_score(bytes: &[u8], terms: &[String]) -> u32 {
     score
 }
 
-/// Plain names and `*.ext` patterns from the project's top `.gitignore`.
-#[derive(Default)]
-struct Ignored {
-    names: Vec<String>,
-    extensions: Vec<String>,
-}
-
-impl Ignored {
-    fn matches(&self, name: &str) -> bool {
-        self.names.iter().any(|n| n == name)
-            || self
-                .extensions
-                .iter()
-                .any(|ext| name.ends_with(ext.as_str()))
-    }
-}
-
-fn ignored_names(root: &Path) -> Ignored {
-    let mut ignored = Ignored::default();
-    let Ok(text) = guard_secure_fs::read_bounded(&root.join(".gitignore"), 16_384)
-        .map(|read| String::from_utf8_lossy(&read.bytes).into_owned())
-    else {
-        return ignored;
-    };
-    for line in text.lines().map(str::trim) {
-        if line.is_empty() || line.starts_with(['#', '!']) {
-            continue;
-        }
-        let line = line.trim_start_matches('/').trim_end_matches('/');
-        if let Some(ext) = line.strip_prefix('*') {
-            if ext.starts_with('.') && !ext.contains(['*', '/', '?', '[']) {
-                ignored.extensions.push(ext.into());
-            }
-        } else if !line.contains(['*', '/', '?', '[']) {
-            ignored.names.push(line.into());
-        }
-    }
-    ignored
-}
-
 /// The path without Windows' `\\?\` prefix, as grants spell it.
-fn plain(path: PathBuf) -> PathBuf {
+pub(crate) fn plain(path: PathBuf) -> PathBuf {
     #[cfg(windows)]
     {
         let text = path.as_os_str().to_string_lossy();

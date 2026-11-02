@@ -266,10 +266,13 @@ fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String>
     Ok(())
 }
 
-fn evaluate_validated_envelope(
+/// `lease` is held until the verdict and its evidence are settled, and
+/// released before any prompt context lookup waits on CIGAR.
+fn evaluate_validated_envelope<Lease>(
     envelope: GuardHookEnvelopeV2,
     policy_snapshot: Option<&AdmittedPolicySnapshot>,
     origin_store: Option<&crate::policy_store::PolicySnapshotStore>,
+    lease: Lease,
 ) -> Result<Vec<u8>, String> {
     let started = Instant::now();
     let harness = canonical_harness(&envelope.harness)?;
@@ -415,13 +418,6 @@ fn evaluate_validated_envelope(
     if event_name == "PreToolUse" {
         crate::command_policy_repair::apply_at_edge(&mut result, policy_snapshot, &envelope.source);
     }
-    let harness_response = crate::context_assistance_prompt::harness_response(
-        &envelope,
-        &harness,
-        &event_name,
-        &result,
-        origin_store,
-    );
     let guard_home = origin_store.map(crate::policy_store::PolicySnapshotStore::guard_home);
     let (local_cli_rule, review_evidence) = crate::edge_review_evidence::beside(
         &envelope,
@@ -431,6 +427,15 @@ fn evaluate_validated_envelope(
         &receipt,
         guard_home,
         || edge_local_cli::settle(&envelope, &harness, &event_name, &result),
+    );
+    drop(lease);
+    let harness_response = crate::context_assistance_prompt::harness_response(
+        &envelope,
+        &harness,
+        &event_name,
+        &result,
+        origin_store,
+        started,
     );
     let mut edge = GuardHookEdgeResultV2 {
         exact_command_block: None,
@@ -470,8 +475,8 @@ pub(crate) fn evaluate_envelope_with_store(
         &envelope.source.guard_home,
         envelope.policy_generation,
     )?;
-    let _command_lease = policy_store.command_authority_lease(snapshot.snapshot())?;
-    evaluate_validated_envelope(envelope, Some(snapshot.as_ref()), Some(policy_store))
+    let lease = policy_store.command_authority_lease(snapshot.snapshot())?;
+    evaluate_validated_envelope(envelope, Some(snapshot.as_ref()), Some(policy_store), lease)
 }
 
 /// Evaluate against a snapshot while the policy store's request fence is
@@ -482,7 +487,7 @@ pub(crate) fn evaluate_envelope_with_snapshot(
     snapshot: &AdmittedPolicySnapshot,
 ) -> Result<Vec<u8>, String> {
     validate_envelope_shape(&envelope)?;
-    evaluate_validated_envelope(envelope, Some(snapshot), None)
+    evaluate_validated_envelope(envelope, Some(snapshot), None, ())
 }
 
 #[cfg(test)]

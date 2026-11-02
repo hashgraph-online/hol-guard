@@ -54,7 +54,7 @@ export function cigarSetupSteps(status: ContextAssistanceStatus | null): CigarSe
     },
     {
       title: "Pick a project folder",
-      description: "Choose the folder CIGAR may read. It reads nothing else.",
+      description: "Optional. Choose exactly which files CIGAR uses for a project, instead of the ones that match each prompt.",
       complete: false,
       action: on ? "Pick a folder" : null,
       tab: "access",
