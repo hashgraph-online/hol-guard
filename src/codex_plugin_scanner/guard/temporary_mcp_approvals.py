@@ -7,6 +7,7 @@ ships the filed intent and records the answer.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Final
 from .models import PolicyDecision
 from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
+_LOGGER = logging.getLogger(__name__)
 _KIND: Final = "temporary_mcp_grant"
 _BATCH: Final = 256
 _SELECTION_FIELDS: Final = (
@@ -65,10 +67,12 @@ def temporary_mcp_approval_payloads(
                 {"browser_intents": [requests[index]["browser_intent"] for index in batch]},
                 guard_home=guard_home,
             )
-        except NativeRunnerAuthorityError:
+        except NativeRunnerAuthorityError as error:
+            _LOGGER.warning("Temporary MCP grant offers unavailable for %d request(s): %s", len(batch), error)
             continue
         approvals = payload.get("approvals")
         if not isinstance(approvals, list) or len(approvals) != len(batch):
+            _LOGGER.warning("Temporary MCP grant offers malformed for %d request(s)", len(batch))
             continue
         for index, approval in zip(batch, approvals, strict=True):
             answers[index] = approval if isinstance(approval, dict) else None

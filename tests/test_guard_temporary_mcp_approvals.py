@@ -604,3 +604,25 @@ def test_invalid_temporary_grant_does_not_resolve_request(tmp_path) -> None:
     stored_request = store.get_approval_request("invalid-mcp-request")
     assert stored_request is not None
     assert stored_request["status"] == "pending"
+
+
+def test_a_resident_that_cannot_answer_logs_the_lost_offers(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from codex_plugin_scanner.guard import temporary_mcp_approvals
+    from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+
+    def refuse(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    requests = [{"browser_intent": {"intent": "browser.interact"}}, {"artifact_id": "plain"}]
+    monkeypatch.setattr(temporary_mcp_approvals, "native_runner_authority", refuse)
+    with caplog.at_level("WARNING", logger=temporary_mcp_approvals.__name__):
+        assert temporary_mcp_approvals.temporary_mcp_approval_payloads(requests) == [None, None]
+    assert "unavailable for 1 request(s): native_runner_authority_unavailable" in caplog.text
+
+    monkeypatch.setattr(temporary_mcp_approvals, "native_runner_authority", lambda *_a, **_k: {"approvals": []})
+    caplog.clear()
+    with caplog.at_level("WARNING", logger=temporary_mcp_approvals.__name__):
+        assert temporary_mcp_approvals.temporary_mcp_approval_payloads(requests) == [None, None]
+    assert "malformed for 1 request(s)" in caplog.text

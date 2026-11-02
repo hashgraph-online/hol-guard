@@ -73,6 +73,16 @@ pub(crate) fn category_for(intent: &str) -> Option<&'static str> {
     }
 }
 
+/// The grant rule every reader shares: the routine category is claimed, and
+/// nothing beyond it but the informational external-domain flag.
+pub(crate) fn risks_allow_grant<S: AsRef<str>>(category: &str, risks: &[S]) -> bool {
+    risks.iter().any(|risk| risk.as_ref() == category)
+        && risks.iter().all(|risk| {
+            let risk = risk.as_ref();
+            risk == category || risk == INFORMATIONAL_CATEGORY
+        })
+}
+
 /// Grant selectors, most specific first, for a routine browser capability.
 /// Anything that adds risk beyond the routine category yields none.
 pub(crate) fn grant_selectors(
@@ -94,12 +104,7 @@ pub(crate) fn grant_selectors(
     let (Some(identity), Some(category)) = (identity, category) else {
         return Vec::new();
     };
-    if named.is_empty()
-        || !risk_categories.iter().any(|item| item == category)
-        || risk_categories
-            .iter()
-            .any(|item| item != category && item != INFORMATIONAL_CATEGORY)
-    {
+    if named.is_empty() || !risks_allow_grant(category, risk_categories) {
         return Vec::new();
     }
     vec![

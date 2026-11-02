@@ -20,7 +20,7 @@ use serde_json::{json, Map, Value};
 
 use crate::context_digest::python_strip;
 use crate::mcp_tool_policy_grants::{
-    category_for, exact_grant_selector, scope_grant_selector, INFORMATIONAL_CATEGORY,
+    category_for, exact_grant_selector, risks_allow_grant, scope_grant_selector,
 };
 use crate::runner_authority_op::KindResult;
 
@@ -116,11 +116,7 @@ fn eligibility(intent: Option<&Value>) -> Option<Eligibility> {
         .flatten()
         .filter_map(Value::as_str)
         .collect();
-    if !risk_categories.contains(&category)
-        || risk_categories
-            .iter()
-            .any(|risk| *risk != category && *risk != INFORMATIONAL_CATEGORY)
-    {
+    if !risks_allow_grant(category, &risk_categories) {
         return None;
     }
     let target_label =
