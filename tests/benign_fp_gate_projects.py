@@ -140,19 +140,37 @@ def _yarn_lockfile(packages: dict[str, str]) -> str:
     return "# yarn lockfile v1\n\n" + "\n".join(entries)
 
 
+# The launcher each package really publishes, where it is not ``bin/<binary>.js``.
+# Guard resolves a ``.bin`` launcher by looking for the installed entry the
+# package names, so a fixture that writes every launcher under ``bin/`` leaves
+# those runners unrecognised and scores every spelling of them a plain allow.
+_PACKAGE_LAUNCHERS = {
+    ("vitest", "vitest"): "vitest.mjs",
+    ("typescript", "tsc"): "bin/tsc",
+    ("prettier", "prettier"): "bin/prettier.cjs",
+}
+
+
 def _node_package(workspace: Path, name: str, version: str, binaries: tuple[str, ...] = ()) -> None:
     """One installed package with its ``node_modules/.bin`` shims, as npm links them."""
     binaries = binaries or (name,)
+    launchers = {
+        binary: _PACKAGE_LAUNCHERS.get((name, binary), f"bin/{binary}.js") for binary in binaries
+    }
     package = workspace / "node_modules" / name
-    manifest = {"name": name, "version": version, "bin": {binary: f"./bin/{binary}.js" for binary in binaries}}
+    manifest = {
+        "name": name,
+        "version": version,
+        "bin": {binary: f"./{launcher}" for binary, launcher in launchers.items()},
+    }
     _write(package / "package.json", json.dumps(manifest) + "\n")
-    for binary in binaries:
-        script = package / "bin" / f"{binary}.js"
+    for binary, launcher in launchers.items():
+        script = package / launcher
         _write(script, f"#!/usr/bin/env node\nconsole.log('{binary} {version}');\n")
         script.chmod(0o755)
         shim = workspace / "node_modules" / ".bin" / binary
         shim.parent.mkdir(parents=True, exist_ok=True)
-        shim.symlink_to(Path("..") / name / "bin" / f"{binary}.js")
+        shim.symlink_to(Path("..") / name / launcher)
 
 
 def _python_toolchain(workspace: Path) -> None:
