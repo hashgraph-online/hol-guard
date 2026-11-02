@@ -614,48 +614,72 @@ fn lexical(path: &Path) -> PathBuf {
 
 /// `a && b && c` of plain words, rejoined, or `None` for any other shape.
 ///
-/// Each command may send its stderr to stdout or to `/dev/null`, and may pipe
-/// its output through further stages of plain words. Those stages stay in the
-/// rejoined text, where the sandbox's shell applies each to the command before
-/// it, exactly as the issued text did. Rejoining is what lets a pipeline whose
-/// filters the peel has no grammar for still run in the root the `cd` named,
-/// so an ordinary `| cut` or `| sort` reads as the same work as `| head`.
+/// Each command may send its stderr to stdout or to `/dev/null`, and may bound
+/// its output with one `head` or `tail` of a line or byte count. The filter
+/// stays in the rejoined text, where the sandbox's shell applies it to that
+/// command alone, as the issued text did.
 ///
 /// A lone command is rejoined only when the peel refuses its pipeline, so a
-/// shape the peel already reads keeps its narrower sink.
+/// shape the peel already reads keeps its narrower sink. Its pipeline may run
+/// through any number of readers of standard input whose options name no
+/// file, which is what lets a pipeline the peel has no grammar for still run
+/// in the root the `cd` named: an ordinary `| cut` or `| sort` reads as the
+/// same work as `| head`. A list keeps the narrower grammar, because a filter
+/// there bounds only the command it follows while the rest of the list still
+/// runs.
 fn joined_list(tokens: &[Token]) -> Option<String> {
+    let lone = !tokens.iter().any(|token| operator(token) == Some("&&"));
     let mut commands = Vec::new();
     for command in tokens.split(|token| operator(token) == Some("&&")) {
-        let mut stages = Vec::new();
-        for (index, stage) in command
-            .split(|token| operator(token) == Some("|"))
-            .enumerate()
-        {
-            let (words, redirect) = if index == 0 {
-                stderr_redirect(stage)
-            } else {
-                let (program, arguments) = stage.split_first()?;
-                let arguments: Vec<String> =
-                    arguments.iter().map(|token| token.0.clone()).collect();
-                if program.1 || !output_filters::rejoined_stage(&program.0, &arguments) {
-                    return None;
-                }
-                (stage, None)
-            };
-            let mut text = plain_words(words)?;
-            if let Some(redirect) = redirect {
-                text.push(' ');
-                text.push_str(redirect);
-            }
-            stages.push(text);
+        let mut stages = command.split(|token| operator(token) == Some("|"));
+        let (words, redirect) = stderr_redirect(stages.next()?);
+        let mut text = plain_words(words)?;
+        if let Some(redirect) = redirect {
+            text.push(' ');
+            text.push_str(redirect);
         }
-        commands.push(stages.join(" | "));
+        let mut filters = 0usize;
+        for stage in stages {
+            filters += 1;
+            if !lone && filters > 1 {
+                return None;
+            }
+            text.push_str(" | ");
+            text.push_str(&filter_stage(stage, lone)?);
+        }
+        if redirect.is_some() && filters == 0 {
+            return None;
+        }
+        commands.push(text);
     }
     let piped = tokens.iter().any(|token| operator(token) == Some("|"));
     if commands.len() < 2 && !(piped && peel_declines(tokens)) {
         return None;
     }
     Some(commands.join(" && "))
+}
+
+/// One filter stage's text, or `None` when it is not a reader of standard
+/// input. A `head` or `tail` is written back from the count this module read,
+/// rather than copied, so the rejoined bound is one the peel understood. Any
+/// other reader is rejoined only for a lone command, which is the shape the
+/// peel would otherwise refuse outright.
+fn filter_stage(tokens: &[Token], lone: bool) -> Option<String> {
+    let (program, arguments) = tokens.split_first()?;
+    if tokens.iter().any(|token| token.1) {
+        return None;
+    }
+    let program = word(program);
+    let arguments: Vec<String> = arguments.iter().map(|token| token.0.clone()).collect();
+    if matches!(program, "head" | "tail") {
+        let (count, bytes) = output_filters::head_tail_bound(&arguments)?;
+        let unit = if bytes { "-c" } else { "-n" };
+        return Some(format!("{program} {unit} {count}"));
+    }
+    if !lone || !output_filters::rejoined_stage(program, &arguments) {
+        return None;
+    }
+    plain_words(tokens)
 }
 
 /// One command's words, quoted back into text, or `None` when a word is an

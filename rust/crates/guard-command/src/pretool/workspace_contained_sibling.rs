@@ -56,35 +56,61 @@ fn sibling_list(
 /// Whether the sink rejoins this list whole rather than peeling a filter out
 /// of it.
 ///
-/// Each command may pipe its output through further stages of plain words.
-/// The sink leaves those pipes in the text the root runs, so the root's shell
-/// applies each stage to the command before it, exactly as the issued text
-/// did; an ordinary `| cut` or `| sort` is then the same work as `| head`. A
-/// lone command whose filter the sink peels itself is left to
-/// `sibling_cd_root`, which reads that shape, so asking the peel here is what
-/// keeps the classifier from admitting a list the sink would refuse.
+/// Two or more commands after the `cd` keep the narrower grammar: each may
+/// bound its own output with one `| head -N` or `| tail -N`, optionally after
+/// `2>&1`, which is all the sink leaves in the text the root runs. A filter
+/// there bounds only the command it follows while the rest of the list still
+/// runs, so a stage that is not a bound is not the same work.
+///
+/// One command after the `cd` may instead pipe through any stages of plain
+/// words: the root's shell applies each to the command before it, exactly as
+/// the issued text did, so an ordinary `| cut` or `| sort` is the same work as
+/// `| head`. That shape is admitted only where the sink's own peel refuses the
+/// pipeline, because `sibling_cd_root` reads the shapes the peel does and
+/// keeps their narrower sink.
 fn joined_filters(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
-    if !model
+    let commands = model
         .segments
         .iter()
-        .any(|segment| segment.pipeline_index > 0)
-    {
-        return true;
-    }
-    if !model
-        .segments
-        .iter()
-        .all(|segment| segment.pipeline_index == 0 || plain_stage(model, segment))
-    {
-        return false;
+        .filter(|segment| segment.pipeline_index == 0)
+        .count();
+    if commands < 3 {
+        if !model
+            .segments
+            .iter()
+            .any(|segment| segment.pipeline_index > 0)
+        {
+            return true;
+        }
+        return model
+            .segments
+            .iter()
+            .all(|segment| segment.pipeline_index == 0 || plain_stage(model, segment))
+            && super::super::contained_wrapper::contained_core(model, context).is_none();
     }
     model
         .segments
         .iter()
-        .filter(|segment| segment.pipeline_index == 0)
-        .count()
-        >= 3
-        || super::super::contained_wrapper::contained_core(model, context).is_none()
+        .enumerate()
+        .all(|(index, segment)| match segment.pipeline_index {
+            0 => {
+                segment.arguments.last().map(String::as_str) != Some("2>&1")
+                    || model
+                        .segments
+                        .get(index + 1)
+                        .is_some_and(|next| next.pipeline_index == 1)
+            }
+            1 => {
+                matches!(segment.executable.as_deref(), Some("head" | "tail"))
+                    && segment.environment_names.is_empty()
+                    && segment.wrapper_chain.is_empty()
+                    && !segment.path_overridden
+                    && super::super::contained_wrapper::output_filters::head_tail_arguments(
+                        &segment.arguments,
+                    )
+            }
+            _ => false,
+        })
 }
 
 /// One pipeline stage the sink rejoins as the words the text spelled: a plain
