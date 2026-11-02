@@ -266,11 +266,11 @@ pub(super) fn load(home: &Path) -> Result<Snapshot, String> {
     load_locked(home, &lock, now()?)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(super) fn import_at(home: &Path, raw: &[u8], time: u64) -> Result<Value, String> {
     publication::import_at(home, raw, time)
 }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(super) fn load_at(home: &Path, time: u64) -> Result<Snapshot, String> {
     let lock = WriteLock::acquire(home).map_err(storage)?;
     load_locked(home, &lock, time)

@@ -264,6 +264,6 @@ impl SwitchSettings {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "context_assistance_switch_policy_tests.rs"]
 mod tests;

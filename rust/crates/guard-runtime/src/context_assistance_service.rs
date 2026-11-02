@@ -22,7 +22,6 @@ mod execution;
 mod lifecycle;
 #[path = "context_assistance_service_status.rs"]
 mod status;
-#[cfg(unix)]
 #[path = "context_assistance_service_upgrade.rs"]
 mod upgrade;
 #[path = "context_assistance_service_verification.rs"]
@@ -54,7 +53,6 @@ struct Pending {
 }
 struct Verified {
     runtime: VerifiedRuntime,
-    #[cfg(unix)]
     selection:
         Option<crate::policy_store::context_assistance_registry::switching::ActivationSelection>,
     #[cfg(target_os = "macos")]
@@ -70,9 +68,7 @@ struct State {
     last_check: Option<RuntimeStatus>,
     error: Option<String>,
     pending: Option<Pending>,
-    #[cfg(unix)]
     upgrade: Option<Arc<upgrade::Signal>>,
-    #[cfg(unix)]
     cutover: Option<upgrade::Cutover>,
     last_used: Instant,
     maintenance_started: bool,
@@ -93,9 +89,7 @@ impl Default for State {
             last_check: None,
             error: None,
             pending: None,
-            #[cfg(unix)]
             upgrade: None,
-            #[cfg(unix)]
             cutover: None,
             last_used: Instant::now(),
             maintenance_started: false,
@@ -108,7 +102,6 @@ impl Default for State {
 }
 impl Drop for State {
     fn drop(&mut self) {
-        #[cfg(unix)]
         if let Some(upgrade) = &self.upgrade {
             upgrade.revoke();
         }
@@ -128,7 +121,6 @@ impl Drop for State {
 }
 
 fn revoke_runtime(state: &mut State) -> Option<Arc<RuntimeActor<Engine>>> {
-    #[cfg(unix)]
     if let Some(upgrade) = &state.upgrade {
         upgrade.revoke();
     }
@@ -152,7 +144,6 @@ type ExecutionTestHook = Box<dyn FnOnce(&crate::policy_store::PolicySnapshotStor
 pub(crate) struct Service {
     state: Arc<Mutex<State>>,
     updates: crate::policy_store::context_assistance_registry::Jobs,
-    #[cfg(unix)]
     switches: upgrade::Jobs,
     #[cfg(all(test, target_os = "macos"))]
     execution_test_hook: Mutex<Option<ExecutionTestHook>>,
@@ -188,7 +179,6 @@ impl Service {
             if state.closed {
                 return Err("native_context_assistance_shutdown".into());
             }
-            #[cfg(unix)]
             if operation == Check::Activate {
                 crate::policy_store::context_assistance_registry::switching::DataRemoval::check_clear(&home)
                     .map_err(|e| format!("native_context_assistance_{}",e.code()))?;
@@ -207,7 +197,6 @@ impl Service {
             if state.settings.effective.runtime_id.is_empty() {
                 return Err("native_context_assistance_runtime_not_selected".into());
             }
-            #[cfg(unix)]
             if state.upgrade.is_some() || state.cutover.is_some() {
                 return Err("native_context_assistance_busy".into());
             }
@@ -280,12 +269,10 @@ impl Service {
                     if !runtime.status().active {
                         return Err("native_context_assistance_runtime_closed".into());
                     }
-                    #[cfg(unix)]
                     let selection = crate::policy_store::context_assistance_registry::switching::prepare_activation(
                         &home, &installation, &runtime, &settings.effective)?;
                     Ok(Verified {
                         runtime,
-                        #[cfg(unix)]
                         selection,
                         #[cfg(target_os = "macos")]
                         execution_lane,
@@ -364,7 +351,6 @@ fn finish(
                         ))
                     });
                 let engine = Engine::new(home.clone(), &settings.effective, notifications.clone());
-                #[cfg(unix)]
                 let engine = {
                     let mut engine = engine;
                     if let Some(selection) = verified.selection {

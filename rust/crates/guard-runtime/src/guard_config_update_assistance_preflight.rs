@@ -63,38 +63,18 @@ pub(super) fn fence(previous: Option<&str>, next: &mut String, force: bool) -> R
 }
 struct HomeStamp {
     canonical: PathBuf,
-    #[cfg(unix)]
-    dev: u64,
-    #[cfg(unix)]
-    ino: u64,
+    node: io::RootIdentity,
 }
 impl HomeStamp {
     fn capture(home: &Path) -> Result<Self, Failure> {
-        let canonical = fs::canonicalize(home)
-            .map_err(|_| Failure::Error("config_directory_unavailable".into()))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            let m = fs::metadata(home)
-                .map_err(|_| Failure::Error("config_directory_unavailable".into()))?;
-            Ok(Self {
-                canonical,
-                dev: m.dev(),
-                ino: m.ino(),
-            })
-        }
-        #[cfg(not(unix))]
-        {
-            Ok(Self { canonical })
-        }
+        let unavailable = || Failure::Error("config_directory_unavailable".into());
+        let canonical = fs::canonicalize(home).map_err(|_| unavailable())?;
+        let node = io::root_identity_of(home).map_err(|_| unavailable())?;
+        Ok(Self { canonical, node })
     }
     fn check(&self, home: &Path) -> Result<(), Failure> {
         let now = Self::capture(home)?;
-        if now.canonical != self.canonical {
-            return Err(Failure::Error("config_directory_changed".into()));
-        }
-        #[cfg(unix)]
-        if now.dev != self.dev || now.ino != self.ino {
+        if now.canonical != self.canonical || now.node != self.node {
             return Err(Failure::Error("config_directory_changed".into()));
         }
         Ok(())
@@ -113,7 +93,6 @@ pub(super) fn write(request: &UpdateRequest, value: &PyVal) -> Result<Value, Fai
         &now_iso(),
     )?;
     fence(stored.as_deref(), &mut computed.text, false)?;
-    #[cfg(unix)]
     let mut lease = None;
     if request.kind == "settings" {
         require_selection_job(stored.as_deref(), &computed.text)?;
@@ -123,13 +102,10 @@ pub(super) fn write(request: &UpdateRequest, value: &PyVal) -> Result<Value, Fai
             // under the shared lifecycle lease, with no config lock held.
             crate::policy_store::context_assistance_registry::load(home, &id)
                 .map_err(selection_error)?;
-            #[cfg(unix)]
-            {
-                lease = Some(
-                    crate::policy_store::context_assistance_registry::selection_lease(home)
-                        .map_err(Failure::Error)?,
-                );
-            }
+            lease = Some(
+                crate::policy_store::context_assistance_registry::selection_lease(home)
+                    .map_err(Failure::Error)?,
+            );
             identity.check(home)?;
             crate::guard_config_load::cigar_updates::check_target(home, &id)
                 .map_err(Failure::Error)?;
@@ -140,7 +116,6 @@ pub(super) fn write(request: &UpdateRequest, value: &PyVal) -> Result<Value, Fai
     let lock = io::WriteLock::acquire(home)?;
     identity.check(home)?;
     lock.publish(stored.as_deref(), &computed.text)?;
-    #[cfg(unix)]
     drop(lease);
     Ok(computed.previous.unwrap_or(Value::Null))
 }
@@ -155,7 +130,7 @@ fn before_publish() {
         }
     }
 }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn with_publication_hook<T>(
     hook: impl FnOnce() + 'static,
     run: impl FnOnce() -> T,

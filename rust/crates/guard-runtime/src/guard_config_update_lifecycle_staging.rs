@@ -38,69 +38,51 @@ fn temporary(name: &str) -> Option<LifecycleFile> {
 impl WriteLock {
     pub(super) fn recover_lifecycle_staging(&self) -> Result<(), Failure> {
         self.check()?;
-        let fd = openat(
-            &self.directory,
-            ".",
-            OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC,
-            Mode::empty(),
-        )
-        .map_err(|_| failure("cigar_lifecycle_staging_unavailable"))?;
-        let mut dir = nix::dir::Dir::from_fd(fd)
-            .map_err(|_| failure("cigar_lifecycle_staging_unavailable"))?;
+        let all = self.directory.names(4096).map_err(|e| match e {
+            Names::Limit => failure("cigar_lifecycle_staging_limit"),
+            Names::Failed => failure("cigar_lifecycle_staging_unavailable"),
+        })?;
         let mut names = Vec::new();
         let mut bytes = 0u64;
-        for (index, entry) in dir.iter().enumerate() {
-            if index >= 4096 {
-                return Err(failure("cigar_lifecycle_staging_limit"));
-            }
-            let entry = entry.map_err(|_| failure("cigar_lifecycle_staging_unavailable"))?;
-            let name = entry
-                .file_name()
-                .to_str()
-                .map_err(|_| failure("cigar_lifecycle_staging_unavailable"))?;
-            let Some(kind) = temporary(name) else {
+        for name in all {
+            let Some(kind) = temporary(&name) else {
                 continue;
             };
             if names.len() >= 32 {
                 return Err(failure("cigar_lifecycle_staging_limit"));
             }
-            let file: File = openat(
-                &self.directory,
-                name,
-                OFlag::O_RDONLY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC | OFlag::O_NONBLOCK,
-                Mode::empty(),
-            )
-            .map_err(|_| failure("cigar_lifecycle_staging_invalid"))?
-            .into();
-            let m = file
-                .metadata()
+            let file = self
+                .directory
+                .open_file(&name, How::Read)
                 .map_err(|_| failure("cigar_lifecycle_staging_invalid"))?;
-            if !m.is_file()
-                || m.nlink() != 1
-                || m.uid() != nix::unistd::geteuid().as_raw()
-                || m.mode() & 0o077 != 0
-                || m.len() > kind.limit() as u64
-            {
+            let m = self
+                .directory
+                .file_entry(&name, &file)
+                .map_err(|_| failure("cigar_lifecycle_staging_invalid"))?;
+            if !m.private_file() || m.len > kind.limit() as u64 {
                 return Err(failure("cigar_lifecycle_staging_invalid"));
             }
-            bytes = bytes.saturating_add(m.len());
+            bytes = bytes.saturating_add(m.len);
             if bytes > 4 * 1024 * 1024 {
                 return Err(failure("cigar_lifecycle_staging_limit"));
             }
-            names.push((name.to_owned(), file, m));
+            names.push((name, m));
         }
-        for (name, _file, m) in names {
+        for (name, m) in names {
             self.check()?;
-            let n = fstatat(&self.directory, name.as_str(), AtFlags::AT_SYMLINK_NOFOLLOW)
+            let n = self
+                .directory
+                .stat(&name)
                 .map_err(|_| failure("cigar_lifecycle_staging_invalid"))?;
-            if n.st_dev as u64 != m.dev() || n.st_ino != m.ino() || n.st_nlink != 1 {
+            if n.node != m.node || n.links != 1 {
                 return Err(failure("cigar_lifecycle_staging_invalid"));
             }
-            unlinkat(&self.directory, name.as_str(), UnlinkatFlags::NoRemoveDir)
+            self.directory
+                .remove_file(&name)
                 .map_err(|_| failure("cigar_lifecycle_commit_outcome_unknown"))?;
         }
         self.directory
-            .sync_all()
+            .sync()
             .map_err(|_| failure("cigar_lifecycle_commit_outcome_unknown"))
     }
     pub(crate) fn forget_lifecycle_selection(&self) -> Result<(), Failure> {
@@ -112,20 +94,23 @@ impl WriteLock {
             LifecycleFile::InitialSelection,
             LifecycleFile::Key,
         ] {
-            if let Some(file) = checked_file(self, kind, OFlag::O_RDONLY)? {
-                let m = file
-                    .metadata()
+            if let Some(file) = checked_file(self, kind, How::Read)? {
+                let m = self
+                    .directory
+                    .file_entry(kind.name(), &file)
                     .map_err(|_| failure("cigar_lifecycle_file_invalid"))?;
+                drop(file);
                 self.check()?;
-                let n = fstatat(&self.directory, kind.name(), AtFlags::AT_SYMLINK_NOFOLLOW)
+                let n = self
+                    .directory
+                    .stat(kind.name())
                     .map_err(|_| failure("cigar_lifecycle_file_changed"))?;
-                if n.st_dev as u64 != m.dev() || n.st_ino != m.ino() {
+                if n.node != m.node {
                     return Err(failure("cigar_lifecycle_file_changed"));
                 }
-                unlinkat(&self.directory, kind.name(), UnlinkatFlags::NoRemoveDir)
-                    .map_err(|_| failure("cigar_lifecycle_commit_outcome_unknown"))?;
                 self.directory
-                    .sync_all()
+                    .remove_file(kind.name())
+                    .and_then(|()| self.directory.sync())
                     .map_err(|_| failure("cigar_lifecycle_commit_outcome_unknown"))?;
             }
         }

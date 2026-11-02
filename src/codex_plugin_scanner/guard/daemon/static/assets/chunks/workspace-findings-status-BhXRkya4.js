@@ -1,4 +1,4 @@
-import { dO as fetchGuardApi } from "../guard-dashboard.js";
+import { dW as fetchGuardApi } from "../guard-dashboard.js";
 const ASSESSMENTS_PATH = "/v1/supply-chain/workspace-assessments";
 const FINDINGS_PATH = "/v1/supply-chain/workspace-findings";
 const RUN_STATES = /* @__PURE__ */ new Set(["queued", "running", "completed", "partial", "superseded", "failed", "canceled"]);

@@ -2,12 +2,12 @@
 //! capsule contains no SDK eligibility, process, workspace or app authority.
 use super::*;
 use crate::guard_config_load::AssistanceSettings;
+use crate::guard_config_update::io::{root_identity_of, RootIdentity};
 use guard_context_assistance::{EvidenceGenerationStore, PreparedEvidenceGeneration, StorageMode};
-use std::os::unix::fs::MetadataExt;
 
 pub(crate) struct DisabledTarget {
     home: PathBuf,
-    root_identity: (u64, u64),
+    root_identity: RootIdentity,
     raw: Option<String>,
     settings: AssistanceSettings,
     rules: guard_cigar_release::UpdatePreferences,
@@ -90,8 +90,7 @@ impl DisabledTarget {
         &self.pointer
     }
     pub(crate) fn check(&self) -> Result<(), String> {
-        let metadata = fs::metadata(&self.home).map_err(|_| error("home_invalid"))?;
-        if (metadata.dev(), metadata.ino()) != self.root_identity {
+        if root_identity_of(&self.home).map_err(|_| error("home_invalid"))? != self.root_identity {
             return Err(error("switch_selection_conflict"));
         }
         DataRemoval::check_clear(&self.home).map_err(|e| error(e.code()))?;

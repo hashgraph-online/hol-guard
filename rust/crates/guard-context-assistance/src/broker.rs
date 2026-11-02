@@ -18,10 +18,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 mod clients;
 #[path = "broker_execution.rs"]
 mod execution;
-#[cfg(unix)]
 #[path = "broker_note_transfer.rs"]
 mod note_transfer;
-#[cfg(unix)]
 pub use note_transfer::EphemeralReviewedNotes;
 #[path = "broker_proposals.rs"]
 mod proposals;

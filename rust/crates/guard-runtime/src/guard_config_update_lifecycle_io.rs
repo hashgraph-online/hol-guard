@@ -49,66 +49,56 @@ impl LifecycleFile {
 thread_local! { static AFTER_RECORD_RENAME: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 #[cfg(test)]
 thread_local! { static AFTER_ERASURE_RENAME: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn fail_next_erasure_intent_after_rename() {
     AFTER_ERASURE_RENAME.with(|f| f.set(true));
 }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn fail_next_lifecycle_record_after_rename() {
     AFTER_RECORD_RENAME.with(|f| f.set(true));
 }
-fn checked_file(
-    lock: &WriteLock,
-    kind: LifecycleFile,
-    flags: OFlag,
-) -> Result<Option<File>, Failure> {
+fn checked_file(lock: &WriteLock, kind: LifecycleFile, how: How) -> Result<Option<File>, Failure> {
     lock.check()?;
-    let file: File = match openat(
-        &lock.directory,
-        kind.name(),
-        flags | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC | OFlag::O_NONBLOCK,
-        Mode::empty(),
-    ) {
-        Ok(fd) => fd.into(),
-        Err(nix::errno::Errno::ENOENT) => return Ok(None),
+    let file = match lock.directory.open_file(kind.name(), how) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(failure("cigar_lifecycle_file_invalid")),
     };
-    let m = file
-        .metadata()
+    let m = lock
+        .directory
+        .file_entry(kind.name(), &file)
         .map_err(|_| failure("cigar_lifecycle_file_invalid"))?;
-    let n = fstatat(&lock.directory, kind.name(), AtFlags::AT_SYMLINK_NOFOLLOW)
+    let n = lock
+        .directory
+        .stat(kind.name())
         .map_err(|_| failure("cigar_lifecycle_file_changed"))?;
-    if !m.is_file()
-        || m.nlink() != 1
-        || m.uid() != nix::unistd::geteuid().as_raw()
-        || m.mode() & 0o077 != 0
-        || m.len() as usize > kind.limit()
-        || m.dev() != n.st_dev as u64
-        || m.ino() != n.st_ino
-        || !SFlag::from_bits_truncate(n.st_mode).contains(SFlag::S_IFREG)
+    if !m.private_file() || m.len > kind.limit() as u64 || m.node != n.node || n.kind != Kind::File
     {
         return Err(failure("cigar_lifecycle_file_invalid"));
     }
     lock.check()?;
     Ok(Some(file))
 }
+/// Whether the existing file may be replaced: it opens for writing and its
+/// owner may write it.
+fn replaceable(lock: &WriteLock, kind: LifecycleFile) -> Result<(), Failure> {
+    let file = checked_file(lock, kind, How::Write)?
+        .ok_or_else(|| failure("cigar_lifecycle_record_changed"))?;
+    let entry = lock
+        .directory
+        .file_entry(kind.name(), &file)
+        .map_err(|_| failure("cigar_lifecycle_file_invalid"))?;
+    if !entry.writable {
+        return Err(failure("cigar_lifecycle_file_not_writable"));
+    }
+    Ok(())
+}
 impl WriteLock {
     pub(crate) fn check_erasure_intent(&self, expected: &[u8]) -> Result<(), Failure> {
         if self.lifecycle_bytes(LifecycleFile::Erasure)?.as_deref() != Some(expected) {
             return Err(failure("cigar_lifecycle_record_changed"));
         }
-        let file = checked_file(self, LifecycleFile::Erasure, OFlag::O_WRONLY)?
-            .ok_or_else(|| failure("cigar_lifecycle_record_changed"))?;
-        if file
-            .metadata()
-            .map_err(|_| failure("cigar_lifecycle_file_invalid"))?
-            .mode()
-            & 0o200
-            == 0
-        {
-            return Err(failure("cigar_lifecycle_file_not_writable"));
-        }
-        Ok(())
+        replaceable(self, LifecycleFile::Erasure)
     }
     pub(crate) fn complete_saved_erasure(&self, expected: &[u8]) -> Result<(), Failure> {
         self.check_erasure_intent(expected)?;
@@ -117,51 +107,43 @@ impl WriteLock {
     }
     pub(crate) fn complete_scope_erasure(&self, expected: &[u8]) -> Result<(), Failure> {
         self.check_erasure_intent(expected)?;
-        unlinkat(
-            &self.directory,
-            LifecycleFile::Erasure.name(),
-            UnlinkatFlags::NoRemoveDir,
-        )
-        .map_err(|_| failure("cigar_lifecycle_commit_outcome_unknown"))?;
         self.directory
-            .sync_all()
+            .remove_file(LifecycleFile::Erasure.name())
+            .and_then(|()| self.directory.sync())
             .map_err(|_| failure("cigar_lifecycle_commit_outcome_unknown"))?;
         self.check()
     }
 
     pub(crate) fn lifecycle_bytes(&self, kind: LifecycleFile) -> Result<Option<Vec<u8>>, Failure> {
-        let Some(mut file) = checked_file(self, kind, OFlag::O_RDONLY)? else {
+        let Some(mut file) = checked_file(self, kind, How::Read)? else {
             return Ok(None);
         };
-        let before = file
-            .metadata()
+        let before = self
+            .directory
+            .file_entry(kind.name(), &file)
             .map_err(|_| failure("cigar_lifecycle_file_invalid"))?;
         let mut bytes = Vec::new();
         Read::by_ref(&mut file)
             .take(kind.limit() as u64 + 1)
             .read_to_end(&mut bytes)
             .map_err(|_| failure("cigar_lifecycle_file_invalid"))?;
-        let fresh = checked_file(self, kind, OFlag::O_RDONLY)?
+        drop(file);
+        let fresh = checked_file(self, kind, How::Read)?
             .ok_or_else(|| failure("cigar_lifecycle_file_changed"))?;
-        let after = fresh
-            .metadata()
+        let after = self
+            .directory
+            .file_entry(kind.name(), &fresh)
             .map_err(|_| failure("cigar_lifecycle_file_invalid"))?;
         if bytes.len() > kind.limit()
-            || bytes.len() as u64 != before.len()
-            || before.dev() != after.dev()
-            || before.ino() != after.ino()
-            || before.len() != after.len()
-            || before.mtime() != after.mtime()
-            || before.mtime_nsec() != after.mtime_nsec()
-            || before.ctime() != after.ctime()
-            || before.ctime_nsec() != after.ctime_nsec()
+            || bytes.len() as u64 != before.len
+            || before.node != after.node
+            || before.len != after.len
+            || before.times != after.times
         {
             return Err(failure("cigar_lifecycle_file_changed"));
         }
         Ok(Some(bytes))
     }
-    // libc::dev_t differs across Unix targets; the inode comparison uses MetadataExt's u64.
-    #[allow(clippy::unnecessary_cast)]
     pub(crate) fn publish_lifecycle(
         &self,
         kind: LifecycleFile,
@@ -181,17 +163,7 @@ impl WriteLock {
             return Err(failure("cigar_lifecycle_record_changed"));
         }
         if expected.is_some() {
-            let file = checked_file(self, kind, OFlag::O_WRONLY)?
-                .ok_or_else(|| failure("cigar_lifecycle_record_changed"))?;
-            if file
-                .metadata()
-                .map_err(|_| failure("cigar_lifecycle_file_invalid"))?
-                .mode()
-                & 0o200
-                == 0
-            {
-                return Err(failure("cigar_lifecycle_file_not_writable"));
-            }
+            replaceable(self, kind)?;
         }
         let mut nonce = [0_u8; 16];
         getrandom::fill(&mut nonce).map_err(|_| failure("cigar_lifecycle_write_failed"))?;
@@ -201,64 +173,62 @@ impl WriteLock {
             std::process::id(),
             u128::from_le_bytes(nonce)
         );
-        let mut file: File = openat(
-            &self.directory,
-            name.as_str(),
-            OFlag::O_WRONLY | OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
-            Mode::from_bits_truncate(0o600),
-        )
-        .map_err(|_| failure("cigar_lifecycle_write_failed"))?
-        .into();
-        let m = file
-            .metadata()
+        let mut file = self
+            .directory
+            .open_file(&name, How::CreateNew)
             .map_err(|_| failure("cigar_lifecycle_write_failed"))?;
-        let result = (|| {
-            file.write_all(bytes)
-                .and_then(|_| file.sync_all())
-                .map_err(|_| failure("cigar_lifecycle_write_failed"))?;
-            self.check()?;
-            if self.lifecycle_bytes(kind)?.as_deref() != expected {
-                return Err(failure("cigar_lifecycle_record_changed"));
-            }
-            let staged = fstatat(&self.directory, name.as_str(), AtFlags::AT_SYMLINK_NOFOLLOW)
-                .map_err(|_| failure("cigar_lifecycle_write_failed"))?;
-            if staged.st_dev as u64 != m.dev()
-                || staged.st_ino != m.ino()
-                || staged.st_nlink != 1
-                || staged.st_mode as u32 & 0o077 != 0
-            {
-                return Err(failure("cigar_lifecycle_write_failed"));
-            }
-            renameat(&self.directory, name.as_str(), &self.directory, kind.name())
-                .map_err(|_| failure("cigar_lifecycle_write_failed"))?;
-            #[cfg(test)]
-            if matches!(kind, LifecycleFile::Record)
-                && AFTER_RECORD_RENAME.with(|f| f.replace(false))
-            {
-                return Err(failure("cigar_lifecycle_commit_outcome_unknown"));
-            }
-            #[cfg(test)]
-            if matches!(kind, LifecycleFile::Erasure)
-                && AFTER_ERASURE_RENAME.with(|f| f.replace(false))
-            {
-                return Err(failure("cigar_lifecycle_commit_outcome_unknown"));
-            }
-            self.directory
-                .sync_all()
-                .map_err(|_| failure("cigar_lifecycle_commit_outcome_unknown"))?;
-            if self
-                .lifecycle_bytes(kind)
-                .map_err(|_| failure("cigar_lifecycle_commit_outcome_unknown"))?
-                .as_deref()
-                != Some(bytes)
-            {
-                return Err(failure("cigar_lifecycle_commit_outcome_unknown"));
-            }
-            Ok(())
-        })();
-        if let Ok(staged) = fstatat(&self.directory, name.as_str(), AtFlags::AT_SYMLINK_NOFOLLOW) {
-            if staged.st_dev as u64 == m.dev() && staged.st_ino == m.ino() {
-                let _ = unlinkat(&self.directory, name.as_str(), UnlinkatFlags::NoRemoveDir);
+        let created = self
+            .directory
+            .file_entry(&name, &file)
+            .map_err(|_| failure("cigar_lifecycle_write_failed"))?;
+        let written = file.write_all(bytes).and_then(|_| file.sync_all());
+        // Windows cannot rename or remove a name that still has an open handle.
+        drop(file);
+        let result = written
+            .map_err(|_| failure("cigar_lifecycle_write_failed"))
+            .and_then(|()| {
+                self.check()?;
+                if self.lifecycle_bytes(kind)?.as_deref() != expected {
+                    return Err(failure("cigar_lifecycle_record_changed"));
+                }
+                let staged = self
+                    .directory
+                    .stat(&name)
+                    .map_err(|_| failure("cigar_lifecycle_write_failed"))?;
+                if staged.node != created.node || !staged.private_file() {
+                    return Err(failure("cigar_lifecycle_write_failed"));
+                }
+                self.directory
+                    .rename(&name, kind.name())
+                    .map_err(|_| failure("cigar_lifecycle_write_failed"))?;
+                #[cfg(test)]
+                if matches!(kind, LifecycleFile::Record)
+                    && AFTER_RECORD_RENAME.with(|f| f.replace(false))
+                {
+                    return Err(failure("cigar_lifecycle_commit_outcome_unknown"));
+                }
+                #[cfg(test)]
+                if matches!(kind, LifecycleFile::Erasure)
+                    && AFTER_ERASURE_RENAME.with(|f| f.replace(false))
+                {
+                    return Err(failure("cigar_lifecycle_commit_outcome_unknown"));
+                }
+                self.directory
+                    .sync()
+                    .map_err(|_| failure("cigar_lifecycle_commit_outcome_unknown"))?;
+                if self
+                    .lifecycle_bytes(kind)
+                    .map_err(|_| failure("cigar_lifecycle_commit_outcome_unknown"))?
+                    .as_deref()
+                    != Some(bytes)
+                {
+                    return Err(failure("cigar_lifecycle_commit_outcome_unknown"));
+                }
+                Ok(())
+            });
+        if let Ok(staged) = self.directory.stat(&name) {
+            if staged.node == created.node {
+                let _ = self.directory.remove_file(&name);
             }
         }
         result

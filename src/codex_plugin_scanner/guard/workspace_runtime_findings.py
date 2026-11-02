@@ -3,9 +3,12 @@
 Reuses the runtime posture: the native probe describes each executable the
 configured MCP servers would launch, without running it, and the native
 assessment matches it against the runtime advisories carried in the cached
-supply-chain bundle. Nothing here feeds hooks or approvals. Cloud receives each
-finding's identifiers and a keyed digest of its path, which matches the digest
-fleet posture reports for the same runtime; the path itself stays local.
+supply-chain bundle. The native ``workspace_runtime_findings`` kind turns the
+posture into findings, coverage and the identity digest; this module probes
+and keeps the per-worktree probe cache. Nothing here feeds hooks or approvals.
+Cloud receives each finding's identifiers and a keyed digest of its path,
+which matches the digest fleet posture reports for the same runtime; the path
+itself stays local.
 Where the native runtime enumerates running processes, a process that kept
 running after its runtime was replaced on disk keeps its finding, as
 ``restart_required``, until it exits: a new build on disk alone is never the
@@ -19,22 +22,22 @@ with that source kind rather than dressed up as packages.
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import threading
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
+
+from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
 RUNTIME_DETECTOR: Final = "runtime_identity_v1"
 RUNTIME_SOURCE_KIND: Final = "agent_inventory"
 # Probing hashes every launched executable, so the background worker looks
 # for a changed runtime at most this often per worktree.
 RUNTIME_OBSERVE_INTERVAL_MS: Final = 10 * 60 * 1000
+# The native projection keeps at most this many findings per run.
 MAX_RUNTIME_FINDINGS: Final = 50
-_FINDING_VERDICTS: Final = frozenset({"affected", "restart_required", "fix_unverified"})
-_SEVERITY_RANK: Final = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 _LOGGER = logging.getLogger(__name__)
 
 _lock = threading.Lock()
@@ -71,40 +74,18 @@ def observe_workspace_runtimes(store: Any, root: Path, *, home_dir: Path | None 
 def runtime_identity_digest(posture: Mapping[str, object]) -> str | None:
     """Digest which executables would launch and what they are, or ``None`` when unknown.
 
-    Advisories are left out: they arrive with the cached bundle, whose own
-    digest already queues a reassessment when it changes.
+    The native runtime computes it. Advisories are left out: they arrive with
+    the cached bundle, whose own digest already queues a reassessment when it
+    changes. A digest the runtime could not answer is unknown, like a failed
+    probe, so the last answer stands.
     """
 
-    if posture.get("status") == "unavailable":
+    try:
+        answer = _native("identity_digest", {"posture": dict(posture)})
+    except RuntimeError:
         return None
-    identity = {
-        # A launch past the probe's candidate limit, or a harness that became
-        # unreadable, changes coverage without changing the retained rows.
-        "status": str(posture.get("status")),
-        "candidate_limit_reached": posture.get("candidate_limit_reached") is True,
-        "runtimes": sorted(
-            [
-                str(row.get("path")),
-                str(row.get("location_state")),
-                str(row.get("family")),
-                str(row.get("version")),
-                str(row.get("executable_sha256")),
-            ]
-            for row in _rows(posture.get("runtimes"))
-        ),
-        "unresolved": sorted(
-            [str(row.get("harness")), str(row.get("server")), str(row.get("command"))]
-            for row in _rows(posture.get("unresolved_launches"))
-        ),
-        "skipped": sorted(str(item) for item in _list(posture.get("skipped_harnesses"))),
-    }
-    # A process left running on a replaced build, and its exit, change what a
-    # run reports; processes running the build on disk do not.
-    stale = _stale_instances(posture)
-    if stale:
-        identity["stale_instances"] = stale
-    encoded = json.dumps(identity, separators=(",", ":"))
-    return hashlib.sha256(("guard.workspace-runtimes.v1\0" + encoded).encode("utf-8")).hexdigest()
+    digest = answer.get("digest")
+    return digest if isinstance(digest, str) else None
 
 
 def cached_runtime_digest(store: Any, worktree_key: str, *, now_ms: int) -> tuple[str | None, bool] | None:
@@ -191,173 +172,39 @@ def assessment_context_digest(feed_digest: str, runtime_digest: str | None) -> s
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+class WorkspaceRuntimeFindingsError(RuntimeError):
+    """The native runtime could not project the runtime findings or coverage."""
+
+
 def project_runtime_findings(worktree_key: str, posture: Mapping[str, object]) -> tuple[list[dict[str, object]], bool]:
     """One finding per advisory and matched executable path, and whether any were dropped.
 
-    Byte-identical runtimes at different paths share one artifact, so every
-    path of a matched artifact gets its own finding. The cap keeps the
-    known-exploited and most severe findings.
+    The native runtime projects them; the cap keeps the known-exploited and
+    most severe findings.
     """
 
-    rows: dict[str, list[Mapping[str, object]]] = {}
-    for row in _rows(posture.get("runtimes")):
-        artifact_id = row.get("artifact_id")
-        if isinstance(artifact_id, str):
-            rows.setdefault(artifact_id, []).append(row)
-    locations = _by_location(posture)
-    instances = {row.get("instance_id"): row for row in _instance_rows(posture)}
-    findings: dict[str, dict[str, object]] = {}
-    for advisory in _rows(posture.get("advisories")):
-        advisory_id, verdict = _text(advisory.get("advisory_id")), advisory.get("verdict")
-        if advisory_id is None or not isinstance(verdict, str) or verdict not in _FINDING_VERDICTS:
-            continue
-        severity = str(advisory.get("severity") or "").lower()
-        targets = [
-            (row, row.get("version"))
-            for artifact_id in _list(advisory.get("affected_artifact_ids"))
-            for row in rows.get(str(artifact_id), [])
-        ]
-        # A process still running an affected build is reported at the path it
-        # was launched from, even once a fixed build sits there.
-        for instance_id in _list(advisory.get("affected_instance_ids")):
-            instance = instances.get(instance_id)
-            if instance is None:
-                continue
-            location_id = _text(instance.get("location_id"))
-            location = locations.get(location_id) if location_id is not None else None
-            if location is not None:
-                targets.append((location, instance.get("version")))
-        for row, version in targets:
-            path = str(row.get("path"))
-            finding_id = hashlib.sha256(
-                "\0".join(("guard.workspace-finding.v1", worktree_key, "runtime", advisory_id, path)).encode("utf-8")
-            ).hexdigest()[:32]
-            if finding_id not in findings:
-                findings[finding_id] = {
-                    "finding_id": finding_id,
-                    "source_kind": RUNTIME_SOURCE_KIND,
-                    "detector": RUNTIME_DETECTOR,
-                    "severity": severity if severity in _SEVERITY_RANK else "unknown",
-                    # Observation only: a runtime finding never blocks anything.
-                    "decision": "warn",
-                    "ecosystem": None,
-                    "package_name": None,
-                    "runtime_family": _text(row.get("family")),
-                    "runtime_version": _text(version),
-                    "path": path,
-                    "rule_ids": [str(verdict)],
-                    "advisory_ids": [advisory_id],
-                    "title": _text(advisory.get("title")),
-                    "known_exploited": advisory.get("known_exploited") is True,
-                    "validation_state": "confirmed",
-                    "lifecycle_state": "open",
-                }
-    ordered = sorted(
-        findings.values(),
-        key=lambda item: (
-            item["known_exploited"] is not True,
-            _SEVERITY_RANK.get(str(item["severity"]), len(_SEVERITY_RANK)),
-            str(item["advisory_ids"]),
-            str(item["path"]),
-        ),
-    )
-    return ordered[:MAX_RUNTIME_FINDINGS], len(ordered) > MAX_RUNTIME_FINDINGS
+    answer = _native("findings", {"worktree_key": worktree_key, "posture": dict(posture)})
+    findings = answer.get("findings")
+    if not isinstance(findings, list):
+        raise WorkspaceRuntimeFindingsError("Guard could not project the workspace runtime findings.")
+    return cast(list[dict[str, object]], findings), answer.get("truncated") is True
 
 
 def with_runtime_coverage(coverage: dict[str, object], posture: Mapping[str, object] | None) -> dict[str, object]:
-    """Add the runtime detector to a run's coverage.
+    """Add the runtime detector to a run's coverage, as the native runtime decides it."""
 
-    Runtimes the advisories could not be checked against, or a harness whose
-    configuration could not be read, leave the detector incomplete and the run
-    partial, as does a configured launch Guard could not resolve or identify.
-    A workspace whose tools launch nothing has no runtime inputs.
-    """
-
-    reasons = list(_list(coverage.get("reasons")))
-    if posture is None or posture.get("status") == "unavailable":
-        status = "not_run"
-        reasons.append(f"detector_not_run:{RUNTIME_DETECTOR}")
-    else:
-        runtimes = _rows(posture.get("runtimes"))
-        unresolved = _rows(posture.get("unresolved_launches"))
-        gaps: list[str] = []
-        if (
-            posture.get("status") != "ok"
-            or unresolved
-            or any(not isinstance(row.get("artifact_id"), str) or row.get("family") is None for row in runtimes)
-            or any(row.get("verdict") == "unknown" for row in _rows(posture.get("advisories")))
-        ):
-            gaps.append("runtimes_incomplete")
-        # A process Guard could not name, one past the limit, or processes the
-        # assessment left out may still run an affected build.
-        instances = posture.get("instances")
-        if (
-            isinstance(instances, Mapping)
-            and instances.get("enumerated") is True
-            and (
-                instances.get("limit_reached") is True
-                or instances.get("unbound_processes")
-                or instances.get("assessed") is False
-            )
-        ):
-            gaps.append("runtime_instances_incomplete")
-        posture_coverage = posture.get("coverage")
-        available = isinstance(posture_coverage, Mapping) and posture_coverage.get("advisories_available") is True
-        if runtimes and not available:
-            gaps.append("runtime_advisories_unavailable")
-        status = "incomplete" if gaps else "complete" if runtimes or unresolved else "no_inputs"
-        reasons.extend(gaps)
-    detectors = coverage.get("detectors")
-    summary = {
-        "digest": runtime_identity_digest(posture) if posture is not None else None,
-        "runtime_count": len(_rows(posture.get("runtimes"))) if posture is not None else 0,
-    }
-    return {
-        **coverage,
-        "status": "partial" if reasons else "complete",
-        "reasons": reasons,
-        "detectors": {**(detectors if isinstance(detectors, Mapping) else {}), RUNTIME_DETECTOR: status},
-        "runtimes": summary,
-    }
+    answer = _native("coverage", {"coverage": coverage, "posture": dict(posture) if posture is not None else None})
+    merged = answer.get("coverage")
+    if not isinstance(merged, dict):
+        raise WorkspaceRuntimeFindingsError("Guard could not summarize the workspace runtime coverage.")
+    return cast(dict[str, object], merged)
 
 
-def _by_location(posture: Mapping[str, object]) -> dict[str, Mapping[str, object]]:
-    return {
-        location_id: row
-        for row in _rows(posture.get("runtimes"))
-        if isinstance(location_id := row.get("location_id"), str)
-    }
-
-
-def _instance_rows(posture: Mapping[str, object]) -> list[Mapping[str, object]]:
-    instances = posture.get("instances")
-    return _rows(instances.get("rows")) if isinstance(instances, Mapping) else []
-
-
-def _stale_instances(posture: Mapping[str, object]) -> list[list[str]]:
-    locations = _by_location(posture)
-    stale: list[list[str]] = []
-    for row in _instance_rows(posture):
-        location = locations.get(str(row.get("location_id")))
-        running = row.get("state") == "running"
-        if location is not None and running and row.get("artifact_id") != location.get("artifact_id"):
-            stale.append([str(location.get("path")), str(row.get("artifact_id"))])
-    return sorted(stale)
-
-
-def _rows(value: object) -> list[Mapping[str, object]]:
-    return [item for item in value if isinstance(item, Mapping)] if isinstance(value, list) else []
-
-
-def _list(value: object) -> list[object]:
-    return list(value) if isinstance(value, (list, tuple)) else []
-
-
-def _text(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    stripped = value.strip()
-    return stripped[:256] if stripped else None
+def _native(op: str, args: Mapping[str, object]) -> dict[str, object]:
+    try:
+        return native_runner_authority("workspace_runtime_findings", {"op": op, **args})
+    except NativeRunnerAuthorityError as error:
+        raise WorkspaceRuntimeFindingsError("Guard could not assess the workspace runtimes.") from error
 
 
 __all__ = [
@@ -365,6 +212,7 @@ __all__ = [
     "RUNTIME_DETECTOR",
     "RUNTIME_OBSERVE_INTERVAL_MS",
     "RUNTIME_SOURCE_KIND",
+    "WorkspaceRuntimeFindingsError",
     "assessment_context_digest",
     "cached_runtime_digest",
     "log_probe_failure",

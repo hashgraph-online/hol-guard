@@ -16,21 +16,12 @@ impl VerifiedRuntime {
         if !self.status().active || self.cancel.load(std::sync::atomic::Ordering::Acquire) {
             return Err(RuntimeError::Cancelled);
         }
-        #[cfg(unix)]
-        {
-            qualify(self, home, config)?;
-            self.set_persistence_verified(true);
-            Ok(())
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = home;
-            Err(RuntimeError::PlatformUnqualified)
-        }
+        qualify(self, home, config)?;
+        self.set_persistence_verified(true);
+        Ok(())
     }
 }
 
-#[cfg(unix)]
 fn qualify(
     runtime: &mut VerifiedRuntime,
     home: &Path,
@@ -70,7 +61,6 @@ fn qualify(
     runtime.recheck_artifacts()
 }
 
-#[cfg(unix)]
 fn roundtrip(
     runtime: &mut VerifiedRuntime,
     config: &ContextAssistanceConfig,

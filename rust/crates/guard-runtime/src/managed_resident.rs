@@ -45,7 +45,7 @@ mod exit_record;
 #[path = "resident_lifecycle_journal.rs"]
 mod lifecycle_journal;
 #[path = "resident_private_file.rs"]
-mod private_file;
+pub(crate) mod private_file;
 #[path = "resident_requested_stop.rs"]
 mod requested_stop;
 #[path = "resident_failure_log.rs"]

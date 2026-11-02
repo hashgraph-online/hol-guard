@@ -7,7 +7,7 @@ use zeroize::Zeroizing;
 mod publication;
 #[path = "guard_config_update_catalog_staging.rs"]
 mod staging;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "guard_config_update_catalog_tests.rs"]
 mod tests;
 const NAME: &str = "cigar-catalog-state";
@@ -17,7 +17,7 @@ const LIMIT: usize = 4 * 1024 * 1024;
 #[derive(Eq, PartialEq)]
 enum Layout {
     Legacy,
-    Directory { dev: u64, ino: u64 },
+    Directory(Node),
 }
 pub(crate) struct CatalogPair {
     cache: Vec<u8>,
@@ -35,90 +35,60 @@ impl CatalogPair {
 fn invalid() -> Failure {
     failure("cigar_catalog_storage_invalid_or_changed")
 }
-fn same(a: &std::fs::Metadata, b: &std::fs::Metadata) -> bool {
-    a.dev() == b.dev()
-        && a.ino() == b.ino()
-        && a.len() == b.len()
-        && a.mtime() == b.mtime()
-        && a.mtime_nsec() == b.mtime_nsec()
-        && a.ctime() == b.ctime()
-        && a.ctime_nsec() == b.ctime_nsec()
+fn same(a: &dir::Entry, b: &dir::Entry) -> bool {
+    a.node == b.node && a.len == b.len && a.times == b.times
 }
-fn directory(lock: &WriteLock, name: &str) -> Result<Option<File>, Failure> {
+fn directory(lock: &WriteLock, name: &str) -> Result<Option<Dir>, Failure> {
     lock.check()?;
-    let file: File = match openat(
-        &lock.directory,
-        name,
-        OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
-        Mode::empty(),
-    ) {
-        Ok(fd) => fd.into(),
-        Err(nix::errno::Errno::ENOENT) => return Ok(None),
+    let dir = match lock.directory.open_dir(name) {
+        Ok(dir) => dir,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(invalid()),
     };
-    check_directory(lock, name, &file)?;
-    Ok(Some(file))
+    check_directory(lock, name, &dir)?;
+    Ok(Some(dir))
 }
-fn check_directory(lock: &WriteLock, name: &str, file: &File) -> Result<(), Failure> {
+fn check_directory(lock: &WriteLock, name: &str, dir: &Dir) -> Result<(), Failure> {
     lock.check()?;
-    let m = file.metadata().map_err(|_| invalid())?;
-    let n = fstatat(&lock.directory, name, AtFlags::AT_SYMLINK_NOFOLLOW).map_err(|_| invalid())?;
-    if !m.is_dir()
-        || m.uid() != nix::unistd::geteuid().as_raw()
-        || m.mode() & 0o077 != 0
-        || m.dev() != n.st_dev as u64
-        || m.ino() != n.st_ino
-        || !SFlag::from_bits_truncate(n.st_mode).contains(SFlag::S_IFDIR)
-    {
+    let m = dir.entry().map_err(|_| invalid())?;
+    let n = lock.directory.stat(name).map_err(|_| invalid())?;
+    if !m.private_directory() || m.node != n.node || n.kind != Kind::Directory {
         return Err(invalid());
     }
     Ok(())
 }
-fn checked_file(
-    parent: &File,
-    name: &str,
-    limit: usize,
-    flags: OFlag,
-) -> Result<Option<File>, Failure> {
-    let file: File = match openat(
-        parent,
-        name,
-        flags | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC | OFlag::O_NONBLOCK,
-        Mode::empty(),
-    ) {
-        Ok(fd) => fd.into(),
-        Err(nix::errno::Errno::ENOENT) => return Ok(None),
+/// The file's entry, read through the open handle.
+fn entry(parent: &Dir, name: &str, file: &File) -> Result<dir::Entry, Failure> {
+    parent.file_entry(name, file).map_err(|_| invalid())
+}
+fn checked_file(parent: &Dir, name: &str, limit: usize, how: How) -> Result<Option<File>, Failure> {
+    let file = match parent.open_file(name, how) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(invalid()),
     };
-    let m = file.metadata().map_err(|_| invalid())?;
-    let n = fstatat(parent, name, AtFlags::AT_SYMLINK_NOFOLLOW).map_err(|_| invalid())?;
-    if !m.is_file()
-        || m.nlink() != 1
-        || m.uid() != nix::unistd::geteuid().as_raw()
-        || m.mode() & 0o077 != 0
-        || m.len() as usize > limit
-        || m.dev() != n.st_dev as u64
-        || m.ino() != n.st_ino
-        || !SFlag::from_bits_truncate(n.st_mode).contains(SFlag::S_IFREG)
-    {
+    let m = entry(parent, name, &file)?;
+    let n = parent.stat(name).map_err(|_| invalid())?;
+    if !m.private_file() || m.len > limit as u64 || m.node != n.node || n.kind != Kind::File {
         return Err(invalid());
     }
     Ok(Some(file))
 }
-fn read(parent: &File, name: &str, limit: usize) -> Result<Option<Zeroizing<Vec<u8>>>, Failure> {
-    let Some(mut f) = checked_file(parent, name, limit, OFlag::O_RDONLY)? else {
+fn read(parent: &Dir, name: &str, limit: usize) -> Result<Option<Zeroizing<Vec<u8>>>, Failure> {
+    let Some(mut f) = checked_file(parent, name, limit, How::Read)? else {
         return Ok(None);
     };
-    let before = f.metadata().map_err(|_| invalid())?;
+    let before = entry(parent, name, &f)?;
     let mut bytes = Zeroizing::new(Vec::new());
     Read::by_ref(&mut f)
         .take(limit as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| invalid())?;
-    let fresh = checked_file(parent, name, limit, OFlag::O_RDONLY)?.ok_or_else(invalid)?;
+    drop(f);
+    let fresh = checked_file(parent, name, limit, How::Read)?.ok_or_else(invalid)?;
     if bytes.len() > limit
-        || bytes.len() as u64 != before.len()
-        || !same(&before, &fresh.metadata().map_err(|_| invalid())?)
+        || bytes.len() as u64 != before.len
+        || !same(&before, &entry(parent, name, &fresh)?)
     {
         return Err(invalid());
     }
@@ -151,18 +121,11 @@ impl WriteLock {
         if legacy_cache.is_some() || legacy_key.is_some() {
             return Err(failure("cigar_catalog_layout_conflict"));
         }
-        let meta = dir.metadata().map_err(|_| invalid())?;
+        let node = dir.entry().map_err(|_| invalid())?.node;
         let cache = read(&dir, CACHE, LIMIT)?.map(|v| v.to_vec());
         let key = read(&dir, KEY, 32)?;
         check_directory(self, NAME, &dir)?;
-        pair(
-            cache,
-            key,
-            Layout::Directory {
-                dev: meta.dev(),
-                ino: meta.ino(),
-            },
-        )
+        pair(cache, key, Layout::Directory(node))
     }
     pub(crate) fn publish_catalog(
         &self,
@@ -193,26 +156,26 @@ impl WriteLock {
                 Some(expected.ok_or_else(invalid)?.cache()),
                 bytes,
             ),
-            Some(Layout::Directory { .. }) => {
+            Some(Layout::Directory(_)) => {
                 publication::replace(self, expected.ok_or_else(invalid)?, bytes)
             }
         }
     }
 }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[derive(Clone, Copy)]
 pub(crate) enum Fault {
     Crash(&'static str),
     Error(&'static str),
 }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 thread_local! {static FAULT:std::cell::Cell<Option<Fault>>=const{std::cell::Cell::new(None)};}
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn fault_next(fault: Fault) {
     FAULT.with(|f| f.set(Some(fault)));
 }
 fn checkpoint(point: &str) -> Result<(), Failure> {
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     if let Some(fault) = FAULT.with(|f| f.get()) {
         match fault {
             Fault::Crash(at) if at == point => std::process::exit(86),

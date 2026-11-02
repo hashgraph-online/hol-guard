@@ -39,7 +39,6 @@ pub(super) fn read(home: &Path) -> Result<Zeroizing<[u8; 32]>, String> {
     let bytes = Zeroizing::new(bytes);
     let stable = guard_secure_fs::read_stable(&path, 4096, false)
         .map_err(|_| error("installation_key_invalid"))?;
-    #[cfg(unix)]
     if stable.identity.mode & 0o077 != 0 {
         return Err(error("installation_key_invalid"));
     }

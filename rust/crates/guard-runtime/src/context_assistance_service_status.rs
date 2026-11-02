@@ -48,10 +48,7 @@ impl Service {
                 None
             }
         });
-        #[cfg(unix)]
         let upgrade = state.upgrade.as_ref().map(|signal| signal.describe());
-        #[cfg(not(unix))]
-        let upgrade: Option<Value> = None;
         Ok(
             json!({"schema":"guard-context-assistance-status.v2", "availability":availability,
             "requested_enabled":state.settings.requested.enabled, "effective_enabled":effective, "preferences":state.settings.requested,
