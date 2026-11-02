@@ -145,6 +145,36 @@ def test_every_benign_case_path_exists_in_the_built_fixture(tmp_path: Path) -> N
         fixture.cleanup()
 
 
+def test_installed_node_launchers_sit_where_guard_resolves_them(tmp_path: Path) -> None:
+    """Each installed package publishes the launcher Guard looks for.
+
+    Guard reads a workspace's own runner by the entry the package declares:
+    Vitest at ``vitest/vitest.mjs``, TypeScript at the extensionless
+    ``typescript/bin/tsc``, Prettier at ``prettier/bin/prettier.cjs``. The
+    ``npx`` route goes further and refuses a ``node_modules/.bin`` shim that
+    does not resolve to that same file. A fixture that writes every launcher
+    as ``bin/<name>.js`` leaves those entries missing, so a launch of the
+    workspace's own runner resolves to nothing and the cases written for that
+    route measure a different one.
+    """
+    fixture = build_fixture(tmp_path)
+    try:
+        modules = fixture.worktree / "node_modules"
+        for package, binary, launcher in (
+            ("vitest", "vitest", "vitest.mjs"),
+            ("typescript", "tsc", "bin/tsc"),
+            ("prettier", "prettier", "bin/prettier.cjs"),
+        ):
+            entry = modules / package / launcher
+            assert entry.is_file() and not entry.is_symlink(), entry
+            manifest = json.loads((modules / package / "package.json").read_text())
+            assert manifest["bin"][binary] == f"./{launcher}", package
+            shim = modules / ".bin" / binary
+            assert shim.is_symlink() and shim.resolve() == entry.resolve(), shim
+    finally:
+        fixture.cleanup()
+
+
 def test_credential_like_paths_are_never_materialised() -> None:
     for relative in (
         ".codex/auth.json",
