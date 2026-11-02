@@ -150,6 +150,7 @@ struct CloudWiring {
     signer: Signer,
     include_catalog: bool,
     effect_override: Option<ActionEffect>,
+    dropped_capability: Option<&'static str>,
 }
 
 impl CloudWiring {
@@ -158,6 +159,7 @@ impl CloudWiring {
             signer: signer(),
             include_catalog: true,
             effect_override: None,
+            dropped_capability: None,
         }
     }
 
@@ -165,6 +167,10 @@ impl CloudWiring {
         let mut set: Value = serde_json::from_str(BINDINGS).unwrap();
         let effect = self.effect_override.unwrap_or(facts.effect);
         set["bindings"][BINDING_INDEX]["effect"] = serde_json::to_value(effect).unwrap();
+        if let Some(dropped) = self.dropped_capability {
+            let required = &mut set["bindings"][BINDING_INDEX]["required_capabilities"];
+            required.as_array_mut().unwrap().retain(|c| c != dropped);
+        }
         let evaluator = CloudActionEvaluator::new(
             load_binding_set(set.to_string().as_bytes()).unwrap(),
             Some(self.signer.public),
@@ -243,11 +249,23 @@ fn check(case: &ParityCase, action_id: &str, cloud: &CloudWiring) -> Result<(), 
                 && case.expect.explanation.as_deref().is_some_and(explained)
         }
         "cloud-unavailable" => {
+            let mut missing: Vec<&str> = result["missing_capabilities"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(Value::as_str)
+                .collect();
+            missing.sort_unstable();
+            let mut withheld: Vec<&str> = case
+                .facts
+                .missing_capabilities
+                .iter()
+                .map(String::as_str)
+                .collect();
+            withheld.sort_unstable();
             hosted == GuardAction::SandboxRequired
-                && !result["missing_capabilities"]
-                    .as_array()
-                    .unwrap()
-                    .is_empty()
+                && !missing.is_empty()
+                && missing == withheld
                 && explained("capability_unavailable")
         }
         other => return fail(format!("unknown relation {other}")),
@@ -321,6 +339,7 @@ fn every_tool_state_and_starting_action_agrees_without_target_restrictions() {
         GuardAction::Warn,
         GuardAction::Review,
         GuardAction::RequireReapproval,
+        GuardAction::SandboxRequired,
         GuardAction::Block,
     ];
     for state in ["inherit", "allow", "review", "block"] {
@@ -384,5 +403,18 @@ fn a_wrong_mapping_fails_the_comparison() {
             .iter()
             .any(|m| m.starts_with("admin-effect-is-never-hosted:")),
         "{moved:?}"
+    );
+    // A binding that stops requiring filesystem isolation lets a target
+    // without it dispatch.
+    let unisolated = CloudWiring {
+        dropped_capability: Some("no-filesystem"),
+        ..CloudWiring::faithful()
+    };
+    let exposed = mismatches(&unisolated);
+    assert!(
+        exposed
+            .iter()
+            .any(|m| m.starts_with("missing-filesystem-isolation:")),
+        "{exposed:?}"
     );
 }

@@ -322,6 +322,28 @@
       }
     },
     {
+      "id": "missing-filesystem-isolation",
+      "why": "The hosted target cannot keep the tool off the filesystem, so it may not dispatch the call.",
+      "facts": {
+        "tool_state": "allow",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": [
+          "no-filesystem"
+        ]
+      },
+      "expect": {
+        "local": "allow",
+        "cloud": "sandbox-required",
+        "relation": "cloud-unavailable",
+        "explanation": "capability_unavailable"
+      }
+    },
+    {
       "id": "write-floor-without-a-rule",
       "why": "With no workspace rule the hosted path applies the write floor.",
       "facts": {
