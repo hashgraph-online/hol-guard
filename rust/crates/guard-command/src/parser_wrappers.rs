@@ -371,6 +371,23 @@ const STARTUP_SHELLS: &[&str] = &["ash", "bash", "dash", "sh", "zsh"];
 /// and never which words the script is.
 const STARTUP_SHELL_FLAGS: &str = "eilux";
 
+/// The program directories such a shell is installed in. A path-spelled shell
+/// there names the same program a bare lookup finds, and `/bin/zsh -lc` is how
+/// a harness spells the shell it was configured with.
+const SYSTEM_SHELL_DIRS: &[&str] = &["/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"];
+
+/// The shell this token names, for a bare name or a path into a system program
+/// directory. Any other path keeps the spelling it was given: a shell beside
+/// the work, or under the home directory, is not the system's.
+fn startup_shell_name(token: &str) -> Option<&str> {
+    match token.rsplit_once('/') {
+        None => STARTUP_SHELLS.contains(&token).then_some(token),
+        Some((directory, name)) => (SYSTEM_SHELL_DIRS.contains(&directory)
+            && STARTUP_SHELLS.contains(&name))
+        .then_some(name),
+    }
+}
+
 /// The script a shell is told to run, for the spellings
 /// [`inline_shell_script`] leaves unmodelled.
 ///
@@ -390,9 +407,7 @@ pub(crate) fn startup_shell_script(raw: &str) -> Option<String> {
     }
     let tokens = crate::shell_tokens(raw, false).ok()?;
     let (shell, rest) = tokens.split_first()?;
-    if !STARTUP_SHELLS.contains(&shell.as_str()) {
-        return None;
-    }
+    startup_shell_name(shell)?;
     let [script] = carries_script(rest, STARTUP_SHELL_FLAGS)? else {
         return None;
     };
@@ -477,6 +492,39 @@ mod tests {
             extraction_provenance: "guard-shell".to_owned(),
         })
         .unwrap()
+    }
+
+    #[test]
+    fn a_startup_shell_is_read_by_name_or_from_a_system_directory() {
+        for command in [
+            "bash -lc 'npm test'",
+            "zsh -c 'npm test'",
+            "/bin/zsh -lc 'pytest -q'",
+            "/opt/homebrew/bin/bash -lc 'npm test'",
+            "bash -lc 'cd dashboard && npm test'",
+        ] {
+            assert!(super::startup_shell_script(command).is_some(), "{command}");
+        }
+        for command in [
+            // A shell beside the work, or under the home directory, is not the
+            // system's, whatever it is named.
+            "./zsh -lc 'npm test'",
+            "/Users/person/bin/bash -lc 'npm test'",
+            // `-s` reads the script from standard input, and a long option is
+            // not an option letter, so neither names the words to run.
+            "bash -lsc 'npm test'",
+            "bash --login -c 'npm test'",
+            // A shell with its own script grammar, and a program that is not a
+            // shell at all.
+            "fish -c 'npm test'",
+            "node -e 'process.exit(0)'",
+            // The script has to be in this text, and nothing may run beside it.
+            "bash -lc ''",
+            "bash -lc 'npm test' && rm -rf dist",
+            "bash -lc \"npm run $TASK\"",
+        ] {
+            assert!(super::startup_shell_script(command).is_none(), "{command}");
+        }
     }
 
     #[test]

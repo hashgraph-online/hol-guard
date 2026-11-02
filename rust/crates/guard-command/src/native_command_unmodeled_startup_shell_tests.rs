@@ -20,6 +20,11 @@ fn a_startup_shell_script_reaches_its_owners_floor() {
         "bash -lc 'npm run build'",
         "zsh -c 'npm test'",
         "zsh -lc 'cargo build'",
+        "zsh -ic 'npm test'",
+        "sh -lc 'npm test'",
+        "/bin/zsh -lc 'pytest -q'",
+        "/bin/bash -lc 'npm test'",
+        "bash -lc 'cd dashboard && npm test'",
     ] {
         let (action, code) = decision(&controls, command);
         assert_ne!(code, FAILED, "{command}");
