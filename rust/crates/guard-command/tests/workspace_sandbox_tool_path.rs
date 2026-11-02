@@ -84,6 +84,19 @@ fn selected_developer_dir() -> Option<PathBuf> {
     .ok()
 }
 
+/// Whether `developer` lies where Guard accepts a developer directory: under
+/// `/Library/Developer`, or inside an app bundle directly in `/Applications`.
+fn sealed_developer_prefix(developer: &Path) -> bool {
+    if developer.starts_with("/Library/Developer") {
+        return true;
+    }
+    developer
+        .strip_prefix("/Applications")
+        .ok()
+        .and_then(|rest| rest.components().next())
+        .is_some_and(|bundle| Path::new(bundle.as_os_str()).extension() == Some("app".as_ref()))
+}
+
 /// The file the shell finds for the bare `program` on `search_path`.
 fn find(program: &str, search_path: &str) -> Option<PathBuf> {
     search_path
@@ -101,8 +114,10 @@ fn a_bare_shim_name_finds_the_developer_tool_inside_the_sandbox() {
     // `/usr/bin/python3` is a shim. Run inside the sandbox, its lookup spawns
     // `xcodebuild`, whose diagnostics land in the command's own output, so
     // the sandbox PATH must find the interpreter the shim forwards to first.
-    // Guard executes only from a root-owned developer directory.
+    // Guard executes only from a root-owned developer directory under
+    // `/Library/Developer` or an app in `/Applications`.
     let Some(forwarded) = selected_developer_dir()
+        .filter(|developer| sealed_developer_prefix(developer))
         .filter(|developer| {
             developer
                 .metadata()

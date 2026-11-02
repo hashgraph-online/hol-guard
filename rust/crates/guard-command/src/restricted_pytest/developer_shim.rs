@@ -104,11 +104,16 @@ pub(super) fn developer_tools_ahead_of_shims(entries: &mut Vec<String>) {
 }
 
 /// The file a bare `program` runs inside the sandbox when the session found
-/// it at `canonical`: the tool a `/usr/bin` shim forwards to, because the
-/// sandbox `PATH` holds the developer tools ahead of the shims. A path the
-/// command spells out runs as spelled.
-pub(super) fn sandbox_launched(program: &str, canonical: PathBuf) -> PathBuf {
-    if program.contains('/') || sandbox_developer_tools().is_none() {
+/// it at `found`, which is `canonical`: the tool a `/usr/bin` shim forwards
+/// to, because the sandbox `PATH` holds the developer tools just ahead of
+/// `/usr/bin`. Only a shim found in `/usr/bin` itself is replaced. An earlier
+/// entry, such as a link to the shim, still comes first inside the sandbox,
+/// and a path the command spells out runs as spelled.
+pub(super) fn sandbox_launched(program: &str, found: &Path, canonical: PathBuf) -> PathBuf {
+    if program.contains('/')
+        || found.parent() != Some(Path::new(SHIM_DIRECTORY))
+        || sandbox_developer_tools().is_none()
+    {
         return canonical;
     }
     forwarded_tool(&canonical).unwrap_or(canonical)
@@ -287,10 +292,17 @@ mod tests {
             return;
         }
         let shim = Path::new("/usr/bin/python3").to_path_buf();
-        assert_eq!(sandbox_launched("python3", shim.clone()), resolved);
+        assert_eq!(sandbox_launched("python3", &shim, shim.clone()), resolved);
         // A spelled-out shim path runs the shim itself.
-        assert_eq!(sandbox_launched("/usr/bin/python3", shim.clone()), shim);
+        assert_eq!(
+            sandbox_launched("/usr/bin/python3", &shim, shim.clone()),
+            shim
+        );
+        // A link to the shim in an earlier entry still comes first inside
+        // the sandbox, so it launches the shim it names.
+        let link = Path::new("/opt/tools/bin/python3");
+        assert_eq!(sandbox_launched("python3", link, shim.clone()), shim);
         let ls = Path::new("/bin/ls").to_path_buf();
-        assert_eq!(sandbox_launched("ls", ls.clone()), ls);
+        assert_eq!(sandbox_launched("ls", &ls, ls.clone()), ls);
     }
 }

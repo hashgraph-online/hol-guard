@@ -84,7 +84,7 @@ impl<'a> Reach<'a> {
     fn admit(&mut self, program: &str) -> Option<PathBuf> {
         let found = found(program, self.search_path, self.workspace)?;
         let canonical =
-            super::developer_shim::sandbox_launched(program, found.canonicalize().ok()?);
+            super::developer_shim::sandbox_launched(program, &found, found.canonicalize().ok()?);
         for (link, directory) in links(&found)? {
             self.open(&link, directory)?;
         }

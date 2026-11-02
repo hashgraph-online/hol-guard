@@ -618,7 +618,11 @@ mod tests {
             false,
         );
         assert!(!roots.contains(&outside.0) && !roots.contains(&link));
-        assert_eq!(path, "/usr/bin:/bin");
+        // A macOS host with a sealed developer directory lists its tools
+        // just ahead of the `/usr/bin` shims.
+        let mut expected = vec!["/usr/bin".to_owned(), "/bin".to_owned()];
+        super::super::developer_shim::developer_tools_ahead_of_shims(&mut expected);
+        assert_eq!(path, expected.join(":"));
     }
 
     #[test]
