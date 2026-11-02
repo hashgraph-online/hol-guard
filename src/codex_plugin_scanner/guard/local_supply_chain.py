@@ -74,20 +74,6 @@ from .shims import package_shim_protection, package_shim_supported_managers
 from .store import GuardStore
 from .store_guard_home_binding import binds_store_guard_home
 
-_MANIFEST_CANDIDATES = (
-    "package.json",
-    "requirements.txt",
-    "constraints.txt",
-    "pyproject.toml",
-    "Pipfile",
-    "Cargo.toml",
-    "go.mod",
-    "pom.xml",
-    "build.gradle",
-    "build.gradle.kts",
-    "composer.json",
-    "Gemfile",
-)
 _PACKAGE_MANAGER_BY_ECOSYSTEM = {
     "npm": "npm",
     "pypi": "pip",
@@ -374,14 +360,6 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
         except (runner.GuardSyncNotAvailableError, runner.GuardSyncNotConfiguredError, OSError, RuntimeError):
             continue
     return entitlement_module.package_firewall_entitlement_or_denied(store)
-
-
-def _workspace_has_project_markers(workspace_dir: Path) -> bool:
-    try:
-        resolved = workspace_dir.resolve()
-    except OSError:
-        return False
-    return any((resolved / marker).exists() for marker in _MANIFEST_CANDIDATES)
 
 
 def managed_install_audit_workspace_dirs(store: Any) -> tuple[str, ...]:

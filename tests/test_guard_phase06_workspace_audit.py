@@ -362,6 +362,26 @@ def test_workspace_audit_inference_uses_current_directory_with_markers(
     assert resolved == workspace_dir.resolve()
 
 
+def test_workspace_audit_inference_prefers_the_callers_cursor_project(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cursor_dir = tmp_path / "cursor-project"
+    cursor_dir.mkdir()
+    _write_text(cursor_dir / "package.json", '{"name":"cursor"}')
+    cwd_dir = tmp_path / "cwd-project"
+    cwd_dir.mkdir()
+    _write_text(cwd_dir / "package.json", '{"name":"cwd"}')
+    monkeypatch.chdir(cwd_dir)
+    monkeypatch.setenv("CURSOR_PROJECT_DIR", f" {cursor_dir} ")
+    resolved = resolve_supply_chain_audit_workspace_dir(
+        workspace_dir_value=None,
+        workspace_value=None,
+        allowed_roots=(tmp_path.resolve(),),
+    )
+    assert resolved == cursor_dir.resolve()
+
+
 def test_workspace_audit_inference_accepts_workspace_alias(
     tmp_path: Path,
 ) -> None:

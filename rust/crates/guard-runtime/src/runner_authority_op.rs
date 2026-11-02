@@ -132,6 +132,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cloud_sync_receipt_payloads" => receipt::cloud_sync_receipt_payloads(args),
         "cloud_request_payload" => snapshot::cloud_request_payload(args),
         "local_request_snapshot" => snapshot::local_request_snapshot(args),
+        "supply_chain_audit_workspace_dir" => crate::supply_chain_audit_workspace::dispatch(args),
         "local_request_snapshot_items" => snapshot::local_request_snapshot_items(args),
         "oci_bundle_evidence" => oci::oci_bundle_evidence(args),
         "oci_evidence_verdict" => oci::oci_evidence_verdict(args),

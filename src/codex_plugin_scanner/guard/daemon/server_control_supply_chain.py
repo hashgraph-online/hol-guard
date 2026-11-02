@@ -438,6 +438,7 @@ class _SupplyChainRoutes:
             allowed_roots=allowed_roots,
             managed_workspace_dirs=managed_workspace_dirs,
             reject_invalid_explicit=reject_invalid_explicit,
+            guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
         )
 
     def _supply_chain_context(
