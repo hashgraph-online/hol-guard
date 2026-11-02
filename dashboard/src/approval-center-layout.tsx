@@ -240,7 +240,8 @@ function renderViewContent(props: LayoutProps): ReactNode {
     props.view === "supply-chain" ||
     props.view === "audit" ||
     props.view === "feed-health" ||
-    props.view === "workspaces"
+    props.view === "workspaces" ||
+    props.view === "mcp-cross-exam"
   ) {
     return props.supplyChainHubContent ?? null;
   }

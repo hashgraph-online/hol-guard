@@ -223,6 +223,8 @@ uv run plugin-scanner scan . --cisco-skill-scan on --cisco-mcp-scan on
 
 The published `cisco` extra provides skill scanning; the separate `cisco-mcp` group supplies the MCP scanner. Dependency versions and Python constraints are maintained in [`pyproject.toml`](pyproject.toml).
 
+MCP Cross Exam is a separate auditor CLI, not a Guard extra. Install it independently (for example with pipx), leave it off until `hol-guard settings set mcp-cross-exam on`, then run `hol-guard mcp audit`. See [`docs/guard/mcp-cross-exam.md`](docs/guard/mcp-cross-exam.md).
+
 ## Ecosystem Support
 
 | Ecosystem | Detection surfaces |
