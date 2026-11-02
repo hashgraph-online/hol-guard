@@ -2,7 +2,8 @@ use super::super::PreToolDecisionV1;
 use super::extract::GenericSignals;
 use super::result::{generic_action, generic_result, review_reason};
 use super::tools::{
-    infer_action_type, is_package_tool, package_command, tool_matches, tool_name_is_typed,
+    executable_is_package_tool, infer_action_type, package_command, tool_matches,
+    tool_name_is_typed,
 };
 use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1};
 
@@ -473,7 +474,10 @@ pub(super) fn evaluate_signals(
         && command_decision
             .and_then(|decision| decision.as_ref().ok())
             .is_some_and(|decision| {
-                build_review::build_or_test_command(&decision.command_model, is_package_tool)
+                build_review::build_or_test_command(
+                    &decision.command_model,
+                    executable_is_package_tool,
+                )
             })
     {
         // Same package review; install advice does not fit a build or test.

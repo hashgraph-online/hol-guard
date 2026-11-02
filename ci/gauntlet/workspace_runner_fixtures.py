@@ -76,6 +76,10 @@ WORKSPACE_LINT_STAGED_CASE = "omp-native-workspace-npx-lint-staged"
 # its sources. `--test` puts Node in test-runner mode, so the words behind the
 # flags are the files it loads rather than the first file's arguments.
 WORKSPACE_TSX_NODE_TEST_CASE = "omp-native-workspace-npx-tsx-node-test"
+# The script runner a Node project installs to drive several of its own scripts
+# at once. Its own name carries a manager's inside it, and it installs nothing:
+# every script it names is already in the project's manifest.
+WORKSPACE_RUN_ALL_CASE = "omp-native-workspace-npm-run-all-scripts"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
@@ -93,6 +97,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_LINT_STAGED_CASE,
         WORKSPACE_TSX_NODE_TEST_CASE,
         WORKSPACE_VITEST_FILTER_CASE,
+        WORKSPACE_RUN_ALL_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -418,6 +423,36 @@ _TSX_FILES = {
 }
 
 
+_RUN_ALL_VERSION = "4.1.5"
+# The one line the workspace's own script runner prints.
+RUN_ALL_MARKER = f"npm-run-all {_RUN_ALL_VERSION} ran the named scripts"
+_RUN_ALL_FILES = {
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "scripts": {\n    "test:unit": "node --test __tests__",\n'
+        '    "test:types": "tsc --noEmit"\n  },\n'
+        f'  "devDependencies": {{\n    "npm-run-all": "{_RUN_ALL_VERSION}"\n  }}\n}}\n'
+    ),
+    "package-lock.json": (
+        '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+        '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+        '      "version": "0.0.0",\n      "devDependencies": {\n'
+        f'        "npm-run-all": "{_RUN_ALL_VERSION}"\n      }}\n    }},\n'
+        '    "node_modules/npm-run-all": {\n'
+        f'      "version": "{_RUN_ALL_VERSION}",\n      "dev": true,\n'
+        '      "bin": {\n        "npm-run-all": "bin/npm-run-all.js"\n      }\n    }\n  }\n}\n'
+    ),
+    "src/settings.ts": "export const settings = { retries: 3 };\n",
+    "node_modules/npm-run-all/package.json": (
+        f'{{"name": "npm-run-all", "version": "{_RUN_ALL_VERSION}", "bin": '
+        '{"npm-run-all": "bin/npm-run-all.js"}}\n'
+    ),
+    "node_modules/npm-run-all/bin/npm-run-all.js": (
+        f"#!/usr/bin/env node\nconsole.log('{RUN_ALL_MARKER}');\n"
+    ),
+}
+
+
 class _Install(NamedTuple):
     """One runner's install: the package npm links, its files and its own line."""
 
@@ -458,6 +493,7 @@ _INSTALLS = {
         entry="bin/tsc",
     ),
     WORKSPACE_LINT_STAGED_CASE: _Install("lint-staged", _LINT_STAGED_FILES, LINT_STAGED_MARKER),
+    WORKSPACE_RUN_ALL_CASE: _Install("npm-run-all", _RUN_ALL_FILES, RUN_ALL_MARKER),
     WORKSPACE_PNPM_TSC_CASE: _Install(
         "tsc",
         _PNPM_TYPESCRIPT_FILES,

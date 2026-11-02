@@ -70,6 +70,51 @@ pub(in crate::pretool) fn is_package_tool(tool: &str) -> bool {
     )
 }
 
+/// The package managers a shell command spells as its program. [`is_package_tool`]
+/// reads a name token by token, which is what a harness tool's name needs
+/// (`install_package`, `mcp__registry__npm_add`) but not what an executable
+/// needs: `npm-run-all` runs the project's own scripts and installs nothing,
+/// and reading its name as `npm` cost it both its containment and its reason.
+/// These are the managers that reading already reached, so no program becomes
+/// a package tool that was not one before.
+const PACKAGE_EXECUTABLES: &[&str] = &[
+    "apk",
+    "apt",
+    "apt-get",
+    "brew",
+    "bun",
+    "cargo",
+    "cargo-binstall",
+    "dnf",
+    "gem",
+    "npm",
+    "pip",
+    "pip-sync",
+    "pipx",
+    "pnpm",
+    "poetry",
+    "yarn",
+    "yum",
+];
+
+/// Whether the program `executable` names is a package manager. The basename
+/// is read without the extension Windows launches it by, and without the
+/// version a Python manager carries, so `pip3` and `pip3.12` are `pip`.
+pub(in crate::pretool) fn executable_is_package_tool(executable: &str) -> bool {
+    let name = executable
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(executable)
+        .to_ascii_lowercase();
+    let name = name
+        .rsplit_once('.')
+        .filter(|(_, extension)| matches!(*extension, "exe" | "cmd" | "bat" | "ps1"))
+        .map_or(name.as_str(), |(stem, _)| stem);
+    let versionless =
+        name.trim_end_matches(|character: char| character.is_ascii_digit() || character == '.');
+    PACKAGE_EXECUTABLES.contains(&name) || PACKAGE_EXECUTABLES.contains(&versionless)
+}
+
 fn is_network_tool(tool: &str) -> bool {
     tool_matches(
         tool,
@@ -248,7 +293,11 @@ fn is_command_tool(tool: &str) -> bool {
 
 pub(super) fn package_command(model: &CanonicalCommandV1) -> bool {
     model.segments.iter().any(|segment| {
-        segment.executable.as_deref().is_some_and(is_package_tool) && !runs_code(segment)
+        segment
+            .executable
+            .as_deref()
+            .is_some_and(executable_is_package_tool)
+            && !runs_code(segment)
     })
 }
 

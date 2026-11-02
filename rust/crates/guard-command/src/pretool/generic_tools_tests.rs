@@ -332,3 +332,80 @@ fn a_bun_verb_is_still_a_package_action() {
         );
     }
 }
+
+/// A locally installed tool carries its own name, which may spell a manager's
+/// inside it. Reading that name token by token — the reading a harness tool's
+/// name needs — made `npm-run-all` an `npm` install, so a run of the project's
+/// own test scripts lost its containment and asked to review an install that
+/// never happens.
+#[test]
+fn a_local_tool_named_after_a_manager_is_not_a_package_action() {
+    for command in [
+        "./node_modules/.bin/npm-run-all test:unit",
+        "./node_modules/.bin/npm-run-all --parallel test:unit test:int",
+        "node_modules/.bin/npm-check-updates --target minor",
+        "./node_modules/.bin/yarn-deduplicate --list",
+        "cargo-nextest nextest run",
+    ] {
+        let result = evaluate(serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        }));
+        assert_ne!(
+            result.action.action_type,
+            PreToolActionTypeV1::Package,
+            "{command}: {} {}",
+            result.reason_code,
+            result.reason
+        );
+        assert_ne!(
+            result.reason_code, "native_package_review",
+            "{command}: {}",
+            result.reason
+        );
+    }
+}
+
+/// The managers themselves are still read as package tools, under every
+/// spelling they are launched by: an absolute path, the version a Python
+/// manager carries, the extension Windows appends, and the hyphenated names
+/// that do install. Reading a name token by token reached all of these, so
+/// narrowing it must not drop one.
+#[test]
+fn a_manager_is_still_read_as_a_package_tool() {
+    for executable in [
+        "npm",
+        "/usr/bin/apt-get",
+        "pip3",
+        "pip3.12",
+        "npm.cmd",
+        "C:\\Program Files\\nodejs\\npm.cmd",
+        "pip-sync",
+        "cargo-binstall",
+        "yarn",
+        "pnpm",
+        "brew",
+        "poetry",
+    ] {
+        assert!(
+            super::executable_is_package_tool(executable),
+            "{executable}"
+        );
+    }
+    for executable in [
+        "./node_modules/.bin/npm-run-all",
+        "npm-check-updates",
+        "yarn-deduplicate",
+        "cargo-nextest",
+        "pip-audit",
+        "apt-cache",
+        "npmlog",
+        "vitest",
+        "node",
+    ] {
+        assert!(
+            !super::executable_is_package_tool(executable),
+            "{executable}"
+        );
+    }
+}
