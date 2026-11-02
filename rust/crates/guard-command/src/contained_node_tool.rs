@@ -329,21 +329,17 @@ pub(crate) fn node_tool_route(
     }
     let mut runtime_arguments = Vec::new();
     let mut expected_entry = None;
-    let names_local_bin_verb =
-        crate::contained_argv::manager_reporting_options_peeled(&name, &arguments)
-            .first()
-            .is_some_and(|word| local_bin_verb(&name, word));
-    if names_local_bin_verb || manager_local_bin_arguments(&name, &arguments).is_some() {
+    if crate::contained_argv::manager_reporting_options_peeled(&name, &arguments)
+        .first()
+        .is_some_and(|word| local_bin_verb(&name, word))
+    {
         // `npm exec`, `npm x`, `pnpm exec` and `yarn exec` are each manager's
-        // spelling of a local-bin run, and pnpm spells one without a verb at
-        // all: `pnpm vitest run` starts the same installed binary. A manager
-        // option before the tool (`-c` runs a shell, `-r`/`--filter` fan out)
-        // is not accepted. An option that only chooses how much the manager
-        // prints names no verb, so the subcommand is read behind it, the same
-        // way the admission reads it: otherwise a quiet `exec` the admission
-        // routed here would arrive as a package script and never start its
-        // tool. The verb keeps its own reading so a spelling the admission
-        // refuses still answers for a missing runner rather than for a script.
+        // spelling of a local-bin run. A manager option before the tool (`-c`
+        // runs a shell, `-r`/`--filter` fan out) is not accepted. An option
+        // that only chooses how much the manager prints names no verb, so the
+        // subcommand is read behind it, the same way the admission reads it:
+        // otherwise a quiet `exec` the admission routed here would arrive as
+        // a package script and never start its tool.
         let Some(peeled) = manager_local_bin_arguments(&name, &arguments).map(|local_run| {
             let (runner, rest) = local_run.split_first().expect("a peeled run names a tool");
             (runner.clone(), rest.to_vec())

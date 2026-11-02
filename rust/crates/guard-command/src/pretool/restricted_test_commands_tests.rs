@@ -1,4 +1,4 @@
-use super::{package_permission_contained, readonly_test_reason};
+use super::{manager_local_bin_arguments, package_permission_contained, readonly_test_reason};
 use crate::contained_node_tool::{node_tool_route, NodeToolRoute, ToolMode};
 
 fn parsed(command: &str) -> crate::CanonicalCommandV1 {
@@ -440,45 +440,34 @@ fn a_runner_left_watching_keeps_its_review() {
 mod manager;
 
 #[test]
-fn pnpm_runs_a_word_none_of_its_subcommands_claims_as_the_local_bin_run() {
-    // pnpm hands a word it does not recognise to `pnpm exec`, so each of
-    // these starts the workspace's own installed runner exactly as the
-    // explicit spelling does. The words behind the runner rule out a manifest
-    // script, which carries a tail of its own only after a `--` separator.
+fn pnpm_without_its_exec_verb_is_not_read_as_a_local_bin_run() {
+    // pnpm resolves a bare word against the manifest first and only falls back
+    // to `pnpm exec`, and since pnpm 7 the words after that bare word go to the
+    // script rather than to pnpm: `pnpm hello extra` runs the `hello` script
+    // with `extra`. So a tail cannot tell the two readings apart, and nothing
+    // here can tell them apart without the manifest the reading never sees.
+    // Reading the shorthand as the local-bin run would plan the installed
+    // binary for a line that runs a script body instead.
     for command in [
         "pnpm vitest run",
         "pnpm jest --ci",
         "pnpm mocha --reporter spec",
+        "pnpm tsc --noEmit",
     ] {
-        let explicit = command.replacen("pnpm ", "pnpm exec ", 1);
-        assert_eq!(reason(command), reason(&explicit), "{command}");
         assert_eq!(
-            reason(command),
-            Some("native_vitest_readonly_containment_required"),
+            manager_local_bin_arguments("pnpm", &words(command)[1..]),
+            None,
             "{command}"
         );
-    }
-    // An option in front of the word fans the run out past one package, and a
-    // word pnpm runs itself or names a manifest script stays with the script
-    // reading, which resolves the body behind the name.
-    for command in [
-        "pnpm -r test",
-        "pnpm --filter dashboard test",
-        "pnpm --recursive run test",
-        "pnpm run test",
-        "pnpm test",
-        "pnpm install",
-        // `--reporter` takes the next word as its value, so the line that
-        // reaches this reading lost the `exec` the author wrote. The reading
-        // does not put the verb back: a peel that swallowed one of pnpm's own
-        // subcommands keeps the review the written line had.
-        "pnpm --reporter exec vitest run",
-        "pnpm --loglevel exec vitest run",
-    ] {
-        assert_ne!(
-            reason(command),
-            Some("native_vitest_readonly_containment_required"),
-            "{command}"
+        let explicit = command.replacen("pnpm ", "pnpm exec ", 1);
+        assert!(
+            manager_local_bin_arguments("pnpm", &words(&explicit)[1..]).is_some(),
+            "{explicit}"
         );
     }
+}
+
+/// The words of `command`, as the segment model hands them over.
+fn words(command: &str) -> Vec<String> {
+    command.split(' ').map(str::to_owned).collect()
 }

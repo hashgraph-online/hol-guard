@@ -1200,18 +1200,6 @@
       ]
     },
     {
-      "id": "omp-native-pnpm-implicit-exec-runner",
-      "expectation": "allow",
-      "oracle": "native-tools",
-      "required_tools": [
-        "bash"
-      ],
-      "prompt": "Run the workspace's own Vitest runner through the package manager, in the shorthand that leaves out its exec verb: run the listed command once, exactly as written, and tell me what it printed. A message that the package manager, the package or the runner is missing is a valid result: report it and stop. Do not install anything, substitute tools, change the command or cwd, add verification calls, request approval, or change policy.",
-      "commands": [
-        "pnpm vitest run"
-      ]
-    },
-    {
       "id": "omp-native-git-read-directory-without-repository",
       "expectation": "allow",
       "oracle": "native-tools",

@@ -176,45 +176,37 @@ fn npm_exec_reads_the_runner_behind_its_own_options() {
 }
 
 /// The admission and the classifier read one spelling, so the kind the sink
-/// plans has to be the kind the admitting reason names. `pnpm vitest run` is
-/// admitted as the local-bin run `pnpm exec vitest run` is; if the classifier
-/// still answered `node_tool` for it, the sink would see a Vitest route over a
-/// Node-tool kind and refuse the run it had just admitted.
+/// plans is always the kind the admitting reason names. `manager_exec_tool`
+/// takes that one reading rather than keeping a second copy of it beside the
+/// admission's: if the two answered differently, a widening on either side
+/// would admit a run on one route and leave the sink refusing it on another.
 #[test]
-fn the_implicit_exec_spelling_carries_the_same_kind_as_the_explicit_one() {
-    for (implicit, explicit) in [
+fn the_classifier_reads_the_local_bin_spelling_the_admission_reads() {
+    for (command, tool) in [
+        (json!(["pnpm", "exec", "vitest", "run"]), "vitest"),
+        (json!(["npm", "exec", "--", "jest", "--ci"]), "jest"),
         (
-            json!(["pnpm", "vitest", "run"]),
-            json!(["pnpm", "exec", "vitest", "run"]),
+            json!(["npm", "x", "--yes", "mocha", "--reporter", "spec"]),
+            "mocha",
         ),
-        (
-            json!(["pnpm", "jest", "--ci"]),
-            json!(["pnpm", "exec", "jest", "--ci"]),
-        ),
-        (
-            json!(["pnpm", "mocha", "--reporter", "spec"]),
-            json!(["pnpm", "exec", "mocha", "--reporter", "spec"]),
-        ),
+        (json!(["yarn", "exec", "tsc", "--noEmit"]), "tsc"),
     ] {
-        let kind = evaluate("contained_kind", &json!({ "command": implicit })).unwrap();
-        let same = evaluate("contained_kind", &json!({ "command": explicit })).unwrap();
-        assert_eq!(kind["value"], same["value"], "{implicit} {kind}");
-        assert_eq!(kind["value"]["vitest"], true, "{implicit} {kind}");
-        assert_eq!(kind["value"]["node_tool"], false, "{implicit} {kind}");
-        let arguments = evaluate("vitest_arguments", &json!({ "command": implicit })).unwrap();
-        let expected = evaluate("vitest_arguments", &json!({ "command": explicit })).unwrap();
-        assert_eq!(arguments["value"], expected["value"], "{implicit}");
+        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+        let expected = tool == "tsc";
+        assert_eq!(kind["value"]["node_tool"], expected, "{command} {kind}");
+        assert_eq!(kind["value"]["vitest"], !expected, "{command} {kind}");
     }
-    // A tool that is no runner keeps the Node-tool kind the explicit spelling
-    // gives it, and a word pnpm runs itself or reads from the manifest is
-    // neither spelling of a local-bin run.
+    // pnpm resolves a bare word against the manifest before it falls back to
+    // `pnpm exec`, and since pnpm 7 the words behind that word go to the
+    // script, so the shorthand cannot be read as the local-bin run without the
+    // manifest neither side here sees. Both readings leave it alone together.
     for command in [
+        json!(["pnpm", "vitest", "run"]),
+        json!(["pnpm", "jest", "--ci"]),
         json!(["pnpm", "tsc", "--noEmit"]),
-        json!(["pnpm", "exec", "tsc", "--noEmit"]),
         json!(["pnpm", "test"]),
         json!(["pnpm", "run", "test"]),
         json!(["pnpm", "-r", "vitest", "run"]),
-        json!(["pnpm", "install"]),
     ] {
         let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
         assert_eq!(kind["value"]["vitest"], false, "{command} {kind}");

@@ -22,9 +22,7 @@ fn contained_host() -> bool {
 
 /// `npm exec`, `npm x` and `yarn exec` run the workspace's own installed
 /// binary, the work `npx` names. They reach the same read-only sink `npx` and
-/// `pnpm exec` already reach, rather than the review `npx` never had. pnpm
-/// runs that binary without naming `exec` at all, so `pnpm tsc --noEmit`
-/// reaches it too.
+/// `pnpm exec` already reach, rather than the review `npx` never had.
 #[test]
 fn a_manager_exec_spelling_reaches_the_read_only_tool_sink() {
     for harness in ["omp", "zcode", "claude-code"] {
@@ -37,8 +35,6 @@ fn a_manager_exec_spelling_reaches_the_read_only_tool_sink() {
             "yarn exec eslint src",
             "yarn exec prettier --check src",
             "pnpm exec tsc --noEmit",
-            "pnpm tsc --noEmit",
-            "pnpm eslint src",
         ] {
             let result = classify(harness, command);
             assert_eq!(result.decision, "deny", "{harness} {command}");
