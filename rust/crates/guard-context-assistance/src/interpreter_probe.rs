@@ -91,8 +91,13 @@ fn probe(
             return Err(RuntimeError::PackageUnsafe);
         }
     }
+    // Windows loads DLLs from the executable's folder first, so that folder
+    // must be closed to other accounts as well.
     #[cfg(windows)]
     if !guard_cigar_artifacts::host::owned(python)
+        || !python
+            .parent()
+            .is_some_and(guard_cigar_artifacts::host::owned)
         || !guard_cigar_artifacts::host::private_directory(private_work, &directory)
     {
         return Err(RuntimeError::PackageUnsafe);

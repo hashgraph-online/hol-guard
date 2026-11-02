@@ -91,9 +91,12 @@ mod windows {
     }
 
     /// Whether the current user (or LocalSystem or Administrators, who can
-    /// already rewrite anything the user owns) owns `path`.
+    /// already rewrite anything the user owns) owns `path`, and no other
+    /// account may change it. Ownership alone says nothing about who else
+    /// the access list lets write, which the Unix mode check covers.
     pub fn owned(path: &Path) -> bool {
         guard_runtime_windows_process::owned_by_current_user(path)
+            && guard_runtime_windows_process::writable_only_by_trusted(path)
     }
 
     /// Whether `metadata` is a link, junction or other reparse point.

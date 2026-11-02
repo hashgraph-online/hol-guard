@@ -155,7 +155,7 @@ fn inspect(
         }
     }
     // Windows has no group or world write bits; the counterpart is that the
-    // user owns each path, so no other account chose its access list.
+    // user owns each path and its access list lets no other account change it.
     #[cfg(windows)]
     if [
         &selection.python,

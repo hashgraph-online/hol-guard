@@ -10,6 +10,11 @@ pub(super) fn runtime(
     config: &ContextAssistanceConfig,
     cancel: Arc<AtomicBool>,
 ) -> Result<VerifiedRuntime, String> {
+    // The same refusal as starting the runtime: the SDK's store on Windows
+    // holds every parent folder against renames while it is open.
+    if config.storage.mode != StorageMode::Memory && !cfg!(unix) {
+        return Err("native_context_assistance_persistence_unavailable".into());
+    }
     #[cfg(test)]
     let started = Instant::now();
     #[cfg(test)]

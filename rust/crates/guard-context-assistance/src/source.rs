@@ -76,11 +76,14 @@ impl SourceRoot {
     pub fn read(&self, relative: &str) -> Result<AdmittedFile, RuntimeError> {
         validate_relative(relative)?;
         self.revalidate()?;
+        // The decision names the file by its canonical spelling, which on
+        // Windows carries the `\\?\` prefix the stored root may leave off.
+        let root = std::fs::canonicalize(&self.path).map_err(|_| RuntimeError::ScopeDenied)?;
         let decision = classify_source_path(relative, &self.path, None, false);
         let selected = decision
             .resolved_path
             .filter(|_| decision.allowed)
-            .filter(|path| path.starts_with(&self.path))
+            .filter(|path| path.starts_with(&root))
             .ok_or(RuntimeError::ScopeDenied)?;
         let read = read_bounded(&selected, MAX_FILE_BYTES)
             .map_err(|_| RuntimeError::ArtifactUnreadable)?;

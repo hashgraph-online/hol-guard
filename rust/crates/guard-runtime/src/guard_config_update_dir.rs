@@ -327,9 +327,11 @@ mod imp {
             Ok(found)
         }
         pub(in super::super) fn stat(&self, name: &str) -> io::Result<Entry> {
+            self.entry()?;
             path_entry(&self.join(name)?)
         }
         pub(in super::super) fn file_entry(&self, name: &str, file: &File) -> io::Result<Entry> {
+            self.entry()?;
             entry(&self.join(name)?, file, &file.metadata()?)
         }
         pub(in super::super) fn open_dir(&self, name: &str) -> io::Result<Self> {
