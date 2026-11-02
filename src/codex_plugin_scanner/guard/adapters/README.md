@@ -5,8 +5,7 @@ Start with [the adapter contribution guide](../../../../docs/guard/adapter-contr
 - `__init__.py`: public harness registry.
 - `base.py`: `HarnessAdapter`, `HarnessContext`, install ownership and shared utilities.
 - `<harness>.py`: public adapter class. Examples: `cursor.py`, `cline.py`, `pi.py`, `gemini.py`.
-- `contract_registry.py` and `contracts.py`: supported hosts and capability/setup contracts.
-- `contract_*capabilities.py`: verified host-event capability declarations.
+- `contract_registry.py` and `contracts.py`: load and serve the supported hosts and their verified capability/setup contracts from `../contracts/harness-protection-contracts.v1.json`.
 - `_modules/<family>/`: grouped internal helper files for Claude, Cline, Codex, Copilot, Cursor, Devin, Grok, OpenCode, Pi, and ZCode.
 - Other root helpers: shared transports, MCP discovery, state protection, and code still at a path pinned by an ownership contract or dependent on `__file__`.
 
