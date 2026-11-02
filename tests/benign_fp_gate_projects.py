@@ -326,7 +326,9 @@ def host_tool_path(home: Path, search_path: str) -> str:
     recorded for. ``uv`` is there for the same reason as SQLite: a runner installs it wherever its
     own setup put it, often a directory the sandbox executes nothing from, so a stand-in sits in
     the Cargo bin directory a developer's own ``uv`` resolves from and the gate measures the
-    command rather than the runner's layout. Go is the same case once more: a hosted runner keeps
+    command rather than the runner's layout. ``fd`` sits beside it because a case that names a
+    root ``fd`` never reaches would measure the missing program, which Guard contains for a
+    reason the case is not about. Go is the same case once more: a hosted runner keeps
     its toolchain in ``/usr/local/go/bin``, which the sandbox executes nothing from, so ``go test``
     would record that image's layout instead of the setting the case is about.
     """
@@ -345,7 +347,7 @@ def host_tool_path(home: Path, search_path: str) -> str:
         (bun, ("bun",)),
         (node, ("node", "npm", "npx", "yarn", "pnpm")),
         (sqlite, ("sqlite3",)),
-        (cargo, ("uv",)),
+        (cargo, ("uv", "fd")),
         # Composer and Bundler install themselves wherever the host's PHP or
         # Ruby setup put them, often a directory the sandbox executes nothing
         # from. The stand-ins sit in version-manager installs, which the sandbox
