@@ -11,9 +11,12 @@ use std::path::Path;
 const LONGEST_MARKER_FILE: usize = 64;
 
 /// The longest number a marker holds. A pid, a port and a generation are all
-/// well inside ten digits. Twenty bytes of digits is no process marker: it is
+/// well inside ten digits, and ten is a second of epoch time, which is as
+/// far as a generation counts. Longer than that is no process marker: it is
 /// a card or account number, a recovery code, or a key written in decimal.
-const LONGEST_MARKER_NUMBER: usize = 20;
+/// A card number is thirteen to nineteen digits, so the bound has to sit
+/// below them rather than merely above a key.
+const LONGEST_MARKER_NUMBER: usize = 10;
 
 /// The leaf names a process writes a marker to.
 const MARKER_NAMES: [&str; 5] = ["pid", "pidfile", "port", "generation", "lock"];

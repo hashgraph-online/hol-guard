@@ -55,6 +55,9 @@ fn a_hidden_file_that_is_not_a_process_marker_keeps_its_review() {
         (".state/owner.pid", "deploy\n"),
         (".state/boot.pid", ""),
         (".state/service.pid", decimal_key.as_str()),
+        // A card number is thirteen to nineteen digits, well past anything a
+        // process counts to, so a marker name does not carry it through.
+        (".state/account.lock", "4024007182693012\n"),
         (".state/dump.pid", long.as_str()),
     ] {
         plant(&repo.join(name), body);
