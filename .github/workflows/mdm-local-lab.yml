@@ -61,7 +61,7 @@ jobs:
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - run: uv run --python 3.12 --no-sync python scripts/mdm/run-local-lab.py --json --output mdm-local-conformance.json ${{ matrix.suites }}
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: mdm-local-conformance-${{ matrix.os }}
           path: mdm-local-conformance.json

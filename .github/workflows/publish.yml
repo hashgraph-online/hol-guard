@@ -1201,23 +1201,23 @@ jobs:
             --source-sha "$SOURCE_SHA" \
             --output installed-canary-subject.json
       - name: Upload artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: distributions
           path: dist/
       - name: Upload distribution hashes
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: distribution-sha256
           path: distribution-sha256.txt
       - name: Retain immutable optional installed data
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: installed-bundle-assets
           path: installed-bundle-assets/
           if-no-files-found: error
       - name: Retain the release source compiler for publication checks
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-source-compiler
           path: rust/target/release/guard-command-source
@@ -1225,13 +1225,13 @@ jobs:
           retention-days: 1
       - name: Upload installed canary subject
         if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: installed-canary-subject
           path: installed-canary-subject.json
           if-no-files-found: error
       - name: Upload release toolchain SBOM
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-toolchain-sbom
           path: release-metadata/*.cdx.json
@@ -1775,12 +1775,12 @@ jobs:
       - name: Record aggregate immutable hashes
         run: |
           find dist -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > distribution-sha256-native.txt
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: distributions-native
           path: dist/
           if-no-files-found: error
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: distribution-sha256-native
           path: distribution-sha256-native.txt
@@ -2034,7 +2034,7 @@ jobs:
             test "$count" -eq 1
           done
       - name: Upload installed canary evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: installed-canary-evidence-${{ runner.os }}
           path: |
@@ -3028,7 +3028,7 @@ jobs:
           CHANNEL: ${{ needs.build.outputs.channel }}
         run: uv run --no-project --with packaging==25.0 python -m scripts.release.publish_core_inputs --directory dist
       - name: Retain exact provenance for final release verification
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: main-release-provenance
           path: dist/*.intoto.jsonl
