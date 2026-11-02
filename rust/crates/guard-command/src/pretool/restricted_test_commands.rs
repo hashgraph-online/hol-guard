@@ -151,8 +151,9 @@ fn node_test_script_args(arguments: &[String]) -> bool {
         if workspace_relative(script) && node_test_script_name(script))
 }
 
-/// `tsx math.test.ts` in its installed forms. The sink loads the file through
-/// the package's own loader inside the Vitest transform boundary.
+/// `tsx math.test.ts` in its installed forms, with or without the Node
+/// test-runner flags Node reads ahead of the script. The sink loads the file
+/// through the package's own loader inside the Vitest transform boundary.
 fn tsx_test_script_args(name: &str, arguments: &[String]) -> bool {
     let rest = match (name, arguments) {
         ("tsx", rest) => rest,
@@ -177,6 +178,7 @@ fn tsx_test_script_args(name: &str, arguments: &[String]) -> bool {
         }
         _ => return false,
     };
+    let rest = &rest[crate::contained_argv::tsx_runner_flag_count(rest)..];
     matches!(rest, [script, ..] if workspace_relative(script) && node_test_script_name(script))
 }
 

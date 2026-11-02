@@ -3,6 +3,7 @@ use super::*;
 use crate::contained_argv::{
     bun_runner_entry_launch, bun_vitest_invocation, contained_runner_invocation, inline_eval,
     node_runtime_args, node_script_index, python_runtime_args, tsx_test_invocation,
+    tsx_test_runner_flags,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -461,7 +462,11 @@ fn prepare_tsx(
         .map_err(|_| invalid_node("Test loader is unavailable."))?;
     let mut command = vec![plan["executable"].as_str().unwrap().to_owned()];
     command.extend(runtime);
-    command.extend(["--import".to_owned(), uri.into(), script.to_owned()]);
+    command.extend(["--import".to_owned(), uri.into()]);
+    // Node reads its test-runner flags before the script and treats anything
+    // after it as the script's own arguments, so they go back in front.
+    command.extend(tsx_test_runner_flags(argv)?);
+    command.push(script.to_owned());
     command.extend_from_slice(arguments);
     plan["profile_version"] = json!("vitest-readonly-v1");
     plan["command"] = json!(command);

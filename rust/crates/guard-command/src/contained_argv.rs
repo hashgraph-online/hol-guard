@@ -166,9 +166,11 @@ pub fn node_script_index(command: &[String], start: usize) -> Option<usize> {
         .map(|_| index)
 }
 
-pub fn tsx_test_invocation(
+/// A tsx test run split at its script: the Node test-runner flags ahead of
+/// the script, the script itself, and the arguments the script is passed.
+fn tsx_test_parts(
     command: &[String],
-) -> Result<Option<(String, Vec<String>)>, RestrictedPytestError> {
+) -> Result<Option<(&[String], &String, &[String])>, RestrictedPytestError> {
     let name = basename(command);
     let Some(mut args) = command.get(1..) else {
         return Ok(None);
@@ -191,10 +193,25 @@ pub fn tsx_test_invocation(
     } else if name != "tsx" {
         return Ok(None);
     }
-    Ok(args
+    let (flags, rest) = args.split_at(tsx_runner_flag_count(args));
+    Ok(rest
         .first()
         .filter(|value| named_test_script(value, true))
-        .map(|script| (script.clone(), args[1..].to_vec())))
+        .map(|script| (flags, script, &rest[1..])))
+}
+
+/// The test script a tsx run names, and the arguments the script is passed.
+pub fn tsx_test_invocation(
+    command: &[String],
+) -> Result<Option<(String, Vec<String>)>, RestrictedPytestError> {
+    Ok(tsx_test_parts(command)?.map(|(_, script, rest)| (script.clone(), rest.to_vec())))
+}
+
+/// The Node test-runner flags a tsx run carries, which the sink re-emits in
+/// front of the script. Node reads them nowhere else: behind the script they
+/// are the script's own arguments, and the run is no longer a test run.
+pub fn tsx_test_runner_flags(command: &[String]) -> Result<Vec<String>, RestrictedPytestError> {
+    Ok(tsx_test_parts(command)?.map_or_else(Vec::new, |(flags, _, _)| flags.to_vec()))
 }
 
 pub fn python_runtime_args(command: &[String]) -> Option<Vec<String>> {
@@ -302,7 +319,7 @@ fn bun_runner_invocation(
 mod runner_calls;
 pub(crate) use runner_calls::{
     bun_test_runs_once, contained_runner_call, jest_contained_call, jest_runs_once,
-    mocha_contained_call, mocha_runs_once, vitest_runs_once,
+    mocha_contained_call, mocha_runs_once, tsx_runner_flag_count, vitest_runs_once,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.

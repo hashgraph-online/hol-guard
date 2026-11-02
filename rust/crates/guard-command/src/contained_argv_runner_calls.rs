@@ -333,3 +333,35 @@ pub(crate) fn bun_test_runs_once(arguments: &[String]) -> bool {
             .any(|(option, takes_value)| *option == name && (*takes_value || !joined))
     })
 }
+
+/// True when a word is a Node test-runner flag that names nothing.
+///
+/// `tsx` hands its arguments to Node, so a test file run through it can carry
+/// the runner's own flags ahead of the script. These five say that this is a
+/// test run, which test to keep, and how long it may take; none of them names
+/// a module, a path or a program, so none widens what the run can reach.
+/// `--test-reporter` and `--test-reporter-destination` name a module and a
+/// file, so they stay out and keep their review.
+fn tsx_runner_flag(argument: &str) -> bool {
+    match argument.split_once('=') {
+        None => matches!(argument, "--test" | "--test-only" | "--test-force-exit"),
+        Some((name, value)) => {
+            matches!(name, "--test-concurrency" | "--test-timeout")
+                && !value.is_empty()
+                && value.len() <= 9
+                && value.bytes().all(|byte| byte.is_ascii_digit())
+        }
+    }
+}
+
+/// How many of those flags a tsx call carries ahead of its test script.
+///
+/// The count is the split point: Node reads these before the script it runs,
+/// so both the admission and the sink have to look past them to find the
+/// script, and the sink has to put them back in front of it.
+pub(crate) fn tsx_runner_flag_count(arguments: &[String]) -> usize {
+    arguments
+        .iter()
+        .take_while(|argument| tsx_runner_flag(argument))
+        .count()
+}
