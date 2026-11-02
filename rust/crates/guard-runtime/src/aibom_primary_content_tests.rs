@@ -199,23 +199,37 @@ mod links {
             Value::Null
         );
     }
+}
 
-    #[test]
-    fn a_link_above_the_skills_root_is_followed() {
-        let (_dir, base) = home();
-        let real_workspace = base.join("workspace-real");
-        write(
-            &real_workspace.join(".gemini/skills/review/SKILL.md"),
-            b"# review\n",
-        );
-        let workspace = base.join("workspace-link");
-        link(&real_workspace, &workspace);
-        let skills = workspace.join(".gemini/skills");
-        let path = skills.join("review/SKILL.md");
-        assert_eq!(admit_one("skill", &path, None), json!(text(&skills)));
-        let answer = read_one(&path, &skills, &digest(b"# review\n"));
-        assert_eq!(answer["size"], 9);
+/// A directory link, or `None` where this account may not create one.
+fn link_dir(target: &Path, at: &Path) -> Option<()> {
+    fs::create_dir_all(at.parent()?).ok()?;
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink(target, at);
+    #[cfg(windows)]
+    let made = std::os::windows::fs::symlink_dir(target, at);
+    made.ok()
+}
+
+#[test]
+fn a_link_above_the_skills_root_is_followed() {
+    let (_dir, base) = home();
+    let real_workspace = base.join("workspace-real");
+    write(
+        &real_workspace.join(".gemini/skills/review/SKILL.md"),
+        b"# review\n",
+    );
+    let workspace = base.join("workspace-link");
+    if link_dir(&real_workspace, &workspace).is_none() {
+        // Linking needs a privilege a Windows account may not hold.
+        assert!(cfg!(windows), "unix accounts can always link");
+        return;
     }
+    let skills = workspace.join(".gemini/skills");
+    let path = skills.join("review/SKILL.md");
+    assert_eq!(admit_one("skill", &path, None), json!(text(&skills)));
+    let answer = read_one(&path, &skills, &digest(b"# review\n"));
+    assert_eq!(answer["size"], 9);
 }
 
 #[test]

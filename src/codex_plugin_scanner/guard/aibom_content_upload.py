@@ -19,6 +19,9 @@ _MAX_CONTENT_RAW_BYTES_PER_BATCH = 5 * 1024 * 1024
 _MAX_CONTENT_REQUEST_BYTES = 7 * 1024 * 1024
 # One admission call checks every candidate's link-free path under its root.
 _NATIVE_ADMIT_TIMEOUT_SECONDS = 8.0
+# Bounded admit requests: a path is at most a few KiB, so a chunk stays well
+# under the native request limit, and one refused chunk leaves the rest.
+_NATIVE_ADMIT_CHUNK = 500
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,8 +135,18 @@ def _native_allowed_roots(
     every content hash.
     """
 
-    if not candidates:
-        return []
+    roots: list[str | None] = []
+    for start in range(0, len(candidates), _NATIVE_ADMIT_CHUNK):
+        chunk = candidates[start : start + _NATIVE_ADMIT_CHUNK]
+        roots.extend(_native_allowed_roots_chunk(chunk, workspace_dir=workspace_dir))
+    return roots
+
+
+def _native_allowed_roots_chunk(
+    candidates: list[tuple[str, GuardAgentInventoryItem, str, Path]],
+    *,
+    workspace_dir: Path | None,
+) -> list[str | None]:
     request = {
         "op": "admit",
         "workspace_dir": None if workspace_dir is None else str(workspace_dir),

@@ -4,8 +4,8 @@
 //! `admit` answers, per candidate, the root a primary document must stay
 //! under (the nearest `skills` directory for a `SKILL.md`, the workspace for
 //! a Markdown instruction) or null when the document may not be uploaded.
-//! `read` checks the same path again, opens it without following a final
-//! link, and returns the body only when it still hashes to the digest the
+//! `read` checks the same path again, opens its resolved path without
+//! following a final link, and returns the body only when it still hashes to the digest the
 //! inventory advertised.
 
 use std::io::Read;
@@ -15,7 +15,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
-use crate::aibom_paths::{is_file, is_symlink, py_path, resolves_within_root};
+use crate::aibom_paths::{is_file, is_symlink, py_path, resolve, resolves_within_root};
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 use crate::skill_identity_platform::open_regular;
@@ -76,7 +76,12 @@ fn read(args: &Map<String, Value>) -> KindResult {
     let root = absolute_path(text(args, "allowed_root")?);
     let expected = text(args, "content_hash")?;
     let body = match (path, root) {
-        (Some(path), Some(root)) if safe_primary_path(&path, &root) => read_body(&path),
+        // The open takes the resolved path: a link above the allowed root
+        // (a workspace reached through a Windows junction) was admitted, and
+        // the Windows open refuses a link in any ancestor.
+        (Some(path), Some(root)) if safe_primary_path(&path, &root) => resolve(&path)
+            .ok()
+            .and_then(|resolved| read_body(&resolved)),
         _ => None,
     };
     Ok(match body.filter(|body| content_hash(body) == expected) {
