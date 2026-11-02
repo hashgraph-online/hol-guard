@@ -349,6 +349,19 @@ mod github_workflow_prepare_op;
 mod grok_detect;
 mod grok_executable;
 mod grok_executable_paths;
+#[path = "adapters/detection/grok_toml_engine.rs"]
+mod grok_toml_engine;
+#[path = "adapters/detection/grok_toml_scan.rs"]
+mod grok_toml_scan;
+#[path = "adapters/detection/grok_toml_semantic.rs"]
+mod grok_toml_semantic;
+#[path = "adapters/detection/grok_user_config.rs"]
+mod grok_user_config;
+#[path = "adapters/detection/grok_user_config_op.rs"]
+mod grok_user_config_op;
+#[cfg(all(test, unix))]
+#[path = "adapters/detection/grok_user_config_tests.rs"]
+mod grok_user_config_tests;
 mod guard_config_coerce;
 mod guard_config_harness;
 mod guard_config_iso;

@@ -28,6 +28,7 @@ use super::devin_detect;
 use super::devin_jsonc;
 use super::gemini_detect;
 use super::grok_detect;
+use super::grok_user_config_op;
 use super::hermes_detect;
 use super::kimi_detect;
 use super::muse_detect;
@@ -167,6 +168,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "devin_detect" => devin_detect::detect(args),
         "devin_jsonc" => devin_jsonc::document(args),
         "grok_detect" => grok_detect::detect(args),
+        "grok_user_config" => grok_user_config_op::dispatch(args),
         "kimi_detect" => kimi_detect::detect(args),
         "muse_detect" => muse_detect::detect(args),
         "openclaw_detect" => openclaw_detect::detect(args),
