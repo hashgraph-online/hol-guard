@@ -41,7 +41,7 @@ pub(super) fn command_creates_nothing(model: &crate::CanonicalCommandV1) -> bool
     model
         .segments
         .iter()
-        .all(|segment| grep::creates_nothing(segment, false))
+        .all(|segment| grep::creates_nothing(segment))
 }
 
 /// A names-only walk (`find`) rooted at a project-metadata directory such as

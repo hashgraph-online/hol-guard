@@ -52,7 +52,7 @@ pub(super) fn safe_rg_segment(
             .segments
             .iter()
             .filter(|other| other.span != segment.span)
-            .all(|other| super::grep::creates_nothing(other, true));
+            .all(|other| super::grep::creates_nothing(other));
     safe_rg_arguments_inner(&segment.arguments, context, false, true, absent)
 }
 
