@@ -16,8 +16,6 @@ use guard_command::redacted_command_tokens::redacted_command_tokens;
 use crate::runner_authority_op::KindResult;
 
 const ERR_INVALID: &str = "native_package_command_redaction_invalid";
-/// The most argv tokens one launch may carry; a package command is far shorter.
-const MAX_TOKENS: usize = 4096;
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {
     let fields = args.as_object().ok_or(ERR_INVALID)?;
@@ -28,9 +26,6 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         .get("command")
         .and_then(Value::as_array)
         .ok_or(ERR_INVALID)?;
-    if tokens.len() > MAX_TOKENS {
-        return Err(ERR_INVALID);
-    }
     let command = tokens
         .iter()
         .map(|token| token.as_str().map(str::to_owned))

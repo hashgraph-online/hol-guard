@@ -451,6 +451,7 @@ def _build_package_protect_authority(
     additional_policy_context: dict[str, object] | None,
     external_archive_network_authorized: bool = False,
     invoking_harness: str | None = None,
+    redacted_command: str | None = None,
 ) -> _PackageProtectAuthority | None:
     try:
         launch_cwd = workspace_dir.expanduser().resolve(strict=True)
@@ -482,7 +483,9 @@ def _build_package_protect_authority(
         # cached install verdict the native parser already carries is the whole
         # answer whichever route reached protect.
         return None
-    sanitized_intent = replace(intent, redacted_command=redacted_command_text(command, guard_home=store.guard_home))
+    if redacted_command is None:
+        redacted_command = redacted_command_text(command, guard_home=store.guard_home)
+    sanitized_intent = replace(intent, redacted_command=redacted_command)
     artifact = build_package_request_artifact(
         _LOCAL_SUPPLY_CHAIN_HARNESS,
         sanitized_intent,
@@ -644,6 +647,9 @@ def _final_package_protect_authority(
         additional_policy_context=additional_context,
         external_archive_network_authorized=saved_approval_claimed,
         invoking_harness=initial.invoking_harness,
+        # The same argv redacts to the same text; reusing it keeps a resident
+        # round-trip out of the window after a saved approval is claimed.
+        redacted_command=initial.intent.redacted_command,
     )
     stored_policy = None
     if (

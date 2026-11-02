@@ -55,13 +55,11 @@ fn the_redacted_tokens_are_joined_as_shlex_joins_them() {
 
 #[test]
 fn malformed_requests_are_invalid() {
-    let too_many = vec![json!("npm"); MAX_TOKENS + 1];
     for args in [
         json!([]),
         json!({}),
         json!({ "command": "npm install" }),
         json!({ "command": ["npm", 1] }),
-        json!({ "command": too_many }),
         json!({ "command": ["npm"], "extra": true }),
     ] {
         assert_eq!(dispatch(&args), Err(ERR_INVALID), "{args}");
@@ -70,4 +68,16 @@ fn malformed_requests_are_invalid() {
         dispatch(&json!({ "command": [] })).expect("answer"),
         json!({ "text": "" })
     );
+}
+
+#[test]
+fn a_long_install_is_redacted_rather_than_refused() {
+    // The request-size bound already caps the argv; a count cap here would
+    // stop an install the protect parser accepted before it reached review.
+    let mut command = vec![json!("npm"), json!("install")];
+    command.extend((0..5000).map(|index| json!(format!("p{index}"))));
+    let answer = dispatch(&json!({ "command": command })).expect("answer");
+    let text = answer["text"].as_str().expect("text");
+    assert!(text.starts_with("npm install p0 p1 "), "{text}");
+    assert!(text.ends_with(" p4999"), "{text}");
 }
