@@ -51,6 +51,206 @@ INTERPOLATED_TEMPLATE_ASSIGNMENT_RE = re.compile(
 )
 
 
+DIRECT_SHELL_CONCAT_RE = re.compile(
+    rf"""(?<![\w.]){SHELL_CALL_PATTERN}\s*\(\s*"""
+    r"""(?:(?:["'][^"']*["'][ \t]*\+[ \t]*[A-Za-z_$][\w$]*)|(?:[A-Za-z_$][\w$]*[ \t]*\+[ \t]*["']))""",
+    re.S,
+)
+MEMBER_SHELL_CONCAT_RE = re.compile(
+    rf"""{SHELL_RECEIVER_PATTERN}\s*\.\s*{SHELL_CALL_PATTERN}\s*\(\s*"""
+    r"""(?:(?:["'][^"']*["'][ \t]*\+[ \t]*[A-Za-z_$][\w$]*)|(?:[A-Za-z_$][\w$]*[ \t]*\+[ \t]*["']))""",
+    re.S,
+)
+CONCAT_ASSIGNMENT_RE = re.compile(
+    r"""\b(?:export\s+)?(?:const|let|var)\s+(?P<name>[A-Za-z_$][\w$]*)"""
+    r"""(?:\s*:\s*[^=;\n]+)?\s*=\s*"""
+    r"""(?:(?:["'][^"']*["'][ \t]*\+[ \t]*[A-Za-z_$][\w$]*)|(?:[A-Za-z_$][\w$]*[ \t]*\+[ \t]*["']))[ \t]*;?""",
+    re.S,
+)
+
+
+def _mask_code_literals_and_comments(
+    content: str, *, is_python: bool = False, preserve_template_literals: bool = False
+) -> str:
+    """Mask string literals and comments with spaces, preserving length and newlines.
+
+    Prevents false-positive matches in comments, string literals, regexes, and docstrings (#3531).
+    """
+    chars = list(content)
+    length = len(chars)
+    i = 0
+
+    while i < length:
+        if is_python and chars[i] == "#":
+            while i < length and chars[i] != "\n":
+                chars[i] = " "
+                i += 1
+            continue
+
+        if not is_python and i + 1 < length and chars[i] == "/" and chars[i + 1] == "/":
+            while i < length and chars[i] != "\n":
+                chars[i] = " "
+                i += 1
+            continue
+
+        if not is_python and i + 1 < length and chars[i] == "/" and chars[i + 1] == "*":
+            chars[i] = " "
+            chars[i + 1] = " "
+            i += 2
+            while i < length:
+                if i + 1 < length and chars[i] == "*" and chars[i + 1] == "/":
+                    chars[i] = " "
+                    chars[i + 1] = " "
+                    i += 2
+                    break
+                if chars[i] != "\n" and chars[i] != "\r":
+                    chars[i] = " "
+                i += 1
+            continue
+
+        if (
+            is_python
+            and (i + 2 < length)
+            and (
+                (chars[i] == '"' and chars[i + 1] == '"' and chars[i + 2] == '"')
+                or (chars[i] == "'" and chars[i + 1] == "'" and chars[i + 2] == "'")
+            )
+        ):
+            delim = chars[i]
+            i += 3
+            while i < length:
+                if i + 2 < length and chars[i] == delim and chars[i + 1] == delim and chars[i + 2] == delim:
+                    i += 3
+                    break
+                if chars[i] != "\n" and chars[i] != "\r":
+                    chars[i] = " "
+                i += 1
+            continue
+
+        if chars[i] in ('"', "'"):
+            if preserve_template_literals:
+                prev_idx = i - 1
+                while prev_idx >= 0 and chars[prev_idx] in " \t\r\n":
+                    prev_idx -= 1
+                if prev_idx >= 0 and chars[prev_idx] == "(":
+                    p2 = prev_idx - 1
+                    while p2 >= 0 and chars[p2] in " \t\r\n":
+                        p2 -= 1
+                    call_end = p2 + 1
+                    while p2 >= 0 and (chars[p2].isalnum() or chars[p2] in "_$"):
+                        p2 -= 1
+                    call_name = "".join(chars[p2 + 1 : call_end])
+                    if call_name in ("require", "import"):
+                        delim = chars[i]
+                        i += 1
+                        while i < length:
+                            if chars[i] == delim:
+                                i += 1
+                                break
+                            i += 1
+                        continue
+
+            delim = chars[i]
+            i += 1
+            escaped = False
+            while i < length:
+                c = chars[i]
+                if escaped:
+                    chars[i] = " "
+                    escaped = False
+                    i += 1
+                    continue
+                if c == "\\":
+                    chars[i] = " "
+                    escaped = True
+                    i += 1
+                    continue
+                if c == delim:
+                    i += 1
+                    break
+                if c != "\n" and c != "\r":
+                    chars[i] = " "
+                i += 1
+            continue
+
+        if not is_python and chars[i] == "`":
+            if preserve_template_literals:
+                i += 1
+                continue
+            i += 1
+            escaped = False
+            while i < length:
+                c = chars[i]
+                if escaped:
+                    chars[i] = " "
+                    escaped = False
+                    i += 1
+                    continue
+                if c == "\\":
+                    chars[i] = " "
+                    escaped = True
+                    i += 1
+                    continue
+                if c == "`":
+                    i += 1
+                    break
+                if c == "$" and i + 1 < length and chars[i + 1] == "{":
+                    i += 2
+                    brace_depth = 1
+                    while i < length and brace_depth > 0:
+                        if chars[i] == "{":
+                            brace_depth += 1
+                        elif chars[i] == "}":
+                            brace_depth -= 1
+                        i += 1
+                    continue
+                if c != "\n" and c != "\r":
+                    chars[i] = " "
+                i += 1
+            continue
+
+        if not is_python and chars[i] == "/":
+            prev_idx = i - 1
+            while prev_idx >= 0 and chars[prev_idx] in " \t\r\n":
+                prev_idx -= 1
+            if prev_idx < 0 or chars[prev_idx] in "=([,:!&|?;~^{}":
+                chars[i] = " "
+                i += 1
+                in_char_class = False
+                escaped = False
+                while i < length:
+                    c = chars[i]
+                    if escaped:
+                        chars[i] = " "
+                        escaped = False
+                        i += 1
+                        continue
+                    if c == "\\":
+                        chars[i] = " "
+                        escaped = True
+                        i += 1
+                        continue
+                    if c == "[":
+                        in_char_class = True
+                    elif c == "]":
+                        in_char_class = False
+                    elif c == "/" and not in_char_class:
+                        chars[i] = " "
+                        i += 1
+                        while i < length and chars[i].isalpha():
+                            chars[i] = " "
+                            i += 1
+                        break
+                    if c != "\n" and c != "\r":
+                        chars[i] = " "
+                    i += 1
+                continue
+
+        i += 1
+
+    return "".join(chars)
+
+
 def _find_code_files(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> list[Path]:
     if files is not None:
         return [
@@ -85,10 +285,18 @@ def _shell_call_uses_variable(content: str, variable: str) -> bool:
 
 
 def _has_shell_injection_pattern(content: str) -> bool:
-    if DIRECT_SHELL_TEMPLATE_RE.search(content) or MEMBER_SHELL_TEMPLATE_RE.search(content):
+    if (
+        DIRECT_SHELL_TEMPLATE_RE.search(content)
+        or MEMBER_SHELL_TEMPLATE_RE.search(content)
+        or DIRECT_SHELL_CONCAT_RE.search(content)
+        or MEMBER_SHELL_CONCAT_RE.search(content)
+    ):
         return True
 
     for assignment in INTERPOLATED_TEMPLATE_ASSIGNMENT_RE.finditer(content):
+        if _shell_call_uses_variable(content[assignment.end() :], assignment.group("name")):
+            return True
+    for assignment in CONCAT_ASSIGNMENT_RE.finditer(content):
         if _shell_call_uses_variable(content[assignment.end() :], assignment.group("name")):
             return True
     return False
@@ -185,9 +393,10 @@ def check_no_eval(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> Ch
             content = fpath.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        if _has_direct_eval_call(content):
+        masked = _mask_code_literals_and_comments(content, is_python=(fpath.suffix == ".py"))
+        if _has_direct_eval_call(masked):
             findings.append(f"{fpath.relative_to(plugin_dir)}: eval()")
-        if FUNCTION_RE.search(content):
+        if FUNCTION_RE.search(masked):
             findings.append(f"{fpath.relative_to(plugin_dir)}: new Function()")
     if not findings:
         return CheckResult(
@@ -225,7 +434,10 @@ def check_no_shell_injection(plugin_dir: Path, files: tuple[Path, ...] | None = 
             content = fpath.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        if _has_shell_injection_pattern(content):
+        masked = _mask_code_literals_and_comments(
+            content, is_python=(fpath.suffix == ".py"), preserve_template_literals=True
+        )
+        if _has_shell_injection_pattern(masked):
             findings.append(str(fpath.relative_to(plugin_dir)))
     if not findings:
         return CheckResult(
