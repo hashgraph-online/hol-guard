@@ -662,3 +662,30 @@ fn aliased_test_script_name_resolves_to_the_manifest_key() {
         Some("test")
     );
 }
+
+/// The sink reads the kind off the same words the admission did, so a Bun run
+/// of one workspace test file has to arrive as a Node test rather than as the
+/// tool kind every other `bun` line takes.
+#[test]
+fn bun_running_one_test_file_reads_as_a_node_test() {
+    for command in [
+        json!(["bun", "src/app-routing.test.ts"]),
+        json!(["bun", "src/shell-navigation.test.tsx"]),
+        json!(["bun", "api.spec.mjs"]),
+        json!(["/opt/homebrew/bin/bun", "tests/test_parser.js"]),
+    ] {
+        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+        assert_eq!(kind["value"]["node_test"], true, "{command} {kind}");
+        assert_eq!(kind["value"]["node_tool"], false, "{command} {kind}");
+        assert_eq!(kind["value"]["vitest"], false, "{command} {kind}");
+        assert_eq!(kind["value"]["inline_eval"], false, "{command} {kind}");
+    }
+    for command in [
+        json!(["bun", "src/server.ts"]),
+        json!(["bun", "../other/app.test.ts"]),
+        json!(["bun", "src/app.test.ts", "src/other.test.ts"]),
+    ] {
+        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+        assert_eq!(kind["value"]["node_test"], false, "{command} {kind}");
+    }
+}

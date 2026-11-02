@@ -101,26 +101,6 @@ fn test_script_name(script: &str) -> bool {
             || matches!(stem, "test" | "tests" | "runtests" | "run_tests"))
 }
 
-/// `math.test.ts`, `api.spec.mjs`, `test_calc.js`: the usual JavaScript and
-/// TypeScript test file names.
-fn node_test_script_name(script: &str) -> bool {
-    let name = script.rsplit('/').next().unwrap_or(script);
-    let Some((stem, extension)) = name.rsplit_once('.') else {
-        return false;
-    };
-    matches!(
-        extension,
-        "js" | "mjs" | "cjs" | "jsx" | "ts" | "mts" | "cts" | "tsx"
-    ) && stem
-        .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
-        && (stem.ends_with(".test")
-            || stem.ends_with(".spec")
-            || stem.starts_with("test_")
-            || stem.ends_with("_test")
-            || matches!(stem, "test" | "tests"))
-}
-
 /// Type stripping and warning filters change how Node loads and reports a
 /// script, not what the script can reach.
 fn node_after_script_flags(arguments: &[String]) -> &[String] {
@@ -148,7 +128,7 @@ fn node_after_script_flags(arguments: &[String]) -> &[String] {
 /// script shares the inline evaluation boundary, as Python test scripts do.
 fn node_test_script_args(arguments: &[String]) -> bool {
     matches!(node_after_script_flags(arguments), [script, ..]
-        if workspace_relative(script) && node_test_script_name(script))
+        if crate::contained_argv::workspace_test_script(script))
 }
 
 /// `tsx math.test.ts` in its installed forms. The sink loads the file through
@@ -177,7 +157,7 @@ fn tsx_test_script_args(name: &str, arguments: &[String]) -> bool {
         }
         _ => return false,
     };
-    matches!(rest, [script, ..] if workspace_relative(script) && node_test_script_name(script))
+    matches!(rest, [script, ..] if crate::contained_argv::workspace_test_script(script))
 }
 
 /// Classify a direct pytest invocation for delegation, never direct allowance.
@@ -625,6 +605,12 @@ pub(super) fn readonly_test_reason(
         ("bun", [test, args @ ..])
             if test == "test" && crate::contained_argv::bun_test_runs_once(args) =>
         {
+            return Some("native_node_test_readonly_containment_required");
+        }
+        // `bun math.test.ts` runs that one file through Bun's own runtime,
+        // which registers its test runner, so the pass is the one `bun test`
+        // takes over the same file and the same boundary carries it.
+        ("bun", args) if crate::contained_argv::bun_test_script_once(args) => {
             return Some("native_node_test_readonly_containment_required");
         }
         (name, args) if tsx_test_script_args(name, args) => {

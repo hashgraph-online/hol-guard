@@ -301,8 +301,8 @@ fn bun_runner_invocation(
 #[path = "contained_argv_runner_calls.rs"]
 mod runner_calls;
 pub(crate) use runner_calls::{
-    bun_test_runs_once, contained_runner_call, jest_contained_call, jest_runs_once,
-    mocha_contained_call, mocha_runs_once, vitest_runs_once,
+    bun_test_runs_once, bun_test_script_once, contained_runner_call, jest_contained_call,
+    jest_runs_once, mocha_contained_call, mocha_runs_once, vitest_runs_once, workspace_test_script,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
@@ -315,6 +315,16 @@ pub fn bun_test_invocation(command: &[String]) -> bool {
     basename(command) == "bun"
         && command.get(1).is_some_and(|word| word == "test")
         && bun_test_runs_once(&command[2..])
+}
+
+/// True when a command is Bun running one of the workspace's own test files.
+///
+/// `bun math.test.ts` loads the file with Bun's runtime, which registers its
+/// test runner, so the run is the pass `bun test` takes over that one file.
+/// The Node test profile carries it for the same reason it carries `bun
+/// test`: the runner reaches nothing outside the workspace.
+pub fn bun_test_script_invocation(command: &[String]) -> bool {
+    !command.is_empty() && basename(command) == "bun" && bun_test_script_once(&command[1..])
 }
 
 /// The runner a contained call names, with the arguments the sink hands it.
@@ -828,7 +838,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let node_test_argv =
         command.get(index).is_some_and(|v| v == "--test") && matches!(name, "node" | "nodejs");
     let bun = bun_vitest_invocation(command);
-    let bun_test = bun_test_invocation(command);
+    let bun_test = bun_test_invocation(command) || bun_test_script_invocation(command);
     let entries = command.iter().skip(1).take(2);
     let vitest = !command.is_empty()
         && (matches!(name, "bunx" | "npx" | "vitest" | "jest" | "mocha")
