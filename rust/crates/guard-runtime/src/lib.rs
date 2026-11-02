@@ -736,6 +736,11 @@ mod onefile_extraction_reclaim;
 mod onefile_extraction_removal;
 mod onefile_open_paths;
 mod oneshot;
+#[path = "adapters/detection/openclaw_config.rs"]
+mod openclaw_config;
+#[cfg(all(test, unix))]
+#[path = "adapters/detection/openclaw_config_tests.rs"]
+mod openclaw_config_tests;
 #[path = "adapters/detection/openclaw_detect.rs"]
 mod openclaw_detect;
 #[cfg(all(test, unix))]
