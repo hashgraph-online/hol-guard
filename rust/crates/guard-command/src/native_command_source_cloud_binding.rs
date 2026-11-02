@@ -10,14 +10,24 @@
 //! The document carries no defaults, decisions, code, includes or endpoints:
 //! an action's effect and required restrictions are the only semantics it adds,
 //! and those can only make hosted execution stricter.
+//!
+//! The offline source compiler turns resolved contributions into one binding
+//! artifact beside the compiled program. Hosted evaluation loads that artifact;
+//! it never parses or resolves contributions while serving a request.
 
-use super::{contract::SourceDocument, json, mcp, validation};
-use crate::cloud_action_binding::{valid_action_id, valid_label, ActionEffect, TargetCapability};
-use serde::Deserialize;
-use serde_json::Value;
+use super::{catalog, contract::SourceDocument, json, mcp, validation};
+use crate::cloud_action_binding::{
+    valid_action_id, valid_label, ActionEffect, TargetCapability, MAX_BINDINGS,
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
 pub(super) const BINDING_CONTRIBUTION_SCHEMA: &str = "guard.cloud-action-binding-contribution.v1";
+pub const BINDING_ARTIFACT_SCHEMA: &str = "guard.cloud-action-binding-artifact.v1";
+const BINDING_ARTIFACT_COMPILER_VERSION: u64 = 1;
+const BINDING_ARTIFACT_DOMAIN: &[u8] = b"hol-guard.cloud-action-binding-artifact.v1\0";
+const BINDING_MEANING_DOMAIN: &[u8] = b"hol-guard.cloud-action-binding-meaning.v1\0";
 const MAX_BINDINGS_PER_EXTENSION: usize = 256;
 /// Every hosted executor must pin egress and bound output; mirrors binding admission.
 const EXECUTABLE_FLOOR: [TargetCapability; 2] = [
@@ -26,7 +36,7 @@ const EXECUTABLE_FLOOR: [TargetCapability; 2] = [
 ];
 
 /// How far a binding reaches into hosted execution.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CloudSupport {
     /// Native rules can evaluate authenticated cloud action facts; nothing runs.
@@ -77,7 +87,8 @@ enum TargetKind {
         permissions: BTreeSet<String>,
     },
     Mcp {
-        remote: bool,
+        /// The canonical remote endpoint; `None` for a locally launched server.
+        endpoint: Option<String>,
         tools: BTreeSet<String>,
     },
 }
@@ -100,12 +111,18 @@ impl BindingTarget {
                 .filter(|name| *name != "other")
                 .map(str::to_owned)
                 .collect();
+            let endpoint = if lowered.canonical["launch"]["kind"] == "remote-http" {
+                Some(mcp::canonical_endpoint(
+                    lowered.canonical["launch"]["url"]
+                        .as_str()
+                        .ok_or("command_source_mcp_contract_invalid")?,
+                )?)
+            } else {
+                None
+            };
             return Ok(Self {
                 extension_id: id.to_owned(),
-                kind: TargetKind::Mcp {
-                    remote: lowered.canonical["launch"]["kind"] == "remote-http",
-                    tools,
-                },
+                kind: TargetKind::Mcp { endpoint, tools },
             });
         }
         let document: SourceDocument = serde_json::from_value(json::decode(bytes)?)
@@ -187,12 +204,12 @@ pub(super) fn resolve(
                     return Err("cloud_binding_local_only_target");
                 }
             }
-            (TargetKind::Mcp { remote, tools }, None, Some(tool)) => {
+            (TargetKind::Mcp { endpoint, tools }, None, Some(tool)) => {
                 if !tools.contains(tool) {
                     return Err("cloud_binding_tool_unknown");
                 }
                 // A locally launched server needs a local process the cloud does not have.
-                if !remote && binding.cloud_support == CloudSupport::CloudExecutable {
+                if endpoint.is_none() && binding.cloud_support == CloudSupport::CloudExecutable {
                     return Err("cloud_binding_local_only_target");
                 }
             }
@@ -200,6 +217,70 @@ pub(super) fn resolve(
         }
     }
     Ok(())
+}
+
+/// Compile resolved contributions into the binding artifact for one build.
+///
+/// Actions are ordered by action ID, so the artifact does not depend on the
+/// order contributions arrived in. Each action carries a `binding_digest` over
+/// what it means when run: its extension, the permission or tool and endpoint
+/// it exercises, its effect, resource and required restrictions. A rule or
+/// tool-state change leaves that digest alone; a change of meaning does not.
+/// The artifact digest also covers the program it was compiled with.
+pub(super) fn compile_artifact(
+    resolved: &[(&CloudBindingContribution, BindingTarget)],
+    program_digest: &str,
+) -> Result<Value, &'static str> {
+    let mut actions = Vec::new();
+    for (contribution, target) in resolved {
+        if contribution.extension_id != target.extension_id {
+            return Err("cloud_binding_extension_mismatch");
+        }
+        for binding in &contribution.bindings {
+            let exercised = match (&target.kind, &binding.permission_id, &binding.tool) {
+                (TargetKind::Command { .. }, Some(permission), None) => {
+                    json!({"kind": "command-permission", "permission_id": permission})
+                }
+                (TargetKind::Mcp { endpoint, .. }, None, Some(tool)) => {
+                    json!({"kind": "mcp-tool", "tool": tool, "endpoint": endpoint})
+                }
+                _ => return Err("cloud_binding_reference_invalid"),
+            };
+            let mut action = json!({
+                "action_id": binding.action_id,
+                "extension_id": contribution.extension_id,
+                "target": exercised,
+                "effect": binding.effect,
+                "resource": binding.resource.as_ref().map(|resource| json!({
+                    "kind": resource.kind,
+                    "argument": resource.argument,
+                })),
+                "required_capabilities": binding.required_capabilities,
+                "cloud_support": binding.cloud_support,
+            });
+            action["binding_digest"] = json!(catalog::digest(BINDING_MEANING_DOMAIN, &action)?);
+            actions.push(action);
+        }
+    }
+    if actions.len() > MAX_BINDINGS {
+        return Err("cloud_binding_artifact_limit");
+    }
+    actions.sort_by(|left, right| left["action_id"].as_str().cmp(&right["action_id"].as_str()));
+    if actions
+        .windows(2)
+        .any(|pair| pair[0]["action_id"] == pair[1]["action_id"])
+    {
+        return Err("cloud_binding_duplicate_action");
+    }
+    let mut artifact = json!({
+        "schema": BINDING_ARTIFACT_SCHEMA,
+        "compiler_version": BINDING_ARTIFACT_COMPILER_VERSION,
+        "program_digest": program_digest,
+        "actions": actions,
+    });
+    artifact["artifact_digest"] = json!(catalog::digest(BINDING_ARTIFACT_DOMAIN, &artifact)?);
+    artifact.sort_all_objects();
+    Ok(artifact)
 }
 
 /// Parse a binding contribution and resolve it against its extension source.
