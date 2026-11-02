@@ -33,6 +33,8 @@ export type ShellNavigationItem = {
   view: NavigationView;
   group: NavigationGroup;
   icon: IconType;
+  /** Short status chip rendered beside the label, e.g. a pre-release marker. */
+  badge?: string;
 };
 
 export type ShellNavigationProps = {
@@ -84,12 +86,13 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
   },
   {
     href: "/cigar",
-    label: "CIGAR",
-    shortLabel: "CIGAR",
+    label: "Context",
+    shortLabel: "Context",
     description: "Local context, setup, sources, and AI app access",
     view: "cigar",
     group: "primary",
     icon: HiMiniCircleStack,
+    badge: "Beta",
   },
   {
     href: "/extensions",

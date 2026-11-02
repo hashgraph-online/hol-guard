@@ -65,6 +65,10 @@
 .cigar-note { margin-bottom: 1rem; padding: 1rem 1.2rem; border: 1px solid #cbdcf5; border-radius: .75rem; background: #f4f8ff; font-size: .8rem; line-height: 1.7; color: #475569; }
 .cigar-note strong { color: #3f4174; font-weight: 600; }
 .cigar-note p { margin: .4rem 0 0; }
+.cigar-beta-note { display: flex; align-items: baseline; flex-wrap: wrap; gap: .35rem .8rem; padding: .65rem 1rem; border: 1px solid #d8dcf8; border-radius: .75rem; background: #eef0ff; font-size: .78rem; line-height: 1.65; color: #4f5bd5; }
+.cigar-beta-note__chip { flex-shrink: 0; border: 1px solid #c5cbf5; border-radius: 999px; padding: .1rem .55rem; font-size: .62rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #4f5bd5; }
+.cigar-beta-note a { color: #3d4bc4; font-weight: 600; text-underline-offset: 3px; }
+.cigar-beta-note a:hover { color: #2d379f; }
 .cigar-section-description { max-width: 48rem; }
 .cigar-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.25rem; margin-top: 1.5rem; }
 .cigar-flow > li { border-top: 1px solid #e2e8f0; padding-top: 1.25rem; }
