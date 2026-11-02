@@ -13,7 +13,9 @@ use super::bounded_hook_bridge::BRIDGE_COMMAND;
 use super::pyjson::{float_repr, parse_marking_lone_surrogates, PyVal, LONE_SURROGATE_MARK};
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 
+// The plugin template is split in two; only the first part carries placeholders.
 const TEMPLATE: &str = include_str!("opencode_plugin_render.ts.txt");
+const TEMPLATE_HOOK: &str = include_str!("opencode_plugin_render_hook.ts.txt");
 const HOOK_ARGV_ENV: &str = "HOL_GUARD_HOOK_ARGV";
 const HOOK_TIMEOUT_SECONDS: u32 = 25;
 const INTERCEPT_TOOLS: &[&str] = &[
@@ -104,6 +106,7 @@ pub(crate) fn render(args: &Value) -> KindResult {
     for (placeholder, value) in replacements {
         source = source.replace(placeholder, &dumps(&value));
     }
+    source.push_str(TEMPLATE_HOOK);
     Ok(serde_json::json!({ "source": source }))
 }
 
