@@ -42,7 +42,9 @@ runs:
     shell: bash
     run: |
       chmod 0755 rust/target/release/hol-guard-runtime rust/target/release/guard-command-source
+      echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
       echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+      echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
   - name: Run actual SDK continuation module with zero-skip enforcement
     shell: bash
     run: |
