@@ -102,6 +102,43 @@ fn an_mcp_artifact_keeps_the_raw_arguments_and_environment_privately() {
 }
 
 #[test]
+fn a_server_the_cline_proxy_install_wrote_is_guard_managed() {
+    let root = temp_home("cline-managed-proxy");
+    write(
+        &root.join(SETTINGS),
+        r#"{"mcpServers": {
+            "launcher": {"command": "/opt/guard/bin/hol-guard", "args": ["guard", "cline-mcp-proxy", "--server", "a"]},
+            "module": {"command": "/usr/bin/python3", "args": ["-m", "codex_plugin_scanner.cli", "guard", "cline-mcp-proxy"]},
+            "hermes": {"command": "hol-guard", "args": ["hermes-mcp-proxy"]},
+            "plain": {"command": "npx", "args": ["cline-mcp-proxy"]}
+        }}"#,
+    );
+    let settings = root.join(SETTINGS).to_string_lossy().into_owned();
+    let answer = detect(&request(&root, &[settings.as_str()])).unwrap();
+    release(&root);
+    let managed: Vec<(String, Value)> = answer["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|artifact| {
+            (
+                artifact["metadata"]["name"].as_str().unwrap().to_owned(),
+                artifact["metadata"]["guard_managed_proxy"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        managed,
+        vec![
+            ("launcher".to_owned(), json!(true)),
+            ("module".to_owned(), json!(true)),
+            ("hermes".to_owned(), json!(true)),
+            ("plain".to_owned(), json!(false)),
+        ]
+    );
+}
+
+#[test]
 fn a_non_utf8_vscode_extension_name_is_refused() {
     let root = temp_home("cline-vscode-name");
     let extensions = root.join(".vscode/extensions");
