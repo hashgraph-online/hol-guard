@@ -4,7 +4,10 @@ The mined cases name project directories (scrubbed to stand-in names) that the
 hand-built fixture never grew. Instead of listing them one by one, derive them
 from the cases: every ``${HOME}``, ``${PRIVATE_TMP}`` and ``${WORKTREE}`` path in
 a case that expects ``allow`` is created, so a listing or a search has something
-to read and the case measures its labelled class rather than a missing path.
+to read and the case measures its labelled class rather than a missing path. A
+handful of cases that expect a review are built too, where the review is about
+what the file holds: an absent name under the workspace is admitted without a
+review, so such a case measures nothing until the file is there.
 """
 
 from __future__ import annotations
@@ -224,13 +227,20 @@ PROBES_FOR_ABSENCE = frozenset(
 )
 
 
+# Cases that expect a review and whose path has to be there for the review to
+# be the one they measure. An absent name under the workspace is admitted
+# without a review by design, so a protection case about what a file holds
+# measures nothing until the file exists.
+PROTECTION_CASES_NEEDING_PATHS = frozenset({"cat-hidden-numeric-not-a-marker"})
+
+
 def benign_path_tokens(document: dict[str, object] | None = None) -> set[tuple[str, str]]:
-    """``(root token, relative path)`` pairs named by cases that expect ``allow``."""
+    """``(root token, relative path)`` pairs named by cases whose path must exist."""
     cases = (document or json.loads(CASES_PATH.read_text(encoding="utf-8")))["cases"]
     found: set[tuple[str, str]] = set()
     created: set[tuple[str, str]] = set()
     for case in cases:
-        if case.get("expect") != "allow":
+        if case.get("expect") != "allow" and case.get("id") not in PROTECTION_CASES_NEEDING_PATHS:
             continue
         for target in creation_targets(case.get("tool", ""), case.get("tool_input", {})):
             for match in _PATH_TOKEN.finditer(target):
