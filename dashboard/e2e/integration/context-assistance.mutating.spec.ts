@@ -1,4 +1,5 @@
 import { daemonApi, expect, expectNoErrorBoundary, test, type IntegrationState } from "./fixtures";
+import { addContextProject, confirmContextProject } from "./context-project";
 import { contextStatus } from "./context-status";
 import { stopContextAssistance } from "./context-stop";
 import { writeFileSync } from "node:fs";
@@ -59,13 +60,8 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     });
     expect([401, 403, 423]).toContain(unproved.status());
     await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
-    await page.getByLabel("Workspace folder", { exact: true }).fill(state.workspace);
-    await page.getByLabel("Files relative to the workspace, one per line").fill("README.md");
-    await page.getByRole("button", { name: "Grant review source access" }).click();
-    const sourceProof = page.getByRole("dialog");
-    await sourceProof.getByLabel("Approval password").fill(state.approvalPassword);
-    await sourceProof.getByRole("button", { name: "Grant source access", exact: true }).click();
-    await expect(sourceProof).toHaveCount(0);
+    await addContextProject(page, state.workspace);
+    await confirmContextProject(page, state.approvalPassword);
     await expect(page.getByText(/Recent native receipt facts: 0 of at most 16 retained/)).toBeVisible();
     await page.getByLabel("What would you like context about?").fill("reviewed release process");
     await page.getByRole("button", { name: "Prepare cited context" }).click();
@@ -99,13 +95,8 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     expect(pending.data.phase).toBe("pending");
     expect(JSON.stringify(pending)).not.toContain("credential");
     expect((await probe.request("get_guard_context", { query: "release procedure" })).ok).toBe(false);
-    await chooseMenuOption(page.getByRole("combobox", { name: "Context consumer", exact: true }), "codex");
-    await page.getByLabel("Files relative to the workspace, one per line").fill("README.md");
-    await page.getByRole("button", { name: "Grant review source access" }).click();
-    const appSourceProof = page.getByRole("dialog");
-    await appSourceProof.getByLabel("Approval password").fill(state.approvalPassword);
-    await appSourceProof.getByRole("button", { name: "Grant source access", exact: true }).click();
-    await expect(appSourceProof).toHaveCount(0);
+    await addContextProject(page, state.workspace, { app: "Codex" });
+    await confirmContextProject(page, state.approvalPassword);
     await page.getByRole("button", { name: "Refresh app connections", exact: true }).click();
     const connection = page.getByRole("region", { name: `Context connection ${pending.data.session_id}`, exact: true });
     await expect(connection.getByText("Waiting for your permission", { exact: false })).toBeVisible();
@@ -136,13 +127,8 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     expect(agentBrief.citations.length).toBeGreaterThanOrEqual(2);
     expect((await probe.request("explain_guard_context", { snapshot_id: agentBrief.snapshot_id })).ok).toBe(true);
     expect((await probe.request("get_guard_context", { query: "release procedure", scope_id: "foreign", app: "cursor" })).ok).toBe(false);
-    await chooseMenuOption(page.getByRole("combobox", { name: "Context consumer", exact: true }), "dashboard");
-    await page.getByLabel("Files relative to the workspace, one per line").fill("README.md");
-    await page.getByRole("button", { name: "Grant review source access" }).click();
-    const reviewSourceProof = page.getByRole("dialog");
-    await reviewSourceProof.getByLabel("Approval password").fill(state.approvalPassword);
-    await reviewSourceProof.getByRole("button", { name: "Grant source access", exact: true }).click();
-    await expect(reviewSourceProof).toHaveCount(0);
+    await addContextProject(page, state.workspace, { app: "Only this page" });
+    await confirmContextProject(page, state.approvalPassword);
     const nativeReview = JSON.parse(execFileSync(String(seed.pythonExecutable), ["-B",
       resolve(import.meta.dirname, "../../../scripts/ci/dashboard_context_native_review.py"),
       "--guard-home", state.guardHome, "--workspace", state.workspace], { encoding: "utf8", timeout: 15_000 }));

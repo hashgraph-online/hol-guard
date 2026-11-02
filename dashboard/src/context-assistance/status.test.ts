@@ -27,6 +27,9 @@ assert.match(contextStatusCopy(waiting).detail, /Click Turn on CIGAR/);
 assert.equal(contextStatusCopy({ ...waiting, last_check: ready.runtime }).label, "Not started",
   "a historical check never claims that a runtime is currently Ready");
 assert.equal(contextStatusCopy({ ...waiting, diagnostic: "runtime_idle" }).label, "Paused");
+const resting = contextStatusCopy(parseContextAssistanceStatus({ ...waiting, diagnostic: "runtime_resting" }));
+assert.equal(resting.label, "Resting", "a saved opt-in without a worker is still on, never Off or Paused");
+assert.doesNotMatch(resting.detail, /turn on|token|faster|smarter/i);
 assert.equal(contextStatusCopy({ ...waiting, diagnostic: "python_version_unsupported" }).label, "Unavailable");
 assert.equal(contextStatusCopy({ ...waiting, verification_permitted: false }).label, "Unavailable");
 

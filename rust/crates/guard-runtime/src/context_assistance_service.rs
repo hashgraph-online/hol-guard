@@ -28,6 +28,8 @@ mod upgrade;
 mod verification;
 #[path = "context_assistance_service_versions.rs"]
 mod versions;
+#[path = "context_assistance_service_wake.rs"]
+mod wake;
 #[path = "context_assistance_service_workspace.rs"]
 mod workspace;
 use lifecycle::configure;
@@ -71,6 +73,8 @@ struct State {
     upgrade: Option<Arc<upgrade::Signal>>,
     cutover: Option<upgrade::Cutover>,
     last_used: Instant,
+    woke: Option<Instant>,
+    started: Option<Instant>,
     maintenance_started: bool,
     stopping: bool,
     epoch: guard_context_assistance::ContextEpoch,
@@ -92,6 +96,8 @@ impl Default for State {
             upgrade: None,
             cutover: None,
             last_used: Instant::now(),
+            woke: None,
+            started: None,
             maintenance_started: false,
             stopping: false,
             epoch: Default::default(),
@@ -200,7 +206,15 @@ impl Service {
             if state.upgrade.is_some() || state.cutover.is_some() {
                 return Err("native_context_assistance_busy".into());
             }
-            if state.pending.is_some() {
+            if let Some(job) = &state.pending {
+                // A wake and a click can race; both asked for the same start.
+                if operation == Check::Activate
+                    && job.operation == Check::Activate
+                    && !state.stopping
+                    && !job.cancel.load(Ordering::Acquire)
+                {
+                    return Ok(());
+                }
                 return Err("native_context_assistance_busy".into());
             }
             if state.stopping {
@@ -229,6 +243,8 @@ impl Service {
                 cancel: Arc::clone(&cancel),
             });
             state.error = None;
+            // Both checks may publish a new worker; its crash window starts now.
+            state.started = Some(Instant::now());
             (
                 generation,
                 state.settings.clone(),

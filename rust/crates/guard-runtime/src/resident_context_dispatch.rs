@@ -287,7 +287,12 @@ pub(super) fn is_request(bytes: &[u8]) -> bool {
         "context_assistance" => matches!(
             query.and_then(|query| query.kind).as_deref(),
             Some(
-                "installations" | "versions" | "workspace" | "workspace_access" | "workspace_grant"
+                "installations"
+                    | "versions"
+                    | "workspace"
+                    | "workspace_access"
+                    | "workspace_grant"
+                    | "folders"
             )
         ),
         _ => false,
