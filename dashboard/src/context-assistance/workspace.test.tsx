@@ -32,8 +32,30 @@ assert.equal(homeCopy(off).headline, "CIGAR is off");
 assert.equal(homeCopy(saved).headline, "CIGAR is not running", "a saved preference is not proof that CIGAR is on");
 assert.equal(homeCopy({ ...saved, last_check: ready.runtime }).headline, "CIGAR is not running",
   "a cached compilation check must not complete activation");
-assert.equal(homeCopy(ready).headline, "CIGAR is on, but prompts get no files yet");
+const promise = /Every prompt you send in Claude Code or Codex gets the few project files that match it\./;
+const noFiles = /Prompts get no project files until Context for AI apps and workspace documents are on in Settings\./;
+const withFiles = (agentContext: boolean, documents: boolean) => parseContextAssistanceStatus({ ...ready, effective_preferences: { ...ready.effective_preferences,
+  features: { ...ready.effective_preferences.features, agent_context: agentContext },
+  sources: { ...ready.effective_preferences.sources, workspace_documents: documents, source_set_id: documents ? "selected-workspaces" : "" } } });
+assert.equal(homeCopy(ready).headline, "CIGAR is on");
+assert.match(homeCopy(ready).detail, noFiles, "the ready fixture has both switches off, so no promise of project files");
+assert.doesNotMatch(homeCopy(ready).detail, promise);
 assert.equal(homeCopy(ready).setupHint, true);
+assert.match(homeCopy(withFiles(true, true)).detail, promise, "both switches on earn the promise");
+assert.equal(homeCopy(withFiles(true, true)).setupHint, false);
+for (const [agentContext, documents] of [[true, false], [false, true], [false, false]] as const) {
+  const partial = homeCopy(withFiles(agentContext, documents));
+  assert.equal(partial.headline, "CIGAR is on");
+  assert.match(partial.detail, noFiles, "one switch alone must not promise project files");
+  assert.doesNotMatch(partial.detail, promise);
+  assert.equal(partial.setupHint, true);
+}
+assert.match(homeCopy(off).detail, /Turn it on and every prompt you send/, "a fresh install gets project files when it is turned on");
+const choseNoDocuments = parseContextAssistanceStatus({ ...off, preferences: { ...off.preferences,
+  sources: { ...off.preferences.sources, workspace_documents: false, source_set_id: "selected-workspaces" } } });
+assert.doesNotMatch(homeCopy(choseNoDocuments).detail, promise, "an earlier choice survives, so turning on promises nothing");
+assert.match(homeCopy(choseNoDocuments).detail, noFiles);
+assert.equal(homeCopy(choseNoDocuments).setupHint, true);
 assert.equal(homeCopy(parseContextAssistanceStatus(receipt.restriction_observation)).headline.startsWith("CIGAR is on"), false);
 assert.equal(homeCopy(null, true).headline, "Checking CIGAR");
 assert.equal(homeCopy(null).headline, "CIGAR status unavailable");
@@ -93,15 +115,17 @@ const on = render({ status: ready });
 assert.match(on, />Turn off CIGAR</, "the one button flips to turn off");
 assert.doesNotMatch(on, />Turn on CIGAR</);
 assert.doesNotMatch(on, />Pick a project folder</, "picking a folder is optional and lives in Advanced");
-assert.match(on, /CIGAR is on, but prompts get no files yet/);
-assert.match(on, /Turn on Context for AI apps and Allow selected workspace documents in Settings/,
-  "with project context off, the copy does not promise project files");
-const sharing = parseContextAssistanceStatus({ ...ready, effective_preferences: { ...ready.effective_preferences,
-  features: { ...ready.effective_preferences.features, agent_context: true },
-  sources: { ...ready.effective_preferences.sources, workspace_documents: true, source_set_id: "selected-workspaces" } } });
-const sharingHome = render({ status: sharing });
+assert.match(on, /<h2[^>]*>CIGAR is on<\/h2>/);
+assert.match(on, noFiles, "with project context off, the card says why prompts get no files");
+assert.doesNotMatch(on, promise, "with project context off, the card does not promise project files");
+assert.match(on, />Open Settings</, "a button opens Advanced and Settings so the switches are one click away");
+const sharingHome = render({ status: withFiles(true, true) });
 assert.match(sharingHome, /<h2[^>]*>CIGAR is on<\/h2>/);
-assert.match(sharingHome, /Every prompt you send in Claude Code or Codex gets the few project files that match it\./);
+assert.match(sharingHome, promise);
+assert.doesNotMatch(sharingHome, noFiles);
+assert.doesNotMatch(sharingHome, />Open Settings</);
+assert.doesNotMatch(render({ status: withFiles(true, false) }), promise, "one switch alone must not promise project files");
+assert.doesNotMatch(render({ status: withFiles(false, true) }), promise, "one switch alone must not promise project files");
 assert.match(render({ status: saved, setup: idle({ ...install, build_id: null, python_build_id: null, runtime_id: "r", stages: ["start"], approval: false }) }), />Not started</);
 const resting = render({ status: { ...saved, diagnostic: "runtime_resting" }, setup: idle(install) });
 assert.match(resting, />Resting</);

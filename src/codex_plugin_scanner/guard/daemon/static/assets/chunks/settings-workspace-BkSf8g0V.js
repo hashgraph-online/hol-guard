@@ -4839,7 +4839,7 @@ function CigarGuide({ onSelect, walkthroughs }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-guide", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-explained-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-explained-heading", children: "How CIGAR works" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "When CIGAR is on, every prompt you send in Claude Code or Codex gets the few project files that match it. CIGAR finds your project from the folder your AI app runs in. A prompt about the header color brings the header and its styles. A prompt that matches nothing, like “build a to-do app” in an empty folder, adds nothing." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "With CIGAR on, and Context for AI apps and workspace documents turned on in Settings, every prompt you send in Claude Code or Codex gets the few project files that match it. The Turn on CIGAR button sets both up on a fresh install. CIGAR finds your project from the folder your AI app runs in. A prompt about the header color brings the header and its styles. A prompt that matches nothing, like “build a to-do app” in an empty folder, adds nothing." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Secrets, keys, hidden files, generated folders and anything your project's .gitignore files leave out are always skipped. To stop it, turn off CIGAR, or turn off Context for AI apps in Settings." }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-caption", children: [
         "CIGAR stands for ",
@@ -4913,7 +4913,14 @@ function cigarHelpsPrompts(status) {
   const effective = status?.effective_preferences;
   return effective?.features.agent_context === true && effective.sources.workspace_documents === true;
 }
+function cigarWillHelpPrompts(status) {
+  if (!status) return false;
+  if (cigarHelpsPrompts(status)) return true;
+  const { sources } = status.preferences;
+  return !sources.workspace_documents && !sources.source_set_id;
+}
 const PROMPT_PROMISE = "Every prompt you send in Claude Code or Codex gets the few project files that match it.";
+const NO_FILES_YET = "Prompts get no project files until Context for AI apps and workspace documents are on in Settings.";
 function cigarHomeCopy(status, loading, running) {
   if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. You can keep browsing.", setupHint: false };
   if (!status) {
@@ -4922,11 +4929,7 @@ function cigarHomeCopy(status, loading, running) {
   }
   if (status.effective_enabled) {
     if (cigarHelpsPrompts(status)) return { headline: "CIGAR is on", detail: PROMPT_PROMISE, setupHint: false };
-    return {
-      headline: "CIGAR is on, but prompts get no files yet",
-      detail: "Turn on Context for AI apps and Allow selected workspace documents in Settings.",
-      setupHint: true
-    };
+    return { headline: "CIGAR is on", detail: NO_FILES_YET, setupHint: true };
   }
   if (cigarWaking(status)) {
     return { headline: "CIGAR is on", detail: "It rests when nothing needs it and wakes up by itself. You do not need to turn it on again.", setupHint: false };
@@ -4934,7 +4937,10 @@ function cigarHomeCopy(status, loading, running) {
   if (status.requested_enabled) {
     return { headline: "CIGAR is not running", detail: "It is saved as on but has not started. Turn it on to start it.", setupHint: false };
   }
-  return { headline: "CIGAR is off", detail: "Turn it on and " + PROMPT_PROMISE.charAt(0).toLowerCase() + PROMPT_PROMISE.slice(1), setupHint: false };
+  if (cigarWillHelpPrompts(status)) {
+    return { headline: "CIGAR is off", detail: "Turn it on and " + PROMPT_PROMISE.charAt(0).toLowerCase() + PROMPT_PROMISE.slice(1), setupHint: false };
+  }
+  return { headline: "CIGAR is off", detail: "Turn it on to start CIGAR. " + NO_FILES_YET, setupHint: true };
 }
 function CigarTutorials(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-walkthroughs", "aria-labelledby": "cigar-tutorials-heading", children: [

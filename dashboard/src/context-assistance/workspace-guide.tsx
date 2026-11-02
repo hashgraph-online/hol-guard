@@ -9,7 +9,7 @@ export function CigarGuide({ onSelect, walkthroughs }: Props) {
   return <div className="cigar-guide">
     <section className="cigar-card" aria-labelledby="cigar-explained-heading">
       <h2 id="cigar-explained-heading">How CIGAR works</h2>
-      <p>When CIGAR is on, every prompt you send in Claude Code or Codex gets the few project files that match it. CIGAR finds your project from the folder your AI app runs in. A prompt about the header color brings the header and its styles. A prompt that matches nothing, like &ldquo;build a to-do app&rdquo; in an empty folder, adds nothing.</p>
+      <p>With CIGAR on, and Context for AI apps and workspace documents turned on in Settings, every prompt you send in Claude Code or Codex gets the few project files that match it. The Turn on CIGAR button sets both up on a fresh install. CIGAR finds your project from the folder your AI app runs in. A prompt about the header color brings the header and its styles. A prompt that matches nothing, like &ldquo;build a to-do app&rdquo; in an empty folder, adds nothing.</p>
       <p>Secrets, keys, hidden files, generated folders and anything your project's .gitignore files leave out are always skipped. To stop it, turn off CIGAR, or turn off Context for AI apps in Settings.</p>
       <p className="cigar-caption">CIGAR stands for {CIGAR_FULL_NAME}.</p>
     </section>

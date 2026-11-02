@@ -38,9 +38,18 @@ export function cigarHelpsPrompts(status: ContextAssistanceStatus | null): boole
   return effective?.features.agent_context === true && effective.sources.workspace_documents === true;
 }
 
+/** Turning CIGAR on switches project files on for an untouched install and keeps any earlier choice. */
+export function cigarWillHelpPrompts(status: ContextAssistanceStatus | null): boolean {
+  if (!status) return false;
+  if (cigarHelpsPrompts(status)) return true;
+  const { sources } = status.preferences;
+  return !sources.workspace_documents && !sources.source_set_id;
+}
+
 export type CigarHomeCopy = { headline: string; detail: string; setupHint: boolean };
 
 const PROMPT_PROMISE = "Every prompt you send in Claude Code or Codex gets the few project files that match it.";
+const NO_FILES_YET = "Prompts get no project files until Context for AI apps and workspace documents are on in Settings.";
 
 /** One headline and one sentence for the home screen. Only native state proves CIGAR is on. */
 export function cigarHomeCopy(status: ContextAssistanceStatus | null, loading: boolean, running: boolean): CigarHomeCopy {
@@ -51,8 +60,7 @@ export function cigarHomeCopy(status: ContextAssistanceStatus | null, loading: b
   }
   if (status.effective_enabled) {
     if (cigarHelpsPrompts(status)) return { headline: "CIGAR is on", detail: PROMPT_PROMISE, setupHint: false };
-    return { headline: "CIGAR is on, but prompts get no files yet",
-      detail: "Turn on Context for AI apps and Allow selected workspace documents in Settings.", setupHint: true };
+    return { headline: "CIGAR is on", detail: NO_FILES_YET, setupHint: true };
   }
   if (cigarWaking(status)) {
     return { headline: "CIGAR is on", detail: "It rests when nothing needs it and wakes up by itself. You do not need to turn it on again.", setupHint: false };
@@ -60,5 +68,8 @@ export function cigarHomeCopy(status: ContextAssistanceStatus | null, loading: b
   if (status.requested_enabled) {
     return { headline: "CIGAR is not running", detail: "It is saved as on but has not started. Turn it on to start it.", setupHint: false };
   }
-  return { headline: "CIGAR is off", detail: "Turn it on and " + PROMPT_PROMISE.charAt(0).toLowerCase() + PROMPT_PROMISE.slice(1), setupHint: false };
+  if (cigarWillHelpPrompts(status)) {
+    return { headline: "CIGAR is off", detail: "Turn it on and " + PROMPT_PROMISE.charAt(0).toLowerCase() + PROMPT_PROMISE.slice(1), setupHint: false };
+  }
+  return { headline: "CIGAR is off", detail: "Turn it on to start CIGAR. " + NO_FILES_YET, setupHint: true };
 }
