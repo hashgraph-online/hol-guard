@@ -13,6 +13,10 @@ from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_
 _UNAVAILABLE_MESSAGE = "Guard could not load the surface server contract. Check that the Guard daemon is running."
 
 
+class SurfaceServerUnavailableError(RuntimeError):
+    """The native runtime could not answer the surface server handshake."""
+
+
 def surface_server_handshake(supported_protocol_versions: Sequence[object] = ()) -> dict[str, object]:
     """The contract, protocol block and negotiated version for one client.
 
@@ -25,9 +29,9 @@ def surface_server_handshake(supported_protocol_versions: Sequence[object] = ())
             {"supported_protocol_versions": list(supported_protocol_versions)},
         )
     except NativeRunnerAuthorityError as error:
-        raise RuntimeError(_UNAVAILABLE_MESSAGE) from error
+        raise SurfaceServerUnavailableError(_UNAVAILABLE_MESSAGE) from error
     if not isinstance(answer.get("contract"), dict) or not isinstance(answer.get("protocol"), dict):
-        raise RuntimeError(_UNAVAILABLE_MESSAGE)
+        raise SurfaceServerUnavailableError(_UNAVAILABLE_MESSAGE)
     return answer
 
 
@@ -38,5 +42,5 @@ def build_surface_server_contract() -> dict[str, object]:
 def surface_server_contract(handshake: dict[str, object]) -> dict[str, object]:
     contract = handshake.get("contract")
     if not isinstance(contract, dict):
-        raise RuntimeError(_UNAVAILABLE_MESSAGE)
+        raise SurfaceServerUnavailableError(_UNAVAILABLE_MESSAGE)
     return contract
