@@ -29,6 +29,7 @@ _CONTRACT_KEYS = (
     "threat_intelligence",
     "cisco_evidence",
 )
+_OPTIONAL_CONTRACT_KEYS = frozenset({"cisco_evidence"})
 
 
 def _scan_args(scan_result: ScanResult) -> dict[str, object]:
@@ -70,6 +71,15 @@ def build_consumer_mode_contract(
     except NativeRunnerAuthorityError as error:
         raise RuntimeError(_UNAVAILABLE_MESSAGE) from error
     contract = answer.get("contract")
-    if not isinstance(contract, dict):
+    if not isinstance(contract, dict) or not _complete(contract):
         raise RuntimeError(_UNAVAILABLE_MESSAGE)
     return {key: contract[key] for key in _CONTRACT_KEYS if key in contract}
+
+
+def _complete(contract: dict[str, object]) -> bool:
+    """A contract without every required key, or without a verdict action, is refused."""
+
+    if any(key not in contract for key in _CONTRACT_KEYS if key not in _OPTIONAL_CONTRACT_KEYS):
+        return False
+    verdict = contract["install_verdict"]
+    return isinstance(verdict, dict) and isinstance(verdict.get("action"), str)

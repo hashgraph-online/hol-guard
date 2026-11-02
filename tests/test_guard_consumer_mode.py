@@ -266,6 +266,48 @@ def _fake_scan_result(path: Path, options: ScanOptions | None = None) -> ScanRes
     )
 
 
+def _complete_contract() -> dict[str, object]:
+    keys = (
+        "threat_intelligence",
+        "schema_version",
+        "generated_at",
+        "install_target",
+        "artifact_snapshot",
+        "capability_manifest",
+        "artifact_diff",
+        "provenance_record",
+        "trust_evidence_bundle",
+        "policy_recommendation",
+        "abom_entry",
+    )
+    return {**{key: {} for key in keys}, "schema_version": "guard-consumer.v2", "install_verdict": {"action": "allow"}}
+
+
+@pytest.mark.parametrize(
+    "contract",
+    [
+        {},
+        {key: value for key, value in _complete_contract().items() if key != "install_verdict"},
+        {**_complete_contract(), "install_verdict": {}},
+        {**_complete_contract(), "install_verdict": "allow"},
+    ],
+)
+def test_build_consumer_mode_contract_refuses_an_incomplete_native_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    contract: dict[str, object],
+) -> None:
+    def answer(_kind: str, _args: dict[str, object]) -> dict[str, object]:
+        return {"contract": contract}
+
+    module = "codex_plugin_scanner.guard.schemas.consumer_mode"
+    monkeypatch.setattr(f"{module}.scan_plugin", _fake_scan_result)
+    monkeypatch.setattr(f"{module}.native_runner_authority", answer)
+
+    with pytest.raises(RuntimeError, match="install-time scan contract"):
+        _ = build_consumer_mode_contract(tmp_path)
+
+
 def test_build_consumer_mode_contract_ships_the_scan_to_the_native_kind(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -274,7 +316,7 @@ def test_build_consumer_mode_contract_ships_the_scan_to_the_native_kind(
 
     def fake_authority(kind: str, args: dict[str, object]) -> dict[str, object]:
         calls.append((kind, args))
-        return {"contract": {"cisco_evidence": {}, "schema_version": "guard-consumer.v2", "generated_at": "t"}}
+        return {"contract": {"cisco_evidence": {}, **_complete_contract()}}
 
     module = "codex_plugin_scanner.guard.schemas.consumer_mode"
     monkeypatch.setattr(f"{module}.scan_plugin", _fake_scan_result)
@@ -282,7 +324,8 @@ def test_build_consumer_mode_contract_ships_the_scan_to_the_native_kind(
 
     payload = build_consumer_mode_contract(tmp_path, intended_harness="codex")
 
-    assert list(payload) == ["schema_version", "generated_at", "cisco_evidence"]
+    assert list(payload)[:2] == ["schema_version", "generated_at"]
+    assert list(payload)[-1] == "cisco_evidence"
     assert calls == [
         (
             "consumer_mode_contract",

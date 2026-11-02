@@ -101,7 +101,7 @@ def _run_guard_safe_preflight_command(
     _emit_preflight(payload, json_output=json_output, output_stream=output_stream)
     if getattr(args, "enforce", False):
         install_verdict = payload.get("install_verdict")
-        if isinstance(install_verdict, dict) and str(install_verdict.get("action")) != "allow":
+        if not isinstance(install_verdict, dict) or install_verdict.get("action") != "allow":
             return 2
     return 0
 
