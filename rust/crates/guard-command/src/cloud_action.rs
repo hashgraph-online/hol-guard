@@ -100,6 +100,24 @@ struct SavedConsent {
     action_identity_sha256: String,
 }
 
+/// What a decision reads from the command program: its digests and its
+/// catalog MCP contributions.
+pub(crate) struct ProgramView<'a> {
+    pub(crate) program_digest: &'a str,
+    pub(crate) catalog_digest: &'a str,
+    pub(crate) catalog: Vec<Contribution<'a>>,
+}
+
+impl<'a> ProgramView<'a> {
+    pub(crate) fn of(program: &'a NativeCommandProgram) -> Self {
+        Self {
+            program_digest: &program.program_digest,
+            catalog_digest: &program.catalog_digest,
+            catalog: contributions(program),
+        }
+    }
+}
+
 /// The long-lived evaluator state fixed at startup.
 pub struct CloudActionEvaluator {
     bindings: BindingSet,
@@ -140,17 +158,25 @@ impl CloudActionEvaluator {
             Ok(program) => program,
             Err(_) => return error_result(request_id.as_deref(), "program_unavailable"),
         };
-        match self.decide(&request, &program) {
+        match self.decide(&request, &ProgramView::of(&program)) {
             Ok(result) => result,
             Err(code) => error_result(request_id.as_deref(), code),
         }
     }
 
-    fn decide(
-        &self,
-        request: &Request,
-        program: &NativeCommandProgram,
-    ) -> Result<Value, &'static str> {
+    /// `evaluate` against a given program view instead of the packaged one,
+    /// so parity fixtures can supply their own catalog contributions.
+    #[cfg(test)]
+    pub(crate) fn evaluate_with(&self, line: &[u8], program: &ProgramView<'_>) -> Value {
+        let request: Request = match parse_strict(line).map(serde_json::from_value) {
+            Ok(Ok(request)) => request,
+            _ => return error_result(None, "invalid_request"),
+        };
+        self.decide(&request, program)
+            .unwrap_or_else(|code| error_result(Some(&request.request_id), code))
+    }
+
+    fn decide(&self, request: &Request, program: &ProgramView<'_>) -> Result<Value, &'static str> {
         validate_request(request)?;
         if request.binding_set_digest != self.bindings.digest {
             return Err("binding_unavailable");
@@ -171,7 +197,7 @@ impl CloudActionEvaluator {
             self.activation_key.as_ref(),
             &ActivationContext {
                 workspace_id: &request.principal.workspace_id,
-                catalog_digest: &program.catalog_digest,
+                catalog_digest: program.catalog_digest,
                 now: &request.evaluated_at,
             },
         )?;
@@ -187,8 +213,8 @@ impl CloudActionEvaluator {
         );
         let mut action = policy.action;
         let mut reason_codes = vec![policy.reason_code];
-        let catalog = contributions(program);
-        if let Some(tightened) = catalog_tightening(admitted, &catalog, &activation, action) {
+        if let Some(tightened) = catalog_tightening(admitted, &program.catalog, &activation, action)
+        {
             action = tightened;
             reason_codes.push("catalog_mcp_extension");
         }

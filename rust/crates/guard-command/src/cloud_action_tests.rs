@@ -4,6 +4,7 @@ mod canonical;
 mod catalog;
 mod consent;
 mod intake;
+mod parity;
 mod policy;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
