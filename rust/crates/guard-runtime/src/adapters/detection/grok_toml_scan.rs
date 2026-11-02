@@ -26,8 +26,15 @@ fn parse_header(line: &str) -> Option<(Vec<String>, bool)> {
         Some(inner) => (true, inner),
         None => (false, rest),
     };
-    let close = rest.find([']', '#'])?;
-    let after = rest[close..].strip_prefix(']')?;
+    let b = rest.as_bytes();
+    let mut close = 0;
+    while close < b.len() && !matches!(b[close], b']' | b'#') {
+        close = match b[close] {
+            b'"' | b'\'' => skip_string(b, close),
+            _ => close + 1,
+        };
+    }
+    let after = rest.get(close..)?.strip_prefix(']')?;
     let tail = after
         .strip_prefix(']')
         .unwrap_or(after)
@@ -35,12 +42,27 @@ fn parse_header(line: &str) -> Option<(Vec<String>, bool)> {
     if !tail.is_empty() && tail != "\r" && !tail.starts_with('#') {
         return None;
     }
-    let path = rest[..close]
-        .trim_matches([' ', '\t'])
-        .split('.')
-        .map(|part| part.trim().trim_matches('"').trim_matches('\'').to_string())
-        .collect();
-    Some((path, aot))
+    Some((key_path(&rest[..close])?, aot))
+}
+
+/// The dotted key a header names, read with TOML's quoting rules so a dot
+/// inside a quoted part stays part of that key.
+fn key_path(raw: &str) -> Option<Vec<String>> {
+    let table: toml::Table = format!("{raw} = 0").parse().ok()?;
+    let mut path = Vec::new();
+    let mut node = &table;
+    loop {
+        let mut entries = node.iter();
+        let (key, value) = entries.next()?;
+        if entries.next().is_some() {
+            return None;
+        }
+        path.push(key.clone());
+        match value {
+            toml::Value::Table(inner) => node = inner,
+            _ => return Some(path),
+        }
+    }
 }
 
 /// The offset just past the string literal that opens at `i`, honoring the

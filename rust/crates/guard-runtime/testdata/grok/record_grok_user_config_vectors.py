@@ -69,6 +69,9 @@ _EXACT: dict[str, str] = {
     "crlf-deny": '[permission]\r\ndeny = [\r\n  "a",\r\n  "b",\r\n]\r\n',
     "indented-header": '  [ permission ]\n  deny = ["a"]\n',
     "quoted-header": '["permission"]\ndeny = ["a"]\n',
+    "quoted-dotted-sibling": '[permission]\nmode = "ask"\n["permission.extra"]\nvalues = []\n',
+    "quoted-dotted-only": '["permission.extra"]\nvalues = []\n',
+    "quoted-bracket-key": '["a]b"]\nx = 1\n[permission]\ndeny = ["a"]\n',
     "quoted-key": '[permission]\n"deny" = ["a"]\n',
     "header-comment": "[permission] # hi\ndeny = []\n",
     "permission-mode": '[permission]\nmode = "ask"\n',
@@ -133,6 +136,7 @@ _SEMANTIC: dict[str, str] = {
     "dotted-compat": "compat.claude.hooks = true\n",
     "dotted-hooks": "hooks.PreToolUse = []\n",
     "implicit-permission": "[permission.sub]\nx = 1\n",
+    "quoted-dotted-part": '[permission."x.y"]\nz = 1\n',
     "implicit-vendor": "[compat.claude.sub]\nx = 1\n",
 }
 

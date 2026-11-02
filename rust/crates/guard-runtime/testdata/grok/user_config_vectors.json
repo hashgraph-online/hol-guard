@@ -5036,6 +5036,588 @@
   },
   {
    "candidates": [],
+   "existing_text": "[permission]\nmode = \"ask\"\n[\"permission.extra\"]\nvalues = []\n",
+   "expect": {
+    "merged": "[permission]\nmode = \"ask\"\ndeny = [\"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n[\"permission.extra\"]\nvalues = []\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+    "state": {
+     "added_deny_rules": [
+      "Bash(hol-guard apps disconnect grok*)",
+      "Bash(hol-guard apps uninstall*)",
+      "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/managed_config.toml)",
+      "Edit(**/.grok/config.toml)",
+      "Read(**/.grok/auth/**)",
+      "Read(**/.grok/auth.json)",
+      "Read(**/.env)",
+      "Read(**/.npmrc)",
+      "Read(**/.ssh/**)",
+      "Read(**/.hol-guard/secrets/**)",
+      "Read(**/.hol-guard/totp-secrets/**)",
+      "Read(**/.hol-guard/daemon-auth-token)"
+     ],
+     "added_hook_events": [
+      "PreToolUse",
+      "UserPromptSubmit",
+      "SubagentStart",
+      "SessionStart"
+     ],
+     "created_keys": [
+      "compat",
+      "hooks",
+      "permission.deny",
+      "compat.claude",
+      "compat.cursor",
+      "hooks.PreToolUse",
+      "hooks.UserPromptSubmit",
+      "hooks.SubagentStart",
+      "hooks.SessionStart"
+     ],
+     "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+     "prior_compat_hooks": {
+      "claude": null,
+      "cursor": null
+     }
+    }
+   },
+   "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+   "layout": "exact",
+   "missing": [],
+   "name": "quoted-dotted-sibling/install",
+   "op": "merge",
+   "previous_state": {}
+  },
+  {
+   "existing_text": "[permission]\nmode = \"ask\"\ndeny = [\"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n[\"permission.extra\"]\nvalues = []\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+   "expect": {
+    "text": "[permission]\nmode = \"ask\"\n[\"permission.extra\"]\nvalues = []\n\n"
+   },
+   "layout": "exact",
+   "name": "quoted-dotted-sibling/remove",
+   "op": "remove",
+   "previous_state": {
+    "added_deny_rules": [
+     "Bash(hol-guard apps disconnect grok*)",
+     "Bash(hol-guard apps uninstall*)",
+     "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/managed_config.toml)",
+     "Edit(**/.grok/config.toml)",
+     "Read(**/.grok/auth/**)",
+     "Read(**/.grok/auth.json)",
+     "Read(**/.env)",
+     "Read(**/.npmrc)",
+     "Read(**/.ssh/**)",
+     "Read(**/.hol-guard/secrets/**)",
+     "Read(**/.hol-guard/totp-secrets/**)",
+     "Read(**/.hol-guard/daemon-auth-token)"
+    ],
+    "added_hook_events": [
+     "PreToolUse",
+     "UserPromptSubmit",
+     "SubagentStart",
+     "SessionStart"
+    ],
+    "created_keys": [
+     "compat",
+     "hooks",
+     "permission.deny",
+     "compat.claude",
+     "compat.cursor",
+     "hooks.PreToolUse",
+     "hooks.UserPromptSubmit",
+     "hooks.SubagentStart",
+     "hooks.SessionStart"
+    ],
+    "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+    "prior_compat_hooks": {
+     "claude": null,
+     "cursor": null
+    }
+   }
+  },
+  {
+   "candidates": [],
+   "existing_text": "[permission]\nmode = \"ask\"\ndeny = [\"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n[\"permission.extra\"]\nvalues = []\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+   "expect": {
+    "merged": "[permission]\nmode = \"ask\"\ndeny = [\"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n[\"permission.extra\"]\nvalues = []\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+    "state": {
+     "added_deny_rules": [
+      "Bash(hol-guard apps disconnect grok*)",
+      "Bash(hol-guard apps uninstall*)",
+      "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/managed_config.toml)",
+      "Edit(**/.grok/config.toml)",
+      "Read(**/.grok/auth/**)",
+      "Read(**/.grok/auth.json)",
+      "Read(**/.env)",
+      "Read(**/.npmrc)",
+      "Read(**/.ssh/**)",
+      "Read(**/.hol-guard/secrets/**)",
+      "Read(**/.hol-guard/totp-secrets/**)",
+      "Read(**/.hol-guard/daemon-auth-token)"
+     ],
+     "added_hook_events": [
+      "PreToolUse",
+      "UserPromptSubmit",
+      "SubagentStart",
+      "SessionStart"
+     ],
+     "created_keys": [
+      "compat",
+      "hooks",
+      "permission.deny",
+      "compat.claude",
+      "compat.cursor",
+      "hooks.PreToolUse",
+      "hooks.UserPromptSubmit",
+      "hooks.SubagentStart",
+      "hooks.SessionStart"
+     ],
+     "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+     "prior_compat_hooks": {
+      "claude": null,
+      "cursor": null
+     }
+    }
+   },
+   "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+   "layout": "exact",
+   "missing": [],
+   "name": "quoted-dotted-sibling/reinstall",
+   "op": "merge",
+   "previous_state": {
+    "added_deny_rules": [
+     "Bash(hol-guard apps disconnect grok*)",
+     "Bash(hol-guard apps uninstall*)",
+     "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/managed_config.toml)",
+     "Edit(**/.grok/config.toml)",
+     "Read(**/.grok/auth/**)",
+     "Read(**/.grok/auth.json)",
+     "Read(**/.env)",
+     "Read(**/.npmrc)",
+     "Read(**/.ssh/**)",
+     "Read(**/.hol-guard/secrets/**)",
+     "Read(**/.hol-guard/totp-secrets/**)",
+     "Read(**/.hol-guard/daemon-auth-token)"
+    ],
+    "added_hook_events": [
+     "PreToolUse",
+     "UserPromptSubmit",
+     "SubagentStart",
+     "SessionStart"
+    ],
+    "created_keys": [
+     "compat",
+     "hooks",
+     "permission.deny",
+     "compat.claude",
+     "compat.cursor",
+     "hooks.PreToolUse",
+     "hooks.UserPromptSubmit",
+     "hooks.SubagentStart",
+     "hooks.SessionStart"
+    ],
+    "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+    "prior_compat_hooks": {
+     "claude": null,
+     "cursor": null
+    }
+   }
+  },
+  {
+   "candidates": [],
+   "existing_text": "[\"permission.extra\"]\nvalues = []\n",
+   "expect": {
+    "merged": "[\"permission.extra\"]\nvalues = []\n\n[permission]\ndeny = [\"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+    "state": {
+     "added_deny_rules": [
+      "Bash(hol-guard apps disconnect grok*)",
+      "Bash(hol-guard apps uninstall*)",
+      "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/managed_config.toml)",
+      "Edit(**/.grok/config.toml)",
+      "Read(**/.grok/auth/**)",
+      "Read(**/.grok/auth.json)",
+      "Read(**/.env)",
+      "Read(**/.npmrc)",
+      "Read(**/.ssh/**)",
+      "Read(**/.hol-guard/secrets/**)",
+      "Read(**/.hol-guard/totp-secrets/**)",
+      "Read(**/.hol-guard/daemon-auth-token)"
+     ],
+     "added_hook_events": [
+      "PreToolUse",
+      "UserPromptSubmit",
+      "SubagentStart",
+      "SessionStart"
+     ],
+     "created_keys": [
+      "permission",
+      "compat",
+      "hooks",
+      "permission.deny",
+      "compat.claude",
+      "compat.cursor",
+      "hooks.PreToolUse",
+      "hooks.UserPromptSubmit",
+      "hooks.SubagentStart",
+      "hooks.SessionStart"
+     ],
+     "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+     "prior_compat_hooks": {
+      "claude": null,
+      "cursor": null
+     }
+    }
+   },
+   "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+   "layout": "exact",
+   "missing": [],
+   "name": "quoted-dotted-only/install",
+   "op": "merge",
+   "previous_state": {}
+  },
+  {
+   "existing_text": "[\"permission.extra\"]\nvalues = []\n\n[permission]\ndeny = [\"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+   "expect": {
+    "text": "[\"permission.extra\"]\nvalues = []\n\n"
+   },
+   "layout": "exact",
+   "name": "quoted-dotted-only/remove",
+   "op": "remove",
+   "previous_state": {
+    "added_deny_rules": [
+     "Bash(hol-guard apps disconnect grok*)",
+     "Bash(hol-guard apps uninstall*)",
+     "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/managed_config.toml)",
+     "Edit(**/.grok/config.toml)",
+     "Read(**/.grok/auth/**)",
+     "Read(**/.grok/auth.json)",
+     "Read(**/.env)",
+     "Read(**/.npmrc)",
+     "Read(**/.ssh/**)",
+     "Read(**/.hol-guard/secrets/**)",
+     "Read(**/.hol-guard/totp-secrets/**)",
+     "Read(**/.hol-guard/daemon-auth-token)"
+    ],
+    "added_hook_events": [
+     "PreToolUse",
+     "UserPromptSubmit",
+     "SubagentStart",
+     "SessionStart"
+    ],
+    "created_keys": [
+     "permission",
+     "compat",
+     "hooks",
+     "permission.deny",
+     "compat.claude",
+     "compat.cursor",
+     "hooks.PreToolUse",
+     "hooks.UserPromptSubmit",
+     "hooks.SubagentStart",
+     "hooks.SessionStart"
+    ],
+    "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+    "prior_compat_hooks": {
+     "claude": null,
+     "cursor": null
+    }
+   }
+  },
+  {
+   "candidates": [],
+   "existing_text": "[\"permission.extra\"]\nvalues = []\n\n[permission]\ndeny = [\"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+   "expect": {
+    "merged": "[\"permission.extra\"]\nvalues = []\n\n[permission]\ndeny = [\"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+    "state": {
+     "added_deny_rules": [
+      "Bash(hol-guard apps disconnect grok*)",
+      "Bash(hol-guard apps uninstall*)",
+      "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/managed_config.toml)",
+      "Edit(**/.grok/config.toml)",
+      "Read(**/.grok/auth/**)",
+      "Read(**/.grok/auth.json)",
+      "Read(**/.env)",
+      "Read(**/.npmrc)",
+      "Read(**/.ssh/**)",
+      "Read(**/.hol-guard/secrets/**)",
+      "Read(**/.hol-guard/totp-secrets/**)",
+      "Read(**/.hol-guard/daemon-auth-token)"
+     ],
+     "added_hook_events": [
+      "PreToolUse",
+      "UserPromptSubmit",
+      "SubagentStart",
+      "SessionStart"
+     ],
+     "created_keys": [
+      "permission",
+      "compat",
+      "hooks",
+      "permission.deny",
+      "compat.claude",
+      "compat.cursor",
+      "hooks.PreToolUse",
+      "hooks.UserPromptSubmit",
+      "hooks.SubagentStart",
+      "hooks.SessionStart"
+     ],
+     "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+     "prior_compat_hooks": {
+      "claude": null,
+      "cursor": null
+     }
+    }
+   },
+   "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+   "layout": "exact",
+   "missing": [],
+   "name": "quoted-dotted-only/reinstall",
+   "op": "merge",
+   "previous_state": {
+    "added_deny_rules": [
+     "Bash(hol-guard apps disconnect grok*)",
+     "Bash(hol-guard apps uninstall*)",
+     "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/managed_config.toml)",
+     "Edit(**/.grok/config.toml)",
+     "Read(**/.grok/auth/**)",
+     "Read(**/.grok/auth.json)",
+     "Read(**/.env)",
+     "Read(**/.npmrc)",
+     "Read(**/.ssh/**)",
+     "Read(**/.hol-guard/secrets/**)",
+     "Read(**/.hol-guard/totp-secrets/**)",
+     "Read(**/.hol-guard/daemon-auth-token)"
+    ],
+    "added_hook_events": [
+     "PreToolUse",
+     "UserPromptSubmit",
+     "SubagentStart",
+     "SessionStart"
+    ],
+    "created_keys": [
+     "permission",
+     "compat",
+     "hooks",
+     "permission.deny",
+     "compat.claude",
+     "compat.cursor",
+     "hooks.PreToolUse",
+     "hooks.UserPromptSubmit",
+     "hooks.SubagentStart",
+     "hooks.SessionStart"
+    ],
+    "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+    "prior_compat_hooks": {
+     "claude": null,
+     "cursor": null
+    }
+   }
+  },
+  {
+   "candidates": [],
+   "existing_text": "[\"a]b\"]\nx = 1\n[permission]\ndeny = [\"a\"]\n",
+   "expect": {
+    "merged": "[\"a]b\"]\nx = 1\n[permission]\ndeny = [\"a\", \"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+    "state": {
+     "added_deny_rules": [
+      "Bash(hol-guard apps disconnect grok*)",
+      "Bash(hol-guard apps uninstall*)",
+      "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/managed_config.toml)",
+      "Edit(**/.grok/config.toml)",
+      "Read(**/.grok/auth/**)",
+      "Read(**/.grok/auth.json)",
+      "Read(**/.env)",
+      "Read(**/.npmrc)",
+      "Read(**/.ssh/**)",
+      "Read(**/.hol-guard/secrets/**)",
+      "Read(**/.hol-guard/totp-secrets/**)",
+      "Read(**/.hol-guard/daemon-auth-token)"
+     ],
+     "added_hook_events": [
+      "PreToolUse",
+      "UserPromptSubmit",
+      "SubagentStart",
+      "SessionStart"
+     ],
+     "created_keys": [
+      "compat",
+      "hooks",
+      "compat.claude",
+      "compat.cursor",
+      "hooks.PreToolUse",
+      "hooks.UserPromptSubmit",
+      "hooks.SubagentStart",
+      "hooks.SessionStart"
+     ],
+     "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+     "prior_compat_hooks": {
+      "claude": null,
+      "cursor": null
+     }
+    }
+   },
+   "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+   "layout": "exact",
+   "missing": [],
+   "name": "quoted-bracket-key/install",
+   "op": "merge",
+   "previous_state": {}
+  },
+  {
+   "existing_text": "[\"a]b\"]\nx = 1\n[permission]\ndeny = [\"a\", \"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+   "expect": {
+    "text": "[\"a]b\"]\nx = 1\n[permission]\ndeny = [\"a\"]\n\n"
+   },
+   "layout": "exact",
+   "name": "quoted-bracket-key/remove",
+   "op": "remove",
+   "previous_state": {
+    "added_deny_rules": [
+     "Bash(hol-guard apps disconnect grok*)",
+     "Bash(hol-guard apps uninstall*)",
+     "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/managed_config.toml)",
+     "Edit(**/.grok/config.toml)",
+     "Read(**/.grok/auth/**)",
+     "Read(**/.grok/auth.json)",
+     "Read(**/.env)",
+     "Read(**/.npmrc)",
+     "Read(**/.ssh/**)",
+     "Read(**/.hol-guard/secrets/**)",
+     "Read(**/.hol-guard/totp-secrets/**)",
+     "Read(**/.hol-guard/daemon-auth-token)"
+    ],
+    "added_hook_events": [
+     "PreToolUse",
+     "UserPromptSubmit",
+     "SubagentStart",
+     "SessionStart"
+    ],
+    "created_keys": [
+     "compat",
+     "hooks",
+     "compat.claude",
+     "compat.cursor",
+     "hooks.PreToolUse",
+     "hooks.UserPromptSubmit",
+     "hooks.SubagentStart",
+     "hooks.SessionStart"
+    ],
+    "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+    "prior_compat_hooks": {
+     "claude": null,
+     "cursor": null
+    }
+   }
+  },
+  {
+   "candidates": [],
+   "existing_text": "[\"a]b\"]\nx = 1\n[permission]\ndeny = [\"a\", \"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+   "expect": {
+    "merged": "[\"a]b\"]\nx = 1\n[permission]\ndeny = [\"a\", \"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+    "state": {
+     "added_deny_rules": [
+      "Bash(hol-guard apps disconnect grok*)",
+      "Bash(hol-guard apps uninstall*)",
+      "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/managed_config.toml)",
+      "Edit(**/.grok/config.toml)",
+      "Read(**/.grok/auth/**)",
+      "Read(**/.grok/auth.json)",
+      "Read(**/.env)",
+      "Read(**/.npmrc)",
+      "Read(**/.ssh/**)",
+      "Read(**/.hol-guard/secrets/**)",
+      "Read(**/.hol-guard/totp-secrets/**)",
+      "Read(**/.hol-guard/daemon-auth-token)"
+     ],
+     "added_hook_events": [
+      "PreToolUse",
+      "UserPromptSubmit",
+      "SubagentStart",
+      "SessionStart"
+     ],
+     "created_keys": [
+      "compat",
+      "hooks",
+      "compat.claude",
+      "compat.cursor",
+      "hooks.PreToolUse",
+      "hooks.UserPromptSubmit",
+      "hooks.SubagentStart",
+      "hooks.SessionStart"
+     ],
+     "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+     "prior_compat_hooks": {
+      "claude": null,
+      "cursor": null
+     }
+    }
+   },
+   "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+   "layout": "exact",
+   "missing": [],
+   "name": "quoted-bracket-key/reinstall",
+   "op": "merge",
+   "previous_state": {
+    "added_deny_rules": [
+     "Bash(hol-guard apps disconnect grok*)",
+     "Bash(hol-guard apps uninstall*)",
+     "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/managed_config.toml)",
+     "Edit(**/.grok/config.toml)",
+     "Read(**/.grok/auth/**)",
+     "Read(**/.grok/auth.json)",
+     "Read(**/.env)",
+     "Read(**/.npmrc)",
+     "Read(**/.ssh/**)",
+     "Read(**/.hol-guard/secrets/**)",
+     "Read(**/.hol-guard/totp-secrets/**)",
+     "Read(**/.hol-guard/daemon-auth-token)"
+    ],
+    "added_hook_events": [
+     "PreToolUse",
+     "UserPromptSubmit",
+     "SubagentStart",
+     "SessionStart"
+    ],
+    "created_keys": [
+     "compat",
+     "hooks",
+     "compat.claude",
+     "compat.cursor",
+     "hooks.PreToolUse",
+     "hooks.UserPromptSubmit",
+     "hooks.SubagentStart",
+     "hooks.SessionStart"
+    ],
+    "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+    "prior_compat_hooks": {
+     "claude": null,
+     "cursor": null
+    }
+   }
+  },
+  {
+   "candidates": [],
    "existing_text": "[permission]\n\"deny\" = [\"a\"]\n",
    "expect": {
     "merged": "[permission]\n\"deny\" = [\"a\", \"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
@@ -19621,6 +20203,200 @@
    "name": "implicit-permission/after-remove",
    "op": "merge",
    "previous_state": {}
+  },
+  {
+   "candidates": [],
+   "existing_text": "[permission.\"x.y\"]\nz = 1\n",
+   "expect": {
+    "merged": "[permission]\ndeny = [\"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[permission.\"x.y\"]\nz = 1\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+    "state": {
+     "added_deny_rules": [
+      "Bash(hol-guard apps disconnect grok*)",
+      "Bash(hol-guard apps uninstall*)",
+      "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/managed_config.toml)",
+      "Edit(**/.grok/config.toml)",
+      "Read(**/.grok/auth/**)",
+      "Read(**/.grok/auth.json)",
+      "Read(**/.env)",
+      "Read(**/.npmrc)",
+      "Read(**/.ssh/**)",
+      "Read(**/.hol-guard/secrets/**)",
+      "Read(**/.hol-guard/totp-secrets/**)",
+      "Read(**/.hol-guard/daemon-auth-token)"
+     ],
+     "added_hook_events": [
+      "PreToolUse",
+      "UserPromptSubmit",
+      "SubagentStart",
+      "SessionStart"
+     ],
+     "created_keys": [
+      "compat",
+      "hooks",
+      "permission.deny",
+      "compat.claude",
+      "compat.cursor",
+      "hooks.PreToolUse",
+      "hooks.UserPromptSubmit",
+      "hooks.SubagentStart",
+      "hooks.SessionStart"
+     ],
+     "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+     "prior_compat_hooks": {
+      "claude": null,
+      "cursor": null
+     }
+    }
+   },
+   "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+   "layout": "semantic",
+   "missing": [],
+   "name": "quoted-dotted-part/install",
+   "op": "merge",
+   "previous_state": {}
+  },
+  {
+   "existing_text": "[permission]\ndeny = [\"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[permission.\"x.y\"]\nz = 1\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+   "expect": {
+    "text": "[permission]\n\n[permission.\"x.y\"]\nz = 1\n\n"
+   },
+   "layout": "semantic",
+   "name": "quoted-dotted-part/remove",
+   "op": "remove",
+   "previous_state": {
+    "added_deny_rules": [
+     "Bash(hol-guard apps disconnect grok*)",
+     "Bash(hol-guard apps uninstall*)",
+     "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/managed_config.toml)",
+     "Edit(**/.grok/config.toml)",
+     "Read(**/.grok/auth/**)",
+     "Read(**/.grok/auth.json)",
+     "Read(**/.env)",
+     "Read(**/.npmrc)",
+     "Read(**/.ssh/**)",
+     "Read(**/.hol-guard/secrets/**)",
+     "Read(**/.hol-guard/totp-secrets/**)",
+     "Read(**/.hol-guard/daemon-auth-token)"
+    ],
+    "added_hook_events": [
+     "PreToolUse",
+     "UserPromptSubmit",
+     "SubagentStart",
+     "SessionStart"
+    ],
+    "created_keys": [
+     "compat",
+     "hooks",
+     "permission.deny",
+     "compat.claude",
+     "compat.cursor",
+     "hooks.PreToolUse",
+     "hooks.UserPromptSubmit",
+     "hooks.SubagentStart",
+     "hooks.SessionStart"
+    ],
+    "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+    "prior_compat_hooks": {
+     "claude": null,
+     "cursor": null
+    }
+   }
+  },
+  {
+   "candidates": [],
+   "existing_text": "[permission]\ndeny = [\"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[permission.\"x.y\"]\nz = 1\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+   "expect": {
+    "merged": "[permission]\ndeny = [\"Bash(hol-guard apps disconnect grok*)\", \"Bash(hol-guard apps uninstall*)\", \"Bash(rm -rf **/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/hooks/hol-guard*)\", \"Edit(**/.grok/managed_config.toml)\", \"Edit(**/.grok/config.toml)\", \"Read(**/.grok/auth/**)\", \"Read(**/.grok/auth.json)\", \"Read(**/.env)\", \"Read(**/.npmrc)\", \"Read(**/.ssh/**)\", \"Read(**/.hol-guard/secrets/**)\", \"Read(**/.hol-guard/totp-secrets/**)\", \"Read(**/.hol-guard/daemon-auth-token)\"]\n\n[permission.\"x.y\"]\nz = 1\n\n[compat.claude]\nhooks = false\n\n[compat.cursor]\nhooks = false\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 90\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"/opt/hol-guard/bin/hol-guard hook --harness grok\"\ntimeout = 15\n",
+    "state": {
+     "added_deny_rules": [
+      "Bash(hol-guard apps disconnect grok*)",
+      "Bash(hol-guard apps uninstall*)",
+      "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/hooks/hol-guard*)",
+      "Edit(**/.grok/managed_config.toml)",
+      "Edit(**/.grok/config.toml)",
+      "Read(**/.grok/auth/**)",
+      "Read(**/.grok/auth.json)",
+      "Read(**/.env)",
+      "Read(**/.npmrc)",
+      "Read(**/.ssh/**)",
+      "Read(**/.hol-guard/secrets/**)",
+      "Read(**/.hol-guard/totp-secrets/**)",
+      "Read(**/.hol-guard/daemon-auth-token)"
+     ],
+     "added_hook_events": [
+      "PreToolUse",
+      "UserPromptSubmit",
+      "SubagentStart",
+      "SessionStart"
+     ],
+     "created_keys": [
+      "compat",
+      "hooks",
+      "permission.deny",
+      "compat.claude",
+      "compat.cursor",
+      "hooks.PreToolUse",
+      "hooks.UserPromptSubmit",
+      "hooks.SubagentStart",
+      "hooks.SessionStart"
+     ],
+     "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+     "prior_compat_hooks": {
+      "claude": null,
+      "cursor": null
+     }
+    }
+   },
+   "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+   "layout": "semantic",
+   "missing": [],
+   "name": "quoted-dotted-part/reinstall",
+   "op": "merge",
+   "previous_state": {
+    "added_deny_rules": [
+     "Bash(hol-guard apps disconnect grok*)",
+     "Bash(hol-guard apps uninstall*)",
+     "Bash(rm -rf **/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/hooks/hol-guard*)",
+     "Edit(**/.grok/managed_config.toml)",
+     "Edit(**/.grok/config.toml)",
+     "Read(**/.grok/auth/**)",
+     "Read(**/.grok/auth.json)",
+     "Read(**/.env)",
+     "Read(**/.npmrc)",
+     "Read(**/.ssh/**)",
+     "Read(**/.hol-guard/secrets/**)",
+     "Read(**/.hol-guard/totp-secrets/**)",
+     "Read(**/.hol-guard/daemon-auth-token)"
+    ],
+    "added_hook_events": [
+     "PreToolUse",
+     "UserPromptSubmit",
+     "SubagentStart",
+     "SessionStart"
+    ],
+    "created_keys": [
+     "compat",
+     "hooks",
+     "permission.deny",
+     "compat.claude",
+     "compat.cursor",
+     "hooks.PreToolUse",
+     "hooks.UserPromptSubmit",
+     "hooks.SubagentStart",
+     "hooks.SessionStart"
+    ],
+    "hook_command": "/opt/hol-guard/bin/hol-guard hook --harness grok",
+    "prior_compat_hooks": {
+     "claude": null,
+     "cursor": null
+    }
+   }
   },
   {
    "candidates": [],
