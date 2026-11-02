@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import cloud_exception_requests
 from codex_plugin_scanner.guard.cloud_exception_requests import (
     CloudExceptionRequestError,
     fetch_cloud_exception_requests,
@@ -18,6 +19,7 @@ from codex_plugin_scanner.guard.cloud_exception_requests import (
     submit_cloud_exception_request,
     validate_cloud_exception_request_payload,
 )
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -27,6 +29,16 @@ def test_normalized_cloud_exception_requests_url_from_sync_url() -> None:
         normalized_cloud_exception_requests_url("https://hol.org/api/guard/receipts/sync")
         == "https://hol.org/api/guard/exceptions/requests"
     )
+
+
+def test_an_unavailable_resident_fails_the_request_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _unavailable(*_args: object, **_kwargs: object) -> str:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(cloud_exception_requests, "derived_sync_url", _unavailable)
+    with pytest.raises(CloudExceptionRequestError) as caught:
+        normalized_cloud_exception_requests_url("https://hol.org/api/guard/receipts/sync")
+    assert caught.value.status == 502
 
 
 def test_validate_cloud_exception_request_payload_requires_source_receipt() -> None:

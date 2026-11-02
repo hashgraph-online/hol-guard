@@ -1,7 +1,11 @@
+import pytest
+
+from codex_plugin_scanner.guard import insights_share
 from codex_plugin_scanner.guard.insights_share import (
     build_insights_share_payload,
     normalized_insights_share_url,
 )
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 
 
 def test_build_insights_share_payload_defaults():
@@ -56,3 +60,15 @@ def test_build_insights_share_payload_with_top_artifacts():
 def test_normalized_insights_share_url_from_receipts_sync():
     url = normalized_insights_share_url("https://hol.org/api/guard/receipts/sync")
     assert url == "https://hol.org/api/guard/insights/shares"
+
+
+def test_an_unavailable_resident_fails_the_share(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(insights_share, "native_runner_authority", _unavailable)
+    monkeypatch.setattr(insights_share, "derived_sync_url", _unavailable)
+    with pytest.raises(RuntimeError, match="could not prepare the insights share"):
+        build_insights_share_payload({"total": 1})
+    with pytest.raises(RuntimeError, match="could not prepare the insights share"):
+        normalized_insights_share_url("https://hol.org/api/guard/receipts/sync")
