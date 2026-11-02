@@ -59,10 +59,32 @@ def report_native_unavailable(
     return 1
 
 
-def guard_value_error_exit(parser: argparse.ArgumentParser, exc: ValueError) -> int:
-    """Return the native-failure exit code, or fall back to the usage error."""
+def report_review_contract_rejection(parser: argparse.ArgumentParser, exc: ValueError) -> int | None:
+    """Print a refused Guard Cloud signature as a runtime error, or None for other errors.
 
-    native_exit = report_native_unavailable(parser, exc)
-    if native_exit is None:
+    A key Guard cannot anchor stops `connect` and `sync` after sign-in. The
+    usage banner made that look like a mistyped command.
+    """
+
+    from .guard.review_oauth_binding import GuardReviewContractError
+
+    if not isinstance(exc, GuardReviewContractError):
+        return None
+    print(f"{parser.prog}: error: {exc}", file=sys.stderr)
+    print(
+        f"{parser.prog}: hint: Guard Cloud sent signed data this install could not verify, so Guard did not "
+        "trust it and stopped the sync. Run `hol-guard update`, then `hol-guard sync`.",
+        file=sys.stderr,
+    )
+    return 1
+
+
+def guard_value_error_exit(parser: argparse.ArgumentParser, exc: ValueError) -> int:
+    """Return the runtime-failure exit code, or fall back to the usage error."""
+
+    runtime_exit = report_native_unavailable(parser, exc)
+    if runtime_exit is None:
+        runtime_exit = report_review_contract_rejection(parser, exc)
+    if runtime_exit is None:
         parser.error(str(exc))
-    return native_exit
+    return runtime_exit
