@@ -106,7 +106,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
     """Parse scenario data without importing candidate Python code."""
     if not isinstance(data, dict) or not isinstance(data.get("scenarios"), list):
         raise ValueError("scenario catalog must contain an array")
-    if not 1 <= len(data["scenarios"]) <= 256:
+    if not 1 <= len(data["scenarios"]) <= 384:
         raise ValueError("scenario catalog count exceeds its bound")
     if data.get("schema") != "hol.guard-gauntlet.scenarios.v1":
         raise ValueError("unsupported Gauntlet scenario schema")
