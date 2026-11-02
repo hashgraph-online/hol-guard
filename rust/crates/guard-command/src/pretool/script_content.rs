@@ -373,11 +373,24 @@ pub(crate) fn prefixed_launch(model: &CanonicalCommandV1, context: PathContext<'
 /// approval left to give them, while `bash -c 'npm test'` beside them
 /// modelled exactly and ran.
 pub(crate) fn shell_script_launch(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
-    model.uncertainty_reason.as_deref() == Some("transparent_wrapper_not_yet_supported")
+    startup_shell_script(model).is_some_and(|script| {
+        text_structure(&script, context).is_some() && !text_exfiltrates(&script, context)
+    })
+}
+
+/// The script a startup-reading shell is told to run, when that shell is the
+/// whole command.
+///
+/// The invocation keeps the uncertainty the startup file earns it, so the
+/// script is read as a projection of the text rather than as the command's own
+/// segments, and every screen that judges the command has to be given the same
+/// projection - otherwise the script buys a floor the words inside it would not
+/// have earned on their own.
+fn startup_shell_script(model: &CanonicalCommandV1) -> Option<String> {
+    (model.uncertainty_reason.as_deref() == Some("transparent_wrapper_not_yet_supported")
         && model.wrapper_chain.is_empty()
-        && !model.path_overridden
-        && crate::parser_wrappers::startup_shell_script(&model.normalized_text)
-            .is_some_and(|script| text_structure(&script, context).is_some())
+        && !model.path_overridden)
+        .then(|| crate::parser_wrappers::startup_shell_script(&model.normalized_text))?
 }
 
 /// The sources of the program, when the command is one interpreter launch,
@@ -764,9 +777,31 @@ fn assess_programs(
 /// Whether one launched program both reads a credential store and uses the
 /// network. Two programs that each do one of them are not paired.
 pub(super) fn exfiltrates(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
+    launches_exfiltration(model, context)
+        || startup_shell_script(model).is_some_and(|script| text_exfiltrates(&script, context))
+}
+
+/// Whether a program this command's own segments launch both reads a
+/// credential store and uses the network.
+fn launches_exfiltration(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
     assess(model, context)
         .iter()
         .any(|found| found.network && found.credential_store)
+}
+
+/// Whether a program the POSIX shell text `command` launches both reads a
+/// credential store and uses the network, for a caller that judges a
+/// projection of the text. A shell inside that text is read no further,
+/// because a projection holding one is not a projection a floor is granted
+/// for either.
+pub(super) fn text_exfiltrates(command: &str, context: PathContext<'_>) -> bool {
+    crate::parse_command(&crate::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: "posix".to_owned(),
+        transport: "shell_string".to_owned(),
+        extraction_provenance: "guard-shell".to_owned(),
+    })
+    .is_ok_and(|model| launches_exfiltration(&model, context))
 }
 
 /// Whether the script at `path` stands alone and does neither of the things
