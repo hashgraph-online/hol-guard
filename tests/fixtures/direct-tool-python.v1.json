@@ -1266,6 +1266,108 @@
       "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
     },
     {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | tail -20",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | head -40",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts | tail -20",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | tail -201",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\"",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | wc -l",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
       "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | tail -200 ; echo TSC_DONE",
       "environment": {},
       "expected": true,

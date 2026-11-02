@@ -85,7 +85,7 @@ fn routine_context(
     home: &Path,
     authority: &dyn DirectToolAuthority,
 ) -> bool {
-    if !context.complete || ![2, 4, 5].contains(&context.segments.len()) {
+    if !context.complete || ![2, 3, 4, 5].contains(&context.segments.len()) {
         return false;
     }
     let directory = &context.segments[0];
