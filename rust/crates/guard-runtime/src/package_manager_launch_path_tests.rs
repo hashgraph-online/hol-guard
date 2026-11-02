@@ -150,11 +150,12 @@ fn a_double_slash_entry_names_the_same_directory() {
     let path = [format!("/{}", text(&layout.shims)), tools.clone()].join(":");
     assert_eq!(launch_path(&layout, &path, ":"), json!({ "path": tools }));
 
+    let plain = [text(&layout.shims), text(&layout.tools)].join(":");
     let answer = dispatch(&json!({
         "guard_home": format!("/{}", text(&layout.guard_home)),
         "launch_cwd": text(&layout.base),
         "separator": ":",
-        "path": [text(&layout.shims), text(&layout.tools)].join(":"),
+        "path": plain,
     }))
     .expect("launch path answer");
     assert_eq!(answer, json!({ "path": text(&layout.tools) }));
