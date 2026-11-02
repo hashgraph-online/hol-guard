@@ -19,12 +19,14 @@ use serde_json::Value;
 use super::aibom_op as aibom;
 use super::antigravity_detect;
 use super::claude_code_detect;
+use super::cline_detect;
 use super::cline_plugin_render;
 use super::codex_detect;
 use super::context_digest_json::write_canonical_json_with_limit;
 use super::copilot_detect;
 use super::cursor_detect;
 use super::devin_detect;
+use super::devin_jsonc;
 use super::gemini_detect;
 use super::grok_detect;
 use super::hermes_detect;
@@ -158,9 +160,11 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "codex_detect" => codex_detect::detect(args),
         "copilot_detect" => copilot_detect::detect(args),
         "claude_code_detect" => claude_code_detect::detect(args),
+        "cline_detect" => cline_detect::detect(args),
         "gemini_detect" => gemini_detect::detect(args),
         "antigravity_detect" => antigravity_detect::detect(args),
         "devin_detect" => devin_detect::detect(args),
+        "devin_jsonc" => devin_jsonc::document(args),
         "grok_detect" => grok_detect::detect(args),
         "kimi_detect" => kimi_detect::detect(args),
         "muse_detect" => muse_detect::detect(args),

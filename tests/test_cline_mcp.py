@@ -8,8 +8,8 @@ import pytest
 
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.cline import ClineHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cline_mcp import (
-    detect_cline_mcp,
     install_cline_mcp_proxies,
     restore_cline_mcp_proxies,
 )
@@ -38,8 +38,14 @@ def test_cline_mcp_proxy_install_preserves_remote_and_restores_exact_text(tmp_pa
     original_text = json.dumps(original, indent=2) + "\n"
     settings.write_text(original_text, encoding="utf-8")
 
-    detection = detect_cline_mcp(context)
-    assert {artifact.name for artifact in detection.artifacts} == {"local", "remote"}
+    servers = [
+        artifact
+        for artifact in ClineHarnessAdapter().detect(context).artifacts
+        if artifact.artifact_type == "mcp_server"
+    ]
+    assert {artifact.name for artifact in servers} == {"local", "remote"}
+    local = next(artifact for artifact in servers if artifact.name == "local")
+    assert local.runtime_private_metadata == {"mcp_args": ("server.js",), "mcp_env": {"TOKEN": "secret"}}
     evidence_text = json.dumps(
         [
             {
@@ -47,7 +53,7 @@ def test_cline_mcp_proxy_install_preserves_remote_and_restores_exact_text(tmp_pa
                 "args": artifact.args,
                 "metadata": artifact.metadata,
             }
-            for artifact in detection.artifacts
+            for artifact in servers
         ],
         sort_keys=True,
     )

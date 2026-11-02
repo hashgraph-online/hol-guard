@@ -113,33 +113,46 @@ function folderListing(body: { mode?: string; path?: string }) {
 }
 
 for (const width of [1440, 790, 390, 320]) {
-  test("CIGAR navigation, setup and guide at " + width + "px", async ({ page }, testInfo) => {
+  test("CIGAR home, Advanced and guide at " + width + "px", async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 });
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     const calls = await fixture(page);
     await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175");
+    const workspace = page.locator(".cigar-workspace");
     await expect(page.getByRole("heading", { name: "CIGAR", exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Give your AI the right pages, not the whole book." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "CIGAR is off", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Turn on CIGAR", exact: true })).toBeEnabled();
-    await expect(page.getByRole("heading", { name: "Three steps, and only the first is needed", exact: true })).toBeVisible();
-    await expect(page.locator(".cigar-hero, .cigar-panel").getByText(/save[sd]? tokens|faster|smarter/i).filter({ visible: true })).toHaveCount(0);
+    await expect(page.getByText("Finds your project from the folder your AI app runs in.", { exact: true })).toBeVisible();
+    // The default screen is one switch and one sentence: no tabs until Advanced is opened.
+    await expect(workspace.getByRole("tab")).toHaveCount(0);
+    const advanced = page.getByRole("button", { name: /^Advanced/ });
+    await expect(advanced).toHaveAttribute("aria-expanded", "false");
+    await expect(workspace.getByText(/token|faster|smarter/i).filter({ visible: true })).toHaveCount(0);
     await expect(page.locator('[data-navigation-item="cigar"][aria-current="page"]:visible').first()).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await page.screenshot({ path: testInfo.outputPath("cigar-overview-" + width + ".png"), fullPage: true });
-    const guideTab = page.getByRole("tab", { name: "How it works", exact: true });
+    await page.screenshot({ path: testInfo.outputPath("cigar-home-" + width + ".png"), fullPage: true });
+    await advanced.click();
+    await expect(advanced).toHaveAttribute("aria-expanded", "true");
+    await expect(workspace.getByRole("tab")).toHaveCount(5);
+    const guideTab = page.getByRole("tab", { name: "Guides", exact: true });
     await guideTab.click();
-    await expect(page.getByRole("heading", { name: "Do I need to install anything?", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "How CIGAR works", exact: true })).toBeVisible();
+    await page.getByText("Do I need to install anything?", { exact: true }).click();
+    await expect(page.getByText(/Guard gets its own copy of Python 3\.14/)).toBeVisible();
     await page.getByText("Does CIGAR save me tokens or make my AI faster?", { exact: true }).click();
     await expect(page.getByText(/CIGAR does not promise either/)).toBeVisible();
     await guideTab.focus();
     await page.keyboard.press("Home");
-    await expect(page.getByRole("tab", { name: "Overview", exact: true })).toBeFocused();
-    await page.keyboard.press("ArrowRight");
     await expect(page.getByRole("tab", { name: "Settings", exact: true })).toBeFocused();
     await expect(page.getByText("Selected runtime", { exact: true })).toBeVisible();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Projects & AI apps", exact: true })).toBeFocused();
     await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
     await expect(page.getByText("Turn on CIGAR first", { exact: true })).toBeVisible();
+    await advanced.click();
+    await expect(workspace.getByRole("tab")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Turn on CIGAR", exact: true })).toBeEnabled();
     expect(writes(calls)).toEqual([]);
     expect(errors).toEqual([]);
   });
@@ -174,10 +187,10 @@ test("CIGAR saves with the existing approval proof, starts explicitly, and keeps
   await start.click();
   await expect(proof).toHaveCount(0);
   await expect(page.locator(".cigar-status")).toHaveText("Ready");
-  await page.getByRole("tab", { name: "How it works", exact: true }).click();
+  await page.getByRole("tab", { name: "Guides", exact: true }).click();
   await page.getByRole("button", { name: "Turn off CIGAR", exact: true }).click();
   await expect(page.locator(".cigar-status")).toHaveText("Off");
-  await expect(page.getByRole("tab", { name: "How it works", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "Guides", exact: true })).toHaveAttribute("aria-selected", "true");
   expect(calls.filter((call) => call.path === "/v1/context-assistance/activate")).toHaveLength(1);
   expect(calls.filter((call) => call.path === "/v1/context-assistance/stop")).toHaveLength(1);
   const saves = calls.filter((call) => call.path === "/v1/settings" && call.method === "POST");
@@ -186,7 +199,7 @@ test("CIGAR saves with the existing approval proof, starts explicitly, and keeps
   expect(saves[0].body.settings.context_assistance.enabled).toBe(true);
 });
 
-test("a saved runtime starts from the top of the guide and leads to actual context access", async ({ page }) => {
+test("a saved runtime turns on from the top of the page and picking a project stays optional in Advanced", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const calls = await fixture(page, true, true);
   await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=guide");
@@ -196,8 +209,9 @@ test("a saved runtime starts from the top of the guide and leads to actual conte
   expect(calls.some((call) => call.path === "/v1/context-assistance/activate")).toBe(false);
   await start.click();
   await expect(page.locator(".cigar-status")).toHaveText("Ready");
-  await expect(page.getByRole("tab", { name: "How it works", exact: true })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("button", { name: "Pick a project folder", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Guides", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.getByText("Do I have to pick a project folder?", { exact: true }).click();
+  await page.getByRole("button", { name: "Open Projects & AI apps", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Projects & AI apps", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("No projects yet.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Choose a project folder/ })).toBeEnabled();
@@ -222,9 +236,8 @@ for (const width of [1440, 390]) {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     const calls = await fixture(page, true, true, true);
-    await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=guide");
+    await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=access");
     await page.getByRole("button", { name: "Turn on CIGAR", exact: true }).click();
-    await page.getByRole("button", { name: "Pick a project folder", exact: true }).click();
     await page.getByRole("button", { name: /Choose a project folder/ }).click();
     const picker = page.getByRole("dialog", { name: "Choose a project folder" });
     await expect(picker).toBeVisible();
@@ -302,8 +315,8 @@ for (const width of [1440, 390]) {
     page.on("pageerror", (error) => errors.push(error.message));
     const calls = await fixture(page);
     await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=tutorials");
-    await expect(page.locator(".cigar-heading p")).toHaveText("A context helper for your AI that runs on your computer.");
-    await expect(page.getByRole("heading", { name: "Make CIGAR useful for your next task", exact: true })).toBeVisible();
+    await expect(page.locator(".cigar-heading p")).toHaveText("Gives your AI app the project files that match what you ask.");
+    await expect(page.getByRole("heading", { name: "Guided walkthroughs", exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("cigar-tutorials-" + width + ".png"), fullPage: true });
     await page.getByRole("button", { name: /Start walkthrough.*Prepare your first cited brief/ }).click();
     const walkthrough = page.getByRole("complementary", { name: "Prepare your first cited brief", exact: true });
@@ -332,17 +345,16 @@ for (const width of [1440, 390]) {
   });
 }
 
-test("how CIGAR works explains scoped graphs, budgets and evidence interactively", async ({ page }) => {
+test("the guide explains CIGAR in plain words and links to the deeper sections", async ({ page }) => {
   const calls = await fixture(page);
   await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=guide");
-  await expect(page.getByRole("heading", { name: "Context Intelligence Graph Agentic Runtime", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: /Build a scoped graph/ }).click();
-  await expect(page.getByRole("region", { name: /Build a scoped graph/ })).toContainText("organized context store");
-  await page.getByRole("button", { name: /Compile a cited brief/ }).click();
-  await expect(page.getByRole("region", { name: /Compile a cited brief/ })).toContainText("does not change an AI model's own context window");
-  await page.getByRole("button", { name: /Use it with Guard and apps/ }).click();
-  await expect(page.getByRole("region", { name: /Use it with Guard and apps/ })).toContainText("Guard makes and enforces command decisions");
-  await page.getByRole("button", { name: "Try a guided walkthrough", exact: true }).click();
-  await expect(page.getByRole("tab", { name: "Tutorials", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("heading", { name: "How CIGAR works", exact: true })).toBeVisible();
+  await expect(page.locator(".cigar-guide").getByText(/every prompt you send in Claude Code or Codex gets the few project files that match it/)).toBeVisible();
+  await expect(page.getByText("CIGAR stands for Context Intelligence Graph Agentic Runtime.", { exact: true })).toBeVisible();
+  await page.getByText("Why did a prompt get no files?", { exact: true }).click();
+  await expect(page.getByText(/A vague prompt, or an empty or brand-new folder, matches nothing/)).toBeVisible();
+  await page.getByText("Do I need to install anything?", { exact: true }).click();
+  await page.getByRole("button", { name: "Choose a version in Updates", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Updates", exact: true })).toHaveAttribute("aria-selected", "true");
   expect(writes(calls)).toEqual([]);
 });

@@ -79,6 +79,27 @@ def _native(kind: str, args: Mapping[str, Any]) -> dict[str, Any]:
         raise NativeAibomError(str(error)) from error
 
 
+def _private_metadata_from_wire(item: Mapping[str, Any]) -> dict[str, object]:
+    """The unredacted MCP arguments and environment a native kind passes privately."""
+
+    private = item.get("runtime_private_metadata")
+    if private is None:
+        return {}
+    if not isinstance(private, dict):
+        raise NativeAibomError("native_runner_authority_result_invalid")
+    args = private.get("mcp_args")
+    environment = private.get("mcp_env")
+    if (
+        set(private) != {"mcp_args", "mcp_env"}
+        or not isinstance(args, list)
+        or not all(isinstance(value, str) for value in args)
+        or not isinstance(environment, dict)
+        or not all(isinstance(key, str) and isinstance(value, str) for key, value in environment.items())
+    ):
+        raise NativeAibomError("native_runner_authority_result_invalid")
+    return {"mcp_args": tuple(args), "mcp_env": dict(environment)}
+
+
 def _artifact_from_wire(item: object) -> GuardArtifact:
     if not isinstance(item, dict):
         raise NativeAibomError("native_runner_authority_result_invalid")
@@ -107,6 +128,7 @@ def _artifact_from_wire(item: object) -> GuardArtifact:
         transport=item["transport"],
         publisher=item["publisher"],
         metadata=metadata,
+        runtime_private_metadata=_private_metadata_from_wire(item),
     )
 
 

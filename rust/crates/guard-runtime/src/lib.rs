@@ -130,6 +130,11 @@ mod claude_session_start_contract;
 mod claude_session_start_live;
 mod cli_copilot_resolution;
 mod cli_runtime_support_op;
+#[path = "adapters/detection/cline_detect.rs"]
+mod cline_detect;
+#[cfg(all(test, unix))]
+#[path = "adapters/detection/cline_detect_tests.rs"]
+mod cline_detect_tests;
 mod cline_hook_worker;
 #[path = "adapters/cline_plugin_render.rs"]
 mod cline_plugin_render;
@@ -300,6 +305,11 @@ mod developer_inspection_host;
 mod device_key_helper;
 #[path = "adapters/detection/devin_detect.rs"]
 mod devin_detect;
+#[path = "adapters/detection/devin_jsonc.rs"]
+mod devin_jsonc;
+#[cfg(all(test, unix))]
+#[path = "adapters/detection/devin_jsonc_tests.rs"]
+mod devin_jsonc_tests;
 mod direct_tool_context_op;
 #[cfg(test)]
 mod direct_tool_context_tests;
