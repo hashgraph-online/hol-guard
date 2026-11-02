@@ -143,7 +143,7 @@ fn staged_tool_entries(program: &str, arguments: &[String]) -> Option<&'static [
     if tool == "vite" {
         return None;
     }
-    crate::contained_node_tool::tool_entries(tool).map(|(_, entries)| entries)
+    crate::contained_node_tool::node_tool_modes::tool_entries(tool).map(|(_, entries)| entries)
 }
 
 /// Whether the nearest install carrying one of `entries` is a flat npm or

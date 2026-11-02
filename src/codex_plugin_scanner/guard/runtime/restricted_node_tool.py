@@ -275,9 +275,7 @@ def _prepare_windows_route(command: Sequence[str], *, workspace: Path, cwd: Path
     if isinstance(route, _ScriptRoute):
         # Only the manifest read is this side's work: the script's own words go
         # back to the classifier, which gates them as the run they spell.
-        route = _native_route(
-            argv, _script_body(route.task, workspace=workspace, cwd=cwd), cwd=cwd
-        )
+        route = _native_route(argv, _script_body(route.task, workspace=workspace, cwd=cwd), cwd=cwd)
     if isinstance(route, _ScriptRoute):
         raise RestrictedPytestError("node_tool_invalid_command", "Only a single named package script is supported.")
     expected_entry = None if route.expected_entry is None else Path(route.expected_entry)

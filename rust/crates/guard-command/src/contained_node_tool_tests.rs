@@ -1,6 +1,6 @@
-use super::node_tool_modes::{prettier_checks, PRETTIER_ENTRIES};
+use super::node_tool_modes::{prettier_checks, tool_entries, PRETTIER_ENTRIES};
 use super::{
-    entry_tool, local_package_entry, node_tool_route, program_name, supported_tool, tool_entries,
+    entry_tool, local_package_entry, node_tool_route, program_name, supported_tool,
     writes_or_chains, NodeToolRoute, ToolMode,
 };
 
