@@ -56,10 +56,10 @@ def _bounded_analytics(analytics: dict[str, object], *, include_top_artifacts: b
     """
 
     rows = analytics.get("top_artifacts") if include_top_artifacts else None
+    object_rows = [row for row in (rows if isinstance(rows, list) else []) if isinstance(row, dict)]
     top_artifacts = [
         {**row, "name": row["name"][:_ARTIFACT_LABEL_CHARS]} if isinstance(row.get("name"), str) else row
-        for row in (rows if isinstance(rows, list) else [])[:_TOP_ARTIFACT_ROWS]
-        if isinstance(row, dict)
+        for row in object_rows[:_TOP_ARTIFACT_ROWS]
     ]
     return {**analytics, "top_artifacts": top_artifacts}
 

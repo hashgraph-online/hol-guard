@@ -82,7 +82,7 @@ def test_only_the_shown_top_artifacts_reach_the_resident(monkeypatch: pytest.Mon
         return {"payload": {}}
 
     monkeypatch.setattr(insights_share, "native_runner_authority", record)
-    rows = [{"name": "x" * 5000, "total": 9}, *({"name": f"a{index}", "total": 1} for index in range(6))]
+    rows = [None, {"name": "x" * 5000, "total": 9}, "bash", *({"name": f"a{index}", "total": 1} for index in range(6))]
 
     insights_share.build_insights_share_payload({"top_artifacts": rows}, include_top_artifacts=True)
     insights_share.build_insights_share_payload({"top_artifacts": rows})
