@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -392,3 +393,29 @@ def test_skill_outside_skills_root_does_not_advertise_uploadable_body_hash(tmp_p
 
     assert not snapshot.items[0].content_hash.startswith("sha256:")
     assert sources == ()
+
+
+def test_primary_content_admission_is_asked_in_bounded_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import aibom_content_upload as upload_module
+    from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventoryItem
+    from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+
+    requested: list[int] = []
+
+    def _admit(_kind: str, request: dict[str, object], **_options: object) -> dict[str, object]:
+        candidates = request["candidates"]
+        assert isinstance(candidates, list)
+        requested.append(len(candidates))
+        if len(requested) == 2:
+            raise NativeRunnerAuthorityError("native_runner_authority_invalid")
+        return {"allowed_roots": ["/skills"] * len(candidates)}
+
+    monkeypatch.setattr(upload_module, "_NATIVE_ADMIT_CHUNK", 2)
+    monkeypatch.setattr(upload_module, "native_runner_authority", _admit)
+    item = cast("GuardAgentInventoryItem", cast("object", SimpleNamespace(item_id="item")))
+    candidates = [("skill", item, "sha256:x", Path(f"/skills/s{index}/SKILL.md")) for index in range(5)]
+
+    roots = upload_module._native_allowed_roots(candidates, workspace_dir=None)
+
+    assert requested == [2, 2, 1]
+    assert roots == ["/skills", "/skills", None, None, "/skills"]

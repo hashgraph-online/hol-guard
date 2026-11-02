@@ -141,6 +141,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "aibom_workspace_plan" => aibom::workspace_merge_plan(args),
         "aibom_codex_skills" => aibom::codex_skills(args),
         "aibom_mcp_metadata" => aibom::mcp_metadata(args),
+        "aibom_primary_content" => crate::aibom_primary_content::dispatch(args),
         "zcode_detect" => zcode_detect::detect(args),
         "hermes_detect" => hermes_detect::detect(args),
         "pi_detect" => pi_detect::detect(args),
