@@ -16,6 +16,7 @@ mod aibom_marketplace;
 mod aibom_mcp_metadata;
 mod aibom_op;
 mod aibom_paths;
+mod aibom_primary_content;
 mod aibom_report_summaries_op;
 mod aibom_skill_rules;
 mod aibom_skills;
