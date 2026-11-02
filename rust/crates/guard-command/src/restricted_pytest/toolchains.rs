@@ -195,7 +195,7 @@ fn read_selected_developer_dir() -> Option<PathBuf> {
 /// The Xcode or CommandLineTools root `/usr/bin` shims forward into. Inside
 /// an app bundle the whole bundle is granted, because the developer
 /// directory loads frameworks and `Info.plist` from beside it.
-fn developer_dir() -> Option<PathBuf> {
+pub(super) fn developer_dir() -> Option<PathBuf> {
     let resolved = selected_developer_dir()?;
     let root = developer_root(&resolved)?;
     owned_and_sealed(&root).then_some(root)
@@ -321,6 +321,7 @@ pub(super) fn workspace_exec_roots(
             entries.push(system.to_owned());
         }
     }
+    super::developer_shim::developer_tools_ahead_of_shims(&mut entries);
     roots.extend(developer_dir());
     // Corepack's shims (`pnpm`, `yarn`) read the package manager they run
     // from its cache; the launch environment points `COREPACK_HOME` there.

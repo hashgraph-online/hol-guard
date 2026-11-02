@@ -16,7 +16,7 @@
 //! So the plan resolves the shim itself. The concrete interpreter is what the
 //! contained run execs, the profile grants that binary's own runtime root
 //! through `runtime_roots`, and `xcode-select` never runs inside containment.
-use super::toolchains::selected_developer_dir;
+use super::toolchains::{developer_dir, selected_developer_dir};
 use super::*;
 use std::os::unix::fs::MetadataExt;
 
@@ -71,10 +71,65 @@ pub(super) fn is_in_developer_dir_lexically(path: &Path) -> bool {
     selected_developer_dir().is_some_and(|developer| path_is_within_lexically(path, &developer))
 }
 
+/// Put the selected developer directory's `usr/bin` on the sandbox `PATH`
+/// just ahead of `/usr/bin`.
+///
+/// Otherwise a bare `python3` or `git` reaches the shim inside the sandbox,
+/// and the shim's lookup there runs `xcrun`, which spawns `xcodebuild`. That
+/// process cannot reach the services it wants, and its complaints land in
+/// the command's own output. With the developer tools ahead of the shims the
+/// shell finds the binary the shim forwards to, which is what
+/// [`forwarded_tool`] answers on the other routes; the developer directory is
+/// an executable root. An entry the session lists ahead of `/usr/bin` keeps
+/// its place, so whatever the session finds before it still comes first.
+pub(super) fn developer_tools_ahead_of_shims(entries: &mut Vec<String>) {
+    let Some(tools) = sandbox_developer_tools() else {
+        return;
+    };
+    let text = tools.to_string_lossy().into_owned();
+    if text.contains(':') {
+        return;
+    }
+    let Some(shims) = entries.iter().position(|entry| entry == SHIM_DIRECTORY) else {
+        return;
+    };
+    match entries.iter().position(|entry| *entry == text) {
+        Some(at) if at < shims => {}
+        Some(at) => {
+            entries.remove(at);
+            entries.insert(shims, text);
+        }
+        None => entries.insert(shims, text),
+    }
+}
+
+/// The file a bare `program` runs inside the sandbox when the session found
+/// it at `canonical`: the tool a `/usr/bin` shim forwards to, because the
+/// sandbox `PATH` holds the developer tools ahead of the shims. A path the
+/// command spells out runs as spelled.
+pub(super) fn sandbox_launched(program: &str, canonical: PathBuf) -> PathBuf {
+    if program.contains('/') || sandbox_developer_tools().is_none() {
+        return canonical;
+    }
+    forwarded_tool(&canonical).unwrap_or(canonical)
+}
+
+/// The selected developer directory's `usr/bin`, when the sandbox executes
+/// from that directory. A developer directory kept anywhere but the sealed
+/// prefixes `developer_dir` accepts is no executable root, so its tools stay
+/// off the sandbox `PATH` and the shims keep answering for them.
+fn sandbox_developer_tools() -> Option<PathBuf> {
+    developer_dir()?;
+    let tools = selected_developer_dir()?.join("usr/bin");
+    tools.is_dir().then_some(tools)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        forwarded_tool, is_developer_tool, is_in_developer_dir_lexically, path_is_within_any,
+        developer_tools_ahead_of_shims, forwarded_tool, is_developer_tool,
+        is_in_developer_dir_lexically, path_is_within_any, sandbox_developer_tools,
+        sandbox_launched,
     };
     use std::path::Path;
 
@@ -169,5 +224,73 @@ mod tests {
             super::super::authority::launched_path(launch, executable),
             launch
         );
+    }
+
+    /// The developer tools directory as the sandbox `PATH` spells it, when
+    /// this host selects one.
+    fn developer_tools() -> Option<String> {
+        sandbox_developer_tools().map(|tools| tools.to_string_lossy().into_owned())
+    }
+
+    fn owned(entries: &[&str]) -> Vec<String> {
+        entries.iter().map(|entry| (*entry).to_owned()).collect()
+    }
+
+    #[test]
+    fn developer_tools_go_just_ahead_of_the_shims() {
+        let Some(tools) = developer_tools() else {
+            return;
+        };
+        let mut entries = owned(&["/opt/homebrew/bin", "/usr/bin", "/bin"]);
+        developer_tools_ahead_of_shims(&mut entries);
+        assert_eq!(
+            entries,
+            owned(&["/opt/homebrew/bin", &tools, "/usr/bin", "/bin"])
+        );
+        // Placing them twice changes nothing.
+        developer_tools_ahead_of_shims(&mut entries);
+        assert_eq!(
+            entries,
+            owned(&["/opt/homebrew/bin", &tools, "/usr/bin", "/bin"])
+        );
+    }
+
+    #[test]
+    fn developer_tools_listed_behind_the_shims_move_ahead_of_them() {
+        let Some(tools) = developer_tools() else {
+            return;
+        };
+        let mut entries = owned(&["/usr/bin", "/opt/tools", &tools, "/bin"]);
+        developer_tools_ahead_of_shims(&mut entries);
+        assert_eq!(entries, owned(&[&tools, "/usr/bin", "/opt/tools", "/bin"]));
+    }
+
+    #[test]
+    fn developer_tools_the_session_lists_earlier_keep_their_place() {
+        // Moving them behind `/opt/homebrew/bin` would let a Homebrew `git`
+        // answer inside the sandbox for the developer `git` the session ran.
+        let Some(tools) = developer_tools() else {
+            return;
+        };
+        let session = owned(&[&tools, "/opt/homebrew/bin", "/usr/bin", "/bin"]);
+        let mut entries = session.clone();
+        developer_tools_ahead_of_shims(&mut entries);
+        assert_eq!(entries, session);
+    }
+
+    #[test]
+    fn a_bare_shim_name_launches_the_tool_it_forwards_to() {
+        let Some(resolved) = forwarded_tool(Path::new("/usr/bin/python3")) else {
+            return;
+        };
+        if sandbox_developer_tools().is_none() {
+            return;
+        }
+        let shim = Path::new("/usr/bin/python3").to_path_buf();
+        assert_eq!(sandbox_launched("python3", shim.clone()), resolved);
+        // A spelled-out shim path runs the shim itself.
+        assert_eq!(sandbox_launched("/usr/bin/python3", shim.clone()), shim);
+        let ls = Path::new("/bin/ls").to_path_buf();
+        assert_eq!(sandbox_launched("ls", ls.clone()), ls);
     }
 }

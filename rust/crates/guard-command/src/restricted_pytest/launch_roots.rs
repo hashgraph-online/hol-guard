@@ -131,6 +131,7 @@ fn unreachable_from(
     let Ok(canonical) = found.canonicalize() else {
         return true;
     };
+    let canonical = super::developer_shim::sandbox_launched(program, canonical);
     if !reaches(&canonical) {
         return true;
     }
