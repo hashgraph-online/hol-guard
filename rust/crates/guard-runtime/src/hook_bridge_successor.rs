@@ -28,7 +28,8 @@ use crate::resident_process_identity::durable_digest_for;
 use crate::resident_state::{discover_same_executable_states, validate_process_start_marker};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(1);
-/// A hook answer is a few kilobytes; nothing past this is read.
+/// A hook answer is a few kilobytes; an answer longer than this is cut off,
+/// so it fails rather than reach the harness in part.
 const MAX_OUTPUT_BYTES: u64 = 1 << 20;
 
 /// What the successor bridge did with the hook.
@@ -36,7 +37,8 @@ const MAX_OUTPUT_BYTES: u64 = 1 << 20;
 pub(crate) enum HandOff {
     /// Its stdout and exit code.
     Answered(Vec<u8>, i32),
-    /// It ran but gave no answer before the deadline, or was killed.
+    /// It ran but gave no answer before the deadline, answered with more
+    /// than [`MAX_OUTPUT_BYTES`], or was killed.
     Failed,
 }
 
@@ -138,7 +140,8 @@ pub(crate) fn hand_off(
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
         let mut output = Vec::new();
-        let read = stdout.take(MAX_OUTPUT_BYTES).read_to_end(&mut output);
+        // One byte past the bound tells a full answer from a cut-off one.
+        let read = stdout.take(MAX_OUTPUT_BYTES + 1).read_to_end(&mut output);
         let _ = sender.send(read.map(|_| output));
     });
     let status = loop {
@@ -155,8 +158,14 @@ pub(crate) fn hand_off(
     // Anything it left running still holds the pipe; stop reading at the
     // deadline rather than wait for it.
     let wait = deadline.saturating_duration_since(Instant::now());
+    // An answer this bridge only reads past its deadline is as late as no
+    // answer at all.
     match (status.code(), receiver.recv_timeout(wait)) {
-        (Some(code), Ok(Ok(output))) => Some(HandOff::Answered(output, code)),
+        (Some(code), Ok(Ok(output)))
+            if output.len() as u64 <= MAX_OUTPUT_BYTES && Instant::now() < deadline =>
+        {
+            Some(HandOff::Answered(output, code))
+        }
         _ => Some(HandOff::Failed),
     }
 }
