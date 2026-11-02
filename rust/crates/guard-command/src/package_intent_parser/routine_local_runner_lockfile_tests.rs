@@ -166,15 +166,6 @@ fn a_bun_entry_naming_a_checkout_is_not_a_release() {
     assert!(!routine_local_runner(&value));
 }
 
-/// Replace the workspace's only lockfile with `name`, holding `body`.
-fn only_lockfile(root: &Path, name: &str, body: &str) -> PackageIntent {
-    fs::remove_file(root.join("package-lock.json")).unwrap();
-    write(&root.join(name), body);
-    let mut value = intent(root);
-    value.local_executions[0].lockfiles = vec![evidence(&root.join(name))];
-    value
-}
-
 #[test]
 fn a_pnpm_lockfile_pins_the_installed_version() {
     let dir = workspace();

@@ -257,6 +257,7 @@
       "src/package_intent_parser/managers_python.rs",
       "src/package_intent_parser/redaction_and_combination.rs",
       "src/package_intent_parser/routine_local_runner.rs",
+      "src/package_intent_parser/routine_local_runner_lockfiles.rs",
       "src/package_intent_parser/runner_options.rs",
       "src/package_intent_parser/shell_normalization.rs",
       "src/package_manager_command.rs",

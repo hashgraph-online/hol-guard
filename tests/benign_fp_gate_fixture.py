@@ -72,6 +72,7 @@ from tests.benign_fp_gate_projects import (
     _node_toolchain,
     _python_toolchain,
     _sibling_test_runner,
+    pnpm_monorepo,
     _vendored_toolchain,
     _write,
 )
@@ -182,6 +183,7 @@ class BenignFixture:
             # A checkout whose `.gitignore` re-includes a hidden template, as most application repositories do.
             "ignore_negation": self.home / "Code" / "ignore-rules" / "billing-api",
             "feature_app": feature_app_path(self.home),
+            "pnpm_monorepo": self.home / "Code" / "acme-platform",
             "linked_worktree": self.linked_worktree,
         }[name]
 
@@ -274,6 +276,14 @@ def build_fixture(root: Path) -> BenignFixture:
         home / "other-project" / "package-lock.json",
         json.dumps({"lockfileVersion": 3, "packages": {"node_modules/left-pad": {"version": "1.3.0"}}}) + "\n",
     )
+    # A pnpm monorepo part-way through a type checker bump: the root runs
+    # the current release, a package under it is still on the previous one,
+    # and the one lockfile lists both.
+    pnpm_monorepo(home / "Code" / "acme-platform")
+    _git(home / "Code" / "acme-platform", "init", "--quiet", "--initial-branch=main", home=home)
+    _write(home / "Code" / "acme-platform" / ".gitignore", "node_modules/\n")
+    _git(home / "Code" / "acme-platform", "add", "-A", home=home)
+    _git(home / "Code" / "acme-platform", "commit", "--quiet", "-m", "platform base", home=home)
     _write(home / "acme-plain" / "README.txt", "Plain notes directory.\n")
     _write(home / "acme-plain" / "probe_py.py", "print('probe')\n")
     _write(home / "kubeconfig.yaml", KUBECONFIG)
