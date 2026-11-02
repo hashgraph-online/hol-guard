@@ -445,6 +445,7 @@ fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
             "bunx vitest run __tests__/one.test.ts __tests__/two.test.ts",
             "npx --no-install vitest run",
             "pnpm exec vitest run __tests__/one.test.ts",
+            "pnpm vitest run __tests__/one.test.ts",
             "vitest run",
             "node /home/tester/project/node_modules/vitest/vitest.mjs run tests/example.test.ts",
         ] {
@@ -470,6 +471,9 @@ fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
             "bunx vitest run $(cat .env)",
             "bunx vitest run > .env",
             "pnpm exec vitest watch",
+            "pnpm vitest watch",
+            "pnpm -r vitest run",
+            "pnpm vitest run && rm -rf /",
             "pnpm exec -c vitest run",
             "pnpm exec --filter app vitest run",
             "pnpm -r exec vitest run",

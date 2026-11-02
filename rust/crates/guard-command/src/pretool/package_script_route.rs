@@ -98,7 +98,7 @@ fn resolved(
     // The same name the build classification reads, so `npm.exe run build`
     // is the package script `npm run build` is and keeps the review prompt.
     let manager = crate::program_basename(segment.executable.as_deref()?);
-    // A manager's `exec` spelling runs a local bin, not a script body.
+    // A manager's local-bin spelling runs a local bin, not a script body.
     let local_run = super::manager_local_bin_arguments(manager, arguments).is_some();
     if matches!(manager, "npm" | "pnpm" | "bun" | "yarn")
         && !local_run
@@ -132,7 +132,8 @@ fn resolved(
 fn staged_tool_entries(program: &str, arguments: &[String]) -> Option<&'static [&'static str]> {
     let tool = match program {
         "npx" | "bunx" => arguments.first()?.as_str(),
-        // Only a manager's bare `exec` spelling is a local-bin run.
+        // Only a manager's local-bin spelling is a local-bin run: its bare
+        // `exec`, or the verbless shorthand pnpm runs as `exec`.
         "npm" | "pnpm" | "yarn" => super::manager_local_bin_arguments(program, arguments)?
             .first()?
             .as_str(),

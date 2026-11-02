@@ -20,12 +20,15 @@ const REVIEW: &str = "native_command_review_required";
 const PACKAGE_REVIEW: &str = "native_package_review";
 /// The read-only tool runs the direct sink stages, in every spelling the
 /// classifier admits.
-const REPORTING: [&str; 11] = [
+const REPORTING: [&str; 12] = [
     "npx eslint src",
     "bunx eslint src",
     "eslint src",
     "npx tsc --noEmit",
     "pnpm exec tsc --noEmit",
+    // pnpm runs the same local binary without naming `exec`, so the staged run
+    // reads the tool behind the shorthand too.
+    "pnpm tsc --noEmit",
     "npm exec tsc --noEmit",
     "npm x tsc --noEmit",
     "npm exec -- tsc --noEmit",
