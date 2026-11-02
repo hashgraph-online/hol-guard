@@ -428,17 +428,12 @@ fn short_search_option(
     Ok((None, false))
 }
 
-pub(super) fn safe_search_arguments_with_context(
-    executable: &str,
-    arguments: &[String],
+pub(super) fn safe_fd_segment(
+    model: &crate::CanonicalCommandV1,
+    segment: &crate::CommandSegmentV1,
     context: ReadContext<'_>,
 ) -> bool {
-    match executable {
-        "rg" => rg::safe_rg_arguments(arguments, context),
-        "fd" => fd::safe_fd_arguments(arguments, context),
-        "grep" => grep::safe_grep_arguments(arguments, context),
-        _ => false,
-    }
+    fd::safe_fd_segment(model, segment, context)
 }
 
 pub(super) fn safe_rg_segment(

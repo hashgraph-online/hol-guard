@@ -10,7 +10,9 @@ struct AbsentOperands {
     recursive: bool,
 }
 
-/// The operand proof alone, as if `grep` were the whole command.
+/// The operand proof alone, as if `grep` were the whole command. Every caller
+/// outside this module reads a segment, so the bare form is a test vantage.
+#[cfg(test)]
 pub(super) fn safe_grep_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
     let absent = AbsentOperands {
         plain: true,

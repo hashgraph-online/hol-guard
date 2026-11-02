@@ -484,3 +484,55 @@ fn a_reader_beside_a_missing_root_leaves_the_walk_quiet() {
         }
     }
 }
+
+/// The same question, asked of `fd`, which lists names rather than contents.
+///
+/// Every `fd` root proof resolves the directory it describes, so a root that
+/// is not there failed all of them and the listing went to review — while the
+/// same missing root under `rg`, `grep`, `find` and `ls` was already quiet. An
+/// agent spells a tree it has not looked at yet (`fd ts ~/other/app`) and gets
+/// an error from `fd` either way; the review bought nothing.
+#[test]
+fn a_names_only_listing_of_a_missing_root_is_quiet() {
+    let nonce = crate::unique_nanos::unique_nanos();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/recursive-file-search")
+        .join(format!("fd-absent-{}-{nonce}", std::process::id()));
+    let _fixture = FixtureDirectory(root.clone());
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    std::fs::write(root.join("src/index.ts"), "ordinary source").unwrap();
+    std::fs::write(root.join("notes.md"), "ordinary notes").unwrap();
+    let spelled = root.to_string_lossy().replace('\\', "/");
+    for harness in ["omp", "zcode"] {
+        for (command, expected) in [
+            // The root that is there, to show the fixture proves an ordinary
+            // listing of the same shape.
+            (format!("fd ts {spelled}/src"), true),
+            (format!("fd ts {spelled}/app"), true),
+            (format!("fd --extension ts . {spelled}/app"), true),
+            (format!("fd -t f ts {spelled}/app"), true),
+            (format!("fd ts {spelled}/app; cat notes.md"), true),
+            (format!("fd ts {spelled}/app; pwd"), true),
+            // A peer that can put a tree at the name before the walk reaches
+            // it keeps the review, exactly as it does for a recursive search.
+            (format!("fd ts {spelled}/app; touch {spelled}/app"), false),
+            (format!("fd ts {spelled}/app; cat notes.md > app"), false),
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"toolName":"Bash", "toolInput":{"command":command}}),
+                None,
+                None,
+                root.to_str(),
+                root.to_str(),
+            );
+            assert_eq!(
+                result.minimum_action == "allow",
+                expected,
+                "{harness}: {command}"
+            );
+        }
+    }
+}
