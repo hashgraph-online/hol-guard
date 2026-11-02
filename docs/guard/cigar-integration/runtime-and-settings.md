@@ -148,7 +148,7 @@ This part is implemented. When CIGAR is on and verified, and both `features.agen
 For each prompt the native runtime:
 
 1. Finds the project from the hook's working directory: the nearest enclosing Git repository, or the folder itself. It never uses the home folder, a folder that contains it, a top-level folder, a credential folder, or anything inside the Guard home.
-2. Pulls search words from the prompt and walks the project for files whose path or contents match, skipping secrets, keys, hidden files and generated output. The walk applies Git's ignore rules from `.git/info/exclude` and every `.gitignore` it meets, nested ones included, without running `git`. A folder whose `.gitignore` cannot be read, holds more than 1,024 rules or has a pattern Guard cannot compile is skipped whole. The global `core.excludesFile` is not read.
+2. Pulls search words from the prompt and walks the project for files whose path or contents match, skipping secrets, keys, hidden files and generated output. The walk applies Git's ignore rules from `.git/info/exclude` and every `.gitignore` it meets, nested ones included, without running `git`. A folder whose `.gitignore` cannot be read, holds more than 1,024 rules or has a pattern Guard cannot compile is skipped whole. The global `core.excludesFile` is not read. Test and spec files stay out when a source file matched and the prompt does not mention tests, so a test that quotes the same words does not crowd out the file the request is about.
 3. Asks the CIGAR worker for excerpts from those files, scoped to that project and app.
 4. Keeps only excerpts that mention a word from the prompt, renders them as fenced file contents under a short header that marks them as data, and lists the other matching files by path.
 

@@ -21,7 +21,12 @@ from ci.gauntlet.clone_fixtures import (
     long_lived_clone_checks,
     long_lived_clone_config,
 )
-from ci.gauntlet.command_outputs import BUN_ENTRY_CASE, TOKEN_SHELL_CASES, command_outputs_match
+from ci.gauntlet.command_outputs import (
+    BUN_ENTRY_CASE,
+    STATUS_TAIL_BUILD_CASE,
+    TOKEN_SHELL_CASES,
+    command_outputs_match,
+)
 from ci.gauntlet.fast_forward_fixtures import (
     FAST_FORWARD_CASE,
     FAST_FORWARD_HOOK_CASE,
@@ -451,6 +456,31 @@ def test_the_bun_entry_case_needs_the_build_line_tail_cannot_supply() -> None:
     finished = _tool_call("bash", {"command": command}, f"dist/index.html  0.40 kB\n{VITE_BUILD_MARKER}\n")
     assert command_outputs_match(scenario, [finished])
     for text in ("", 'error: Cannot find module "vite"\n', "vite v5.4.0 building for production...\n"):
+        assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
+    assert not command_outputs_match(scenario, [])
+    assert not command_outputs_match(scenario, [finished, finished])
+
+
+def test_the_status_tail_build_case_needs_the_build_line_and_its_status() -> None:
+    """`| tail -15; echo "build=$?"` reports `tail`'s status, never the build's.
+
+    The case keeps that shape, because it is the shape an agent writes when it reads the
+    status of the step before it, so its oracle asks for the line the finished build
+    prints and for the status the run itself printed.
+    """
+    scenario = {case.id: case for case in load_catalog()}[STATUS_TAIL_BUILD_CASE]
+    command = scenario.commands[0]
+    assert command.endswith('| tail -15; echo "build=$?"')
+    finished = _tool_call("bash", {"command": command}, f"dist/index.html  0.40 kB\n{VITE_BUILD_MARKER}\nbuild=0\n")
+    assert command_outputs_match(scenario, [finished])
+    for text in (
+        "",
+        "build=0\n",
+        f"{VITE_BUILD_MARKER}\n",
+        f'error: Cannot find module "vite"\nbuild=0\n',
+        f"{VITE_BUILD_MARKER}\nbuild=0\nbuild=1\n",
+        f"{VITE_BUILD_MARKER}\nbuild=1\n",
+    ):
         assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
     assert not command_outputs_match(scenario, [])
     assert not command_outputs_match(scenario, [finished, finished])

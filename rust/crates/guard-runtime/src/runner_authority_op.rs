@@ -35,7 +35,9 @@ use super::muse_detect;
 use super::oci_bundle_op as oci;
 use super::openclaw_detect;
 use super::opencode_detect;
+use super::opencode_plugin_render;
 use super::pi_detect;
+use super::pi_extension_render;
 use super::runner_authority_signature as signature;
 use super::zcode_detect;
 use super::{
@@ -157,6 +159,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "hermes_detect" => hermes_detect::detect(args),
         "pi_detect" => pi_detect::detect(args),
         "cline_plugin_render" => cline_plugin_render::render(args),
+        "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
         "copilot_detect" => copilot_detect::detect(args),
         "claude_code_detect" => claude_code_detect::detect(args),
@@ -171,6 +174,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "openclaw_detect" => openclaw_detect::detect(args),
         "cursor_detect" => cursor_detect::detect(args),
         "opencode_detect" => opencode_detect::detect(args),
+        "opencode_plugin_render" => opencode_plugin_render::render(args),
         _ => Err(ERR_KIND),
     }
 }

@@ -28,30 +28,15 @@ def _bun() -> str:
 
 
 def _offer_native(monkeypatch: pytest.MonkeyPatch, runtime: Path) -> None:
-    from codex_plugin_scanner.guard import native_runtime
-    from codex_plugin_scanner.guard.native_runtime import (
-        NativeRuntimeCapabilities,
-        NativeRuntimeIdentity,
-        NativeRuntimeStatus,
-    )
+    # Fake only the bridge lookup: a faked runtime status would also reach the
+    # native runner authority that renders the plugin.
+    from codex_plugin_scanner.guard.adapters import native_hook_bridge
 
-    status = NativeRuntimeStatus(
-        mode="auto",
-        available=True,
-        compatible=True,
-        reason="ok",
-        identity=NativeRuntimeIdentity(path=runtime, size=1, mtime_ns=1, sha256="0" * 64),
-        capabilities=NativeRuntimeCapabilities(
-            protocol_version=1,
-            runtime_version="0",
-            rule_digest="0" * 64,
-            build_sha="0" * 40,
-            target="test",
-            features=(NATIVE_BOUNDED_HOOK_FEATURE,),
-        ),
-    )
+    def executable(feature: str, *, guard_home: Path | None = None) -> Path | None:
+        return runtime if feature == NATIVE_BOUNDED_HOOK_FEATURE else None
+
     monkeypatch.delenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", raising=False)
-    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda *, deadline_monotonic=None: status)
+    monkeypatch.setattr(native_hook_bridge, "native_hook_bridge_executable", executable)
 
 
 def _context(tmp_path: Path) -> HarnessContext:

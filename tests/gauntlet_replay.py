@@ -21,12 +21,10 @@ from ci.gauntlet.approval_rows import offers_always
 from ci.gauntlet.fixtures import LFS_GITCONFIG
 from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.interruptions import observation_interruptions
-from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_tests_source import (
-    CONTAINED_TEST_HELPERS_SOURCE,
-)
 from tests.benign_fp_gate_connectors import connector_setup_failure
 from tests.benign_fp_gate_git import signed_checkout_include
 from tests.native_gate_retry import BUDGET_MISS_REASONS, review_with_unavailable_retry
+from tests.pi_extension_template import CONTAINED_TEST_HELPERS_SOURCE
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPLAY_DOCUMENT = json.loads((FIXTURES / "gauntlet_replay_cases.json").read_text(encoding="utf-8"))

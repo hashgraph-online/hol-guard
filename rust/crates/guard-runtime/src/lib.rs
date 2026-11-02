@@ -768,6 +768,11 @@ mod openclaw_mcp;
 mod openclaw_skills;
 #[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
+#[path = "adapters/opencode_plugin_render.rs"]
+mod opencode_plugin_render;
+#[cfg(test)]
+#[path = "adapters/opencode_plugin_render_tests.rs"]
+mod opencode_plugin_render_tests;
 mod orphaned_worker_reap;
 mod ownership_acl_verdict;
 mod package_approval_hash_op;
@@ -792,6 +797,11 @@ mod paseo_providers;
 mod persistence_action_class;
 #[path = "adapters/detection/pi_detect.rs"]
 mod pi_detect;
+#[path = "adapters/pi_extension_render.rs"]
+mod pi_extension_render;
+#[cfg(test)]
+#[path = "adapters/pi_extension_render_tests.rs"]
+mod pi_extension_render_tests;
 mod pi_glob;
 mod pi_hook_bridge;
 #[cfg(all(test, unix))]

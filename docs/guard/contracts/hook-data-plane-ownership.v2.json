@@ -275,7 +275,6 @@
     "src/codex_plugin_scanner/guard/adapters/*argv*.py",
     "src/codex_plugin_scanner/guard/adapters/*bridge*.py",
     "src/codex_plugin_scanner/guard/adapters/*resume*.py",
-    "src/codex_plugin_scanner/guard/adapters/_modules/*/*resume*.py",
     "src/codex_plugin_scanner/guard/adapters/*script_template*.py",
     "src/codex_plugin_scanner/guard/adapters/_modules/*/*script_template*.py",
     "src/codex_plugin_scanner/guard/adapters/hook_python*.py",

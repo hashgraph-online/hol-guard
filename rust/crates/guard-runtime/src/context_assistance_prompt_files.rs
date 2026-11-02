@@ -36,6 +36,8 @@ const SKIPPED_DIRS: &[&str] = &[
     "Pods",
     "DerivedData",
 ];
+const TEST_DIRS: &[&str] = &["test", "tests", "__tests__", "spec", "e2e"];
+const TEST_WORDS: &[&str] = &["test", "tests", "spec", "e2e", "testing"];
 const TEXT_EXTENSIONS: &[&str] = &[
     "astro", "c", "cc", "cjs", "clj", "cpp", "cs", "css", "dart", "erl", "ex", "exs", "go",
     "gradle", "graphql", "h", "hpp", "html", "java", "js", "json", "jsx", "kt", "kts", "less",
@@ -115,7 +117,23 @@ pub(crate) fn terms(prompt: &str) -> Vec<String> {
         }
     }
     found.truncate(MAX_TERMS);
+    // A request for tests counts even when it comes late in a long prompt.
+    if !asks_for_tests(&found) && prompt_mentions_tests(prompt) {
+        found.truncate(MAX_TERMS - 1);
+        found.push("test".into());
+    }
     found
+}
+
+/// True when the search terms ask about tests.
+pub(crate) fn asks_for_tests(terms: &[String]) -> bool {
+    terms.iter().any(|term| TEST_WORDS.contains(&term.as_str()))
+}
+
+fn prompt_mentions_tests(prompt: &str) -> bool {
+    prompt
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|word| TEST_WORDS.contains(&singular(&word.to_lowercase()).as_str()))
 }
 
 fn singular(word: &str) -> String {
@@ -157,7 +175,7 @@ pub(crate) fn candidates(root: &Path, terms: &[String], budget: Duration) -> Vec
         for entry in entries.flatten() {
             visited += 1;
             if visited > MAX_VISITED || started.elapsed() >= budget {
-                return ranked(scored);
+                return ranked(scored, terms);
             }
             let name = entry.file_name().to_string_lossy().into_owned();
             // `file_type` never follows a link, so a linked folder or file is skipped.
@@ -215,10 +233,16 @@ pub(crate) fn candidates(root: &Path, terms: &[String], budget: Duration) -> Vec
             }
         }
     }
-    ranked(scored)
+    ranked(scored, terms)
 }
 
-fn ranked(mut scored: Vec<Scored>) -> Vec<String> {
+/// Best first. Test files stay out when a source file matched and the prompt
+/// did not ask about tests, since a test that quotes the same words would
+/// otherwise crowd out the file the request is about.
+fn ranked(mut scored: Vec<Scored>, terms: &[String]) -> Vec<String> {
+    if !asks_for_tests(terms) && scored.iter().any(|item| !test_file(&item.relative)) {
+        scored.retain(|item| !test_file(&item.relative));
+    }
     scored.sort_by(|a, b| {
         b.score
             .cmp(&a.score)
@@ -230,6 +254,22 @@ fn ranked(mut scored: Vec<Scored>) -> Vec<String> {
         .take(MAX_CANDIDATES)
         .map(|item| item.relative)
         .collect()
+}
+
+/// A test or spec file by its usual name or folder in common languages.
+pub(crate) fn test_file(relative: &str) -> bool {
+    let lower = relative.to_lowercase();
+    let name = lower.rsplit('/').next().unwrap_or(&lower);
+    let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+    lower.split('/').any(|part| TEST_DIRS.contains(&part))
+        || name.contains(".test.")
+        || name.contains(".spec.")
+        || stem.starts_with("test_")
+        || stem.ends_with("_test")
+        || stem.ends_with("_tests")
+        || stem.ends_with("_spec")
+        || stem == "test"
+        || stem == "tests"
 }
 
 fn wanted_file(name: &str) -> bool {
