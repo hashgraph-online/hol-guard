@@ -279,9 +279,9 @@ fn installed_shared_connections_quarantine_cas_dependencies_withdrawal_and_off()
             .any(|s| s["source_id"] == scope["sources"][0]["source_id"]),
         "shared notes must retain upstream file dependencies"
     );
-    let history_id = entry["history_id"].clone();
     #[cfg(unix)]
     {
+        let history_id = entry["history_id"].clone();
         std::fs::remove_file(root.join("README.md")).unwrap();
         std::os::unix::fs::symlink(root.join("missing.md"), root.join("README.md")).unwrap();
         let unsafe_detail = data(host(

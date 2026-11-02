@@ -16,7 +16,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-pub(super) fn write_private(path: &Path, bytes: &[u8], private_root: &Path) -> Result<(), String> {
+pub(crate) fn write_private(path: &Path, bytes: &[u8], private_root: &Path) -> Result<(), String> {
     let temporary = temporary_path(path)?;
     if existing_private_file(&temporary, private_root)? {
         #[cfg(windows)]
@@ -161,7 +161,7 @@ fn temporary_path(path: &Path) -> Result<PathBuf, String> {
 /// Read one small private file this module owns. The budget and the
 /// requested-stop note sit in the same directory and are validated the same
 /// way, so a foreign or swapped file fails closed whichever one is read.
-pub(super) fn read_private_bytes(
+pub(crate) fn read_private_bytes(
     path: &Path,
     private_root: &Path,
     label: &'static str,

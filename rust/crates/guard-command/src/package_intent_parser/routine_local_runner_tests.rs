@@ -11,12 +11,24 @@ use super::*;
 #[path = "routine_local_runner_lockfile_tests.rs"]
 mod lockfile_tests;
 
+#[path = "routine_local_runner_importer_tests.rs"]
+mod importer_tests;
+
 const INSTALLED_VERSION: &str = "9.1.0";
 const DECLARED_VERSION: &str = "^9.0.0";
 
 fn write(path: &Path, body: &str) {
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, body).unwrap();
+}
+
+/// Replace the workspace's only lockfile with `name`, holding `body`.
+fn only_lockfile(root: &Path, name: &str, body: &str) -> PackageIntent {
+    fs::remove_file(root.join("package-lock.json")).unwrap();
+    write(&root.join(name), body);
+    let mut value = intent(root);
+    value.local_executions[0].lockfiles = vec![evidence(&root.join(name))];
+    value
 }
 
 /// An eslint install the verdict accepts: declared in

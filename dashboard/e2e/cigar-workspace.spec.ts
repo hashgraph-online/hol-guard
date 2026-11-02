@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { defaultSettingsPayload, emptyInventoryPayload, emptyPoliciesPayload, emptyReceiptsPayload, freeStateSnapshot } from "./fixture-states";
+import { chooseMenuOption } from "./select-menu";
 
 const ready = JSON.parse(readFileSync(new URL("../src/context-assistance/fixtures/intent-state.json", import.meta.url), "utf8")).native_test.ready_observation;
 const catalog = JSON.parse(readFileSync(new URL("../../integrations/cigar/release-catalog.v1.json", import.meta.url), "utf8"));
@@ -122,7 +123,7 @@ test("a computer without CIGAR offers one click and changes nothing until it is 
 test("CIGAR saves with the existing approval proof, starts explicitly, and keeps a global off switch", async ({ page }) => {
   const calls = await fixture(page, true, true);
   await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=runtime");
-  await page.getByRole("combobox", { name: "Context size" }).selectOption("low_memory");
+  await chooseMenuOption(page.getByRole("combobox", { name: "Context size" }), "low_memory");
   await expect(page.getByText("Save your changes first", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Turn on CIGAR", exact: true }).first()).toBeDisabled();
   const save = page.getByRole("region", { name: "Save CIGAR preferences" });

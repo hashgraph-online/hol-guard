@@ -120,7 +120,6 @@ _START_CLASSIFICATION_RESERVE_FRACTION = 0.25
 # ask so a missed answer is retried instead of spending the whole start budget.
 _SPAWNED_URL_POLL_LIFECYCLE_SECONDS = 5.0
 _GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES = 1024 * 1024
-_RUNTIME_FINGERPRINT_CACHE_MAX_BYTES = 4096
 _RUNTIME_FINGERPRINT_HEX_LENGTH = 64
 _WINDOWS_CREATE_NEW_PROCESS_GROUP = 0x00000200
 _WINDOWS_DETACHED_PROCESS = 0x00000008
@@ -2655,11 +2654,12 @@ def _current_guard_daemon_source_root() -> str:
     return str(Path(__file__).resolve().parents[3])
 
 
-def _measure_runtime_fingerprint(source_root: Path, cached: tuple[str, str] | None) -> tuple[str, str, bool]:
+def _measure_runtime_fingerprint(source_root: Path, cache_dir: Path | None) -> tuple[str, str, bool]:
     """The native runtime's (tree signature, fingerprint, reused) for `source_root`.
 
-    `runtime_fingerprint.rs` walks the tree and hashes it; a cached pair whose
-    tree signature still matches comes back unchanged without reading a file.
+    `runtime_fingerprint.rs` walks the tree and hashes it. Given `cache_dir`
+    it also reads and rewrites the private cache file there, so a tree whose
+    signature still matches comes back without reading a file.
     """
 
     from ..mdm.runtime_request import runtime_answer
@@ -2669,8 +2669,8 @@ def _measure_runtime_fingerprint(source_root: Path, cached: tuple[str, str] | No
         "source_root": str(source_root),
         "version": __version__,
     }
-    if cached is not None:
-        request["cached"] = {"tree_sig": cached[0], "fingerprint": cached[1]}
+    if cache_dir is not None:
+        request["cache_dir"] = str(cache_dir)
 
     def ask() -> dict[str, object] | None:
         return runtime_answer(
@@ -2699,9 +2699,8 @@ def _measure_runtime_fingerprint(source_root: Path, cached: tuple[str, str] | No
     return tree_sig, fingerprint, reused
 
 
-def _runtime_fingerprint_cache_path(source_root: Path) -> Path:
-    digest = hashlib.sha256(os.fsencode(str(source_root))).hexdigest()
-    return Path.home() / ".hol-guard" / "runtime-fingerprint-cache" / f"{digest}.json"
+def _runtime_fingerprint_cache_dir() -> Path:
+    return Path.home() / ".hol-guard" / "runtime-fingerprint-cache"
 
 
 def _is_sha256_hex(value: object) -> bool:
@@ -2712,60 +2711,12 @@ def _is_sha256_hex(value: object) -> bool:
     )
 
 
-def _load_runtime_fingerprint_cache(source_root: Path) -> tuple[str, str] | None:
-    raw_payload = read_private_regular_text(
-        _runtime_fingerprint_cache_path(source_root),
-        max_bytes=_RUNTIME_FINGERPRINT_CACHE_MAX_BYTES,
-        require_private_parent=True,
-    )
-    if raw_payload is None:
-        return None
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(payload, dict):
-        return None
-    if payload.get("source_root") != str(source_root):
-        return None
-    cached_tree_sig = payload.get("tree_sig")
-    cached_fingerprint = payload.get("content_fingerprint")
-    if not isinstance(cached_tree_sig, str) or not isinstance(cached_fingerprint, str):
-        return None
-    if not _is_sha256_hex(cached_fingerprint):
-        return None
-    return cached_tree_sig, cached_fingerprint
-
-
-def _store_runtime_fingerprint_cache(source_root: Path, tree_sig: str, fingerprint: str) -> None:
-    cache_path = _runtime_fingerprint_cache_path(source_root)
-    try:
-        _ensure_private_directory(cache_path.parent)
-        _write_private_atomic_text(
-            cache_path,
-            json.dumps(
-                {
-                    "content_fingerprint": fingerprint,
-                    "source_root": str(source_root),
-                    "tree_sig": tree_sig,
-                },
-                sort_keys=True,
-            ),
-        )
-    except (OSError, RuntimeError, ValueError):
-        return
-
-
 def _current_guard_daemon_runtime_fingerprint() -> str:
     global _runtime_fingerprint_cache
     if _runtime_fingerprint_cache is not None:
         return _runtime_fingerprint_cache[1]
     source_root = Path(_current_guard_daemon_source_root())
-    tree_sig, fingerprint, reused = _measure_runtime_fingerprint(
-        source_root, _load_runtime_fingerprint_cache(source_root)
-    )
-    if not reused:
-        _store_runtime_fingerprint_cache(source_root, tree_sig, fingerprint)
+    tree_sig, fingerprint, _reused = _measure_runtime_fingerprint(source_root, _runtime_fingerprint_cache_dir())
     _runtime_fingerprint_cache = (tree_sig, fingerprint)
     return fingerprint
 

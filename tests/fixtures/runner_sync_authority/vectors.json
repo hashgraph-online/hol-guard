@@ -25208,6 +25208,6860 @@
      }
     ]
    }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/registry/api/v1'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/registry/api/v1"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/registry/api/v1/'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/registry/api/v1/"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/registry/api/v1?x=1'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/registry/api/v1?x=1"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/registry/api/v1#frag'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/registry/api/v1#frag"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/registry/api/v1/guard/receipts/sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/registry/api/v1/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/registry/api/v1/guard/receipts/sync/'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/registry/api/v1/guard/receipts/sync/"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/registry/api/v1/guard/receipts/sync?a=1&workspaceId=old&b=%20x+y#f'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/registry/api/v1/guard/receipts/sync?a=1&workspaceId=old&b=%20x+y#f"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/insights/shares?a=1&workspaceId=old&b=%20x+y"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/api/guard/receipts/sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/api/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "https://hol.org/api/guard/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/guard/receipts/sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "https://hol.org/guard/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/guard/receipts/sync?workspaceId=a&workspaceId=b&k'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/guard/receipts/sync?workspaceId=a&workspaceId=b&k"
+   },
+   "expected": {
+    "url": "https://hol.org/guard/insights/shares?workspaceId=a&workspaceId=b&k"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/api/v1/guard/events'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/api/v1/guard/events"
+   },
+   "expected": {
+    "url": "https://hol.org/api/v1/guard/events/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/api/v1/guard/events/'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/api/v1/guard/events/"
+   },
+   "expected": {
+    "url": "https://hol.org/api/v1/guard/events/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/api/v1/guard/events?q=1#z'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/api/v1/guard/events?q=1#z"
+   },
+   "expected": {
+    "url": "https://hol.org/api/v1/guard/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/custom/base'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/custom/base"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/base/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/custom/base/'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/custom/base/"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/base/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/custom/receipts'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/custom/receipts"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/receipts/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/custom/inventory'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/custom/inventory"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/inventory/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/custom/receipts/sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/custom/receipts/sync"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/custom/inventory/sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/custom/inventory/sync"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/inventory/sync/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/receipts'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/receipts"
+   },
+   "expected": {
+    "url": "https://hol.org/receipts/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/"
+   },
+   "expected": {
+    "url": "https://hol.org/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org"
+   },
+   "expected": {
+    "url": "https://hol.org/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'HTTPS://HOL.ORG:8443/Guard/Receipts/Sync?Z=1'",
+   "args": {
+    "route": "insights_share",
+    "url": "HTTPS://HOL.ORG:8443/Guard/Receipts/Sync?Z=1"
+   },
+   "expected": {
+    "url": "https://HOL.ORG:8443/Guard/Receipts/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'http://localhost:3000/api/guard/receipts/sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "http://localhost:3000/api/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "http://localhost:3000/api/guard/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'http://127.0.0.1:8080'",
+   "args": {
+    "route": "insights_share",
+    "url": "http://127.0.0.1:8080"
+   },
+   "expected": {
+    "url": "http://127.0.0.1:8080/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://u:p@hol.org/guard/receipts/sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://u:p@hol.org/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "https://u:p@hol.org/guard/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org//double//slash/receipts/sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org//double//slash/receipts/sync"
+   },
+   "expected": {
+    "url": "https://hol.org//double//slash/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/guard/receipts/sync?k=%E2%9C%93&e=caf%C3%A9&bad=%FF'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/guard/receipts/sync?k=%E2%9C%93&e=caf%C3%A9&bad=%FF"
+   },
+   "expected": {
+    "url": "https://hol.org/guard/insights/shares?k=%E2%9C%93&e=caf%C3%A9&bad=%FF"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/guard/receipts/sync?a=1&&b=2&=v&c='",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/guard/receipts/sync?a=1&&b=2&=v&c="
+   },
+   "expected": {
+    "url": "https://hol.org/guard/insights/shares?a=1&&b=2&=v&c="
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'hol.org/guard/receipts/sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "hol.org/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "hol.org/guard/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share '/guard/receipts/sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "/guard/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share ''",
+   "args": {
+    "route": "insights_share",
+    "url": ""
+   },
+   "expected": {
+    "url": "/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/a b/c?x=a b'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/a b/c?x=a b"
+   },
+   "expected": {
+    "url": "https://hol.org/a b/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/guard/receipts/sync?ecosystem=npm&partition=3&z=9'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/guard/receipts/sync?ecosystem=npm&partition=3&z=9"
+   },
+   "expected": {
+    "url": "https://hol.org/guard/insights/shares?ecosystem=npm&partition=3&z=9"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/registry/api/v1/guard/supply-chain/bundle?workspaceId=w1'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/registry/api/v1/guard/supply-chain/bundle?workspaceId=w1"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/supply-chain/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/sync\\tx\\n/path'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/sync\tx\n/path"
+   },
+   "expected": {
+    "url": "https://hol.org/syncx/path/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/api/guard/receipts/sync/'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/api/guard/receipts/sync/"
+   },
+   "expected": {
+    "url": "https://hol.org/api/guard/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/api/guard/receipts/sync?workspace=a#frag'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/api/guard/receipts/sync?workspace=a#frag"
+   },
+   "expected": {
+    "url": "https://hol.org/api/guard/insights/shares?workspace=a"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/guard/receipts/sync?x=1'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/guard/receipts/sync?x=1"
+   },
+   "expected": {
+    "url": "https://hol.org/guard/insights/shares?x=1"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/registry/api/v1/guard/receipts/sync//'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/registry/api/v1/guard/receipts/sync//"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/custom/receipts/sync/'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/custom/receipts/sync/"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/custom/receipts/sync?x=1'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/custom/receipts/sync?x=1"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/receipts/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/custom/path'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/custom/path"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/path/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/custom/path/'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/custom/path/"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/path/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/custom/path?x=1#y'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/custom/path?x=1#y"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/a/../b/./c'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/a/../b/./c"
+   },
+   "expected": {
+    "url": "https://hol.org/b/c/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'https://hol.org/a//b'",
+   "args": {
+    "route": "insights_share",
+    "url": "https://hol.org/a//b"
+   },
+   "expected": {
+    "url": "https://hol.org/a/b/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'http://localhost:8080/guard/receipts/sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "http://localhost:8080/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "http://localhost:8080/guard/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'mailto:someone@example.com'",
+   "args": {
+    "route": "insights_share",
+    "url": "mailto:someone@example.com"
+   },
+   "expected": {
+    "url": "insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'custom-scheme://host/path'",
+   "args": {
+    "route": "insights_share",
+    "url": "custom-scheme://host/path"
+   },
+   "expected": {
+    "url": "insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'relative/path'",
+   "args": {
+    "route": "insights_share",
+    "url": "relative/path"
+   },
+   "expected": {
+    "url": "relative/path/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share '/absolute/path'",
+   "args": {
+    "route": "insights_share",
+    "url": "/absolute/path"
+   },
+   "expected": {
+    "url": "/absolute/path/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'file:///tmp/sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "file:///tmp/sync"
+   },
+   "expected": {
+    "url": "file:///tmp/sync/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "insights_share 'HTTPS://HOL.ORG/Guard/Receipts/Sync'",
+   "args": {
+    "route": "insights_share",
+    "url": "HTTPS://HOL.ORG/Guard/Receipts/Sync"
+   },
+   "expected": {
+    "url": "https://HOL.ORG/Guard/Receipts/Sync/insights/shares"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/registry/api/v1'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/registry/api/v1"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/registry/api/v1/'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/registry/api/v1/"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/registry/api/v1?x=1'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/registry/api/v1?x=1"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/registry/api/v1#frag'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/registry/api/v1#frag"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/registry/api/v1/guard/receipts/sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/registry/api/v1/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/registry/api/v1/guard/receipts/sync/'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/registry/api/v1/guard/receipts/sync/"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/registry/api/v1/guard/receipts/sync?a=1&workspaceId=old&b=%20x+y#f'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/registry/api/v1/guard/receipts/sync?a=1&workspaceId=old&b=%20x+y#f"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/exceptions/requests?a=1&workspaceId=old&b=%20x+y"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/api/guard/receipts/sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/api/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "https://hol.org/api/guard/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/guard/receipts/sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "https://hol.org/guard/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/guard/receipts/sync?workspaceId=a&workspaceId=b&k'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/guard/receipts/sync?workspaceId=a&workspaceId=b&k"
+   },
+   "expected": {
+    "url": "https://hol.org/guard/exceptions/requests?workspaceId=a&workspaceId=b&k"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/api/v1/guard/events'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/api/v1/guard/events"
+   },
+   "expected": {
+    "url": "https://hol.org/api/v1/guard/events/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/api/v1/guard/events/'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/api/v1/guard/events/"
+   },
+   "expected": {
+    "url": "https://hol.org/api/v1/guard/events/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/api/v1/guard/events?q=1#z'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/api/v1/guard/events?q=1#z"
+   },
+   "expected": {
+    "url": "https://hol.org/api/v1/guard/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/custom/base'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/custom/base"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/base/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/custom/base/'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/custom/base/"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/base/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/custom/receipts'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/custom/receipts"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/receipts/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/custom/inventory'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/custom/inventory"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/inventory/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/custom/receipts/sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/custom/receipts/sync"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/custom/inventory/sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/custom/inventory/sync"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/inventory/sync/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/receipts'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/receipts"
+   },
+   "expected": {
+    "url": "https://hol.org/receipts/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/"
+   },
+   "expected": {
+    "url": "https://hol.org/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org"
+   },
+   "expected": {
+    "url": "https://hol.org/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'HTTPS://HOL.ORG:8443/Guard/Receipts/Sync?Z=1'",
+   "args": {
+    "route": "exception_requests",
+    "url": "HTTPS://HOL.ORG:8443/Guard/Receipts/Sync?Z=1"
+   },
+   "expected": {
+    "url": "https://HOL.ORG:8443/Guard/Receipts/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'http://localhost:3000/api/guard/receipts/sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "http://localhost:3000/api/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "http://localhost:3000/api/guard/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'http://127.0.0.1:8080'",
+   "args": {
+    "route": "exception_requests",
+    "url": "http://127.0.0.1:8080"
+   },
+   "expected": {
+    "url": "http://127.0.0.1:8080/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://u:p@hol.org/guard/receipts/sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://u:p@hol.org/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "https://u:p@hol.org/guard/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org//double//slash/receipts/sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org//double//slash/receipts/sync"
+   },
+   "expected": {
+    "url": "https://hol.org//double//slash/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/guard/receipts/sync?k=%E2%9C%93&e=caf%C3%A9&bad=%FF'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/guard/receipts/sync?k=%E2%9C%93&e=caf%C3%A9&bad=%FF"
+   },
+   "expected": {
+    "url": "https://hol.org/guard/exceptions/requests?k=%E2%9C%93&e=caf%C3%A9&bad=%FF"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/guard/receipts/sync?a=1&&b=2&=v&c='",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/guard/receipts/sync?a=1&&b=2&=v&c="
+   },
+   "expected": {
+    "url": "https://hol.org/guard/exceptions/requests?a=1&&b=2&=v&c="
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'hol.org/guard/receipts/sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "hol.org/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "hol.org/guard/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests '/guard/receipts/sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "/guard/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests ''",
+   "args": {
+    "route": "exception_requests",
+    "url": ""
+   },
+   "expected": {
+    "url": "/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/a b/c?x=a b'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/a b/c?x=a b"
+   },
+   "expected": {
+    "url": "https://hol.org/a b/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/guard/receipts/sync?ecosystem=npm&partition=3&z=9'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/guard/receipts/sync?ecosystem=npm&partition=3&z=9"
+   },
+   "expected": {
+    "url": "https://hol.org/guard/exceptions/requests?ecosystem=npm&partition=3&z=9"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/registry/api/v1/guard/supply-chain/bundle?workspaceId=w1'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/registry/api/v1/guard/supply-chain/bundle?workspaceId=w1"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/supply-chain/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/sync\\tx\\n/path'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/sync\tx\n/path"
+   },
+   "expected": {
+    "url": "https://hol.org/syncx/path/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/api/guard/receipts/sync/'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/api/guard/receipts/sync/"
+   },
+   "expected": {
+    "url": "https://hol.org/api/guard/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/api/guard/receipts/sync?workspace=a#frag'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/api/guard/receipts/sync?workspace=a#frag"
+   },
+   "expected": {
+    "url": "https://hol.org/api/guard/exceptions/requests?workspace=a"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/guard/receipts/sync?x=1'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/guard/receipts/sync?x=1"
+   },
+   "expected": {
+    "url": "https://hol.org/guard/exceptions/requests?x=1"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/registry/api/v1/guard/receipts/sync//'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/registry/api/v1/guard/receipts/sync//"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/custom/receipts/sync/'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/custom/receipts/sync/"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/custom/receipts/sync?x=1'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/custom/receipts/sync?x=1"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/receipts/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/custom/path'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/custom/path"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/path/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/custom/path/'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/custom/path/"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/path/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/custom/path?x=1#y'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/custom/path?x=1#y"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/a/../b/./c'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/a/../b/./c"
+   },
+   "expected": {
+    "url": "https://hol.org/b/c/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'https://hol.org/a//b'",
+   "args": {
+    "route": "exception_requests",
+    "url": "https://hol.org/a//b"
+   },
+   "expected": {
+    "url": "https://hol.org/a/b/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'http://localhost:8080/guard/receipts/sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "http://localhost:8080/guard/receipts/sync"
+   },
+   "expected": {
+    "url": "http://localhost:8080/guard/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'mailto:someone@example.com'",
+   "args": {
+    "route": "exception_requests",
+    "url": "mailto:someone@example.com"
+   },
+   "expected": {
+    "url": "exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'custom-scheme://host/path'",
+   "args": {
+    "route": "exception_requests",
+    "url": "custom-scheme://host/path"
+   },
+   "expected": {
+    "url": "exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'relative/path'",
+   "args": {
+    "route": "exception_requests",
+    "url": "relative/path"
+   },
+   "expected": {
+    "url": "relative/path/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests '/absolute/path'",
+   "args": {
+    "route": "exception_requests",
+    "url": "/absolute/path"
+   },
+   "expected": {
+    "url": "/absolute/path/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'file:///tmp/sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "file:///tmp/sync"
+   },
+   "expected": {
+    "url": "file:///tmp/sync/exceptions/requests"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "exception_requests 'HTTPS://HOL.ORG/Guard/Receipts/Sync'",
+   "args": {
+    "route": "exception_requests",
+    "url": "HTTPS://HOL.ORG/Guard/Receipts/Sync"
+   },
+   "expected": {
+    "url": "https://HOL.ORG/Guard/Receipts/Sync/exceptions/requests"
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 0",
+   "args": {
+    "analytics": {
+     "total": -3,
+     "blocked": "2",
+     "active_day_streak": 0,
+     "peak_day_total": 20,
+     "by_harness": [
+      {
+       "total": 33,
+       "harness": " gemini-cli "
+      }
+     ],
+     "daily_activity": [],
+     "top_artifacts": [
+      {
+       "total": 4.4,
+       "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+     ]
+    },
+    "include_top_artifacts": false,
+    "show_display_name": true,
+    "display_name": "  Sam  ",
+    "overview_stats": {
+     "pending": 2,
+     "apps": 3,
+     "recorded": 50
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 90
+     },
+     "headline": {
+      "totalActions": -3,
+      "activeDayStreak": 0,
+      "peakDayTotal": 20,
+      "blockedCount": 2,
+      "stopRatePct": 0,
+      "topHarness": "Gemini CLI"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Gemini CLI",
+       "count": 33,
+       "sharePct": 0
+      }
+     ],
+     "heatmap": {
+      "days": 90,
+      "cells": []
+     },
+     "showDisplayName": true,
+     "overviewStats": {
+      "pending": 2,
+      "apps": 3,
+      "recorded": 50
+     },
+     "displayName": "Sam"
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 1",
+   "args": {
+    "analytics": {
+     "total": 1,
+     "blocked": "2",
+     "peak_day_total": "7",
+     "by_harness": [
+      {
+       "total": 2.7
+      },
+      {
+       "total": 5,
+       "harness": "codex"
+      },
+      {
+       "total": "12"
+      },
+      {
+       "total": 5,
+       "harness": "my-new-app"
+      }
+     ],
+     "daily_activity": [
+      {
+       "total": 0,
+       "date_key": "2026-01-01"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-02"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-03"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-04"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-01-05"
+      }
+     ]
+    },
+    "include_top_artifacts": false,
+    "show_display_name": false,
+    "display_name": null,
+    "overview_stats": {
+     "pending": 2,
+     "apps": 3,
+     "recorded": 50
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 5
+     },
+     "headline": {
+      "totalActions": 1,
+      "activeDayStreak": 0,
+      "peakDayTotal": 7,
+      "blockedCount": 2,
+      "stopRatePct": 200,
+      "topHarness": "Unknown App"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Unknown App",
+       "count": 2,
+       "sharePct": 200
+      },
+      {
+       "harness": "Codex",
+       "count": 5,
+       "sharePct": 500
+      },
+      {
+       "harness": "Unknown App",
+       "count": 12,
+       "sharePct": 1200
+      },
+      {
+       "harness": "My New App",
+       "count": 5,
+       "sharePct": 500
+      }
+     ],
+     "heatmap": {
+      "days": 5,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 0
+       },
+       {
+        "date": "2026-01-02",
+        "level": 0
+       },
+       {
+        "date": "2026-01-03",
+        "level": 4
+       },
+       {
+        "date": "2026-01-04",
+        "level": 4
+       },
+       {
+        "date": "2026-01-05",
+        "level": 0
+       }
+      ]
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 2,
+      "apps": 3,
+      "recorded": 50
+     },
+     "miniHeatmap": {
+      "days": 5,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 0
+       },
+       {
+        "date": "2026-01-02",
+        "level": 0
+       },
+       {
+        "date": "2026-01-03",
+        "level": 4
+       },
+       {
+        "date": "2026-01-04",
+        "level": 4
+       },
+       {
+        "date": "2026-01-05",
+        "level": 0
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 2",
+   "args": {
+    "analytics": {
+     "total": 200,
+     "blocked": 0,
+     "active_day_streak": 0,
+     "peak_day_total": 20,
+     "by_harness": [
+      {
+       "total": 5,
+       "harness": "Cursor"
+      }
+     ],
+     "daily_activity": [
+      {
+       "total": 10,
+       "date_key": "2026-01-01"
+      },
+      {
+       "total": 17
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-03"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-04"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-05"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-06"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-07"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-01-08"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-01-09"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-10"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-11"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-12"
+      }
+     ],
+     "top_artifacts": [
+      {
+       "total": 4.4
+      },
+      {
+       "total": 1,
+       "name": "bash"
+      }
+     ]
+    },
+    "include_top_artifacts": true,
+    "show_display_name": false,
+    "display_name": "",
+    "overview_stats": {
+     "pending": 2,
+     "apps": 3,
+     "recorded": 50
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 12
+     },
+     "headline": {
+      "totalActions": 200,
+      "activeDayStreak": 0,
+      "peakDayTotal": 20,
+      "blockedCount": 0,
+      "stopRatePct": 0,
+      "topHarness": "Cursor"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Cursor",
+       "count": 5,
+       "sharePct": 2
+      }
+     ],
+     "heatmap": {
+      "days": 11,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 2
+       },
+       {
+        "date": "2026-01-03",
+        "level": 2
+       },
+       {
+        "date": "2026-01-04",
+        "level": 1
+       },
+       {
+        "date": "2026-01-05",
+        "level": 1
+       },
+       {
+        "date": "2026-01-06",
+        "level": 1
+       },
+       {
+        "date": "2026-01-07",
+        "level": 2
+       },
+       {
+        "date": "2026-01-08",
+        "level": 1
+       },
+       {
+        "date": "2026-01-09",
+        "level": 1
+       },
+       {
+        "date": "2026-01-10",
+        "level": 1
+       },
+       {
+        "date": "2026-01-11",
+        "level": 4
+       },
+       {
+        "date": "2026-01-12",
+        "level": 2
+       }
+      ]
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 2,
+      "apps": 3,
+      "recorded": 50
+     },
+     "miniHeatmap": {
+      "days": 5,
+      "cells": [
+       {
+        "date": "2026-01-08",
+        "level": 1
+       },
+       {
+        "date": "2026-01-09",
+        "level": 1
+       },
+       {
+        "date": "2026-01-10",
+        "level": 1
+       },
+       {
+        "date": "2026-01-11",
+        "level": 4
+       },
+       {
+        "date": "2026-01-12",
+        "level": 2
+       }
+      ]
+     },
+     "topArtifacts": [
+      {
+       "label": "Protected action",
+       "count": 4
+      },
+      {
+       "label": "bash",
+       "count": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 3",
+   "args": {
+    "analytics": {
+     "blocked": 2.5,
+     "by_harness": [],
+     "daily_activity": [
+      {
+       "total": 10,
+       "date_key": "2026-01-01"
+      }
+     ],
+     "top_artifacts": [
+      {
+       "total": 2,
+       "name": "bash"
+      },
+      {
+       "total": "3",
+       "name": ""
+      },
+      {
+       "total": "3",
+       "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+       "total": "3",
+       "name": "npm run build"
+      },
+      {
+       "total": 2
+      }
+     ]
+    },
+    "include_top_artifacts": true,
+    "show_display_name": false,
+    "display_name": "名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名",
+    "overview_stats": null,
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 1
+     },
+     "headline": {
+      "totalActions": 0,
+      "activeDayStreak": 0,
+      "peakDayTotal": 0,
+      "blockedCount": 2,
+      "stopRatePct": 0,
+      "topHarness": "Unknown App"
+     },
+     "harnessBreakdown": [],
+     "heatmap": {
+      "days": 1,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 4
+       }
+      ]
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 0,
+      "apps": 0,
+      "recorded": 0
+     },
+     "miniHeatmap": {
+      "days": 1,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 4
+       }
+      ]
+     },
+     "topArtifacts": [
+      {
+       "label": "bash",
+       "count": 2
+      },
+      {
+       "label": "Protected action",
+       "count": 3
+      },
+      {
+       "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+       "count": 3
+      }
+     ]
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 4",
+   "args": {
+    "analytics": {
+     "total": 7,
+     "blocked": 25,
+     "peak_day_total": 20,
+     "by_harness": [
+      {
+       "total": 2.7,
+       "harness": "pi"
+      },
+      {
+       "total": 0,
+       "harness": "   "
+      },
+      {
+       "total": 0
+      },
+      {
+       "total": 0,
+       "harness": "omp"
+      },
+      {
+       "total": 0,
+       "harness": "WINDSURF"
+      },
+      {
+       "total": 33,
+       "harness": "über-tool"
+      }
+     ],
+     "daily_activity": [
+      {
+       "total": "3"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-02"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-01-03"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-01-04"
+      }
+     ]
+    },
+    "include_top_artifacts": true,
+    "show_display_name": true,
+    "display_name": "Alex",
+    "overview_stats": {},
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 4
+     },
+     "headline": {
+      "totalActions": 7,
+      "activeDayStreak": 0,
+      "peakDayTotal": 20,
+      "blockedCount": 25,
+      "stopRatePct": 357,
+      "topHarness": "Pi"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Pi",
+       "count": 2,
+       "sharePct": 29
+      },
+      {
+       "harness": "Unknown app",
+       "count": 0,
+       "sharePct": 0
+      },
+      {
+       "harness": "Unknown App",
+       "count": 0,
+       "sharePct": 0
+      },
+      {
+       "harness": "Oh My Pi",
+       "count": 0,
+       "sharePct": 0
+      }
+     ],
+     "heatmap": {
+      "days": 3,
+      "cells": [
+       {
+        "date": "2026-01-02",
+        "level": 0
+       },
+       {
+        "date": "2026-01-03",
+        "level": 4
+       },
+       {
+        "date": "2026-01-04",
+        "level": 0
+       }
+      ]
+     },
+     "showDisplayName": true,
+     "overviewStats": {
+      "pending": 0,
+      "apps": 0,
+      "recorded": 0
+     },
+     "miniHeatmap": {
+      "days": 3,
+      "cells": [
+       {
+        "date": "2026-01-02",
+        "level": 0
+       },
+       {
+        "date": "2026-01-03",
+        "level": 4
+       },
+       {
+        "date": "2026-01-04",
+        "level": 0
+       }
+      ]
+     },
+     "displayName": "Alex",
+     "topArtifacts": []
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 5",
+   "args": {
+    "analytics": {
+     "total": 7,
+     "blocked": null,
+     "active_day_streak": null,
+     "peak_day_total": 20,
+     "by_harness": [
+      {
+       "total": 33,
+       "harness": "x2y-tool"
+      },
+      {
+       "total": "12",
+       "harness": "Cursor"
+      },
+      {
+       "total": "12",
+       "harness": "pi"
+      },
+      {
+       "total": 1,
+       "harness": "   "
+      },
+      "not-a-row"
+     ],
+     "daily_activity": []
+    },
+    "include_top_artifacts": false,
+    "show_display_name": false,
+    "display_name": "  Sam  ",
+    "overview_stats": {},
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 90
+     },
+     "headline": {
+      "totalActions": 7,
+      "activeDayStreak": 0,
+      "peakDayTotal": 20,
+      "blockedCount": 0,
+      "stopRatePct": 0,
+      "topHarness": "X2Y Tool"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "X2Y Tool",
+       "count": 33,
+       "sharePct": 471
+      },
+      {
+       "harness": "Cursor",
+       "count": 12,
+       "sharePct": 171
+      },
+      {
+       "harness": "Pi",
+       "count": 12,
+       "sharePct": 171
+      },
+      {
+       "harness": "Unknown app",
+       "count": 1,
+       "sharePct": 14
+      }
+     ],
+     "heatmap": {
+      "days": 90,
+      "cells": []
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 0,
+      "apps": 0,
+      "recorded": 0
+     }
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 6",
+   "args": {
+    "analytics": {
+     "total": 100,
+     "active_day_streak": "4",
+     "peak_day_total": 5,
+     "by_harness": [],
+     "top_artifacts": [
+      {
+       "total": 4.4
+      },
+      {
+       "total": 4.4,
+       "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+       "total": 1,
+       "name": ""
+      },
+      {
+       "total": 4.4,
+       "name": "npm run build"
+      },
+      {
+       "total": 2,
+       "name": ""
+      }
+     ]
+    },
+    "include_top_artifacts": false,
+    "show_display_name": false,
+    "display_name": "名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名",
+    "overview_stats": {
+     "pending": "4",
+     "apps": null
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 90
+     },
+     "headline": {
+      "totalActions": 100,
+      "activeDayStreak": 4,
+      "peakDayTotal": 5,
+      "blockedCount": 0,
+      "stopRatePct": 0,
+      "topHarness": "Unknown App"
+     },
+     "harnessBreakdown": [],
+     "heatmap": {
+      "days": 90,
+      "cells": []
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 4,
+      "apps": 0,
+      "recorded": 0
+     }
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 7",
+   "args": {
+    "analytics": {
+     "total": 7,
+     "blocked": 3,
+     "active_day_streak": null,
+     "peak_day_total": 0,
+     "by_harness": [
+      {
+       "total": 33
+      },
+      {
+       "total": 1,
+       "harness": "x2y-tool"
+      },
+      {
+       "total": 0,
+       "harness": "my-new-app"
+      },
+      {
+       "total": "12",
+       "harness": "omp"
+      }
+     ],
+     "daily_activity": [
+      {
+       "total": 1,
+       "date_key": "2026-01-01"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-02"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-03"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-01-04"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-01-05"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-06"
+      }
+     ],
+     "top_artifacts": [
+      {
+       "total": "3",
+       "name": ""
+      },
+      {
+       "total": 2,
+       "name": "npm run build"
+      },
+      {
+       "total": 4.4,
+       "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+       "total": 1,
+       "name": ""
+      },
+      {
+       "total": "3"
+      }
+     ]
+    },
+    "include_top_artifacts": false,
+    "show_display_name": true,
+    "display_name": "  Sam  ",
+    "overview_stats": null,
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 6
+     },
+     "headline": {
+      "totalActions": 7,
+      "activeDayStreak": 0,
+      "peakDayTotal": 0,
+      "blockedCount": 3,
+      "stopRatePct": 43,
+      "topHarness": "Unknown App"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Unknown App",
+       "count": 33,
+       "sharePct": 471
+      },
+      {
+       "harness": "X2Y Tool",
+       "count": 1,
+       "sharePct": 14
+      },
+      {
+       "harness": "My New App",
+       "count": 0,
+       "sharePct": 0
+      },
+      {
+       "harness": "Oh My Pi",
+       "count": 12,
+       "sharePct": 171
+      }
+     ],
+     "heatmap": {
+      "days": 6,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 1
+       },
+       {
+        "date": "2026-01-02",
+        "level": 2
+       },
+       {
+        "date": "2026-01-03",
+        "level": 4
+       },
+       {
+        "date": "2026-01-04",
+        "level": 4
+       },
+       {
+        "date": "2026-01-05",
+        "level": 0
+       },
+       {
+        "date": "2026-01-06",
+        "level": 1
+       }
+      ]
+     },
+     "showDisplayName": true,
+     "overviewStats": {
+      "pending": 0,
+      "apps": 0,
+      "recorded": 0
+     },
+     "miniHeatmap": {
+      "days": 5,
+      "cells": [
+       {
+        "date": "2026-01-02",
+        "level": 2
+       },
+       {
+        "date": "2026-01-03",
+        "level": 4
+       },
+       {
+        "date": "2026-01-04",
+        "level": 4
+       },
+       {
+        "date": "2026-01-05",
+        "level": 0
+       },
+       {
+        "date": "2026-01-06",
+        "level": 1
+       }
+      ]
+     },
+     "displayName": "Sam"
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 8",
+   "args": {
+    "analytics": {
+     "total": "45",
+     "blocked": 50,
+     "active_day_streak": 3,
+     "by_harness": [
+      {
+       "total": 33,
+       "harness": "über-tool"
+      }
+     ],
+     "top_artifacts": []
+    },
+    "include_top_artifacts": true,
+    "show_display_name": true,
+    "display_name": "  Sam  ",
+    "overview_stats": {
+     "pending": 2,
+     "apps": 3,
+     "recorded": 50
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 90
+     },
+     "headline": {
+      "totalActions": 45,
+      "activeDayStreak": 3,
+      "peakDayTotal": 0,
+      "blockedCount": 50,
+      "stopRatePct": 111,
+      "topHarness": "Über Tool"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Über Tool",
+       "count": 33,
+       "sharePct": 73
+      }
+     ],
+     "heatmap": {
+      "days": 90,
+      "cells": []
+     },
+     "showDisplayName": true,
+     "overviewStats": {
+      "pending": 2,
+      "apps": 3,
+      "recorded": 50
+     },
+     "displayName": "Sam",
+     "topArtifacts": []
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 9",
+   "args": {
+    "analytics": {
+     "total": -3,
+     "blocked": 1,
+     "active_day_streak": "4",
+     "peak_day_total": 0,
+     "by_harness": [],
+     "daily_activity": [
+      {
+       "total": -1,
+       "date_key": "2026-01-01"
+      }
+     ],
+     "top_artifacts": [
+      {
+       "total": 1,
+       "name": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      }
+     ]
+    },
+    "include_top_artifacts": false,
+    "show_display_name": true,
+    "display_name": "  Sam  ",
+    "overview_stats": {
+     "pending": "4",
+     "apps": null
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 1
+     },
+     "headline": {
+      "totalActions": -3,
+      "activeDayStreak": 4,
+      "peakDayTotal": 0,
+      "blockedCount": 1,
+      "stopRatePct": 0,
+      "topHarness": "Unknown App"
+     },
+     "harnessBreakdown": [],
+     "heatmap": {
+      "days": 1,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 0
+       }
+      ]
+     },
+     "showDisplayName": true,
+     "overviewStats": {
+      "pending": 4,
+      "apps": 0,
+      "recorded": 0
+     },
+     "miniHeatmap": {
+      "days": 1,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 0
+       }
+      ]
+     },
+     "displayName": "Sam"
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 10",
+   "args": {
+    "analytics": {
+     "blocked": 5,
+     "active_day_streak": "4",
+     "peak_day_total": 5,
+     "by_harness": [
+      {
+       "total": 33,
+       "harness": "pi"
+      },
+      {
+       "total": 0,
+       "harness": "WINDSURF"
+      },
+      {
+       "total": "12",
+       "harness": "my-new-app"
+      },
+      {
+       "total": 5,
+       "harness": "my-new-app"
+      },
+      {
+       "total": 2.7,
+       "harness": "my-new-app"
+      },
+      {
+       "total": 33,
+       "harness": "über-tool"
+      }
+     ],
+     "daily_activity": [
+      {
+       "total": 5,
+       "date_key": ""
+      }
+     ],
+     "top_artifacts": [
+      {
+       "total": 4.4,
+       "name": ""
+      },
+      {
+       "total": 4.4,
+       "name": "npm run build"
+      },
+      {
+       "total": 2
+      }
+     ]
+    },
+    "include_top_artifacts": true,
+    "show_display_name": true,
+    "display_name": "Alex",
+    "overview_stats": null,
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 1
+     },
+     "headline": {
+      "totalActions": 0,
+      "activeDayStreak": 4,
+      "peakDayTotal": 5,
+      "blockedCount": 5,
+      "stopRatePct": 0,
+      "topHarness": "Pi"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Pi",
+       "count": 33,
+       "sharePct": 0
+      },
+      {
+       "harness": "Windsurf",
+       "count": 0,
+       "sharePct": 0
+      },
+      {
+       "harness": "My New App",
+       "count": 12,
+       "sharePct": 0
+      },
+      {
+       "harness": "My New App",
+       "count": 5,
+       "sharePct": 0
+      }
+     ],
+     "heatmap": {
+      "days": 90,
+      "cells": []
+     },
+     "showDisplayName": true,
+     "overviewStats": {
+      "pending": 0,
+      "apps": 0,
+      "recorded": 0
+     },
+     "displayName": "Alex",
+     "topArtifacts": [
+      {
+       "label": "Protected action",
+       "count": 4
+      },
+      {
+       "label": "npm run build",
+       "count": 4
+      },
+      {
+       "label": "Protected action",
+       "count": 2
+      }
+     ]
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 11",
+   "args": {
+    "analytics": {
+     "total": true,
+     "active_day_streak": 0,
+     "peak_day_total": 5,
+     "by_harness": [
+      {
+       "total": 2.7,
+       "harness": "codex"
+      }
+     ],
+     "daily_activity": [
+      {
+       "total": 20,
+       "date_key": "2026-01-01"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-02"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-03"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-04"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-05"
+      }
+     ],
+     "top_artifacts": [
+      {
+       "total": 1,
+       "name": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      }
+     ]
+    },
+    "include_top_artifacts": false,
+    "show_display_name": true,
+    "display_name": "名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名",
+    "overview_stats": {
+     "pending": "4",
+     "apps": null
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 5
+     },
+     "headline": {
+      "totalActions": 1,
+      "activeDayStreak": 0,
+      "peakDayTotal": 5,
+      "blockedCount": 0,
+      "stopRatePct": 0,
+      "topHarness": "Codex"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Codex",
+       "count": 2,
+       "sharePct": 200
+      }
+     ],
+     "heatmap": {
+      "days": 5,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 4
+       },
+       {
+        "date": "2026-01-02",
+        "level": 0
+       },
+       {
+        "date": "2026-01-03",
+        "level": 1
+       },
+       {
+        "date": "2026-01-04",
+        "level": 0
+       },
+       {
+        "date": "2026-01-05",
+        "level": 1
+       }
+      ]
+     },
+     "showDisplayName": true,
+     "overviewStats": {
+      "pending": 4,
+      "apps": 0,
+      "recorded": 0
+     },
+     "miniHeatmap": {
+      "days": 5,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 4
+       },
+       {
+        "date": "2026-01-02",
+        "level": 0
+       },
+       {
+        "date": "2026-01-03",
+        "level": 1
+       },
+       {
+        "date": "2026-01-04",
+        "level": 0
+       },
+       {
+        "date": "2026-01-05",
+        "level": 1
+       }
+      ]
+     },
+     "displayName": "名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名"
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 12",
+   "args": {
+    "analytics": {
+     "total": true,
+     "blocked": 5,
+     "active_day_streak": 3,
+     "peak_day_total": 0,
+     "by_harness": [
+      {
+       "total": "12",
+       "harness": "omp"
+      },
+      {
+       "total": 5,
+       "harness": "   "
+      },
+      {
+       "total": 33,
+       "harness": "claude-code"
+      },
+      {
+       "total": 33,
+       "harness": "omp"
+      },
+      {
+       "total": 1,
+       "harness": "my-new-app"
+      },
+      {
+       "total": 1
+      }
+     ],
+     "daily_activity": [
+      {
+       "total": 9,
+       "date_key": "2026-01-01"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-02"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-03"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-04"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-05"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-01-06"
+      },
+      {
+       "total": 0,
+       "date_key": ""
+      },
+      {
+       "total": -1,
+       "date_key": "2026-01-08"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-09"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-10"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-11"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-12"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-13"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-14"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-15"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-01-16"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-17"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-18"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-01-19"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-20"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-21"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-22"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-01-23"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-24"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-25"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-01-26"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-27"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-01-28"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-01"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-02-02"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-02-03"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-02-04"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-02-05"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-06"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-02-07"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-08"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-02-09"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-02-10"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-02-11"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-12"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-02-13"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-14"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-02-15"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-16"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-17"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-18"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-19"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-20"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-02-21"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-02-22"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-23"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-24"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-25"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-02-26"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-27"
+      },
+      {
+       "total": 1,
+       "date_key": ""
+      },
+      {
+       "total": "3"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-03-02"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-03-03"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-03-04"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-03-05"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-03-06"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-03-07"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-08"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-03-09"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-03-10"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-03-11"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-12"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-13"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-03-14"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-03-15"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-16"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-03-17"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-03-18"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-03-19"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-03-20"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-03-21"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-03-22"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-03-23"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-03-24"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-25"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-26"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-03-27"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-03-28"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-04-01"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-04-02"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-04-03"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-04-04"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-04-05"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-04-06"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-04-07"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-04-08"
+      },
+      {
+       "total": 5,
+       "date_key": ""
+      }
+     ],
+     "top_artifacts": [
+      {
+       "total": "3",
+       "name": "npm run build"
+      },
+      {
+       "total": 1,
+       "name": ""
+      }
+     ]
+    },
+    "include_top_artifacts": false,
+    "show_display_name": false,
+    "display_name": "名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名",
+    "overview_stats": {},
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 93
+     },
+     "headline": {
+      "totalActions": 1,
+      "activeDayStreak": 3,
+      "peakDayTotal": 0,
+      "blockedCount": 5,
+      "stopRatePct": 500,
+      "topHarness": "Oh My Pi"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Oh My Pi",
+       "count": 12,
+       "sharePct": 1200
+      },
+      {
+       "harness": "Unknown app",
+       "count": 5,
+       "sharePct": 500
+      },
+      {
+       "harness": "Claude Code",
+       "count": 33,
+       "sharePct": 3300
+      },
+      {
+       "harness": "Oh My Pi",
+       "count": 33,
+       "sharePct": 3300
+      }
+     ],
+     "heatmap": {
+      "days": 86,
+      "cells": [
+       {
+        "date": "2026-01-04",
+        "level": 1
+       },
+       {
+        "date": "2026-01-05",
+        "level": 0
+       },
+       {
+        "date": "2026-01-06",
+        "level": 4
+       },
+       {
+        "date": "2026-01-08",
+        "level": 0
+       },
+       {
+        "date": "2026-01-09",
+        "level": 2
+       },
+       {
+        "date": "2026-01-10",
+        "level": 2
+       },
+       {
+        "date": "2026-01-11",
+        "level": 2
+       },
+       {
+        "date": "2026-01-12",
+        "level": 4
+       },
+       {
+        "date": "2026-01-13",
+        "level": 1
+       },
+       {
+        "date": "2026-01-14",
+        "level": 0
+       },
+       {
+        "date": "2026-01-15",
+        "level": 2
+       },
+       {
+        "date": "2026-01-16",
+        "level": 1
+       },
+       {
+        "date": "2026-01-17",
+        "level": 4
+       },
+       {
+        "date": "2026-01-18",
+        "level": 2
+       },
+       {
+        "date": "2026-01-19",
+        "level": 0
+       },
+       {
+        "date": "2026-01-20",
+        "level": 1
+       },
+       {
+        "date": "2026-01-21",
+        "level": 2
+       },
+       {
+        "date": "2026-01-22",
+        "level": 1
+       },
+       {
+        "date": "2026-01-23",
+        "level": 1
+       },
+       {
+        "date": "2026-01-24",
+        "level": 1
+       },
+       {
+        "date": "2026-01-25",
+        "level": 1
+       },
+       {
+        "date": "2026-01-26",
+        "level": 1
+       },
+       {
+        "date": "2026-01-27",
+        "level": 0
+       },
+       {
+        "date": "2026-01-28",
+        "level": 0
+       },
+       {
+        "date": "2026-02-01",
+        "level": 4
+       },
+       {
+        "date": "2026-02-02",
+        "level": 4
+       },
+       {
+        "date": "2026-02-03",
+        "level": 1
+       },
+       {
+        "date": "2026-02-04",
+        "level": 1
+       },
+       {
+        "date": "2026-02-05",
+        "level": 0
+       },
+       {
+        "date": "2026-02-06",
+        "level": 4
+       },
+       {
+        "date": "2026-02-07",
+        "level": 1
+       },
+       {
+        "date": "2026-02-08",
+        "level": 4
+       },
+       {
+        "date": "2026-02-09",
+        "level": 4
+       },
+       {
+        "date": "2026-02-10",
+        "level": 2
+       },
+       {
+        "date": "2026-02-11",
+        "level": 0
+       },
+       {
+        "date": "2026-02-12",
+        "level": 4
+       },
+       {
+        "date": "2026-02-13",
+        "level": 0
+       },
+       {
+        "date": "2026-02-14",
+        "level": 2
+       },
+       {
+        "date": "2026-02-15",
+        "level": 1
+       },
+       {
+        "date": "2026-02-16",
+        "level": 4
+       },
+       {
+        "date": "2026-02-17",
+        "level": 1
+       },
+       {
+        "date": "2026-02-18",
+        "level": 1
+       },
+       {
+        "date": "2026-02-19",
+        "level": 2
+       },
+       {
+        "date": "2026-02-20",
+        "level": 2
+       },
+       {
+        "date": "2026-02-21",
+        "level": 2
+       },
+       {
+        "date": "2026-02-22",
+        "level": 1
+       },
+       {
+        "date": "2026-02-23",
+        "level": 2
+       },
+       {
+        "date": "2026-02-24",
+        "level": 4
+       },
+       {
+        "date": "2026-02-25",
+        "level": 1
+       },
+       {
+        "date": "2026-02-26",
+        "level": 2
+       },
+       {
+        "date": "2026-02-27",
+        "level": 1
+       },
+       {
+        "date": "2026-03-02",
+        "level": 4
+       },
+       {
+        "date": "2026-03-03",
+        "level": 4
+       },
+       {
+        "date": "2026-03-04",
+        "level": 2
+       },
+       {
+        "date": "2026-03-05",
+        "level": 1
+       },
+       {
+        "date": "2026-03-06",
+        "level": 2
+       },
+       {
+        "date": "2026-03-07",
+        "level": 1
+       },
+       {
+        "date": "2026-03-08",
+        "level": 4
+       },
+       {
+        "date": "2026-03-09",
+        "level": 2
+       },
+       {
+        "date": "2026-03-10",
+        "level": 2
+       },
+       {
+        "date": "2026-03-11",
+        "level": 2
+       },
+       {
+        "date": "2026-03-12",
+        "level": 0
+       },
+       {
+        "date": "2026-03-13",
+        "level": 0
+       },
+       {
+        "date": "2026-03-14",
+        "level": 1
+       },
+       {
+        "date": "2026-03-15",
+        "level": 1
+       },
+       {
+        "date": "2026-03-16",
+        "level": 0
+       },
+       {
+        "date": "2026-03-17",
+        "level": 1
+       },
+       {
+        "date": "2026-03-18",
+        "level": 2
+       },
+       {
+        "date": "2026-03-19",
+        "level": 2
+       },
+       {
+        "date": "2026-03-20",
+        "level": 2
+       },
+       {
+        "date": "2026-03-21",
+        "level": 4
+       },
+       {
+        "date": "2026-03-22",
+        "level": 1
+       },
+       {
+        "date": "2026-03-23",
+        "level": 1
+       },
+       {
+        "date": "2026-03-24",
+        "level": 0
+       },
+       {
+        "date": "2026-03-25",
+        "level": 4
+       },
+       {
+        "date": "2026-03-26",
+        "level": 4
+       },
+       {
+        "date": "2026-03-27",
+        "level": 1
+       },
+       {
+        "date": "2026-03-28",
+        "level": 4
+       },
+       {
+        "date": "2026-04-01",
+        "level": 2
+       },
+       {
+        "date": "2026-04-02",
+        "level": 0
+       },
+       {
+        "date": "2026-04-03",
+        "level": 0
+       },
+       {
+        "date": "2026-04-04",
+        "level": 0
+       },
+       {
+        "date": "2026-04-05",
+        "level": 1
+       },
+       {
+        "date": "2026-04-06",
+        "level": 2
+       },
+       {
+        "date": "2026-04-07",
+        "level": 4
+       },
+       {
+        "date": "2026-04-08",
+        "level": 1
+       }
+      ]
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 0,
+      "apps": 0,
+      "recorded": 0
+     },
+     "miniHeatmap": {
+      "days": 4,
+      "cells": [
+       {
+        "date": "2026-04-05",
+        "level": 1
+       },
+       {
+        "date": "2026-04-06",
+        "level": 2
+       },
+       {
+        "date": "2026-04-07",
+        "level": 4
+       },
+       {
+        "date": "2026-04-08",
+        "level": 1
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 13",
+   "args": {
+    "analytics": {
+     "total": null,
+     "blocked": 50,
+     "active_day_streak": null,
+     "peak_day_total": null,
+     "by_harness": [
+      {
+       "total": 2.7,
+       "harness": "   "
+      },
+      {
+       "total": 33,
+       "harness": ""
+      },
+      {
+       "total": 5,
+       "harness": "codex"
+      },
+      {
+       "total": 33,
+       "harness": "my-new-app"
+      },
+      {
+       "total": 5,
+       "harness": "   "
+      },
+      {
+       "total": 1,
+       "harness": "Cursor"
+      }
+     ],
+     "daily_activity": []
+    },
+    "include_top_artifacts": true,
+    "show_display_name": false,
+    "display_name": "名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名名",
+    "overview_stats": {
+     "pending": "4",
+     "apps": null
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 90
+     },
+     "headline": {
+      "totalActions": 0,
+      "activeDayStreak": 0,
+      "peakDayTotal": 0,
+      "blockedCount": 50,
+      "stopRatePct": 0,
+      "topHarness": "Unknown app"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Unknown app",
+       "count": 2,
+       "sharePct": 0
+      },
+      {
+       "harness": "Unknown App",
+       "count": 33,
+       "sharePct": 0
+      },
+      {
+       "harness": "Codex",
+       "count": 5,
+       "sharePct": 0
+      },
+      {
+       "harness": "My New App",
+       "count": 33,
+       "sharePct": 0
+      }
+     ],
+     "heatmap": {
+      "days": 90,
+      "cells": []
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 4,
+      "apps": 0,
+      "recorded": 0
+     },
+     "topArtifacts": []
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 14",
+   "args": {
+    "analytics": {
+     "total": "45",
+     "blocked": 1,
+     "active_day_streak": 3,
+     "peak_day_total": null,
+     "by_harness": [
+      {
+       "total": "12",
+       "harness": "über-tool"
+      },
+      {
+       "total": 1,
+       "harness": " gemini-cli "
+      },
+      {
+       "total": 1,
+       "harness": "   "
+      },
+      {
+       "total": 33,
+       "harness": "   "
+      }
+     ],
+     "daily_activity": [
+      {
+       "total": 9,
+       "date_key": "2026-01-01"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-02"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-01-03"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-04"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-05"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-06"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-07"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-01-08"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-09"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-10"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-11"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-12"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-01-13"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-01-14"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-15"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-16"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-17"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-18"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-19"
+      },
+      {
+       "total": 5
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-21"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-22"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-23"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-24"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-01-25"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-26"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-27"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-28"
+      },
+      {
+       "total": 5,
+       "date_key": ""
+      },
+      {
+       "total": 0,
+       "date_key": "2026-02-02"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-03"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-04"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-02-05"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-06"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-07"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-08"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-02-09"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-02-10"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-11"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-02-12"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-02-13"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-02-14"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-15"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-16"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-02-17"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-02-18"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-02-19"
+      },
+      {
+       "total": 1,
+       "date_key": ""
+      },
+      {
+       "total": "3",
+       "date_key": "2026-02-21"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-02-22"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-23"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-02-24"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-02-25"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-26"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-02-27"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-28"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-01"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-03-02"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-03-03"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-03-04"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-03-05"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-03-06"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-03-07"
+      },
+      {
+       "total": 17
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-09"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-03-10"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-03-11"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-03-12"
+      },
+      {
+       "total": 0,
+       "date_key": ""
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-14"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-15"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-03-16"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-17"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-03-18"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-03-19"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-03-20"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-03-21"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-03-22"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-03-23"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-03-24"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-25"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-03-26"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-27"
+      },
+      {
+       "total": 2
+      },
+      {
+       "total": 1,
+       "date_key": "2026-04-01"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-04-02"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-04-03"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-04-04"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-04-05"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-04-06"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-04-07"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-04-08"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-04-09"
+      }
+     ],
+     "top_artifacts": [
+      {
+       "total": 4.4,
+       "name": "npm run build"
+      },
+      {
+       "total": 1,
+       "name": ""
+      }
+     ]
+    },
+    "include_top_artifacts": false,
+    "show_display_name": true,
+    "display_name": null,
+    "overview_stats": {
+     "pending": 2,
+     "apps": 3,
+     "recorded": 50
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 93
+     },
+     "headline": {
+      "totalActions": 45,
+      "activeDayStreak": 3,
+      "peakDayTotal": 0,
+      "blockedCount": 1,
+      "stopRatePct": 2,
+      "topHarness": "Über Tool"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Über Tool",
+       "count": 12,
+       "sharePct": 27
+      },
+      {
+       "harness": "Gemini CLI",
+       "count": 1,
+       "sharePct": 2
+      },
+      {
+       "harness": "Unknown app",
+       "count": 1,
+       "sharePct": 2
+      },
+      {
+       "harness": "Unknown app",
+       "count": 33,
+       "sharePct": 73
+      }
+     ],
+     "heatmap": {
+      "days": 84,
+      "cells": [
+       {
+        "date": "2026-01-04",
+        "level": 2
+       },
+       {
+        "date": "2026-01-05",
+        "level": 0
+       },
+       {
+        "date": "2026-01-06",
+        "level": 1
+       },
+       {
+        "date": "2026-01-07",
+        "level": 0
+       },
+       {
+        "date": "2026-01-08",
+        "level": 4
+       },
+       {
+        "date": "2026-01-09",
+        "level": 0
+       },
+       {
+        "date": "2026-01-10",
+        "level": 0
+       },
+       {
+        "date": "2026-01-11",
+        "level": 1
+       },
+       {
+        "date": "2026-01-12",
+        "level": 0
+       },
+       {
+        "date": "2026-01-13",
+        "level": 4
+       },
+       {
+        "date": "2026-01-14",
+        "level": 1
+       },
+       {
+        "date": "2026-01-15",
+        "level": 1
+       },
+       {
+        "date": "2026-01-16",
+        "level": 1
+       },
+       {
+        "date": "2026-01-17",
+        "level": 1
+       },
+       {
+        "date": "2026-01-18",
+        "level": 1
+       },
+       {
+        "date": "2026-01-19",
+        "level": 4
+       },
+       {
+        "date": "2026-01-21",
+        "level": 1
+       },
+       {
+        "date": "2026-01-22",
+        "level": 1
+       },
+       {
+        "date": "2026-01-23",
+        "level": 1
+       },
+       {
+        "date": "2026-01-24",
+        "level": 0
+       },
+       {
+        "date": "2026-01-25",
+        "level": 4
+       },
+       {
+        "date": "2026-01-26",
+        "level": 1
+       },
+       {
+        "date": "2026-01-27",
+        "level": 2
+       },
+       {
+        "date": "2026-01-28",
+        "level": 2
+       },
+       {
+        "date": "2026-02-02",
+        "level": 0
+       },
+       {
+        "date": "2026-02-03",
+        "level": 4
+       },
+       {
+        "date": "2026-02-04",
+        "level": 1
+       },
+       {
+        "date": "2026-02-05",
+        "level": 4
+       },
+       {
+        "date": "2026-02-06",
+        "level": 2
+       },
+       {
+        "date": "2026-02-07",
+        "level": 4
+       },
+       {
+        "date": "2026-02-08",
+        "level": 1
+       },
+       {
+        "date": "2026-02-09",
+        "level": 1
+       },
+       {
+        "date": "2026-02-10",
+        "level": 0
+       },
+       {
+        "date": "2026-02-11",
+        "level": 1
+       },
+       {
+        "date": "2026-02-12",
+        "level": 1
+       },
+       {
+        "date": "2026-02-13",
+        "level": 1
+       },
+       {
+        "date": "2026-02-14",
+        "level": 1
+       },
+       {
+        "date": "2026-02-15",
+        "level": 1
+       },
+       {
+        "date": "2026-02-16",
+        "level": 4
+       },
+       {
+        "date": "2026-02-17",
+        "level": 1
+       },
+       {
+        "date": "2026-02-18",
+        "level": 2
+       },
+       {
+        "date": "2026-02-19",
+        "level": 1
+       },
+       {
+        "date": "2026-02-21",
+        "level": 1
+       },
+       {
+        "date": "2026-02-22",
+        "level": 1
+       },
+       {
+        "date": "2026-02-23",
+        "level": 2
+       },
+       {
+        "date": "2026-02-24",
+        "level": 4
+       },
+       {
+        "date": "2026-02-25",
+        "level": 1
+       },
+       {
+        "date": "2026-02-26",
+        "level": 4
+       },
+       {
+        "date": "2026-02-27",
+        "level": 1
+       },
+       {
+        "date": "2026-02-28",
+        "level": 2
+       },
+       {
+        "date": "2026-03-01",
+        "level": 4
+       },
+       {
+        "date": "2026-03-02",
+        "level": 1
+       },
+       {
+        "date": "2026-03-03",
+        "level": 1
+       },
+       {
+        "date": "2026-03-04",
+        "level": 1
+       },
+       {
+        "date": "2026-03-05",
+        "level": 1
+       },
+       {
+        "date": "2026-03-06",
+        "level": 1
+       },
+       {
+        "date": "2026-03-07",
+        "level": 2
+       },
+       {
+        "date": "2026-03-09",
+        "level": 4
+       },
+       {
+        "date": "2026-03-10",
+        "level": 1
+       },
+       {
+        "date": "2026-03-11",
+        "level": 2
+       },
+       {
+        "date": "2026-03-12",
+        "level": 2
+       },
+       {
+        "date": "2026-03-14",
+        "level": 4
+       },
+       {
+        "date": "2026-03-15",
+        "level": 0
+       },
+       {
+        "date": "2026-03-16",
+        "level": 1
+       },
+       {
+        "date": "2026-03-17",
+        "level": 4
+       },
+       {
+        "date": "2026-03-18",
+        "level": 0
+       },
+       {
+        "date": "2026-03-19",
+        "level": 2
+       },
+       {
+        "date": "2026-03-20",
+        "level": 1
+       },
+       {
+        "date": "2026-03-21",
+        "level": 2
+       },
+       {
+        "date": "2026-03-22",
+        "level": 0
+       },
+       {
+        "date": "2026-03-23",
+        "level": 1
+       },
+       {
+        "date": "2026-03-24",
+        "level": 1
+       },
+       {
+        "date": "2026-03-25",
+        "level": 0
+       },
+       {
+        "date": "2026-03-26",
+        "level": 1
+       },
+       {
+        "date": "2026-03-27",
+        "level": 0
+       },
+       {
+        "date": "2026-04-01",
+        "level": 1
+       },
+       {
+        "date": "2026-04-02",
+        "level": 1
+       },
+       {
+        "date": "2026-04-03",
+        "level": 1
+       },
+       {
+        "date": "2026-04-04",
+        "level": 4
+       },
+       {
+        "date": "2026-04-05",
+        "level": 2
+       },
+       {
+        "date": "2026-04-06",
+        "level": 2
+       },
+       {
+        "date": "2026-04-07",
+        "level": 1
+       },
+       {
+        "date": "2026-04-08",
+        "level": 2
+       },
+       {
+        "date": "2026-04-09",
+        "level": 1
+       }
+      ]
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 2,
+      "apps": 3,
+      "recorded": 50
+     },
+     "miniHeatmap": {
+      "days": 5,
+      "cells": [
+       {
+        "date": "2026-04-05",
+        "level": 2
+       },
+       {
+        "date": "2026-04-06",
+        "level": 2
+       },
+       {
+        "date": "2026-04-07",
+        "level": 1
+       },
+       {
+        "date": "2026-04-08",
+        "level": 2
+       },
+       {
+        "date": "2026-04-09",
+        "level": 1
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 15",
+   "args": {
+    "analytics": {
+     "total": 200,
+     "blocked": "2",
+     "peak_day_total": "7",
+     "by_harness": [
+      {
+       "total": 1
+      },
+      {
+       "total": 1,
+       "harness": ""
+      },
+      {
+       "total": 5,
+       "harness": "codex"
+      },
+      {
+       "total": 33,
+       "harness": "omp"
+      },
+      {
+       "total": 2.7,
+       "harness": "pi"
+      },
+      {
+       "total": 0,
+       "harness": "pi"
+      },
+      "not-a-row"
+     ],
+     "daily_activity": [
+      {
+       "total": 1,
+       "date_key": "2026-01-01"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-02"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-01-03"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-04"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-05"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-06"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-07"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-08"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-09"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-01-10"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-11"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-12"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-13"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-14"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-15"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-01-16"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-17"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-01-18"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-19"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-01-20"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-21"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-22"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-23"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-24"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-01-25"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-26"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-27"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-28"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-02-01"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-02-02"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-02-03"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-04"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-02-05"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-06"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-02-07"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-02-08"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-02-09"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-02-10"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-02-11"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-12"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-02-13"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-14"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-15"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-02-16"
+      },
+      {
+       "total": 0,
+       "date_key": ""
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-18"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-19"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-02-20"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-21"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-02-22"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-23"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-24"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-02-25"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-26"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-27"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-02-28"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-03-01"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-03-02"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-03-03"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-03-04"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-03-05"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-03-06"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-07"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-03-08"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-03-09"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-03-10"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-11"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-03-12"
+      },
+      {
+       "total": 20
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-14"
+      },
+      {
+       "total": 5,
+       "date_key": ""
+      },
+      {
+       "total": -1,
+       "date_key": "2026-03-16"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-03-17"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-03-18"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-03-19"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-03-20"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-21"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-03-22"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-23"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-03-24"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-03-25"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-03-26"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-03-27"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-03-28"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-04-01"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-04-02"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-04-03"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-04-04"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-04-05"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-04-06"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-04-07"
+      }
+     ],
+     "top_artifacts": []
+    },
+    "include_top_artifacts": true,
+    "show_display_name": true,
+    "display_name": null,
+    "overview_stats": {},
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 91
+     },
+     "headline": {
+      "totalActions": 200,
+      "activeDayStreak": 0,
+      "peakDayTotal": 7,
+      "blockedCount": 2,
+      "stopRatePct": 1,
+      "topHarness": "Unknown App"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Unknown App",
+       "count": 1,
+       "sharePct": 0
+      },
+      {
+       "harness": "Unknown App",
+       "count": 1,
+       "sharePct": 0
+      },
+      {
+       "harness": "Codex",
+       "count": 5,
+       "sharePct": 2
+      },
+      {
+       "harness": "Oh My Pi",
+       "count": 33,
+       "sharePct": 16
+      }
+     ],
+     "heatmap": {
+      "days": 87,
+      "cells": [
+       {
+        "date": "2026-01-02",
+        "level": 1
+       },
+       {
+        "date": "2026-01-03",
+        "level": 0
+       },
+       {
+        "date": "2026-01-04",
+        "level": 4
+       },
+       {
+        "date": "2026-01-05",
+        "level": 2
+       },
+       {
+        "date": "2026-01-06",
+        "level": 1
+       },
+       {
+        "date": "2026-01-07",
+        "level": 2
+       },
+       {
+        "date": "2026-01-08",
+        "level": 1
+       },
+       {
+        "date": "2026-01-09",
+        "level": 2
+       },
+       {
+        "date": "2026-01-10",
+        "level": 0
+       },
+       {
+        "date": "2026-01-11",
+        "level": 0
+       },
+       {
+        "date": "2026-01-12",
+        "level": 2
+       },
+       {
+        "date": "2026-01-13",
+        "level": 0
+       },
+       {
+        "date": "2026-01-14",
+        "level": 2
+       },
+       {
+        "date": "2026-01-15",
+        "level": 1
+       },
+       {
+        "date": "2026-01-16",
+        "level": 4
+       },
+       {
+        "date": "2026-01-17",
+        "level": 1
+       },
+       {
+        "date": "2026-01-18",
+        "level": 1
+       },
+       {
+        "date": "2026-01-19",
+        "level": 0
+       },
+       {
+        "date": "2026-01-20",
+        "level": 4
+       },
+       {
+        "date": "2026-01-21",
+        "level": 1
+       },
+       {
+        "date": "2026-01-22",
+        "level": 1
+       },
+       {
+        "date": "2026-01-23",
+        "level": 4
+       },
+       {
+        "date": "2026-01-24",
+        "level": 2
+       },
+       {
+        "date": "2026-01-25",
+        "level": 4
+       },
+       {
+        "date": "2026-01-26",
+        "level": 0
+       },
+       {
+        "date": "2026-01-27",
+        "level": 1
+       },
+       {
+        "date": "2026-01-28",
+        "level": 1
+       },
+       {
+        "date": "2026-02-01",
+        "level": 1
+       },
+       {
+        "date": "2026-02-02",
+        "level": 1
+       },
+       {
+        "date": "2026-02-03",
+        "level": 1
+       },
+       {
+        "date": "2026-02-04",
+        "level": 4
+       },
+       {
+        "date": "2026-02-05",
+        "level": 1
+       },
+       {
+        "date": "2026-02-06",
+        "level": 1
+       },
+       {
+        "date": "2026-02-07",
+        "level": 0
+       },
+       {
+        "date": "2026-02-08",
+        "level": 1
+       },
+       {
+        "date": "2026-02-09",
+        "level": 2
+       },
+       {
+        "date": "2026-02-10",
+        "level": 0
+       },
+       {
+        "date": "2026-02-11",
+        "level": 1
+       },
+       {
+        "date": "2026-02-12",
+        "level": 1
+       },
+       {
+        "date": "2026-02-13",
+        "level": 1
+       },
+       {
+        "date": "2026-02-14",
+        "level": 2
+       },
+       {
+        "date": "2026-02-15",
+        "level": 4
+       },
+       {
+        "date": "2026-02-16",
+        "level": 4
+       },
+       {
+        "date": "2026-02-18",
+        "level": 2
+       },
+       {
+        "date": "2026-02-19",
+        "level": 4
+       },
+       {
+        "date": "2026-02-20",
+        "level": 1
+       },
+       {
+        "date": "2026-02-21",
+        "level": 4
+       },
+       {
+        "date": "2026-02-22",
+        "level": 0
+       },
+       {
+        "date": "2026-02-23",
+        "level": 4
+       },
+       {
+        "date": "2026-02-24",
+        "level": 2
+       },
+       {
+        "date": "2026-02-25",
+        "level": 2
+       },
+       {
+        "date": "2026-02-26",
+        "level": 4
+       },
+       {
+        "date": "2026-02-27",
+        "level": 1
+       },
+       {
+        "date": "2026-02-28",
+        "level": 2
+       },
+       {
+        "date": "2026-03-01",
+        "level": 1
+       },
+       {
+        "date": "2026-03-02",
+        "level": 4
+       },
+       {
+        "date": "2026-03-03",
+        "level": 1
+       },
+       {
+        "date": "2026-03-04",
+        "level": 0
+       },
+       {
+        "date": "2026-03-05",
+        "level": 1
+       },
+       {
+        "date": "2026-03-06",
+        "level": 1
+       },
+       {
+        "date": "2026-03-07",
+        "level": 0
+       },
+       {
+        "date": "2026-03-08",
+        "level": 1
+       },
+       {
+        "date": "2026-03-09",
+        "level": 2
+       },
+       {
+        "date": "2026-03-10",
+        "level": 1
+       },
+       {
+        "date": "2026-03-11",
+        "level": 4
+       },
+       {
+        "date": "2026-03-12",
+        "level": 2
+       },
+       {
+        "date": "2026-03-14",
+        "level": 0
+       },
+       {
+        "date": "2026-03-16",
+        "level": 0
+       },
+       {
+        "date": "2026-03-17",
+        "level": 1
+       },
+       {
+        "date": "2026-03-18",
+        "level": 1
+       },
+       {
+        "date": "2026-03-19",
+        "level": 1
+       },
+       {
+        "date": "2026-03-20",
+        "level": 0
+       },
+       {
+        "date": "2026-03-21",
+        "level": 0
+       },
+       {
+        "date": "2026-03-22",
+        "level": 0
+       },
+       {
+        "date": "2026-03-23",
+        "level": 0
+       },
+       {
+        "date": "2026-03-24",
+        "level": 1
+       },
+       {
+        "date": "2026-03-25",
+        "level": 1
+       },
+       {
+        "date": "2026-03-26",
+        "level": 2
+       },
+       {
+        "date": "2026-03-27",
+        "level": 2
+       },
+       {
+        "date": "2026-03-28",
+        "level": 1
+       },
+       {
+        "date": "2026-04-01",
+        "level": 2
+       },
+       {
+        "date": "2026-04-02",
+        "level": 1
+       },
+       {
+        "date": "2026-04-03",
+        "level": 0
+       },
+       {
+        "date": "2026-04-04",
+        "level": 1
+       },
+       {
+        "date": "2026-04-05",
+        "level": 1
+       },
+       {
+        "date": "2026-04-06",
+        "level": 1
+       },
+       {
+        "date": "2026-04-07",
+        "level": 2
+       }
+      ]
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 0,
+      "apps": 0,
+      "recorded": 0
+     },
+     "miniHeatmap": {
+      "days": 5,
+      "cells": [
+       {
+        "date": "2026-04-03",
+        "level": 0
+       },
+       {
+        "date": "2026-04-04",
+        "level": 1
+       },
+       {
+        "date": "2026-04-05",
+        "level": 1
+       },
+       {
+        "date": "2026-04-06",
+        "level": 1
+       },
+       {
+        "date": "2026-04-07",
+        "level": 2
+       }
+      ]
+     },
+     "topArtifacts": []
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 16",
+   "args": {
+    "analytics": {
+     "total": 7,
+     "active_day_streak": 3,
+     "peak_day_total": 5,
+     "by_harness": [
+      {
+       "total": 1,
+       "harness": " gemini-cli "
+      },
+      {
+       "total": "12",
+       "harness": "my-new-app"
+      },
+      {
+       "total": 0,
+       "harness": "omp"
+      },
+      {
+       "total": "12"
+      },
+      {
+       "total": 1,
+       "harness": "x2y-tool"
+      },
+      {
+       "total": "12",
+       "harness": "pi"
+      }
+     ],
+     "daily_activity": [
+      {
+       "total": 2,
+       "date_key": "2026-01-01"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-02"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-03"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-04"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-05"
+      }
+     ],
+     "top_artifacts": []
+    },
+    "include_top_artifacts": false,
+    "show_display_name": true,
+    "display_name": "",
+    "overview_stats": {
+     "pending": "4",
+     "apps": null
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 5
+     },
+     "headline": {
+      "totalActions": 7,
+      "activeDayStreak": 3,
+      "peakDayTotal": 5,
+      "blockedCount": 0,
+      "stopRatePct": 0,
+      "topHarness": "Gemini CLI"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Gemini CLI",
+       "count": 1,
+       "sharePct": 14
+      },
+      {
+       "harness": "My New App",
+       "count": 12,
+       "sharePct": 171
+      },
+      {
+       "harness": "Oh My Pi",
+       "count": 0,
+       "sharePct": 0
+      },
+      {
+       "harness": "Unknown App",
+       "count": 12,
+       "sharePct": 171
+      }
+     ],
+     "heatmap": {
+      "days": 5,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 1
+       },
+       {
+        "date": "2026-01-02",
+        "level": 2
+       },
+       {
+        "date": "2026-01-03",
+        "level": 4
+       },
+       {
+        "date": "2026-01-04",
+        "level": 4
+       },
+       {
+        "date": "2026-01-05",
+        "level": 2
+       }
+      ]
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 4,
+      "apps": 0,
+      "recorded": 0
+     },
+     "miniHeatmap": {
+      "days": 5,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 1
+       },
+       {
+        "date": "2026-01-02",
+        "level": 2
+       },
+       {
+        "date": "2026-01-03",
+        "level": 4
+       },
+       {
+        "date": "2026-01-04",
+        "level": 4
+       },
+       {
+        "date": "2026-01-05",
+        "level": 2
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 17",
+   "args": {
+    "analytics": {
+     "total": 0,
+     "blocked": 2.5,
+     "daily_activity": [
+      {
+       "total": -1,
+       "date_key": "2026-01-01"
+      }
+     ],
+     "top_artifacts": [
+      {
+       "total": 1,
+       "name": "npm run build"
+      },
+      {
+       "total": 1
+      }
+     ]
+    },
+    "include_top_artifacts": true,
+    "show_display_name": true,
+    "display_name": "Alex",
+    "overview_stats": {
+     "pending": "4",
+     "apps": null
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 1
+     },
+     "headline": {
+      "totalActions": 0,
+      "activeDayStreak": 0,
+      "peakDayTotal": 0,
+      "blockedCount": 2,
+      "stopRatePct": 0,
+      "topHarness": "Unknown App"
+     },
+     "harnessBreakdown": [],
+     "heatmap": {
+      "days": 1,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 0
+       }
+      ]
+     },
+     "showDisplayName": true,
+     "overviewStats": {
+      "pending": 4,
+      "apps": 0,
+      "recorded": 0
+     },
+     "miniHeatmap": {
+      "days": 1,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 0
+       }
+      ]
+     },
+     "displayName": "Alex",
+     "topArtifacts": [
+      {
+       "label": "npm run build",
+       "count": 1
+      },
+      {
+       "label": "Protected action",
+       "count": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 18",
+   "args": {
+    "analytics": {
+     "total": 100,
+     "blocked": 3,
+     "active_day_streak": 3,
+     "peak_day_total": 0,
+     "top_artifacts": [
+      {
+       "total": "3",
+       "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+       "total": 1
+      }
+     ]
+    },
+    "include_top_artifacts": true,
+    "show_display_name": true,
+    "display_name": "Alex",
+    "overview_stats": {
+     "pending": 2,
+     "apps": 3,
+     "recorded": 50
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 90
+     },
+     "headline": {
+      "totalActions": 100,
+      "activeDayStreak": 3,
+      "peakDayTotal": 0,
+      "blockedCount": 3,
+      "stopRatePct": 3,
+      "topHarness": "Unknown App"
+     },
+     "harnessBreakdown": [],
+     "heatmap": {
+      "days": 90,
+      "cells": []
+     },
+     "showDisplayName": true,
+     "overviewStats": {
+      "pending": 2,
+      "apps": 3,
+      "recorded": 50
+     },
+     "displayName": "Alex",
+     "topArtifacts": [
+      {
+       "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+       "count": 3
+      },
+      {
+       "label": "Protected action",
+       "count": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 19",
+   "args": {
+    "analytics": {
+     "total": 12.9,
+     "blocked": 2.5,
+     "active_day_streak": "4",
+     "peak_day_total": 20,
+     "by_harness": [
+      {
+       "total": "12",
+       "harness": "Cursor"
+      },
+      {
+       "total": 2.7,
+       "harness": "codex"
+      },
+      {
+       "total": 5,
+       "harness": ""
+      },
+      {
+       "total": 2.7,
+       "harness": "x2y-tool"
+      },
+      {
+       "total": 33
+      },
+      {
+       "total": 33
+      }
+     ],
+     "daily_activity": [
+      {
+       "total": 17
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-02"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-03"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-01-04"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-01-05"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-06"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-07"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-08"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-09"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-01-10"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-11"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-12"
+      }
+     ]
+    },
+    "include_top_artifacts": true,
+    "show_display_name": true,
+    "display_name": "  Sam  ",
+    "overview_stats": {
+     "pending": "4",
+     "apps": null
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 12
+     },
+     "headline": {
+      "totalActions": 12,
+      "activeDayStreak": 4,
+      "peakDayTotal": 20,
+      "blockedCount": 2,
+      "stopRatePct": 17,
+      "topHarness": "Cursor"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Cursor",
+       "count": 12,
+       "sharePct": 100
+      },
+      {
+       "harness": "Codex",
+       "count": 2,
+       "sharePct": 17
+      },
+      {
+       "harness": "Unknown App",
+       "count": 5,
+       "sharePct": 42
+      },
+      {
+       "harness": "X2Y Tool",
+       "count": 2,
+       "sharePct": 17
+      }
+     ],
+     "heatmap": {
+      "days": 11,
+      "cells": [
+       {
+        "date": "2026-01-02",
+        "level": 1
+       },
+       {
+        "date": "2026-01-03",
+        "level": 0
+       },
+       {
+        "date": "2026-01-04",
+        "level": 1
+       },
+       {
+        "date": "2026-01-05",
+        "level": 0
+       },
+       {
+        "date": "2026-01-06",
+        "level": 1
+       },
+       {
+        "date": "2026-01-07",
+        "level": 1
+       },
+       {
+        "date": "2026-01-08",
+        "level": 1
+       },
+       {
+        "date": "2026-01-09",
+        "level": 1
+       },
+       {
+        "date": "2026-01-10",
+        "level": 4
+       },
+       {
+        "date": "2026-01-11",
+        "level": 2
+       },
+       {
+        "date": "2026-01-12",
+        "level": 2
+       }
+      ]
+     },
+     "showDisplayName": true,
+     "overviewStats": {
+      "pending": 4,
+      "apps": 0,
+      "recorded": 0
+     },
+     "miniHeatmap": {
+      "days": 5,
+      "cells": [
+       {
+        "date": "2026-01-08",
+        "level": 1
+       },
+       {
+        "date": "2026-01-09",
+        "level": 1
+       },
+       {
+        "date": "2026-01-10",
+        "level": 4
+       },
+       {
+        "date": "2026-01-11",
+        "level": 2
+       },
+       {
+        "date": "2026-01-12",
+        "level": 2
+       }
+      ]
+     },
+     "displayName": "Sam",
+     "topArtifacts": []
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 20",
+   "args": {
+    "analytics": {
+     "total": 200,
+     "blocked": 50,
+     "active_day_streak": "4",
+     "by_harness": [
+      {
+       "total": "12",
+       "harness": "codex"
+      },
+      {
+       "total": 2.7,
+       "harness": "omp"
+      },
+      {
+       "total": "12",
+       "harness": "claude-code"
+      },
+      {
+       "total": 0,
+       "harness": "omp"
+      },
+      "not-a-row"
+     ],
+     "daily_activity": [
+      {
+       "total": 10,
+       "date_key": "2026-01-01"
+      }
+     ],
+     "top_artifacts": [
+      {
+       "total": "3",
+       "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+       "total": "3",
+       "name": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      },
+      {
+       "total": 2
+      },
+      {
+       "total": 4.4,
+       "name": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      },
+      {
+       "total": "3",
+       "name": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      }
+     ]
+    },
+    "include_top_artifacts": true,
+    "show_display_name": true,
+    "display_name": "  Sam  ",
+    "overview_stats": {
+     "pending": "4",
+     "apps": null
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 1
+     },
+     "headline": {
+      "totalActions": 200,
+      "activeDayStreak": 4,
+      "peakDayTotal": 0,
+      "blockedCount": 50,
+      "stopRatePct": 25,
+      "topHarness": "Codex"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Codex",
+       "count": 12,
+       "sharePct": 6
+      },
+      {
+       "harness": "Oh My Pi",
+       "count": 2,
+       "sharePct": 1
+      },
+      {
+       "harness": "Claude Code",
+       "count": 12,
+       "sharePct": 6
+      },
+      {
+       "harness": "Oh My Pi",
+       "count": 0,
+       "sharePct": 0
+      }
+     ],
+     "heatmap": {
+      "days": 1,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 4
+       }
+      ]
+     },
+     "showDisplayName": true,
+     "overviewStats": {
+      "pending": 4,
+      "apps": 0,
+      "recorded": 0
+     },
+     "miniHeatmap": {
+      "days": 1,
+      "cells": [
+       {
+        "date": "2026-01-01",
+        "level": 4
+       }
+      ]
+     },
+     "displayName": "Sam",
+     "topArtifacts": [
+      {
+       "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+       "count": 3
+      },
+      {
+       "label": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+       "count": 3
+      },
+      {
+       "label": "Protected action",
+       "count": 2
+      }
+     ]
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 21",
+   "args": {
+    "analytics": {
+     "total": 12.9,
+     "blocked": 3,
+     "active_day_streak": "4",
+     "peak_day_total": 0,
+     "top_artifacts": []
+    },
+    "include_top_artifacts": false,
+    "show_display_name": true,
+    "display_name": null,
+    "overview_stats": {
+     "pending": 2,
+     "apps": 3,
+     "recorded": 50
+    },
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 90
+     },
+     "headline": {
+      "totalActions": 12,
+      "activeDayStreak": 4,
+      "peakDayTotal": 0,
+      "blockedCount": 3,
+      "stopRatePct": 25,
+      "topHarness": "Unknown App"
+     },
+     "harnessBreakdown": [],
+     "heatmap": {
+      "days": 90,
+      "cells": []
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 2,
+      "apps": 3,
+      "recorded": 50
+     }
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 22",
+   "args": {
+    "analytics": {
+     "total": 1,
+     "blocked": 5,
+     "active_day_streak": 0,
+     "peak_day_total": 20,
+     "by_harness": [
+      {
+       "total": 2.7,
+       "harness": "   "
+      },
+      {
+       "total": 2.7
+      },
+      {
+       "total": 1,
+       "harness": " gemini-cli "
+      },
+      {
+       "total": 1,
+       "harness": "my-new-app"
+      }
+     ],
+     "top_artifacts": [
+      {
+       "total": "3",
+       "name": "bash"
+      }
+     ]
+    },
+    "include_top_artifacts": true,
+    "show_display_name": true,
+    "display_name": "",
+    "overview_stats": {},
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 90
+     },
+     "headline": {
+      "totalActions": 1,
+      "activeDayStreak": 0,
+      "peakDayTotal": 20,
+      "blockedCount": 5,
+      "stopRatePct": 500,
+      "topHarness": "Unknown app"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Unknown app",
+       "count": 2,
+       "sharePct": 200
+      },
+      {
+       "harness": "Unknown App",
+       "count": 2,
+       "sharePct": 200
+      },
+      {
+       "harness": "Gemini CLI",
+       "count": 1,
+       "sharePct": 100
+      },
+      {
+       "harness": "My New App",
+       "count": 1,
+       "sharePct": 100
+      }
+     ],
+     "heatmap": {
+      "days": 90,
+      "cells": []
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 0,
+      "apps": 0,
+      "recorded": 0
+     },
+     "topArtifacts": [
+      {
+       "label": "bash",
+       "count": 3
+      }
+     ]
+    }
+   }
+  },
+  {
+   "kind": "insights_share_payload",
+   "name": "insights share 23",
+   "args": {
+    "analytics": {
+     "total": 200,
+     "blocked": 1,
+     "active_day_streak": 0,
+     "peak_day_total": null,
+     "by_harness": [
+      {
+       "total": 1,
+       "harness": ""
+      },
+      {
+       "total": 1,
+       "harness": " gemini-cli "
+      },
+      {
+       "total": "12",
+       "harness": "   "
+      },
+      {
+       "total": 5,
+       "harness": " gemini-cli "
+      }
+     ],
+     "daily_activity": [
+      {
+       "total": 20
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-02"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-03"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-04"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-05"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-01-06"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-07"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-01-08"
+      },
+      {
+       "total": "3"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-01-10"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-11"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-12"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-01-13"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-14"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-01-15"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-01-16"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-17"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-18"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-01-19"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-20"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-21"
+      },
+      {
+       "total": 20,
+       "date_key": ""
+      },
+      {
+       "total": -1,
+       "date_key": "2026-01-23"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-01-24"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-01-25"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-01-26"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-01-27"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-01-28"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-02-01"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-02"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-03"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-02-04"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-05"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-02-06"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-02-07"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-02-08"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-09"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-02-10"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-02-11"
+      },
+      {
+       "total": 5,
+       "date_key": ""
+      },
+      {
+       "total": 1
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-14"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-15"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-02-16"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-02-17"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-02-18"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-19"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-20"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-02-21"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-02-22"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-23"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-02-24"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-02-25"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-02-26"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-02-27"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-02-28"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-03-01"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-03-02"
+      },
+      {
+       "total": 9,
+       "date_key": "2026-03-03"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-03-04"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-03-05"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-03-06"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-03-07"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-08"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-09"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-03-10"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-03-11"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-03-12"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-03-13"
+      },
+      {
+       "total": 1,
+       "date_key": "2026-03-14"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-15"
+      },
+      {
+       "total": 20,
+       "date_key": ""
+      },
+      {
+       "total": 5,
+       "date_key": "2026-03-17"
+      },
+      {
+       "total": 2,
+       "date_key": "2026-03-18"
+      },
+      {
+       "total": 10,
+       "date_key": "2026-03-19"
+      },
+      {
+       "total": 0,
+       "date_key": "2026-03-20"
+      },
+      {
+       "total": 2,
+       "date_key": ""
+      },
+      {
+       "total": 1,
+       "date_key": "2026-03-22"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-23"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-03-24"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-25"
+      },
+      {
+       "total": "3",
+       "date_key": "2026-03-26"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-27"
+      },
+      {
+       "total": 20,
+       "date_key": "2026-03-28"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-04-01"
+      },
+      {
+       "total": 17,
+       "date_key": "2026-04-02"
+      },
+      {
+       "total": -1,
+       "date_key": "2026-04-03"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-04-04"
+      },
+      {
+       "total": "3",
+       "date_key": ""
+      },
+      {
+       "total": "3",
+       "date_key": "2026-04-06"
+      },
+      {
+       "total": 5,
+       "date_key": "2026-04-07"
+      }
+     ],
+     "top_artifacts": [
+      {
+       "total": 2,
+       "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+     ]
+    },
+    "include_top_artifacts": false,
+    "show_display_name": false,
+    "display_name": "  Sam  ",
+    "overview_stats": {},
+    "generated_at": "2026-11-01T00:00:00Z"
+   },
+   "expected": {
+    "payload": {
+     "version": 1,
+     "generatedAt": "2026-11-01T00:00:00Z",
+     "source": "local_daemon",
+     "period": {
+      "label": "all_time",
+      "activityDays": 91
+     },
+     "headline": {
+      "totalActions": 200,
+      "activeDayStreak": 0,
+      "peakDayTotal": 0,
+      "blockedCount": 1,
+      "stopRatePct": 0,
+      "topHarness": "Unknown App"
+     },
+     "harnessBreakdown": [
+      {
+       "harness": "Unknown App",
+       "count": 1,
+       "sharePct": 0
+      },
+      {
+       "harness": "Gemini CLI",
+       "count": 1,
+       "sharePct": 0
+      },
+      {
+       "harness": "Unknown app",
+       "count": 12,
+       "sharePct": 6
+      },
+      {
+       "harness": "Gemini CLI",
+       "count": 5,
+       "sharePct": 2
+      }
+     ],
+     "heatmap": {
+      "days": 83,
+      "cells": [
+       {
+        "date": "2026-01-02",
+        "level": 1
+       },
+       {
+        "date": "2026-01-03",
+        "level": 2
+       },
+       {
+        "date": "2026-01-04",
+        "level": 1
+       },
+       {
+        "date": "2026-01-05",
+        "level": 2
+       },
+       {
+        "date": "2026-01-06",
+        "level": 1
+       },
+       {
+        "date": "2026-01-07",
+        "level": 2
+       },
+       {
+        "date": "2026-01-08",
+        "level": 0
+       },
+       {
+        "date": "2026-01-10",
+        "level": 1
+       },
+       {
+        "date": "2026-01-11",
+        "level": 0
+       },
+       {
+        "date": "2026-01-12",
+        "level": 4
+       },
+       {
+        "date": "2026-01-13",
+        "level": 4
+       },
+       {
+        "date": "2026-01-14",
+        "level": 4
+       },
+       {
+        "date": "2026-01-15",
+        "level": 1
+       },
+       {
+        "date": "2026-01-16",
+        "level": 2
+       },
+       {
+        "date": "2026-01-17",
+        "level": 4
+       },
+       {
+        "date": "2026-01-18",
+        "level": 0
+       },
+       {
+        "date": "2026-01-19",
+        "level": 4
+       },
+       {
+        "date": "2026-01-20",
+        "level": 1
+       },
+       {
+        "date": "2026-01-21",
+        "level": 1
+       },
+       {
+        "date": "2026-01-23",
+        "level": 0
+       },
+       {
+        "date": "2026-01-24",
+        "level": 1
+       },
+       {
+        "date": "2026-01-25",
+        "level": 1
+       },
+       {
+        "date": "2026-01-26",
+        "level": 4
+       },
+       {
+        "date": "2026-01-27",
+        "level": 2
+       },
+       {
+        "date": "2026-01-28",
+        "level": 0
+       },
+       {
+        "date": "2026-02-01",
+        "level": 4
+       },
+       {
+        "date": "2026-02-02",
+        "level": 2
+       },
+       {
+        "date": "2026-02-03",
+        "level": 4
+       },
+       {
+        "date": "2026-02-04",
+        "level": 0
+       },
+       {
+        "date": "2026-02-05",
+        "level": 1
+       },
+       {
+        "date": "2026-02-06",
+        "level": 0
+       },
+       {
+        "date": "2026-02-07",
+        "level": 0
+       },
+       {
+        "date": "2026-02-08",
+        "level": 1
+       },
+       {
+        "date": "2026-02-09",
+        "level": 1
+       },
+       {
+        "date": "2026-02-10",
+        "level": 1
+       },
+       {
+        "date": "2026-02-11",
+        "level": 0
+       },
+       {
+        "date": "2026-02-14",
+        "level": 4
+       },
+       {
+        "date": "2026-02-15",
+        "level": 2
+       },
+       {
+        "date": "2026-02-16",
+        "level": 4
+       },
+       {
+        "date": "2026-02-17",
+        "level": 2
+       },
+       {
+        "date": "2026-02-18",
+        "level": 4
+       },
+       {
+        "date": "2026-02-19",
+        "level": 1
+       },
+       {
+        "date": "2026-02-20",
+        "level": 2
+       },
+       {
+        "date": "2026-02-21",
+        "level": 1
+       },
+       {
+        "date": "2026-02-22",
+        "level": 1
+       },
+       {
+        "date": "2026-02-23",
+        "level": 1
+       },
+       {
+        "date": "2026-02-24",
+        "level": 1
+       },
+       {
+        "date": "2026-02-25",
+        "level": 4
+       },
+       {
+        "date": "2026-02-26",
+        "level": 2
+       },
+       {
+        "date": "2026-02-27",
+        "level": 0
+       },
+       {
+        "date": "2026-02-28",
+        "level": 1
+       },
+       {
+        "date": "2026-03-01",
+        "level": 1
+       },
+       {
+        "date": "2026-03-02",
+        "level": 1
+       },
+       {
+        "date": "2026-03-03",
+        "level": 2
+       },
+       {
+        "date": "2026-03-04",
+        "level": 0
+       },
+       {
+        "date": "2026-03-05",
+        "level": 0
+       },
+       {
+        "date": "2026-03-06",
+        "level": 1
+       },
+       {
+        "date": "2026-03-07",
+        "level": 1
+       },
+       {
+        "date": "2026-03-08",
+        "level": 0
+       },
+       {
+        "date": "2026-03-09",
+        "level": 4
+       },
+       {
+        "date": "2026-03-10",
+        "level": 0
+       },
+       {
+        "date": "2026-03-11",
+        "level": 1
+       },
+       {
+        "date": "2026-03-12",
+        "level": 1
+       },
+       {
+        "date": "2026-03-13",
+        "level": 4
+       },
+       {
+        "date": "2026-03-14",
+        "level": 1
+       },
+       {
+        "date": "2026-03-15",
+        "level": 0
+       },
+       {
+        "date": "2026-03-17",
+        "level": 1
+       },
+       {
+        "date": "2026-03-18",
+        "level": 1
+       },
+       {
+        "date": "2026-03-19",
+        "level": 2
+       },
+       {
+        "date": "2026-03-20",
+        "level": 0
+       },
+       {
+        "date": "2026-03-22",
+        "level": 1
+       },
+       {
+        "date": "2026-03-23",
+        "level": 4
+       },
+       {
+        "date": "2026-03-24",
+        "level": 4
+       },
+       {
+        "date": "2026-03-25",
+        "level": 4
+       },
+       {
+        "date": "2026-03-26",
+        "level": 1
+       },
+       {
+        "date": "2026-03-27",
+        "level": 4
+       },
+       {
+        "date": "2026-03-28",
+        "level": 4
+       },
+       {
+        "date": "2026-04-01",
+        "level": 1
+       },
+       {
+        "date": "2026-04-02",
+        "level": 4
+       },
+       {
+        "date": "2026-04-03",
+        "level": 0
+       },
+       {
+        "date": "2026-04-04",
+        "level": 1
+       },
+       {
+        "date": "2026-04-06",
+        "level": 1
+       },
+       {
+        "date": "2026-04-07",
+        "level": 1
+       }
+      ]
+     },
+     "showDisplayName": false,
+     "overviewStats": {
+      "pending": 0,
+      "apps": 0,
+      "recorded": 0
+     },
+     "miniHeatmap": {
+      "days": 4,
+      "cells": [
+       {
+        "date": "2026-04-03",
+        "level": 0
+       },
+       {
+        "date": "2026-04-04",
+        "level": 1
+       },
+       {
+        "date": "2026-04-06",
+        "level": 1
+       },
+       {
+        "date": "2026-04-07",
+        "level": 1
+       }
+      ]
+     }
+    }
+   }
   }
  ]
 }

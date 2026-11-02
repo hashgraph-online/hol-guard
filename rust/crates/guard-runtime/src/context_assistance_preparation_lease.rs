@@ -34,6 +34,10 @@ pub(super) fn acquire(home: &Path) -> Result<fs::File, String> {
     let home = fs::canonicalize(home).map_err(|_| error("home_invalid"))?;
     let file = crate::resident_state::private_lock_file(&jobs.join("preparation.lock"), &home)
         .map_err(|_| error("install_storage_unavailable"))?;
+    // The lock lives in the file handle; the checked directory binding is
+    // only needed while the file is opened.
+    #[cfg(windows)]
+    let (file, _binding) = file;
     crate::resident_state::try_lock_exclusive_briefly(&file).map_err(|_| error("install_busy"))?;
     Ok(file)
 }

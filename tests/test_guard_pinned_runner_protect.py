@@ -250,3 +250,82 @@ def test_protect_builds_no_package_request_for_pinned_lint_staged(
     )
 
     assert _protect(tmp_path, workspace, [manager, "lint-staged"]) is None
+
+
+def _pnpm_monorepo_lockfile(root_version: str) -> str:
+    """One lockfile for a monorepo whose other workspace is held back a release.
+
+    `packages` lists every release the tree resolved, so reading it alone
+    leaves two candidates and no answer. `importers` says which one each
+    workspace runs, and `root_version` is the one this workspace resolved.
+    """
+
+    return f"""lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    devDependencies:
+      typescript:
+        specifier: ^4.0.0
+        version: {root_version}
+
+  packages/legacy:
+    devDependencies:
+      typescript:
+        specifier: ~4.9.0
+        version: 4.9.0
+
+packages:
+
+  typescript@4.9.0:
+    resolution: {{integrity: sha512-legacy}}
+
+  typescript@4.22.4:
+    resolution: {{integrity: sha512-current}}
+"""
+
+
+def _pnpm_monorepo_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    root_version: str,
+) -> Path:
+    """The pinned-runner tree with pnpm's monorepo lockfile in place of bun's."""
+
+    workspace = _pinned_runner_workspace(
+        tmp_path, monkeypatch, "tsc", locked="4.22.4", package="typescript"
+    )
+    (workspace / "bun.lock").unlink()
+    (workspace / "pnpm-workspace.yaml").write_text("packages:\n  - packages/*\n", encoding="utf-8")
+    (workspace / "pnpm-lock.yaml").write_text(
+        _pnpm_monorepo_lockfile(root_version), encoding="utf-8"
+    )
+    return workspace
+
+
+@pytest.mark.parametrize("manager", ["npx", "bunx"])
+def test_protect_builds_no_package_request_for_a_monorepo_pinned_tsc(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    manager: str,
+) -> None:
+    """A second workspace's release in the same lockfile is not this one's ambiguity."""
+
+    workspace = _pnpm_monorepo_workspace(tmp_path, monkeypatch, root_version="4.22.4")
+
+    assert _protect(tmp_path, workspace, [manager, "tsc", "-p", "tsconfig.json"]) is None
+
+
+@pytest.mark.parametrize("manager", ["npx", "bunx"])
+def test_protect_reviews_a_monorepo_tsc_this_workspace_never_resolved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    manager: str,
+) -> None:
+    """The release the importer names is the one that has to match what is installed."""
+
+    workspace = _pnpm_monorepo_workspace(tmp_path, monkeypatch, root_version="4.9.0")
+
+    assert _protect(tmp_path, workspace, [manager, "tsc", "-p", "tsconfig.json"]) is not None

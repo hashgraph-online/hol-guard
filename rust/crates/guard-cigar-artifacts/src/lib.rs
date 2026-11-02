@@ -1,5 +1,6 @@
 //! Shared protected-artifact checks; no acquisition, process launch or activation.
 #![forbid(unsafe_code)]
+pub mod host;
 mod paths;
 mod python_snapshot;
 mod python_tree;

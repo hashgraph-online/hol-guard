@@ -15,7 +15,6 @@ impl Backend {
         &mut self,
         runtime: &mut VerifiedRuntime,
     ) -> Result<bool, RuntimeError> {
-        #[cfg(unix)]
         if self
             .cache
             .as_ref()
@@ -24,11 +23,8 @@ impl Backend {
             self.forget(runtime)?;
             return Ok(true);
         }
-        #[cfg(not(unix))]
-        let _ = runtime;
         Ok(false)
     }
-    #[cfg(unix)]
     pub(in super::super) fn open_saved(
         runtime: &mut VerifiedRuntime,
         config: &ContextAssistanceConfig,
@@ -61,24 +57,15 @@ impl Backend {
         Ok(result)
     }
     pub(super) fn has_cache(&self) -> bool {
-        #[cfg(unix)]
-        {
-            self.cache.is_some()
-        }
-        #[cfg(not(unix))]
-        {
-            false
-        }
+        self.cache.is_some()
     }
     pub(super) fn check_cache(&mut self) -> Result<(), RuntimeError> {
-        #[cfg(unix)]
         if let Some(cache) = &mut self.cache {
             cache.revalidate(now_ms())?;
         }
         Ok(())
     }
     pub(super) fn check_cache_read(&self) -> Result<(), RuntimeError> {
-        #[cfg(unix)]
         if let Some(cache) = &self.cache {
             cache.check(now_ms())?;
         }
@@ -90,15 +77,12 @@ impl Backend {
         expected: &str,
         documents: &[ContextDocument],
     ) -> Result<(), RuntimeError> {
-        #[cfg(unix)]
         if let Some(cache) = &mut self.cache {
             if let Err(error) = cache.stage_notes(expected, documents, now_ms()) {
                 runtime.close();
                 return Err(error);
             }
         }
-        #[cfg(not(unix))]
-        let _ = (runtime, expected, documents);
         Ok(())
     }
     pub(super) fn commit_notes(
@@ -107,7 +91,6 @@ impl Backend {
         version: &str,
         notes: Option<(Vec<ContextDocument>, BTreeSet<String>)>,
     ) -> Result<(), RuntimeError> {
-        #[cfg(unix)]
         if let Some(cache) = &mut self.cache {
             let saved = notes.map(|(documents, basis)| guard_context_assistance::SavedNotes {
                 documents,
@@ -120,15 +103,12 @@ impl Backend {
                 return Err(error);
             }
         }
-        #[cfg(not(unix))]
-        let _ = (runtime, version, notes);
         Ok(())
     }
     pub(in super::super) fn finish_sources(
         &mut self,
         runtime: &mut VerifiedRuntime,
     ) -> Result<(), RuntimeError> {
-        #[cfg(unix)]
         if let Some((generation, scope, producer)) = self.deferred_scope.take() {
             if !self.access.read {
                 self.deferred_scope = Some((generation, scope, producer));
@@ -141,7 +121,6 @@ impl Backend {
             generation.admit_deferred_scope(&scope, &producer, slot, runtime, domain, now_ms())?;
             return self.refresh_imported_notes(runtime, now_ms());
         }
-        #[cfg(unix)]
         if self.cache.is_some() {
             return self.restore_notes(runtime);
         }
@@ -150,7 +129,6 @@ impl Backend {
         }
         Ok(())
     }
-    #[cfg(unix)]
     fn restore_notes(&mut self, runtime: &mut VerifiedRuntime) -> Result<(), RuntimeError> {
         let Some(Mode::Shared(domain)) = &self.mode else {
             return Err(RuntimeError::ScopeDenied);
@@ -193,7 +171,6 @@ impl Backend {
         runtime: &mut VerifiedRuntime,
     ) -> Result<(), RuntimeError> {
         self.close(runtime)?;
-        #[cfg(unix)]
         if let Some(cache) = self.cache.take() {
             cache.remove()?;
         }

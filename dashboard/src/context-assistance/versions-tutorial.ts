@@ -12,7 +12,7 @@ export const CIGAR_UPDATE_TUTORIAL: CigarTutorial = {
     {
       title: "Prepare beside your current runtime", description: "Downloading and verifying a replacement does not select or enable it.",
       instructions: ["Choose a registered Python interpreter for an available SDK build, or explicitly prepare an eligible private Python build first.", "Click Prepare this build and watch its native job. The current runtime remains selected while preparation runs.", "Cancel the job if you change your mind. For an uncertain response, refresh jobs and inspect the recorded job ID before another action."],
-      expect: "The prepared installation appears in Registered installations, with your current selection intact.", target: "versions", action: "Prepare an eligible build",
+      expect: "The prepared installation appears in the Versions list marked Installed, with your current selection intact.", target: "versions", action: "Prepare an eligible build",
     },
     {
       title: "Prepare the selection", description: "Guard checks the target and compatible data before offering a commit.",

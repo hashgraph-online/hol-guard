@@ -247,14 +247,16 @@ def test_watch_auto_reverts_after_entered_timestamp(tmp_path: Path) -> None:
 def test_watch_auto_revert_accepts_naive_entered_at(tmp_path: Path) -> None:
     from datetime import datetime, timedelta, timezone
 
-    from codex_plugin_scanner.guard.config import maybe_auto_revert_watch, watch_should_auto_revert
+    from codex_plugin_scanner.guard.config import maybe_auto_revert_watch
+    from codex_plugin_scanner.guard.harness_posture import watch_auto_revert_due
 
     guard_home = tmp_path / ".hol-guard"
     loaded = update_guard_settings(guard_home, {"protection_posture": "watch", "watch_auto_revert_hours": 24})
     naive = loaded.watch_entered_at.replace("+00:00", "") if loaded.watch_entered_at else "2020-01-01T00:00:00"
     naive_config = replace(loaded, watch_entered_at=naive)
     later = datetime.now(timezone.utc) + timedelta(hours=25)
-    assert watch_should_auto_revert(naive_config, now=later) is True
+    assert watch_auto_revert_due(naive_config, now=later) == (True, ())
+    assert watch_auto_revert_due(naive_config, now=later.replace(tzinfo=None)) == (True, ())
     reverted = maybe_auto_revert_watch(guard_home, now=later)
     assert reverted.protection_posture == "protected"
 

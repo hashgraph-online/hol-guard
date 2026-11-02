@@ -1634,6 +1634,18 @@
       ]
     },
     {
+      "id": "omp-native-workspace-tsc-generated-project",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Type-check this project through the generated project file it already carries: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
+      "commands": [
+        "./node_modules/.bin/tsc -p tsconfig.check.json 2>&1 | tail -20"
+      ]
+    },
+    {
       "id": "omp-native-workspace-npx-lint-staged",
       "expectation": "allow",
       "oracle": "native-tools",

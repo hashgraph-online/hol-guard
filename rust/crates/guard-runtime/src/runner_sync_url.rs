@@ -20,6 +20,11 @@ const USES_NETLOC: [&str; 25] = [
     "git+ssh", "ws", "wss",
 ];
 
+const USES_RELATIVE: [&str; 20] = [
+    "", "ftp", "http", "gopher", "nntp", "imap", "wais", "file", "https", "shttp", "mms",
+    "prospero", "rtsp", "rtsps", "rtspu", "sftp", "svn", "svn+ssh", "ws", "wss",
+];
+
 pub(crate) struct Split {
     pub(crate) scheme: String,
     pub(crate) netloc: String,
@@ -264,6 +269,74 @@ fn guard_events(url: &str) -> String {
     with_path(&parsed, &next, &parsed.query, "")
 }
 
+/// A Guard Cloud resource beside the receipts route, such as
+/// `insights/shares` or `exceptions/requests`. Known receipts paths keep their
+/// query and drop the fragment; any other URL ending in `/receipts/sync`
+/// swaps that suffix; anything else joins the resource under the URL.
+fn receipts_sibling(url: &str, resource: &str) -> String {
+    let parsed = urlsplit(url);
+    let prefix = match rstrip_slash(&parsed.path) {
+        REGISTRY_RECEIPTS_SYNC => Some("/registry/api/v1/guard"),
+        API_RECEIPTS_SYNC => Some("/api/guard"),
+        RECEIPTS_SYNC => Some("/guard"),
+        _ => None,
+    };
+    if let Some(prefix) = prefix {
+        return with_path(&parsed, &format!("{prefix}/{resource}"), &parsed.query, "");
+    }
+    let base = url.trim_end_matches('/');
+    if let Some(stripped) = base.strip_suffix("/receipts/sync") {
+        return format!("{stripped}/{resource}");
+    }
+    urljoin_relative(&format!("{base}/"), resource)
+}
+
+/// `urllib.parse.urljoin(base, relative)` for a relative path with no query
+/// or fragment.
+fn urljoin_relative(base: &str, relative: &str) -> String {
+    let parsed = urlsplit(base);
+    if !USES_RELATIVE.contains(&parsed.scheme.as_str()) {
+        return relative.to_owned();
+    }
+    let mut base_parts: Vec<&str> = parsed.path.split('/').collect();
+    if base_parts.last().is_some_and(|part| !part.is_empty()) {
+        base_parts.pop();
+    }
+    let mut segments = base_parts;
+    segments.extend(relative.split('/'));
+    let last = segments.len() - 1;
+    let segments: Vec<&str> = segments
+        .iter()
+        .enumerate()
+        .filter(|(index, segment)| *index == 0 || *index == last || !segment.is_empty())
+        .map(|(_, segment)| *segment)
+        .collect();
+    let mut resolved: Vec<&str> = Vec::new();
+    for segment in &segments {
+        match *segment {
+            ".." => {
+                resolved.pop();
+            }
+            "." => {}
+            other => resolved.push(other),
+        }
+    }
+    if segments
+        .last()
+        .is_some_and(|segment| matches!(*segment, "." | ".."))
+    {
+        resolved.push("");
+    }
+    let path = resolved.join("/");
+    let path = if path.is_empty() { "/" } else { path.as_str() };
+    let netloc = if USES_NETLOC.contains(&parsed.scheme.as_str()) {
+        parsed.netloc.as_str()
+    } else {
+        ""
+    };
+    urlunsplit(&parsed.scheme, netloc, path, "", "")
+}
+
 /// `sync_url`: one derived endpoint, selected by `route`.
 pub(crate) fn sync_url(args: &Value) -> KindResult {
     let args = args_object(args)?;
@@ -274,6 +347,8 @@ pub(crate) fn sync_url(args: &Value) -> KindResult {
         "receipts" => receipts(url),
         "runtime_sessions" => runtime_sessions(url),
         "guard_events" => guard_events(url),
+        "insights_share" => receipts_sibling(url, "insights/shares"),
+        "exception_requests" => receipts_sibling(url, "exceptions/requests"),
         "supply_chain_index" => supply_chain_index(url),
         "supply_chain_bundle" => {
             workspace_bundle(url, text("workspace_id")?, "supply-chain/bundle")

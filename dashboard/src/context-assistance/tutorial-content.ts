@@ -36,7 +36,7 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
       },
       {
         title: "Choose a small evidence set", description: "Pick the sources that can answer your question before granting workspace access.",
-        instructions: ["Open Sources, limits and runtime details in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
+        instructions: ["Open Advanced in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
         expect: "Your intended source preferences are saved and the runtime is Ready.", target: "runtime", action: "Choose source preferences",
         tip: "A document preference allows you to choose files later. It does not grant access to the whole workspace.",
       },
@@ -114,7 +114,7 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
       },
       {
         title: "Choose the execution preference", description: "Execution associations use native capture and policy facts.",
-        instructions: ["Open Sources, limits and runtime details. Enable Native policy and decision facts.", "If the build offers it, enable Associate native context with execution.", "Save and start CIGAR. Inspect the Native execution context panel for preparation readiness."],
+        instructions: ["Open Advanced in Settings. Enable Native policy and decision facts.", "If the build offers it, enable Associate native context with execution.", "Save and start CIGAR. Inspect the Native execution context panel for preparation readiness."],
         expect: "The panel reports the current native preparation state.", target: "runtime", action: "Review execution preferences",
       },
       {

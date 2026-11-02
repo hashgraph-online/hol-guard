@@ -14,8 +14,12 @@
 //! - `harness_postures` ranks each configured per-harness override against
 //!   the machine-wide baseline and derives the mode and security level an
 //!   override implies, so no caller recalculates a posture.
+//! - `watch_auto_revert_deadlines` dates when each Watch posture reverts:
+//!   the machine-wide one and each harness override, from its stored stamp
+//!   plus `watch_auto_revert_hours`. The caller compares its own clock, so
+//!   the answer stays a function of the configuration alone.
 //!
-//! All three are pure functions of the request; nothing on disk is read.
+//! All four are pure functions of the request; nothing on disk is read.
 
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -29,6 +33,7 @@ use serde_json::{json, Map, Value};
 
 use crate::guard_config_coerce as coerce;
 use crate::guard_config_harness as harness;
+use crate::guard_config_iso::iso_epoch_micros;
 use crate::guard_config_managed::{apply_managed_policy, ManagedInput};
 use crate::package_authority_config as base;
 use crate::risk_action::configured_risk_action;
@@ -84,6 +89,19 @@ struct Request {
     /// `harness_postures`: the baseline and the configured overrides.
     #[serde(default)]
     postures: Option<HarnessPostureConfigV1>,
+    /// `watch_auto_revert_deadlines`: the Watch postures and their stamps.
+    #[serde(default)]
+    watch: Option<WatchInput>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WatchInput {
+    auto_revert_hours: i64,
+    protection_posture: String,
+    watch_entered_at: Option<String>,
+    harness_postures: BTreeMap<String, String>,
+    harness_watch_entered_at: BTreeMap<String, String>,
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
@@ -128,6 +146,10 @@ fn resolve(request: &Request) -> Result<Value, &'static str> {
             let facts = request.postures.as_ref().ok_or(INVALID)?;
             Ok(harness_postures(facts))
         }
+        "watch_auto_revert_deadlines" => {
+            let watch = request.watch.as_ref().ok_or(INVALID)?;
+            Ok(watch_auto_revert_deadlines(watch))
+        }
         _ => Err(INVALID),
     }
 }
@@ -140,6 +162,35 @@ fn harness_postures(facts: &HarnessPostureConfigV1) -> Value {
         "baseline": baseline,
         "effective": harness::effective_map(baseline, &facts.harness_postures),
         "views": harness::posture_views(baseline, &facts.harness_postures, &facts.security_level),
+    })
+}
+
+/// When the machine-wide Watch posture and each harness Watch override
+/// reverts: its stored stamp plus the auto-revert window, in microseconds
+/// since the Unix epoch. A zero or negative window never reverts, and neither
+/// does a stamp that does not parse or a deadline past the representable
+/// range.
+fn watch_auto_revert_deadlines(watch: &WatchInput) -> Value {
+    let window = watch.auto_revert_hours.checked_mul(3_600_000_000);
+    let deadline = |posture: &str, stamp: Option<&String>| {
+        if posture != "watch" {
+            return None;
+        }
+        let window = window.filter(|window| *window > 0)?;
+        let entered = stamp.map(String::as_str).and_then(iso_epoch_micros)?;
+        entered.checked_add(window)
+    };
+    let harnesses: BTreeMap<&String, i64> = watch
+        .harness_postures
+        .iter()
+        .filter_map(|(harness, posture)| {
+            let stamp = watch.harness_watch_entered_at.get(harness);
+            Some((harness, deadline(posture, stamp)?))
+        })
+        .collect();
+    json!({
+        "protection_posture": deadline(&watch.protection_posture, watch.watch_entered_at.as_ref()),
+        "harnesses": harnesses,
     })
 }
 

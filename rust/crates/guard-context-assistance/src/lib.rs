@@ -13,7 +13,6 @@ mod broker_execution_doctor;
 mod broker_persistence_doctor;
 mod broker_storage;
 mod config;
-#[cfg(unix)]
 mod evidence_cache;
 mod freshness;
 mod graph;
@@ -27,7 +26,6 @@ mod source;
 
 pub use actor::{Quiescence, RuntimeActivity, RuntimeActor};
 pub use artifacts::{inspect_bundle, inspect_release_bundle, BundleApproval, RuntimeSelection};
-#[cfg(unix)]
 pub use broker::EphemeralReviewedNotes;
 pub use broker::{
     BrokerAnswerClaim, BrokerAnswerPolicy, BrokerBoundExecution, BrokerClaimReview,
@@ -39,7 +37,6 @@ pub use config::{
     ConfigError, ContextAssistanceConfig, Features, Limits, ResourceProfile, Sources, Storage,
     StorageMode,
 };
-#[cfg(unix)]
 pub use evidence_cache::{
     DataCompatibility, EvidenceCache, EvidenceCacheHealth, EvidenceCacheLocation,
     EvidenceCacheSummary, EvidenceErasureScope, EvidenceGenerationStore, EvidencePreparation,

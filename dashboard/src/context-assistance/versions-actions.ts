@@ -10,6 +10,10 @@ export function canCommitCigarJob(job: CigarSelectionJob, status: ContextAssista
 export function cigarJobPending(job: CigarVersionJob): boolean {
   return job.worker_live === true || (!job.recovery_available && !["ready", "completed", "cancelled", "failed", "recovery_required"].includes(job.phase));
 }
+/** Jobs that still need Guard or the user; finished history stays out of "In progress". */
+export function cigarJobActive(job: CigarVersionJob): boolean {
+  return cigarJobPending(job) || job.can_commit || job.recovery_available || job.phase === "recovery_required";
+}
 export function cigarBuildBlock(catalog: CigarCatalog, build: CigarCatalogBuild, updates: CigarUpdateSettings): string | null {
   if (build.withdrawn) return "This build has been withdrawn.";
   if (!catalog.catalog.fresh_for_preparation) return "Refresh the catalog before preparing a build.";

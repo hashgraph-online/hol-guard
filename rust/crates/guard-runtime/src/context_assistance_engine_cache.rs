@@ -2,7 +2,6 @@ use super::*;
 
 impl Engine {
     pub(super) fn saved_data(&self) -> Value {
-        #[cfg(unix)]
         if let Some(cache) = &self.cache {
             return crate::context_assistance_data::describe(Some(cache))
                 .and_then(|value| {
@@ -32,7 +31,6 @@ impl Engine {
                 return Err(RuntimeError::ScopeDenied);
             }
             let access = scope.graph.access();
-            #[cfg(unix)]
             let removal =
                 crate::policy_store::context_assistance_registry::switching::ScopeRemoval::acquire(
                     &self.home,
@@ -45,7 +43,6 @@ impl Engine {
             scope.clear_contexts();
             scope.history.clear();
             scope.receipts.clear();
-            #[cfg(unix)]
             let erasure = removal.remove(self.cache.as_ref())?;
             if let Some(source) = withdrawn {
                 scope.sources.remove(source);
@@ -68,11 +65,8 @@ impl Engine {
             current_sources(&scope)?;
             policy_current(&self.home, &mut scope, runtime)?;
             let mut result = metadata(id, &scope);
-            #[cfg(unix)]
-            {
-                result["saved_copy_erasure"] =
-                    serde_json::to_value(erasure).map_err(|_| RuntimeError::RequestInvalid)?;
-            }
+            result["saved_copy_erasure"] =
+                serde_json::to_value(erasure).map_err(|_| RuntimeError::RequestInvalid)?;
             Ok(result)
         })();
         if result.is_err() && changed {
@@ -86,7 +80,6 @@ impl Engine {
         result
     }
     pub(super) fn sweep_saved(&self) -> Result<(), RuntimeError> {
-        #[cfg(unix)]
         if let Some(cache) = &self.cache {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -100,23 +93,19 @@ impl Engine {
     }
     pub(super) fn forget_saved(
         &mut self,
-        #[cfg(unix)]
         removal: crate::policy_store::context_assistance_registry::switching::DataRemoval,
     ) -> Result<(), RuntimeError> {
-        #[cfg(unix)]
-        {
-            if self.cache.is_none() {
-                self.cache = guard_context_assistance::EvidenceCache::existing(&self.home)?;
-            }
-            if let Some(cache) = &self.cache {
-                cache.forget_all()?;
-            }
-            self.cache = None; // release the current cache lock before clearing generations
-            self.data_generation = None;
-            // Also removes the legacy root when this cache was a generation.
-            removal.remove()?;
-            self.producer = None;
+        if self.cache.is_none() {
+            self.cache = guard_context_assistance::EvidenceCache::existing(&self.home)?;
         }
+        if let Some(cache) = &self.cache {
+            cache.forget_all()?;
+        }
+        self.cache = None; // release the current cache lock before clearing generations
+        self.data_generation = None;
+        // Also removes the legacy root when this cache was a generation.
+        removal.remove()?;
+        self.producer = None;
         Ok(())
     }
     pub(super) fn open_backend(
@@ -128,7 +117,6 @@ impl Engine {
         config: &ContextAssistanceConfig,
         access: NotesAccess,
     ) -> Result<Backend, RuntimeError> {
-        #[cfg(unix)]
         crate::policy_store::context_assistance_registry::switching::DataRemoval::check_clear(
             &self.home,
         )?;
@@ -146,53 +134,45 @@ impl Engine {
         if !runtime.status().persistence_compile_verified {
             return Err(RuntimeError::HandshakeFailed);
         }
-        #[cfg(unix)]
-        {
-            if self.cache.is_none() {
-                self.cache = Some(match &self.data_generation {
-                    Some(generation) => generation.open_cache()?,
-                    None => guard_context_assistance::EvidenceCache::open(&self.home)?,
-                });
-            }
-            let cache = self.cache.as_ref().ok_or(RuntimeError::ScopeDenied)?;
-            let namespace = guard_context_assistance::EvidenceScope::new(app, root.path())?;
-            let key = match &self.producer {
-                Some(producer) => namespace.key(producer)?,
-                None => guard_context_assistance::EvidenceCache::key(
-                    app,
-                    root.path(),
-                    &runtime.status().worker_fingerprint,
-                )?,
-            };
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis()
-                .try_into()
-                .unwrap_or(u64::MAX);
-            crate::policy_store::context_assistance_registry::switching::scope_index::remember(
-                &self.home, cache, &namespace, &key,
-            )?;
-            let deferred = match (&self.data_generation, &self.producer) {
-                (Some(generation), Some(producer))
-                    if generation.has_deferred_scope(&namespace, producer)? =>
-                {
-                    Some((Arc::clone(generation), producer.clone()))
-                }
-                _ => None,
-            };
-            let slot = cache.open_slot(&key, config.storage.retention_hours, now)?;
-            let mut backend = Backend::open_saved(runtime, config, access, slot)?;
-            if let Some((generation, producer)) = deferred {
-                backend.defer_scope(generation, namespace, producer);
-            }
-            Ok(backend)
+        if self.cache.is_none() {
+            self.cache = Some(match &self.data_generation {
+                Some(generation) => generation.open_cache()?,
+                None => guard_context_assistance::EvidenceCache::open(&self.home)?,
+            });
         }
-        #[cfg(not(unix))]
-        {
-            let _ = (root, app);
-            Err(RuntimeError::PlatformUnqualified)
+        let cache = self.cache.as_ref().ok_or(RuntimeError::ScopeDenied)?;
+        let namespace = guard_context_assistance::EvidenceScope::new(app, root.path())?;
+        let key = match &self.producer {
+            Some(producer) => namespace.key(producer)?,
+            None => guard_context_assistance::EvidenceCache::key(
+                app,
+                root.path(),
+                &runtime.status().worker_fingerprint,
+            )?,
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .try_into()
+            .unwrap_or(u64::MAX);
+        crate::policy_store::context_assistance_registry::switching::scope_index::remember(
+            &self.home, cache, &namespace, &key,
+        )?;
+        let deferred = match (&self.data_generation, &self.producer) {
+            (Some(generation), Some(producer))
+                if generation.has_deferred_scope(&namespace, producer)? =>
+            {
+                Some((Arc::clone(generation), producer.clone()))
+            }
+            _ => None,
+        };
+        let slot = cache.open_slot(&key, config.storage.retention_hours, now)?;
+        let mut backend = Backend::open_saved(runtime, config, access, slot)?;
+        if let Some((generation, producer)) = deferred {
+            backend.defer_scope(generation, namespace, producer);
         }
+        Ok(backend)
     }
 }
 
