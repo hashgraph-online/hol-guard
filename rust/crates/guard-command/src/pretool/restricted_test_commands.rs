@@ -438,12 +438,23 @@ pub(crate) fn manager_local_bin_arguments<'a>(
     manager: &str,
     arguments: &'a [String],
 ) -> Option<&'a [String]> {
-    let arguments = crate::contained_argv::manager_reporting_options_peeled(manager, arguments);
+    let peeled = crate::contained_argv::manager_reporting_options_peeled(manager, arguments);
+    // A value option whose value is missing takes the next word instead, so
+    // `pnpm --reporter exec tsc` hands `exec` to the reporter and leaves a
+    // line that reads as the shorthand. The verb the peel swallowed is not a
+    // word this reading may invent, so a peel that ate one of the manager's
+    // own subcommands keeps the review the unpeeled line had.
+    let peel_consumed = &arguments[..arguments.len() - peeled.len()];
+    let peel_ate_a_subcommand = peel_consumed
+        .iter()
+        .any(|word| MANAGER_SUBCOMMANDS.contains(&word.as_str()));
+    let arguments = peeled;
     let mut rest = match (manager, arguments) {
         ("npm", [subcommand, rest @ ..]) if subcommand == "exec" || subcommand == "x" => rest,
         ("pnpm" | "yarn", [subcommand, rest @ ..]) if subcommand == "exec" => rest,
         ("pnpm", [tool, ..])
-            if !tool.starts_with('-')
+            if !peel_ate_a_subcommand
+                && !tool.starts_with('-')
                 && !MANAGER_SUBCOMMANDS.contains(&tool.as_str())
                 && manager_script_task(manager, arguments).is_none() =>
         {

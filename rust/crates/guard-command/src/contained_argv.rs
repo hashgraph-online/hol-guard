@@ -481,9 +481,10 @@ const YARN_REPORTING_FLAGS: &[&str] = &[
 /// and `npm --silent test` runs the same script `npm test` does.
 ///
 /// A value option whose value is written separately eats the next word, so
-/// `pnpm --reporter exec tsc` consumes `exec` and leaves `tsc`, which is not
-/// a verb and keeps the review. That is the right answer: pnpm reads that
-/// line the same way.
+/// `pnpm --reporter exec tsc` consumes `exec` and leaves `tsc`. pnpm reads
+/// that line the same way, and would run the remainder as the shorthand it
+/// now looks like; the local-bin reading refuses to put a swallowed
+/// subcommand back, so the written line keeps its review.
 pub(crate) fn manager_reporting_options_peeled<'a>(
     manager: &str,
     mut arguments: &'a [String],

@@ -468,6 +468,12 @@ fn pnpm_runs_a_word_none_of_its_subcommands_claims_as_the_local_bin_run() {
         "pnpm run test",
         "pnpm test",
         "pnpm install",
+        // `--reporter` takes the next word as its value, so the line that
+        // reaches this reading lost the `exec` the author wrote. The reading
+        // does not put the verb back: a peel that swallowed one of pnpm's own
+        // subcommands keeps the review the written line had.
+        "pnpm --reporter exec vitest run",
+        "pnpm --loglevel exec vitest run",
     ] {
         assert_ne!(
             reason(command),
