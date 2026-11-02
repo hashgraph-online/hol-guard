@@ -11,6 +11,11 @@ import sysconfig
 # brackets, commas and parentheses (for example "[pipe,2 attempt(s),...]").
 _NATIVE_UNAVAILABLE_PATTERN = re.compile(r"native_[a-z0-9_]+_unavailable(?::[^\r\n]{1,1024})?")
 _REPAIR_HINT_CODES = ("native_resident_runtime_identity_mismatch", "native_resident_update")
+# Signing-key rejections a newer key anchor can resolve. Bad or missing
+# signatures and binding mismatches are not fixed by updating Guard.
+_KEY_ANCHOR_HINT_CODES = frozenset(
+    {"expired_signing_key", "missing_verification_keys", "unknown_signing_key", "untrusted_signing_key"}
+)
 
 
 def _missing_runtime_hint() -> str | None:
@@ -60,7 +65,7 @@ def report_native_unavailable(
 
 
 def report_review_contract_rejection(parser: argparse.ArgumentParser, exc: ValueError) -> int | None:
-    """Print a refused Guard Cloud signature as a runtime error, or None for other errors.
+    """Print a refused Guard Cloud contract as a runtime error, or None for other errors.
 
     A key Guard cannot anchor stops `connect` and `sync` after sign-in. The
     usage banner made that look like a mistyped command.
@@ -70,12 +75,14 @@ def report_review_contract_rejection(parser: argparse.ArgumentParser, exc: Value
 
     if not isinstance(exc, GuardReviewContractError):
         return None
-    print(f"{parser.prog}: error: {exc}", file=sys.stderr)
-    print(
-        f"{parser.prog}: hint: Guard Cloud sent signed data this install could not verify, so Guard did not "
-        "trust it and stopped the sync. Run `hol-guard update`, then `hol-guard sync`.",
-        file=sys.stderr,
-    )
+    message = str(exc)
+    print(f"{parser.prog}: error: {message}", file=sys.stderr)
+    if message in _KEY_ANCHOR_HINT_CODES:
+        print(
+            f"{parser.prog}: hint: Guard Cloud signed this data with a key this install does not trust, so Guard "
+            "stopped the sync. Run `hol-guard update`, then `hol-guard sync`.",
+            file=sys.stderr,
+        )
     return 1
 
 
