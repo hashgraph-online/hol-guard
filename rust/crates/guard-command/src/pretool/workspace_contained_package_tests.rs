@@ -24,6 +24,7 @@ fn pnpm_and_yarn_exec_run_in_the_workspace_sandbox() {
         "pnpm --filter app exec tsc --noEmit",
         "pnpm -r exec vitest run",
         "yarn workspace web exec vitest run",
+        "pnpm recursive exec vitest run",
         // A script of the project's own named `exec` is the script it is.
         "pnpm run exec",
         // The target is read past a `--` separator, and reading it there must
@@ -76,6 +77,12 @@ fn exec_that_can_reach_a_registry_keeps_its_review() {
         "pnpm exec sh -c 'npm install zod'",
         "pnpm exec timeout 5 npx cowsay",
         "pnpm exec xargs npm install zod",
+        // A workspace selector stands in front of the verb, so the program
+        // behind the `exec` it carries is read there rather than left unread.
+        "yarn workspace web exec npx cowsay",
+        "yarn workspace web exec env npx cowsay",
+        "yarn workspace web exec 'npm install zod'",
+        "pnpm recursive exec npx cowsay",
         // An `exec` naming no program at all runs nothing this can read.
         "pnpm exec",
         "pnpm exec --",

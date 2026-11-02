@@ -156,6 +156,25 @@ fn exec_runs_a_fetcher(manager: &str, arguments: &[&str], verb: usize) -> bool {
         .is_none_or(|target| target_keeps_its_review(target))
 }
 
+/// The index of the verb a workspace selector stands in front of. `yarn
+/// workspace <name>` and `pnpm recursive` name which project of the workspace
+/// the command runs in rather than what runs there, so the verb they carry is
+/// the word behind the selector and behind the options spelled after it.
+/// Reading the leading word alone would leave `yarn workspace web exec npx
+/// <package>` with no `exec` for [`exec_runs_a_fetcher`] to answer for, and the
+/// fetch behind it unread.
+fn verb_behind_a_selector(manager: &str, arguments: &[&str], verb: usize) -> usize {
+    let selector = match (manager, arguments.get(verb).copied()) {
+        ("yarn", Some("workspace")) => 2,
+        ("pnpm", Some("recursive")) => 1,
+        _ => return verb,
+    };
+    let Some(behind) = arguments.get(verb + selector..) else {
+        return verb;
+    };
+    verb + selector + options::skip_inert_options(manager, behind)
+}
+
 /// Whether the program a pnpm or yarn `exec` runs keeps the command's review.
 /// The managers reach a registry through their own verbs, and a package runner
 /// fetches the package it names outright, so neither is the installed project
@@ -445,7 +464,11 @@ pub(super) fn local_package_work(
             && (leading_verb || version_probe)
             && !workspace_fanout
             && !positional_init
-            && !exec_runs_a_fetcher(&name, &all_arguments, verb)
+            && !exec_runs_a_fetcher(
+                &name,
+                &all_arguments,
+                verb_behind_a_selector(&name, &arguments, verb),
+            )
             && !scan_reaches_a_registry(&name, scanned)
     })
 }
