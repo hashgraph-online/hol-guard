@@ -478,6 +478,8 @@ def test_the_status_tail_build_case_needs_the_build_line_and_its_status() -> Non
         "build=0\n",
         f"{VITE_BUILD_MARKER}\n",
         f'error: Cannot find module "vite"\nbuild=0\n',
+        f"{VITE_BUILD_MARKER}\nbuild=0\nbuild=1\n",
+        f"{VITE_BUILD_MARKER}\nbuild=1\n",
     ):
         assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
     assert not command_outputs_match(scenario, [])

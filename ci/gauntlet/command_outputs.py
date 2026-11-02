@@ -275,11 +275,19 @@ def _bun_entry_build_match(calls: list[dict[str, Any]]) -> bool:
 
 
 def _status_tail_build_match(calls: list[dict[str, Any]]) -> bool:
-    """The build finished, and the run printed the status it finished with."""
+    """The build finished, and the run printed the status it finished with.
+
+    The `echo` is the last thing the run prints, so the status is read as the
+    final line. Looking for it anywhere in the text would let a later nonzero
+    status stand beside the one the oracle asked for.
+    """
     if len(calls) != 1:
         return False
     text = _text(calls[0])
-    return text is not None and VITE_BUILD_MARKER in text and "build=0" in text
+    if text is None or VITE_BUILD_MARKER not in text:
+        return False
+    lines = text.splitlines()
+    return bool(lines) and lines[-1].strip() == "build=0"
 
 
 def _bun_test_file_match(calls: list[dict[str, Any]]) -> bool:
