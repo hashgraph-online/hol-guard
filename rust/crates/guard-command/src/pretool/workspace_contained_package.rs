@@ -133,20 +133,34 @@ fn scan_reaches_a_registry(manager: &str, scanned: &[&str]) -> bool {
             return scanned[index + 1..]
                 .iter()
                 .find(|word| !word.starts_with('-'))
-                .is_some_and(|target| runs_its_own_fetch(target));
+                .is_some_and(|target| target_keeps_its_review(target));
         }
         REGISTRY_VERBS.contains(&argument.as_str())
     })
 }
 
-/// Whether `target` names a program that fetches the package it is given.
-/// The managers reach a registry through their own verbs, and a package
-/// runner fetches the package it names outright, so neither is the installed
-/// project tool a contained `exec` runs.
-fn runs_its_own_fetch(target: &str) -> bool {
+/// Whether the program a pnpm or yarn `exec` runs keeps the command's review.
+/// The managers reach a registry through their own verbs, and a package runner
+/// fetches the package it names outright, so neither is the installed project
+/// tool a contained `exec` runs.
+///
+/// Yarn runs its `exec` argument through a shell, so a target holding
+/// whitespace or shell syntax is a script rather than a program name: `yarn
+/// exec 'npm install zod'` is one word here and names its install inside it.
+/// What such a script does is the question this reading cannot answer, so it
+/// stays at review rather than passing on the shape of the word.
+fn target_keeps_its_review(target: &str) -> bool {
+    let shell_syntax =
+        |character: char| character.is_whitespace() || SHELL_SYNTAX.contains(character);
+    if target.is_empty() || target.contains(shell_syntax) {
+        return true;
+    }
     let name = super::super::executable_basename(target).to_ascii_lowercase();
     PACKAGE_RUNNERS.contains(&name.as_str()) || manager_program(&name)
 }
+
+/// The characters that make a word a script rather than a program name.
+const SHELL_SYNTAX: &str = "&|;<>()$`\\\"'*?[]{}!#~=";
 
 /// Whether `name` runs a manager this module decides a verb for.
 fn manager_program(name: &str) -> bool {

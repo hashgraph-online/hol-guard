@@ -315,6 +315,9 @@ fn exec_that_can_reach_a_registry_keeps_its_review() {
         "pnpm exec npx cowsay",
         "pnpm exec bunx cowsay",
         "yarn exec npx cowsay",
+        // Yarn runs its `exec` argument through a shell, so the install is
+        // spelled inside one word rather than beside it.
+        "yarn exec 'npm install zod'",
     ] {
         assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
     }
