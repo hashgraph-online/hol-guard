@@ -35,7 +35,7 @@ const PRESERVE_UNQUOTED_BACKSLASH: bool = cfg!(windows);
 /// Characters a surviving word may not contain: the core is handed to a
 /// sandbox, not to a shell, so a redirection or list operator inside a word
 /// would be passed through as text rather than obeyed.
-const ARGUMENT_REJECT: &str = "<>|&;";
+pub(in crate::pretool) const ARGUMENT_REJECT: &str = "<>|&;";
 /// The quiet `cd` suffix the peel resolves itself instead of the shell.
 const QUIET_SUFFIX: &str = "2>/dev/null";
 /// The longest label a final `; echo "<label>$?"` may carry.
@@ -349,6 +349,9 @@ fn lex(command: &str) -> Result<(Vec<Token>, bool), &'static str> {
         } else if word.is_none() && merge_at(&characters, index) {
             tokens.push(("2>&1".to_owned(), true));
             index += 4;
+        } else if word.is_none() && stderr_at(&characters, index) {
+            tokens.push(("2>".to_owned(), true));
+            index += 2;
         } else if OPERATOR.contains(character) {
             if let Some(value) = word.take() {
                 tokens.push((value, false));
@@ -423,6 +426,19 @@ fn lex(command: &str) -> Result<(Vec<Token>, bool), &'static str> {
         tokens.push((value, false));
     }
     Ok((tokens, exact))
+}
+
+/// `2>` as its own operator: a stderr redirect spelled the way the shell
+/// reads one, with the digit touching the `>` and no quote between them.
+///
+/// `cmd 2 >/dev/null` and `cmd '2'>/dev/null` pass `2` to the program and
+/// redirect standard output instead. Both leave the digit in the word stream,
+/// where the rejoin refuses it rather than writing back a command the shell
+/// would read as this redirect. `2>>log` and `2>&2` are not this operator
+/// either, so the `>` that follows keeps them out of every rejoin.
+fn stderr_at(characters: &[char], index: usize) -> bool {
+    characters.get(index..index + 2) == Some(&['2', '>'][..])
+        && !matches!(characters.get(index + 2).copied(), Some('&' | '>'))
 }
 
 /// `2>&1` as its own operator: the one redirection the sink applies itself.
@@ -614,54 +630,127 @@ fn lexical(path: &Path) -> PathBuf {
 
 /// `a && b && c` of plain words, rejoined, or `None` for any other shape.
 ///
-/// Each command may bound its own output with one `| head` or `| tail` of a
-/// line or byte count, optionally after `2>&1`. The filter stays in the
-/// rejoined text, where the sandbox's shell applies it to that command alone,
-/// as the issued text did.
+/// Each command may send its stderr to stdout or to `/dev/null`, and may bound
+/// its output with one `head` or `tail` of a line or byte count. The filter
+/// stays in the rejoined text, where the sandbox's shell applies it to that
+/// command alone, as the issued text did.
+///
+/// A lone command is rejoined only when the peel refuses its pipeline, so a
+/// shape the peel already reads keeps its narrower sink. Its pipeline may run
+/// through any number of readers of standard input whose options name no
+/// file, which is what lets a pipeline the peel has no grammar for still run
+/// in the root the `cd` named: an ordinary `| cut` or `| sort` reads as the
+/// same work as `| head`. A list keeps the narrower grammar, because a filter
+/// there bounds only the command it follows while the rest of the list still
+/// runs.
 fn joined_list(tokens: &[Token]) -> Option<String> {
+    let lone = !tokens.iter().any(|token| operator(token) == Some("&&"));
     let mut commands = Vec::new();
     for command in tokens.split(|token| operator(token) == Some("&&")) {
-        let (words, filter) = match command
-            .iter()
-            .position(|token| operator(token) == Some("|"))
-        {
-            Some(index) => (&command[..index], Some(&command[index + 1..])),
-            None => (command, None),
-        };
-        let (words, merged) = match words.split_last() {
-            Some((last, rest)) if operator(last) == Some("2>&1") => (rest, true),
-            _ => (words, false),
-        };
-        if words.is_empty()
-            || (merged && filter.is_none())
-            || words.iter().any(|token| {
-                token.1
-                    || token
-                        .0
-                        .chars()
-                        .any(|character| ARGUMENT_REJECT.contains(character))
-            })
-        {
-            return None;
+        let mut stages = command.split(|token| operator(token) == Some("|"));
+        let (words, redirect) = stderr_redirect(stages.next()?);
+        let mut text = plain_words(words)?;
+        if let Some(redirect) = redirect {
+            text.push(' ');
+            text.push_str(redirect);
         }
-        let mut text = shlex_join(words.iter().map(|token| token.0.as_str()));
-        if merged {
-            text.push_str(" 2>&1");
-        }
-        if let Some(filter) = filter {
-            let (program, arguments) = filter.split_first()?;
-            let program = word(program);
-            if !matches!(program, "head" | "tail") || arguments.iter().any(|token| token.1) {
+        let mut filters = 0usize;
+        for stage in stages {
+            filters += 1;
+            if !lone && filters > 1 {
                 return None;
             }
-            let arguments: Vec<String> = arguments.iter().map(|token| token.0.clone()).collect();
-            let (count, bytes) = output_filters::head_tail_bound(&arguments)?;
-            let unit = if bytes { "-c" } else { "-n" };
-            text.push_str(&format!(" | {program} {unit} {count}"));
+            text.push_str(" | ");
+            text.push_str(&filter_stage(stage, lone)?);
+        }
+        if redirect.is_some() && filters == 0 {
+            return None;
         }
         commands.push(text);
     }
-    (commands.len() >= 2).then(|| commands.join(" && "))
+    let piped = tokens.iter().any(|token| operator(token) == Some("|"));
+    if commands.len() < 2 && !(piped && peel_declines(tokens)) {
+        return None;
+    }
+    Some(commands.join(" && "))
+}
+
+/// One filter stage's text, or `None` when it is not a reader of standard
+/// input. A `head` or `tail` is written back from the count this module read,
+/// rather than copied, so the rejoined bound is one the peel understood. Any
+/// other reader is rejoined only for a lone command, which is the shape the
+/// peel would otherwise refuse outright.
+fn filter_stage(tokens: &[Token], lone: bool) -> Option<String> {
+    let (program, arguments) = tokens.split_first()?;
+    if tokens.iter().any(|token| token.1) {
+        return None;
+    }
+    let program = word(program);
+    let arguments: Vec<String> = arguments.iter().map(|token| token.0.clone()).collect();
+    if matches!(program, "head" | "tail") {
+        let (count, bytes) = output_filters::head_tail_bound(&arguments)?;
+        let unit = if bytes { "-c" } else { "-n" };
+        return Some(format!("{program} {unit} {count}"));
+    }
+    if !lone || !output_filters::rejoined_stage(program, &arguments) {
+        return None;
+    }
+    plain_words(tokens)
+}
+
+/// One command's words, quoted back into text, or `None` when a word is an
+/// operator or carries one inside quotes. A `;`, `|`, `<`, `>` or `&` that the
+/// sandbox's shell would read again cannot be rejoined as the word it was.
+fn plain_words(tokens: &[Token]) -> Option<String> {
+    if tokens.is_empty()
+        || tokens.iter().any(|token| {
+            token.1
+                || token
+                    .0
+                    .chars()
+                    .any(|character| ARGUMENT_REJECT.contains(character))
+        })
+    {
+        return None;
+    }
+    Some(shlex_join(tokens.iter().map(|token| token.0.as_str())))
+}
+
+/// A trailing `2>&1` or `2>/dev/null` split off a command's words, with the
+/// text to re-emit after them.
+///
+/// Both lex as one operator token followed, for the quiet form, by the path,
+/// so the digit can never have been a word the program was given.
+fn stderr_redirect(tokens: &[Token]) -> (&[Token], Option<&'static str>) {
+    if let Some((last, rest)) = tokens.split_last() {
+        if operator(last) == Some("2>&1") {
+            return (rest, Some("2>&1"));
+        }
+    }
+    if let [rest @ .., redirect, target] = tokens {
+        if operator(redirect) == Some("2>") && word(target) == "/dev/null" {
+            return (rest, Some(QUIET_SUFFIX));
+        }
+    }
+    (tokens, None)
+}
+
+/// Whether the filter peel refuses this command's pipeline, leaving the rejoin
+/// as the only reading that runs it in the root the `cd` named.
+///
+/// A `2>/dev/null` before the pipe refuses it as surely as an unreadable
+/// filter does: the peel truncates the command at the pipe and then reads the
+/// redirect's `>` among the core's words, which it will not run. The rejoin
+/// keeps the redirect in the text, where the root's own shell applies it to
+/// the same command the issued text did.
+fn peel_declines(tokens: &[Token]) -> bool {
+    tokens
+        .iter()
+        .position(|token| operator(token) == Some("|"))
+        .is_some_and(|index| {
+            filter_chain(&tokens[index + 1..]).is_err()
+                || stderr_redirect(&tokens[..index]).1 == Some(QUIET_SUFFIX)
+        })
 }
 
 /// Where a bare `node -e <program>` or `python3 -c <program>` holds its

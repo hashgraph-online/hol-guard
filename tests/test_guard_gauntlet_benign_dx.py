@@ -30,6 +30,8 @@ from ci.gauntlet.fast_forward_fixtures import (
 )
 from ci.gauntlet.fixtures import (
     ALIAS_ESCAPES_CASE,
+    BUN_TEST_FILE_CASE,
+    BUN_TEST_SCRIPT_MARKER,
     INSTEAD_OF_CASE,
     LARGE_GITCONFIG_CASE,
     LARGE_GITCONFIG_MIN_BYTES,
@@ -452,3 +454,19 @@ def test_the_bun_entry_case_needs_the_build_line_tail_cannot_supply() -> None:
         assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
     assert not command_outputs_match(scenario, [])
     assert not command_outputs_match(scenario, [finished, finished])
+
+
+def test_the_bun_test_file_case_needs_the_line_only_that_file_prints() -> None:
+    """A clean exit status cannot stand in for the spec Bun was asked to run.
+
+    `bun <file>` reports success for a file it loaded and for one whose assertions
+    never ran, so the oracle asks for the line the file itself prints.
+    """
+    scenario = {case.id: case for case in load_catalog()}[BUN_TEST_FILE_CASE]
+    command = scenario.commands[0]
+    ran = _tool_call("bash", {"command": command}, f"{BUN_TEST_SCRIPT_MARKER}\n")
+    assert command_outputs_match(scenario, [ran])
+    for text in ("", "bun test v1.1.0\n", "error: Module not found\n"):
+        assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
+    assert not command_outputs_match(scenario, [])
+    assert not command_outputs_match(scenario, [ran, ran])

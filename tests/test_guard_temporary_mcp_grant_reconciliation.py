@@ -11,7 +11,8 @@ from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardAction, GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.temporary_mcp_approvals import temporary_mcp_grant_selector
+
+from .test_guard_temporary_mcp_approvals import temporary_mcp_grant_selector
 
 
 def _request(request_id: str, *, tool_name: str, policy_action: GuardAction = "review") -> GuardApprovalRequest:

@@ -12065,6 +12065,40 @@
       "expect": "allow"
     },
     {
+      "id": "gauntlet-sibling-cd-jest-cut",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js 2>&1 | cut -c1-120"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "gauntlet-sibling-cd-jest-quiet",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js 2>/dev/null | head -40"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
       "id": "gauntlet-sibling-ls-missing-github-workflows",
       "fix_area": "shell",
       "harnesses": [
@@ -15067,6 +15101,23 @@
       "tool": "shell",
       "tool_input": {
         "command": "bun test src/parser.test.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-bun-workspace-test-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun src/app-routing.test.ts"
       },
       "cwd": "worktree",
       "expect": "allow",
@@ -25903,6 +25954,40 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "toolchain-npx-tsx-node-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsx --test __tests__/media.test.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "toolchain-tsx-node-test-runner-flags",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsx --test --test-only --test-timeout=30000 src/parse.test.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "package-test-dashdash-reporter-tail",

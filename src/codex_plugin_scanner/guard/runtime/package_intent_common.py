@@ -351,12 +351,6 @@ def build_package_request_artifact(
     )
 
 
-def redact_package_request_token(value: str) -> str:
-    """Return a persistence-safe package argv token without URL credentials."""
-
-    return _sanitize_url(value)
-
-
 def _sanitize_url(value: str) -> str:
     http_source = _HTTP_SOURCE_IN_TOKEN_RE.search(value)
     if http_source is not None:

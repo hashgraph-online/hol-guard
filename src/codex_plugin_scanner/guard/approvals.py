@@ -433,6 +433,7 @@ def apply_approval_resolution(
             target=mcp_grant_target,
             duration=mcp_grant_duration,
             now=resolved_at,
+            guard_home=store.guard_home,
         )
     local_tool_selection: LocalToolGrantSelection | None = None
     if (local_tool_grant_target is None) != (local_tool_grant_duration is None):
@@ -593,8 +594,6 @@ def apply_approval_resolution(
             harness=str(request["harness"]),
             selection=temporary_mcp_selection,
             reason=reason,
-            artifact_id=request_artifact_id or "",
-            artifact_hash=request_artifact_hash or "",
         )
         store.ensure_policy_integrity_ready_for_write(
             harness=temporary_decision.harness,
@@ -674,7 +673,7 @@ def apply_approval_resolution(
             retry_cannot_reuse_approval=RETRY_CANNOT_REUSE_APPROVAL in contract.restrictions,
         )
         issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
-        result.update(scope_payload_for_request(request, contract))
+        result.update(scope_payload_for_request(request, contract, guard_home=store.guard_home))
         result["requested_scope"] = requested_scope
         result["applied_scope"] = scope
         if selection.warning is not None:
@@ -717,7 +716,7 @@ def apply_approval_resolution(
         retry_cannot_reuse_approval=RETRY_CANNOT_REUSE_APPROVAL in contract.restrictions,
     )
     issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
-    updated.update(scope_payload_for_request(request, contract))
+    updated.update(scope_payload_for_request(request, contract, guard_home=store.guard_home))
     apply_scope_surfaces(updated)
     updated["requested_scope"] = requested_scope
     updated["applied_scope"] = scope
@@ -735,8 +734,8 @@ def _temporary_mcp_grant_result(selection: TemporaryMcpGrantSelection) -> dict[s
         "target": selection.target,
         "duration": selection.duration,
         "expires_at": selection.expires_at,
-        "server_name": selection.eligibility.server_name,
-        "category": selection.eligibility.category,
+        "server_name": selection.server_name,
+        "category": selection.category,
     }
 
 
