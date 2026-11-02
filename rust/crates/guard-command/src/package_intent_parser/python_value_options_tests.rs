@@ -165,3 +165,36 @@ fn a_path_that_names_no_distribution_keeps_its_last_component() {
         );
     }
 }
+
+/// The parsed distribution name is not a registry identity. A local archive
+/// carries its own path as the target's source, so a policy entry for the
+/// published distribution cannot admit a file that merely spells its name,
+/// while a plain requirement keeps the registry source it names.
+#[test]
+fn a_local_distribution_file_carries_its_path_as_its_source() {
+    let source_of = |command: &str| {
+        parse_package_intent(command, None, None, None, None)
+            .expect("the install must produce a package intent")
+            .targets
+            .into_iter()
+            .map(|target| target.source_url)
+            .collect::<Vec<_>>()
+    };
+    for (command, source) in [
+        (
+            "uv pip install /tmp/dl/hol_guard-3.59.0a33-py3-none-macosx_11_0_arm64.whl",
+            "/tmp/dl/hol_guard-3.59.0a33-py3-none-macosx_11_0_arm64.whl",
+        ),
+        (
+            "pip install dist/hol_guard-3.59.0-py3-none-any.whl",
+            "dist/hol_guard-3.59.0-py3-none-any.whl",
+        ),
+        (
+            "uv pip install ../wheels/left_pad-1.2.3.tar.gz",
+            "../wheels/left_pad-1.2.3.tar.gz",
+        ),
+    ] {
+        assert_eq!(source_of(command), [Some(source.to_owned())], "{command}");
+    }
+    assert_eq!(source_of("pip install left-pad==1.2.3"), [None]);
+}

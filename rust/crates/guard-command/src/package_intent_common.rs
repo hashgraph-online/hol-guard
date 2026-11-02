@@ -1385,7 +1385,17 @@ pub fn python_target(
         );
     }
     if let Some((distribution, version)) = python_distribution_file(spec) {
-        return base(Some(distribution), Some(version), None, extras);
+        // The file names the distribution it holds, but its contents are
+        // whatever is on disk. Carrying the path as the target's source keeps
+        // the parsed identity out of registry matching: a policy entry for the
+        // published `distribution==version` must not admit an archive that
+        // merely spells that name.
+        return base(
+            Some(distribution),
+            Some(version),
+            Some(spec.to_owned()),
+            extras,
+        );
     }
     let (normalized_name, requested_specifier) = split_python_specifier(spec);
     let (mut package_name, detected_extras) = split_python_extras(&normalized_name);
