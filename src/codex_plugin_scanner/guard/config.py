@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, fields, replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import TypeGuard, cast, get_args
 
@@ -22,8 +22,8 @@ from .harness_posture import (
     HARNESS_POSTURES_KEY,
     effective_harness_postures,
     harness_posture_status,
-    harness_watch_auto_revert_due,
     managed_locks_harness_postures,
+    watch_auto_revert_due,
 )
 from .mdm.contracts import ManagedPolicy, ManagedPolicyState
 from .mdm.policy import fail_closed_managed_policy, load_managed_policy
@@ -44,27 +44,13 @@ from .protection_posture import (
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
 
 
-def watch_should_auto_revert(config: GuardConfig, *, now: datetime | None = None) -> bool:
-    if config.protection_posture != "watch" or config.watch_auto_revert_hours <= 0:
-        return False
-    if config.watch_entered_at is None:
-        return False
-    try:
-        entered = datetime.fromisoformat(config.watch_entered_at.replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    if entered.tzinfo is None:
-        entered = entered.replace(tzinfo=timezone.utc)
-    current = now or datetime.now(timezone.utc)
-    return current - entered >= timedelta(hours=config.watch_auto_revert_hours)
-
-
 def maybe_auto_revert_watch(guard_home: Path, *, now: datetime | None = None) -> GuardConfig:
     config = load_guard_config(guard_home)
     revert: dict[str, object] = {}
-    if watch_should_auto_revert(config, now=now):
+    posture_due, due_harnesses = watch_auto_revert_due(config, now=now)
+    if posture_due:
         revert["protection_posture"] = "protected"
-    if due_harnesses := harness_watch_auto_revert_due(config, now=now):
+    if due_harnesses:
         # A harness reverts to inheriting the baseline posture.
         revert[HARNESS_POSTURES_KEY] = dict.fromkeys(due_harnesses)
     if not revert:
