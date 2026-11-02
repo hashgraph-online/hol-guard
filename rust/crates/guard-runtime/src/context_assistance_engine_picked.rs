@@ -82,27 +82,33 @@ impl Engine {
 
     /// The person took the folder back; it is not restored again.
     pub(super) fn forget_pick(&mut self, id: &str) -> Result<(), RuntimeError> {
-        let Some(scope) = self.scopes.get(id).filter(|scope| scope.app == PICKER) else {
+        let Some(workspace) = self.hand_picked(id) else {
             return Ok(());
         };
-        let workspace = scope.root.path().to_path_buf();
         self.drop_saved(|picks| picks.remove(&workspace).is_some())
     }
 
     /// A withdrawal that failed part way still takes the file out of the
     /// record, so the next worker never grants a file the person withdrew.
-    pub(super) fn forget_source(
-        &mut self,
-        workspace: &Path,
-        source: &str,
-    ) -> Result<(), RuntimeError> {
+    pub(super) fn forget_source(&mut self, id: &str, source: &str) -> Result<(), RuntimeError> {
+        let Some(workspace) = self.hand_picked(id) else {
+            return Ok(());
+        };
         self.drop_saved(|picks| {
-            picks.get_mut(workspace).is_some_and(|folder| {
+            picks.get_mut(&workspace).is_some_and(|folder| {
                 let before = folder.sources.len();
                 folder.sources.retain(|kept| kept != source);
                 folder.sources.len() != before
             })
         })
+    }
+
+    /// The folder of a scope the person picked in the dashboard. An agent's
+    /// scope on the same folder never changes that pick.
+    fn hand_picked(&self, id: &str) -> Option<PathBuf> {
+        (self.scopes.get(id))
+            .filter(|scope| scope.app == PICKER && !self.auto.contains(id))
+            .map(|scope| scope.root.path().to_path_buf())
     }
 
     /// Clear deletes the record itself, through the shared data removal.

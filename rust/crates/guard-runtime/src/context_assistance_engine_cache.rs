@@ -26,12 +26,7 @@ impl Engine {
         let mut scope = self.scopes.remove(id).ok_or(RuntimeError::ScopeDenied)?;
         let withdrawn_file = withdrawn
             .and_then(|source| scope.sources.get(source))
-            .map(|source| {
-                (
-                    scope.root.path().to_path_buf(),
-                    source.relative_path.clone(),
-                )
-            });
+            .map(|source| source.relative_path.clone());
         let mut changed = false;
         let result = (|| {
             policy_current(&self.home, &mut scope, runtime)?;
@@ -88,7 +83,7 @@ impl Engine {
         // A withdrawn file leaves the record before anything else is saved,
         // also when the withdrawal failed part way.
         let forgotten = match withdrawn_file.filter(|_| changed) {
-            Some((root, file)) => self.forget_source(&root, &file),
+            Some(file) => self.forget_source(id, &file),
             None => Ok(()),
         };
         if result.is_ok() {
