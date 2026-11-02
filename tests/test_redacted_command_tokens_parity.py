@@ -1,20 +1,17 @@
-"""The command tokens Guard persists must be redacted the same way both sides.
+"""The vectors that pin how Guard redacts a package command it stores.
 
-``redacted_command_tokens`` is what turns a package manager invocation into the
-command text Guard stores on a receipt and prints in a review. Each token goes
-through ``redact_package_request_token`` first, then a key-fragment check that
-masks ``API_KEY=...`` and ``api-key: ...`` shaped tokens, then ``redact_text``
-for whatever is left. ``guard_command::redacted_command_tokens`` is the
-resident's copy of that same chain, and each side redacts on the route it owns,
-so a fragment dropped or an order swapped in one copy would persist a secret the
-other copy masks without either side failing.
+Guard stores the command text of a package manager invocation on a receipt and
+prints it in a review. The resident redacts each token: package-source
+credentials first, then a key-fragment check that masks ``API_KEY=...`` and
+``api-key: ...`` shaped tokens, then the text rules for whatever is left.
+``guard_command::redacted_command_tokens`` and the runtime's
+``package_command_redaction`` kind both replay
+``tests/fixtures/redacted-command-tokens.v1.json``.
 
-Both sides read ``tests/fixtures/redacted-command-tokens.v1.json``. The two
-sub-routines are already pinned on their own; these vectors cover the chain: the
-five key fragments, the ``=``-before-``:`` order, and the tokens where package
-redaction runs first and the text rules then act on what it left. Each case
-assembles its tokens from fragments so no complete secret-shaped literal sits in
-the tree, the same discipline the Rust oracle vectors follow.
+These checks keep the fixture itself honest: its shape, a recorded case for
+every key fragment, and no redacted token that still carries a fragment it was
+meant to mask. Each case assembles its tokens from fragments so no complete
+secret-shaped literal sits in the tree.
 """
 
 from __future__ import annotations
@@ -22,18 +19,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-from codex_plugin_scanner.guard.local_supply_chain import redacted_command_tokens
-
 _VECTORS = json.loads(
     (Path(__file__).parent / "fixtures" / "redacted-command-tokens.v1.json").read_text(encoding="utf-8")
 )
 _KEY_FRAGMENTS = ("token", "secret", "api_key", "api-key", "password")
-
-
-def _command(case: dict[str, object]) -> list[str]:
-    return ["".join(parts) for parts in case["command"]]
 
 
 def test_the_fixture_is_the_shape_both_sides_read() -> None:
@@ -50,11 +39,6 @@ def test_every_key_fragment_has_a_recorded_case() -> None:
     }
     for fragment in _KEY_FRAGMENTS:
         assert any(fragment in key for key in masked_keys), fragment
-
-
-@pytest.mark.parametrize("case", _VECTORS["cases"], ids=lambda case: case["name"])
-def test_a_recorded_command_redacts_to_its_recorded_tokens(case: dict[str, object]) -> None:
-    assert list(redacted_command_tokens(_command(case))) == case["redacted"]
 
 
 def test_no_redacted_token_keeps_the_fragment_it_masked() -> None:
