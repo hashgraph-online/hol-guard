@@ -719,7 +719,7 @@ fn a_temporary_or_enclosing_repository_is_no_sibling_root() {
 /// A stage whose words carry an operator inside quotes keeps its review.
 ///
 /// The classifier reads the stage the way a shell does, where `'|'` is an
-/// ordinary character. The sink rejoins the stage from its lexed words, where
+/// ordinary character. The sink rejoins a `tr` stage from its lexed words, where
 /// that character is an operator again, and refuses it. Admitting the shape
 /// here promised a containment the sink would not build, so the command
 /// failed instead of running in the sibling root.
@@ -727,20 +727,35 @@ fn a_temporary_or_enclosing_repository_is_no_sibling_root() {
 fn a_quoted_operator_in_a_rejoined_stage_keeps_its_review() {
     let (home, main, _tree) = fixture();
     let projects = main.parent().unwrap();
-    for command in [
-        format!(
-            "cd {}/other && npm run build | tr '|' x",
-            projects.display()
-        ),
-        format!(
-            "cd {}/other && npm run build | cut -d'|' -f2",
-            projects.display()
-        ),
-    ] {
-        assert!(
-            !contained(&reason("omp", &home, &main, &command)),
-            "{command}"
-        );
-    }
+    let command = format!(
+        "cd {}/other && npm run build | tr '|' x",
+        projects.display()
+    );
+    assert!(
+        !contained(&reason("omp", &home, &main, &command)),
+        "{command}"
+    );
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}
+
+/// The same quoted operator is safe once the stage is peeled instead of rejoined.
+///
+/// A `cut` stage is one the peel runs itself: the sink hands the runtime the
+/// stage's lexed words and the runtime execs `cut` with them, so `-d|` arrives
+/// as one argument and no shell ever reads that character again. `tr` has no
+/// peel of its own and still reaches the sink as rejoined text, which is why
+/// the two spellings part company here.
+#[test]
+fn a_quoted_delimiter_in_a_peeled_stage_stays_contained() {
+    let (home, main, _tree) = fixture();
+    let projects = main.parent().unwrap();
+    let command = format!(
+        "cd {}/other && npm run build | cut -d'|' -f2",
+        projects.display()
+    );
+    assert!(
+        contained(&reason("omp", &home, &main, &command)),
+        "{command}"
+    );
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
