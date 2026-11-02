@@ -158,18 +158,21 @@ def test_installed_node_launchers_sit_where_guard_resolves_them(tmp_path: Path) 
     route measure a different one.
     """
     fixture = build_fixture(tmp_path)
-    modules = fixture.worktree / "node_modules"
-    for package, binary, launcher in (
-        ("vitest", "vitest", "vitest.mjs"),
-        ("typescript", "tsc", "bin/tsc"),
-        ("prettier", "prettier", "bin/prettier.cjs"),
-    ):
-        entry = modules / package / launcher
-        assert entry.is_file() and not entry.is_symlink(), entry
-        manifest = json.loads((modules / package / "package.json").read_text())
-        assert manifest["bin"][binary] == f"./{launcher}", package
-        shim = modules / ".bin" / binary
-        assert shim.is_symlink() and shim.resolve() == entry.resolve(), shim
+    try:
+        modules = fixture.worktree / "node_modules"
+        for package, binary, launcher in (
+            ("vitest", "vitest", "vitest.mjs"),
+            ("typescript", "tsc", "bin/tsc"),
+            ("prettier", "prettier", "bin/prettier.cjs"),
+        ):
+            entry = modules / package / launcher
+            assert entry.is_file() and not entry.is_symlink(), entry
+            manifest = json.loads((modules / package / "package.json").read_text())
+            assert manifest["bin"][binary] == f"./{launcher}", package
+            shim = modules / ".bin" / binary
+            assert shim.is_symlink() and shim.resolve() == entry.resolve(), shim
+    finally:
+        fixture.cleanup()
 
 
 def test_credential_like_paths_are_never_materialised() -> None:
