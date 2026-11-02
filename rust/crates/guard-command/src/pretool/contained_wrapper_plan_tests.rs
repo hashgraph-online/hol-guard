@@ -227,3 +227,89 @@ fn other_workspace_root_spellings_are_left_whole_by_the_sink() {
         );
     }
 }
+
+/// A repository root beside the session's workspace, under `/tmp` rather than
+/// `$TMPDIR`: macOS puts the latter below `/private/var`, which the path
+/// proofs judge as its own location rather than a home.
+#[cfg(unix)]
+fn sibling_root(name: &str) -> std::path::PathBuf {
+    let root =
+        std::path::Path::new("/tmp").join(format!("guard-plan-{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join(".git")).expect("sibling .git");
+    std::fs::write(root.join(".git/config"), "[core]\n\tbare = false\n").expect("config");
+    std::fs::write(root.join("package.json"), "{}").expect("manifest");
+    root.canonicalize().expect("sibling root")
+}
+
+/// `cd <sibling root> && <command> 2>/dev/null | head -N` is rejoined and run
+/// whole in that root.
+///
+/// The peel truncates the command at the pipe and then meets the redirect's
+/// own operator among the core's words, which it will not run, so the rejoin
+/// is the only reading that runs this text at all. Reading the pipeline alone
+/// left the quiet redirect out of that judgement and refused the command.
+#[cfg(unix)]
+#[test]
+fn a_quiet_redirect_before_a_readable_filter_is_rejoined_in_the_sibling_root() {
+    let root = sibling_root("quiet-filter");
+    let session = workspace("plan-quiet-filter", true);
+    let workspace_path = session.to_str().expect("workspace path");
+    let command = format!("cd {} && pytest -q 2>/dev/null | head -40", root.display());
+
+    let plan = wrapper_plan(
+        &command,
+        workspace_path,
+        Some(workspace_path),
+        Some(HOME),
+        false,
+    )
+    .plan
+    .expect("rejoined in the sibling root");
+    assert_eq!(plan.core, "pytest -q 2>/dev/null | head -n 40");
+    assert_eq!(
+        std::fs::canonicalize(&plan.directory).expect("directory"),
+        root
+    );
+    assert_eq!(plan.output, None);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A `2` the shell passes to the program is never rewritten into a redirect.
+///
+/// `cmd 2 >/dev/null` and `cmd '2'>/dev/null` send *standard output* to
+/// `/dev/null` and give the program a `2` of its own. Reading the digit as
+/// part of the redirect dropped that argument and silenced stderr instead, so
+/// the root would have run different work from the text the user issued.
+#[cfg(unix)]
+#[test]
+fn a_detached_or_quoted_two_is_an_argument_rather_than_a_stderr_redirect() {
+    let root = sibling_root("detached-two");
+    let session = workspace("plan-detached-two", true);
+    let workspace_path = session.to_str().expect("workspace path");
+    for command in [
+        format!(
+            "cd {} && pytest -q 2 >/dev/null | cut -c1-120",
+            root.display()
+        ),
+        format!(
+            "cd {} && pytest -q '2'>/dev/null | cut -c1-120",
+            root.display()
+        ),
+    ] {
+        let planned = wrapper_plan(
+            &command,
+            workspace_path,
+            Some(workspace_path),
+            Some(HOME),
+            false,
+        );
+        assert_eq!(planned.plan, None, "{command}");
+        assert_eq!(
+            planned.refusal,
+            Some(CONTAINED_WRAPPER_PLAN_UNSUPPORTED),
+            "{command}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}

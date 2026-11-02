@@ -37,11 +37,11 @@ fn sibling_list(
     let target = super::super::segment_proof::verified_cwd_list_context(model, context, true)?;
     let workspace = std::fs::canonicalize(context.cwd?).ok()?;
     let target = PathBuf::from(target);
-    // The sink joins only an `&&` list after a sibling root; any pipe but a
-    // command's own output bound would leave the `cd` to run under the
-    // session workspace's profile.
+    // The sink rejoins an `&&` list after a sibling root and runs it there.
+    // A shape it would not rejoin must not be admitted here, or the `cd`
+    // would run under the session workspace's profile instead.
     if target.starts_with(&workspace)
-        || !joined_filters(model)
+        || !joined_filters(model, context)
         || super::super::contained_wrapper::sibling_project_root(&target, context.home_dir?)
             .as_deref()
             != Some(target.as_path())
@@ -53,22 +53,40 @@ fn sibling_list(
     Some((target, rest))
 }
 
-/// Whether every pipe in the list is one `| head -N` or `| tail -N` on the
-/// command before it, optionally after `2>&1`: the only filter the sink keeps
-/// when it joins two or more commands, leaving it in the text the root runs.
-/// One command after the `cd` takes no pipe here; `sibling_cd_root` reads
-/// that shape, as the sink peels its filter itself.
-fn joined_filters(model: &CanonicalCommandV1) -> bool {
+/// Whether the sink rejoins this list whole rather than peeling a filter out
+/// of it.
+///
+/// Two or more commands after the `cd` keep the narrower grammar: each may
+/// bound its own output with one `| head -N` or `| tail -N`, optionally after
+/// `2>&1`, which is all the sink leaves in the text the root runs. A filter
+/// there bounds only the command it follows while the rest of the list still
+/// runs, so a stage that is not a bound is not the same work.
+///
+/// One command after the `cd` may instead pipe through any stages of plain
+/// words: the root's shell applies each to the command before it, exactly as
+/// the issued text did, so an ordinary `| cut` or `| sort` is the same work as
+/// `| head`. That shape is admitted only where the sink's own peel refuses the
+/// pipeline, because `sibling_cd_root` reads the shapes the peel does and
+/// keeps their narrower sink.
+fn joined_filters(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
     let commands = model
         .segments
         .iter()
         .filter(|segment| segment.pipeline_index == 0)
         .count();
     if commands < 3 {
+        if !model
+            .segments
+            .iter()
+            .any(|segment| segment.pipeline_index > 0)
+        {
+            return true;
+        }
         return model
             .segments
             .iter()
-            .all(|segment| segment.pipeline_index == 0);
+            .all(|segment| segment.pipeline_index == 0 || plain_stage(model, segment))
+            && super::super::contained_wrapper::contained_core(model, context).is_none();
     }
     model
         .segments
@@ -92,6 +110,24 @@ fn joined_filters(model: &CanonicalCommandV1) -> bool {
                     )
             }
             _ => false,
+        })
+}
+
+/// One pipeline stage the sink rejoins as the words the text spelled: a plain
+/// program, with no wrapper, environment prefix or `PATH` override, and no
+/// character the root's shell would read as anything but a word.
+fn plain_stage(model: &CanonicalCommandV1, segment: &CommandSegmentV1) -> bool {
+    segment.executable.as_deref().is_some_and(|program| {
+        super::super::contained_wrapper::output_filters::rejoined_stage(program, &segment.arguments)
+            && super::super::contained_wrapper::output_filters::rejoined_words(
+                program,
+                &segment.arguments,
+            )
+    }) && segment.environment_names.is_empty()
+        && segment.wrapper_chain.is_empty()
+        && !segment.path_overridden
+        && super::super::contained_wrapper::segment_source(model, segment).is_some_and(|source| {
+            super::super::contained_wrapper::output_filters::plain_source(&source)
         })
 }
 
@@ -453,47 +489,5 @@ fn names_readable(segment: &CommandSegmentV1, directory: &Path, trees: &[PathBuf
 mod cargo_tests;
 
 #[cfg(test)]
-mod heap_size_tests {
-    #[test]
-    fn only_a_bounded_numeric_heap_size_is_peeled() {
-        for word in ["--max-old-space-size=16", "--max-old-space-size=4096"] {
-            assert!(super::node_heap_size(word), "{word}");
-        }
-        for word in [
-            "--max-old-space-size=",
-            "--max-old-space-size=8",
-            "--max-old-space-size=999999",
-            "--max-old-space-size=4096k",
-            "--max-old-space-size=+4096",
-            "--require=./hook.js",
-            "-r",
-        ] {
-            assert!(!super::node_heap_size(word), "{word}");
-        }
-    }
-}
-
-#[cfg(test)]
-mod operator_tests {
-    #[test]
-    fn only_operators_outside_quotes_keep_the_review() {
-        for text in [
-            "sed -i '' 's|1.0.0|1.1.0|' /tmp/wt/catalog.json",
-            "perl -pi -e \"s/a|b/c/\" /tmp/wt/notes.md",
-            "sed -i 's/a\\|b/c/' notes.md",
-            "printf 'a;b&c<d>e'",
-        ] {
-            assert!(!super::unquoted_operator(text), "{text}");
-        }
-        for text in [
-            "sed -i '' 's/a/b/' notes.md > out",
-            "perl -pi -e 's/a/b/' notes.md 2>/dev/null",
-            "echo \"`id`\"",
-            "echo 'open",
-            "printf 'a\\' > out '",
-            "cat notes.md | sh",
-        ] {
-            assert!(super::unquoted_operator(text), "{text}");
-        }
-    }
-}
+#[path = "workspace_contained_sibling_unit_tests.rs"]
+mod unit_tests;
