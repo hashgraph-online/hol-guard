@@ -362,3 +362,95 @@ fn the_posture_op_needs_its_facts() {
         serde_json::from_value(json!({"schema": SCHEMA, "op": "harness_postures"})).unwrap();
     assert_eq!(resolve(&request).unwrap_err(), INVALID);
 }
+
+const ENTERED: &str = "2026-01-01T00:00:00+00:00";
+const ENTERED_MICROS: i64 = 1_767_225_600_000_000;
+const HOUR: i64 = 3_600_000_000;
+
+fn deadlines(hours: i64, fields: Value) -> Value {
+    let mut input = json!({
+        "auto_revert_hours": hours,
+        "protection_posture": "watch",
+        "watch_entered_at": ENTERED,
+        "harness_postures": {"codex": "watch", "cursor": "watch", "claude-code": "protected"},
+        "harness_watch_entered_at": {
+            "codex": ENTERED,
+            "cursor": "2026-01-01T07:00:00-05:00",
+            "claude-code": ENTERED,
+        },
+    });
+    for (key, value) in fields.as_object().unwrap() {
+        input[key] = value.clone();
+    }
+    let reply =
+        run(&json!({"schema": SCHEMA, "op": "watch_auto_revert_deadlines", "watch": input}));
+    assert_eq!(reply["ok"], true, "{reply}");
+    reply["result"].clone()
+}
+
+#[test]
+fn each_watch_posture_reverts_its_window_after_its_stamp() {
+    assert_eq!(
+        deadlines(24, json!({})),
+        json!({
+            "protection_posture": ENTERED_MICROS + 24 * HOUR,
+            "harnesses": {
+                "codex": ENTERED_MICROS + 24 * HOUR,
+                "cursor": ENTERED_MICROS + 36 * HOUR,
+            },
+        })
+    );
+}
+
+#[test]
+fn a_naive_stamp_is_read_as_utc() {
+    let answer = deadlines(
+        2,
+        json!({
+            "watch_entered_at": "2026-01-01T00:00:00",
+            "harness_watch_entered_at": {"codex": "2026-01-01"},
+        }),
+    );
+    assert_eq!(
+        answer,
+        json!({
+            "protection_posture": ENTERED_MICROS + 2 * HOUR,
+            "harnesses": {"codex": ENTERED_MICROS + 2 * HOUR},
+        })
+    );
+}
+
+#[test]
+fn watch_never_reverts_without_a_window_a_stamp_or_a_watch_posture() {
+    let none = json!({"protection_posture": null, "harnesses": {}});
+    assert_eq!(deadlines(0, json!({})), none);
+    assert_eq!(deadlines(-1, json!({})), none);
+    assert_eq!(deadlines(i64::MAX, json!({})), none);
+    let unwatched = deadlines(
+        24,
+        json!({
+            "protection_posture": "protected",
+            "harness_postures": {"codex": "watch", "cursor": "watch"},
+            "harness_watch_entered_at": {"codex": "not-a-timestamp"},
+        }),
+    );
+    assert_eq!(unwatched, none);
+    let unstamped = deadlines(24, json!({"watch_entered_at": null}));
+    assert_eq!(unstamped["protection_posture"], Value::Null);
+    let unparseable = deadlines(24, json!({"watch_entered_at": "2026-01-01T10"}));
+    assert_eq!(unparseable["protection_posture"], Value::Null);
+}
+
+#[test]
+fn the_watch_op_needs_its_input() {
+    let request: Request =
+        serde_json::from_value(json!({"schema": SCHEMA, "op": "watch_auto_revert_deadlines"}))
+            .unwrap();
+    assert_eq!(resolve(&request).unwrap_err(), INVALID);
+    let reply = run(&json!({
+        "schema": SCHEMA,
+        "op": "watch_auto_revert_deadlines",
+        "watch": {"auto_revert_hours": 24, "protection_posture": "watch"},
+    }));
+    assert_eq!(reply["ok"], false);
+}

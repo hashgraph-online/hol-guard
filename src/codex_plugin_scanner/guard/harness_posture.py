@@ -203,30 +203,41 @@ def effective_harness_postures(config: GuardConfig) -> dict[str, str]:
     return {harness: effective[harness] for harness in known_harness_ids()}
 
 
-def harness_watch_auto_revert_due(
-    config: GuardConfig,
-    *,
-    now: datetime | None = None,
-) -> tuple[str, ...]:
-    """Harnesses whose own Watch override outlived ``watch_auto_revert_hours``."""
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
-    if config.watch_auto_revert_hours <= 0:
-        return ()
+
+def watch_auto_revert_due(config: GuardConfig, *, now: datetime | None = None) -> tuple[bool, tuple[str, ...]]:
+    """Whether the machine-wide Watch posture and which harness overrides are due to revert.
+
+    The runtime dates each revert, so only the clock is read here and the native answer stays
+    memoized for an unchanged configuration. A naive ``now`` is read as UTC, like a naive stamp.
+    """
+
+    result = resolve_native_guard_config(
+        "watch_auto_revert_deadlines",
+        {
+            "watch": {
+                "auto_revert_hours": config.watch_auto_revert_hours,
+                "protection_posture": config.protection_posture,
+                "watch_entered_at": config.watch_entered_at,
+                "harness_postures": dict(config.harness_postures or {}),
+                "harness_watch_entered_at": dict(config.harness_watch_entered_at or {}),
+            }
+        },
+    )
+    posture_at = result.get("protection_posture")
+    harness_at = result.get("harnesses")
+    deadlines = cast("dict[object, object]", harness_at) if isinstance(harness_at, dict) else None
+    if (
+        deadlines is None
+        or not all(isinstance(key, str) and type(at) is int for key, at in deadlines.items())
+        or not (posture_at is None or type(posture_at) is int)
+    ):
+        raise ConfigFileTrustError("native_guard_config_invalid")
     current = now or datetime.now(timezone.utc)
-    due: list[str] = []
-    for harness, posture in (config.harness_postures or {}).items():
-        stamp = (config.harness_watch_entered_at or {}).get(harness)
-        if posture != "watch" or stamp is None:
-            continue
-        try:
-            entered = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        if entered.tzinfo is None:
-            entered = entered.replace(tzinfo=timezone.utc)
-        if current - entered >= timedelta(hours=config.watch_auto_revert_hours):
-            due.append(harness)
-    return tuple(sorted(due))
+    clock = (current.replace(tzinfo=current.tzinfo or timezone.utc) - _EPOCH) // timedelta(microseconds=1)
+    due = tuple(sorted(key for key, at in cast("dict[str, int]", deadlines).items() if clock >= at))
+    return posture_at is not None and clock >= posture_at, due
 
 
 def harness_posture_summary(config: GuardConfig) -> dict[str, object]:
@@ -288,9 +299,9 @@ __all__ = [
     "harness_posture_override",
     "harness_posture_status",
     "harness_posture_summary",
-    "harness_watch_auto_revert_due",
     "known_harness_ids",
     "managed_locks_harness_postures",
     "protection_settings_payload",
     "runtime_harness_key",
+    "watch_auto_revert_due",
 ]
