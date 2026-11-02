@@ -1,5 +1,5 @@
-import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as shellHref, c as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b4 as HiMiniPauseCircle, b5 as listContextAgentSessions, h as harnessDisplayName, b6 as HiMiniLink, b7 as revokeContextAgentSession, b8 as authorizeContextAgentSession, b9 as ContextAssistanceApiError, ba as ask, bb as parseContextScope, bc as validContextBrokerRevision, bd as isGuardDemoMode, be as fetchWithGuardAuth, bf as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bg as HiMiniCodeBracketSquare, bh as HiMiniFolder, u as HiMiniDocumentText, bi as HiMiniComputerDesktop, bj as HiMiniHome, k as HiMiniCheck, bk as HiMiniFolderPlus, bl as commitDashboardLocation, bm as listContextWorkspaces, bn as HiMiniFolderOpen, bo as grantContextWorkspace, bp as manageContextWorkspace, bq as compileWorkspaceContext, br as isCigarProducerVersion, bs as isCigarCoreLabel, w as HiMiniArrowRight, m as HiMiniHandRaised, bt as HiMiniBookOpen, M as HiMiniClipboardDocument, bu as HiMiniArrowLeft, bv as HiMiniAcademicCap, bw as subscribeDashboardLocation, a5 as HiMiniSparkles, bx as HiMiniArrowUpCircle, by as parseContextAssistanceStatus, bz as isCigarBuildIdentity, bA as fetchContextInstallations, bB as HiMiniCloudArrowDown, f as fetchContextAssistance, a as controlContextAssistance, bC as HiMiniArrowDownTray, bD as downloadBlob, bE as savedEvidenceCopy, bF as guardAwareHref, bG as fetchContextData, bH as forgetContextHistory, bI as forgetSavedEvidence, bJ as resolveProtectionLevelCopy, aA as fetchSettings, bK as fetchRuntimeSnapshot, bL as clearHarnessWatchOverrides, bM as withHarnessPosturePatch, P as updateSettings, bN as clearPolicy, bO as clearReviewQueue, bP as revokeApprovalGateCooldown, bQ as disableApprovalGateTotp, bR as importSettings, bS as resetSettings, bT as enrollApprovalGateTotp, bU as verifyApprovalGateTotp, bV as clearEvidence, bW as exportDiagnostics, bX as repairApprovalCenter, bY as exportSettings, bZ as setupDesktopNotifications, a7 as EmptyState, b_ as settingsWatchBannerModel, b$ as WorkspacePageHeader, Z as WatchProtectionBanner, c0 as navigateFromAnchor, g as HiMiniChevronDown, c1 as humanizeList, c2 as isProtectionPosture, c3 as deriveProtectionPosture, c4 as normalizeHarnessPostures, c5 as approvalGateCooldownLabel } from "../guard-dashboard.js";
-import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-Fu6v3Dtb.js";
+import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as shellHref, c as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b4 as HiMiniPauseCircle, b5 as listContextAgentSessions, h as harnessDisplayName, b6 as HiMiniLink, b7 as revokeContextAgentSession, b8 as authorizeContextAgentSession, b9 as ContextAssistanceApiError, ba as ask, bb as parseContextScope, bc as validContextBrokerRevision, bd as isGuardDemoMode, be as fetchWithGuardAuth, bf as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bg as HiMiniCodeBracketSquare, bh as HiMiniFolder, u as HiMiniDocumentText, bi as HiMiniComputerDesktop, bj as HiMiniHome, k as HiMiniCheck, bk as HiMiniFolderPlus, bl as HiMiniClock, bm as commitDashboardLocation, bn as listContextWorkspaces, bo as HiMiniFolderOpen, bp as grantContextWorkspace, bq as manageContextWorkspace, br as compileWorkspaceContext, bs as isCigarProducerVersion, bt as isCigarCoreLabel, w as HiMiniArrowRight, m as HiMiniHandRaised, bu as HiMiniBookOpen, M as HiMiniClipboardDocument, bv as HiMiniArrowLeft, bw as HiMiniAcademicCap, bx as subscribeDashboardLocation, a5 as HiMiniSparkles, by as HiMiniArrowUpCircle, bz as parseContextAssistanceStatus, bA as isCigarBuildIdentity, bB as fetchContextInstallations, bC as HiMiniCloudArrowDown, f as fetchContextAssistance, a as controlContextAssistance, bD as HiMiniArrowDownTray, bE as downloadBlob, bF as savedEvidenceCopy, bG as guardAwareHref, bH as fetchContextData, bI as forgetContextHistory, bJ as forgetSavedEvidence, bK as resolveProtectionLevelCopy, aA as fetchSettings, bL as fetchRuntimeSnapshot, bM as clearHarnessWatchOverrides, bN as withHarnessPosturePatch, P as updateSettings, bO as clearPolicy, bP as clearReviewQueue, bQ as revokeApprovalGateCooldown, bR as disableApprovalGateTotp, bS as importSettings, bT as resetSettings, bU as enrollApprovalGateTotp, bV as verifyApprovalGateTotp, bW as clearEvidence, bX as exportDiagnostics, bY as repairApprovalCenter, bZ as exportSettings, b_ as setupDesktopNotifications, a7 as EmptyState, b$ as settingsWatchBannerModel, c0 as WorkspacePageHeader, Z as WatchProtectionBanner, c1 as navigateFromAnchor, g as HiMiniChevronDown, c2 as humanizeList, c3 as isProtectionPosture, c4 as deriveProtectionPosture, c5 as normalizeHarnessPostures, c6 as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-Nqs1ShEa.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
 import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-R8WOnNuC.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-q5ZpYwb7.js";
@@ -3916,13 +3916,59 @@ function FolderPickerDialog({ open, initialPath, onCancel, onChoose }) {
     }
   );
 }
+const RECENT_PROJECTS_KEY = "guard.cigar.recent-projects.v1";
+const MAX_RECENT_PROJECTS = 4;
+const MAX_FILES = 32;
+function browserStore() {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+function valid(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const row2 = value;
+  return typeof row2.workspace === "string" && row2.workspace.length > 0 && typeof row2.app === "string" && row2.app.length > 0 && Array.isArray(row2.files) && row2.files.length <= MAX_FILES && row2.files.every((file) => typeof file === "string" && file.length > 0);
+}
+function readRecentProjects(store = browserStore()) {
+  try {
+    const parsed = JSON.parse(store?.getItem(RECENT_PROJECTS_KEY) ?? "[]");
+    if (!Array.isArray(parsed)) return [];
+    const seen = /* @__PURE__ */ new Set();
+    return parsed.filter(valid).filter((row2) => !seen.has(row2.workspace) && Boolean(seen.add(row2.workspace))).slice(0, MAX_RECENT_PROJECTS).map((row2) => ({ workspace: row2.workspace, files: [...row2.files], app: row2.app }));
+  } catch {
+    return [];
+  }
+}
+function write(rows, store) {
+  try {
+    store?.setItem(RECENT_PROJECTS_KEY, JSON.stringify(rows));
+  } catch {
+  }
+  return rows;
+}
+function rememberProject(project, store = browserStore()) {
+  const row2 = { workspace: project.workspace, files: project.files.slice(0, MAX_FILES), app: project.app };
+  return write([row2, ...readRecentProjects(store).filter((item) => item.workspace !== row2.workspace)].slice(0, MAX_RECENT_PROJECTS), store);
+}
+function forgetProject(workspace, store = browserStore()) {
+  return write(readRecentProjects(store).filter((item) => item.workspace !== workspace), store);
+}
+function keptFiles(preset, listing) {
+  const present = /* @__PURE__ */ new Set([
+    ...listing.files.filter((file) => file.available).map((file) => file.relative),
+    ...listing.suggested.map((item) => item.relative)
+  ]);
+  return preset.filter((relative) => relative.includes("/") || present.has(relative)).slice(0, MAX_FILES);
+}
 const MAX_PROJECT_FILES = 32;
 const REASONS = { too_large: "Too big", not_text: "Not text", empty: "Empty" };
 const chip = "inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-sm transition-colors duration-150 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-blue/40 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 motion-reduce:transition-none";
 const chipOn = " border-brand-blue/30 bg-brand-blue/[0.07] text-brand-dark";
 const chipOff = " border-brand-dark/12 bg-white text-brand-dark/70 hover:border-brand-dark/25";
 const row = "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm";
-function ProjectFilesPicker({ workspace, selected, onChange, disabled = false }) {
+function ProjectFilesPicker({ workspace, selected, onChange, disabled = false, preset = null }) {
   const id2 = reactExports.useId();
   const [root, setRoot] = reactExports.useState(null);
   const [browsing, setBrowsing] = reactExports.useState(false);
@@ -3932,6 +3978,8 @@ function ProjectFilesPicker({ workspace, selected, onChange, disabled = false })
   const request = reactExports.useRef(null);
   const latest = reactExports.useRef(onChange);
   latest.current = onChange;
+  const remembered = reactExports.useRef(preset);
+  remembered.current = preset;
   function load(path, onLoaded) {
     request.current?.abort();
     const controller = new AbortController();
@@ -3953,7 +4001,8 @@ function ProjectFilesPicker({ workspace, selected, onChange, disabled = false })
     load("", (value) => {
       setRoot(value);
       setListing(value);
-      latest.current(value.suggested.map((item) => item.relative).slice(0, MAX_PROJECT_FILES));
+      const chosen = remembered.current ? keptFiles(remembered.current, value) : value.suggested.map((item) => item.relative);
+      latest.current(chosen.slice(0, MAX_PROJECT_FILES));
     });
     return () => request.current?.abort();
   }, [workspace]);
@@ -4107,7 +4156,7 @@ function proofDetail(input, executionAllowed, sharingAllowed) {
   const execution = executionAllowed && (input.app === "pi" || input.app === "omp") ? " This does not approve any command." : "";
   return `CIGAR can read ${files} in ${folderName(input.workspace)}${who}, plus Guard's own safety facts for that folder. Nothing else in it is opened.${execution}${notes}`;
 }
-function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharingAllowed, executionAllowed, gate, error, first, onGrant }) {
+function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharingAllowed, executionAllowed, gate, error, first, active = [], onGrant }) {
   const id2 = reactExports.useId();
   const [workspace, setWorkspace] = reactExports.useState(null);
   const [files, setFiles] = reactExports.useState([]);
@@ -4116,6 +4165,9 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharing
   const [notesPropose, setNotesPropose] = reactExports.useState(false);
   const [picking, setPicking] = reactExports.useState(false);
   const [proofOpen, setProofOpen] = reactExports.useState(false);
+  const [recent, setRecent] = reactExports.useState(() => readRecentProjects());
+  const [preset, setPreset] = reactExports.useState(null);
+  const shortcuts = recent.filter((project) => !active.includes(project.workspace));
   const apps = projectAppOptions(agentsAllowed, executionAllowed);
   const chosenApp = apps.some((option) => option.value === app) ? app : "dashboard";
   const input = workspace ? {
@@ -4127,14 +4179,22 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharing
   async function grant(credentials) {
     if (!input) return;
     if (await onGrant(input, credentials)) {
+      setRecent(rememberProject(input));
       setProofOpen(false);
       setWorkspace(null);
       setFiles([]);
+      setPreset(null);
     }
+  }
+  function reuse(project) {
+    setPreset(project.files);
+    setFiles(project.files);
+    setApp(project.app);
+    setWorkspace(project.workspace);
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-5 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-6", "aria-labelledby": `${id2}-add`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: `${id2}-add`, className: versionHeading, children: first ? "Add your first project" : "Add a project" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: `${id2}-add`, className: versionHeading, children: first && !shortcuts.length ? "Add your first project" : "Add a project" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Choose a folder and the notes CIGAR may read. Secret files, like passwords and keys, are always skipped." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { disabled: busy || dirty, className: "space-y-6", children: [
@@ -4161,9 +4221,10 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharing
           ]
         }
       ),
+      !workspace && shortcuts.length ? /* @__PURE__ */ jsxRuntimeExports.jsx(RecentProjects, { projects: shortcuts, onReuse: reuse, onForget: (path) => setRecent(forgetProject(path)) }) : null,
       workspace ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-surface-in space-y-2.5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: question, children: "What should CIGAR read?" }),
-        documentsAllowed ? /* @__PURE__ */ jsxRuntimeExports.jsx(ProjectFilesPicker, { workspace, selected: files, onChange: setFiles, disabled: busy || dirty }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-surface-1/70 px-4 py-3", children: [
+        documentsAllowed ? /* @__PURE__ */ jsxRuntimeExports.jsx(ProjectFilesPicker, { workspace, selected: files, onChange: setFiles, disabled: busy || dirty, preset }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-surface-1/70 px-4 py-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 flex-1 text-sm leading-6 text-brand-dark/70", children: "Reading project files is off, so CIGAR uses only Guard's own safety facts here. Turn on “Allow selected workspace documents” in Settings to pick notes." }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, onClick: openSettings, children: "Open Settings" })
         ] })
@@ -4242,6 +4303,7 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharing
         onChoose: (path) => {
           setPicking(false);
           if (path !== workspace) {
+            setPreset(null);
             setFiles([]);
             setWorkspace(path);
           }
@@ -4265,6 +4327,29 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharing
         onConfirm: (credentials) => void grant(credentials)
       }
     )
+  ] });
+}
+function RecentProjects({ projects, onReuse, onForget }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-surface-in space-y-2.5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: question, children: "Recent projects" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "grid gap-2 sm:grid-cols-2", children: projects.map((project) => {
+      const name = folderName(project.workspace);
+      const who = project.app === "dashboard" ? "this page" : harnessDisplayName(project.app);
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-center rounded-xl border border-brand-dark/10 bg-white transition-colors hover:border-brand-dark/25 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-blue/40", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-l-xl p-2.5 text-left focus-visible:outline-none", title: project.workspace, onClick: () => onReuse(project), children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-dark/[0.05] text-brand-dark/55", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClock, { className: "size-4" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-sm font-semibold text-brand-dark", children: name }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "block truncate text-xs text-brand-dark/60", children: [
+              plural(project.files.length, "file"),
+              " · for ",
+              who
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", "aria-label": `Remove ${name} from this list`, className: "mr-1.5 flex size-9 shrink-0 items-center justify-center rounded-lg text-brand-dark/40 hover:bg-brand-dark/[0.05] hover:text-brand-dark focus-visible:outline-none", onClick: () => onForget(project.workspace), children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4" }) })
+      ] }, project.workspace);
+    }) })
   ] });
 }
 const fieldLabel = "text-sm font-medium text-brand-dark";
@@ -4486,6 +4571,7 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
         gate,
         error,
         first: scopes.length === 0,
+        active: scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace),
         onGrant: grant
       }
     ) : null,
@@ -7357,24 +7443,24 @@ function Row({ title, body, action }) {
 }
 const CONFIRM = {
   history: {
-    title: "Clear prepared context history?",
-    label: "Clear history",
-    description: "Deletes retained historical briefs. Current contexts and source permissions stay available. Guard approvals and evidence are unchanged."
+    title: "Clear past answers?",
+    label: "Clear past answers",
+    description: "Deletes the answers CIGAR kept. Your projects keep their access. Guard's approvals and records are not touched."
   },
   saved: {
-    title: "Remove saved evidence?",
-    label: "Remove saved evidence",
-    description: "Ends current context access and removes saved source evidence and reviewed notes, including inactive stores. Check and start the runtime and grant access again to continue. Guard approvals and evidence are unchanged."
+    title: "Remove saved notes?",
+    label: "Remove saved notes",
+    description: "Deletes everything CIGAR saved on this computer, including old projects, and ends current access. Turn CIGAR on and add your projects again to keep going. Guard's approvals and records are not touched."
   },
   data: {
-    title: "Clear all context data?",
-    label: "Clear context data",
-    description: "Closes context graphs and deletes retained briefs, saved evidence, native context origins, source grants and app connections. Grant access again to continue. Guard approvals and evidence are unchanged."
+    title: "Delete everything CIGAR knows?",
+    label: "Delete everything",
+    description: "Deletes past answers, saved notes, project access and app connections. You can set it up again anytime. Guard's approvals and records are not touched."
   },
   recheck: {
-    title: "Recheck context runtime?",
-    label: "Recheck runtime",
-    description: "Ends current context access and checks the selected runtime again. An enabled preference may start a fresh runtime. Grant source and app access again afterward."
+    title: "Start CIGAR fresh?",
+    label: "Start fresh",
+    description: "Ends current access and checks CIGAR again. If it is turned on, it starts fresh. Add your projects again afterward."
   }
 };
 function contextDiagnostics(status, data) {
@@ -7456,7 +7542,7 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
       if (revision.current === current && !controller.signal.aborted) {
         setStatus(null);
         setData(null);
-        setMessage(cause instanceof Error ? cause.message : "Context data is unavailable. Refresh its status.");
+        setMessage(cause instanceof Error ? cause.message : "CIGAR did not answer. Try Refresh.");
       }
     } finally {
       if (changes) onBusyChange(false);
@@ -7467,7 +7553,7 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
     const controller = new AbortController();
     request.current = controller;
     void refresh(controller.signal).catch(() => {
-      if (!controller.signal.aborted) setMessage("Context status is unavailable. Refresh or turn off the feature to check it.");
+      if (!controller.signal.aborted) setMessage("CIGAR did not answer. Try Refresh, or turn it off.");
     });
     return () => {
       revision.current += 1;
@@ -7483,22 +7569,22 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
         const value = await forgetContextHistory(signal);
         if (!signal.aborted) {
           setData(value);
-          setMessage("Prepared context history cleared. Current context and source access remain available.");
+          setMessage("Past answers cleared. Your projects keep their access.");
         }
       } else if (action === "saved") {
         await forgetSavedEvidence(signal);
         await refresh(signal);
-        if (!signal.aborted) setMessage("Saved evidence removed and current context access ended. Check and start the runtime, then grant sources again to continue.");
+        if (!signal.aborted) setMessage("Saved notes removed. Turn CIGAR on and add your projects again to keep going.");
       } else if (action === "data") {
         await manageContextWorkspace("clear", void 0, void 0, signal);
         await refresh(signal);
-        if (!signal.aborted) setMessage("Context data cleared. Grant workspace and app access again before preparing more context.");
+        if (!signal.aborted) setMessage("Everything CIGAR knew is deleted. Add a project to start again.");
       } else {
         const value = await controlContextAssistance("recheck", signal);
         if (!signal.aborted) {
           setStatus(value);
           setData(null);
-          setMessage("Runtime check scheduled. Refresh status to see the result; earlier context access has ended.");
+          setMessage("Checking CIGAR again. Refresh in a moment to see how it went.");
         }
       }
     }, true);
@@ -7510,7 +7596,7 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
         setStatus(value);
         setData(null);
         onStopped(value.preferences);
-        setMessage("Context assistance is off. Guard approvals and evidence remain available.");
+        setMessage("CIGAR is off. Guard keeps protecting you as usual.");
       }
     }, true);
   }
@@ -7524,25 +7610,25 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-[1_1_20rem] items-start gap-3.5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-10 shrink-0 items-center justify-center rounded-full " + (ready ? "bg-brand-green-bg text-brand-green-text" : "bg-brand-dark/[0.06] text-brand-dark/55"), children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "size-5" }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-1.5", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xs font-semibold uppercase tracking-[0.08em] text-brand-dark/55", children: "Context data and repair" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xs font-semibold uppercase tracking-[0.08em] text-brand-dark/55", children: "Privacy and repair" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-lg font-semibold tracking-[-0.01em] text-brand-dark", children: copy.label }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-[62ch] text-sm leading-6 text-brand-dark/75", children: copy.detail }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: caption + " max-w-[70ch]", children: [
-              "Prepared contexts and history use local memory. ",
-              status?.capabilities?.private_persistence ? "Optional saved evidence uses private local files, with no Guard encryption. It remains after the runtime stops until expiry cleanup or removal. Guard removes expired evidence while running or before reuse after launch. Permissions must be granted again after restart." : "This build cannot activate saved evidence. Existing saved evidence can still be inspected and removed below."
+              "What CIGAR prepares stays in this computer's memory. ",
+              status?.capabilities?.private_persistence ? "If you turn on saved notes, they are kept in private files here, not encrypted by Guard, until they expire or you remove them. After Guard restarts, add your projects again." : "This version cannot save notes. Anything saved earlier can still be checked and removed below."
             ] })
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet, type: "button", disabled: busy || disabled, onClick: () => void perform(refresh), children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "size-4" }),
-            "Refresh context data"
+            "Refresh"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet, type: "button", disabled: busy || !status, onClick: () => {
             if (status) downloadBlob(new Blob([JSON.stringify(contextDiagnostics(status, data), null, 2)], { type: "application/json" }), "guard-context-diagnostics.json");
           }, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { "aria-hidden": "true", className: "size-4" }),
-            "Export context diagnostics"
+            "Download diagnostics"
           ] })
         ] })
       ] }) }),
@@ -7550,28 +7636,28 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": "cigar-data-held", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "cigar-data-held", className: versionHeading, children: "What CIGAR is holding" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Counts only. Guard never shows source text, queries or paths here." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Just counts. Your files, questions and folder names are never shown here." })
         ] }),
         data ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-2 gap-2 sm:grid-cols-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Active workspace/app grants", value: data.active_scopes }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Selected files", value: data.selected_files }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Current contexts", value: data.current_contexts }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Prepared history entries", value: data.history_entries }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Encoded history payload", value: data.history_encoded_bytes.toLocaleString() + " bytes" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "App connections", value: data.agent_sessions })
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70", children: "Live context counts are available while a verified runtime is ready." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption, children: "History is limited to eight entries and 512 KiB of encoded payload per workspace/app grant, with the configured retention period. These counts do not measure process memory or execution safety." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Projects with access", value: data.active_scopes }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Files it can read", value: data.selected_files }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Answers ready", value: data.current_contexts }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Past answers kept", value: data.history_entries }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Space used by past answers", value: data.history_encoded_bytes.toLocaleString() + " bytes" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Connected apps", value: data.agent_sessions })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70", children: "Counts show up while CIGAR is on." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption, children: "CIGAR keeps at most 8 past answers (512 KiB) for each project, and clears them after the time you chose in Settings." })
       ] }),
       data?.saved_evidence ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-5", role: "region", "aria-label": "Saved context evidence", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-semibold text-brand-dark", children: "Saved evidence" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-semibold text-brand-dark", children: "Saved notes" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-brand-dark/75", children: savedEvidenceCopy(data.saved_evidence) }),
         data.saved_evidence.slots !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-2 gap-2 sm:grid-cols-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Saved workspace/app stores", value: data.saved_evidence.slots }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Saved file bytes", value: data.saved_evidence.bytes?.toLocaleString() ?? "Unavailable" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Note writes to reconcile", value: data.saved_evidence.unresolved_writes ?? "Unavailable" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Expired stores awaiting cleanup", value: data.saved_evidence.expired_slots ?? "Unavailable" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Projects with saved notes", value: data.saved_evidence.slots }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Space used (bytes)", value: data.saved_evidence.bytes?.toLocaleString() ?? "Unavailable" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Notes still saving", value: data.saved_evidence.unresolved_writes ?? "Unavailable" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Stat, { term: "Expired, waiting to clear", value: data.saved_evidence.expired_slots ?? "Unavailable" })
         ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption, children: "Saved evidence is limited to eight stores and 528 MiB of logical file bytes, including database journals. This does not measure process memory." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption, children: "Saved notes use at most 8 projects and about 550 MB of disk." })
       ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": "cigar-data-fix", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "cigar-data-fix", className: versionHeading, children: "Fix a problem" }),
@@ -7579,17 +7665,17 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             Row,
             {
-              title: "Check the runtime again",
-              body: !ready ? "If a runtime is unavailable, turn off assistance to release its context. Rechecking requires an enrolled Python 3.14 runtime." : "Ends current context access, then checks the selected runtime. Grant access again afterward.",
-              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionButton, type: "button", disabled: busy || disabled || !status?.verification_permitted || !status?.preferences.runtime_id || Boolean(status.job), onClick: () => setConfirm("recheck"), children: "Recheck context runtime" })
+              title: "Start CIGAR fresh",
+              body: !ready ? "If CIGAR seems stuck, turn it off to free everything it holds. Starting fresh needs Python 3.14, which Settings can set up." : "Ends current access and starts CIGAR again. Add your projects again afterward.",
+              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionButton, type: "button", disabled: busy || disabled || !status?.verification_permitted || !status?.preferences.runtime_id || Boolean(status.job), onClick: () => setConfirm("recheck"), children: "Start fresh" })
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             Row,
             {
               title: "Change setup",
-              body: "Runtime, sources, limits and storage live in Settings.",
-              action: /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: versionButton, href: guardAwareHref("/cigar?section=runtime"), children: "Manage context setup" })
+              body: "Choose what CIGAR may read and how long it keeps things.",
+              action: /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: versionButton, href: guardAwareHref("/cigar?section=runtime"), children: "Open Settings" })
             }
           )
         ] })
@@ -7597,39 +7683,39 @@ function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBusyChang
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": "cigar-data-danger", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "cigar-data-danger", className: versionHeading, children: "Delete or turn off" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Deleting asks you first. Guard approvals and evidence are never touched." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Each one asks you first. Guard's approvals and records are never touched." })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "divide-y divide-red-200/70 overflow-hidden rounded-2xl border border-red-200 bg-red-50/30", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             Row,
             {
-              title: "Prepared context history",
-              body: "Deletes retained historical briefs. Current contexts and source permissions stay.",
-              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled || !ready || !data?.history_entries, onClick: () => setConfirm("history"), children: "Clear context history" })
+              title: "Past answers",
+              body: "Deletes the answers CIGAR kept. Projects keep their access.",
+              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled || !ready || !data?.history_entries, onClick: () => setConfirm("history"), children: "Clear past answers" })
             }
           ),
           removable ? /* @__PURE__ */ jsxRuntimeExports.jsx(
             Row,
             {
-              title: "Saved evidence",
-              body: "Removes saved source evidence and reviewed notes, including inactive stores.",
-              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled, onClick: () => setConfirm("saved"), children: "Remove saved evidence" })
+              title: "Saved notes",
+              body: "Deletes what CIGAR saved on this computer, including old projects.",
+              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled, onClick: () => setConfirm("saved"), children: "Remove saved notes" })
             }
           ) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             Row,
             {
               title: "Everything CIGAR knows",
-              body: "Deletes briefs, saved evidence, source grants and app connections. You can grant access again later.",
-              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled || !ready && !data?.saved_evidence, onClick: () => setConfirm("data"), children: "Clear all context data" })
+              body: "Deletes past answers, saved notes, project access and app connections. You can set it up again anytime.",
+              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled || !ready && !data?.saved_evidence, onClick: () => setConfirm("data"), children: "Delete everything" })
             }
           ),
           offAvailable ? /* @__PURE__ */ jsxRuntimeExports.jsx(
             Row,
             {
               title: "Turn CIGAR off",
-              body: "Stops the runtime now and ends all context access.",
-              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled, onClick: stop, children: "Turn off context assistance" })
+              body: "Stops CIGAR now. Projects lose access until you turn it back on.",
+              action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: danger, type: "button", disabled: busy || disabled, onClick: stop, children: "Turn CIGAR off" })
             }
           ) : null
         ] })

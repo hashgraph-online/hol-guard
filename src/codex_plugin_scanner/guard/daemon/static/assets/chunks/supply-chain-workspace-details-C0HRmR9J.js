@@ -1,9 +1,9 @@
-import { j as jsxRuntimeExports, r as reactExports, dl as HiMiniArrowTopRightOnSquare, ad as HiMiniExclamationTriangle, en as HiMiniBugAnt, af as Badge, T as Tag, b as formatRelativeTime, g as HiMiniChevronDown, eI as fetchReceipts, A as ActionButton, v as HiMiniCheckCircle, aK as HiMiniXCircle, h as harnessDisplayName, e as HiMiniChevronUp, i as HiMiniArrowPath } from "../guard-dashboard.js";
-import { m as missingBundleMessage, f as formatBundleExpiry, i as isBundleExpired, b as bundleRefreshKey, r as resolveIntelFreshness } from "./feed-health-workspace-Cq3UnHIw.js";
-import { u as useSupplyChainBundle } from "./supply-chain-hub-workspace-DAqQbAjC.js";
+import { j as jsxRuntimeExports, r as reactExports, dm as HiMiniArrowTopRightOnSquare, ad as HiMiniExclamationTriangle, en as HiMiniBugAnt, af as Badge, T as Tag, b as formatRelativeTime, g as HiMiniChevronDown, eI as fetchReceipts, A as ActionButton, v as HiMiniCheckCircle, aK as HiMiniXCircle, h as harnessDisplayName, e as HiMiniChevronUp, i as HiMiniArrowPath } from "../guard-dashboard.js";
+import { m as missingBundleMessage, f as formatBundleExpiry, i as isBundleExpired, b as bundleRefreshKey, r as resolveIntelFreshness } from "./feed-health-workspace-Bw4U4-NG.js";
+import { u as useSupplyChainBundle } from "./supply-chain-hub-workspace-DRGlUc_Y.js";
 import { s as supplyChainEvidenceHref, d as deriveSupplyChainEvidenceRail } from "./supply-chain-protection-stats-DHj0Mska.js";
-import { r as resolveSupplyChainIssues } from "./supply-chain-issues-Ixx-xKP4.js";
-import "./home-protection-module-HCF_WQND.js";
+import { r as resolveSupplyChainIssues } from "./supply-chain-issues-DCc13S4H.js";
+import "./home-protection-module-DBrgJvXy.js";
 function SupplyChainDetailSection({
   id,
   title,

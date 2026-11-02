@@ -79,7 +79,11 @@ async function fixture(page: Page, registered = true, savedEnabled = false, docu
       settings = { ...settings, settings: { ...settings.settings, context_assistance: status.preferences } };
       result = status;
     } else if (path === "/v1/context-assistance/folders") result = folderListing(body);
-    else if (path === "/v1/context-assistance/workspace" && body.input.action === "list") {
+    else if (path === "/v1/context-assistance/workspace-grant" && body.input.action === "grant") {
+      const sources = (body.input.sources as string[]).map((file, index) => ({ source_id: "source:" + index, path: file, sha256: "b".repeat(64), documents: 1 }));
+      result = { schema: "guard-cigar-workspace-result.v1", data_role: true, result: { scope_id: "scope:my-app", workspace: body.input.workspace,
+        app: body.input.app, policy_revision: "a".repeat(64), retained_contexts: 0, revoked: false, sources } };
+    } else if (path === "/v1/context-assistance/workspace" && body.input.action === "list") {
       result = { schema: "guard-cigar-workspace-result.v1", data_role: true, result: { scopes: [] } };
     }
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(result) });
@@ -260,6 +264,18 @@ for (const width of [1440, 390]) {
     const grant = calls.find((call) => call.path === "/v1/context-assistance/workspace-grant")!;
     expect(grant.body.input).toMatchObject({ action: "grant", app: "dashboard", workspace: "/Users/you/Projects/my-app", sources: ["README.md", "docs/design.md"] });
     expect(calls.filter((call) => call.path === "/v1/context-assistance/folders").every((call) => call.method === "POST")).toBe(true);
+
+    await expect(page.getByRole("button", { name: "Revoke workspace access", exact: true })).toBeVisible();
+    await expect(page.getByText("Recent projects", { exact: true })).toHaveCount(0);
+    // Guard restarts and forgets the grant; this browser offers it back in one click.
+    await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=access");
+    await page.getByRole("button", { name: /my-app.*2 files · for this page/ }).click();
+    await expect(page.getByText("/Users/you/Projects/my-app", { exact: true })).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: /README\.md/ })).toBeChecked();
+    await expect(page.getByRole("checkbox", { name: /docs\/design\.md/ })).toBeChecked();
+    await expect(page.getByRole("checkbox", { name: /AGENTS\.md/ })).not.toBeChecked();
+    await expect(page.getByText("2 picked · up to 32", { exact: true })).toBeVisible();
+    expect(calls.filter((call) => call.path === "/v1/context-assistance/workspace-grant")).toHaveLength(1);
     expect(errors).toEqual([]);
   });
 }

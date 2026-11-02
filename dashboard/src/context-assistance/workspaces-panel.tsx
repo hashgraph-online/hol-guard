@@ -162,7 +162,8 @@ export function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllo
       </>}
     </section>
     {ready ? <AddProjectPanel busy={busy} dirty={dirty} documentsAllowed={documentsAllowed} agentsAllowed={agentsAllowed} sharingAllowed={sharingAllowed}
-      executionAllowed={executionAllowed} gate={gate} error={error} first={scopes.length === 0} onGrant={grant} /> : null}
+      executionAllowed={executionAllowed} gate={gate} error={error} first={scopes.length === 0}
+      active={scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace)} onGrant={grant} /> : null}
     <ContextAgentsPanel ready={ready} enabled={agentsAllowed} dirty={dirty} generation={generation} scopes={scopes} gate={gate} />
   </div>;
 }
