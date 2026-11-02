@@ -314,7 +314,10 @@ def host_tool_path(home: Path, search_path: str) -> str:
     contained. Stand-ins in a version-manager directory the sandbox accepts go first, as a
     developer's own Node does, and the sandbox finds the same file by the same name. Yarn sits beside
     them because a project that runs ``yarn build`` is as ordinary as one that runs ``npm run build``,
-    and a runner without Yarn would measure a missing binary rather than Guard. SQLite sits there
+    and a runner without Yarn would measure a missing binary rather than Guard. pnpm is there for
+    the same reason, and for one of its own: a pnpm case that resolved no pnpm would be contained
+    for the absence of the program instead of for the run the case is about, which reads as a pass
+    and proves nothing. SQLite sits there
     for the same reason from the other direction: every macOS developer has a ``sqlite3``, but where
     a host keeps it differs, and a hosted runner's copy resolves outside the roots the sandbox
     executes from, so the gate would be measuring that host's package layout rather than the command
@@ -340,7 +343,7 @@ def host_tool_path(home: Path, search_path: str) -> str:
     cloud_sdk = home / "google-cloud-sdk" / "bin"
     tools = (
         (bun, ("bun",)),
-        (node, ("node", "npm", "npx", "yarn")),
+        (node, ("node", "npm", "npx", "yarn", "pnpm")),
         (sqlite, ("sqlite3",)),
         (cargo, ("uv",)),
         # Composer and Bundler install themselves wherever the host's PHP or

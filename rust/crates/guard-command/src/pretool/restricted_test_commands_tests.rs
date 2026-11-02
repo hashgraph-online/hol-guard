@@ -438,3 +438,41 @@ fn a_runner_left_watching_keeps_its_review() {
 
 #[path = "restricted_test_commands_manager_tests.rs"]
 mod manager;
+
+#[test]
+fn pnpm_runs_a_word_none_of_its_subcommands_claims_as_the_local_bin_run() {
+    // pnpm hands a word it does not recognise to `pnpm exec`, so each of
+    // these starts the workspace's own installed runner exactly as the
+    // explicit spelling does. The words behind the runner rule out a manifest
+    // script, which carries a tail of its own only after a `--` separator.
+    for command in [
+        "pnpm vitest run",
+        "pnpm jest --ci",
+        "pnpm mocha --reporter spec",
+    ] {
+        let explicit = command.replacen("pnpm ", "pnpm exec ", 1);
+        assert_eq!(reason(command), reason(&explicit), "{command}");
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+    // An option in front of the word fans the run out past one package, and a
+    // word pnpm runs itself or names a manifest script stays with the script
+    // reading, which resolves the body behind the name.
+    for command in [
+        "pnpm -r test",
+        "pnpm --filter dashboard test",
+        "pnpm --recursive run test",
+        "pnpm run test",
+        "pnpm test",
+        "pnpm install",
+    ] {
+        assert_ne!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}

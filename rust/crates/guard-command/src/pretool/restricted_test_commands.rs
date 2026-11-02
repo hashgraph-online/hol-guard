@@ -427,6 +427,13 @@ const MANAGER_SUBCOMMANDS: &[&str] = &[
 /// manager prints names no package, so it is peeled before the subcommand is
 /// read and `npm --silent exec tsc` or `pnpm --silent exec tsc` stays the
 /// local-bin run it is.
+///
+/// pnpm also runs a word that is none of its own subcommands as `pnpm exec`,
+/// so `pnpm vitest run` starts the same installed binary the explicit
+/// spelling does. A bare word, alone or carrying only a `--` tail, is the
+/// manifest script [`manager_script_task`] reads instead, and the words after
+/// a word pnpm would run as a script need the separator, so arguments that
+/// cannot be a script run are the implicit `exec` spelling.
 pub(crate) fn manager_local_bin_arguments<'a>(
     manager: &str,
     arguments: &'a [String],
@@ -435,6 +442,13 @@ pub(crate) fn manager_local_bin_arguments<'a>(
     let mut rest = match (manager, arguments) {
         ("npm", [subcommand, rest @ ..]) if subcommand == "exec" || subcommand == "x" => rest,
         ("pnpm" | "yarn", [subcommand, rest @ ..]) if subcommand == "exec" => rest,
+        ("pnpm", [tool, ..])
+            if !tool.starts_with('-')
+                && !MANAGER_SUBCOMMANDS.contains(&tool.as_str())
+                && manager_script_task(manager, arguments).is_none() =>
+        {
+            arguments
+        }
         _ => return None,
     };
     // `npx` is npm's own name for `npm exec`, and the two take the same
