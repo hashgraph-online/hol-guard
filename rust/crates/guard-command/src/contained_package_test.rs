@@ -8,7 +8,9 @@
 #[path = "contained_package_test_tests.rs"]
 mod tests;
 
-use crate::contained_argv::{jest_contained_call, mocha_contained_call, program_name};
+use crate::contained_argv::{
+    jest_contained_call, mocha_contained_call, program_name, vitest_runs_once,
+};
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
 use crate::sfrs_shlex::{split_with, SCRIPT_LEXER};
 use serde_json::{Map, Value};
@@ -143,13 +145,21 @@ pub(crate) fn script_tokens(
     {
         return Err(invalid("Test shell effects need separate evaluation."));
     }
+    // Each runner is read by its own grammar over the words the manifest
+    // declares and the words the caller appended, so a script body is admitted
+    // on the same terms as the direct call that spells it. Vitest included:
+    // `--run` turns the watch off exactly as the `run` verb does, and a
+    // manifest that spells it that way names the same finishing run.
     let passthrough = trailing.get(1..).unwrap_or_default();
     let runner = tokens[0].as_str();
     let rest = &tokens[1..];
     let flag = rest.first();
     let node = matches!(program_name(runner), "node" | "nodejs")
         && flag.is_some_and(|flag| flag == "--test");
-    let vitest = program_name(runner) == "vitest" && flag.is_some_and(|flag| flag == "run");
+    let vitest = program_name(runner) == "vitest" && {
+        let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+        vitest_runs_once(&call)
+    };
     let jest = program_name(runner) == "jest" && {
         let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
         jest_contained_call(&call)

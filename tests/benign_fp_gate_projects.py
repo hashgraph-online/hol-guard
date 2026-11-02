@@ -71,8 +71,14 @@ _TOOL_SCRIPTS = {"lint": "eslint .", "typecheck": "tsc --noEmit", "format": "pre
 # The suite split into named parts, which is how a project with more than one
 # kind of test spells them. The route reads the body rather than the name, so
 # the fixture holds a runner body and a read-only tool body under the same
-# `test:` family.
-_TEST_FAMILY_SCRIPTS = {"test:unit": "vitest run tests/", "test:types": "tsc --noEmit"}
+# `test:` family. The third spells the same finishing Vitest run with the
+# option rather than the verb, which is how a project that passes reporting
+# options writes it.
+_TEST_FAMILY_SCRIPTS = {
+    "test:unit": "vitest run tests/",
+    "test:types": "tsc --noEmit",
+    "test:ci": "vitest --run --reporter dot",
+}
 _INSTALLED_PACKAGES = _NODE_PACKAGES | {name: version for name, (version, _) in _NODE_TOOLS.items()}
 
 

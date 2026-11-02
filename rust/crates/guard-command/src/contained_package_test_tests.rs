@@ -64,6 +64,38 @@ fn supported_runners_resolve_with_their_passed_arguments() {
 }
 
 #[test]
+fn a_vitest_script_resolves_on_every_spelling_that_finishes_its_run() {
+    // Vitest finishes on the `run` verb and on the options that turn its
+    // watch off, so a manifest that spells the run either way names the same
+    // finishing call and resolves the same way.
+    for body in ["vitest --run", "vitest --no-watch", "vitest --watch=false"] {
+        let manifest = scripts(json!({ "test": body }));
+        let expected: Vec<String> = body.split(' ').map(|word| word.to_owned()).collect();
+        assert_eq!(
+            resolve(&words(&["npm", "test"]), Some(&manifest)).unwrap(),
+            expected
+        );
+    }
+    let reporting = scripts(json!({"test": "vitest --run --reporter dot"}));
+    assert_eq!(
+        resolve(&words(&["yarn", "test"]), Some(&reporting)).unwrap(),
+        words(&["vitest", "--run", "--reporter", "dot"])
+    );
+    // The caller's own words are read with the manifest's, so the watch an
+    // argument turns back on keeps the alias at review, and a word naming a
+    // command this reading does not model does the same.
+    let watching = scripts(json!({"test": "vitest --run --watch"}));
+    assert!(resolve(&words(&["npm", "test"]), Some(&watching)).is_err());
+    let unmodeled = scripts(json!({"test": "vitest --run typecheck"}));
+    assert!(resolve(&words(&["npm", "test"]), Some(&unmodeled)).is_err());
+    let bare = scripts(json!({"test": "vitest"}));
+    assert_eq!(
+        resolve(&words(&["npm", "test", "--", "--run"]), Some(&bare)).unwrap(),
+        words(&["vitest", "--run"])
+    );
+}
+
+#[test]
 fn a_jest_script_resolves_only_while_it_finishes_in_its_workspace() {
     let manifest = scripts(json!({"test": "jest --ci"}));
     assert_eq!(
