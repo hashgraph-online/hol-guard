@@ -426,12 +426,27 @@ const MANAGER_SUBCOMMANDS: &[&str] = &[
 /// one package and keeps the review. An option that only chooses how much the
 /// manager prints names no package, so it is peeled before the subcommand is
 /// read and `npm --silent exec tsc` or `pnpm --silent exec tsc` stays the
-/// local-bin run it is.
+/// local-bin run it is. npm's own workspace selectors are read the same way:
+/// they choose which of the root manifest's packages the run stands in, and
+/// every one of those is a directory inside the workspace the sandbox already
+/// confines, so `npm --workspace dashboard exec tsc` runs the project's own
+/// binary just as `npm exec tsc` does.
 pub(crate) fn manager_local_bin_arguments<'a>(
     manager: &str,
     arguments: &'a [String],
 ) -> Option<&'a [String]> {
-    let arguments = crate::contained_argv::manager_reporting_options_peeled(manager, arguments);
+    let mut arguments = arguments;
+    loop {
+        let peeled = crate::contained_argv::manager_reporting_options_peeled(manager, arguments);
+        let peeled = match manager {
+            "npm" => npm_workspace_selectors_peeled(peeled),
+            _ => peeled,
+        };
+        if peeled.len() == arguments.len() {
+            break;
+        }
+        arguments = peeled;
+    }
     let mut rest = match (manager, arguments) {
         ("npm", [subcommand, rest @ ..]) if subcommand == "exec" || subcommand == "x" => rest,
         ("pnpm" | "yarn", [subcommand, rest @ ..]) if subcommand == "exec" => rest,
@@ -462,6 +477,53 @@ pub(crate) fn manager_local_bin_arguments<'a>(
     // is not a local-bin run.
     rest.first().filter(|tool| !tool.starts_with('-'))?;
     Some(rest)
+}
+
+/// The arguments left after npm's workspace selectors, which choose which of
+/// the root manifest's own packages a run stands in. A selector only narrows
+/// the run to a directory the manifest already named inside the project, so
+/// for a local-bin run it reaches no further than the plain spelling does.
+/// `--prefix` and `-C` are not selectors: they move the run to a directory
+/// the manifest never named, so they are left where the directory is decided
+/// and keep the review.
+fn npm_workspace_selectors_peeled(mut arguments: &[String]) -> &[String] {
+    while let [option, tail @ ..] = arguments {
+        let (name, written_inline) = match option.split_once('=') {
+            Some((name, value)) => (name, Some(value)),
+            None => (option.as_str(), None),
+        };
+        match name {
+            "--workspaces" | "--ws" | "--no-workspaces" | "--include-workspace-root" => {
+                arguments = tail;
+            }
+            "--workspace" | "-w" => {
+                let (value, rest) = match (written_inline, tail) {
+                    (Some(value), tail) => (value, tail),
+                    (None, [value, rest @ ..]) if !value.starts_with('-') => (value.as_str(), rest),
+                    (None, _) => break,
+                };
+                if !names_a_package_below(value) {
+                    break;
+                }
+                arguments = rest;
+            }
+            _ => break,
+        }
+    }
+    arguments
+}
+
+/// Whether a `--workspace` value names one of the root manifest's own packages
+/// rather than a directory the sandbox cannot follow the run to. npm takes a
+/// package name or a path below the project; an absolute path or one that
+/// climbs out of it is neither, so it keeps the review.
+fn names_a_package_below(value: &str) -> bool {
+    let path = std::path::Path::new(value);
+    !value.is_empty()
+        && !path.is_absolute()
+        && !path
+            .components()
+            .any(|component| component == std::path::Component::ParentDir)
 }
 
 /// The script a manager run names, with the words the run passes on to it.

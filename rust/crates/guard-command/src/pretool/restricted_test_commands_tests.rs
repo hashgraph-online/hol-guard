@@ -438,3 +438,46 @@ fn a_runner_left_watching_keeps_its_review() {
 
 #[path = "restricted_test_commands_manager_tests.rs"]
 mod manager;
+
+#[test]
+fn an_npm_workspace_selector_keeps_the_local_bin_run_it_names() {
+    // `npm --workspace dashboard exec vitest run` stands in a directory the
+    // root manifest already named inside the project and runs the project's
+    // own binary, so it reaches no further than `npm exec vitest run`. Read as
+    // a fan-out, every monorepo's own test run and type check sat behind an
+    // approval card while the plain spelling ran contained and silent.
+    let expected = reason("npm exec vitest run");
+    assert!(expected.is_some(), "the plain spelling is the control");
+    for command in [
+        "npm --workspace dashboard exec vitest run",
+        "npm -w dashboard exec vitest run",
+        "npm --workspace=dashboard exec vitest run",
+        "npm -w packages/web exec vitest run",
+        "npm --workspaces exec vitest run",
+        "npm --include-workspace-root -w dashboard exec vitest run",
+        "npm --silent -w dashboard exec vitest run",
+        "npm -w dashboard --silent exec vitest run",
+        "npm -w dashboard x vitest run",
+    ] {
+        assert_eq!(reason(command), expected, "{command}");
+    }
+}
+
+#[test]
+fn a_workspace_value_that_leaves_the_project_keeps_the_review() {
+    // A selector names one of the manifest's own packages. A path that climbs
+    // out of the project or starts at the root names a directory the sandbox
+    // cannot follow the run to, and `--prefix` and `-C` move the run outright,
+    // so none of them is peeled.
+    for command in [
+        "npm --workspace ../other exec vitest run",
+        "npm -w ../other exec vitest run",
+        "npm --workspace=/srv/other exec vitest run",
+        "npm -w packages/../../other exec vitest run",
+        "npm --workspace exec vitest run",
+        "npm --prefix ../other exec vitest run",
+        "npm -C ../other exec vitest run",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
