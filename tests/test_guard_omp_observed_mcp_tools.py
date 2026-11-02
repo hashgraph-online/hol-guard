@@ -163,7 +163,8 @@ def test_omp_flattened_name_shares_a_connector_with_its_configured_remote_server
             source_scope="global",
             config_path="mcp.json",
             url="https://pilot.example.com/mcp",
-        )
+        ),
+        "https://pilot.example.com/mcp",
     )
     observed = observed_mcp_tool("omp", "mcp__truenas_pilot_status", ["truenas-pilot"])
 

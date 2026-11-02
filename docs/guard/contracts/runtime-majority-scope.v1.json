@@ -291,8 +291,7 @@
           "src/codex_plugin_scanner/guard/daemon/mcp_policy_decisions.py",
           "src/codex_plugin_scanner/guard/daemon/catalog_v2_client.py",
           "src/codex_plugin_scanner/guard/daemon/catalog_read_v2.py",
-          "src/codex_plugin_scanner/guard/adapters/harness_mcp_discovery.py",
-          "src/codex_plugin_scanner/guard/adapters/remote_mcp_origin.py"
+          "src/codex_plugin_scanner/guard/adapters/harness_mcp_discovery.py"
         ]
       },
       {

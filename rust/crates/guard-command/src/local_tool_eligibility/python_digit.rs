@@ -87,7 +87,8 @@ const PYTHON_DIGIT_RANGES: &[(u32, u32)] = &[
     (0x1FBF0, 0x1FBF9),
 ];
 
-fn python_isdigit_char(c: char) -> bool {
+/// `str.isdigit()` for one code point.
+pub(crate) fn python_isdigit_char(c: char) -> bool {
     if c.is_ascii() {
         return c.is_ascii_digit();
     }

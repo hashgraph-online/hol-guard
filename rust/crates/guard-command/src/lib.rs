@@ -221,6 +221,8 @@ pub mod pytest_argv;
 #[cfg(test)]
 mod pytest_argv_tests;
 mod read_only_fanout;
+mod remote_mcp_origin;
+pub use remote_mcp_origin::remote_mcp_origin;
 pub mod reviewed_invocation_bindings;
 pub mod rich_command_model_api;
 use parser_executables::*;
