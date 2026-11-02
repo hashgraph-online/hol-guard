@@ -57,6 +57,11 @@ assert.doesNotMatch(homeCopy(choseNoDocuments).detail, promise, "an earlier choi
 assert.match(homeCopy(choseNoDocuments).detail, noFiles);
 assert.equal(homeCopy(choseNoDocuments).setupHint, true);
 assert.equal(homeCopy(parseContextAssistanceStatus(receipt.restriction_observation)).headline.startsWith("CIGAR is on"), false);
+const restricted = parseContextAssistanceStatus(receipt.restriction_observation);
+assert.ok(restricted.restriction && !restricted.effective_preferences.enabled, "fixture is an organization restriction");
+assert.doesNotMatch(homeCopy(restricted).detail, promise, "a managed install cannot be turned on, so it promises nothing");
+assert.match(homeCopy(restricted).detail, /Your organization manages CIGAR/);
+assert.equal(homeCopy(restricted).setupHint, false);
 assert.equal(homeCopy(null, true).headline, "Checking CIGAR");
 assert.equal(homeCopy(null).headline, "CIGAR status unavailable");
 assert.equal(homeCopy(off, false, true).headline, "Turning on CIGAR");

@@ -65,6 +65,9 @@ export function cigarHomeCopy(status: ContextAssistanceStatus | null, loading: b
   if (cigarWaking(status)) {
     return { headline: "CIGAR is on", detail: "It rests when nothing needs it and wakes up by itself. You do not need to turn it on again.", setupHint: false };
   }
+  if (status.restriction && !status.effective_preferences.enabled) {
+    return { headline: "CIGAR is off", detail: "Your organization manages CIGAR on this computer.", setupHint: false };
+  }
   if (status.requested_enabled) {
     return { headline: "CIGAR is not running", detail: "It is saved as on but has not started. Turn it on to start it.", setupHint: false };
   }

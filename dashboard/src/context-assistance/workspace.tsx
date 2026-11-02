@@ -37,7 +37,11 @@ export function CigarWorkspace(props: CigarWorkspaceProps) {
   const canStop = props.stopAvailable ?? Boolean(status?.requested_enabled || status?.effective_enabled || status?.job);
 
   useEffect(() => {
-    const sync = () => setTab(cigarTabFromSearch(window.location.search));
+    const sync = () => {
+      const next = cigarTabFromSearch(window.location.search);
+      if (next !== "overview") lastAdvanced.current = next;
+      setTab(next);
+    };
     return subscribeDashboardLocation(sync);
   }, []);
 

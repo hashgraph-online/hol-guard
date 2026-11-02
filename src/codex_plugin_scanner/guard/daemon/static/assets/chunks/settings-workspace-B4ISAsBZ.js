@@ -4691,7 +4691,7 @@ const CIGAR_TUTORIALS = [
       {
         title: "Choose a small evidence set",
         description: "Pick the sources that can answer your question before granting workspace access.",
-        instructions: ["Open More settings in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
+        instructions: ["Open More settings in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents in Settings, above More settings. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
         expect: "Your intended source preferences are saved and the runtime is Ready.",
         target: "runtime",
         action: "Choose source preferences",
@@ -4933,6 +4933,9 @@ function cigarHomeCopy(status, loading, running) {
   }
   if (cigarWaking(status)) {
     return { headline: "CIGAR is on", detail: "It rests when nothing needs it and wakes up by itself. You do not need to turn it on again.", setupHint: false };
+  }
+  if (status.restriction && !status.effective_preferences.enabled) {
+    return { headline: "CIGAR is off", detail: "Your organization manages CIGAR on this computer.", setupHint: false };
   }
   if (status.requested_enabled) {
     return { headline: "CIGAR is not running", detail: "It is saved as on but has not started. Turn it on to start it.", setupHint: false };
@@ -5730,7 +5733,11 @@ function CigarWorkspace(props) {
   const status = props.status;
   const canStop = props.stopAvailable ?? Boolean(status?.requested_enabled || status?.effective_enabled || status?.job);
   reactExports.useEffect(() => {
-    const sync = () => setTab(cigarTabFromSearch(window.location.search));
+    const sync = () => {
+      const next = cigarTabFromSearch(window.location.search);
+      if (next !== "overview") lastAdvanced.current = next;
+      setTab(next);
+    };
     return subscribeDashboardLocation(sync);
   }, []);
   function select(next, focusPanel = true) {

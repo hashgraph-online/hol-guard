@@ -36,7 +36,7 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
       },
       {
         title: "Choose a small evidence set", description: "Pick the sources that can answer your question before granting workspace access.",
-        instructions: ["Open More settings in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
+        instructions: ["Open More settings in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents in Settings, above More settings. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
         expect: "Your intended source preferences are saved and the runtime is Ready.", target: "runtime", action: "Choose source preferences",
         tip: "A document preference allows you to choose files later. It does not grant access to the whole workspace.",
       },
