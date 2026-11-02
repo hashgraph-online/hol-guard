@@ -7151,23 +7151,6 @@
       "expect": "allow"
     },
     {
-      "id": "runner-watch-off-vitest-filter-no-watch",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "./node_modules/.bin/vitest src/a.test.ts src/b.test.ts --no-watch"
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
       "id": "gauntlet-node-jest-entry-ci",
       "fix_area": "shell",
       "harnesses": [

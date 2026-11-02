@@ -327,14 +327,17 @@ _VITEST_FILES = {
     "node_modules/vitest/package.json": (
         f'{{"name": "vitest", "version": "{_VITEST_VERSION}", "bin": {{"vitest": "vitest.mjs"}}}}\n'
     ),
-    # A launch that lost the filter would still start this file, so the line the
-    # oracle reads is printed only when the named file actually arrives. That
-    # makes the case fail where the filter is dropped instead of passing on the
-    # launch alone.
+    # A launch that lost the filter would still start this file, and one that
+    # lost the watch-off flag would leave Vitest watching rather than finishing
+    # a pass, so the line the oracle reads is printed only when both the named
+    # file and `--run` arrive. That makes the case fail where either word is
+    # dropped instead of passing on the launch alone.
     "node_modules/vitest/vitest.mjs": (
         "#!/usr/bin/env node\n"
-        f"const filtered = process.argv.slice(2).includes('{VITEST_TEST_FILE}');\n"
-        f"console.log(filtered ? '{VITEST_MARKER}' : 'vitest: the named file was not forwarded');\n"
+        "const argv = process.argv.slice(2);\n"
+        f"const once = argv.includes('{VITEST_TEST_FILE}') && argv.includes('--run');\n"
+        f"console.log(once ? '{VITEST_MARKER}'"
+        " : 'vitest: the named one-pass run was not forwarded');\n"
     ),
 }
 
