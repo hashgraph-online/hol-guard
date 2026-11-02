@@ -2932,7 +2932,7 @@ function ContextSettingsControls(props) {
           SettingsToggleRow,
           {
             label: "Context for AI apps",
-            description: "Allow scoped context tools for apps you authorize. Sharing between agents requires a separate choice.",
+            description: "Add the project files that match each prompt in Claude Code and Codex, and allow context tools for apps you authorize. Sharing between agents is a separate choice.",
             checked: value.features.agent_context,
             disabled: editingDisabled,
             onChange: (agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })
@@ -4922,11 +4922,13 @@ async function follow(deps, stage, input, proof, done) {
 }
 function turnOnPreferences(previous, runtime) {
   const untouched = !previous.sources.workspace_documents && !previous.sources.source_set_id;
+  if (!untouched) return { ...previous, enabled: true, runtime_id: runtime };
   return {
     ...previous,
     enabled: true,
     runtime_id: runtime,
-    ...untouched ? { sources: { ...previous.sources, workspace_documents: true, source_set_id: "selected-workspaces" } } : {}
+    sources: { ...previous.sources, workspace_documents: true, source_set_id: "selected-workspaces" },
+    features: { ...previous.features, agent_context: true }
   };
 }
 async function runCigarSetup(plan, initial2, deps, proof) {
@@ -5441,7 +5443,7 @@ function CigarGuide({ onSelect }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-explained-heading", children: CIGAR_FULL_NAME }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR" }),
-        " prepares reusable, scoped evidence for Guard and the AI apps you authorize. Think of it as the context layer behind a task: you choose what it can use, ask a focused question, and inspect the sources behind the prepared brief."
+        " reads the project you are working in and, each time you send a prompt in Claude Code or Codex, adds the few files that match your request. A prompt about the header color brings the header and its styles; a prompt that matches nothing in the project adds nothing. Secrets, keys, and ignored or generated folders are never read."
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("tutorials"), children: [
         "Try a guided walkthrough",
@@ -5876,7 +5878,7 @@ function CigarWorkspace(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("br", { className: "hidden sm:block" }),
           " not the whole book."
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Think of CIGAR as a librarian on your computer. You choose the books. When your AI or Guard has a question, CIGAR finds the few pages that answer it and shows where each one came from." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Think of CIGAR as a librarian on your computer. When you ask Claude Code or Codex for a change, CIGAR finds the few files in your project that match and hands them over with your request, so your AI starts in the right place." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupAction, { setup: props.setup, status, disabled: actionDisabled, tone: "hero", onOpen: select }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-hero-actions", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-hero-link", onClick: () => select("guide"), children: [
