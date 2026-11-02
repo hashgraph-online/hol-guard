@@ -963,6 +963,14 @@
    "body": "f9cea4d1e602"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Runtime verification refuses a non-memory store off Unix before starting the runtime, the same refusal fn schedule gives; memory mode remains available. On Windows the SDK store holds every parent folder against renames while open.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_verification.rs",
+   "item": "fn runtime -- cfg! expression",
+   "cfg": "unix",
+   "body": "a20adc987e28"
+  },
+  {
    "verdict": "windows-permissive",
    "note": "Background retention maintenance is skipped off Unix; private saved evidence and generation stores are unavailable here.",
    "file": "rust/crates/guard-runtime/src/context_assistance_service_data.rs",
