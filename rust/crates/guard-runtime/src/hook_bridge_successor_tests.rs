@@ -160,6 +160,39 @@ fn a_successor_past_the_deadline_is_stopped_and_fails() {
 }
 
 #[test]
+fn an_answer_longer_than_the_bound_fails_rather_than_arrive_cut_off() {
+    let bound = MAX_OUTPUT_BYTES.to_string();
+    let arguments = [
+        "-c".to_owned(),
+        r#"head -c "$1" /dev/zero; head -c 1 /dev/zero; exit 0"#.to_owned(),
+        "sh".to_owned(),
+        bound,
+    ];
+    let deadline = Instant::now() + Duration::from_secs(30);
+
+    let answer = hand_off(Path::new("/bin/sh"), &arguments, b"{}", deadline);
+
+    assert_eq!(answer, Some(HandOff::Failed));
+}
+
+#[test]
+fn an_answer_of_exactly_the_bound_still_counts() {
+    let bound = MAX_OUTPUT_BYTES.to_string();
+    let arguments = [
+        "-c".to_owned(),
+        r#"head -c "$1" /dev/zero; exit 0"#.to_owned(),
+        "sh".to_owned(),
+        bound,
+    ];
+    let deadline = Instant::now() + Duration::from_secs(30);
+
+    let answer = hand_off(Path::new("/bin/sh"), &arguments, b"{}", deadline);
+
+    let expected = usize::try_from(MAX_OUTPUT_BYTES).unwrap();
+    assert!(matches!(answer, Some(HandOff::Answered(output, 0)) if output.len() == expected));
+}
+
+#[test]
 fn a_successor_that_cannot_start_leaves_the_hook_here() {
     let missing = state_base();
     let deadline = Instant::now() + Duration::from_secs(30);
