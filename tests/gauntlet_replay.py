@@ -67,7 +67,8 @@ REPLAYED = frozenset({"codex", "zcode", "claude-code", "omp", "pi", "cursor", "m
 FAMILIES = {"shell": SHELL, "read": READ, "glob": GLOB, "grep": GREP, "write": WRITE}
 ENVIRONMENTS = ("clean", "realistic")
 # Profile and reason pairs the shipped OMP extension runs in Guard's sandbox instead of showing the
-# denial, read from its source. Every profile is contained on macOS and the workspace profile on Linux.
+# denial, read from its source. Every profile is contained on macOS, and on Linux every one the
+# resident runtime's own sink runs (see `omp_routes_profile`).
 # Z Code and Claude Code route inside the hook path, and Codex in its hook bridge (see
 # test_guard_gauntlet_replay_gate.py), so their replay result already shows the contained run.
 OMP_CONTAINED = frozenset(
@@ -75,6 +76,26 @@ OMP_CONTAINED = frozenset(
 )
 # An empty set would silently stop modelling OMP routing if the extension's source changes shape.
 assert ("workspace-contained-v1", "native_workspace_containment_required") in OMP_CONTAINED
+# The bound Bash owner the extension takes only on macOS: its route needs the host process
+# that owns the shell, so elsewhere the denial stands as the review it already is.
+OMP_BOUND_BASH = ("native-bash-owner-v1", "native_bash_owner_required")
+assert OMP_BOUND_BASH in OMP_CONTAINED
+
+
+def omp_routes_profile(profile: object, reason: object) -> bool:
+    """Whether the shipped extension runs this profile in Guard's sandbox on this host.
+
+    macOS takes every contained profile through Guard's own sink. On Linux the extension
+    takes the resident runtime's sink instead, which the runtime marks for the workspace
+    sandbox and for the read-only profiles that sink reproduces, so those run contained
+    there as well. Both lanes drive that runtime, so the mark is the ordinary answer; the
+    bound Bash owner stays macOS-only because its route needs the host's own shell.
+    """
+    if (profile, reason) not in OMP_CONTAINED:
+        return False
+    if sys.platform == "darwin":
+        return True
+    return sys.platform == "linux" and (profile, reason) != OMP_BOUND_BASH
 
 
 @dataclass(frozen=True)
@@ -259,8 +280,7 @@ def omp_contained(case: ReplayCase, result: dict[str, object]) -> bool:
         and result.get("decision") == "deny"
         and result.get("policy_action") == "sandbox-required"
         and result.get("observe_mode") is not True
-        and (profile, code) in OMP_CONTAINED
-        and (sys.platform == "darwin" or (sys.platform == "linux" and profile == "workspace-contained-v1"))
+        and omp_routes_profile(profile, code)
     )
 
 

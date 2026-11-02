@@ -100,13 +100,19 @@ fn package_script_receipts_match_the_sinks() {
             assert_ne!(result.decision, "allow", "{harness}: {name}");
             assert_ne!(result.minimum_action, "allow", "{harness}: {name}");
             match expected {
-                Some(reason) if cfg!(target_os = "macos") => assert_eq!(
-                    (result.minimum_action.as_str(), result.reason_code.as_str()),
-                    ("sandbox-required", reason),
-                    "{harness}: {name}"
-                ),
+                Some(reason) if guard_command::pretool::workspace_sandbox_available() => {
+                    assert_eq!(
+                        (result.minimum_action.as_str(), result.reason_code.as_str()),
+                        ("sandbox-required", reason),
+                        "{harness}: {name}"
+                    )
+                }
                 Some(_) => {}
                 None => {
+                    // This route declines the case, but another sink may still
+                    // claim the command -- `bun test` has a read-only profile
+                    // of its own -- so what the receipt must not carry is one
+                    // of this route's own reasons.
                     assert!(
                         ![PACKAGE_TEST, NODE_TOOL, NODE_BUILD]
                             .contains(&result.reason_code.as_str()),
@@ -114,7 +120,14 @@ fn package_script_receipts_match_the_sinks() {
                         result.reason_code
                     );
                     if result.minimum_action == "sandbox-required" {
-                        assert_eq!(result.reason_code, WORKSPACE, "{harness}: {name}");
+                        assert!(
+                            result.reason_code == WORKSPACE
+                                || result
+                                    .reason_code
+                                    .ends_with("_readonly_containment_required"),
+                            "{harness}: {name}: {}",
+                            result.reason_code
+                        );
                     }
                 }
             }

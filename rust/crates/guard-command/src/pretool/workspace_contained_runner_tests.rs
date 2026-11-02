@@ -1,4 +1,4 @@
-use super::workspace_contained_tests::{host, reason, workspace, CONTAINED};
+use super::workspace_contained_tests::{contained, host, reason, workspace, CONTAINED};
 use std::path::Path;
 
 fn install_tool(directory: &Path, tool: &str) {
@@ -46,9 +46,11 @@ fn runners_of_installed_project_tools_run_in_the_workspace_sandbox() {
         "cd app && npm exec vitest run",
     ] {
         let got = reason("omp", command, &ws, true);
-        // macOS claims some of these with narrower node profiles first.
+        // A host that runs Guard's sink claims some of these with a narrower
+        // node profile before the general workspace one; either way the run
+        // never reaches the user as a review.
         if cfg!(target_os = "linux") && host() {
-            assert_eq!(got, CONTAINED, "{command}");
+            assert!(contained(&got), "{command}: {got}");
         }
     }
 }
