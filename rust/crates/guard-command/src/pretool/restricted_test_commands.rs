@@ -7,6 +7,9 @@
 #[cfg(test)]
 #[path = "restricted_test_commands_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "restricted_test_commands_tsx_tests.rs"]
+mod tsx_tests;
 
 use crate::contained_argv::{
     contained_runner_call, jest_contained_call, mocha_contained_call, npm_exec_inert_option,
@@ -178,8 +181,14 @@ fn tsx_test_script_args(name: &str, arguments: &[String]) -> bool {
         }
         _ => return false,
     };
-    let rest = &rest[crate::contained_argv::tsx_runner_flag_count(rest)..];
-    matches!(rest, [script, ..] if workspace_relative(script) && node_test_script_name(script))
+    let (flags, rest) = rest.split_at(crate::contained_argv::tsx_runner_flag_count(rest));
+    let named = |script: &String| workspace_relative(script) && node_test_script_name(script);
+    if crate::contained_argv::tsx_runner_test_mode(flags) {
+        // Node runs each remaining word as a test file of its own, so a word
+        // outside the workspace is code the run loads rather than inert argv.
+        return !rest.is_empty() && rest.iter().all(named);
+    }
+    matches!(rest, [script, ..] if named(script))
 }
 
 /// Classify a direct pytest invocation for delegation, never direct allowance.

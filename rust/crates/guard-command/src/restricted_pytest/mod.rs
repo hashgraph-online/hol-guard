@@ -204,6 +204,8 @@ mod authority;
 mod contained;
 #[cfg(test)]
 mod contained_tests;
+#[cfg(test)]
+mod contained_tsx_tests;
 mod credentials;
 mod developer_shim;
 mod environment;

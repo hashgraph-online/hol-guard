@@ -2,6 +2,9 @@
 #[cfg(test)]
 #[path = "contained_argv_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "contained_argv_tsx_tests.rs"]
+mod tsx_tests;
 use crate::contained_node_tool::local_package_entry;
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
 use crate::sfrs_shlex::{split_with, PLAIN_LEXER, STRICT_LEXER};
@@ -200,6 +203,9 @@ fn tsx_test_parts(command: &[String]) -> Result<Option<TsxTestParts<'_>>, Restri
         return Ok(None);
     }
     let (flags, rest) = args.split_at(tsx_runner_flag_count(args));
+    if tsx_runner_test_mode(flags) && !rest.iter().all(|value| named_test_script(value, true)) {
+        return Ok(None);
+    }
     Ok(rest
         .first()
         .filter(|value| named_test_script(value, true))
@@ -329,7 +335,8 @@ fn bun_runner_invocation(
 mod runner_calls;
 pub(crate) use runner_calls::{
     bun_test_runs_once, contained_runner_call, jest_contained_call, jest_runs_once,
-    mocha_contained_call, mocha_runs_once, tsx_runner_flag_count, vitest_runs_once,
+    mocha_contained_call, mocha_runs_once, tsx_runner_flag_count, tsx_runner_test_mode,
+    vitest_runs_once,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.

@@ -365,3 +365,11 @@ pub(crate) fn tsx_runner_flag_count(arguments: &[String]) -> usize {
         .take_while(|argument| tsx_runner_flag(argument))
         .count()
 }
+
+/// Whether those flags put Node in test-runner mode.
+///
+/// There Node reads every remaining word as a test file it runs, not as the
+/// first script's own arguments, so a trailing word is another file to load.
+pub(crate) fn tsx_runner_test_mode(flags: &[String]) -> bool {
+    flags.iter().any(|flag| flag.starts_with("--test"))
+}

@@ -67,6 +67,10 @@ WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
 # installed and pinned exactly as the linter it drives is, and it is launched
 # through npx the same way, so the verdict has the same evidence to read.
 WORKSPACE_LINT_STAGED_CASE = "omp-native-workspace-npx-lint-staged"
+# The TypeScript runner a project installs to run Node's own test runner over
+# its sources. `--test` puts Node in test-runner mode, so the words behind the
+# flags are the files it loads rather than the first file's arguments.
+WORKSPACE_TSX_NODE_TEST_CASE = "omp-native-workspace-npx-tsx-node-test"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
@@ -82,6 +86,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_TSC_GENERATED_PROJECT_CASE,
         WORKSPACE_PNPM_TSC_CASE,
         WORKSPACE_LINT_STAGED_CASE,
+        WORKSPACE_TSX_NODE_TEST_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -314,6 +319,53 @@ _LINT_STAGED_FILES = {
 }
 
 
+_TSX_VERSION = "4.20.6"
+# The one line the workspace's own test prints. The contained run replaces the
+# installed launcher with `node --import <loader> --test <file>`, so the line
+# the oracle reads has to come from the test file Node loads rather than from
+# the launcher, which that run never starts.
+TSX_MARKER = f"tsx {_TSX_VERSION} ran the node test runner"
+_TSX_FILES = {
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "type": "module",\n'
+        '  "scripts": {\n    "test": "tsx --test __tests__/media.test.ts"\n  },\n'
+        f'  "devDependencies": {{\n    "tsx": "{_TSX_VERSION}"\n  }}\n}}\n'
+    ),
+    "package-lock.json": (
+        '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+        '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+        '      "version": "0.0.0",\n      "devDependencies": {\n'
+        f'        "tsx": "{_TSX_VERSION}"\n      }}\n    }},\n'
+        '    "node_modules/tsx": {\n'
+        f'      "version": "{_TSX_VERSION}",\n      "dev": true,\n'
+        '      "bin": {\n        "tsx": "dist/cli.mjs"\n      }\n    }\n  }\n}\n'
+    ),
+    "__tests__/media.test.ts": (
+        'import { test } from "node:test";\n'
+        'import assert from "node:assert/strict";\n\n'
+        'test("media urls keep their path", () => {\n'
+        '  assert.equal(new URL("https://cdn.example.test/a.png").pathname, "/a.png");\n'
+        f"  console.log('{TSX_MARKER}');\n"
+        "});\n"
+    ),
+    "node_modules/tsx/package.json": (
+        f'{{"name": "tsx", "version": "{_TSX_VERSION}", "type": "module", "bin": '
+        '{"tsx": "dist/cli.mjs"}}\n'
+    ),
+    # The launcher npm links into `node_modules/.bin`. A contained run never
+    # starts it, so its line says so: reading it means the launch escaped the
+    # rewritten command rather than that the run worked.
+    "node_modules/tsx/dist/cli.mjs": (
+        "#!/usr/bin/env node\nconsole.log('tsx: the run was not contained');\n"
+    ),
+    # What the rewritten command imports. The real loader registers tsx's
+    # transform; the fixture's sources need none, so it only has to be a module
+    # Node can import.
+    "node_modules/tsx/dist/loader.mjs": "export {};\n",
+}
+
+
 class _Install(NamedTuple):
     """One runner's install: the package npm links, its files and its own line."""
 
@@ -360,6 +412,12 @@ _INSTALLS = {
         TSC_MARKER,
         package="typescript",
         entry="bin/tsc",
+    ),
+    WORKSPACE_TSX_NODE_TEST_CASE: _Install(
+        "tsx",
+        _TSX_FILES,
+        TSX_MARKER,
+        entry="dist/cli.mjs",
     ),
 }
 
