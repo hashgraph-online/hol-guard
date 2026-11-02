@@ -17,14 +17,21 @@ const installation = { runtime_id: ready.preferences.runtime_id, qualification: 
 type Call = { path: string; method: string; body: any };
 const readOnlyActions = new Set(["preferences", "list"]);
 const writes = (calls: Call[]) => calls.filter((call) => call.method === "POST"
-  && (call.path.startsWith("/v1/context-assistance") || call.path === "/v1/settings") && !readOnlyActions.has(call.body?.input?.action));
+  && (call.path.startsWith("/v1/context-assistance") || call.path === "/v1/settings") && call.path !== "/v1/context-assistance/folders"
+  && !readOnlyActions.has(call.body?.input?.action));
 
-async function fixture(page: Page, registered = true, savedEnabled = false) {
+function savedDiagnostic(savedEnabled: boolean, resting: boolean) {
+  if (!savedEnabled) return null;
+  return resting ? "runtime_resting" : "runtime_not_verified";
+}
+
+async function fixture(page: Page, registered = true, savedEnabled = false, documents = false, resting = false) {
   const calls: Call[] = [];
+  const sources = { ...ready.preferences.sources, ...(documents ? { workspace_documents: true, source_set_id: "selected-workspaces" } : {}) };
   let status = { ...ready, availability: savedEnabled ? "unavailable" : "off", requested_enabled: savedEnabled, effective_enabled: false,
-    runtime: null, last_check: null, diagnostic: savedEnabled ? "runtime_not_verified" : null, job: null, qualification: null,
-    preferences: { ...ready.preferences, enabled: savedEnabled, runtime_id: savedEnabled ? installation.runtime_id : "" },
-    effective_preferences: { ...ready.effective_preferences, enabled: savedEnabled, runtime_id: savedEnabled ? installation.runtime_id : "" },
+    runtime: null, last_check: null, diagnostic: savedDiagnostic(savedEnabled, resting), job: null, qualification: null,
+    preferences: { ...ready.preferences, sources, enabled: savedEnabled, runtime_id: savedEnabled ? installation.runtime_id : "" },
+    effective_preferences: { ...ready.effective_preferences, sources, enabled: savedEnabled, runtime_id: savedEnabled ? installation.runtime_id : "" },
     installation_options: null };
   let settings = { ...defaultSettingsPayload, settings: { ...defaultSettingsPayload.settings,
     context_assistance: status.preferences, context_assistance_requested: status.preferences,
@@ -71,12 +78,34 @@ async function fixture(page: Page, registered = true, savedEnabled = false) {
         effective_preferences: { ...status.effective_preferences, enabled: false } };
       settings = { ...settings, settings: { ...settings.settings, context_assistance: status.preferences } };
       result = status;
-    } else if (path === "/v1/context-assistance/workspace" && body.input.action === "list") {
+    } else if (path === "/v1/context-assistance/folders") result = folderListing(body);
+    else if (path === "/v1/context-assistance/workspace" && body.input.action === "list") {
       result = { schema: "guard-cigar-workspace-result.v1", data_role: true, result: { scopes: [] } };
     }
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(result) });
   });
   return calls;
+}
+
+const home = "/Users/you";
+const place = (label: string, path: string, kind = "folder") => ({ label, path, kind });
+function folderListing(body: { mode?: string; path?: string }) {
+  const base = { schema: "guard-context-folders.v1", home, separator: "/", truncated: false,
+    places: [place("Home", home, "home"), place("Projects", home + "/Projects")], roots: [{ label: "This computer", path: "/" }] };
+  if (body.mode === "files") return { schema: "guard-context-folders.v1", mode: "files", workspace: home + "/Projects/my-app", path: body.path ?? "",
+    entries: body.path ? [] : [{ name: "docs", relative: "docs" }], max_file_bytes: 65536, truncated: false,
+    suggested: body.path ? [] : [{ relative: "README.md", size: 2048 }, { relative: "AGENTS.md", size: 900 }],
+    files: body.path === "docs" ? [{ name: "design.md", relative: "docs/design.md", size: 3000, available: true, reason: null }]
+      : [{ name: "AGENTS.md", relative: "AGENTS.md", size: 900, available: true, reason: null },
+        { name: "logo.png", relative: "logo.png", size: 4000, available: false, reason: "not_text" },
+        { name: "README.md", relative: "README.md", size: 2048, available: true, reason: null }] };
+  const path = body.path ?? home;
+  const children: Record<string, { name: string; path: string; project: boolean }[]> = {
+    [home]: [{ name: "Documents", path: home + "/Documents", project: false }, { name: "Projects", path: home + "/Projects", project: false }],
+    [home + "/Projects"]: [{ name: "my-app", path: home + "/Projects/my-app", project: true }, { name: "notes", path: home + "/Projects/notes", project: false }],
+  };
+  const parent = path === "/" ? null : path.slice(0, path.lastIndexOf("/")) || "/";
+  return { ...base, mode: "folders", path, name: path.split("/").pop() || "/", parent, project: path.endsWith("my-app"), entries: children[path] ?? [] };
 }
 
 for (const width of [1440, 790, 390, 320]) {
@@ -166,12 +195,74 @@ test("a saved runtime starts from the top of the guide and leads to actual conte
   await expect(page.getByRole("tab", { name: "How it works", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("button", { name: "Pick a project folder", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Projects & AI apps", exact: true })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("No workspace has context access.", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Workspace folder", { exact: true })).toBeEnabled();
+  await expect(page.getByText("No projects yet.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Choose a project folder/ })).toBeEnabled();
   expect(calls.filter((call) => call.path === "/v1/context-assistance/activate")).toHaveLength(1);
   expect(calls.some((call) => call.path === "/v1/settings" && call.method === "POST")).toBe(false);
   expect(calls.some((call) => call.path === "/v1/context-assistance/workspace-grant")).toBe(false);
 });
+
+test("a CIGAR that went to rest comes back on its own when the page opens", async ({ page }) => {
+  const calls = await fixture(page, true, true, false, true);
+  await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=access");
+  await expect(page.locator(".cigar-status")).toHaveText("Ready");
+  await expect(page.getByText("No projects yet.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Turn on CIGAR", exact: true })).toHaveCount(0);
+  expect(calls.filter((call) => call.path === "/v1/context-assistance/activate")).toHaveLength(1);
+  expect(calls.some((call) => call.path === "/v1/settings" && call.method === "POST")).toBe(false);
+});
+
+for (const width of [1440, 390]) {
+  test("picking a project is browsing folders and ticking notes at " + width + "px", async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    const calls = await fixture(page, true, true, true);
+    await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=guide");
+    await page.getByRole("button", { name: "Turn on CIGAR", exact: true }).click();
+    await page.getByRole("button", { name: "Pick a project folder", exact: true }).click();
+    await page.getByRole("button", { name: /Choose a project folder/ }).click();
+    const picker = page.getByRole("dialog", { name: "Choose a project folder" });
+    await expect(picker).toBeVisible();
+    await expect(picker.getByRole("button", { name: "Use this folder", exact: true })).toBeDisabled();
+    await expect(picker.getByText(/whole home folder/)).toBeVisible();
+    await picker.getByRole("button", { name: "Open Projects", exact: true }).click();
+    await expect(picker.getByRole("button", { name: "Open my-app, project", exact: true })).toBeVisible();
+    await picker.getByPlaceholder("Search in Projects").fill("not");
+    await expect(picker.getByRole("button", { name: /^Open my-app/ })).toHaveCount(0);
+    await picker.getByPlaceholder("Search in Projects").press("Enter");
+    await expect(picker.getByRole("list", { name: "Folders in notes" })).toBeVisible();
+    await picker.getByRole("button", { name: "Go up one folder", exact: true }).click();
+    await expect(picker.getByRole("button", { name: "Use my-app", exact: true })).toBeVisible();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: testInfo.outputPath("cigar-picker-" + width + ".png") });
+    await picker.getByRole("button", { name: "Use my-app", exact: true }).click();
+    await expect(picker).toHaveCount(0);
+    await expect(page.getByText("/Users/you/Projects/my-app", { exact: true })).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: /README\.md/ })).toBeChecked();
+    await expect(page.getByRole("checkbox", { name: /AGENTS\.md/ })).toBeChecked();
+    await expect(page.getByText("2 picked · up to 32", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Browse all files", exact: true }).click();
+    await expect(page.getByText("Not text", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "docs", exact: true }).click();
+    await page.getByRole("checkbox", { name: /design\.md/ }).check();
+    await page.getByRole("checkbox", { name: /AGENTS\.md/ }).first().uncheck();
+    await expect(page.getByText("2 picked · up to 32", { exact: true })).toBeVisible();
+    await expect(page.getByText("Context consumer")).toHaveCount(0);
+    await expect(page.getByText("Which app can use it?")).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath("cigar-files-" + width + ".png"), fullPage: true });
+    await page.getByRole("button", { name: "Give CIGAR access", exact: true }).click();
+    const proof = page.getByRole("dialog", { name: "Confirm CIGAR access" });
+    await expect(proof).toContainText("CIGAR can read 2 files in my-app");
+    await proof.getByLabel("Approval password").fill("cigar-ui-test-proof");
+    await proof.getByRole("button", { name: "Give access", exact: true }).click();
+    await expect.poll(() => calls.filter((call) => call.path === "/v1/context-assistance/workspace-grant").length).toBe(1);
+    const grant = calls.find((call) => call.path === "/v1/context-assistance/workspace-grant")!;
+    expect(grant.body.input).toMatchObject({ action: "grant", app: "dashboard", workspace: "/Users/you/Projects/my-app", sources: ["README.md", "docs/design.md"] });
+    expect(calls.filter((call) => call.path === "/v1/context-assistance/folders").every((call) => call.method === "POST")).toBe(true);
+    expect(errors).toEqual([]);
+  });
+}
 
 for (const width of [1440, 390]) {
   test("guided CIGAR lessons resume without changing runtime or access at " + width + "px", async ({ page }, testInfo) => {

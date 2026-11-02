@@ -213,6 +213,10 @@ impl Engine {
         self.sweep_saved()?;
         Ok(())
     }
+    /// True while a project grant would be lost if this worker retired.
+    pub(crate) fn holds_scopes(&self) -> bool {
+        self.scopes.values().any(|scope| !scope.revoked)
+    }
     pub(crate) fn maintenance(
         runtime: &mut VerifiedRuntime,
         engine: &mut Self,

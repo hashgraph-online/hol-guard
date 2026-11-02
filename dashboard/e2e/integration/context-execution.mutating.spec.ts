@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
+import { addContextProject } from "./context-project";
 import { resolve } from "node:path";
 import type { Page } from "@playwright/test";
 import { contextStatus } from "./context-status";
 import { stopContextAssistance } from "./context-stop";
 import { daemonApi, expect, expectNoErrorBoundary, test, type IntegrationState } from "./fixtures";
 import { decide, requestRecord } from "./inbox-helpers";
-import { chooseMenuOption, menuValues } from "../select-menu";
 
 test.use({ actionTimeout: 15_000 });
 
@@ -60,15 +60,14 @@ test("execution opt-in and browser approvals reach the installed native executor
     await expect(panel.getByText(/Preparation is ready for Pi and Oh My Pi/)).toBeVisible();
     await expect(panel.getByText("No recent execution-context observations.", { exact: true })).toBeVisible();
     await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
-    const consumer = page.getByRole("combobox", { name: "Context consumer", exact: true });
-    expect(await menuValues(consumer)).toEqual(["dashboard", "pi", "omp"]);
-    await chooseMenuOption(consumer, "omp");
-    await page.getByLabel("Workspace folder", { exact: true }).fill(state.workspace);
-    await page.getByRole("button", { name: "Grant review source access", exact: true }).click();
-    const grantProof = page.getByRole("dialog");
+    await addContextProject(page, state.workspace, { app: "Oh My Pi", files: [] });
+    const apps = page.getByRole("group", { name: "Which app can use it?", exact: true }).getByRole("radio");
+    expect(await apps.evaluateAll((items) => items.map((item) => (item as HTMLInputElement).value))).toEqual(["dashboard", "pi", "omp"]);
+    await page.getByRole("button", { name: "Give CIGAR access", exact: true }).click();
+    const grantProof = page.getByRole("dialog", { name: "Confirm CIGAR access", exact: true });
     await expect(grantProof).toContainText("Oh My Pi");
     await grantProof.getByLabel("Approval password").fill(state.approvalPassword);
-    await grantProof.getByRole("button", { name: "Grant source access", exact: true }).click();
+    await grantProof.getByRole("button", { name: "Give access", exact: true }).click();
     await expect(grantProof).toHaveCount(0);
     for (const choice of ["allow-once", "always-allow"]) {
       const queued = sink(choice, "prepare");

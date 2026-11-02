@@ -63,7 +63,8 @@ export function ContextAssistanceSettings(props: Props) {
     request.current = controller;
     try {
       // Opening the CIGAR workspace lists registered metadata. It never scans
-      // PATH, probes Python, imports CIGAR, or activates an optional runtime.
+      // PATH, probes Python or imports CIGAR. Only a runtime the user already
+      // turned on is woken, below.
       const result = await (workspace ? fetchContextInstallations(controller.signal) : fetchContextAssistance(controller.signal));
       if (current !== revision.current) return;
       setStatus(result);
@@ -124,6 +125,20 @@ export function ContextAssistanceSettings(props: Props) {
     onBusyChange(true);
     return () => onBusyChange(false);
   }, [setup.busy, onBusyChange]);
+
+  // A saved opt-in that went to rest wakes when someone opens CIGAR, once per
+  // resting spell, so the page never asks the user to turn it on again. The
+  // latch clears only after CIGAR is running, so a start that fails is not retried.
+  const woke = useRef(false);
+  const resting = status?.diagnostic === "runtime_resting" && !status.job;
+  useEffect(() => {
+    if (status?.effective_enabled) woke.current = false;
+    if (!resting || dirty || busy || setup.busy || props.disabled || woke.current) return;
+    woke.current = true;
+    void perform("activate");
+    // perform reads the latest props and status itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resting, status?.effective_enabled, dirty, busy, setup.busy, props.disabled]);
 
   async function perform(action: ContextControlAction | "installations") {
     // Stop always wins over a one-click setup that is still running.

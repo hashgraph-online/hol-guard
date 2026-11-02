@@ -130,6 +130,12 @@ export function contextStatusCopy(status: ContextAssistanceStatus): { label: str
       && (status.diagnostic === "runtime_not_verified" || status.diagnostic === null)) return {
     label: "Not started", detail: "Your preferences are saved. Click Turn on CIGAR to verify and run the selected runtime.",
   };
+  if (status.diagnostic === "runtime_resting") return {
+    label: "Resting", detail: "CIGAR is on. It rests when nothing needs it and wakes up on its own.",
+  };
+  if (status.diagnostic === "runtime_crashed") return {
+    label: "Stopped", detail: "CIGAR stopped right after it started. Click Turn on CIGAR to try again.",
+  };
   if (status.diagnostic === "runtime_idle") return {
     label: "Paused", detail: "CIGAR stopped after being idle. Click Turn on CIGAR when you need context again.",
   };

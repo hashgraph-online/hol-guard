@@ -1,5 +1,5 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace-DvaL-IdS.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/supply-chain-issues-EX-41s9Z.js","assets/chunks/feed-health-workspace-DxOG_qOF.js","assets/chunks/home-protection-module-CANjTunq.js","assets/chunks/supply-chain-protection-stats-DfVtGkjL.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/supply-chain-workspace-details-PhOCy-nf.js","assets/chunks/audit-workspace-AzWfKaWL.js","assets/chunks/workspace-findings-status-BhXRkya4.js","assets/chunks/workspace-findings-workspace-bim0JG8b.js"])))=>i.map(i=>d[i]);
-import { ee as isSupplyChainAuditIncomplete, ef as isSupplyChainAuditEvidence, dT as GuardHarnessActionError, eg as readString$1, c1 as isRecord$1, r as reactExports, j as jsxRuntimeExports, i as HiMiniArrowPath, T as Tag, eh as IconActionButton, aK as HiMiniXCircle, dV as HiMiniTrash, a0 as HiMiniShieldCheck, az as HiMiniWrenchScrewdriver, ei as HiMiniBeaker, b as formatRelativeTime, A as ActionButton, ej as HiMiniBugAnt, ek as ActivationSummary, el as ActionResultPanel, t as HiMiniMagnifyingGlass, ad as HiMiniExclamationTriangle, g as HiMiniChevronDown, em as fetchSupplyChainBundle, ab as useFocusTrap, v as HiMiniCheckCircle, a6 as HiMiniXMark, en as closeOnEscape, b1 as buildApprovalProofCredentials, dR as GuardModalLayer, eo as ConnectFlowCard, ep as ApprovalProofInline, dg as HiMiniArrowTopRightOnSquare, bv as HiMiniCloudArrowDown, eq as SUPPLY_CHAIN_SYNC_TIMEOUT_MS, cx as useResolvedApprovalGate, er as fetchPackageFirewallStatus, es as runPackageAudit, et as resolveSupplyChainAuditFailure, eu as runPackageSync, ev as GuardOperationTimeoutError, ew as startPackageFirewallConnect, av as openPackageFirewallAuthorizeFallback, ex as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, ey as repairSupplyChainProtection, ez as runPackageFirewallAction, eA as parseInterceptProofSnapshot, eB as activatePackageFirewallRuntime, eC as EntitlementNotice, aQ as ApprovalProofModal, eD as chooseSupplyChainAuditFolder, eE as fetchReceipts, bW as WorkspacePageHeader, eF as lazyWorkspace, eG as __vitePreload } from "../guard-dashboard.js";
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace-B-_Ik4G7.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/supply-chain-issues-Ixx-xKP4.js","assets/chunks/feed-health-workspace-Cq3UnHIw.js","assets/chunks/home-protection-module-HCF_WQND.js","assets/chunks/supply-chain-protection-stats-DHj0Mska.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/supply-chain-workspace-details-CSVog3L2.js","assets/chunks/audit-workspace-g0cO84o-.js","assets/chunks/workspace-findings-status-Cmy7nQR6.js","assets/chunks/workspace-findings-workspace-CiYNZ5yy.js"])))=>i.map(i=>d[i]);
+import { ei as isSupplyChainAuditIncomplete, ej as isSupplyChainAuditEvidence, dY as GuardHarnessActionError, ek as readString$1, c6 as isRecord$1, r as reactExports, j as jsxRuntimeExports, i as HiMiniArrowPath, T as Tag, el as IconActionButton, aK as HiMiniXCircle, d_ as HiMiniTrash, a0 as HiMiniShieldCheck, az as HiMiniWrenchScrewdriver, em as HiMiniBeaker, b as formatRelativeTime, A as ActionButton, en as HiMiniBugAnt, eo as ActivationSummary, ep as ActionResultPanel, t as HiMiniMagnifyingGlass, ad as HiMiniExclamationTriangle, g as HiMiniChevronDown, eq as fetchSupplyChainBundle, ab as useFocusTrap, v as HiMiniCheckCircle, a6 as HiMiniXMark, er as closeOnEscape, b1 as buildApprovalProofCredentials, dW as GuardModalLayer, es as ConnectFlowCard, et as ApprovalProofInline, dl as HiMiniArrowTopRightOnSquare, bB as HiMiniCloudArrowDown, eu as SUPPLY_CHAIN_SYNC_TIMEOUT_MS, cC as useResolvedApprovalGate, ev as fetchPackageFirewallStatus, ew as runPackageAudit, ex as resolveSupplyChainAuditFailure, ey as runPackageSync, ez as GuardOperationTimeoutError, eA as startPackageFirewallConnect, av as openPackageFirewallAuthorizeFallback, eB as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, eC as repairSupplyChainProtection, eD as runPackageFirewallAction, eE as parseInterceptProofSnapshot, eF as activatePackageFirewallRuntime, eG as EntitlementNotice, aQ as ApprovalProofModal, eH as chooseSupplyChainAuditFolder, eI as fetchReceipts, b$ as WorkspacePageHeader, eJ as lazyWorkspace, eK as __vitePreload } from "../guard-dashboard.js";
 const SEVERITY_RANK = {
   critical: 4,
   high: 3,
@@ -2999,23 +2999,23 @@ function useSupplyChainAuditSession({
 }
 const SupplyChainWorkspace = lazyWorkspace(
   "supply-chain-workspace",
-  () => __vitePreload(() => import("./supply-chain-workspace-DvaL-IdS.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6,7]) : void 0).then((m) => ({ default: m.SupplyChainWorkspace }))
+  () => __vitePreload(() => import("./supply-chain-workspace-B-_Ik4G7.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6,7]) : void 0).then((m) => ({ default: m.SupplyChainWorkspace }))
 );
 const SupplyChainWorkspaceDetails = lazyWorkspace(
   "supply-chain-workspace-details",
-  () => __vitePreload(() => import("./supply-chain-workspace-details-PhOCy-nf.js"), true ? __vite__mapDeps([8,1,2,4,6,3,5]) : void 0).then((m) => ({ default: m.SupplyChainWorkspaceDetails }))
+  () => __vitePreload(() => import("./supply-chain-workspace-details-CSVog3L2.js"), true ? __vite__mapDeps([8,1,2,4,6,3,5]) : void 0).then((m) => ({ default: m.SupplyChainWorkspaceDetails }))
 );
 const AuditWorkspace = lazyWorkspace(
   "audit-workspace",
-  () => __vitePreload(() => import("./audit-workspace-AzWfKaWL.js"), true ? __vite__mapDeps([9,1,2,6,10]) : void 0).then((m) => ({ default: m.AuditWorkspace }))
+  () => __vitePreload(() => import("./audit-workspace-g0cO84o-.js"), true ? __vite__mapDeps([9,1,2,6,10]) : void 0).then((m) => ({ default: m.AuditWorkspace }))
 );
 const WorkspaceFindingsWorkspace = lazyWorkspace(
   "workspace-findings-workspace",
-  () => __vitePreload(() => import("./workspace-findings-workspace-bim0JG8b.js"), true ? __vite__mapDeps([11,1,2,10]) : void 0).then((m) => ({ default: m.WorkspaceFindingsWorkspace }))
+  () => __vitePreload(() => import("./workspace-findings-workspace-CiYNZ5yy.js"), true ? __vite__mapDeps([11,1,2,10]) : void 0).then((m) => ({ default: m.WorkspaceFindingsWorkspace }))
 );
 const FeedHealthWorkspace = lazyWorkspace(
   "feed-health-workspace",
-  () => __vitePreload(() => import("./feed-health-workspace-DxOG_qOF.js").then((n) => n.c), true ? __vite__mapDeps([4,1,2]) : void 0).then((m) => ({ default: m.FeedHealthWorkspace }))
+  () => __vitePreload(() => import("./feed-health-workspace-Cq3UnHIw.js").then((n) => n.c), true ? __vite__mapDeps([4,1,2]) : void 0).then((m) => ({ default: m.FeedHealthWorkspace }))
 );
 const hubTabs = [
   { value: "supply-chain", label: "Supply Chain" },

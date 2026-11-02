@@ -1,5 +1,5 @@
 import {
-  HiMiniArrowPath, HiMiniArrowRight, HiMiniBookOpen, HiMiniCheck, HiMiniHandRaised, HiMiniLockClosed, HiMiniXMark,
+  HiMiniArrowRight, HiMiniBookOpen, HiMiniHandRaised, HiMiniLockClosed,
 } from "react-icons/hi2";
 import type { GuardApprovalGatePublicConfig } from "../guard-types";
 import { SettingsSaveProofModal } from "../settings-save-proof-modal";
@@ -7,16 +7,10 @@ import { CIGAR_SETUP_STAGE_LABELS, type CigarSetupStage } from "./one-click";
 import { contextStatusCopy } from "./status";
 import type { ContextAssistanceStatus } from "./types";
 import type { useCigarOneClick } from "./use-one-click";
-import type { CigarTab } from "./workspace-model";
+import { cigarWaking, type CigarTab } from "./workspace-model";
 
 export type CigarOneClick = ReturnType<typeof useCigarOneClick>;
 const ALL_STAGES: CigarSetupStage[] = ["python", "download", "check", "start"];
-const STAGE_DETAIL: Record<CigarSetupStage, string> = {
-  python: "A private copy, kept apart from any Python you already use.",
-  download: "Only the version Guard approved for this computer.",
-  check: "Guard compares its fingerprint before trusting it.",
-  start: "CIGAR runs here. It reads no files until you pick a project.",
-};
 
 export const CIGAR_WHY = [
   { icon: HiMiniHandRaised, title: "Know why Guard paused",
@@ -58,6 +52,12 @@ export function CigarSetupAction({ setup, status, disabled, tone = "plain", onOp
       <p className="cigar-setup-caption" role="status">{CIGAR_SETUP_STAGE_LABELS[setup.run.stage]}…</p>
     </div>;
   }
+  if (cigarWaking(status)) {
+    return <div className="cigar-setup-action">
+      <button type="button" className={primary} disabled>Pick a project folder<HiMiniArrowRight aria-hidden="true" /></button>
+      <p className="cigar-setup-caption" role="status">CIGAR is on and waking up…</p>
+    </div>;
+  }
   const plan = setup.plan;
   const block = plan?.kind === "blocked" ? plan.block : null;
   const checking = plan === null && setup.loadError === null;
@@ -74,35 +74,45 @@ export function CigarSetupAction({ setup, status, disabled, tone = "plain", onOp
 }
 
 type ProgressProps = { setup: CigarOneClick; status: ContextAssistanceStatus | null; loading: boolean };
+type StageState = "done" | "active" | "failed" | "next";
 
-/** One list shows the plan before the click and the live progress after it. */
+function stageState(index: number, at: number, phase: CigarOneClick["run"]["phase"]): StageState {
+  if (phase !== "running" && phase !== "failed") return "next";
+  if (index < at) return "done";
+  if (index > at) return "next";
+  return phase === "running" ? "active" : "failed";
+}
+const STAGE_SUFFIX: Record<StageState, string> = { done: " (done)", active: " (in progress)", failed: " (stopped)", next: "" };
+
+/** Plain progress: what is happening now, never how it works inside. */
 export function CigarSetupProgress({ setup, status, loading }: ProgressProps) {
   const run = setup.run;
   const on = status?.effective_enabled === true;
-  const stages = run.phase === "running" || run.phase === "failed" ? run.stages
-    : setup.plan?.kind === "run" ? setup.plan.stages : ALL_STAGES;
-  const current = run.phase === "running" ? run.stage : run.phase === "failed" ? run.stage : null;
-  const at = current ? stages.indexOf(current) : -1;
-  const heading = on ? "CIGAR is on" : run.phase === "running" ? "Turning on CIGAR" : run.phase === "failed" ? "Setup stopped"
-    : loading ? "Checking…" : "What happens when you click";
+  const live = run.phase === "running" || run.phase === "failed" ? run : null;
+  const stages = live?.stages ?? (setup.plan?.kind === "run" ? setup.plan.stages : ALL_STAGES);
+  const at = live?.stage ? stages.indexOf(live.stage) : -1;
+  let heading = "Guard does the setup for you";
+  if (on) heading = "CIGAR is on";
+  else if (run.phase === "running") heading = "Turning on CIGAR";
+  else if (run.phase === "failed") heading = "Setup stopped";
+  else if (loading) heading = "Checking…";
+  let label = "Checking";
+  if (run.phase === "running") label = "Working";
+  else if (status) label = contextStatusCopy(status).label;
+  let body = "Click once. Guard downloads CIGAR, makes sure it is safe and starts it. It reads only the project files you pick later.";
+  if (on) body = "Running on this computer. Next, pick a project folder. You can connect an AI app after that.";
+  else if (run.phase !== "running" && cigarWaking(status)) body = "CIGAR rests when nothing needs it and wakes up on its own. You do not need to turn it on again.";
+  else if (live?.stage) body = `${CIGAR_SETUP_STAGE_LABELS[live.stage]}… step ${at + 1} of ${stages.length}.`;
   return <div className="cigar-runtime-card cigar-setup-progress" aria-live="polite">
     <div className="cigar-runtime-top"><h3>{heading}</h3>
-      <span className="cigar-status" data-ready={on}><span aria-hidden="true" />{run.phase === "running" ? "Working" : status ? contextStatusCopy(status).label : "Checking"}</span></div>
-    {on && status?.runtime ? <p>Python {status.runtime.interpreter.version.join(".")} · CIGAR {status.runtime.package_version} · on this computer</p> : null}
-    {!on ? <ol className="cigar-setup-stages">
+      <span className="cigar-status" data-ready={on}><span aria-hidden="true" />{label}</span></div>
+    <p className="cigar-setup-body">{body}</p>
+    {!on && live ? <ol className="cigar-setup-track" aria-label="Setup progress">
       {stages.map((stage, index) => {
-        const state = run.phase === "running" ? index < at ? "done" : index === at ? "active" : "next"
-          : run.phase === "failed" ? index < at ? "done" : index === at ? "failed" : "next" : "next";
-        return <li key={stage} data-state={state}>
-          <span className="cigar-setup-mark" aria-hidden="true">
-            {state === "done" ? <HiMiniCheck /> : state === "active" ? <HiMiniArrowPath className="motion-safe:animate-spin" />
-              : state === "failed" ? <HiMiniXMark /> : index + 1}
-          </span>
-          <div><strong>{CIGAR_SETUP_STAGE_LABELS[stage]}<span className="sr-only">{state === "done" ? " (done)" : state === "active" ? " (in progress)" : state === "failed" ? " (stopped)" : ""}</span></strong>
-            <p>{STAGE_DETAIL[stage]}</p></div>
-        </li>;
+        const state = stageState(index, at, run.phase);
+        return <li key={stage} data-state={state}><span className="sr-only">{CIGAR_SETUP_STAGE_LABELS[stage]}{STAGE_SUFFIX[state]}</span></li>;
       })}
-    </ol> : <p className="cigar-runtime-note">Next: pick a project folder, then connect an AI app if you want. Each one asks you first.</p>}
+    </ol> : null}
   </div>;
 }
 
@@ -112,7 +122,7 @@ export function CigarSetupProof({ setup, gate }: ProofProps) {
   const run = setup.run;
   return <SettingsSaveProofModal open={run.phase === "proof"} mode="verify-save" gate={gate}
     title="Approve turning on CIGAR"
-    detail="Guard will get Python ready if needed, download the approved CIGAR copy, check it and start it. One approval covers every step."
+    detail="Guard will download CIGAR, make sure it is the approved copy and start it on this computer. You can then pick project files for it to read. It reads nothing you have not picked. One approval covers everything."
     confirmLabel="Turn on CIGAR" error={run.phase === "proof" ? run.error : null} pending={false}
     onCancel={setup.cancelProof} onConfirm={(proof) => setup.confirm({ currentPassword: proof.currentPassword, totpCode: proof.totpCode })} />;
 }

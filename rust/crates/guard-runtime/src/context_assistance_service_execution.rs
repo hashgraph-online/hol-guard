@@ -48,6 +48,11 @@ impl Service {
         let settings = crate::guard_config_load::context_assistance_config(&facts.home).ok()?;
         self.configure_at(settings, generation).ok()?;
         if !self.execution_requested() {
+            // A hook never waits for a start; the next command gets context.
+            self.wake(&facts.home, |settings| {
+                settings.effective.features.execution_context
+                    && settings.effective.sources.native_policy_facts
+            });
             return None;
         }
         let (actor, fence, observations) = {

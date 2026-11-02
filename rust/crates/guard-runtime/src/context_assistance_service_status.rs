@@ -48,6 +48,12 @@ impl Service {
                 None
             }
         });
+        // Resting is still on: the next request wakes it without a click.
+        let diagnostic = if wake::resting(&state) {
+            Some("runtime_resting")
+        } else {
+            diagnostic
+        };
         let upgrade = state.upgrade.as_ref().map(|signal| signal.describe());
         Ok(
             json!({"schema":"guard-context-assistance-status.v2", "availability":availability,

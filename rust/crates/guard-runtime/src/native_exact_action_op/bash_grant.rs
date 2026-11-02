@@ -148,7 +148,8 @@ pub(crate) fn execute_authorized(
     let mut context = None;
     if !cancel.load(Ordering::Acquire)
         && deadline.saturating_duration_since(Instant::now()) > Duration::from_millis(250)
-        && store.context_assistance().execution_requested()
+        && (store.context_assistance().execution_requested()
+            || store.context_assistance().execution_resting())
     {
         if let Ok(facts) = super::bash_context::facts(
             request,
