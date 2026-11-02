@@ -20,14 +20,11 @@ _BASE_HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         harness="claude-code",
         install_aliases=("claude-code", "claude"),
         config_paths=("~/.claude/settings.json", "~/.claude/settings.local.json"),
-        event_surfaces=("shell", "mcp_tool", "file_read", "tool_result"),
+        event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "tool_result"),
         native_approval=True,
         browser_fallback=True,
         resume_support=True,
-        known_blind_spots=(
-            "Guard does not install a Claude Code UserPromptSubmit hook, so native prompt submission is not "
-            "intercepted. Background agent sessions without an active terminal may not surface hook events."
-        ),
+        known_blind_spots=("Background agent sessions without an active terminal may not surface hook events."),
         smoke_command="hol-guard install claude --dry-run",
     ),
     HarnessProtectionContract(

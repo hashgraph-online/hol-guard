@@ -2932,7 +2932,7 @@ function ContextSettingsControls(props) {
           SettingsToggleRow,
           {
             label: "Context for AI apps",
-            description: "Allow scoped context tools for apps you authorize. Sharing between agents requires a separate choice.",
+            description: "Add the project files that match each prompt in Claude Code and Codex, and allow context tools for apps you authorize. Sharing between agents is a separate choice.",
             checked: value.features.agent_context,
             disabled: editingDisabled,
             onChange: (agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })
@@ -2991,7 +2991,7 @@ function ContextSettingsControls(props) {
                 SettingsToggleRow,
                 {
                   label: "Allow selected workspace documents",
-                  description: "After saving, choose each folder and file in Workspace context access. Files are read only with an explicit grant.",
+                  description: "With Context for AI apps on, prompts in Claude Code and Codex get the files in their project that match them. Choose folders in Workspace context access to pick exact files instead.",
                   checked: value.sources.workspace_documents,
                   disabled: editingDisabled,
                   onChange: (workspace_documents) => props.onChange({ ...value, sources: {
@@ -4762,7 +4762,7 @@ function cigarSetupSteps(status) {
     },
     {
       title: "Pick a project folder",
-      description: "Choose the folder CIGAR may read. It reads nothing else.",
+      description: "Optional. Choose exactly which files CIGAR uses for a project, instead of the ones that match each prompt.",
       complete: false,
       action: on ? "Pick a folder" : null,
       tab: "access"
@@ -4922,11 +4922,13 @@ async function follow(deps, stage, input, proof, done) {
 }
 function turnOnPreferences(previous, runtime) {
   const untouched = !previous.sources.workspace_documents && !previous.sources.source_set_id;
+  if (!untouched) return { ...previous, enabled: true, runtime_id: runtime };
   return {
     ...previous,
     enabled: true,
     runtime_id: runtime,
-    ...untouched ? { sources: { ...previous.sources, workspace_documents: true, source_set_id: "selected-workspaces" } } : {}
+    sources: { ...previous.sources, workspace_documents: true, source_set_id: "selected-workspaces" },
+    features: { ...previous.features, agent_context: true }
   };
 }
 async function runCigarSetup(plan, initial2, deps, proof) {
@@ -5058,12 +5060,14 @@ function CigarWhy() {
 function CigarSetupAction({ setup, status, disabled, tone = "plain", onOpen }) {
   const primary = "cigar-button cigar-button-primary" + (tone === "plain" ? " cigar-button-solid" : "");
   if (status?.effective_enabled) {
+    const { features, sources } = status.effective_preferences;
+    const caption2 = features.agent_context && sources.workspace_documents ? "CIGAR is on. Prompts in Claude Code and Codex now get the project files that match them. Pick a folder to choose exactly which files it uses." : "CIGAR is on. To give prompts the project files that match them, turn on Context for AI apps and Allow selected workspace documents in Settings.";
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-action", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: primary, onClick: () => onOpen("access"), children: [
         "Pick a project folder",
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: "CIGAR is on. It reads nothing until you choose what it may use." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: caption2 })
     ] });
   }
   if (setup.run.phase === "running") {
@@ -5171,7 +5175,7 @@ function CigarSetupProof({ setup, gate }) {
       mode: "verify-save",
       gate,
       title: "Approve turning on CIGAR",
-      detail: "Guard will download CIGAR, make sure it is the approved copy and start it on this computer. You can then pick project files for it to read. It reads nothing you have not picked. One approval covers everything.",
+      detail: "Guard will download CIGAR, make sure it is the approved copy and start it on this computer. After that, each prompt you send in Claude Code or Codex gets the few files from that project that match it. CIGAR skips secrets, keys, generated folders and anything the project's .gitignore files leave out. Turn off Context for AI apps in Settings to stop it. One approval covers everything.",
       confirmLabel: "Turn on CIGAR",
       error: run.phase === "proof" ? run.error : null,
       pending: false,
@@ -5441,7 +5445,7 @@ function CigarGuide({ onSelect }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-explained-heading", children: CIGAR_FULL_NAME }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR" }),
-        " prepares reusable, scoped evidence for Guard and the AI apps you authorize. Think of it as the context layer behind a task: you choose what it can use, ask a focused question, and inspect the sources behind the prepared brief."
+        " reads the project you are working in and, each time you send a prompt in Claude Code or Codex, adds the few files that match your request. A prompt about the header color brings the header and its styles; a prompt that matches nothing in the project adds nothing. It skips secrets, keys, generated folders and anything the project's .gitignore files leave out."
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("tutorials"), children: [
         "Try a guided walkthrough",
@@ -5876,7 +5880,7 @@ function CigarWorkspace(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("br", { className: "hidden sm:block" }),
           " not the whole book."
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Think of CIGAR as a librarian on your computer. You choose the books. When your AI or Guard has a question, CIGAR finds the few pages that answer it and shows where each one came from." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Think of CIGAR as a librarian on your computer. When you ask Claude Code or Codex for a change, CIGAR finds the few files in your project that match and hands them over with your request, so your AI starts in the right place." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupAction, { setup: props.setup, status, disabled: actionDisabled, tone: "hero", onOpen: select }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-hero-actions", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-hero-link", onClick: () => select("guide"), children: [

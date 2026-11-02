@@ -73,11 +73,8 @@ fn compiled_contract_matches_the_lane_and_bridge_constants() {
         contract.session_start_context,
         "HOL Guard protection is active for this workspace."
     );
-    assert_eq!(
-        contract.pruned_events,
-        ["PermissionDenied", "UserPromptSubmit"]
-    );
-    assert_eq!(contract.runtime_groups.len(), 5);
+    assert_eq!(contract.pruned_events, ["PermissionDenied"]);
+    assert_eq!(contract.runtime_groups.len(), 6);
 }
 
 #[test]

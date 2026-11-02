@@ -106,7 +106,7 @@ export function CigarWorkspace(props: CigarWorkspaceProps) {
     {tab === "overview" ? <section className="cigar-hero" aria-labelledby="cigar-hero-heading">
         <div className="cigar-hero-copy">
           <h2 id="cigar-hero-heading">Give your AI the right pages,<br className="hidden sm:block" /> not the whole book.</h2>
-          <p>Think of CIGAR as a librarian on your computer. You choose the books. When your AI or Guard has a question, CIGAR finds the few pages that answer it and shows where each one came from.</p>
+          <p>Think of CIGAR as a librarian on your computer. When you ask Claude Code or Codex for a change, CIGAR finds the few files in your project that match and hands them over with your request, so your AI starts in the right place.</p>
           <CigarSetupAction setup={props.setup} status={status} disabled={actionDisabled} tone="hero" onOpen={select} />
           <div className="cigar-hero-actions">
             <button type="button" className="cigar-hero-link" onClick={() => select("guide")}>How it works<HiMiniArrowRight aria-hidden="true" /></button>

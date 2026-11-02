@@ -177,11 +177,13 @@ async function follow(
 }
 
 /** Run the plan to a verified Ready state. Stop wins at every boundary. */
-/** Turning on also allows ticked project files unless someone already chose otherwise. Each file still needs its own grant. */
+/** Turning on also lets CIGAR add matching project files to each prompt unless someone already chose otherwise. */
 export function turnOnPreferences(previous: GuardContextAssistanceConfig, runtime: string): GuardContextAssistanceConfig {
   const untouched = !previous.sources.workspace_documents && !previous.sources.source_set_id;
+  if (!untouched) return { ...previous, enabled: true, runtime_id: runtime };
   return { ...previous, enabled: true, runtime_id: runtime,
-    ...(untouched ? { sources: { ...previous.sources, workspace_documents: true, source_set_id: "selected-workspaces" } } : {}) };
+    sources: { ...previous.sources, workspace_documents: true, source_set_id: "selected-workspaces" },
+    features: { ...previous.features, agent_context: true } };
 }
 
 export async function runCigarSetup(plan: CigarSetupRun, initial: ContextAssistanceStatus, deps: CigarSetupDeps, proof?: ContextProof): Promise<ContextAssistanceStatus> {
