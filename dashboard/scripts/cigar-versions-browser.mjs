@@ -135,7 +135,7 @@ try {
     await page.getByRole("tab", { name: "Updates", exact: true }).waitFor();
     if (versions) {
       await page.getByRole("tab", { name: "Updates", exact: true }).click();
-      await page.getByRole("heading", { name: "Registered installations", exact: true }).waitFor();
+      await page.getByRole("heading", { name: "Versions", exact: true }).waitFor();
       await page.getByRole("button", { name: "Refresh versions & jobs", exact: true }).waitFor({ state: "visible" });
     }
   };
@@ -148,12 +148,12 @@ try {
   await expect(page.getByRole("combobox", { name: "Local runtime", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Choose or switch runtime", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Updates", exact: true })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("heading", { name: "Registered installations", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Versions", exact: true }).waitFor();
   pass("Runtime preferences route selection to Versions without drafting or starting a replacement");
   await page.getByRole("tab", { name: "Settings", exact: true }).focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("tab", { name: "Updates", exact: true })).toBeFocused();
-  await page.getByRole("heading", { name: "Registered installations", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Versions", exact: true }).waitFor();
   await expect(page.getByRole("button", { name: "Switch now", exact: true })).toBeDisabled();
   assert.ok(calls.every(call => !["install","setup_interpreter","prepare_switch","commit"].includes(call.action)));
   pass("Keyboard tab navigation opens Versions; metadata never submits preparation or commit");
@@ -274,7 +274,7 @@ try {
   assert.equal(calls.filter(call => call.action && call.action !== "preferences").length, effectsBeforeLesson);
   await page.getByRole("button", { name: "Exit walkthrough", exact: true }).click();
   await page.getByRole("tab", { name: "Updates", exact: true }).click();
-  await page.getByRole("heading", { name: "Registered installations", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Versions", exact: true }).waitFor();
   pass("Update walkthrough resumes its step, navigates Versions and never performs a native effect");
   state = { ...structuredClone(initialState), availability: "off", requested_enabled: false, effective_enabled: false,
     runtime: null, last_check: null, diagnostic: null, qualification: null, execution_ready: false,
@@ -285,7 +285,7 @@ try {
   await page.getByRole("switch", { name: "Use CIGAR on this machine", exact: true }).click();
   await expect.poll(async () => JSON.parse(await page.getByTestId("selection").textContent()).draft.enabled).toBe(true);
   await page.getByRole("tab", { name: "Updates", exact: true }).click();
-  await page.getByRole("heading", { name: "Registered installations", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Versions", exact: true }).waitFor();
   await expect(page.getByRole("button", { name: "Refresh versions & jobs", exact: true })).toBeEnabled();
   const unchanged = JSON.parse(await page.getByTestId("selection").textContent());
   assert.equal(unchanged.saved.enabled, false); assert.equal(unchanged.draft.enabled, true);
