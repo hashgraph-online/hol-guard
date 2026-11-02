@@ -357,3 +357,73 @@ def _application_database(path: Path) -> None:
         connection.commit()
     finally:
         connection.close()
+
+
+# The second release of the type checker a monorepo's other workspace is held
+# back on. One `pnpm-lock.yaml` serves the whole tree, so its `packages` block
+# names both, and only the `importers` block says which one each workspace runs.
+_PNPM_LEGACY_TYPESCRIPT = "5.4.5"
+
+
+def pnpm_monorepo(root: Path) -> None:
+    """A pnpm workspace root whose lockfile carries a second workspace's own release.
+
+    This is the ordinary shape of any monorepo that has not finished a version
+    bump: the root runs the current type checker, a package somewhere under it
+    is still on the previous one, and the single lockfile lists both. Reading
+    `packages` alone leaves two candidates and no answer about what `npx tsc`
+    would run here, which is what turned a type check into an approval prompt.
+    """
+
+    version = _NODE_TOOLS["typescript"][0]
+    manifest = {
+        "private": True,
+        "scripts": {"typecheck": "tsc --noEmit"},
+        "devDependencies": {"typescript": f"^{version}"},
+    }
+    _write(root / "package.json", json.dumps(manifest) + "\n")
+    _write(root / "pnpm-workspace.yaml", "packages:\n  - packages/*\n")
+    _write(root / "tsconfig.json", json.dumps({"compilerOptions": {"strict": True}}) + "\n")
+    _write(root / "src" / "index.ts", "export const ready = true;\n")
+    legacy = {"name": "@acme/legacy", "devDependencies": {"typescript": f"~{_PNPM_LEGACY_TYPESCRIPT}"}}
+    _write(root / "packages" / "legacy" / "package.json", json.dumps(legacy) + "\n")
+    _write(root / "pnpm-lock.yaml", _pnpm_monorepo_lockfile(version))
+    _node_package(root, "typescript", version, ("tsc",))
+
+
+def _pnpm_monorepo_lockfile(version: str) -> str:
+    """The lockfile pnpm writes for that tree: an importer each, both releases listed once."""
+    legacy = _PNPM_LEGACY_TYPESCRIPT
+    return (
+        "lockfileVersion: '9.0'\n"
+        "\n"
+        "settings:\n"
+        "  autoInstallPeers: true\n"
+        "  excludeLinksFromLockfile: false\n"
+        "\n"
+        "importers:\n"
+        "\n"
+        "  .:\n"
+        "    devDependencies:\n"
+        "      typescript:\n"
+        f"        specifier: ^{version}\n"
+        f"        version: {version}\n"
+        "\n"
+        "  packages/legacy:\n"
+        "    devDependencies:\n"
+        "      typescript:\n"
+        f"        specifier: ~{legacy}\n"
+        f"        version: {legacy}\n"
+        "\n"
+        "packages:\n"
+        "\n"
+        f"  typescript@{legacy}:\n"
+        "    resolution: {integrity: sha512-fixture}\n"
+        "    engines: {node: '>=14.17'}\n"
+        "    hasBin: true\n"
+        "\n"
+        f"  typescript@{version}:\n"
+        "    resolution: {integrity: sha512-fixture}\n"
+        "    engines: {node: '>=14.17'}\n"
+        "    hasBin: true\n"
+    )
