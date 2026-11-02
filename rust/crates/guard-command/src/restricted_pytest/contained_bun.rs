@@ -70,14 +70,16 @@ pub(super) fn prepare_eval(input: &Input, argv: &[String]) -> Result<Value, Rest
     )
 }
 
-/// Plan for a `bun test` argv: `[bun, test, ...]`.
+/// Plan for a `bun test` argv: `[bun, test, ...]`, or for the single test
+/// file `bun` runs on its own: `[bun, math.test.ts]`.
 ///
-/// The read-only Node test profile carries it. Bun's runner loads the
+/// The read-only Node test profile carries both. Bun's runner loads the
 /// workspace's own tests and writes nothing, so the boundary `node --test`
 /// runs under needs no widening; only the image approval differs.
 pub(super) fn prepare_test(input: &Input, argv: &[String]) -> Result<Value, RestrictedPytestError> {
     let contained = matches!(argv, [_, test, args @ ..]
-        if test == "test" && crate::contained_argv::bun_test_runs_once(args));
+        if test == "test" && crate::contained_argv::bun_test_runs_once(args))
+        || crate::contained_argv::bun_test_script_invocation(argv);
     if !contained {
         return Err(RestrictedPytestError::new(
             INVALID,

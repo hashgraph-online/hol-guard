@@ -42,6 +42,47 @@ fn the_node_test_reason_carries_bun_s_package_protection_permission() {
 }
 
 #[test]
+fn bun_running_one_workspace_test_file_takes_the_node_test_boundary() {
+    // `bun src/app-routing.test.ts` is the pass `bun test` takes over that one
+    // file: `bun test` discovers and loads the same file under this profile.
+    for command in [
+        "bun src/app-routing.test.ts",
+        "bun src/shell-navigation.test.tsx",
+        "bun api.spec.mjs",
+        "bun tests/test_parser.js",
+    ] {
+        let model = parsed(command);
+        let found = readonly_test_reason(&model, None);
+        assert_eq!(
+            found,
+            Some("native_node_test_readonly_containment_required"),
+            "{command}"
+        );
+        assert!(
+            package_permission_contained(found, Some(&model)),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn bun_keeps_the_review_for_a_file_outside_the_workspace_or_a_second_word() {
+    // A path that leaves the tree, a name no project gives a test file, and a
+    // line carrying more than the one file each stay at ordinary review.
+    for command in [
+        "bun /tmp/payload.test.ts",
+        "bun ../other/app.test.ts",
+        "bun ~/scratch/app.test.ts",
+        "bun src/server.ts",
+        "bun src/app.test.ts --preload ./setup.ts",
+        "bun src/app.test.ts src/other.test.ts",
+        "bun src/app.test.sh",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
+
+#[test]
 fn a_relative_vitest_entry_reads_as_the_project_runner() {
     for command in [
         "node node_modules/vitest/vitest.mjs run",
