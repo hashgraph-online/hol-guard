@@ -27,6 +27,10 @@ pub mod catalog_read_model;
 mod catalog_read_projection;
 #[path = "../../guard-command/src/catalog_read_query.rs"]
 mod catalog_read_query;
+#[path = "../../guard-command/src/cloud_action_binding.rs"]
+pub mod cloud_action_binding;
+#[path = "../../guard-command/src/cloud_action_canonical.rs"]
+mod cloud_action_canonical;
 #[path = "../../guard-command/src/cloud_audit_sync.rs"]
 pub mod cloud_audit_sync;
 #[path = "../../guard-command/src/cloud_scrub_shell.rs"]
