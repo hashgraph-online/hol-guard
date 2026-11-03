@@ -6,6 +6,7 @@ import json
 import os
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -24,8 +25,12 @@ def _context(tmp_path: Path) -> HarnessContext:
 
 def _answering(monkeypatch: pytest.MonkeyPatch, answer: object) -> list[tuple[str, dict[str, object]]]:
     calls: list[tuple[str, dict[str, object]]] = []
+    real = authority_module.native_runner_authority
 
-    def fake(kind: str, args: dict[str, object], **_kwargs: object) -> object:
+    def fake(kind: str, args: dict[str, object], *rest: Any, **kwargs: Any) -> object:
+        if kind != "cline_hook_files":
+            # Path binding is the native runtime's own answer.
+            return real(kind, args, *rest, **kwargs)
         calls.append((kind, json.loads(json.dumps(args, allow_nan=False))))
         if isinstance(answer, Exception):
             raise answer

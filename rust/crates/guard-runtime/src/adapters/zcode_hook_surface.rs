@@ -222,7 +222,7 @@ fn render(value: &PyVal, lone: bool) -> Result<String, &'static str> {
     String::from_utf8(out).map_err(|_| ERR_INVALID)
 }
 
-fn render_file(payload: Dict, lone: bool) -> Result<String, &'static str> {
+pub(crate) fn render_file(payload: Dict, lone: bool) -> Result<String, &'static str> {
     render(&PyVal::Dict(payload), lone).map(|text| text + "\n")
 }
 

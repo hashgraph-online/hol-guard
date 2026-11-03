@@ -148,6 +148,8 @@ mod cline_hook_files;
 #[path = "adapters/cline_hook_files_tests.rs"]
 mod cline_hook_files_tests;
 mod cline_hook_worker;
+#[path = "adapters/cline_paths.rs"]
+mod cline_paths;
 #[path = "adapters/cline_plugin_render.rs"]
 mod cline_plugin_render;
 #[cfg(test)]
@@ -164,6 +166,7 @@ mod cloud_request_snapshot;
 mod cloud_request_text;
 #[cfg(test)]
 mod cloud_request_vectors_tests;
+mod cloud_review_ack;
 mod cloud_sync_privacy;
 mod codex_app_server_socket;
 #[path = "adapters/detection/codex_detect.rs"]
@@ -608,6 +611,8 @@ mod harness_mcp_discovery;
 #[cfg(test)]
 #[path = "adapters/harness_mcp_discovery_tests.rs"]
 mod harness_mcp_discovery_tests;
+#[path = "adapters/harness_settings_file.rs"]
+mod harness_settings_file;
 mod harness_version_compat;
 mod health_lease_contract;
 mod health_lease_state;
@@ -733,6 +738,7 @@ mod local_cli_observer;
 mod local_mcp_grant_identity;
 mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
+mod local_mcp_probe;
 mod local_once_store;
 mod local_risk_report;
 mod local_skill_index;

@@ -292,10 +292,11 @@ fn lookup(
                 words,
                 found,
             } = request;
+            let asked = words.clone();
             let picked = actor
                 .call(move |runtime, engine| {
                     engine
-                        .prompt_context(runtime, root, app, found.clone(), query)
+                        .prompt_context(runtime, root, app, found.clone(), query, &asked)
                         .map(|picked| picked.map(|picked| (picked, found)))
                 })
                 .ok()

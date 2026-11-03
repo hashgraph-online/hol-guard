@@ -22,6 +22,7 @@ use super::claude_code_detect;
 use super::claude_hook_config;
 use super::cline_detect;
 use super::cline_hook_files;
+use super::cline_paths;
 use super::cline_plugin_render;
 use super::codex_detect;
 use super::codex_remote_launch;
@@ -42,6 +43,7 @@ use super::grok_detect;
 use super::grok_legacy_settings;
 use super::grok_user_config_op;
 use super::harness_hook_settings;
+use super::harness_settings_file;
 use super::hermes_detect;
 use super::kimi_detect;
 use super::kimi_hook_config;
@@ -182,10 +184,12 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "pi_detect" => pi_detect::detect(args),
         "cline_plugin_render" => cline_plugin_render::render(args),
         "cline_hook_files" => cline_hook_files::dispatch(args),
+        "cline_paths" => cline_paths::dispatch(args),
         "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
         "codex_host_inventory" => crate::codex_host_inventory::dispatch(args),
         "package_script_memory" => crate::package_script_memory::dispatch(args),
+        "cloud_review_ack" => crate::cloud_review_ack::dispatch(args),
         "copilot_detect" => copilot_detect::detect(args),
         "copilot_hook_config" => copilot_hook_config::dispatch(args),
         "copilot_lifecycle_state" => copilot_lifecycle_state::dispatch(args),
@@ -198,8 +202,10 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "devin_detect" => devin_detect::detect(args),
         "devin_jsonc" => devin_jsonc::document(args),
         "harness_hook_settings" => harness_hook_settings::dispatch(args),
+        "harness_settings_file" => harness_settings_file::dispatch(args),
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
+        "local_mcp_probe" => crate::local_mcp_probe::dispatch(args),
         "hook_approval_wait" => crate::hook_approval_wait::dispatch(args),
         "grok_detect" => grok_detect::detect(args),
         "grok_legacy_settings" => grok_legacy_settings::dispatch(args),
