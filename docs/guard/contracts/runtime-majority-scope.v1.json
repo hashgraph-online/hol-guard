@@ -325,7 +325,7 @@
       {
         "id": "install-uninstall-doctor",
         "category": "install_config",
-        "reason": "Install/uninstall/doctor/connect/pairing/OAuth/desktop-bootstrap CLI flows and repair/inverse lifecycle. codex_hook_recovery.py/codex_hook_rollback.py are the hook-publication journal, called only from CodexHarnessAdapter._write_authenticated_hook_config_owned, prepare_* migration/backup functions, prepare_install, the shim and cursor prepare functions and the excluded repair/inverse modules. commands_remove_hooks, hook_removal_presence, daemon_stop and commands_repair back the uninstall/repair CLI commands and are imported only by the commands_support facade and the excluded parser/dispatchers.",
+        "reason": "Install/uninstall/doctor/connect/pairing/OAuth/desktop-bootstrap CLI flows and repair/inverse lifecycle. codex_hook_recovery.py/codex_hook_rollback.py are the hook-publication journal, called only from CodexHarnessAdapter._write_authenticated_hook_config_owned, prepare_* migration/backup functions, prepare_install, the shim and cursor prepare functions and the excluded repair/inverse modules. commands_remove_hooks, hook_removal_presence, daemon_stop and commands_repair back the uninstall/repair CLI commands and are imported only by the commands_support facade and the excluded parser/dispatchers. cloud_actions_* and commands_dispatch_cloud_actions back `hol-guard cloud-actions` sign-in, sign-out and profile status (a browser OAuth flow for Guard Cloud actions); nothing on the hook path imports them.",
         "path": [
           "src/codex_plugin_scanner/guard/cli/install_*.py",
           "src/codex_plugin_scanner/guard/cli/uninstall_commands.py",
@@ -338,6 +338,8 @@
           "src/codex_plugin_scanner/guard/cli/connect_sync_result.py",
           "src/codex_plugin_scanner/guard/cli/remote_pair_flow.py",
           "src/codex_plugin_scanner/guard/cli/oauth_*.py",
+          "src/codex_plugin_scanner/guard/cli/cloud_actions_*.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud_actions.py",
           "src/codex_plugin_scanner/guard/cli/trust_install_surface.py",
           "src/codex_plugin_scanner/guard/cli/grok_hook_validation.py",
           "src/codex_plugin_scanner/guard/cli/codex_authority_repair.py",
@@ -369,7 +371,6 @@
           "src/codex_plugin_scanner/guard/cli/progress.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_admin.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud.py",
-          "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud_actions.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_mdm.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_policy_document.py",
