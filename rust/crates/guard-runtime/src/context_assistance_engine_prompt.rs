@@ -3,7 +3,8 @@
 //! When someone has turned on agent context, each prompt an agent hook sees
 //! keeps one memory-only scope per (project, app) up to date with the files
 //! that prompt is about, and asks CIGAR which parts matter. A project picked
-//! by hand always wins: its files stay exactly as chosen. Automatic scopes
+//! by hand always wins, for every app when it was picked in the dashboard:
+//! its files stay exactly as chosen. Automatic scopes
 //! never keep a resting worker awake and are the first to make room.
 use super::*;
 use std::time::{Instant, SystemTime};
@@ -200,8 +201,12 @@ impl Engine {
         if let Some(id) = self
             .scopes
             .iter()
-            .find(|(id, scope)| !self.auto.contains(id) && !scope.revoked && same(scope))
-            .map(|(id, _)| id.clone())
+            .filter(|(id, scope)| {
+                !self.auto.contains(id) && !scope.revoked && scope.root.path() == root.path()
+            })
+            .filter_map(|(id, scope)| Some((pick_rank(&scope.app, &app, scope.sources.len())?, id)))
+            .min_by_key(|(rank, _)| *rank)
+            .map(|(_, id)| id.clone())
         {
             return self.pick(runtime, &id, &query).map(Some);
         }
@@ -473,6 +478,19 @@ impl Engine {
                 let _ = scope.graph.close(runtime);
             }
         }
+    }
+}
+
+/// How a project picked by hand answers `app`'s prompts: a pick for that app
+/// comes first, then files picked in the dashboard, which serve every app.
+/// A dashboard pick of no files leaves the prompt to the automatic scope.
+fn pick_rank(picked_for: &str, app: &str, files: usize) -> Option<u8> {
+    if picked_for == app {
+        Some(0)
+    } else if picked_for == "dashboard" && files > 0 {
+        Some(1)
+    } else {
+        None
     }
 }
 

@@ -1,9 +1,9 @@
-import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, a9 as HiMiniCloud, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as fetchWithGuardAuth, b4 as isRecord$1, b5 as HiMiniArrowTopRightOnSquare, b6 as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b7 as HiMiniPauseCircle, b8 as listContextAgentSessions, h as harnessDisplayName, b9 as HiMiniLink, ba as revokeContextAgentSession, bb as authorizeContextAgentSession, bc as ContextAssistanceApiError, bd as ask, be as parseContextScope, bf as validContextBrokerRevision, bg as isGuardDemoMode, bh as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bi as HiMiniCodeBracketSquare, bj as HiMiniFolder, u as HiMiniDocumentText, bk as HiMiniComputerDesktop, bl as HiMiniHome, k as HiMiniCheck, bm as HiMiniFolderPlus, bn as HiMiniClock, bo as commitDashboardLocation, bp as listContextWorkspaces, bq as HiMiniFolderOpen, br as grantContextWorkspace, bs as manageContextWorkspace, bt as compileWorkspaceContext, w as HiMiniArrowRight, M as HiMiniClipboardDocument, bu as HiMiniArrowLeft, bv as isCigarProducerVersion, bw as isCigarCoreLabel, bx as subscribeDashboardLocation, a5 as HiMiniSparkles, by as HiMiniArrowUpCircle, bz as parseContextAssistanceStatus, bA as isCigarBuildIdentity, bB as fetchContextInstallations, bC as HiMiniCloudArrowDown, f as fetchContextAssistance, c as controlContextAssistance, bD as HiMiniArrowDownTray, bE as downloadBlob, bF as savedEvidenceCopy, bG as guardAwareHref, bH as fetchContextData, bI as forgetContextHistory, bJ as forgetSavedEvidence, bK as resolveProtectionLevelCopy, aA as fetchSettings, bL as fetchRuntimeSnapshot, bM as clearHarnessWatchOverrides, bN as withHarnessPosturePatch, P as updateSettings, bO as clearPolicy, bP as clearReviewQueue, bQ as revokeApprovalGateCooldown, bR as disableApprovalGateTotp, bS as importSettings, bT as resetSettings, bU as enrollApprovalGateTotp, bV as verifyApprovalGateTotp, bW as clearEvidence, bX as exportDiagnostics, bY as repairApprovalCenter, bZ as exportSettings, b_ as setupDesktopNotifications, a7 as EmptyState, b$ as settingsWatchBannerModel, c0 as WorkspacePageHeader, Z as WatchProtectionBanner, c1 as navigateFromAnchor, g as HiMiniChevronDown, c2 as humanizeList, c3 as isProtectionPosture, c4 as deriveProtectionPosture, c5 as normalizeHarnessPostures, c6 as approvalGateCooldownLabel } from "../guard-dashboard.js";
-import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-DFZLvZ36.js";
+import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, a9 as HiMiniCloud, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as fetchWithGuardAuth, b4 as isRecord$1, b5 as HiMiniArrowTopRightOnSquare, b6 as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b7 as HiMiniPauseCircle, h as harnessDisplayName, b8 as listContextAgentSessions, b9 as HiMiniLink, ba as revokeContextAgentSession, bb as grantContextWorkspace, bc as authorizeContextAgentSession, bd as ContextAssistanceApiError, be as ask, bf as parseContextScope, bg as validContextBrokerRevision, bh as isGuardDemoMode, bi as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bj as HiMiniCodeBracketSquare, bk as HiMiniFolder, u as HiMiniDocumentText, bl as HiMiniComputerDesktop, bm as HiMiniHome, k as HiMiniCheck, bn as HiMiniFolderPlus, bo as HiMiniClock, bp as listContextWorkspaces, bq as HiMiniFolderOpen, br as manageContextWorkspace, bs as compileWorkspaceContext, w as HiMiniArrowRight, bt as HiMiniChatBubbleLeftEllipsis, bu as HiMiniDocumentMagnifyingGlass, bv as HiMiniPower, bw as HiMiniEyeSlash, bx as HiMiniCpuChip, by as HiMiniAcademicCap, aa as HiMiniQuestionMarkCircle, M as HiMiniClipboardDocument, bz as HiMiniArrowLeft, bA as isCigarProducerVersion, bB as isCigarCoreLabel, a5 as HiMiniSparkles, bC as subscribeDashboardLocation, bD as HiMiniChatBubbleLeftRight, bE as HiMiniArrowUpCircle, bF as parseContextAssistanceStatus, bG as isCigarBuildIdentity, bH as fetchContextInstallations, bI as HiMiniCloudArrowDown, f as fetchContextAssistance, c as controlContextAssistance, bJ as commitDashboardLocation, bK as HiMiniArrowDownTray, bL as downloadBlob, bM as savedEvidenceCopy, bN as guardAwareHref, bO as fetchContextData, bP as forgetContextHistory, bQ as forgetSavedEvidence, bR as resolveProtectionLevelCopy, aA as fetchSettings, bS as fetchRuntimeSnapshot, bT as clearHarnessWatchOverrides, bU as withHarnessPosturePatch, P as updateSettings, bV as clearPolicy, bW as clearReviewQueue, bX as revokeApprovalGateCooldown, bY as disableApprovalGateTotp, bZ as importSettings, b_ as resetSettings, b$ as enrollApprovalGateTotp, c0 as verifyApprovalGateTotp, c1 as clearEvidence, c2 as exportDiagnostics, c3 as repairApprovalCenter, c4 as exportSettings, c5 as setupDesktopNotifications, a7 as EmptyState, c6 as settingsWatchBannerModel, c7 as WorkspacePageHeader, Z as WatchProtectionBanner, c8 as navigateFromAnchor, g as HiMiniChevronDown, c9 as humanizeList, ca as isProtectionPosture, cb as deriveProtectionPosture, cc as normalizeHarnessPostures, cd as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-0zM1Juyt.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
-import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-bAWZ8zmO.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-CjWFL3B3.js";
-import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-7c8X0j_V.js";
+import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-C0X7QXA-.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-o4J5gv4p.js";
+import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-Do0eMrgH.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
   if (typeof count2 === "number" && count2 > 0) {
@@ -3432,7 +3432,7 @@ function ContextSettingsControls(props) {
           SettingsToggleRow,
           {
             label: "Allow selected workspace documents",
-            description: "With Context for AI apps on, prompts in Claude Code, Codex, Pi and Oh My Pi get the files in their project that match them. To limit one app to exact files, pick a project folder under Projects & AI apps and choose that app.",
+            description: "With Context for AI apps on, prompts in Claude Code, Codex, Pi and Oh My Pi get the files in their project that match them. To choose the exact files, add the project under Projects.",
             checked: value.sources.workspace_documents,
             disabled: editingDisabled,
             onChange: (workspace_documents) => props.onChange({ ...value, sources: {
@@ -3575,9 +3575,9 @@ function ContextSettingsControls(props) {
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: storageId + "-retention", className: caption$1 + " mt-1 block font-normal", children: "Applies to context history, saved evidence and shared notes." })
               ] })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Memory data ends when the runtime stops. Saved evidence uses private local files, with no Guard encryption; it can outlive the runtime until retention or removal. Restoring it never restores app access or approvals. Saving a storage change ends current context access." }),
-            status?.capabilities?.private_persistence !== true ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Saved evidence activation is unavailable in this build. Existing saved data can be removed in Data & repair." }) : null,
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Memory data also ends when access is revoked, the runtime stops, or Guard restarts. Changing preferences requires fresh grants." })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Notes kept in memory disappear when CIGAR stops. Saved notes are private files on this computer, not encrypted by Guard, and stay until they expire or you delete them. Bringing them back never brings back app access or approvals. Changing this ends current access, so add your projects again after." }),
+            status?.capabilities?.private_persistence !== true ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "This version of Guard cannot save notes. You can still delete notes saved earlier in Privacy." }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Notes in memory also disappear when you take back access or Guard restarts." })
           ] }),
           effective ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Group, { title: "In effect now", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid gap-2 sm:grid-cols-2 lg:grid-cols-3", children: [
@@ -3618,9 +3618,38 @@ function ContextSettingsControls(props) {
   ] });
 }
 const empty$1 = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70";
-function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate }) {
+const label$1 = "text-sm font-medium text-brand-dark";
+const CONNECTABLE_APPS = [
+  "cursor",
+  "codex",
+  "claude-code",
+  "copilot",
+  "gemini",
+  "opencode",
+  "cline",
+  "kimi",
+  "hermes",
+  "openclaw",
+  "antigravity",
+  "zcode",
+  "devin",
+  "muse",
+  "paseo",
+  "pi",
+  "omp"
+];
+const folderName$1 = (path) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+function appScope(scopes, workspace, app) {
+  return scopes.find((scope) => !scope.revoked && scope.workspace === workspace && scope.app === app);
+}
+function pickedFiles(scopes, workspace) {
+  const own = scopes.filter((scope) => !scope.revoked && scope.workspace === workspace);
+  const picked = own.find((scope) => scope.app === "dashboard") ?? own[0];
+  return picked ? picked.sources.map((source) => source.path) : [];
+}
+function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate, sharingAllowed = false, onGranted }) {
   const [sessions, setSessions] = reactExports.useState([]);
-  const [selected, setSelected] = reactExports.useState({});
+  const [choices, setChoices] = reactExports.useState({});
   const [confirm, setConfirm] = reactExports.useState(null);
   const [error, setError] = reactExports.useState(null);
   const [statusError, setStatusError] = reactExports.useState(null);
@@ -3630,7 +3659,11 @@ function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate })
   const pending = reactExports.useRef(false);
   const allowed = ready && enabled;
   const idBase = reactExports.useId();
-  const confirmationScope = scopes.find((scope) => scope.scope_id === selected[confirm?.session_id ?? ""]);
+  const projects = [...new Set(scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace))];
+  const projectOptions = projects.map((workspace) => ({ value: workspace, label: folderName$1(workspace), description: workspace }));
+  const appOptions = CONNECTABLE_APPS.map((app) => ({ value: app, label: harnessDisplayName(app) }));
+  const choice = (session) => choices[session.session_id] ?? { read: false, propose: false };
+  const choose = (session, change) => setChoices((values) => ({ ...values, [session.session_id]: { ...choice(session), ...change } }));
   const refresh = reactExports.useCallback(async () => {
     if (!allowed || pending.current) return;
     const id2 = ++revision.current;
@@ -3646,13 +3679,13 @@ function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate })
     } catch {
       if (revision.current === id2) {
         setSessions([]);
-        setStatusError("Connection status is unavailable. Refresh before granting access.");
+        setStatusError("Guard could not check for apps waiting to connect. Refresh to try again.");
       }
     }
   }, [allowed]);
   reactExports.useEffect(() => {
     setSessions([]);
-    setSelected({});
+    setChoices({});
     setConfirm(null);
     setError(null);
     setStatusError(null);
@@ -3669,8 +3702,8 @@ function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate })
   }, [allowed, generation, refresh]);
   async function perform(session, credentials, revoke = false) {
     if (pending.current) return;
-    const scope = scopes.find((scope2) => scope2.scope_id === selected[session.session_id] && !scope2.revoked && scope2.app !== "dashboard");
-    if (!revoke && (dirty || !scope)) return;
+    const { workspace, app, read, propose } = choice(session);
+    if (!revoke && (dirty || !workspace || !app)) return;
     pending.current = true;
     const id2 = ++revision.current;
     request.current?.abort();
@@ -3680,10 +3713,26 @@ function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate })
     setError(null);
     try {
       if (revoke) await revokeContextAgentSession(session.session_id, controller.signal);
-      else await authorizeContextAgentSession(session.session_id, scope.scope_id, credentials, controller.signal);
+      else {
+        let scope = appScope(scopes, workspace, app);
+        let proof = credentials;
+        if (!scope) {
+          scope = await grantContextWorkspace(
+            workspace,
+            pickedFiles(scopes, workspace),
+            credentials,
+            controller.signal,
+            app,
+            sharingAllowed ? { read, propose: read && propose } : void 0
+          );
+          onGranted?.(scope);
+          proof = credentials?.currentPassword ? { currentPassword: credentials.currentPassword } : credentials;
+        }
+        await authorizeContextAgentSession(session.session_id, scope.scope_id, proof, controller.signal);
+      }
       if (revision.current === id2) setConfirm(null);
     } catch (failure2) {
-      if (revision.current === id2) setError(failure2 instanceof ContextAssistanceApiError ? failure2.message : "The connection change did not return a verified result. Refresh its status before trying again.");
+      if (revision.current === id2) setError(failure2 instanceof ContextAssistanceApiError ? failure2.message : "Guard did not confirm that change. Refresh, then try again.");
     } finally {
       pending.current = false;
       if (revision.current === id2) {
@@ -3692,70 +3741,125 @@ function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate })
       }
     }
   }
-  const grants = scopes.filter((scope) => !scope.revoked && scope.app !== "dashboard").map((scope) => ({
-    value: scope.scope_id,
-    label: harnessDisplayName(scope.app) + " · " + scope.workspace
-  }));
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "AI app context connections", className: "space-y-4", children: [
+  const asked = confirm ? choice(confirm) : null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Connect another app", className: "space-y-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-end justify-between gap-x-6 gap-y-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: versionHeading, children: "AI app context connections" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Use Guard's MCP server in your app, then match the connection code from get_context_status before granting access. Pairing authenticates that MCP process; the app label is your permission choice. A running runtime alone grants no app access." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: versionHeading, children: "Connect another app" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Claude Code, Codex, Pi and Oh My Pi need nothing here. Other apps, like Cursor, can ask CIGAR for files through Guard's tool server (MCP). When one asks, it shows up here with a short code. Check it matches the code your app shows, then choose the project." })
       ] }),
       allowed ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet, type: "button", disabled: busy, onClick: () => {
         setError(null);
         void refresh();
       }, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "size-4" }),
-        "Refresh app connections"
+        "Check for apps"
       ] }) : null
     ] }),
-    !allowed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty$1, children: "Enable Context for AI apps, save settings and start a verified runtime to pair a connection." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    !allowed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty$1, children: "Turn on CIGAR and let it read project files to connect other apps." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       error || statusError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "cigar-note", children: error ?? statusError }) : null,
-      sessions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty$1, children: "No context connection is waiting or paired." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-3", children: sessions.map((session) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "section",
-        {
-          className: "space-y-3 rounded-2xl border p-4 sm:p-5 " + (session.phase === "pending" ? "border-brand-blue/25 bg-brand-blue/[0.03]" : "border-brand-dark/10 bg-white"),
-          "aria-label": `Context connection ${session.session_id}`,
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-9 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLink, { className: "size-4" }) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: session.phase === "pending" ? "attention" : "green", children: session.phase === "pending" ? "Waiting for your permission" : "Grant assigned" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-brand-dark/60", children: [
-                "expires in ",
-                Math.ceil(session.expires_in_seconds / 60),
-                " minutes"
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all font-mono text-xs text-brand-dark/70", children: [
-              "Connection code: ",
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-brand-dark", children: session.session_id })
-            ] }),
-            session.phase === "pending" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: `${idBase}-${session.session_id}`, className: "text-sm font-medium text-brand-dark", children: "Workspace and app grant" }),
+      sessions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty$1, children: "No app is asking to connect right now." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-3", children: sessions.map((session) => {
+        const current = choice(session);
+        const connected = scopes.find((scope) => scope.scope_id === session.scope_id);
+        return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "section",
+          {
+            "aria-label": `App connection ${session.session_id}`,
+            className: "space-y-3 rounded-2xl border p-4 sm:p-5 " + (session.phase === "pending" ? "border-brand-blue/25 bg-brand-blue/[0.03]" : "border-brand-dark/10 bg-white"),
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-9 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLink, { className: "size-4" }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: session.phase === "pending" ? "attention" : "green", children: session.phase === "pending" ? "Asking to connect" : "Connected" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-brand-dark/60", children: [
+                  "ends in ",
+                  Math.ceil(session.expires_in_seconds / 60),
+                  " minutes"
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-sm text-brand-dark/75", children: [
+                "Code: ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono font-semibold text-brand-dark", children: session.session_id })
+              ] }),
+              session.phase === "pending" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                projects.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Add a project above first, then connect it here." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 sm:grid-cols-2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: `${idBase}-${session.session_id}-app`, className: label$1, children: "Which app is this?" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      SelectMenu,
+                      {
+                        labelledBy: `${idBase}-${session.session_id}-app`,
+                        className: "mt-1.5 w-full",
+                        disabled: busy || dirty,
+                        placeholder: "Choose the app",
+                        value: current.app ?? "",
+                        options: appOptions,
+                        onChange: (app) => choose(session, { app })
+                      }
+                    )
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: `${idBase}-${session.session_id}-project`, className: label$1, children: "Which project?" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      SelectMenu,
+                      {
+                        labelledBy: `${idBase}-${session.session_id}-project`,
+                        className: "mt-1.5 w-full",
+                        disabled: busy || dirty,
+                        placeholder: "Choose a project",
+                        value: current.workspace ?? "",
+                        options: projectOptions,
+                        onChange: (workspace) => choose(session, { workspace })
+                      }
+                    )
+                  ] })
+                ] }),
+                sharingAllowed && projects.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-0.5 rounded-xl bg-surface-1/70 px-3 py-1.5 text-sm text-brand-dark/80", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 cursor-pointer items-center gap-3", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "input",
+                      {
+                        type: "checkbox",
+                        className: "size-4 accent-brand-blue",
+                        checked: current.read,
+                        disabled: busy || dirty,
+                        onChange: (event) => choose(session, { read: event.target.checked, propose: event.target.checked && current.propose })
+                      }
+                    ),
+                    "Let it read shared notes you approved"
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 cursor-pointer items-center gap-3", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "input",
+                      {
+                        type: "checkbox",
+                        className: "size-4 accent-brand-blue",
+                        checked: current.propose,
+                        disabled: busy || dirty || !current.read,
+                        onChange: (event) => choose(session, { propose: event.target.checked })
+                      }
+                    ),
+                    "Let it suggest new notes for you to review"
+                  ] })
+                ] }) : null,
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  SelectMenu,
+                  "button",
                   {
-                    labelledBy: `${idBase}-${session.session_id}`,
-                    className: "mt-1.5 w-full",
-                    disabled: busy || dirty,
-                    placeholder: "Choose a grant",
-                    value: selected[session.session_id] ?? "",
-                    options: grants,
-                    onChange: (value) => setSelected((values) => ({ ...values, [session.session_id]: value }))
+                    className: versionPrimary,
+                    type: "button",
+                    disabled: busy || dirty || !current.app || !current.workspace,
+                    onClick: () => {
+                      if (gate?.enabled) setConfirm(session);
+                      else void perform(session);
+                    },
+                    children: "Connect"
                   }
                 )
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionPrimary, type: "button", disabled: busy || dirty || !selected[session.session_id], onClick: () => {
-                if (gate?.enabled) setConfirm(session);
-                else void perform(session);
-              }, children: "Authorize context connection" })
-            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all text-sm text-brand-dark/75", children: scopes.find((scope) => scope.scope_id === session.scope_id)?.workspace ?? "This grant is unavailable. Revoke it and pair again." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: busy, onClick: () => void perform(session, void 0, true), children: "Revoke context connection" })
-          ]
-        }
-      ) }, session.session_id)) })
+              ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all text-sm text-brand-dark/75", children: connected ? `${harnessDisplayName(connected.app)} · ${folderName$1(connected.workspace)}` : "This project is gone. Disconnect, then connect the app again." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: busy, onClick: () => void perform(session, void 0, true), children: session.phase === "pending" ? "Turn down" : "Disconnect" })
+            ]
+          }
+        ) }, session.session_id);
+      }) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       SettingsSaveProofModal,
@@ -3763,9 +3867,9 @@ function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate })
         open: confirm !== null,
         mode: "verify-save",
         gate,
-        title: "Authorize AI app context",
-        detail: `Grant connection ${confirm?.session_id ?? ""} access to ${confirmationScope ? `${harnessDisplayName(confirmationScope.app)} sources in ${confirmationScope.workspace}` : "the selected sources"} for this runtime session.${confirmationScope?.sharing?.mode === "shared_broker" ? ` Five-minute lease. Reviewed shared notes: ${confirmationScope.sharing.notes.read ? "allowed" : "not granted"}. Note proposals: ${confirmationScope.sharing.notes.propose ? "allowed, subject to your separate review" : "not granted"}.` : ""} This grants no command approval.`,
-        confirmLabel: "Authorize connection",
+        title: "Connect this app",
+        detail: asked?.app && asked.workspace ? `${harnessDisplayName(asked.app)} (code ${confirm?.session_id ?? ""}) can ask CIGAR for files in ${folderName$1(asked.workspace)} for the next few minutes.${sharingAllowed ? ` Shared notes: ${asked.read ? "it can read the ones you approved" : "off"}${asked.read && asked.propose ? ", and it can suggest new ones for you to review" : ""}.` : ""} This does not approve any command.` : "",
+        confirmLabel: "Connect",
         pending: busy,
         error,
         onCancel: () => {
@@ -3997,13 +4101,119 @@ function ContextNotesPanel({ scope, disabled, gate, onChanged }) {
     )
   ] });
 }
-const object$6 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const object$6 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+async function saveCigarPreference(config, proof, signal) {
+  if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Turning on CIGAR requires a local Guard installation.");
+  const timeout = AbortSignal.timeout(12e3);
+  const response = await fetchWithGuardAuth("/v1/settings", {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    body: JSON.stringify({
+      settings: { context_assistance: config },
+      ...proof?.currentPassword ? { approval_password: proof.currentPassword } : {},
+      ...proof?.totpCode ? { approval_totp_code: proof.totpCode } : {}
+    })
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    const code = object$6(body) && typeof body.error === "string" && /^[a-z0-9_]{1,160}$/.test(body.error) ? body.error : "settings_unavailable";
+    throw new ContextAssistanceApiError(code, response.status === 400 && object$6(body) && typeof body.message === "string" ? "Guard could not save this setting: " + body.message.slice(0, 200) : response.status === 403 ? "Guard needs your approval before this change." : "Guard did not confirm the saved setting. Refresh status before trying again.");
+  }
+  const saved = object$6(body) && object$6(body.settings) ? body.settings.context_assistance : null;
+  if (!object$6(saved) || saved.schema_version !== 1 || typeof saved.enabled !== "boolean" || typeof saved.runtime_id !== "string") {
+    throw new ContextAssistanceApiError("settings_payload_invalid", "Guard returned settings this page does not understand. Refresh status.");
+  }
+  return saved;
+}
+function allowProjectFilesPreferences(previous) {
+  return {
+    ...previous,
+    sources: { ...previous.sources, workspace_documents: true, source_set_id: previous.sources.source_set_id || "selected-workspaces" },
+    features: { ...previous.features, agent_context: true }
+  };
+}
+function useCigarAllowFiles(options) {
+  const [proof, setProof] = reactExports.useState(false);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const latest = reactExports.useRef(options);
+  latest.current = options;
+  const mounted = reactExports.useRef(true);
+  reactExports.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  async function save(credentials) {
+    const { saved, dirty, disabled } = latest.current;
+    if (!saved || dirty || disabled || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await saveCigarPreference(allowProjectFilesPreferences(saved), credentials);
+      if (!mounted.current) return;
+      setProof(false);
+      latest.current.onSaved(next, saved);
+      if (next.enabled) latest.current.onRestart();
+    } catch (cause) {
+      if (!mounted.current) return;
+      setError(cause instanceof Error ? cause.message : "Guard did not save this setting. Try again.");
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  }
+  return {
+    available: options.saved !== null && !options.dirty && !options.disabled,
+    busy,
+    error,
+    start: () => {
+      setError(null);
+      if (latest.current.gate?.enabled) setProof(true);
+      else void save();
+    },
+    proofOpen: proof,
+    cancel: () => {
+      if (!busy) {
+        setProof(false);
+        setError(null);
+      }
+    },
+    confirm: (credentials) => void save(credentials)
+  };
+}
+function CigarAllowFilesProof({ allow, gate }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    SettingsSaveProofModal,
+    {
+      open: allow.proofOpen,
+      mode: "verify-save",
+      gate,
+      title: "Let CIGAR read project files",
+      detail: "Prompts in your AI apps will get the few project files that match them. Secrets, keys, hidden files and anything your .gitignore leaves out stay skipped.",
+      confirmLabel: "Turn on",
+      error: allow.error,
+      pending: allow.busy,
+      onCancel: allow.cancel,
+      onConfirm: allow.confirm
+    }
+  );
+}
+function CigarAllowFilesButton({ allow, className, caption: caption2 }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-allow-files", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className, disabled: !allow.available || allow.busy, onClick: allow.start, children: allow.busy ? "Turning on…" : "Let CIGAR read project files" }),
+    allow.error && !allow.proofOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "cigar-allow-error", children: allow.error }) : caption2 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: caption2 }) : null
+  ] });
+}
+const object$5 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const text = (value) => typeof value === "string";
 const list = (value, max, item) => {
   if (!Array.isArray(value) || value.length > max || !value.every(item)) invalid$4();
   return value;
 };
-const place = (row2) => object$6(row2) && text(row2.label) && text(row2.path);
+const place = (row2) => object$5(row2) && text(row2.label) && text(row2.path);
 const size = (value) => Number.isSafeInteger(value) && value >= 0;
 function invalid$4() {
   throw new ContextAssistanceApiError("folder_payload_invalid", "Guard returned an unexpected folder list. Try again.");
@@ -4027,10 +4237,10 @@ async function browse(input, signal) {
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const code = object$6(body) && text(body.code) && /^[a-z0-9_]{1,80}$/.test(body.code) ? body.code : "folder_unavailable";
+    const code = object$5(body) && text(body.code) && /^[a-z0-9_]{1,80}$/.test(body.code) ? body.code : "folder_unavailable";
     throw new ContextAssistanceApiError(code, MESSAGES[code] ?? (response.status === 404 ? "This Guard version cannot browse folders yet. Update Guard, then try again." : "Guard could not open that folder."));
   }
-  if (!object$6(body) || body.schema !== "guard-context-folders.v1") invalid$4();
+  if (!object$5(body) || body.schema !== "guard-context-folders.v1") invalid$4();
   return body;
 }
 async function listFolders(path, hidden, signal) {
@@ -4046,7 +4256,7 @@ async function listFolders(path, hidden, signal) {
     truncated: body.truncated,
     places: list(body.places, 32, place),
     roots: list(body.roots, 26, place),
-    entries: list(body.entries, 400, (row2) => object$6(row2) && text(row2.name) && text(row2.path) && typeof row2.project === "boolean")
+    entries: list(body.entries, 400, (row2) => object$5(row2) && text(row2.name) && text(row2.path) && typeof row2.project === "boolean")
   };
 }
 async function listProjectFiles(workspace, path, signal) {
@@ -4057,9 +4267,9 @@ async function listProjectFiles(workspace, path, signal) {
     path: body.path,
     maxFileBytes: body.max_file_bytes,
     truncated: body.truncated,
-    entries: list(body.entries, 400, (row2) => object$6(row2) && text(row2.name) && text(row2.relative)),
-    files: list(body.files, 400, (row2) => object$6(row2) && text(row2.name) && text(row2.relative) && size(row2.size) && typeof row2.available === "boolean" && (row2.reason === null || ["too_large", "not_text", "empty"].includes(String(row2.reason)))),
-    suggested: list(body.suggested, 8, (row2) => object$6(row2) && text(row2.relative) && size(row2.size))
+    entries: list(body.entries, 400, (row2) => object$5(row2) && text(row2.name) && text(row2.relative)),
+    files: list(body.files, 400, (row2) => object$5(row2) && text(row2.name) && text(row2.relative) && size(row2.size) && typeof row2.available === "boolean" && (row2.reason === null || ["too_large", "not_text", "empty"].includes(String(row2.reason)))),
+    suggested: list(body.suggested, 8, (row2) => object$5(row2) && text(row2.relative) && size(row2.size))
   };
 }
 function folderCrumbs(path, separator) {
@@ -4655,55 +4865,30 @@ function FileRow({ file, checked, disabled, onToggle }) {
 }
 const question = "text-sm font-semibold text-brand-dark";
 const folderName = (path) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-const openSettings = () => {
-  const url = new URL(window.location.href);
-  url.searchParams.set("section", "runtime");
-  commitDashboardLocation(url.pathname + url.search + url.hash);
-};
 const plural = (count2, word2) => `${count2} ${word2}${count2 === 1 ? "" : "s"}`;
-const agentAppDescriptions = {
-  codex: "Its prompts get only the files you tick. It can also ask CIGAR about the project after you connect it.",
-  "claude-code": "Its prompts get only the files you tick. It can also ask CIGAR about the project after you connect it.",
-  cursor: "This app can ask CIGAR about the project after you connect it."
-};
-function projectAppOptions(agentsAllowed, executionAllowed) {
-  return [
-    { value: "dashboard", label: "Only this page", description: "You look things up here, in Guard. Your AI apps keep getting matching files on their own." },
-    ...agentsAllowed ? ["codex", "claude-code", "cursor"].map((name) => ({ value: name, label: harnessDisplayName(name), description: agentAppDescriptions[name] })) : [],
-    ...executionAllowed ? ["pi", "omp"].map((name) => ({ value: name, label: harnessDisplayName(name), description: "Its prompts get only the files you tick, and commands it runs through Guard come back with project notes." })) : []
-  ];
-}
-function proofDetail(input, executionAllowed, sharingAllowed) {
-  const who = input.app === "dashboard" ? "" : ` for ${harnessDisplayName(input.app)}`;
+function proofDetail(input, executionAllowed) {
   const files = input.files.length ? plural(input.files.length, "file") : "no files";
-  const notes = sharingAllowed && input.app !== "dashboard" ? ` Shared notes: ${input.notes?.read ? "allowed" : "off"}${input.notes?.propose ? ", and it may suggest new ones for you to review" : ""}.` : "";
-  const execution = executionAllowed && (input.app === "pi" || input.app === "omp") ? " This does not approve any command." : "";
-  return `CIGAR can read ${files} in ${folderName(input.workspace)}${who}, plus Guard's own safety facts for that folder. Nothing else in it is opened.${execution}${notes}`;
+  const execution = executionAllowed ? " This does not approve any command." : "";
+  return `CIGAR can read ${files} in ${folderName(input.workspace)}, plus Guard's own safety facts for that folder, for prompts in every AI app. Nothing else in it is opened.${execution}`;
 }
-function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharingAllowed, executionAllowed, gate, error, first, active = [], onGrant }) {
+function summary$2(workspace, files, documentsAllowed) {
+  if (documentsAllowed && files) return `Prompts about ${folderName(workspace)} will use these ${plural(files, "file")}, in every AI app.`;
+  return `No files picked, so your AI apps keep finding matching files in ${folderName(workspace)} on their own.`;
+}
+function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate, error, first, allowFiles, active = [], onGrant }) {
   const id2 = reactExports.useId();
   const [workspace, setWorkspace] = reactExports.useState(null);
   const [files, setFiles] = reactExports.useState([]);
-  const [app, setApp] = reactExports.useState("dashboard");
-  const [notesRead, setNotesRead] = reactExports.useState(false);
-  const [notesPropose, setNotesPropose] = reactExports.useState(false);
   const [picking, setPicking] = reactExports.useState(false);
   const [proofOpen, setProofOpen] = reactExports.useState(false);
   const [recent, setRecent] = reactExports.useState(() => readRecentProjects());
   const [preset, setPreset] = reactExports.useState(null);
   const shortcuts = recent.filter((project) => !active.includes(project.workspace));
-  const apps = projectAppOptions(agentsAllowed, executionAllowed);
-  const chosenApp = apps.some((option) => option.value === app) ? app : "dashboard";
-  const input = workspace ? {
-    workspace,
-    files: documentsAllowed ? files : [],
-    app: chosenApp,
-    notes: sharingAllowed && chosenApp !== "dashboard" ? { read: notesRead, propose: notesPropose } : void 0
-  } : null;
+  const input = workspace ? { workspace, files: documentsAllowed ? files : [] } : null;
   async function grant(credentials) {
     if (!input) return;
     if (await onGrant(input, credentials)) {
-      setRecent(rememberProject(input));
+      setRecent(rememberProject({ ...input, app: "dashboard" }));
       setProofOpen(false);
       setWorkspace(null);
       setFiles([]);
@@ -4713,13 +4898,12 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharing
   function reuse(project) {
     setPreset(project.files);
     setFiles(project.files);
-    setApp(project.app);
     setWorkspace(project.workspace);
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-5 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-6", "aria-labelledby": `${id2}-add`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: `${id2}-add`, className: versionHeading, children: first && !shortcuts.length ? "Add your first project" : "Add a project" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Choose a folder and the notes CIGAR may read. Secret files, like passwords and keys, are always skipped." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Choose a folder and tick the files CIGAR should read. Secret files, like passwords and keys, are always skipped." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { disabled: busy || dirty, className: "space-y-6", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "sr-only", children: "Add a project" }),
@@ -4747,58 +4931,11 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharing
       ),
       !workspace && shortcuts.length ? /* @__PURE__ */ jsxRuntimeExports.jsx(RecentProjects, { projects: shortcuts, onReuse: reuse, onForget: (path) => setRecent(forgetProject(path)) }) : null,
       workspace ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-surface-in space-y-2.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: question, children: "What should CIGAR read?" }),
-        documentsAllowed ? /* @__PURE__ */ jsxRuntimeExports.jsx(ProjectFilesPicker, { workspace, selected: files, onChange: setFiles, disabled: busy || dirty, preset }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-surface-1/70 px-4 py-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 flex-1 text-sm leading-6 text-brand-dark/70", children: "Reading project files is off, so CIGAR uses only Guard's own safety facts here. Turn on “Allow selected workspace documents” in Settings to pick notes." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, onClick: openSettings, children: "Open Settings" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: question, children: "Which files should CIGAR read?" }),
+        documentsAllowed ? /* @__PURE__ */ jsxRuntimeExports.jsx(ProjectFilesPicker, { workspace, selected: files, onChange: setFiles, disabled: busy || dirty, preset }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 rounded-xl bg-surface-1/70 px-4 py-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Reading project files is off right now. Turn it on to pick files here and to give your AI apps matching files with each prompt." }),
+          allowFiles ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarAllowFilesButton, { allow: allowFiles, className: versionPrimary }) : null
         ] })
-      ] }) : null,
-      workspace && apps.length > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "guard-surface-in space-y-2.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: question, children: "Which app can use it?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 sm:grid-cols-2", children: apps.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "label",
-          {
-            className: "flex cursor-pointer gap-3 rounded-xl border border-brand-dark/10 p-3 transition-colors hover:border-brand-dark/25 has-[:checked]:border-brand-blue/50 has-[:checked]:bg-brand-blue/[0.04] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-blue/40",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "radio", name: `${id2}-app`, value: option.value, className: "mt-0.5 size-4 shrink-0 accent-brand-blue", checked: chosenApp === option.value, onChange: () => setApp(option.value) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: option.label }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs leading-5 text-brand-dark/60", children: option.description })
-              ] })
-            ]
-          },
-          option.value
-        )) }),
-        sharingAllowed && chosenApp !== "dashboard" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-0.5 rounded-xl bg-surface-1/70 px-3 py-1.5 text-sm text-brand-dark/80", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 cursor-pointer items-center gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "checkbox",
-                className: "size-4 accent-brand-blue",
-                checked: notesRead,
-                onChange: (event) => {
-                  setNotesRead(event.target.checked);
-                  if (!event.target.checked) setNotesPropose(false);
-                }
-              }
-            ),
-            "Let it read shared notes you approved"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 cursor-pointer items-center gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "checkbox",
-                className: "size-4 accent-brand-blue",
-                checked: notesPropose,
-                disabled: !notesRead,
-                onChange: (event) => setNotesPropose(event.target.checked)
-              }
-            ),
-            "Let it suggest new notes for you to review"
-          ] })
-        ] }) : null
       ] }) : null,
       dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "cigar-note", children: "Save your preferences first, then add the project." }) : null,
       workspace ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3 border-t border-brand-dark/[0.07] pt-4", children: [
@@ -4812,10 +4949,10 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharing
               if (gate?.enabled) setProofOpen(true);
               else void grant();
             },
-            children: "Give CIGAR access"
+            children: "Add project"
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-brand-dark/60", children: documentsAllowed && files.length ? `CIGAR will read ${plural(files.length, "file")} from ${folderName(workspace)}.` : `CIGAR will use Guard's safety facts for ${folderName(workspace)}.` })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-brand-dark/60", children: summary$2(workspace, input?.files.length ?? 0, documentsAllowed) })
       ] }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -4840,9 +4977,9 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharing
         open: proofOpen && !!input,
         mode: "verify-save",
         gate,
-        title: "Confirm CIGAR access",
-        detail: input ? proofDetail(input, executionAllowed, sharingAllowed) : "",
-        confirmLabel: "Give access",
+        title: "Add this project",
+        detail: input ? proofDetail(input, executionAllowed) : "",
+        confirmLabel: "Add project",
         error,
         pending: busy,
         onCancel: () => {
@@ -4858,17 +4995,12 @@ function RecentProjects({ projects, onReuse, onForget }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: question, children: "Recent projects" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "grid gap-2 sm:grid-cols-2", children: projects.map((project) => {
       const name = folderName(project.workspace);
-      const who = project.app === "dashboard" ? "this page" : harnessDisplayName(project.app);
       return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-center rounded-xl border border-brand-dark/10 bg-white transition-colors hover:border-brand-dark/25 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-blue/40", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-l-xl p-2.5 text-left focus-visible:outline-none", title: project.workspace, onClick: () => onReuse(project), children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-dark/[0.05] text-brand-dark/55", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClock, { className: "size-4" }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-sm font-semibold text-brand-dark", children: name }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "block truncate text-xs text-brand-dark/60", children: [
-              plural(project.files.length, "file"),
-              " · for ",
-              who
-            ] })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-xs text-brand-dark/60", children: project.files.length ? plural(project.files.length, "file") : "Guard's safety facts only" })
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", "aria-label": `Remove ${name} from this list`, className: "mr-1.5 flex size-9 shrink-0 items-center justify-center rounded-lg text-brand-dark/40 hover:bg-brand-dark/[0.05] hover:text-brand-dark focus-visible:outline-none", onClick: () => onForget(project.workspace), children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4" }) })
@@ -4879,7 +5011,7 @@ function RecentProjects({ projects, onReuse, onForget }) {
 const fieldLabel = "text-sm font-medium text-brand-dark";
 const empty = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-8 text-center text-sm text-brand-dark/70";
 const summary$1 = "inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark [&::-webkit-details-marker]:hidden";
-function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate }) {
+function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate, allowFiles }) {
   const [scopes, setScopes] = reactExports.useState([]);
   const [loaded, setLoaded] = reactExports.useState(false);
   const listable = ready || waking;
@@ -4918,7 +5050,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       }
     }).catch((cause) => {
       if (revision.current !== generation2 || controller.signal.aborted) return;
-      const reason = cause instanceof Error ? cause.message : "Context access is unavailable.";
+      const reason = cause instanceof Error ? cause.message : "CIGAR could not list your projects. Try again.";
       failed.current = true;
       setError(ready ? reason : "Your folders appear once CIGAR is running.");
       setLoaded(true);
@@ -4942,7 +5074,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       if (revision.current === generation2 && !controller.signal.aborted) {
         if (brief) setPrevious(brief.value);
         setBrief(null);
-        setError(cause instanceof Error ? cause.message : "Context did not return a verified result.");
+        setError(cause instanceof Error ? cause.message : "CIGAR could not finish that. Try again.");
       }
     } finally {
       if (revision.current === generation2) setBusy(false);
@@ -4951,7 +5083,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
   async function grant(input, credentials) {
     let granted = false;
     await perform(async (signal) => {
-      const scope = await grantContextWorkspace(input.workspace, input.files, credentials, signal, input.app, input.notes);
+      const scope = await grantContextWorkspace(input.workspace, input.files, credentials, signal);
       if (signal.aborted) return;
       setScopes((values) => [...values, scope]);
       granted = true;
@@ -4987,14 +5119,14 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-end justify-between gap-x-6 gap-y-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: `${id2}-projects`, className: versionHeading, children: "Your projects" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Folders CIGAR may read. Access ends when you turn CIGAR off." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Prompts about these folders use the files listed under each one, in every AI app." })
         ] }),
         ready ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet, type: "button", disabled: locked, onClick: refreshScopes, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "size-4" }),
-            "Refresh context access"
+            "Refresh list"
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: locked || scopes.length === 0, onClick: () => manage("clear"), children: "Clear all context data" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: locked || scopes.length === 0, onClick: () => manage("clear"), children: "Remove all projects" })
         ] }) : null
       ] }),
       !listable ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty, children: "Turn on CIGAR to pick project folders. Folders you already picked come back when it is on." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -5003,49 +5135,45 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
         !loaded ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: empty, children: "Loading your folders…" }) : scopes.length === 0 ? !error && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: empty, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolderOpen, { "aria-hidden": "true", className: "mx-auto mb-2 size-6 text-brand-dark/35" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No projects yet." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/55", children: "Choose a folder below to get started." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/60", children: "You don't need one: CIGAR finds the project each app is open in. Add one below to pick the exact files." })
         ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: `${id2}-query`, className: fieldLabel, children: "What would you like context about?" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: `${id2}-query`, className: versionField, maxLength: 4096, value: query, onChange: (event) => setQuery(event.target.value), placeholder: "For example: how releases are reviewed" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: `${id2}-query`, className: fieldLabel, children: "Try it: what would you ask your AI?" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: `${id2}-query`, className: versionField, maxLength: 4096, value: query, onChange: (event) => setQuery(event.target.value), placeholder: "For example: how do releases work?" })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-3", children: scopes.map((scope) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : "border-brand-dark/10 bg-white"), "aria-label": `Context access for ${scope.workspace}`, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-3", children: scopes.map((scope) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : "border-brand-dark/10 bg-white"), "aria-label": `Project ${scope.workspace}`, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-3", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolder, { className: "size-4" }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1 space-y-1.5", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-sm font-semibold text-brand-dark", children: scope.workspace }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1.5", children: [
-                  scope.revoked ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "amber", children: "Access revoked" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: scope.app === "dashboard" ? "Review context" : harnessDisplayName(scope.app) }),
-                  !scope.revoked ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: "local memory" }) : null,
-                  scope.native_policy_facts ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: "Guard policy facts" }) : null,
-                  scope.sharing?.mode === "shared_broker" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "green", children: "Shared context" }) : null
+                  scope.revoked ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "amber", children: "Turned off by policy" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: scope.app === "dashboard" ? "Every app" : harnessDisplayName(scope.app) }),
+                  scope.native_policy_facts ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: "Guard safety facts" }) : null,
+                  scope.sharing?.mode === "shared_broker" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "green", children: "Shared notes" }) : null
                 ] })
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 text-sm leading-6 text-brand-dark/70", children: [
-              scope.revoked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Access revoked by policy. Grant access again to continue." }) : null,
+              scope.revoked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A policy on this computer turned this project off. Add it again once that policy allows it." }) : null,
               scope.sharing?.mode === "shared_broker" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
-                "Shared context · ",
-                scope.sharing.notes.read ? "reviewed notes allowed" : "shared notes not granted",
-                scope.sharing.notes.propose ? " · connection proposals allowed" : "",
-                ". Each paired connection has a five-minute lease."
+                "Shared notes · ",
+                scope.sharing.notes.read ? "it can read notes you approved" : "it cannot read shared notes",
+                scope.sharing.notes.propose ? " and suggest new ones" : "",
+                ". A connected app stays connected for five minutes at a time."
               ] }) : null,
               scope.receipt_window?.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
-                "Recent native receipt facts: ",
+                "Remembers Guard's last ",
                 scope.receipt_window.retained,
-                " of at most 16 retained. This window covers recorded decisions in this exact workspace, not execution confirmation or a complete activity history."
+                " of up to 16 decisions in this folder, so your AI can see them. It is not a full history."
               ] }) : null,
-              scope.receipt_window?.enabled && scope.receipt_window.dropped !== "0" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-amber-800", children: "Some optional receipt updates were missed. Earlier context was invalidated; durable Guard evidence is unchanged." }) : null
+              scope.receipt_window?.enabled && scope.receipt_window.dropped !== "0" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-amber-800", children: "Some recent Guard decisions were missed, so CIGAR started these notes fresh. Guard's own records are unchanged." }) : null
             ] }),
             scope.sources.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "divide-y divide-brand-dark/[0.07] rounded-xl border border-brand-dark/[0.08]", children: scope.sources.map((source) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-wrap items-center justify-between gap-2 py-1 pl-3 pr-1 text-sm", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex min-w-0 items-center gap-2 break-all font-mono text-xs text-brand-dark/80", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { "aria-hidden": "true", className: "size-4 shrink-0 text-brand-dark/40" }),
                 source.path
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: versionQuiet + " min-h-9 px-2.5 text-xs", type: "button", disabled: locked, onClick: () => manage("withdraw", scope.scope_id, source.source_id), children: [
-                "Withdraw ",
-                source.path
-              ] })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " min-h-9 px-2.5 text-xs", type: "button", disabled: locked, "aria-label": `Stop reading ${source.path}`, onClick: () => manage("withdraw", scope.scope_id, source.source_id), children: "Stop reading" })
             ] }, source.source_id)) }) : null,
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionPrimary, type: "button", disabled: locked || dirty || scope.revoked, onClick: () => void perform(async (signal) => {
@@ -5056,9 +5184,9 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
                   setBrief({ scope: current, value: value.brief });
                   setScopes((values) => values.map((item) => item.scope_id === current.scope_id ? current : item));
                 }
-              }), children: "Prepare cited context" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionButton, type: "button", disabled: locked || scope.revoked, onClick: () => manage("refresh", scope.scope_id), children: "Refresh selected files" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: locked, onClick: () => manage("revoke", scope.scope_id), children: "Revoke workspace access" })
+              }), children: "Show what your AI would get" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionButton, type: "button", disabled: locked || scope.revoked, onClick: () => manage("refresh", scope.scope_id), children: "Read files again" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: locked, onClick: () => manage("revoke", scope.scope_id), children: "Remove project" })
             ] }),
             !scope.revoked && scope.sharing?.mode === "shared_broker" && scope.sharing.notes.read ? /* @__PURE__ */ jsxRuntimeExports.jsx(
               ContextNotesPanel,
@@ -5075,23 +5203,17 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
             ) : null
           ] }) }, scope.scope_id)) })
         ] }),
-        brief ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Prepared context", className: "guard-surface-in space-y-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-semibold text-brand-dark", children: "Cited context" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "slate", children: [
-              brief.value.rendered_tokens,
-              " tokens"
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Supporting data verified when prepared. Use a fresh context after files or access change." }),
+        brief ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "What your AI would get", className: "guard-surface-in space-y-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-semibold text-brand-dark", children: "What your AI would get" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Checked just now. Try again after you change files or projects." }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-96 space-y-3 overflow-auto rounded-xl bg-white p-3 text-sm leading-6 text-slate-700", children: brief.value.excerpts.map((excerpt, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "whitespace-pre-wrap break-words", children: excerpt.text }, index)) }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: summary$1, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-4 transition-transform group-open:rotate-90 motion-reduce:transition-none" }),
-              "Sources and revisions"
+              "Where each part came from"
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-2 pl-5 text-sm", children: brief.value.citations.map((citation, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-              brief.scope.sources.find((source) => source.source_id === citation.source)?.path ?? (citation.source === "guard:notes" ? "Reviewed shared notes" : citation.source === "guard:receipts" ? "Native Guard receipt facts" : "Native Guard policy facts"),
+              brief.scope.sources.find((source) => source.source_id === citation.source)?.path ?? (citation.source === "guard:notes" ? "Reviewed shared notes" : citation.source === "guard:receipts" ? "Guard's recent decisions" : "Guard's safety facts"),
               ", lines ",
               citation.start_line,
               "–",
@@ -5102,9 +5224,9 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
           previous ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group/prev", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: summary$1, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-4 transition-transform group-open/prev:rotate-90 motion-reduce:transition-none" }),
-              "Compare with earlier context"
+              "Compare with the last try"
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "my-2 pl-5 text-sm text-slate-600", children: "Earlier context is historical and may no longer apply." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "my-2 pl-5 text-sm text-slate-600", children: "From before your last change, so it may be out of date." }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-64 space-y-3 overflow-auto pl-5 text-sm", children: previous.excerpts.map((excerpt, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "whitespace-pre-wrap break-words", children: excerpt.text }, index)) })
           ] }) : null
         ] }) : null
@@ -5116,8 +5238,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
         busy,
         dirty,
         documentsAllowed,
-        agentsAllowed,
-        sharingAllowed,
+        allowFiles,
         executionAllowed,
         gate,
         error,
@@ -5127,7 +5248,19 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       },
       cleared
     ) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ContextAgentsPanel, { ready, enabled: agentsAllowed, dirty, generation, scopes, gate })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ContextAgentsPanel,
+      {
+        ready,
+        enabled: agentsAllowed,
+        dirty,
+        generation,
+        scopes,
+        gate,
+        sharingAllowed,
+        onGranted: (scope) => setScopes((values) => [...values, scope])
+      }
+    )
   ] });
 }
 const CIGAR_UPDATE_TUTORIAL = {
@@ -5175,7 +5308,7 @@ const CIGAR_UPDATE_TUTORIAL = {
       instructions: ["If you selected while off, return to Settings, choose your enabled preference, save and explicitly start CIGAR.", "Use the live runtime status to confirm readiness before granting workspace access.", "Grant only the intended workspace sources and pair the current app connection again when needed."],
       expect: "Your intended sources and apps have fresh access to the selected runtime.",
       target: "access",
-      action: "Review projects & AI apps"
+      action: "Open Projects"
     },
     {
       title: "Use the last good build deliberately",
@@ -5191,159 +5324,156 @@ const CIGAR_FULL_NAME = "Context Intelligence Graph Agentic Runtime";
 const CIGAR_TUTORIALS = [
   {
     id: "first-brief",
-    title: "Prepare your first cited brief",
+    title: "Your first CIGAR prompt",
     level: "Start here",
-    description: "Go from a running runtime to useful evidence for one workspace.",
-    outcome: "A context brief whose sources and revisions you can inspect.",
+    description: "Turn CIGAR on, ask your AI something, and see what it was handed.",
+    outcome: "A prompt that came with the right project files, and a way to check each one.",
     steps: [
       {
         title: "Turn on CIGAR",
-        description: "One click. Guard gets Python ready, downloads the approved CIGAR copy, checks it and starts it.",
+        description: "One click. Guard gets everything ready, checks it and starts it.",
         instructions: ["Click Turn on CIGAR at the top of this page. If Guard asks for your approval password, enter it once; it covers every step.", "Watch the steps tick off. You can stop at any point and nothing stays turned on.", "Later, if you want to switch versions yourself, use Updates."],
-        expect: "The status says Ready.",
-        target: "runtime",
-        action: "Open Settings",
-        tip: "CIGAR uses its own copy of Python 3.14. Guard can keep using the Python it already has."
+        expect: "The status at the top says Ready.",
+        target: "overview",
+        action: "Go to Home",
+        tip: "CIGAR uses its own copy of Python. The Python you already use is left alone."
       },
       {
-        title: "Choose a small evidence set",
-        description: "Pick the sources that can answer your question before granting workspace access.",
-        instructions: ["Open More settings in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents in Settings, above More settings. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
-        expect: "Your intended source preferences are saved and the runtime is Ready.",
-        target: "runtime",
-        action: "Choose source preferences",
-        tip: "A document preference allows you to choose files later. It does not grant access to the whole workspace."
+        title: "Let it read project files",
+        description: "Prompts only get files once CIGAR may read them.",
+        instructions: ["If the top of this page shows Let CIGAR read project files, click it.", "Secrets, keys, hidden files and anything your .gitignore leaves out stay skipped either way."],
+        expect: "The top of the page no longer asks to read project files.",
+        target: "overview",
+        action: "Go to Home"
       },
       {
-        title: "Grant one workspace access",
-        description: "A grant connects a workspace and a consumer to the evidence you explicitly select.",
-        instructions: ["In Projects & AI apps, click Choose a project folder and browse to your project. Folders that look like projects are marked.", "Under What should CIGAR read?, keep the suggested notes such as the README, or browse to tick others. Untick everything to use only Guard's own safety facts.", "Click Give CIGAR access and confirm when Guard asks for your approval password."],
-        expect: "A Context access section appears for your chosen workspace.",
+        title: "Pick exact files (optional)",
+        description: "Skip this and CIGAR picks matching files from the project your app is open in.",
+        instructions: ["In Projects, click Choose a project folder and browse to your project.", "Tick the files CIGAR should read, such as the README, then click Add project.", "Your choice counts for every AI app."],
+        expect: "Your project shows up under Your projects.",
         target: "access",
-        action: "Open Projects & AI apps",
-        tip: "Choose only relevant sources. Environment files and credential stores are not valid context sources."
+        action: "Open Projects",
+        tip: "Leave this step for later if you are not sure. The automatic choice works for most projects."
       },
       {
-        title: "Ask one concrete question",
-        description: "Tell CIGAR what evidence you need for the task in front of you.",
-        instructions: ["Fill What would you like context about? with one focused question.", "For native facts only, try the example below. If you granted project docs, ask about a specific documented workflow, file, or rule.", "Click Prepare cited context in the section for the workspace you want to use."],
-        expect: "Prepared context contains excerpts and citations. If relevant evidence is missing, refine the question or select better sources.",
+        title: "Ask your AI something specific",
+        description: "Use Claude Code, Codex, Pi or Oh My Pi in your project, the way you always do.",
+        instructions: ["Copy the example below, or write your own about a real file, feature or word in your project.", "Send it in your AI app. CIGAR adds the parts that match before your AI starts."],
+        expect: "Your AI's answer points at the right files. A vague prompt may get no files, which is expected.",
         target: "access",
-        action: "Prepare context in your workspace",
-        question: "Which native Guard policy and decision facts apply to this workspace?",
-        tip: "The brief is evidence prepared for your question. Your review or authorized AI app can use that evidence to reason about the task."
+        action: "Open Projects",
+        question: "Where is the main page header styled, and which file sets its color?",
+        tip: "Prompts that name something in your project match best."
       },
       {
-        title: "Read the evidence behind it",
-        description: "Use the citations to decide whether the brief supports your task.",
-        instructions: ["Read the excerpts in Prepared context, then open Sources and revisions.", "Check the source names, line ranges, and document revisions. A citation identifies the evidence checked when the brief was prepared.", "For a pending command in Inbox, request its context brief when available, inspect the evidence, and make your Guard approval decision separately."],
-        expect: "You can trace a useful statement back to its admitted source. A brief never grants command permission.",
+        title: "See what your AI got",
+        description: "Check the pieces CIGAR hands over, and where each came from.",
+        instructions: ["In Projects, type the same question under Try it: what would you ask your AI?", "Click Show what your AI would get under your project.", "Open Where each part came from to see the file and lines for each piece."],
+        expect: "You can trace each piece back to a file and lines in your project.",
         target: "access",
-        action: "Inspect your prepared context"
+        action: "Open Projects"
       },
       {
-        title: "Keep context current",
-        description: "Fresh sources make the next brief useful as your work changes.",
-        instructions: ["After editing a selected document, click Refresh selected files, then Prepare cited context again.", "Use Withdraw beside a file or Revoke workspace access when it is no longer needed.", "Stopping or restarting the runtime ends active access. Grant the workspace again when needed; saved evidence never restores permission."],
-        expect: "You know how to prepare a fresh brief and remove its source access.",
+        title: "Change it or take it back",
+        description: "You stay in charge of what CIGAR reads.",
+        instructions: ["After you edit a picked file, click Read files again.", "Click Stop reading next to a file, or Remove project to drop the whole folder.", "Turn CIGAR off at the top of this page to stop everything at once."],
+        expect: "You know how to refresh, narrow or remove what CIGAR reads.",
         target: "access",
-        action: "Review workspace access",
-        tip: "Use Privacy to inspect or remove saved evidence. Memory is the default and ends with the runtime."
+        action: "Open Projects",
+        tip: "Privacy shows what CIGAR keeps. By default its notes live in memory only."
       }
     ]
   },
   {
     id: "ai-apps",
-    title: "Give an AI app scoped context",
-    level: "After your first brief",
-    description: "Choose sources for an app, match its real connection code, and pair it explicitly.",
-    outcome: "One authorized Guard MCP connection with access to a chosen workspace.",
+    title: "Connect another app, like Cursor",
+    level: "Optional",
+    description: "Claude Code, Codex, Pi and Oh My Pi need nothing extra. Other apps can ask CIGAR for files once you connect them.",
+    outcome: "One app connected to one project, that you can disconnect at any time.",
     steps: [
       {
-        title: "Enable app context deliberately",
-        description: "App access is a separate feature choice from review briefs.",
-        instructions: ["In Settings, enable Context for AI apps. Choose source preferences before granting access.", "Keep Share context between paired AI connections off while you try a single connection.", "Save your changes. If CIGAR is off, click Turn on CIGAR. Confirm the status says Ready."],
-        expect: "Context for AI apps is saved and the runtime is Ready.",
-        target: "runtime",
-        action: "Choose AI app preferences"
+        title: "Turn on CIGAR and file reading",
+        description: "Connections need both.",
+        instructions: ["At the top of this page, click Turn on CIGAR if it is off.", "If the page shows Let CIGAR read project files, click it too."],
+        expect: "The status says Ready and nothing asks to read project files.",
+        target: "overview",
+        action: "Go to Home"
       },
       {
-        title: "Grant sources for that app",
-        description: "A dashboard grant and an app grant have different consumers.",
-        instructions: ["In Projects & AI apps, choose the project folder and tick the notes your app needs.", "Under Which app can use it?, pick Codex, Claude Code, or Cursor.", "Click Give CIGAR access and check the app and folder in the confirmation."],
-        expect: "A workspace grant names the app you chose.",
+        title: "Add the project",
+        description: "Choose the folder the app will work in.",
+        instructions: ["In Projects, click Choose a project folder and browse to the folder.", "Tick the files it should read, then click Add project."],
+        expect: "The project shows up under Your projects.",
         target: "access",
-        action: "Choose the app's sources"
+        action: "Open Projects"
       },
       {
-        title: "Identify the real connection",
-        description: "Use the local Guard MCP server configured in your app.",
-        instructions: ["In the app's Guard MCP connection, request get_context_status to obtain its pending connection code.", "Return to AI app context connections and click Refresh app connections.", "Match the displayed Connection code to the one from that app's actual process."],
-        expect: "The same code appears in your app and the pending connection shown here.",
+        title: "Get the app's code",
+        description: "The app asks through Guard's tool server (MCP), which your app needs set up.",
+        instructions: ["In your app, ask it to run Guard's get_context_status tool.", "It answers with a short code. Keep it on screen."],
+        expect: "Your app shows a short connection code.",
         target: "access",
-        action: "Find the pending connection",
-        tip: "This screen does not install an app connection. Choosing an app label is a permission choice; matching the real code identifies the connection you are authorizing."
+        action: "Open Projects",
+        tip: "The code proves which running app is asking, so you never connect the wrong one."
       },
       {
-        title: "Authorize one connection",
-        description: "Pair the verified connection with the workspace grant you intended.",
-        instructions: ["Under the matched connection, choose its Workspace and app grant.", "Click Authorize context connection and confirm the connection code, app, and workspace when prompted.", "Look for Grant assigned. A running runtime alone does not grant app access."],
-        expect: "The intended connection shows Grant assigned for the chosen workspace.",
+        title: "Connect it",
+        description: "Match the code, then say which app and project.",
+        instructions: ["Under Connect another app, click Check for apps.", "Find the entry whose code matches your app's code.", "Choose the app and the project, then click Connect."],
+        expect: "The entry says Connected, with the app and project you chose.",
         target: "access",
-        action: "Authorize the matched connection",
-        tip: "Connections have short leases. If one expires or the runtime restarts, reconnect and pair its current code."
+        action: "Open Projects",
+        tip: "Connections last a few minutes at a time. If one ends, ask the app for a new code and connect again."
       },
       {
-        title: "Ask the app to use its context",
-        description: "Make evidence use part of a focused task request.",
-        instructions: ["Ask the authorized app to request Guard context for a specific workspace task, using the example below as a starting point.", "Check the app's cited sources and ask it to identify missing evidence rather than assume an answer.", "Use Revoke context connection when you are finished. Add sharing only when you need it, with separate reviewed-note permissions."],
-        expect: "The app can request context within its grant. Missing access or evidence is reported explicitly.",
+        title: "Use it, then disconnect",
+        description: "Ask the app a question about the project.",
+        instructions: ["Ask the app to use Guard's context tools, using the example below.", "Click Disconnect when you are done."],
+        expect: "The app answers with pieces from your project and says where they came from.",
         target: "access",
-        action: "Review app access",
-        question: "Use your Guard context tools for this workspace to explain the relevant project rules. Cite the evidence you receive and identify anything the available context does not establish."
+        action: "Open Projects",
+        question: "Use your Guard context tools to explain how this project is set up. Say which files each part of your answer came from."
       }
     ]
   },
   {
     id: "execution",
-    title: "Understand execution context",
-    level: "Advanced · supported routes only",
-    description: "Learn the optional native preparation path for Pi and Oh My Pi captured-Bash actions.",
-    outcome: "An understanding of the route requirements and how to inspect an execution-context observation.",
+    title: "Context for Pi commands",
+    level: "Advanced · macOS",
+    description: "When Pi or Oh My Pi runs a shell command, CIGAR can hand it Guard's safety facts for that project.",
+    outcome: "You know whether this works on your computer and where to see it happen.",
     steps: [
       {
-        title: "Check the route first",
-        description: "Execution context has a narrower scope than general review briefs.",
-        instructions: ["Use an existing supported native captured-Bash route for Pi or Oh My Pi on macOS.", "Check the execution capability and Native execution context panel in Settings.", "This candidate has local native preparation checks. Full delivery from external apps has not yet been qualified."],
-        expect: "You know whether the preparation route is available in this build.",
+        title: "Check it works here",
+        description: "This needs Pi or Oh My Pi on macOS.",
+        instructions: ["In Settings, open More settings and look for Associate native context with execution.", "If it is missing or greyed out, this computer does not support it yet. Everything else in CIGAR still works.", "Delivery to apps other than Pi and Oh My Pi is not tested end to end yet."],
+        expect: "You know whether this computer supports it.",
         target: "runtime",
-        action: "Inspect execution availability",
-        tip: "You can read this walkthrough even when the route is unavailable. Review briefs and paired app context have their own controls."
+        action: "Open Settings"
       },
       {
-        title: "Choose the execution preference",
-        description: "Execution associations use native capture and policy facts.",
-        instructions: ["Open More settings in Settings. Enable Native policy and decision facts.", "If the build offers it, enable Associate native context with execution.", "Save and start CIGAR. Inspect the Native execution context panel for preparation readiness."],
-        expect: "The panel reports the current native preparation state.",
+        title: "Turn it on",
+        description: "Two switches in More settings.",
+        instructions: ["In Settings, open More settings and turn on Native policy and decision facts.", "Turn on Associate native context with execution, then save."],
+        expect: "Both switches stay on after saving.",
         target: "runtime",
-        action: "Review execution preferences"
+        action: "Open Settings"
       },
       {
-        title: "Scope the executor's workspace",
-        description: "Choose the app and workspace for the native route you use.",
-        instructions: ["In Projects & AI apps, choose the project folder, then pick Pi or Oh My Pi under Which app can use it?", "Tick only the notes it needs and give access to that one folder.", "A workspace grant does not install an app adapter or approve a command."],
-        expect: "The workspace grant names the intended executor consumer.",
+        title: "Use Pi as usual",
+        description: "No project setup needed.",
+        instructions: ["Open Pi or Oh My Pi in your project and ask it to do something that runs a command.", "CIGAR uses the project Pi is open in, or the files you picked for it in Projects."],
+        expect: "Pi keeps working. Guard still asks before risky commands, exactly as before.",
         target: "access",
-        action: "Inspect executor workspace access"
+        action: "Open Projects"
       },
       {
-        title: "Inspect the native observation",
-        description: "Keep the command decision in Guard's normal approval flow.",
-        instructions: ["Use your existing supported app route. Inspect its Guard review and choose the approval scope you intend, such as Run once or Always allow this version in this project.", "Return to Native execution context observations to inspect whether preparation or association was recorded.", "For an uncertain outcome, consult Guard's native execution record before retrying."],
-        expect: "You can distinguish context preparation, a dispatch acknowledgement, and a native execution record.",
+        title: "See what happened",
+        description: "Guard still decides every command. CIGAR only adds facts.",
+        instructions: ["In Settings, find Native execution context to see what CIGAR prepared for recent commands.", "Approve or deny commands in Guard the usual way."],
+        expect: "You can see what CIGAR prepared, separate from Guard's own decision.",
         target: "runtime",
-        action: "Open execution observations",
-        tip: "Context is supporting information. Guard owns command authorization and the execution record."
+        action: "Open Settings"
       }
     ]
   },
@@ -5355,9 +5485,9 @@ function cigarTutorial(id2) {
 function CigarGuide({ onSelect, walkthroughs }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-guide", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-explained-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-explained-heading", children: "How CIGAR works" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "With CIGAR on, and Context for AI apps and workspace documents turned on in Settings, every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it. The Turn on CIGAR button sets both up on a fresh install. CIGAR finds your project from the folder your AI app runs in. A prompt about the header color brings the header and its styles. A prompt that matches nothing, like “build a to-do app” in an empty folder, adds nothing." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Secrets, keys, hidden files, generated folders and anything your project's .gitignore files leave out are always skipped. To stop it, turn off CIGAR, or turn off Context for AI apps in Settings." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-explained-heading", children: "CIGAR in one minute" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "When CIGAR is on, each prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few parts of your project that match it. Ask about the header color and your AI gets the header and its styles. Ask something that matches nothing, like “build a to-do app” in an empty folder, and nothing is added." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR works out the project from the folder your AI app is open in, so there is nothing to set up for each app. Secrets, keys, hidden files, build folders and anything your .gitignore leaves out are always skipped. To stop it, use the button at the top of this page." }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-caption", children: [
         "CIGAR stands for ",
         CIGAR_FULL_NAME,
@@ -5368,44 +5498,104 @@ function CigarGuide({ onSelect, walkthroughs }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-faq-heading", children: "Common questions" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Do I need to install anything?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. When you click Turn on CIGAR, Guard gets its own copy of Python 3.14 ready, downloads the CIGAR version it approved for this computer, checks its fingerprint and starts it. The Python you already use stays as it is." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "If the button says it is waiting for Guard's safety check, a CIGAR version exists for your computer but Guard has not approved it yet. Guard never installs a version it has not checked." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. The Turn on CIGAR button gets everything ready: Guard sets up its own copy of Python, downloads the CIGAR version it checked for this computer, confirms the download is the real one and starts it. The Python you already use is left alone." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "If the button says it is waiting for Guard's safety check, a new CIGAR exists but Guard has not finished checking it. Guard never installs a version it has not checked." }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("versions"), children: [
           "Choose a version in Updates",
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Does turning on CIGAR give it access to all my files?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. CIGAR only looks at the project your AI app is working in, and it skips secrets, keys, hidden files, generated folders and anything .gitignore leaves out. Starting CIGAR grants no access to anything else." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Can CIGAR see all my files?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. It only looks inside the project your AI app is open in, and it always skips secrets, keys, hidden files, build folders and anything your .gitignore leaves out." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Do I have to pick a project folder?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. Your AI apps get the files that match each prompt from the folder they work in. To limit one app to files you tick, pick the folder and choose that app. A folder picked for Only this page is for looking things up here and does not change what your AI apps get." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Do I have to add my projects?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. CIGAR finds the project each app is open in by itself. Add a project only when you want to choose exactly which files it reads. That choice counts for every app." }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("access"), children: [
-          "Open Projects & AI apps",
+          "Open Projects",
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Why did a prompt get no files?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR adds only files that match the prompt. A vague prompt, or an empty or brand-new folder, matches nothing, so nothing is added. Name a file, a feature or a term from your project and try again. Also check that Context for AI apps and Allow selected workspace documents are on in Settings." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR adds only files that match the prompt. A vague prompt, or an empty or brand-new folder, matches nothing, so nothing is added. Name a file, a feature or a word from your project and try again. If the top of this page asks to let CIGAR read project files, click that button." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Does CIGAR save me tokens or make my AI faster?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR does not promise either. It hands over the few pieces that match your prompt instead of whole files, and shows where each piece came from." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Does my AI read less?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Usually. CIGAR hands over the few pieces that match your prompt instead of whole files, and says where each piece came from. How much less depends on your project and your prompts, so CIGAR makes no promise about it." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "What happens when CIGAR is stopped or unavailable?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Guard keeps protecting commands under its existing policy and approvals. Prompts simply get no extra files until CIGAR is back. Turn off CIGAR to cancel context work. Memory context and active access end when it stops." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "What if CIGAR is off or stops?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Guard keeps protecting you exactly as before. Prompts just get no extra files until CIGAR is back. Projects you added come back when you turn it on again." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "What is saved on disk?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Memory is the default. Optional saved evidence uses private local SQLite files without Guard encryption and can outlive a runtime. Privacy provides retention, diagnostics, and removal controls. Restoring evidence never restores app access or approvals." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "What does CIGAR save on my computer?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "By default, only your settings and the projects you added. Its notes live in memory and vanish when it stops. You can choose to save notes in Privacy. Saved notes are private files on this computer, not encrypted by Guard, and you can delete them there at any time." })
       ] })
     ] }),
     walkthroughs
   ] });
+}
+const CIGAR_PROMPT_APPS = ["Claude Code", "Codex", "Pi", "Oh My Pi"];
+const STEPS = [
+  { icon: HiMiniChatBubbleLeftEllipsis, title: "You ask", text: "Type a prompt in your AI app, the way you always do." },
+  { icon: HiMiniDocumentMagnifyingGlass, title: "CIGAR finds the parts that match", text: "It looks through the project your app is open in and picks the few parts your prompt is about." },
+  { icon: HiMiniCheck, title: "Your AI gets just those", text: "Each part comes with the file and lines it came from, so you can check it. When nothing matches, nothing is added." }
+];
+const PROMISES = [
+  { icon: HiMiniPower, text: "Off until you turn it on, and off again with one click." },
+  { icon: HiMiniEyeSlash, text: "Never reads secrets, keys, hidden files or anything your .gitignore leaves out." },
+  { icon: HiMiniCpuChip, text: "Runs on this computer and keeps its notes in memory unless you choose to save them." },
+  { icon: HiMiniShieldCheck, text: "Guard still decides what your AI may do. CIGAR only adds context." }
+];
+function CigarStory({ onSelect }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-story", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-how", "aria-labelledby": "cigar-how-heading", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-how-heading", children: "How it works" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-steps", children: STEPS.map(({ icon: Icon, title, text: text2 }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-step-icon", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, {}) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: text2 })
+      ] }, title)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-story-pair", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cigar-apps-heading", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-apps-heading", children: "Works in your apps" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No setup for each app. Once CIGAR is on, every prompt in these apps gets the files that match it." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "cigar-apps", children: CIGAR_PROMPT_APPS.map((app) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { "aria-hidden": "true" }),
+          app
+        ] }, app)) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-story-aside", children: "Projects you add here count for all of them. Other apps Guard protects, like Cursor, can ask CIGAR for files after you connect them in Projects." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cigar-charge-heading", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-charge-heading", children: "You stay in charge" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "cigar-promises", children: PROMISES.map(({ icon: Icon, text: text2 }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { "aria-hidden": "true" }),
+          text2
+        ] }, text2)) })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-explore", "aria-labelledby": "cigar-explore-heading", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-explore-heading", children: "Go further" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ExploreRow, { icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolderPlus, {}), title: "Pick the exact files for a project", text: "Choose what CIGAR reads in one folder. Your choice counts for every app.", onClick: () => onSelect("access") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ExploreRow, { icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAcademicCap, {}), title: "Take a short walkthrough", text: "Try CIGAR on your own project, one step at a time.", onClick: () => onSelect("guide") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ExploreRow, { icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniQuestionMarkCircle, {}), title: "Read common questions", text: "What it reads, what it saves, and why a prompt got no files.", onClick: () => onSelect("guide") })
+      ] })
+    ] })
+  ] });
+}
+function ExploreRow({ icon, title, text: text2, onClick }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-explore-row", onClick, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-explore-icon", "aria-hidden": "true", children: icon }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "cigar-explore-text", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text2 })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true", className: "cigar-explore-arrow" })
+  ] }) });
 }
 function CigarTutorials(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-walkthroughs", "aria-labelledby": "cigar-tutorials-heading", children: [
@@ -5524,10 +5714,9 @@ function Intro({ title, children }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children })
   ] });
 }
-function CigarAdvanced(props) {
+function CigarSections(props) {
   const { tab, status, lesson } = props;
   const id2 = reactExports.useId();
-  const open = tab !== "overview";
   function moveTab(event, index) {
     let next;
     if (event.key === "ArrowRight") next = (index + 1) % CIGAR_TABS.length;
@@ -5539,70 +5728,61 @@ function CigarAdvanced(props) {
     props.onSelect(CIGAR_TABS[next].value, false);
     document.getElementById(id2 + "-tab-" + CIGAR_TABS[next].value)?.focus();
   }
-  const active = open ? tab : null;
   const walkthroughs = /* @__PURE__ */ jsxRuntimeExports.jsx(CigarTutorials, { progress: lesson.progress, onBegin: props.onBegin });
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-advanced", "data-open": open, "aria-label": "Advanced", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-advanced-toggle", "aria-expanded": open, "aria-controls": id2 + "-body", onClick: props.onToggle, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Advanced" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Projects, AI apps, settings, updates and privacy" })
-      ] })
-    ] }),
-    open ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: id2 + "-body", className: "cigar-advanced-body", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "cigar-tabs", role: "tablist", "aria-label": "CIGAR sections", children: CIGAR_TABS.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-sections", "aria-label": "CIGAR sections", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "cigar-tabs", role: "tablist", "aria-label": "CIGAR sections", children: CIGAR_TABS.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        id: id2 + "-tab-" + item.value,
+        type: "button",
+        role: "tab",
+        "aria-selected": tab === item.value,
+        "aria-controls": id2 + "-panel",
+        tabIndex: tab === item.value ? 0 : -1,
+        onKeyDown: (event) => moveTab(event, index),
+        onClick: () => props.onSelect(item.value, false),
+        children: item.label
+      },
+      item.value
+    )) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-learning-layout" + (lesson.active ? " has-walkthrough" : ""), children: [
+      lesson.active ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: props.walkthroughRef, tabIndex: -1, className: "cigar-walkthrough-anchor", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CigarWalkthrough,
         {
-          id: id2 + "-tab-" + item.value,
-          type: "button",
-          role: "tab",
-          "aria-selected": tab === item.value,
-          "aria-controls": id2 + "-panel",
-          tabIndex: tab === item.value ? 0 : -1,
-          onKeyDown: (event) => moveTab(event, index),
-          onClick: () => props.onSelect(item.value, false),
-          children: item.label
-        },
-        item.value
-      )) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-learning-layout" + (lesson.active ? " has-walkthrough" : ""), children: [
-        lesson.active ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: props.walkthroughRef, tabIndex: -1, className: "cigar-walkthrough-anchor", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          CigarWalkthrough,
-          {
-            tutorial: lesson.tutorial,
-            step: lesson.progress.step,
-            status,
-            dirty: props.dirty,
-            onMove: props.onMove,
-            onOpen: () => props.onSelect(lesson.tutorial.steps[lesson.progress.step].target),
-            onExit: props.onExitLesson
-          }
-        ) }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: props.panelRef, id: id2 + "-panel", role: "tabpanel", "aria-labelledby": id2 + "-tab-" + tab, tabIndex: -1, className: "cigar-panel", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: active !== "runtime", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Settings", children: "CIGAR works well with the recommended settings. Change these only if you want to." }),
-            props.controls
-          ] }),
-          active === "versions" ? props.versions : null,
-          active === "access" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Projects & AI apps", children: "Optional. Pick a project folder to choose exactly which files CIGAR uses for it, or connect an AI app. Each step asks you first." }),
-            !status?.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-note", children: cigarWaking(status) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Waking up CIGAR" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Your projects and AI apps come back in a moment." })
-            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Turn on CIGAR first" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Projects and AI apps open up as soon as CIGAR is on. Use the button at the top of this page." })
-            ] }) }) : null,
-            props.access
-          ] }) : null,
-          active === "data" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Privacy", children: "By default, CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes." }),
-            props.data
-          ] }) : null,
-          active === "guide" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarGuide, { onSelect: props.onSelect, walkthroughs }) : null
-        ] })
+          tutorial: lesson.tutorial,
+          step: lesson.progress.step,
+          status,
+          dirty: props.dirty,
+          onMove: props.onMove,
+          onOpen: () => props.onSelect(lesson.tutorial.steps[lesson.progress.step].target),
+          onExit: props.onExitLesson
+        }
+      ) }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: props.panelRef, id: id2 + "-panel", role: "tabpanel", "aria-labelledby": id2 + "-tab-" + tab, tabIndex: -1, className: "cigar-panel", children: [
+        tab === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarStory, { onSelect: props.onSelect }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: tab !== "runtime", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Settings", children: "The recommended settings work for most people. Change them only if you want to." }),
+          props.controls
+        ] }),
+        tab === "versions" ? props.versions : null,
+        tab === "access" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Projects", children: "CIGAR already finds the project each AI app is open in. Add a project here only to choose exactly which files it reads. Your choice counts for every app." }),
+          !status?.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-note", children: cigarWaking(status) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Waking up CIGAR" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Your projects come back in a moment." })
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Turn on CIGAR first" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Projects open up as soon as CIGAR is on. Use the button at the top of this page." })
+          ] }) }) : null,
+          status?.effective_enabled || cigarWaking(status) ? props.access : null
+        ] }) : null,
+        tab === "data" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Privacy", children: "By default, CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes." }),
+          props.data
+        ] }) : null,
+        tab === "guide" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarGuide, { onSelect: props.onSelect, walkthroughs }) : null
       ] })
-    ] }) : null
+    ] })
   ] });
 }
 const cigarVersionJobId = () => "dashboard:" + crypto.randomUUID();
@@ -5633,7 +5813,7 @@ function cigarPythonBlock(catalog, build) {
   if (build.qualification === "local_candidate") return "This Python build is a local development candidate.";
   return null;
 }
-const object$5 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const object$4 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const id$3 = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
 const word = (v) => typeof v === "string" && /^[a-z0-9_]{1,128}$/.test(v);
 const count$1 = (v) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
@@ -5643,11 +5823,11 @@ function invalid$3() {
 }
 function recovery(v) {
   if (v === void 0 || v === null) return null;
-  if (!object$5(v) || typeof v.id !== "string" || !/^[a-f0-9]{32}$/.test(v.id) || !isCigarGeneration(v.expected_generation) || !count$1(v.started_at_ms) || !count$1(v.deadline_at_ms) || v.deadline_at_ms < v.started_at_ms) invalid$3();
+  if (!object$4(v) || typeof v.id !== "string" || !/^[a-f0-9]{32}$/.test(v.id) || !isCigarGeneration(v.expected_generation) || !count$1(v.started_at_ms) || !count$1(v.deadline_at_ms) || v.deadline_at_ms < v.started_at_ms) invalid$3();
   return { id: v.id, expected_generation: v.expected_generation, started_at_ms: v.started_at_ms, deadline_at_ms: v.deadline_at_ms };
 }
 function parseCigarVersionJob(value) {
-  if (!object$5(value) || !id$3(value.job_id) || !word(value.phase) || !word(value.code) || !count$1(value.created_at_ms) || !count$1(value.updated_at_ms) || value.updated_at_ms < value.created_at_ms || !count$1(value.deadline_at_ms) || value.deadline_at_ms < value.created_at_ms || !(value.worker_live === null || typeof value.worker_live === "boolean") || typeof value.cancel_requested !== "boolean" || typeof value.recovery_available !== "boolean" || value.worker_live === true && value.recovery_available) invalid$3();
+  if (!object$4(value) || !id$3(value.job_id) || !word(value.phase) || !word(value.code) || !count$1(value.created_at_ms) || !count$1(value.updated_at_ms) || value.updated_at_ms < value.created_at_ms || !count$1(value.deadline_at_ms) || value.deadline_at_ms < value.created_at_ms || !(value.worker_live === null || typeof value.worker_live === "boolean") || typeof value.cancel_requested !== "boolean" || typeof value.recovery_available !== "boolean" || value.worker_live === true && value.recovery_available) invalid$3();
   const base = {
     schema: String(value.schema),
     job_id: value.job_id,
@@ -5713,7 +5893,7 @@ function parseCigarVersionJob(value) {
   };
 }
 function parseCigarVersionJobs(value) {
-  if (!object$5(value) || !Array.isArray(value.jobs) || value.jobs.length > 32) invalid$3();
+  if (!object$4(value) || !Array.isArray(value.jobs) || value.jobs.length > 32) invalid$3();
   const jobs = value.jobs.map(parseCigarVersionJob);
   if (new Set(jobs.map((job) => job.job_id)).size !== jobs.length) invalid$3();
   return jobs;
@@ -6090,11 +6270,6 @@ function CigarSetupProof({ setup, gate }) {
     }
   );
 }
-const FACTS = [
-  "Finds your project from the folder your AI app runs in.",
-  "Skips secrets, keys, hidden files and anything your .gitignore leaves out.",
-  "Adds nothing when nothing matches."
-];
 function CigarHome(props) {
   const id2 = reactExports.useId();
   const { status, setup } = props;
@@ -6123,12 +6298,23 @@ function CigarHome(props) {
           }
         )
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: id2 + "-title", children: copy.headline }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-home-detail", children: copy.detail }),
-      copy.setupHint ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => props.onOpen("runtime"), children: [
-        "Open Settings",
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-      ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: id2 + "-title", children: "Give your AI the right pages, not the whole book." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-home-detail", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
+          copy.headline,
+          "."
+        ] }),
+        " ",
+        copy.detail
+      ] }),
+      copy.setupHint ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CigarAllowFilesButton,
+        {
+          allow: props.allowFiles,
+          className: "cigar-button cigar-button-solid cigar-allow-hero",
+          caption: "Secrets, keys, hidden files and anything your .gitignore leaves out stay skipped."
+        }
+      ) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         CigarSetupAction,
         {
@@ -6143,10 +6329,42 @@ function CigarHome(props) {
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupProgress, { setup })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "cigar-facts", "aria-label": "What CIGAR does", children: FACTS.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { "aria-hidden": "true" }),
-      fact
-    ] }, fact)) })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CigarPromptDemo, {})
+  ] });
+}
+const DEMO_FILES = [
+  { path: "src/components/Header.tsx", match: "lines 12–40" },
+  { path: "src/api/orders.ts" },
+  { path: "src/styles/header.css", match: "lines 1–18" },
+  { path: "README.md" },
+  { path: ".env", locked: true },
+  { path: "tests/checkout.test.ts" }
+];
+function CigarPromptDemo() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("figure", { className: "cigar-demo", "aria-label": "Example: for the prompt Make the header blue, CIGAR picks the header component and its styles, and never reads the .env file.", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-demo-prompt", "aria-hidden": "true", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-demo-you", children: "You" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-demo-ask", children: "Make the header blue" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "cigar-demo-files", "aria-hidden": "true", children: DEMO_FILES.map((file, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "li",
+      {
+        style: { "--cigar-demo-row": index },
+        "data-match": "match" in file ? "true" : void 0,
+        "data-locked": "locked" in file ? "true" : void 0,
+        children: [
+          "locked" in file ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: file.path }),
+          "match" in file ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-demo-tag", children: file.match }) : null,
+          "locked" in file ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-demo-tag", children: "never read" }) : null
+        ]
+      },
+      file.path
+    )) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("figcaption", { className: "cigar-demo-result", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniSparkles, { "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Your AI gets those two pieces, each with the file and lines it came from." })
+    ] })
   ] });
 }
 const key = "hol-guard:cigar-tutorial:v1";
@@ -6188,35 +6406,20 @@ function useCigarTutorial() {
 }
 function CigarWorkspace(props) {
   const [tab, setTab] = reactExports.useState(() => cigarTabFromSearch(typeof window === "undefined" ? "" : window.location.search));
-  const lastAdvanced = reactExports.useRef(tab === "overview" ? "runtime" : tab);
   const panel = reactExports.useRef(null);
   const walkthroughAnchor = reactExports.useRef(null);
   const lesson = useCigarTutorial();
   const status = props.status;
   const canStop = props.stopAvailable ?? Boolean(status?.requested_enabled || status?.effective_enabled || status?.job);
   reactExports.useEffect(() => {
-    const sync = () => {
-      const next = cigarTabFromSearch(window.location.search);
-      if (next !== "overview") lastAdvanced.current = next;
-      setTab(next);
-    };
-    return subscribeDashboardLocation(sync);
+    return subscribeDashboardLocation(() => setTab(cigarTabFromSearch(window.location.search)));
   }, []);
   function select(next, focusPanel = true) {
-    if (next !== "overview") lastAdvanced.current = next;
     setTab(next);
     const url = new URL(window.location.href);
     url.searchParams.set("section", next);
     window.history.replaceState({}, "", url.pathname + url.search + url.hash);
-    if (focusPanel && next !== "overview") window.requestAnimationFrame(() => panel.current?.focus());
-  }
-  function toggleAdvanced() {
-    if (tab === "overview") {
-      select(lastAdvanced.current, false);
-      return;
-    }
-    if (lesson.active) lesson.exit();
-    select("overview", false);
+    if (focusPanel) window.requestAnimationFrame(() => panel.current?.focus());
   }
   function focusWalkthrough() {
     window.requestAnimationFrame(() => {
@@ -6240,13 +6443,14 @@ function CigarWorkspace(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { "aria-hidden": "true" }),
         "CIGAR"
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Gives your AI app the project files that match what you ask." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Hands your AI app the few project files that match what you ask." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       CigarHome,
       {
         status,
         setup: props.setup,
+        allowFiles: props.allowFiles,
         loading: props.loading,
         actionDisabled: props.disabled || props.busy || props.loading,
         canStop,
@@ -6262,7 +6466,7 @@ function CigarWorkspace(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: props.error })
     ] }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(
-      CigarAdvanced,
+      CigarSections,
       {
         tab,
         status,
@@ -6274,7 +6478,6 @@ function CigarWorkspace(props) {
         data: props.data,
         panelRef: panel,
         walkthroughRef: walkthroughAnchor,
-        onToggle: toggleAdvanced,
         onSelect: select,
         onBegin: beginTutorial,
         onMove: moveTutorial,
@@ -6285,11 +6488,11 @@ function CigarWorkspace(props) {
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { className: "cigar-footer", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChatBubbleLeftRight, { "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-        "Guard still decides what your AI may do. CIGAR only adds context. CIGAR is in beta:",
+        "CIGAR is in beta. Something odd or something you love?",
         " ",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: "https://github.com/hashgraph-online/hol-cigar/issues", target: "_blank", rel: "noopener noreferrer", children: "share feedback" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: "https://github.com/hashgraph-online/hol-cigar/issues", target: "_blank", rel: "noopener noreferrer", children: "Tell us" }),
         "."
       ] }),
       props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Unsaved changes" }) : null
@@ -6873,7 +7076,7 @@ function CigarVersionStatusBand({ status, data, loading, actions }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: actions })
   ] }) });
 }
-const object$4 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const object$3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const readRoutes = {
   releases: "/v1/context-assistance/versions",
   catalog: "/v1/context-assistance/catalog",
@@ -6882,7 +7085,7 @@ const readRoutes = {
 };
 const noProof = /* @__PURE__ */ new Set(["releases", "catalog", "interpreters", "jobs", "job", "cancel", "preferences"]);
 function parseCigarVersionsReply(value) {
-  if (!object$4(value) || value.schema !== "guard-cigar-versions-result.v1" || !object$4(value.result)) {
+  if (!object$3(value) || value.schema !== "guard-cigar-versions-result.v1" || !object$3(value.result)) {
     throw new ContextAssistanceApiError("versions_payload_invalid", "Guard returned incompatible CIGAR update data. Refresh status.");
   }
   return { state: parseContextAssistanceStatus(value.state), result: value.result };
@@ -6920,12 +7123,12 @@ async function requestCigarVersions(input, proof, signal) {
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const code = object$4(body) && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : object$4(body) && typeof body.error === "string" && /^approval_gate_[a-z0-9_]{1,140}$/.test(body.error) ? body.error : "context_assistance_unavailable";
+    const code = object$3(body) && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : object$3(body) && typeof body.error === "string" && /^approval_gate_[a-z0-9_]{1,140}$/.test(body.error) ? body.error : "context_assistance_unavailable";
     throw new ContextAssistanceApiError(code, errorMessage(code, response.status));
   }
   return parseCigarVersionsReply(body);
 }
-const object$3 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const object$2 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const id$2 = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
 const digest = (v) => typeof v === "string" && /^[a-f0-9]{64}$/.test(v);
 const count = (v) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
@@ -6939,13 +7142,13 @@ function pythonVersion(v) {
   return Array.isArray(v) && v.length === 3 && v.every((n) => count(n) && n <= 65535);
 }
 function wheelBytes(v) {
-  if (!object$3(v) || !count(v.bytes) || v.bytes === 0 || !digest(v.sha256)) invalid$2();
+  if (!object$2(v) || !count(v.bytes) || v.bytes === 0 || !digest(v.sha256)) invalid$2();
   return v.bytes;
 }
 function parsePlatform(v) {
-  if (!object$3(v) || !platform(v.platform) || !qualification(v.qualification) || !digest(v.worker_sha256) || !(v.package_tree_sha256 === null || digest(v.package_tree_sha256)) || !(v.qualification_receipt_sha256 === null || digest(v.qualification_receipt_sha256)) || v.qualification === "guard_qualified" && v.qualification_receipt_sha256 === null || !Array.isArray(v.features) || v.features.length > 16 || !v.features.every((f) => typeof f === "string" && /^[a-z0-9_]{1,128}$/.test(f)) || new Set(v.features).size !== v.features.length || !Array.isArray(v.dependencies) || v.dependencies.length > 32) invalid$2();
+  if (!object$2(v) || !platform(v.platform) || !qualification(v.qualification) || !digest(v.worker_sha256) || !(v.package_tree_sha256 === null || digest(v.package_tree_sha256)) || !(v.qualification_receipt_sha256 === null || digest(v.qualification_receipt_sha256)) || v.qualification === "guard_qualified" && v.qualification_receipt_sha256 === null || !Array.isArray(v.features) || v.features.length > 16 || !v.features.every((f) => typeof f === "string" && /^[a-z0-9_]{1,128}$/.test(f)) || new Set(v.features).size !== v.features.length || !Array.isArray(v.dependencies) || v.dependencies.length > 32) invalid$2();
   const hasWheel = v.wheel !== null;
-  const locked = v.package_tree_sha256 !== null && v.dependencies.some((w) => object$3(w) && w.distribution === "protobuf");
+  const locked = v.package_tree_sha256 !== null && v.dependencies.some((w) => object$2(w) && w.distribution === "protobuf");
   const bytes = (hasWheel ? wheelBytes(v.wheel) : 0) + v.dependencies.reduce((n, w) => n + wheelBytes(w), 0);
   if (!count(bytes)) invalid$2();
   return {
@@ -6961,7 +7164,7 @@ function parsePlatform(v) {
   };
 }
 function parseBuild(v) {
-  if (!object$3(v) || !isCigarBuildIdentity(v.identity) || !id$2(v.profile_id) || !["stable", "preview", "local_candidate"].includes(String(v.channel)) || typeof v.withdrawn !== "boolean" || !Array.isArray(v.platforms) || v.platforms.length === 0 || v.platforms.length > 7) invalid$2();
+  if (!object$2(v) || !isCigarBuildIdentity(v.identity) || !id$2(v.profile_id) || !["stable", "preview", "local_candidate"].includes(String(v.channel)) || typeof v.withdrawn !== "boolean" || !Array.isArray(v.platforms) || v.platforms.length === 0 || v.platforms.length > 7) invalid$2();
   const platforms = v.platforms.map(parsePlatform);
   if (new Set(platforms.map((p) => p.platform)).size !== platforms.length) invalid$2();
   return { identity: {
@@ -6973,7 +7176,7 @@ function parseBuild(v) {
   }, profile_id: v.profile_id, channel: v.channel, withdrawn: v.withdrawn, platforms };
 }
 function parseInterpreter(v) {
-  if (!object$3(v) || !id$2(v.build_id) || !pythonVersion(v.python_version) || !platform(v.platform) || !qualification(v.qualification) || typeof v.withdrawn !== "boolean" || !count(v.archive_bytes) || v.archive_bytes === 0) invalid$2();
+  if (!object$2(v) || !id$2(v.build_id) || !pythonVersion(v.python_version) || !platform(v.platform) || !qualification(v.qualification) || typeof v.withdrawn !== "boolean" || !count(v.archive_bytes) || v.archive_bytes === 0) invalid$2();
   return {
     build_id: v.build_id,
     python_version: [...v.python_version],
@@ -6984,7 +7187,7 @@ function parseInterpreter(v) {
   };
 }
 function parseCigarCatalogMetadata(v) {
-  if (!object$3(v) || !["bundled", "cached"].includes(String(v.source)) || typeof v.fresh_for_preparation !== "boolean" || !diagnostic(v.diagnostic) || !diagnostic(v.trust_diagnostic) || !diagnostic(v.feed_diagnostic) || typeof v.trust_configured !== "boolean" || typeof v.remote_feed_configured !== "boolean" || v.activation_granted !== false || v.fresh_for_preparation && v.diagnostic !== null) invalid$2();
+  if (!object$2(v) || !["bundled", "cached"].includes(String(v.source)) || typeof v.fresh_for_preparation !== "boolean" || !diagnostic(v.diagnostic) || !diagnostic(v.trust_diagnostic) || !diagnostic(v.feed_diagnostic) || typeof v.trust_configured !== "boolean" || typeof v.remote_feed_configured !== "boolean" || v.activation_granted !== false || v.fresh_for_preparation && v.diagnostic !== null) invalid$2();
   return {
     source: v.source,
     fresh_for_preparation: v.fresh_for_preparation,
@@ -6996,20 +7199,20 @@ function parseCigarCatalogMetadata(v) {
   };
 }
 function parseCigarCatalog(v) {
-  if (!object$3(v) || v.schema !== "guard-cigar-releases.v1" || !(v.host_platform === void 0 || v.host_platform === null || platform(v.host_platform)) || !Array.isArray(v.builds) || v.builds.length > 128 || !Array.isArray(v.interpreter_builds) || v.interpreter_builds.length > 128) invalid$2();
+  if (!object$2(v) || v.schema !== "guard-cigar-releases.v1" || !(v.host_platform === void 0 || v.host_platform === null || platform(v.host_platform)) || !Array.isArray(v.builds) || v.builds.length > 128 || !Array.isArray(v.interpreter_builds) || v.interpreter_builds.length > 128) invalid$2();
   const builds = v.builds.map(parseBuild), interpreters = v.interpreter_builds.map(parseInterpreter);
   if (new Set(builds.map((b) => b.identity.build_id)).size !== builds.length || new Set(interpreters.map((b) => b.build_id)).size !== interpreters.length) invalid$2();
   return { host_platform: v.host_platform ?? null, builds, interpreter_builds: interpreters, catalog: parseCigarCatalogMetadata(v.catalog) };
 }
-const object$2 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const object$1 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const id$1 = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
 function invalid$1() {
   throw new ContextAssistanceApiError("versions_interpreters_invalid", "Guard returned incompatible Python registration data. Refresh updates.");
 }
 function parseCigarInterpreters(value) {
-  if (!object$2(value) || !Array.isArray(value.interpreters) || value.interpreters.length > 16) invalid$1();
+  if (!object$1(value) || !Array.isArray(value.interpreters) || value.interpreters.length > 16) invalid$1();
   const values = value.interpreters.map((v) => {
-    if (!object$2(v) || !id$1(v.interpreter_id) || !Array.isArray(v.python_version) || v.python_version.length !== 3 || !v.python_version.every((n) => Number.isSafeInteger(n) && n >= 0 && n <= 65535) || !id$1(v.platform) || !id$1(v.implementation) || !id$1(v.abi) || typeof v.managed !== "boolean" || !(v.build_id === null || id$1(v.build_id)) || v.managed !== (v.build_id !== null)) invalid$1();
+    if (!object$1(v) || !id$1(v.interpreter_id) || !Array.isArray(v.python_version) || v.python_version.length !== 3 || !v.python_version.every((n) => Number.isSafeInteger(n) && n >= 0 && n <= 65535) || !id$1(v.platform) || !id$1(v.implementation) || !id$1(v.abi) || typeof v.managed !== "boolean" || !(v.build_id === null || id$1(v.build_id)) || v.managed !== (v.build_id !== null)) invalid$1();
     return {
       interpreter_id: v.interpreter_id,
       python_version: [...v.python_version],
@@ -7023,14 +7226,14 @@ function parseCigarInterpreters(value) {
   if (new Set(values.map((v) => v.interpreter_id)).size !== values.length) invalid$1();
   return values;
 }
-const object$1 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const id = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
 const mode = (v) => typeof v === "string" && ["manual", "notify", "prepare"].includes(v);
 function invalid() {
   throw new ContextAssistanceApiError("versions_preferences_invalid", "Guard returned incompatible CIGAR update preferences. Refresh preferences.");
 }
 function preferences(v) {
-  if (!object$1(v) || !mode(v.mode) || typeof v.allow_preview !== "boolean" || typeof v.retain_last_good !== "boolean" || !(v.pinned_build === void 0 || v.pinned_build === null || id(v.pinned_build))) invalid();
+  if (!object(v) || !mode(v.mode) || typeof v.allow_preview !== "boolean" || typeof v.retain_last_good !== "boolean" || !(v.pinned_build === void 0 || v.pinned_build === null || id(v.pinned_build))) invalid();
   return {
     mode: v.mode,
     allow_preview: v.allow_preview,
@@ -7039,7 +7242,7 @@ function preferences(v) {
   };
 }
 function parseCigarUpdateSettings(v) {
-  if (!object$1(v) || v.schema !== "guard-cigar-update-preferences.v1" || typeof v.revision !== "string" || !/^sha256:[a-f0-9]{64}$/.test(v.revision) || !(v.diagnostic === null || typeof v.diagnostic === "string" && /^[a-z0-9_]{1,160}$/.test(v.diagnostic)) || !Array.isArray(v.locked_settings) || v.locked_settings.length > 64 || !v.locked_settings.every((k) => typeof k === "string" && k.length <= 256 && /^context_assistance_updates(?:\.[a-z_]+)?$/.test(k)) || !object$1(v.capabilities) || !Array.isArray(v.capabilities.modes) || v.capabilities.modes.length > 3 || !v.capabilities.modes.every(mode) || new Set(v.capabilities.modes).size !== v.capabilities.modes.length || typeof v.capabilities.automatic_preparation !== "boolean" || typeof v.capabilities.automatic_selection !== "boolean" || typeof v.capabilities.retention_reduction !== "boolean") invalid();
+  if (!object(v) || v.schema !== "guard-cigar-update-preferences.v1" || typeof v.revision !== "string" || !/^sha256:[a-f0-9]{64}$/.test(v.revision) || !(v.diagnostic === null || typeof v.diagnostic === "string" && /^[a-z0-9_]{1,160}$/.test(v.diagnostic)) || !Array.isArray(v.locked_settings) || v.locked_settings.length > 64 || !v.locked_settings.every((k) => typeof k === "string" && k.length <= 256 && /^context_assistance_updates(?:\.[a-z_]+)?$/.test(k)) || !object(v.capabilities) || !Array.isArray(v.capabilities.modes) || v.capabilities.modes.length > 3 || !v.capabilities.modes.every(mode) || new Set(v.capabilities.modes).size !== v.capabilities.modes.length || typeof v.capabilities.automatic_preparation !== "boolean" || typeof v.capabilities.automatic_selection !== "boolean" || typeof v.capabilities.retention_reduction !== "boolean") invalid();
   return {
     requested: preferences(v.requested),
     effective: preferences(v.effective),
@@ -7325,32 +7528,6 @@ function CigarVersionsPanel(props) {
       }
     )
   ] });
-}
-const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-async function saveCigarPreference(config, proof, signal) {
-  if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Turning on CIGAR requires a local Guard installation.");
-  const timeout = AbortSignal.timeout(12e3);
-  const response = await fetchWithGuardAuth("/v1/settings", {
-    method: "POST",
-    cache: "no-store",
-    headers: { "Content-Type": "application/json" },
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    body: JSON.stringify({
-      settings: { context_assistance: config },
-      ...proof?.currentPassword ? { approval_password: proof.currentPassword } : {},
-      ...proof?.totpCode ? { approval_totp_code: proof.totpCode } : {}
-    })
-  });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    const code = object(body) && typeof body.error === "string" && /^[a-z0-9_]{1,160}$/.test(body.error) ? body.error : "settings_unavailable";
-    throw new ContextAssistanceApiError(code, response.status === 400 && object(body) && typeof body.message === "string" ? "Guard could not save this setting: " + body.message.slice(0, 200) : response.status === 403 ? "Guard needs your approval before this change." : "Guard did not confirm the saved setting. Refresh status before trying again.");
-  }
-  const saved = object(body) && object(body.settings) ? body.settings.context_assistance : null;
-  if (!object(saved) || saved.schema_version !== 1 || typeof saved.enabled !== "boolean" || typeof saved.runtime_id !== "string") {
-    throw new ContextAssistanceApiError("settings_payload_invalid", "Guard returned settings this page does not understand. Refresh status.");
-  }
-  return saved;
 }
 async function cancelJob(job) {
   const deadline = AbortSignal.timeout(15e3);
@@ -7657,6 +7834,14 @@ function ContextAssistanceSettings(props) {
     onSaved: (config, previous) => props.onSelectionChanged?.(config, previous),
     onTurnOff: () => void perform("stop")
   });
+  const allowFiles = useCigarAllowFiles({
+    saved,
+    dirty,
+    disabled: props.disabled || props.locked || busy || setup.busy,
+    gate: props.gate ?? null,
+    onSaved: (config, previous) => props.onSelectionChanged?.(config, previous),
+    onRestart: () => void perform("activate")
+  });
   reactExports.useEffect(() => {
     if (!setup.busy) return;
     onBusyChange(true);
@@ -7692,7 +7877,7 @@ function ContextAssistanceSettings(props) {
     } catch (cause) {
       if (current !== revision.current) return;
       setStatus(null);
-      setError(cause instanceof Error ? cause.message : "The context assistance operation did not return a verified result. Refresh its status.");
+      setError(cause instanceof Error ? cause.message : "CIGAR could not finish that. Refresh and try again.");
     } finally {
       pending.current = false;
       if (mounted.current && current === revision.current) {
@@ -7736,7 +7921,8 @@ function ContextAssistanceSettings(props) {
       agentsAllowed: status?.effective_preferences.features.agent_context === true,
       executionAllowed: status?.effective_preferences.features.execution_context === true && status?.capabilities?.execution_context === true,
       sharingAllowed: status?.effective_preferences.features.shared_agents === true && status?.runtime?.shared_compile_verified === true,
-      gate: props.gate ?? null
+      gate: props.gate ?? null,
+      allowFiles
     }
   );
   return workspace ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -7751,6 +7937,7 @@ function ContextAssistanceSettings(props) {
         dirty,
         error,
         setup,
+        allowFiles,
         stopAvailable: Boolean(value?.enabled || saved?.enabled || status?.job || status?.effective_enabled || error),
         controls,
         access,
@@ -7773,10 +7960,12 @@ function ContextAssistanceSettings(props) {
         onStop: () => void perform("stop")
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupProof, { setup, gate: props.gate ?? null })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupProof, { setup, gate: props.gate ?? null }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CigarAllowFilesProof, { allow: allowFiles, gate: props.gate ?? null })
   ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     controls,
-    access
+    access,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CigarAllowFilesProof, { allow: allowFiles, gate: props.gate ?? null })
   ] });
 }
 const caption = "text-xs leading-5 text-brand-dark/60";

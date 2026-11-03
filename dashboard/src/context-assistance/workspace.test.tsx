@@ -33,7 +33,7 @@ assert.equal(homeCopy(saved).headline, "CIGAR is not running", "a saved preferen
 assert.equal(homeCopy({ ...saved, last_check: ready.runtime }).headline, "CIGAR is not running",
   "a cached compilation check must not complete activation");
 const promise = /Every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it\./;
-const noFiles = /Prompts get no project files until Context for AI apps and workspace documents are on in Settings\./;
+const noFiles = /Prompts get no project files yet, because reading project files is off\./;
 const withFiles = (agentContext: boolean, documents: boolean) => parseContextAssistanceStatus({ ...ready, effective_preferences: { ...ready.effective_preferences,
   features: { ...ready.effective_preferences.features, agent_context: agentContext },
   sources: { ...ready.effective_preferences.sources, workspace_documents: documents, source_set_id: documents ? "selected-workspaces" : "" } } });
@@ -82,8 +82,8 @@ assert.equal(cigarTabFromSearch("?section=unknown"), "overview");
 assert.equal(cigarTabFromSearch(""), "overview");
 assert.equal(cigarTabFromSearch("?section=tutorials"), "guide", "the old Tutorials link opens the merged Guides section");
 assert.equal(new Set(CIGAR_TABS.map((tab) => tab.value)).size, CIGAR_TABS.length);
-assert.deepEqual(CIGAR_TABS.map((tab) => tab.label), ["Settings", "Projects & AI apps", "Updates", "Privacy", "Guides"],
-  "everything beyond the on/off switch lives in five Advanced sections");
+assert.deepEqual(CIGAR_TABS.map((tab) => tab.label), ["Home", "Projects", "Settings", "Updates", "Privacy", "Guide"],
+  "six plain sections, always in view");
 const idle = (plan: CigarOneClick["plan"], run: CigarOneClick["run"] = { phase: "idle" }): CigarOneClick => ({
   plan, loadError: null, run, busy: run.phase === "running", start: () => {}, confirm: () => {}, cancelProof: () => {},
   dismiss: () => {}, stop: () => {}, refresh: async () => {},
@@ -94,20 +94,25 @@ const base: CigarWorkspaceProps = {
   status: off, installations: registered, loading: false, busy: false, disabled: false,
   dirty: false, error: null, setup: idle(install), controls: <p>Runtime controls</p>, access: <p>Workspace access</p>,
   data: <p>Context data</p>, onRefresh: () => {}, onStop: () => {},
+  allowFiles: { available: true, busy: false, error: null, start: () => {}, proofOpen: false, cancel: () => {}, confirm: () => {} },
 };
 const render = (props: Partial<CigarWorkspaceProps> = {}) => renderToStaticMarkup(<CigarWorkspace {...base} {...props} />);
 assert.match(render(), /<h1>.*CIGAR<\/h1>/);
 assert.doesNotMatch(render(), /cigar-eyebrow|Context Intelligence Graph/, "the home screen explains CIGAR without jargon or a kicker");
-assert.doesNotMatch(render(), /role="tablist"|role="tabpanel"/, "the default screen has no tabs");
-assert.doesNotMatch(render(), /Runtime controls|Workspace access|Context data/, "Advanced sections stay closed by default");
-assert.match(render(), /<button type="button" class="cigar-advanced-toggle" aria-expanded="false"/);
-assert.match(render(), /<strong>Advanced<\/strong>/);
+assert.match(render(), /role="tablist" aria-label="CIGAR sections"/, "every section is one click away from the start");
+assert.doesNotMatch(render(), /Advanced|aria-expanded/, "nothing hides behind an Advanced toggle");
+assert.doesNotMatch(render(), /Workspace access|Context data/, "Home opens first");
+assert.match(render(), /<div hidden="">.*Runtime controls/, "settings stay mounted but hidden so unsaved edits survive a tab switch");
+for (const heading of ["How it works", "Works in your apps", "You stay in charge", "Go further"]) assert.match(render(), new RegExp(">" + heading + "<"));
+assert.match(render(), /class="cigar-demo"/, "the hero shows one worked prompt");
+assert.match(render(), /never read/, "the worked prompt shows a secret file being skipped");
+assert.doesNotMatch(render(), /Which app can use it/, "no app to choose: projects count for every app");
 assert.match(render(), /CIGAR is off/);
 assert.match(render(), /Turn it on and every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it\./);
-assert.match(render(), /Skips secrets, keys, hidden files and anything your \.gitignore leaves out\./);
-assert.match(render(), /Adds nothing when nothing matches\./);
+assert.match(render(), /Never reads secrets, keys, hidden files or anything your \.gitignore leaves out\./);
+assert.match(render(), /When nothing matches, nothing is added\./);
 assert.doesNotMatch(render(), /only the folders you pick|reads only/i, "copy must match how prompts are matched to the project");
-assert.match(render(), /href="https:\/\/github\.com\/hashgraph-online\/hol-cigar\/issues"[^>]*>share feedback</);
+assert.match(render(), /href="https:\/\/github\.com\/hashgraph-online\/hol-cigar\/issues"[^>]*>Tell us</);
 assert.doesNotMatch(render(), /class="cigar-beta-note"/, "the beta notice is one quiet footer line");
 assert.match(render({ error: "Service unavailable" }), /role="alert"/);
 assert.match(render(), />Turn on CIGAR</);
@@ -119,16 +124,17 @@ assert.doesNotMatch(render(), />Turn off CIGAR</);
 const on = render({ status: ready });
 assert.match(on, />Turn off CIGAR</, "the one button flips to turn off");
 assert.doesNotMatch(on, />Turn on CIGAR</);
-assert.doesNotMatch(on, />Pick a project folder</, "picking a folder is optional and lives in Advanced");
-assert.match(on, /<h2[^>]*>CIGAR is on<\/h2>/);
+assert.doesNotMatch(on, />Pick a project folder</, "picking a folder is optional and lives in Projects");
+assert.match(on, /<strong>CIGAR is on\.<\/strong>/);
 assert.match(on, noFiles, "with project context off, the card says why prompts get no files");
 assert.doesNotMatch(on, promise, "with project context off, the card does not promise project files");
-assert.match(on, />Open Settings</, "a button opens Advanced and Settings so the switches are one click away");
+assert.match(on, />Let CIGAR read project files</, "the missing switch turns on in place, without a trip to Settings");
+assert.doesNotMatch(on, />Open Settings</);
 const sharingHome = render({ status: withFiles(true, true) });
-assert.match(sharingHome, /<h2[^>]*>CIGAR is on<\/h2>/);
+assert.match(sharingHome, /<strong>CIGAR is on\.<\/strong>/);
 assert.match(sharingHome, promise);
 assert.doesNotMatch(sharingHome, noFiles);
-assert.doesNotMatch(sharingHome, />Open Settings</);
+assert.doesNotMatch(sharingHome, />Let CIGAR read project files</);
 assert.doesNotMatch(render({ status: withFiles(true, false) }), promise, "one switch alone must not promise project files");
 assert.doesNotMatch(render({ status: withFiles(false, true) }), promise, "one switch alone must not promise project files");
 assert.match(render({ status: saved, setup: idle({ ...install, build_id: null, python_build_id: null, runtime_id: "r", stages: ["start"], approval: false }) }), />Not started</);
@@ -158,27 +164,26 @@ assert.match(render({ status: null, error: "Service unavailable", stopAvailable:
   "loss of status must not remove the saved preference's off switch");
 assert.match(render({ status: null, error: "Service unavailable" }), /role="alert"/);
 
-const advancedOpen = (section: string) => {
+const sectionOpen = (section: string) => {
   const url = "?section=" + section;
   const original = (globalThis as { window?: unknown }).window;
   (globalThis as { window?: unknown }).window = { location: { search: url } };
   try { return render({ status: ready }); } finally { (globalThis as { window?: unknown }).window = original; }
 };
-const settingsOpen = advancedOpen("runtime");
-assert.match(settingsOpen, /aria-expanded="true"/);
+const settingsOpen = sectionOpen("runtime");
 assert.match(settingsOpen, /role="tablist" aria-label="CIGAR sections"/);
 assert.match(settingsOpen, /role="tabpanel" aria-labelledby=/);
-for (const label of ["Settings", "Projects &amp; AI apps", "Updates", "Privacy", "Guides"]) assert.match(settingsOpen, new RegExp(">" + label + "<"));
+for (const label of ["Home", "Projects", "Settings", "Updates", "Privacy", "Guide"]) assert.match(settingsOpen, new RegExp(">" + label + "<"));
 assert.match(settingsOpen, /Runtime controls/);
-assert.match(advancedOpen("access"), /Workspace access/);
-assert.match(advancedOpen("data"), /Context data/);
-assert.match(advancedOpen("data"), /By default, CIGAR keeps its notes in memory only/, "privacy intro must not promise memory-only storage unconditionally");
+assert.match(sectionOpen("access"), /Workspace access/);
+assert.match(sectionOpen("data"), /Context data/);
+assert.match(sectionOpen("data"), /By default, CIGAR keeps its notes in memory only/, "privacy intro must not promise memory-only storage unconditionally");
 const guide = renderToStaticMarkup(<CigarGuide onSelect={() => {}} />);
-assert.match(guide, /How CIGAR works/);
+assert.match(guide, /CIGAR in one minute/);
 assert.match(guide, /build a to-do app/);
 assert.match(guide, /Do I need to install anything\?/);
 assert.match(guide, /Guard never installs a version it has not checked/);
-assert.match(guide, /CIGAR does not promise either/);
-assert.match(guide, /Restoring evidence never restores app access or approvals/);
+assert.match(guide, /CIGAR makes no promise about it/);
+assert.match(guide, /Do I have to add my projects\?/);
 assert.doesNotMatch(guide, /compile|scoped|grant a workspace/i, "the guide avoids implementation jargon");
 console.log("CIGAR one-click states, live readiness, plain-language copy, guide and tab contracts passed.");

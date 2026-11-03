@@ -112,15 +112,15 @@ impl Engine {
             return Err(RuntimeError::ContextStale);
         }
         let (scope_id, policy, epoch) = {
-            let (id, scope) = self
+            let id = self
                 .scopes
-                .iter_mut()
-                .find(|(_, scope)| {
-                    !scope.revoked
-                        && scope.app == facts.harness
-                        && scope.root.path() == facts.workspace
-                })
+                .iter()
+                .filter(|(_, scope)| !scope.revoked && scope.root.path() == facts.workspace)
+                .filter_map(|(id, scope)| Some((execution_rank(&scope.app, &facts.harness)?, id)))
+                .min_by_key(|(rank, _)| *rank)
+                .map(|(_, id)| id.clone())
                 .ok_or(RuntimeError::ScopeDenied)?;
+            let scope = self.scopes.get_mut(&id).ok_or(RuntimeError::ScopeDenied)?;
             policy_current(&self.home, scope, runtime)?;
             if !scope.policy.features.execution_context || !scope.policy.sources.native_policy_facts
             {
@@ -221,5 +221,32 @@ impl Engine {
             }
         }
         Ok(())
+    }
+}
+
+/// Pi and Oh My Pi use their own project when they have one. A folder picked
+/// in the dashboard answers their prompts instead of one of their own, so it
+/// answers their commands too.
+fn execution_rank(scope_app: &str, harness: &str) -> Option<u8> {
+    if scope_app == harness {
+        Some(0)
+    } else if scope_app == "dashboard" {
+        Some(1)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod rank_tests {
+    use super::execution_rank;
+
+    #[test]
+    fn a_folder_picked_in_the_dashboard_answers_pi_commands() {
+        assert_eq!(execution_rank("pi", "pi"), Some(0));
+        assert_eq!(execution_rank("dashboard", "omp"), Some(1));
+        assert!(execution_rank("omp", "omp") < execution_rank("dashboard", "omp"));
+        assert_eq!(execution_rank("pi", "omp"), None);
+        assert_eq!(execution_rank("cursor", "pi"), None);
     }
 }

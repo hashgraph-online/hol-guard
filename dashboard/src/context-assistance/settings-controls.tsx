@@ -122,7 +122,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
             <SettingsToggleRow label="Context for AI apps" description="Add the project files that match each prompt in Claude Code, Codex, Pi and Oh My Pi, and allow context tools for apps you authorize. Sharing between agents is a separate choice."
               checked={value.features.agent_context} disabled={editingDisabled}
               onChange={(agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })} />
-            <SettingsToggleRow label="Allow selected workspace documents" description="With Context for AI apps on, prompts in Claude Code, Codex, Pi and Oh My Pi get the files in their project that match them. To limit one app to exact files, pick a project folder under Projects & AI apps and choose that app."
+            <SettingsToggleRow label="Allow selected workspace documents" description="With Context for AI apps on, prompts in Claude Code, Codex, Pi and Oh My Pi get the files in their project that match them. To choose the exact files, add the project under Projects."
               checked={value.sources.workspace_documents} disabled={editingDisabled}
               onChange={(workspace_documents) => props.onChange({ ...value, sources: { ...value.sources, workspace_documents,
                 source_set_id: workspace_documents ? value.sources.source_set_id || "selected-workspaces" : value.sources.source_set_id } })} />
@@ -202,9 +202,9 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
                     <span id={storageId + "-retention"} className={caption + " mt-1 block font-normal"}>Applies to context history, saved evidence and shared notes.</span>
                   </label>
                 </div>
-                <p className={caption}>Memory data ends when the runtime stops. Saved evidence uses private local files, with no Guard encryption; it can outlive the runtime until retention or removal. Restoring it never restores app access or approvals. Saving a storage change ends current context access.</p>
-                {status?.capabilities?.private_persistence !== true ? <p className={caption}>Saved evidence activation is unavailable in this build. Existing saved data can be removed in Data & repair.</p> : null}
-                <p className={caption}>Memory data also ends when access is revoked, the runtime stops, or Guard restarts. Changing preferences requires fresh grants.</p>
+                <p className={caption}>Notes kept in memory disappear when CIGAR stops. Saved notes are private files on this computer, not encrypted by Guard, and stay until they expire or you delete them. Bringing them back never brings back app access or approvals. Changing this ends current access, so add your projects again after.</p>
+                {status?.capabilities?.private_persistence !== true ? <p className={caption}>This version of Guard cannot save notes. You can still delete notes saved earlier in Privacy.</p> : null}
+                <p className={caption}>Notes in memory also disappear when you take back access or Guard restarts.</p>
               </Group>
               {effective ? <Group title="In effect now">
                 <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

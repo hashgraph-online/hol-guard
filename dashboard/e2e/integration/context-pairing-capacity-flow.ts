@@ -34,9 +34,9 @@ export async function contextPairingCapacityFlow(page: Page, state: IntegrationS
     await proof.getByLabel("Approval password").fill(state.approvalPassword);
     const before = completedPolls;
     await proof.getByRole("button", { name: "Authorize connection", exact: true }).click();
-    await expect(proof).toContainText("Context client capacity is full.");
+    await expect(proof).toContainText("CIGAR is connected to as many apps as it can.");
     await expect.poll(() => completedPolls - before, { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
-    await expect(proof).toContainText("pair its new code");
+    await expect(proof).toContainText("use its new code");
     await expect(page.getByText("private-server-diagnostic-must-not-render", { exact: false })).toHaveCount(0);
     expect(pairingRequests).toBe(1);
     await proof.getByRole("button", { name: "Go back", exact: true }).click();
