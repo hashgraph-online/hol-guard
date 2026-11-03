@@ -7,9 +7,7 @@ import sys
 from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.network_capability_contract import (
     PlatformCapabilityProfile,
-    PlatformFamily,
     default_platform_profiles,
-    enforcement_grade_rank,
 )
 from codex_plugin_scanner.guard.runtime.network_legacy_config import (
     migrate_new_network_domain_action,
@@ -31,38 +29,6 @@ __all__ = [
 ]
 
 
-def _host_platform_family(platform_name: str | None = None) -> PlatformFamily | None:
-    resolved = (platform_name or sys.platform).lower()
-    if resolved.startswith("linux"):
-        return PlatformFamily.LINUX
-    if resolved == "darwin":
-        return PlatformFamily.MACOS
-    if resolved in {"win32", "cygwin", "msys"}:
-        return PlatformFamily.WINDOWS
-    return None
-
-
-def _default_host_profiles(platform_name: str | None = None) -> tuple[PlatformCapabilityProfile, ...]:
-    if platform_name is None:
-        return default_platform_profiles()
-    family = _host_platform_family(platform_name)
-    if family is None:
-        return ()
-    return tuple(profile for profile in default_platform_profiles() if profile.platform is family)
-
-
-def _health_is_verified_for_profile(
-    profile: PlatformCapabilityProfile,
-    health: NetworkSupervisorHealth | None,
-) -> bool:
-    return (
-        health is not None
-        and health.backend_digest is not None
-        and health.effective_grade is not EnforcementGrade.UNAVAILABLE
-        and enforcement_grade_rank(health.effective_grade) <= enforcement_grade_rank(profile.maximum_grade)
-    )
-
-
 def build_network_status(
     profiles: tuple[PlatformCapabilityProfile, ...] | None = None,
     *,
@@ -70,91 +36,54 @@ def build_network_status(
     supervisor_health: NetworkSupervisorHealth | None = None,
     platform_name: str | None = None,
 ) -> dict[str, object]:
-    """Return current-host truth without promoting static profiles to protection."""
+    """Return current-host truth without promoting static profiles to protection.
 
-    host_family = _host_platform_family(platform_name)
-    resolved = profiles if profiles is not None else _default_host_profiles(platform_name)
+    The native runtime (`network_status_build`) decides which backend is
+    verified and active. Without it nothing is reported as protected.
+    """
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
     migrated = migrate_new_network_domain_action(legacy_domain_action) if legacy_domain_action is not None else None
-
-    backends: list[dict[str, object]] = []
-    active_grade = EnforcementGrade.UNAVAILABLE
-    for profile in resolved:
-        selected = (
-            host_family is profile.platform
-            and supervisor_health is not None
-            and supervisor_health.backend_id == profile.backend_id
-        )
-        selected_health = supervisor_health if selected else None
-        installed = selected_health is not None and selected_health.backend_digest is not None
-        verified = _health_is_verified_for_profile(profile, selected_health)
-        active = (
-            selected_health is not None
-            and selected_health.permits_enforcement
-            and verified
-            and profile.production_ready
-        )
-        effective_grade = (
-            selected_health.effective_grade if selected_health is not None and active else EnforcementGrade.UNAVAILABLE
-        )
-        if active:
-            active_grade = effective_grade
-        backends.append(
+    legacy_policy = (
+        {"action": migrated.action.value, "sandbox_required": migrated.sandbox_required}
+        if migrated is not None
+        else None
+    )
+    request = {
+        "platform": platform_name or sys.platform,
+        "profiles": [
             {
                 "backend_id": profile.backend_id,
                 "platform": profile.platform.value,
-                "supported": host_family is profile.platform or profiles is not None,
-                "installed": installed,
-                "verified": verified,
-                "active": active,
-                "observed": False,
-                "advertised_maximum_grade": profile.maximum_grade.value,
-                "effective_grade": effective_grade.value,
+                "maximum_grade": profile.maximum_grade.value,
                 "production_ready": profile.production_ready,
                 "requires_privilege": profile.requires_privilege,
-                "reason_code": (
-                    "independent-observer-unavailable"
-                    if active
-                    else "no-live-provider-probe"
-                    if not selected
-                    else profile.reason_code
-                ),
-                "reference_reason_code": profile.reason_code,
+                "reason_code": profile.reason_code,
             }
-        )
-
-    reason_code = "no-verified-installed-backend"
-    if host_family is None:
-        reason_code = "unsupported-host-platform"
-    elif not resolved:
-        reason_code = "no-platform-provider-profile"
-    elif (
-        supervisor_health is not None
-        and supervisor_health.backend_id is not None
-        and not any(bool(item["active"]) for item in backends)
-    ):
-        reason_code = "provider-probe-not-enforcing"
-
-    status: dict[str, object] = {
-        "schema": "guard.network-status.v1",
-        "host_platform": host_family.value if host_family is not None else "unsupported",
-        "effective_grade": active_grade.value,
-        "independently_observed_grade": EnforcementGrade.UNAVAILABLE.value,
-        "protection_active": any(bool(item["active"]) for item in backends),
-        "independently_observed": False,
-        "reason_code": reason_code,
-        "backends": backends,
+            for profile in (profiles if profiles is not None else default_platform_profiles())
+        ],
+        "explicit": profiles is not None,
+        "host_only": profiles is None and platform_name is not None,
+        "supervisor": project_network_supervisor_health(supervisor_health) if supervisor_health is not None else None,
+        "legacy_domain_policy": legacy_policy,
     }
-    if migrated is not None:
-        status["legacy_domain_policy"] = {
-            "action": migrated.action.value,
-            "sandbox_required": migrated.sandbox_required,
+    try:
+        return native_runner_authority("network_status_build", request)
+    except NativeRunnerAuthorityError:
+        unavailable = EnforcementGrade.UNAVAILABLE.value
+        status: dict[str, object] = {
+            "schema": "guard.network-status.v1",
+            "host_platform": "unsupported",
+            "effective_grade": unavailable,
+            "independently_observed_grade": unavailable,
+            "protection_active": False,
+            "independently_observed": False,
+            "reason_code": "native-runtime-unavailable",
+            "backends": [],
         }
-    if supervisor_health is not None:
-        supervisor = project_network_supervisor_health(supervisor_health)
-        supervisor["effective_grade"] = active_grade.value
-        supervisor["permits_enforcement"] = bool(status["protection_active"])
-        status["supervisor"] = supervisor
-    return status
+        if legacy_policy is not None:
+            status["legacy_domain_policy"] = legacy_policy
+        return status
 
 
 def project_network_supervisor_health(health: NetworkSupervisorHealth) -> dict[str, object]:
