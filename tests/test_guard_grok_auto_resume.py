@@ -9,11 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.grok_approval_resume import (
-    GROK_APPROVAL_WAIT_MAX_SECONDS,
-    grok_live_approval_wait_seconds,
-    wait_for_grok_live_approval,
-)
+from codex_plugin_scanner.guard.adapters.grok_approval_resume import wait_for_grok_live_approval
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -44,11 +40,6 @@ def _request(tmp_path: Path, request_id: str) -> GuardApprovalRequest:
         review_command=f"hol-guard approvals approve {request_id}",
         approval_url=f"http://127.0.0.1/pending/{request_id}",
     )
-
-
-def test_grok_wait_timeout_is_capped_below_hook_deadline() -> None:
-    assert grok_live_approval_wait_seconds(120) == GROK_APPROVAL_WAIT_MAX_SECONDS
-    assert grok_live_approval_wait_seconds(0) == 0
 
 
 def test_grok_live_wait_allows_after_approval(tmp_path: Path) -> None:

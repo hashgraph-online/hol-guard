@@ -615,6 +615,8 @@ mod hermes_yaml_resolve;
 #[path = "adapters/hook_adapter_op.rs"]
 mod hook_adapter_op;
 mod hook_approval_context;
+#[path = "adapters/hook_approval_wait.rs"]
+mod hook_approval_wait;
 mod hook_artifact_compose_codex_live_allow;
 mod hook_artifact_compose_op;
 mod hook_artifact_compose_package_firewall;
