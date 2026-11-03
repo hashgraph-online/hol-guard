@@ -8,13 +8,12 @@
 //! Only an allowed prompt gets context, and only for harnesses that show
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
-use crate::context_assistance_engine::PickedExcerpt;
+use crate::context_assistance_engine::{admissible_paths, PickedExcerpt};
 use crate::context_assistance_prompt_files::{
     asks_for_tests, candidates, phrases, project_root, terms, test_file,
 };
 use crate::context_assistance_service::LaneMiss;
 use crate::policy_store::PolicySnapshotStore;
-use guard_context_assistance::SourceRoot;
 use guard_contracts::GuardHookEnvelopeV2;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -146,19 +145,25 @@ fn attach(
     let deadline = Instant::now() + wait;
     // An excerpt holding only the quoted text is still about the request.
     words.extend(quoted);
-    // The engine refuses roots like these, so the plain file list does too.
-    let listed = matched(&found).filter(|_| SourceRoot::inspect(&root).is_ok());
     let request = Request {
-        root,
+        root: root.clone(),
         app: harness.to_owned(),
         query: truncated(prompt, MAX_QUERY_BYTES),
         words,
-        found,
+        found: found.clone(),
     };
-    // CIGAR still starting: the matched files alone still save the agent a
-    // search, as long as project context is still on.
-    let Some(context) = lookup(service, store.guard_home(), request, deadline)
-        .unwrap_or_else(|| listed.filter(|_| service.prompt_context_chosen()))
+    // CIGAR still starting, or late: the matched files it would accept still
+    // save the agent a search, as long as project context is still on.
+    let listed = || {
+        let until = deadline + HOOK_MARGIN / 2;
+        let home = store.guard_home();
+        service
+            .prompt_context_chosen()
+            .then(|| admissible_paths(home, &root, harness, &found, MAX_OTHER_FILES, until))
+            .and_then(|paths| matched(&paths))
+    };
+    let Some(context) =
+        lookup(service, store.guard_home(), request, deadline).unwrap_or_else(listed)
     else {
         return;
     };
@@ -232,8 +237,8 @@ fn flights() -> &'static Flights {
 }
 
 /// CIGAR's rendered answer, `Some(None)` when it had nothing that fits, was
-/// off, failed, did not answer before `deadline`, or another prompt holds the
-/// lookup, and `None` only when CIGAR is on and still starting.
+/// off, failed, or another prompt holds the lookup, and `None` when CIGAR is
+/// on but still starting or did not answer before `deadline`.
 fn lookup(
     service: &crate::context_assistance_service::Service,
     guard_home: &Path,
@@ -318,16 +323,13 @@ fn lookup(
     answer(service, &flight, deadline)
 }
 
-/// The flight's answer, dropped if project context changed meanwhile. A late
-/// answer adds nothing: the engine's own checks on the files never finished.
+/// The flight's answer, dropped if project context changed meanwhile.
 fn answer(
     service: &crate::context_assistance_service::Service,
     flight: &Flight,
     deadline: Instant,
 ) -> Option<Option<String>> {
-    let Some(rendered) = wait_for(flight, deadline) else {
-        return Some(None);
-    };
+    let rendered = wait_for(flight, deadline)?;
     Some(rendered.filter(|_| service.prompt_lane_current(&flight.lane)))
 }
 
@@ -403,7 +405,7 @@ fn render(picked: &[PickedExcerpt], found: &[String], words: &[String]) -> Optio
             text,
         );
         if out.len() + block.len() > MAX_CONTEXT_CHARS {
-            break;
+            continue;
         }
         out.push_str(&block);
         shown.push(excerpt.path.as_str());

@@ -218,3 +218,35 @@ fn long_matched_paths_stay_within_the_context_limit() {
         None
     );
 }
+
+#[test]
+fn an_excerpt_too_big_to_fit_gives_way_to_the_next_one() {
+    let picked = [
+        excerpt("src/header.ts", &"header ".repeat(2_000)),
+        excerpt("src/header-title.ts", "export const header = 'Title';"),
+    ];
+    let rendered = render(&picked, &[], &words(&["header"])).unwrap();
+    assert!(
+        rendered.contains("src/header-title.ts (lines 1-3)"),
+        "{rendered}"
+    );
+    assert!(rendered.len() <= MAX_CONTEXT_CHARS);
+}
+
+/// The file list that stands in while CIGAR starts goes through the engine's
+/// own checks. A fresh Guard home has project context off for every
+/// workspace, so nothing is named, even for a readable, ordinary file.
+#[test]
+fn the_starting_fallback_names_nothing_a_workspace_has_not_allowed() {
+    let home = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let root = crate::context_assistance_prompt_files::plain(
+        std::fs::canonicalize(project.path()).unwrap(),
+    );
+    std::fs::write(root.join("header.ts"), "export const header = 1;\n").unwrap();
+    let found = words(&["header.ts"]);
+    let later = Instant::now() + Duration::from_secs(5);
+    for app in ["claude-code", "Claude Code"] {
+        assert!(admissible_paths(home.path(), &root, app, &found, 8, later).is_empty());
+    }
+}
