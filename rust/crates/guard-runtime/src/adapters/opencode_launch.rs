@@ -18,8 +18,8 @@ use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
-use super::opencode_plugin_render::dumps;
-use super::pyjson::{parse, PyVal};
+use super::opencode_plugin_render::{dumps, dumps_unmapping};
+use super::pyjson::{parse_mapping_lone_surrogates, PyVal, SurrogateMapped};
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 use super::workspace_inventory_files::read_text;
@@ -180,25 +180,55 @@ fn consumes_next_value(value: &str, args: &[&str], index: usize) -> bool {
 
 /// `launch_environment`: no content when the overlay is missing or is not a
 /// JSON object, since there is nothing managed to apply.
+///
+/// A lone surrogate escape CPython's `json.loads` keeps, such as a Unix file
+/// name Python decoded, is read as a mapped character and written back as
+/// the same escape. When a mapped character could not be told from a genuine
+/// one the merge cannot be reproduced, so the request is refused rather than
+/// changing the caller's settings.
 fn environment(map: &Map<String, Value>, guard_home: &str) -> KindResult {
     if guard_home.is_empty() {
         return Err(ERR_INVALID);
     }
     let inline = optional_text(map, "inline")?;
     let path = Path::new(guard_home).join(OVERLAY_DIR).join(OVERLAY_FILE);
-    let overlay = match read_text(&path).map(|text| parse(&text)) {
-        Some(Ok(PyVal::Dict(entries))) => entries,
-        _ => return Ok(json!({ "content": null })),
+    let Some(overlay) = read_text(&path).and_then(|text| object(&text)) else {
+        return Ok(json!({ "content": null }));
     };
-    let merged = merge(inline_config(inline), overlay);
-    Ok(json!({ "content": dumps(&PyVal::Dict(merged)) }))
+    let inline = inline.filter(|text| !text.is_empty()).and_then(object);
+    let (mut mapped, mut collision) = (overlay.mapped, overlay.collision);
+    let base = match inline {
+        Some(inline) => {
+            mapped |= inline.mapped;
+            collision |= inline.collision;
+            dict_entries(inline.value)
+        }
+        None => Vec::new(),
+    };
+    if mapped && collision {
+        return Err(ERR_INVALID);
+    }
+    let merged = PyVal::Dict(merge(base, dict_entries(overlay.value)));
+    let content = if mapped {
+        dumps_unmapping(&merged)
+    } else {
+        dumps(&merged)
+    };
+    Ok(json!({ "content": content }))
 }
 
-/// `_inline_config`: the caller's config object, or nothing when it is empty,
-/// unreadable or not an object.
-fn inline_config(raw: Option<&str>) -> Vec<(String, PyVal)> {
-    match raw.filter(|text| !text.is_empty()).map(parse) {
-        Some(Ok(PyVal::Dict(entries))) => entries,
+/// `json.loads(text)` when it reads a JSON object, else nothing (the
+/// caller's `_inline_config` ignores an empty, unreadable or non-object
+/// config).
+fn object(text: &str) -> Option<SurrogateMapped> {
+    parse_mapping_lone_surrogates(text)
+        .ok()
+        .filter(|parsed| matches!(parsed.value, PyVal::Dict(_)))
+}
+
+fn dict_entries(value: PyVal) -> Vec<(String, PyVal)> {
+    match value {
+        PyVal::Dict(entries) => entries,
         _ => Vec::new(),
     }
 }

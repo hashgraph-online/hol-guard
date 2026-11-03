@@ -170,6 +170,38 @@ fn unusable_inline_config_is_ignored() {
 }
 
 #[test]
+fn lone_surrogate_escapes_survive_the_merge() {
+    // CPython's json.loads keeps `\udcff`, and json.dumps writes it back.
+    let content = environment(
+        Some(r#"{"permission": "ask"}"#),
+        Some(r#"{"path": "/tmp/\udcff", "\ud800key": ["\udfff"]}"#),
+    );
+    assert_eq!(
+        content,
+        json!(r#"{"path": "/tmp/\udcff", "\ud800key": ["\udfff"], "permission": "ask"}"#)
+    );
+    let content = environment(Some(r#"{"x": "\udcff"}"#), None);
+    assert_eq!(content, json!(r#"{"x": "\udcff"}"#));
+    // A genuine character of the mapped range is written as its pair.
+    let content = environment(Some("{\"x\": \"\u{f0000}\"}"), None);
+    assert_eq!(content, json!(r#"{"x": "\udb80\udc00"}"#));
+}
+
+#[test]
+fn an_ambiguous_surrogate_refuses_the_merge() {
+    let home = tempfile::tempdir().unwrap();
+    fs::create_dir(home.path().join("opencode")).unwrap();
+    fs::write(
+        home.path().join("opencode/runtime-config.json"),
+        "{\"x\": \"\u{f0000}\"}",
+    )
+    .unwrap();
+    let request = json!({ "op": "environment", "inline": r#"{"y": "\udcff"}"# });
+    let answer = dispatch(&request, home.path().to_str().unwrap());
+    assert_eq!(answer, Err(ERR_INVALID));
+}
+
+#[test]
 fn refuses_malformed_environment_requests() {
     for request in [
         json!({ "op": "environment", "inline": 1 }),
