@@ -85,37 +85,105 @@ const CREDENTIAL_WORDS: [&str; 8] = [
     "passphrase",
 ];
 
+/// Whether a value is written for something else to fill in: a shell
+/// variable, a CI expression or a template hole. The whole value has to be
+/// that hole — a literal password often carries a `$` or a brace of its own
+/// in the middle, and that names a credential like any other.
+fn is_placeholder(value: &str) -> bool {
+    if let Some(rest) = value.strip_prefix('$') {
+        return match rest.strip_prefix('{') {
+            Some(inner) => inner.ends_with('}'),
+            None => !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'),
+        };
+    }
+    value.starts_with("{{") && value.ends_with("}}")
+}
+
+/// The byte width of the placeholder that opens here, if one does. A CI
+/// expression and a template hole carry braces of their own, so they are
+/// recognised before a line is split on its braces.
+fn placeholder_width(rest: &str) -> Option<usize> {
+    for (open, close) in [("${{", "}}"), ("{{", "}}"), ("${", "}")] {
+        let Some(body) = rest.strip_prefix(open) else {
+            continue;
+        };
+        if let Some(end) = body.find(close) {
+            return Some(open.len() + end + close.len());
+        }
+    }
+    let name = rest.strip_prefix('$')?;
+    let width = name
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .map(char::len_utf8)
+        .sum::<usize>();
+    (width > 0).then_some(1 + width)
+}
+
+/// One line with every placeholder replaced by a plain one of the same kind,
+/// so that splitting the line on its braces cannot tear a CI expression into
+/// pieces that read as a literal.
+fn mask_placeholders(line: &str) -> String {
+    let mut masked = String::with_capacity(line.len());
+    let mut index = 0;
+    while index < line.len() {
+        let rest = &line[index..];
+        if let Some(width) = placeholder_width(rest) {
+            masked.push_str("$PLACEHOLDER");
+            index += width;
+            continue;
+        }
+        let character = rest.chars().next().expect("a non-empty remainder");
+        masked.push(character);
+        index += character.len_utf8();
+    }
+    masked
+}
+
+/// The key and value of one `key = value` pair, with the quoting, dashes and
+/// separators a configuration document writes around them taken off.
+fn credential_pair(segment: &str) -> Option<(String, &str)> {
+    let (key, value) = segment.split_once(['=', ':'])?;
+    let key = key
+        .trim()
+        .trim_start_matches(['-', ' '])
+        .trim_matches(['"', '\''])
+        .to_ascii_lowercase()
+        .replace(['-', '_', '.'], "");
+    let value = value
+        .trim()
+        .trim_end_matches(',')
+        .trim_matches(['"', '\''])
+        .trim();
+    Some((key, value))
+}
+
 /// Whether a line writes a literal value under one of those words. The
 /// detector answers for material it recognises by shape, and a short password
 /// has no shape to recognise, so the word beside it carries the answer. A
 /// value the shell or the CI system fills in later names no credential of its
 /// own, and an empty one holds none.
+///
+/// A line can carry more than one pair — an inline table, a flow mapping, a
+/// document written on one line — so every pair on it is read, and the word
+/// is looked for anywhere in the key rather than at its end: `secret_key` and
+/// `aws_secret_access_key` name a credential as plainly as `secret` does.
 fn names_a_credential_value(text: &str) -> bool {
     text.lines().any(|line| {
         let line = line.trim();
         if line.starts_with('#') || line.starts_with("//") {
             return false;
         }
-        let Some((key, value)) = line.split_once(['=', ':']) else {
-            return false;
-        };
-        let key = key
-            .trim()
-            .trim_start_matches(['-', ' '])
-            .trim_matches(['"', '\''])
-            .to_ascii_lowercase()
-            .replace(['-', '_', '.'], "");
-        if !CREDENTIAL_WORDS.iter().any(|word| key.ends_with(word)) {
-            return false;
-        }
-        let value = value
-            .trim()
-            .trim_end_matches(',')
-            .trim_matches(['"', '\''])
-            .trim();
-        !value.is_empty()
-            && !value.contains('$')
-            && !value.contains("{{")
-            && !matches!(value, "{}" | "[]" | "null" | "~" | "true" | "false")
+        mask_placeholders(line)
+            .split([',', '{', '}'])
+            .any(|segment| {
+                let Some((key, value)) = credential_pair(segment) else {
+                    return false;
+                };
+                CREDENTIAL_WORDS.iter().any(|word| key.contains(word))
+                    && !value.is_empty()
+                    && !is_placeholder(value)
+                    && !matches!(value, "{}" | "[]" | "null" | "~" | "true" | "false")
+            })
     })
 }

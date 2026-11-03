@@ -328,6 +328,18 @@ fn a_hidden_directorys_configuration_document_reads_when_it_holds_no_credential(
         "database:\n  password: hunter2\n",
         "[registry]\napi_key = \"abc123\"\n",
         "passphrase: letmein\n",
+        // The word carries the answer wherever it sits in the key, not only
+        // at its end.
+        "secret_key: abc123\n",
+        "aws_secret_access_key = \"abc\"\n",
+        // A line can hold more than one pair: an inline table, a flow
+        // mapping, a document written on one line.
+        "[registries]\ninternal = { token = \"abc123\" }\n",
+        "{\"db\": {\"password\": \"hunter2\"}}\n",
+        // A literal often carries a `$` or a brace of its own, which names a
+        // credential like any other character does.
+        "database:\n  password: hunter$2\n",
+        "[registry]\ntoken = \"ab$cd\"\n",
     ] {
         plant(&repo.join(".circleci/config.yml"), body);
         assert!(
@@ -339,6 +351,8 @@ fn a_hidden_directorys_configuration_document_reads_when_it_holds_no_credential(
     for body in [
         "deploy:\n  token: ${{ secrets.NPM_TOKEN }}\n",
         "[registry]\ntoken = \"$CARGO_REGISTRY_TOKEN\"\n",
+        "deploy:\n  token: ${REGISTRY_TOKEN}\n",
+        "[registry]\ntoken = \"{{ registry_token }}\"\n",
         "password:\n",
     ] {
         plant(&repo.join(".circleci/config.yml"), body);
