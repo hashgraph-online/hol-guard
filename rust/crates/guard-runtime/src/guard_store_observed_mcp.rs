@@ -517,6 +517,9 @@ fn command_catalog(connection: &Connection, cli_id: &str) -> StoreResult<Vec<(St
         .collect())
 }
 
+#[path = "guard_store_observed_mcp_discovery.rs"]
+pub(crate) mod discovery;
+
 #[cfg(test)]
 #[path = "guard_store_observed_mcp_vectors_tests.rs"]
 mod vectors_tests;

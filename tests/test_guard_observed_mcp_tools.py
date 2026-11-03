@@ -7,27 +7,11 @@ from codex_plugin_scanner.guard.runtime.observed_mcp_tools import (
     MAX_OBSERVED_MCP_TOOLS,
     discover_observed_mcp_tools,
     observed_mcp_tool,
-    tools_from_receipts,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
-
-
-def _history(
-    monkeypatch: pytest.MonkeyPatch,
-    store: GuardStore,
-    *,
-    approvals: list[dict[str, object]] | None = None,
-    receipts: list[dict[str, object]] | None = None,
-) -> None:
-    """Stand in for the observation history the resident projects for the scan."""
-
-    monkeypatch.setattr(
-        store,
-        "observed_mcp_history",
-        lambda *, limit: (list(approvals or ()), list(receipts or ())),
-    )
+from .observed_mcp_history_rows import seed_observed_mcp_history
 
 
 def test_observed_connector_enrollment_uses_stored_catalog_and_requires_trust(
@@ -39,7 +23,7 @@ def test_observed_connector_enrollment_uses_stored_catalog_and_requires_trust(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     store = GuardStore(tmp_path / "guard-home")
     qualified_name = "mcp__codex_apps__composio__composio_search_tools"
-    _history(monkeypatch, store, receipts=[{"harness": "codex", "raw_command_text": "tool:" + qualified_name}])
+    seed_observed_mcp_history(store, receipts=[{"harness": "codex", "raw_command_text": "tool:" + qualified_name}])
     discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z")
     tool = observed_mcp_tool("codex", qualified_name)
     assert tool is not None
@@ -92,7 +76,7 @@ def test_permission_mutation_retires_native_readiness_before_writing(
     store._provision_resident_verifier()
     tool = observed_mcp_tool("codex", "mcp__codex_apps__composio__search")
     assert tool is not None
-    _history(monkeypatch, store, receipts=[{"harness": "codex", "raw_command_text": "tool:" + tool.qualified_name}])
+    seed_observed_mcp_history(store, receipts=[{"harness": "codex", "raw_command_text": "tool:" + tool.qualified_name}])
     discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z")
     store.upsert_local_cli_grant(
         identity=tool.identity,
@@ -189,27 +173,20 @@ def test_malformed_or_unbounded_names_are_not_discovered(name: str) -> None:
     assert observed_mcp_tool("codex", name) is None
 
 
-def test_receipt_discovery_uses_labels_only_and_keeps_exact_tool_names() -> None:
-    tools = tools_from_receipts(
-        [
-            {"harness": "codex", "raw_command_text": "tool:mcp__server__read_file"},
-            {"harness": "codex", "artifact_name": "mcp__server__read-file"},
-            {"harness": "codex", "raw_command_text": "tool:mcp__server__read_file"},
-            {"harness": "codex", "raw_command_text": "echo mcp__server__fake"},
-        ]
-    )
-    assert len(tools) == 2
-    assert tools[0].identity.identity_hash == tools[1].identity.identity_hash
-    assert tools[0].command_id != tools[1].command_id
+def test_names_that_slug_alike_keep_separate_commands() -> None:
+    first = observed_mcp_tool("codex", "mcp__server__read_file")
+    second = observed_mcp_tool("codex", "mcp__server__read-file")
+    assert first is not None and second is not None
+    assert first.identity.identity_hash == second.identity.identity_hash
+    assert first.command_id != second.command_id
 
 
 def test_discovery_preserves_choices_and_never_approves_new_tools(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     receipts = [{"harness": "codex", "raw_command_text": "tool:mcp__codex_apps__composio__search"}]
-    _history(monkeypatch, store, receipts=receipts)
+    seed_observed_mcp_history(store, receipts=receipts)
     discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z")
     tool = observed_mcp_tool("codex", "mcp__codex_apps__composio__search")
     assert tool is not None
@@ -221,7 +198,9 @@ def test_discovery_preserves_choices_and_never_approves_new_tools(
         updated_at="2026-01-01T00:00:01Z",
         command_states={tool.command_id: "allow"},
     )
-    receipts.append({"harness": "codex", "raw_command_text": "tool:mcp__codex_apps__composio__execute"})
+    seed_observed_mcp_history(
+        store, receipts=[{"harness": "codex", "raw_command_text": "tool:mcp__codex_apps__composio__execute"}]
+    )
     discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:02Z")
     assert store.read_local_cli_command_states(tool.identity.cli_id)[tool.command_id] == "allow"
     assert store.read_observed_mcp_tool_actions() == {"codex:" + tool.qualified_name: "allow"}
@@ -266,10 +245,9 @@ def test_discovery_preserves_choices_and_never_approves_new_tools(
     )
 
 
-def test_server_deny_is_scoped_to_its_harness_and_connector(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_server_deny_is_scoped_to_its_harness_and_connector(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _history(
-        monkeypatch,
+    seed_observed_mcp_history(
         store,
         receipts=[{"harness": "codex", "raw_command_text": "tool:mcp__codex_apps__composio__execute"}],
     )
@@ -287,11 +265,9 @@ def test_server_deny_is_scoped_to_its_harness_and_connector(tmp_path: Path, monk
 
 def test_paused_native_requests_discover_connectors_without_receipts(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _history(
-        monkeypatch,
+    seed_observed_mcp_history(
         store,
         approvals=[
             {"harness": "codex", "raw_command_text": "tool:mcp__codex_apps__composio__composio_search_tools"},
@@ -331,19 +307,17 @@ def test_concurrent_catalog_growth_preserves_all_tools(tmp_path: Path) -> None:
     assert len(store.read_local_cli_command_catalog(first.identity.cli_id)) == len(tools)
 
 
-def test_duplicate_sources_do_not_consume_catalog_capacity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_duplicate_sources_do_not_consume_catalog_capacity(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     records = [{"harness": "codex", "raw_command_text": f"tool:mcp__server__tool_{index}"} for index in range(128)]
-    _history(monkeypatch, store, approvals=records[:64], receipts=records)
+    seed_observed_mcp_history(store, approvals=records[:64], receipts=records)
     discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z")
     tool = observed_mcp_tool("codex", "mcp__server__tool_0")
     assert tool is not None
     assert len(store.read_local_cli_command_catalog(tool.identity.cli_id)) == MAX_OBSERVED_MCP_TOOLS
 
 
-def test_saturated_observed_connector_is_reported_without_blocking_other_connectors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_saturated_observed_connector_is_reported_without_blocking_other_connectors(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 
     store = GuardStore(tmp_path / "guard-home")
@@ -362,8 +336,7 @@ def test_saturated_observed_connector_is_reported_without_blocking_other_connect
         ],
         limit=MAX_OBSERVED_MCP_TOOLS,
     )
-    _history(
-        monkeypatch,
+    seed_observed_mcp_history(
         store,
         approvals=[
             {"harness": "codex", "raw_command_text": "tool:mcp__server__new_tool"},
@@ -428,8 +401,7 @@ def test_discovery_reads_the_projected_history_and_not_whole_rows(
 
     monkeypatch.setattr(store, "list_receipts", refuse)
     monkeypatch.setattr(store, "list_approval_requests", refuse)
-    _history(
-        monkeypatch,
+    seed_observed_mcp_history(
         store,
         approvals=[{"harness": "codex", "raw_command_text": "tool:mcp__server__write"}],
         receipts=[{"harness": "codex", "raw_command_text": "tool:mcp__server__read"}],
