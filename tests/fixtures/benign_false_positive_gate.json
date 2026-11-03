@@ -12993,7 +12993,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "du -sk ${ORG_WT}/scripts ${ORG_WT}/node_modules 2>/dev/null | sort -k1 -n | tail -3"
+        "command": "du -sk ${ORG_WT}/scripts ${ORG_WT}/src 2>/dev/null | sort -k1 -n | tail -3"
       },
       "cwd": "org",
       "expect": "allow"
