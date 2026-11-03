@@ -16,15 +16,22 @@ type ViewProps = {
   onOpenSettings: () => void;
 };
 
+function homeStatusLabel(props: ViewProps): string {
+  if (props.stopping) return "Stopping";
+  if (props.status) return contextStatusCopy(props.status).label;
+  if (props.loading) return "Checking";
+  return "Unavailable";
+}
+
+function homeStatusCopy(props: ViewProps): { headline: string; detail: string } {
+  if (props.stopping) return { headline: "Turning off CIGAR", detail: "Guard keeps protecting you as usual." };
+  if (props.error) return { headline: "CIGAR status unavailable", detail: "Guard did not answer about CIGAR. Protection keeps working." };
+  return cigarHomeCopy(props.status, props.loading, false);
+}
+
 export function ContextHomeStatusView(props: ViewProps) {
-  const label = props.stopping ? "Stopping"
-    : props.status ? contextStatusCopy(props.status).label
-      : props.loading ? "Checking" : "Unavailable";
-  const copy = props.stopping
-    ? { headline: "Turning off CIGAR", detail: "Guard keeps protecting you as usual." }
-    : props.error
-      ? { headline: "CIGAR status unavailable", detail: "Guard did not answer about CIGAR. Protection keeps working." }
-      : cigarHomeCopy(props.status, props.loading, false);
+  const label = homeStatusLabel(props);
+  const copy = homeStatusCopy(props);
   const canStop = props.stopAvailable ?? Boolean(props.status?.requested_enabled || props.status?.effective_enabled || props.status?.job);
   return <section aria-label="CIGAR overview" className="space-y-3 rounded-xl border border-slate-200 p-4">
     <div className="flex flex-wrap items-center justify-between gap-2">
