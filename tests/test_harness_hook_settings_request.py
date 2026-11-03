@@ -34,7 +34,7 @@ def test_install_rebuilds_the_callers_objects_in_the_answered_order(monkeypatch:
     entry = {"matcher": "Bash", "hooks": [_STALE, _USER], "z": "é"}
     hooks: dict[str, object] = {"Notification": "x", "PreToolUse": ["kept", entry]}
     guard = {"timeout": 35, "status": _STATUS}
-    answer = {
+    answer: dict[str, object] = {
         "hooks": [
             ["Notification", None, None],
             ["PreToolUse", [0, {"entry": 1, "hooks": [1]}, {"matcher": None}], guard],
@@ -180,12 +180,20 @@ def test_a_refused_uninstall_prune_leaves_the_launcher_and_settings(
     config.write_text(original, encoding="utf-8")
     removed: list[str] = []
     monkeypatch.setattr(module, "remove_guard_shim", lambda *_args, **_kwargs: removed.append("shim"))
+    if adapter_name == "devin":
+        from codex_plugin_scanner.guard.adapters.devin_config import DevinJsonDocument
 
-    def refuse(_kind: str, _request: dict[str, object]) -> dict[str, object]:
+        document = DevinJsonDocument(payload=json.loads(original), had_comments=False, parse_failed=False, exists=True)
+        monkeypatch.setattr(devin, "load_devin_jsonc", lambda _path: document)
+    asked: list[str] = []
+
+    def refuse(kind: str, _request: dict[str, object]) -> dict[str, object]:
+        asked.append(kind)
         raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
     monkeypatch.setattr(authority, "native_runner_authority", refuse)
     with pytest.raises(NativeRunnerAuthorityError):
         adapter.uninstall(context)
+    assert asked == ["harness_hook_settings"]
     assert removed == []
     assert config.read_text(encoding="utf-8") == original
