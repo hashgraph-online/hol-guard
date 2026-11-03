@@ -81,3 +81,42 @@ def test_no_resident_answer_for_the_local_cli_step_is_the_host_outage(
         )
         == "allow"
     )
+
+
+@pytest.mark.parametrize(
+    ("answer", "result"),
+    [
+        ("recognition", {"identity": {**_VALID}, "error_code": "", "message": ""}),
+        ("recognition", {"identity": None, "error_code": 7, "message": ""}),
+        ("candidates", {"candidates": ["tool", 3]}),
+    ],
+)
+def test_a_malformed_recognition_is_recorded_and_dropped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, answer: str, result: dict[str, object]
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", lambda *_args, **_kwargs: result)
+    with module.track_local_cli_identity_failures() as failures:
+        found = module.native_local_cli_recognition(
+            "tool", cwd=tmp_path, home_dir=tmp_path, answer=answer, guard_home=tmp_path
+        )
+    assert found is None
+    assert failures == ["native_local_cli_identity_malformed"]
+
+
+def test_recognition_candidates_pass_the_store_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.runtime.local_cli_identity import local_cli_recognition_candidates
+
+    calls: list[tuple[str, dict[str, object], object]] = []
+
+    def answer(kind: str, args: dict[str, object], guard_home: object = None, **_kwargs: object) -> dict[str, object]:
+        calls.append((kind, args, guard_home))
+        return {"candidates": ["tool", "python3 /w/tool.py"]}
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", answer)
+    found = local_cli_recognition_candidates("tool", cwd=tmp_path, home_dir=tmp_path, guard_home=tmp_path / "store")
+    assert found == ("tool", "python3 /w/tool.py")
+    [(kind, args, guard_home)] = calls
+    assert (kind, args["answer"], guard_home) == ("local_cli_recognize", "candidates", tmp_path / "store")

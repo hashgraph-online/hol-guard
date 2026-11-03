@@ -649,6 +649,11 @@ mod forms;
 
 pub(crate) use forms::launch_arguments;
 
+#[path = "local_cli_identify_recognize.rs"]
+mod recognize;
+
+pub(crate) use recognize::dispatch as recognize_dispatch;
+
 #[cfg(test)]
 #[path = "local_cli_identify_tests.rs"]
 mod tests;
