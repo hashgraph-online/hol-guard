@@ -289,7 +289,7 @@ def test_every_signed_claim_of_an_item_is_checked_in_one_call(monkeypatch) -> No
 
     result = _apply_local_claims({"trustResolution": _local_claim(), "trustLayers": layers})
 
-    assert ops == ["claims", "payloads"]
+    assert ops == ["sign_plan"]
     assert all(layer["metadata"]["attestationStatus"] == "signed" for layer in result["trustLayers"])
 
 
