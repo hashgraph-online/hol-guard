@@ -9,13 +9,13 @@
 //! Only an allowed prompt gets context, and only for harnesses that show
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
-use crate::context_assistance_engine::{admissible_paths, PickedExcerpt};
+use crate::context_assistance_engine::{admissible_paths, quick_excerpts, PickedExcerpt};
 use crate::context_assistance_prompt_files::{
     asks_for_tests, candidates, phrases, project_root, terms, test_file,
 };
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
-use lookup::{lookup, Request};
+use lookup::{lookup, Miss, Request};
 use serde_json::Value;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -150,23 +150,34 @@ fn attach(
         root: root.clone(),
         app: harness.to_owned(),
         query: truncated(prompt, MAX_QUERY_BYTES),
-        words,
+        words: words.clone(),
         found: found.clone(),
     };
-    // CIGAR starting, busy with another prompt, or late: the matched files it
-    // would accept still save the agent a search, as long as project context
-    // is still on.
+    let until = deadline + HOOK_MARGIN / 2;
+    let home = store.guard_home();
+    // CIGAR still starting, as on a session's first prompt: Guard reads the
+    // matched files CIGAR would accept and shows their best parts itself.
+    let read = || {
+        service
+            .prompt_context_chosen()
+            .then(|| quick_excerpts(home, &root, harness, &found, &words, until))
+            .and_then(|picked| render(&picked, &found, &words))
+    };
+    // CIGAR busy with another prompt, or late: the matched files it would
+    // accept still save the agent a search, as long as project context is
+    // still on.
     let listed = || {
-        let until = deadline + HOOK_MARGIN / 2;
-        let home = store.guard_home();
         service
             .prompt_context_chosen()
             .then(|| admissible_paths(home, &root, harness, &found, MAX_OTHER_FILES, until))
             .and_then(|paths| matched(&paths))
     };
-    let Some(context) =
-        lookup(service, store.guard_home(), request, deadline).unwrap_or_else(listed)
-    else {
+    let context = match lookup(service, home, request, deadline) {
+        Ok(context) => context,
+        Err(Miss::Starting) => read().or_else(listed),
+        Err(Miss::Pending) => listed(),
+    };
+    let Some(context) = context else {
         return;
     };
     add_context(response, &context);
