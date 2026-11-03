@@ -2,12 +2,13 @@
 
 `login`, `logout`, `status` and `workspace select` act on a saved sign-in
 (profile). `ai-tools configure --dry-run` previews an AI tool's settings change
-without writing it. `accounts connect` opens the workspace's connected accounts
-in Guard Cloud, where the member signs in with the provider in the browser; no
-provider password or key passes through this command. The other commands still
-report, without touching this device or the network, that they cannot act yet,
-and echo the contexts they parsed so scripts and tests can see which one each
-value landed in.
+without writing it, `--apply` writes it and keeps a copy of the previous file,
+and `ai-tools restore` undoes that change. `accounts connect` opens the
+workspace's connected accounts in Guard Cloud, where the member signs in with
+the provider in the browser; no provider password or key passes through this
+command. The other commands still report, without touching this device or the
+network, that they cannot act yet, and echo the contexts they parsed so
+scripts and tests can see which one each value landed in.
 
 The commands_support facade imports this module on every hook, so the sign-in
 modules are imported only when a sign-in command runs.
@@ -17,18 +18,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import urllib.parse
 from collections.abc import Callable
-from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 from ..browser_opener import open_browser_url
 from ..config import resolve_guard_home
 
 if TYPE_CHECKING:
-    from .cloud_actions_host_config import HostConfigPlan
     from .cloud_actions_session import CloudActionsProfile, CloudActionsSessionStore
 
 CLOUD_ACTIONS_SCHEMA = "guard.cloud-actions.v1"
@@ -219,68 +217,6 @@ def _workspace_select(args: argparse.Namespace, store: CloudActionsSessionStore,
     )
 
 
-def _configure_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
-    from .cloud_actions_host_config import (
-        SUPPORTED_AI_TOOLS,
-        AiToolNotSupportedError,
-        gateway_url,
-        plan_host_config,
-        settings_path,
-    )
-    from .cloud_actions_oauth import CloudActionsSignInError, resolve_cloud_origin
-
-    if args.apply:
-        return reply(
-            CLOUD_ACTIONS_UNAVAILABLE_EXIT,
-            "Applying AI tool settings is not available yet. Nothing was changed. Use --dry-run to preview.",
-            state="unavailable",
-            reason="not_available_yet",
-            context=_context(args),
-        )
-    try:
-        url = gateway_url(resolve_cloud_origin(args.cloud_url))
-    except CloudActionsSignInError as error:
-        return reply(
-            CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
-            f"{error} Nothing was changed.",
-            state="failed",
-            reason=error.reason,
-            message=str(error),
-        )
-    explicit_home = getattr(args, "home", None)
-    home = Path(explicit_home).expanduser() if explicit_home else Path.home()
-    try:
-        path = settings_path(args.ai_tool, home=home, environ=None if explicit_home else os.environ)
-    except AiToolNotSupportedError:
-        supported = ", ".join(SUPPORTED_AI_TOOLS)
-        return reply(
-            CLOUD_ACTIONS_UNAVAILABLE_EXIT,
-            f"Cloud actions setup is not available for {args.ai_tool}. Supported AI tools: {supported}.",
-            state="unavailable",
-            reason="ai_tool_not_supported",
-            ai_tool=args.ai_tool,
-            supported_ai_tools=list(SUPPORTED_AI_TOOLS),
-        )
-    plan = plan_host_config(args.ai_tool, path=path, url=url)
-    return reply(
-        CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT if plan.action in {"conflict", "unreadable"} else 0,
-        _preview_text(plan, args.cloud_workspace),
-        state="preview",
-        mode="dry-run",
-        ai_tool=plan.ai_tool,
-        cloud_workspace=args.cloud_workspace,
-        settings_file=str(plan.path),
-        action=plan.action,
-        server_name=plan.server_name,
-        url=plan.url,
-        previous_url=plan.previous_url,
-        configured_as=list(plan.configured_as),
-        other_entries=plan.other_entries,
-        problem=plan.problem,
-        written=False,
-    )
-
-
 # Matches the provider names Guard Cloud shows, so the button named here is the one on the page.
 _PROVIDER_NAMES = {
     "discord": "Discord",
@@ -345,38 +281,6 @@ def _connect_account(args: argparse.Namespace, reply: _Reply) -> int:
     )
 
 
-def _preview_text(plan: HostConfigPlan, workspace: str) -> str:
-    lines = [f"Preview for {plan.display_name}: {plan.path}"]
-    others = f"{plan.other_entries} other MCP server{'s' if plan.other_entries != 1 else ''}"
-    if plan.action == "unreadable":
-        lines.append(f"Guard cannot change this file: {plan.problem}")
-    elif plan.action == "conflict":
-        lines.append(f"{plan.problem} Guard will not replace it; rename or remove that entry first.")
-    elif plan.action == "already_configured":
-        lines.append(f"Already set up as {', '.join(plan.configured_as)}. Nothing would change.")
-    elif plan.action == "unchanged":
-        lines.append(f"Already set up as {plan.server_name}. Nothing would change.")
-    else:
-        if plan.action == "create_file":
-            lines.append("The file does not exist yet; it would be created with only this entry:")
-        elif plan.action == "update":
-            previous = f" from {plan.previous_url}" if plan.previous_url else ""
-            lines.append(f"Would change {plan.server_name}{previous} to:")
-        else:
-            lines.append("Would add this entry:")
-        lines.extend(f"+ {line}" for line in plan.entry_lines)
-        if plan.action != "create_file":
-            lines.append(f"Everything else in the file stays as it is, including {others}.")
-    # An existing entry under another name is already how the AI tool signs in.
-    if plan.action not in {"unreadable", "conflict", "already_configured"}:
-        lines.append(
-            f"The AI tool signs in to Guard Cloud itself; choose workspace {workspace} when it asks. "
-            f"{plan.sign_in_hint}"
-        )
-    lines.append("Nothing was written.")
-    return "\n".join(lines)
-
-
 def _run_guard_cloud_actions_command(
     args: argparse.Namespace,
     *,
@@ -409,8 +313,11 @@ def _run_guard_cloud_actions_command(
         if command == "status":
             return _status(args, store, reply)
         return _workspace_select(args, store, reply)
-    if getattr(args, "cloud_actions_ai_tools_command", None) == "configure":
-        return _configure_ai_tool(args, reply)
+    ai_tools_command = getattr(args, "cloud_actions_ai_tools_command", None)
+    if ai_tools_command in {"configure", "restore"}:
+        from .commands_dispatch_cloud_actions_ai_tools import configure_ai_tool, restore_ai_tool
+
+        return (configure_ai_tool if ai_tools_command == "configure" else restore_ai_tool)(args, reply)
     if getattr(args, "cloud_actions_accounts_command", None) == "connect":
         return _connect_account(args, reply)
     return reply(
