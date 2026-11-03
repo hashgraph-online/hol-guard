@@ -94,6 +94,7 @@ import { SettingsFormSection, SettingsSelectRow, SettingsToggleRow } from "./set
 import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/settings-ia";
 import { ApprovalPasswordSection } from "./settings/approval-password-copy";
 import { CloudReviewSettings } from "./settings/cloud-review-settings";
+import { CloudActionsSettings } from "./settings/cloud-actions-settings";
 import { ContextAssistanceSettings } from "./context-assistance/settings-panel";
 import { ContextDataRepairPanel } from "./context-assistance/data-repair-panel";
 import { settingsWithContextOff } from "./context-assistance/settings-model";
@@ -1991,6 +1992,8 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
             </details>
           </div>
         )}
+
+        {activeTab === "cloud-actions" && <CloudActionsSettings />}
 
         {activeTab === "maintenance" && (
           <div className="flex min-h-0 flex-1 flex-col space-y-6">

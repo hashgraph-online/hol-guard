@@ -51,6 +51,9 @@ pub(super) fn configure(
         state.settings = settings;
         state.error = None;
         state.last_check = None;
+        // New settings start fresh: the next request may wake the worker
+        // they describe without waiting out an earlier wake's retry window.
+        state.woke = None;
         revoke_runtime(&mut state)
     };
     await_cleanup(old);

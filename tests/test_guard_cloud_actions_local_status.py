@@ -92,6 +92,7 @@ def test_saved_sign_in_is_shown_unchecked_with_host_only(tmp_path: Path) -> None
             "profile": "default",
             "workspace": WS,
             "site": "cloud.example.test:8443",
+            "cloud_url": "https://cloud.example.test:8443",
             "signed_in_at": "2026-11-03T11:00:00Z",
             "expires_at": "2026-11-03T13:00:00Z",
             "expired": False,

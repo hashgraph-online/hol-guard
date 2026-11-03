@@ -343,6 +343,7 @@ mod daemon_route_op;
 mod daemon_route_paths;
 mod daemon_route_resolve;
 mod daemon_route_session;
+mod dashboard_reconnect;
 mod data_flow_analyze_op;
 mod decision_authority_op;
 #[cfg(test)]
@@ -565,6 +566,8 @@ mod guard_store_receipt_rollups;
 mod guard_store_receipt_writes;
 #[cfg(test)]
 mod guard_store_receipts_vectors_tests;
+mod guard_store_review_rejection_counts;
+mod guard_store_review_settle;
 mod guard_store_sessions;
 #[cfg(test)]
 mod guard_store_sessions_vectors_tests;
@@ -843,6 +846,7 @@ mod oci_bundle_op;
 #[cfg(test)]
 mod oci_bundle_vectors_tests;
 mod oci_path;
+mod omp_code_mode;
 mod omp_yield_input_scan;
 mod onefile_extraction_reclaim;
 mod onefile_extraction_removal;

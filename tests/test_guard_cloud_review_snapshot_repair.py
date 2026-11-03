@@ -312,7 +312,7 @@ def test_per_event_retry_hints_never_exhaust_the_attempt_cap(tmp_path: Path, mon
 def test_snapshot_repair_for_a_pending_request_does_not_count_toward_the_cap(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.cloud_review_retry_recovery import (
         MAX_REJECTED_DELIVERY_ATTEMPTS,
-        dead_letter_exhausted_review_events,
+        settle_rejected_review_events,
     )
 
     store = connected_exact_review_store(tmp_path)
@@ -326,15 +326,21 @@ def test_snapshot_repair_for_a_pending_request_does_not_count_toward_the_cap(tmp
     results: list[dict[str, object]] = [{"code": "review_event_snapshot_required", "status": "rejected"}] * len(rows)
 
     for _ in range(MAX_REJECTED_DELIVERY_ATTEMPTS + 3):
-        retained, dead_lettered = dead_letter_exhausted_review_events(
-            store, sequences=sequences, results=results, events=events, cleared=[], binding=binding
+        retained, _, progressed = settle_rejected_review_events(
+            store,
+            sequences=sequences,
+            results=results,
+            events=events,
+            acknowledged=[],
+            acknowledged_through=None,
+            binding=binding,
         )
-        assert retained == sequences and dead_lettered == 0
+        assert retained == sequences and not progressed
     assert _rejection_counts(store) == {}
 
 
 def test_rejection_counts_survive_a_backlog_larger_than_the_tracking_window(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.runtime.cloud_review_retry_recovery import dead_letter_exhausted_review_events
+    from codex_plugin_scanner.guard.runtime.cloud_review_retry_recovery import settle_rejected_review_events
 
     store = connected_exact_review_store(tmp_path)
     binding = store.get_review_event_oauth_binding()
@@ -342,10 +348,18 @@ def test_rejection_counts_survive_a_backlog_larger_than_the_tracking_window(tmp_
     sequences = list(range(1, 4100))
     results: list[dict[str, object]] = [{"code": "review_event_unrecognized_failure"}] * len(sequences)
 
+    # One settle call carries at most one bounded batch; the counters persist across calls.
     for _ in range(2):
-        _ = dead_letter_exhausted_review_events(
-            store, sequences=sequences, results=results, events={}, cleared=[], binding=binding
-        )
+        for start in range(0, len(sequences), 2_000):
+            _ = settle_rejected_review_events(
+                store,
+                sequences=sequences[start : start + 2_000],
+                results=results[start : start + 2_000],
+                events={},
+                acknowledged=[],
+                acknowledged_through=None,
+                binding=binding,
+            )
 
     counts = _rejection_counts(store)
     assert counts["1"] == 2 and len(counts) == len(sequences)

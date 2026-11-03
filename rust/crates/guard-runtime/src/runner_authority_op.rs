@@ -206,6 +206,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
         "opencode_command_replace" => crate::opencode_command_replace::dispatch(args),
+        "omp_code_mode" => crate::omp_code_mode::dispatch(args),
         "user_command_lookup" => crate::user_command_lookup::dispatch(args),
         "local_cli_script_source" => crate::local_cli_script_source::dispatch(args),
         "local_mcp_probe" => crate::local_mcp_probe::dispatch(args),
@@ -249,6 +250,10 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
         }
         // The OpenCode launch overlay is read from that verified home too.
         "opencode_launch" => opencode_launch::dispatch(&request.args, &request.guard_home),
+        // Dashboard reconnect proofs use that home's discovery key and store.
+        "dashboard_reconnect" => {
+            crate::dashboard_reconnect::dispatch(&request.args, &request.guard_home)
+        }
         _ => dispatch(&request.kind, &request.args),
     }
 }
