@@ -258,7 +258,8 @@ fn quoted_text_is_kept_as_a_phrase() {
 }
 
 /// A big settings file that says the request's everyday words many times
-/// must not outrank the small file the request names.
+/// must not outrank the small file the request names. The settings file
+/// never says "never mind" as one phrase, so only the words repeat.
 #[test]
 fn rare_words_and_quoted_text_outrank_common_words_repeated() {
     let (_dir, root) = canonical();
@@ -274,7 +275,7 @@ fn rare_words_and_quoted_text_outrank_common_words_repeated() {
     }
     fs::write(
         project.join("src/settings-workspace.tsx"),
-        "default button say never mind instead cancel dialog\n".repeat(8),
+        "default button: say mind, never instead, cancel dialog\n".repeat(8),
     )
     .unwrap();
     fs::write(
