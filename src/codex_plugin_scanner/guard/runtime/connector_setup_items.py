@@ -2,21 +2,19 @@
 
 ``hol-guard mcp list``, ``status`` and ``doctor`` read the same observation
 store and the same filter as the local dashboard, so a connector that needs
-setup is counted once and the counts match the Protect page.
+setup is counted once and the counts match the Protect page. The runtime
+(``connector_setup_rows.rs``) owns that filter and the needs-setup rule.
 """
 
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from urllib.parse import quote
 
 if TYPE_CHECKING:
     from ..store import GuardStore
-
-_SETUP_SURFACES = frozenset({"mcp", "cli"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,56 +70,31 @@ def listed_public_items(store: GuardStore) -> list[dict[str, object]]:
     ]
 
 
-def connector_needs_setup(item: Mapping[str, object]) -> bool:
-    """Mirror of the dashboard's needs-review rule for one listed connector."""
-
-    if item.get("stale") is True or item.get("state") == "unset":
-        return True
-    catalog = item.get("mcp_catalog")
-    if not isinstance(catalog, Mapping):
-        return False
-    changes = catalog.get("changes")
-    changed = isinstance(changes, Mapping) and any(changes.get(key) for key in ("added", "changed"))
-    return catalog.get("stale") is True or catalog.get("complete") is False or changed
-
-
-def workspace_items(items: Sequence[Mapping[str, object]]) -> list[Mapping[str, object]]:
-    """Mirror of the dashboard's Protect workspace filter, without catalog seeds."""
-
-    return [
-        item
-        for item in items
-        if item.get("state") != "unset" or (item.get("suggestable") is True and item.get("surface") in _SETUP_SURFACES)
-    ]
-
-
 def connector_setup_summary(store: GuardStore) -> ConnectorSetupSummary:
-    rows: list[ConnectorSetupItem] = []
-    for item in workspace_items(listed_public_items(store)):
-        cli_id = item.get("cli_id")
-        name = item.get("display_name") or item.get("name")
-        surface = item.get("surface")
-        state = item.get("state")
-        if not isinstance(cli_id, str) or not isinstance(name, str) or not isinstance(surface, str):
-            continue
-        label = item.get("source_label")
-        origin = item.get("remote_origin")
-        declared = item.get("declared_sources")
-        rows.append(
+    """Protect's connectors, filtered and checked for setup by the runtime."""
+
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    rows = native_runner_authority(
+        "connector_setup_rows", {"items": listed_public_items(store)}, guard_home=store.guard_home
+    ).get("rows")
+    try:
+        items = tuple(
             ConnectorSetupItem(
-                cli_id=cli_id,
-                name=name,
-                surface=surface,
-                state=state if isinstance(state, str) else "unset",
-                source_label=label if isinstance(label, str) and label else None,
-                remote_origin=origin if isinstance(origin, str) and origin else None,
-                needs_setup=connector_needs_setup(item),
-                declared_sources=tuple(value for value in declared if isinstance(value, str))
-                if isinstance(declared, list)
-                else (),
+                cli_id=str(row["cli_id"]),
+                name=str(row["name"]),
+                surface=str(row["surface"]),
+                state=str(row["state"]),
+                source_label=cast("str | None", row["source_label"]),
+                remote_origin=cast("str | None", row["remote_origin"]),
+                needs_setup=row["needs_setup"] is True,
+                declared_sources=tuple(str(value) for value in cast("list[object]", row["declared_sources"])),
             )
+            for row in cast("list[dict[str, object]]", rows)
         )
-    return ConnectorSetupSummary(items=tuple(rows))
+    except (KeyError, TypeError) as error:
+        raise NativeRunnerAuthorityError("native_runner_authority_result_invalid") from error
+    return ConnectorSetupSummary(items=items)
 
 
 def connector_setup_href(dashboard_url: str | None, cli_id: str | None = None) -> str | None:

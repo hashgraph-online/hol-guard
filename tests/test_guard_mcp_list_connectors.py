@@ -199,6 +199,19 @@ def test_status_line_counts_connectors_needing_setup(tmp_path: Path) -> None:
     assert connector_setup_line(None) is None
 
 
+@pytest.mark.parametrize("answer", [{}, {"rows": [{"cli_id": "x"}]}, {"rows": [{"declared_sources": 1}]}])
+def test_status_line_is_dropped_when_the_runtime_cannot_list_connectors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: dict[str, object]
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    store = GuardStore(tmp_path / "home")
+    _observe(store, "codex", "alpha")
+    monkeypatch.setattr(authority, "native_runner_authority", lambda *_args, **_kwargs: answer)
+
+    assert connector_setup_status(store, None) is None
+
+
 def test_status_json_carries_the_connector_count(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     home = tmp_path / "home"
     _observe(GuardStore(home), "codex", "alpha")
