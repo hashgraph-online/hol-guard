@@ -150,6 +150,11 @@ mod cline_hook_files;
 #[path = "adapters/cline_hook_files_tests.rs"]
 mod cline_hook_files_tests;
 mod cline_hook_worker;
+#[path = "adapters/cline_install_plan.rs"]
+mod cline_install_plan;
+#[cfg(test)]
+#[path = "adapters/cline_install_plan_tests.rs"]
+mod cline_install_plan_tests;
 #[path = "adapters/cline_paths.rs"]
 mod cline_paths;
 #[path = "adapters/cline_plugin_render.rs"]
