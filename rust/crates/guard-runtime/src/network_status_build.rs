@@ -126,10 +126,13 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         }
         Some(_) => "no-verified-installed-backend",
     };
+    // The grade borrows from the supervisor report, which moves into the
+    // status below.
+    let effective_grade = json!(active_grade);
     let mut status = Map::new();
     status.insert("schema".into(), json!(STATUS_SCHEMA));
     status.insert("host_platform".into(), json!(host.unwrap_or("unsupported")));
-    status.insert("effective_grade".into(), json!(active_grade));
+    status.insert("effective_grade".into(), effective_grade.clone());
     status.insert("independently_observed_grade".into(), json!(UNAVAILABLE));
     status.insert("protection_active".into(), json!(protection_active));
     status.insert("independently_observed".into(), json!(false));
@@ -139,7 +142,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         status.insert("legacy_domain_policy".into(), Value::Object(policy));
     }
     if let Some(mut supervisor) = request.supervisor {
-        supervisor.insert("effective_grade".into(), json!(active_grade));
+        supervisor.insert("effective_grade".into(), effective_grade);
         supervisor.insert("permits_enforcement".into(), json!(protection_active));
         status.insert("supervisor".into(), Value::Object(supervisor));
     }
