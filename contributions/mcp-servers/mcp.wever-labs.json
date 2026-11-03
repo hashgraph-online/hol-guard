@@ -87,7 +87,7 @@
     },
     {
       "name": "wever_x402-payment-gateway",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "wever_ap2-mandate-gateway",
