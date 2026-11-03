@@ -247,10 +247,10 @@ fn open_pending(approval_url: Option<&str>, state_path: &Path) {
         return;
     };
     let home = guard_home(state_path);
-    // A marker can outlive the scheme registration; when Desktop does not
-    // open, the signed browser link below still does.
+    // A marker can outlive the scheme registration; when no app takes the
+    // Desktop link, the signed browser link below still opens.
     if let Some(desktop_url) = crate::desktop_review_link::desktop_review_url(home, url) {
-        if crate::browser_open::open_browser_url(&desktop_url) {
+        if crate::browser_open::open_app_url(&desktop_url) {
             notify(
                 &mut std::io::stderr(),
                 &format!("HOL Guard is waiting for approval in HOL Guard Desktop: {desktop_url}"),

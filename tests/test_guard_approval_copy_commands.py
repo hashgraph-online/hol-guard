@@ -598,9 +598,16 @@ def _write_desktop_marker(home_dir: Path, *, app_path: Path) -> None:
 class TestApprovalsOpenLaunch:
     """`approvals open` launches the request signed in and never prints the session."""
 
-    def _open(self, home_dir: Path, monkeypatch, capsys, *extra: str) -> tuple[int, dict[str, object], list[str]]:
+    def _open(
+        self, home_dir: Path, monkeypatch, capsys, *extra: str, desktop_takes_link: bool = True
+    ) -> tuple[int, dict[str, object], list[str]]:
         opened: list[str] = []
         monkeypatch.setattr(approval_commands_module, "open_browser_url", lambda url: opened.append(url) or True)
+        monkeypatch.setattr(
+            approval_commands_module,
+            "open_app_url",
+            lambda url: opened.append(url) or desktop_takes_link,
+        )
         monkeypatch.setattr(
             approval_commands_module,
             "authenticated_approval_review_url",
@@ -633,6 +640,22 @@ class TestApprovalsOpenLaunch:
         assert opened == [f"http://127.0.0.1:5474/requests/{_QUEUE_REQUEST_ID}#guard-token=gld1.payload.signature"]
         assert output["opened_in"] == "browser"
         assert "guard-token" not in json.dumps(output)
+
+    def test_a_desktop_link_no_app_takes_falls_back_to_the_signed_tab(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        home_dir = tmp_path / "guard-home"
+        GuardStore(home_dir).add_approval_request(_make_request(request_id=_QUEUE_REQUEST_ID), "2026-01-01T00:00:00Z")
+        _write_desktop_marker(home_dir, app_path=tmp_path)
+
+        rc, output, opened = self._open(home_dir, monkeypatch, capsys, desktop_takes_link=False)
+
+        assert rc == 0
+        assert opened == [
+            f"hol-guard-desktop://requests/{_QUEUE_REQUEST_ID}",
+            f"http://127.0.0.1:5474/requests/{_QUEUE_REQUEST_ID}#guard-token=gld1.payload.signature",
+        ]
+        assert output["opened_in"] == "browser"
 
     def test_no_open_only_prints_the_link(self, tmp_path: Path, monkeypatch, capsys) -> None:
         home_dir = tmp_path / "guard-home"

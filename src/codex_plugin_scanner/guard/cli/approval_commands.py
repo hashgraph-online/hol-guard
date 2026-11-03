@@ -19,7 +19,7 @@ from ..approvals import (
     apply_approval_resolution,
     build_runtime_snapshot,
 )
-from ..browser_opener import open_browser_url
+from ..browser_opener import open_app_url, open_browser_url
 from ..codex_resume import retry_request_resume
 from ..config import load_guard_config
 from ..daemon import load_guard_daemon_url
@@ -329,7 +329,7 @@ def run_approval_open_command(
     # Only the launch carries a session, in Desktop's own window or as a signed
     # browser link, so the request opens signed in on this machine.
     desktop_url = desktop_review_url(store.guard_home, request_id)
-    if desktop_url is not None and open_browser_url(desktop_url):
+    if desktop_url is not None and open_app_url(desktop_url):
         payload.update(opened=True, opened_in="desktop")
         return payload, 0
     signed_url = authenticated_approval_review_url(repaired_url, guard_home=store.guard_home)
