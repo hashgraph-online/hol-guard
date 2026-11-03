@@ -410,6 +410,7 @@ pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {
         || record_inspection(&words)
         || artifact_explanation(&words)
         || posture_inspection(&words)
+        || cloud_actions::cloud_actions_inspection(&words)
 }
 
 /// `hol-guard explain <target>` prints the evidence Guard already holds for
@@ -639,6 +640,7 @@ const HELP_SUBCOMMANDS: &[&str] = &[
     "bootstrap",
     "bridge",
     "cloud",
+    "cloud-actions",
     "cloud-review",
     "command",
     "commands",
@@ -746,6 +748,9 @@ fn plain_value(value: &str) -> bool {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
+
+#[path = "guard_diagnostics_cloud_actions.rs"]
+mod cloud_actions;
 
 #[cfg(test)]
 #[path = "guard_diagnostics_tests.rs"]

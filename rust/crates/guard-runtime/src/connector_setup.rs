@@ -140,8 +140,8 @@ mod tests {
         assert_eq!(first.len(), "connector:".len() + 64 + 1 + ACTION_DIGEST_HEX);
     }
 
-    /// The Python migration regroups old reviews with its own copy of
-    /// `queue_group_id`; these vectors pin both to the same ids.
+    /// Pins `queue_group_id` to the shared vectors, so stored connector
+    /// groups keep their ids across releases.
     #[test]
     fn group_ids_match_the_shared_vectors() {
         let vectors: Value = serde_json::from_str(include_str!(
