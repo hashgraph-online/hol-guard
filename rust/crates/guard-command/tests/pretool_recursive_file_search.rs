@@ -440,8 +440,8 @@ fn a_recursive_search_over_a_pipe_still_asks() {
 /// directory or link there before the walk reaches it. `cat notes.md`, `ls` and
 /// `head -3 notes.md` open paths to read them and write to standard output;
 /// with no redirect they create nothing, so they answer that question exactly
-/// as `pwd` already did. A step that does create — `touch app`, or a reader
-/// whose output is redirected into the missing name — keeps the review.
+/// as `pwd` already did. A step that does create, `touch app`, keeps the
+/// review.
 #[test]
 fn a_reader_beside_a_missing_root_leaves_the_walk_quiet() {
     let nonce = crate::unique_nanos::unique_nanos();
@@ -454,6 +454,18 @@ fn a_reader_beside_a_missing_root_leaves_the_walk_quiet() {
     std::fs::write(root.join("src/index.ts"), "ordinary source").unwrap();
     std::fs::write(root.join("notes.md"), "ordinary notes").unwrap();
     for harness in ["omp", "zcode"] {
+        let allows = |command: &str| {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"toolName":"Bash", "toolInput":{"command":command}}),
+                None,
+                None,
+                root.to_str(),
+                root.to_str(),
+            );
+            result.minimum_action == "allow"
+        };
         for (command, expected) in [
             // The root that is there, to show the fixture proves an ordinary
             // sweep beside the same reader.
@@ -465,23 +477,21 @@ fn a_reader_beside_a_missing_root_leaves_the_walk_quiet() {
             ("ls -R app; cat notes.md", true),
             ("grep -rn ordinary app; pwd", true),
             ("grep -rn ordinary app; touch app", false),
-            ("grep -rn ordinary app; cat notes.md > app", false),
         ] {
-            let result = evaluate_pre_tool_envelope_with_context(
-                harness,
-                "PreToolUse",
-                &json!({"toolName":"Bash", "toolInput":{"command":command}}),
-                None,
-                None,
-                root.to_str(),
-                root.to_str(),
-            );
-            assert_eq!(
-                result.minimum_action == "allow",
-                expected,
-                "{harness}: {command}"
-            );
+            assert_eq!(allows(command), expected, "{harness}: {command}");
         }
+        // A redirect into the workspace is the sandbox's question, not the
+        // sweep's: the parser cannot model one at all, so the command reaches
+        // the workspace profile through the projection that removes it, and
+        // whether the sweep's root is there decides nothing about the write.
+        // Before the peer screens agreed, a missing root pulled the whole
+        // command back to review while the same redirect beside a root that
+        // exists ran contained.
+        assert_eq!(
+            allows("grep -rn ordinary app; cat notes.md > app"),
+            allows("grep -rn ordinary src; cat notes.md > app"),
+            "{harness}: a missing sweep root must not change how a redirect is answered"
+        );
     }
 }
 
