@@ -369,6 +369,7 @@
           "src/codex_plugin_scanner/guard/cli/progress.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_admin.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud_actions.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_mdm.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_policy_document.py",

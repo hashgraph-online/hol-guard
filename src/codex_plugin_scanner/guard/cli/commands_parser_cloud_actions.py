@@ -83,10 +83,10 @@ class _RejectLocalWorkspace(argparse.Action):
 
 
 def _add_parser(
-    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+    subparsers: argparse._SubParsersAction[FriendlyArgumentParser],
     name: str,
     help_text: str,
-) -> argparse.ArgumentParser:
+) -> FriendlyArgumentParser:
     parser = subparsers.add_parser(name, help=help_text, description=help_text, allow_abbrev=False)
     parser.add_argument("--workspace", nargs="?", action=_RejectLocalWorkspace, help=argparse.SUPPRESS)
     return parser

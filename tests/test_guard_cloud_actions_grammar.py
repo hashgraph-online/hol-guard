@@ -7,6 +7,8 @@ meanings: `--workspace` still names a local folder for them.
 
 from __future__ import annotations
 
+import argparse
+import io
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -18,6 +20,7 @@ from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli.commands_dispatch_cloud_actions import (
     CLOUD_ACTIONS_SCHEMA,
     CLOUD_ACTIONS_UNAVAILABLE_EXIT,
+    _run_guard_cloud_actions_command,  # pyright: ignore[reportPrivateUsage]
 )
 
 FIXTURE = json.loads(
@@ -68,6 +71,17 @@ def test_human_output_says_nothing_changed(capsys: pytest.CaptureFixture[str]) -
     assert exit_code == CLOUD_ACTIONS_UNAVAILABLE_EXIT
     expected = "`hol-guard cloud-actions accounts connect` is not available yet. Nothing was changed.\n"
     assert capsys.readouterr().out == expected
+
+
+def test_output_goes_to_the_given_stream(capsys: pytest.CaptureFixture[str]) -> None:
+    stream = io.StringIO()
+    args = argparse.Namespace(cloud_actions_command="status", json=True)
+
+    exit_code = _run_guard_cloud_actions_command(args, output_stream=stream)
+
+    assert exit_code == CLOUD_ACTIONS_UNAVAILABLE_EXIT
+    assert json.loads(stream.getvalue())["command"] == "status"
+    assert capsys.readouterr().out == ""
 
 
 def _help(argv: list[str], capsys: pytest.CaptureFixture[str]) -> str:

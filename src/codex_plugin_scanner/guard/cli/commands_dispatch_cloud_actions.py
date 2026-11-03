@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
+from typing import TextIO
 
 CLOUD_ACTIONS_SCHEMA = "guard.cloud-actions.v1"
 # Distinct from argparse's usage error (2): the command was understood.
@@ -43,9 +45,10 @@ def _context(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _run_guard_cloud_actions_command(
-    args: argparse.Namespace, *, input_text: str | None = None, output_stream: object | None = None
+    args: argparse.Namespace, *, input_text: str | None = None, output_stream: TextIO | None = None
 ) -> int:
-    del input_text, output_stream
+    del input_text
+    stream = output_stream if output_stream is not None else sys.stdout
     command = _command_path(args)
     if getattr(args, "json", False):
         payload = {
@@ -55,9 +58,9 @@ def _run_guard_cloud_actions_command(
             "reason": "not_available_yet",
             "context": _context(args),
         }
-        print(json.dumps(payload, sort_keys=True))
+        print(json.dumps(payload, sort_keys=True), file=stream)
     else:
-        print(f"`hol-guard cloud-actions {command}` is not available yet. Nothing was changed.")
+        print(f"`hol-guard cloud-actions {command}` is not available yet. Nothing was changed.", file=stream)
     return CLOUD_ACTIONS_UNAVAILABLE_EXIT
 
 
