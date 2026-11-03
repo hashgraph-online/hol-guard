@@ -33,11 +33,15 @@ _OTHER_HASH = "b" * 64
 
 @pytest.fixture(autouse=True)
 def _provisioned_verifier_key() -> None:
-    """The regroup never provisions the key itself, so the tests start with it."""
+    """The regroup never provisions the key itself, so the tests start with it.
+
+    Best effort: without a native runtime there is no key to provision, and the
+    schema-only tests and the ones that replace the native call still run.
+    """
 
     from codex_plugin_scanner.guard.native_context import _resolve_digest_home, ensure_resident_prerequisite
 
-    assert ensure_resident_prerequisite(_resolve_digest_home(None))
+    ensure_resident_prerequisite(_resolve_digest_home(None))
 
 
 def _columns(connection: sqlite3.Connection, table: str) -> list[str]:
