@@ -184,6 +184,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "devin_detect" => devin_detect::detect(args),
         "devin_jsonc" => devin_jsonc::document(args),
         "harness_hook_settings" => harness_hook_settings::dispatch(args),
+        "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
         "grok_detect" => grok_detect::detect(args),
         "grok_legacy_settings" => grok_legacy_settings::dispatch(args),
         "grok_user_config" => grok_user_config_op::dispatch(args),

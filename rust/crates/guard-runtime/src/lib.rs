@@ -586,6 +586,11 @@ mod harness_hook_settings;
 #[cfg(test)]
 #[path = "adapters/harness_hook_settings_tests.rs"]
 mod harness_hook_settings_tests;
+#[path = "adapters/harness_mcp_discovery.rs"]
+mod harness_mcp_discovery;
+#[cfg(test)]
+#[path = "adapters/harness_mcp_discovery_tests.rs"]
+mod harness_mcp_discovery_tests;
 mod harness_version_compat;
 mod health_lease_contract;
 mod health_lease_state;
