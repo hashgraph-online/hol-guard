@@ -123,6 +123,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
             crate::workspace_assessment_sync::dispatch(kind, args)
         }
         "workspace_audit_sync" => crate::workspace_audit_sync::dispatch(args),
+        "workspace_rule_findings" => crate::workspace_rule_findings::dispatch(args),
         "workspace_runtime_findings" => crate::workspace_runtime_findings::dispatch(args),
         "shell_request_authority" => crate::shell_request_authority_op::dispatch(args),
         "guard_product_copy" => crate::guard_product_copy::dispatch(args),

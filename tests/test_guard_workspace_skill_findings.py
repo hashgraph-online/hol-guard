@@ -186,6 +186,95 @@ def test_merged_findings_order_skills_by_severity_with_the_rest() -> None:
     assert merged[-1]["rule_ids"] == ["skill.hide-actions"]
 
 
+def test_a_runtime_that_cannot_check_rule_replies_leaves_each_detector_not_run(monkeypatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard.workspace_rule_findings import rule_findings
+
+    calls: list[object] = []
+
+    def refuse(kind: str, args: object) -> dict[str, object]:
+        calls.append(args)
+        raise authority.NativeRunnerAuthorityError("native_runner_authority_resident_unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", refuse)
+    base = {"status": "complete", "reasons": [], "detectors": {"supply_chain": "complete"}}
+    results = [("skill_content_v1", skills_result(native_finding())), ("mcp_config_v1", None)]
+    findings, coverage = rule_findings(base, results)
+    assert len(calls) == 1
+    assert findings == []
+    assert coverage["status"] == "partial"
+    assert coverage["reasons"] == ["detector_not_run:skill_content_v1", "detector_not_run:mcp_config_v1"]
+    assert coverage["detectors"] == {
+        "supply_chain": "complete",
+        "skill_content_v1": "not_run",
+        "mcp_config_v1": "not_run",
+    }
+
+
+def test_a_batch_the_runtime_refuses_is_checked_one_detector_at_a_time(monkeypatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard.workspace_rule_findings import rule_findings
+
+    finding = {"rule_ids": ["skill.hide-actions"]}
+
+    def per_detector(kind: str, args: dict[str, object]) -> dict[str, object]:
+        results = args["results"]
+        assert isinstance(results, list)
+        if len(results) > 1 or results[0][0] == "mcp_config_v1":
+            raise authority.NativeRunnerAuthorityError("native_runner_authority_response_too_large")
+        coverage = args["coverage"]
+        assert isinstance(coverage, dict)
+        detectors = {**coverage["detectors"], results[0][0]: "complete"}
+        return {"findings": [finding], "coverage": {**coverage, "detectors": detectors}}
+
+    monkeypatch.setattr(authority, "native_runner_authority", per_detector)
+    base = {"status": "complete", "reasons": [], "detectors": {}}
+    results = [("skill_content_v1", {}), ("mcp_config_v1", {}), ("plugin_content_v1", {})]
+    findings, coverage = rule_findings(base, results)
+    assert findings == [finding, finding]
+    assert coverage["status"] == "partial"
+    assert coverage["reasons"] == ["detector_not_run:mcp_config_v1"]
+    assert coverage["detectors"] == {
+        "skill_content_v1": "complete",
+        "mcp_config_v1": "not_run",
+        "plugin_content_v1": "complete",
+    }
+
+
+def test_a_split_batch_stops_at_the_first_failure_that_is_not_its_size(monkeypatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard.workspace_rule_findings import rule_findings
+
+    finding = {"rule_ids": ["skill.hide-actions"]}
+    calls: list[str] = []
+
+    def per_detector(kind: str, args: dict[str, object]) -> dict[str, object]:
+        results = args["results"]
+        assert isinstance(results, list)
+        if len(results) > 1:
+            raise authority.NativeRunnerAuthorityError("native_runner_authority_request_too_large")
+        calls.append(results[0][0])
+        if results[0][0] == "mcp_config_v1":
+            raise authority.NativeRunnerAuthorityError("native_runner_authority_resident_unavailable")
+        coverage = args["coverage"]
+        assert isinstance(coverage, dict)
+        detectors = {**coverage["detectors"], results[0][0]: "complete"}
+        return {"findings": [finding], "coverage": {**coverage, "detectors": detectors}}
+
+    monkeypatch.setattr(authority, "native_runner_authority", per_detector)
+    base = {"status": "complete", "reasons": [], "detectors": {}}
+    results = [("skill_content_v1", {}), ("mcp_config_v1", {}), ("plugin_content_v1", {})]
+    findings, coverage = rule_findings(base, results)
+    assert calls == ["skill_content_v1", "mcp_config_v1"]
+    assert findings == [finding]
+    assert coverage["reasons"] == ["detector_not_run:mcp_config_v1", "detector_not_run:plugin_content_v1"]
+    assert coverage["detectors"] == {
+        "skill_content_v1": "complete",
+        "mcp_config_v1": "not_run",
+        "plugin_content_v1": "not_run",
+    }
+
+
 @pytest.fixture
 def native_binary(monkeypatch: pytest.MonkeyPatch) -> None:
     if not Path(os.environ.get("HOL_GUARD_NATIVE_BINARY") or "").is_file():
