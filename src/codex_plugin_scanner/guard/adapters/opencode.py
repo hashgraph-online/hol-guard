@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Literal, overload
 from ...ecosystems.opencode import _load_json_or_jsonc
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import HarnessDetection
+from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
 from ._modules.opencode.opencode_config_lock import opencode_config_lock
 from ._modules.opencode.opencode_install_snapshot import (
@@ -62,54 +63,6 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
     )
     approval_prompt_channel = "native"
     approval_auto_open_browser = False
-
-    _SUBCOMMANDS = frozenset(
-        {
-            "completion",
-            "acp",
-            "mcp",
-            "attach",
-            "run",
-            "auth",
-            "agent",
-            "upgrade",
-            "uninstall",
-            "serve",
-            "web",
-            "models",
-            "stats",
-            "export",
-            "import",
-            "github",
-            "pr",
-            "session",
-            "db",
-        }
-    )
-    _REQUIRED_VALUE_OPTIONS = frozenset(
-        {
-            "--hostname",
-            "--mdns-domain",
-            "--cors",
-            "--model",
-            "-m",
-            "--session",
-            "-s",
-            "--prompt",
-            "--agent",
-            "--variant",
-            "--log-level",
-            "--command",
-            "--format",
-            "--file",
-            "-f",
-            "--attach",
-            "--password",
-            "-p",
-            "--dir",
-        }
-    )
-    _OPTIONAL_VALUE_OPTIONS = frozenset({"--port", "--title"})
 
     @staticmethod
     def _scope_for(context: HarnessContext, path: Path) -> str:
@@ -370,23 +323,18 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         }
 
     def launch_environment(self, context: HarnessContext) -> dict[str, str]:
-        overlay_path = runtime_config_path(context)
-        if not overlay_path.exists():
-            return {}
-        try:
-            runtime_config = json.loads(overlay_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return {}
-        existing_config = _inline_config(os.getenv("OPENCODE_CONFIG_CONTENT"))
-        merged_config = _merge_configs(existing_config, runtime_config)
-        return {"OPENCODE_CONFIG_CONTENT": json.dumps(merged_config)}
+        request = {"op": "environment", "inline": os.getenv("OPENCODE_CONFIG_CONTENT")}
+        content = native_runner_authority("opencode_launch", request, guard_home=context.guard_home).get("content")
+        return {"OPENCODE_CONFIG_CONTENT": content} if isinstance(content, str) else {}
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
-        if not passthrough_args:
-            return self._interactive_command(context)
-        if passthrough_args[0] in self._SUBCOMMANDS:
-            return [self.executable, *self._subcommand_args(context, passthrough_args)]
-        return [*self._interactive_command(context), *self._interactive_args(passthrough_args)]
+        workspace = str(context.workspace_dir) if context.workspace_dir is not None else None
+        request = {"op": "argv", "args": "\0".join(passthrough_args), "count": len(passthrough_args)}
+        answer = native_runner_authority("opencode_launch", request | {"workspace": workspace}, context.guard_home)
+        argv, count = answer.get("argv"), answer.get("count")
+        if not isinstance(argv, str) or not isinstance(count, int) or len(command := argv.split("\0")) != count:
+            raise NativeRunnerAuthorityError("native_opencode_launch_invalid")
+        return command
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         if shutil.which(self.executable) is None:
@@ -489,85 +437,5 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
 
     _backup_payload = staticmethod(load_backup_payload)
 
-    def _interactive_command(self, context: HarnessContext) -> list[str]:
-        command = [self.executable]
-        if context.workspace_dir is not None:
-            command.append(str(context.workspace_dir))
-        return command
-
-    def _subcommand_args(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
-        del context
-        return list(passthrough_args)
-
-    def _interactive_args(self, passthrough_args: list[str]) -> list[str]:
-        if any(value == "--prompt" or value.startswith("--prompt=") for value in passthrough_args):
-            return list(passthrough_args)
-        normalized: list[str] = []
-        prompt_tokens: list[str] = []
-        index = 0
-        while index < len(passthrough_args):
-            value = passthrough_args[index]
-            if value == "--":
-                prompt_tokens.extend(passthrough_args[index + 1 :])
-                break
-            if value.startswith("-"):
-                normalized.append(value)
-                if self._consumes_next_value(value, passthrough_args, index):
-                    index += 1
-                    normalized.append(passthrough_args[index])
-                index += 1
-                continue
-            prompt_tokens.extend(passthrough_args[index:])
-            break
-        if prompt_tokens:
-            normalized.extend(["--prompt", " ".join(prompt_tokens)])
-        return normalized
-
-    def _consumes_next_value(self, value: str, passthrough_args: list[str], index: int) -> bool:
-        if index + 1 >= len(passthrough_args) or "=" in value:
-            return False
-        if value in self._REQUIRED_VALUE_OPTIONS:
-            return True
-        next_value = passthrough_args[index + 1]
-        if value == "--port":
-            return next_value.isdigit()
-        if value == "--title":
-            return not next_value.startswith("-")
-        return False
-
 
 __all__ = ["OpenCodeHarnessAdapter", "OpenCodeInstallConfigError"]
-
-
-def _inline_config(raw_content: str | None) -> dict[str, object]:
-    if not raw_content:
-        return {}
-    try:
-        payload = json.loads(raw_content)
-    except json.JSONDecodeError:
-        return {}
-    parsed = _object_dict(payload)
-    return parsed if parsed is not None else {}
-
-
-def _merge_configs(base: dict[str, object], overlay: dict[str, object]) -> dict[str, object]:
-    merged = dict(base)
-    for key, value in overlay.items():
-        existing_value = merged.get(key)
-        nested_overlay = _object_dict(value)
-        nested_existing = _object_dict(existing_value)
-        if nested_overlay is not None and nested_existing is not None:
-            merged[key] = _merge_configs(nested_existing, nested_overlay)
-            continue
-        merged[key] = value
-    return merged
-
-
-def _object_dict(value: object) -> dict[str, object] | None:
-    if not isinstance(value, dict):
-        return None
-    result: dict[str, object] = {}
-    for key, item in value.items():
-        if isinstance(key, str):
-            result[key] = item
-    return result

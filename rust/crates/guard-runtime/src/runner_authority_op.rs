@@ -46,6 +46,7 @@ use super::oci_bundle_op as oci;
 use super::openclaw_detect;
 use super::opencode_detect;
 use super::opencode_install_plan;
+use super::opencode_launch;
 use super::opencode_plugin_render;
 use super::pi_detect;
 use super::pi_extension_render;
@@ -217,6 +218,8 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
         "package_firewall_refresh_claim" => {
             crate::package_firewall_refresh::dispatch(&request.args, &request.guard_home)
         }
+        // The OpenCode launch overlay is read from that verified home too.
+        "opencode_launch" => opencode_launch::dispatch(&request.args, &request.guard_home),
         _ => dispatch(&request.kind, &request.args),
     }
 }
