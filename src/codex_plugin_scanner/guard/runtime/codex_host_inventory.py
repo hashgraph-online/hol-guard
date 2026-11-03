@@ -34,7 +34,6 @@ from ..codex_app_server import (
 from ..strict_json_pairs import unique_json_object
 from .bounded_json_depth import check_json_depth
 
-_MAX_APPS = 1000
 _MAX_TOOLS = 10_000
 _MAX_MESSAGES = 128
 _MAX_JSON_DEPTH = 32
@@ -263,34 +262,6 @@ def _source_id(codex_home: Path, uid: int, pid: int, identity: tuple[int, int, i
     ).hexdigest()
 
 
-def _text(value: object, *, maximum: int, required: bool = False) -> str | None:
-    if value is None and not required:
-        return None
-    if isinstance(value, str) and not value.strip() and not required:
-        return None
-    if not isinstance(value, str) or not 1 <= len(value) <= maximum or "\x00" in value:
-        raise ValueError("codex_host_invalid")
-    text = " ".join(value.split())
-    if not text:
-        raise ValueError("codex_host_invalid")
-    return text
-
-
-def _identifier(value: object) -> str:
-    text = cast(str, _text(value, maximum=256, required=True))
-    if text != value or any(character.isspace() or ord(character) < 32 for character in text):
-        raise ValueError("codex_host_invalid")
-    return text
-
-
-def _summary_text(value: object, *, maximum: int) -> str | None:
-    # Host descriptions have no protocol length cap. Bound display text without
-    # rejecting an otherwise valid inventory; identifiers remain strict.
-    if isinstance(value, str) and "\x00" not in value:
-        value = value[:maximum]
-    return _text(value, maximum=maximum)
-
-
 def _reject_constant(_value: str) -> None:
     raise ValueError("codex_host_invalid")
 
@@ -299,12 +270,6 @@ def _object(value: object) -> dict[str, object]:
     if not isinstance(value, dict):
         raise ValueError("codex_host_invalid")
     return cast(dict[str, object], value)
-
-
-def _array(value: object, *, maximum: int) -> list[object]:
-    if not isinstance(value, list) or len(value) > maximum:
-        raise ValueError("codex_host_limit")
-    return cast(list[object], value)
 
 
 def _check_depth(payload: bytes) -> None:
@@ -391,7 +356,7 @@ def read_codex_host_inventory(
             )
             _send_websocket_text(client, '{"method":"initialized"}')
             result = _rpc(client, pending, "app/installed", {"forceRefresh": False}, deadline=deadline, cancel=cancel)
-            apps = _installed_apps(result)
+            apps = cast(list[dict[str, object]], _native_rows({"installed": result})["apps"])
             complete = True
             for start in range(0, len(apps), 100):
                 page = apps[start : start + 100]
@@ -406,7 +371,9 @@ def read_codex_host_inventory(
                     deadline=deadline,
                     cancel=cancel,
                 )
-                complete = _merge_metadata(page, result) and complete
+                answer = _native_rows({"page": page, "read": result}, count=len(page))
+                apps[start : start + 100] = cast(list[dict[str, object]], answer["apps"])
+                complete = answer["complete"] is True and complete
                 if sum(len(cast(list[object], app.get("tools", []))) for app in apps) > _MAX_TOOLS:
                     raise ValueError("codex_host_limit")
             if cancel.is_set() or not _host_identity_matches(socket_path, pid, expected_pid):
@@ -424,65 +391,29 @@ def read_codex_host_inventory(
         raise
 
 
-def _installed_apps(result: dict[str, object]) -> list[dict[str, object]]:
-    apps: list[dict[str, object]] = []
-    seen: set[str] = set()
-    for value in _array(result.get("apps"), maximum=_MAX_APPS):
-        row = _object(value)
-        app_id = _identifier(row.get("id"))
-        if app_id in seen or type(row.get("enabled")) is not bool or type(row.get("callable")) is not bool:
-            raise ValueError("codex_host_invalid")
-        seen.add(app_id)
-        apps.append(
-            {
-                "app_id": app_id,
-                "name": _text(row.get("runtimeName"), maximum=256) or app_id,
-                "enabled": row["enabled"],
-                "callable": row["callable"],
-                "tools": [],
-                "metadata_available": False,
-            }
-        )
-    return apps
+def _native_rows(request: dict[str, object], *, count: int | None = None) -> dict[str, object]:
+    """Ask the native ``codex_host_inventory`` kind what a host reply says.
 
+    Rust validates the reply and builds the public app rows; a reply it
+    refuses carries the ``codex_host_*`` code to raise.
+    """
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
-def _merge_metadata(apps: list[dict[str, object]], result: dict[str, object]) -> bool:
-    requested = {cast(str, app["app_id"]): app for app in apps}
-    covered: set[str] = set()
-    complete = True
-    for value in _array(result.get("apps"), maximum=100):
-        row = _object(value)
-        app_id = _identifier(row.get("id"))
-        if app_id not in requested or app_id in covered:
-            raise ValueError("codex_host_invalid")
-        covered.add(app_id)
-        app = requested[app_id]
-        app["name"] = _text(row.get("name"), maximum=256, required=True)
-        tools: list[dict[str, object]] = []
-        names: set[str] = set()
-        summaries = row.get("toolSummaries", row.get("tools"))
-        for entry in _array([] if summaries is None else summaries, maximum=_MAX_TOOLS):
-            tool = _object(entry)
-            name = _identifier(tool.get("name"))
-            if name in names:
-                raise ValueError("codex_host_invalid")
-            names.add(name)
-            tools.append(
-                {
-                    "name": name,
-                    "title": _summary_text(tool.get("title"), maximum=512),
-                    "description": _summary_text(tool.get("description"), maximum=4000),
-                }
-            )
-        app["tools"] = tools
-        app["metadata_available"] = summaries is not None
-        complete = summaries is not None and complete
-    missing = _array(result.get("missingAppIds"), maximum=100)
-    for value in missing:
-        app_id = _identifier(value)
-        if app_id not in requested or app_id in covered:
-            raise ValueError("codex_host_invalid")
-        covered.add(app_id)
-    if covered != set(requested):
+    try:
+        answer = native_runner_authority("codex_host_inventory", request)
+    except NativeRunnerAuthorityError as error:
+        raise ValueError(
+            "codex_host_limit" if str(error).endswith("_too_large") else "codex_host_unavailable"
+        ) from None
+    code = answer.get("error")
+    if code is not None:
+        raise ValueError(code if isinstance(code, str) and code in _FAILURE_CODES else "codex_host_invalid")
+    apps: object = answer.get("apps")
+    rows = cast(list[object], apps) if isinstance(apps, list) else None
+    if (
+        rows is None
+        or not all(isinstance(app, dict) for app in rows)
+        or (count is not None and (len(rows) != count or type(answer.get("complete")) is not bool))
+    ):
         raise ValueError("codex_host_invalid")
-    return not missing and complete
+    return answer

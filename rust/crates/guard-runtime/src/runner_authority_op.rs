@@ -175,6 +175,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cline_hook_files" => cline_hook_files::dispatch(args),
         "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
+        "codex_host_inventory" => crate::codex_host_inventory::dispatch(args),
         "copilot_detect" => copilot_detect::detect(args),
         "copilot_hook_config" => copilot_hook_config::dispatch(args),
         "claude_code_detect" => claude_code_detect::detect(args),

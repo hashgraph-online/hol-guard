@@ -6,6 +6,7 @@ import threading
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority
 from codex_plugin_scanner.guard.runtime import codex_host_inventory as inventory
 from tests.codex_host_inventory_support import _handler, _host
 
@@ -118,3 +119,36 @@ def test_native_peer_process_timeout_is_a_bounded_refresh_failure(tmp_path, monk
             cache.refresh(codex_home=home, cancel=threading.Event())
         assert cache.read() is None
     assert requests == []
+
+
+@pytest.mark.parametrize(
+    ("reply", "expected"),
+    [
+        (native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable"), "unavailable"),
+        (
+            native_runner_authority.NativeRunnerAuthorityRefusalError("native_runner_authority_request_too_large"),
+            "limit",
+        ),
+        ({"error": "codex_host_limit"}, "limit"),
+        ({"error": "private injected details"}, "invalid"),
+        ({"error": ["codex_host_limit"]}, "invalid"),
+        ({"apps": "example"}, "invalid"),
+        ({"apps": ["example"]}, "invalid"),
+        ({"apps": [], "complete": True}, "invalid"),
+        ({"apps": [{"app_id": "example"}], "complete": 1}, "invalid"),
+    ],
+)
+def test_native_reply_check_raises_only_host_codes(monkeypatch, reply, expected):
+    requests = []
+
+    def answer(kind, request):
+        requests.append((kind, request))
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", answer)
+    page = [{"app_id": "example"}]
+    with pytest.raises(ValueError, match=f"^codex_host_{expected}$"):
+        inventory._native_rows({"page": page, "read": {"apps": []}}, count=1)
+    assert requests == [("codex_host_inventory", {"page": page, "read": {"apps": []}})]
