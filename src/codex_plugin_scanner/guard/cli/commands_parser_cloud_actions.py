@@ -126,6 +126,15 @@ def _add_cloud_workspace(parser: argparse.ArgumentParser, *, required: bool) -> 
     )
 
 
+def _add_cloud_url(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--cloud-url",
+        default=DEFAULT_CLOUD_ACTIONS_URL,
+        metavar="URL",
+        help=f"Guard Cloud address (default: {DEFAULT_CLOUD_ACTIONS_URL})",
+    )
+
+
 def _add_json(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Emit the versioned JSON contract")
 
@@ -161,12 +170,7 @@ def configure_guard_cloud_actions_parser(
     )
 
     login = _add_parser(commands, "login", "Sign in to Guard Cloud for Cloud actions in one workspace")
-    login.add_argument(
-        "--cloud-url",
-        default=DEFAULT_CLOUD_ACTIONS_URL,
-        metavar="URL",
-        help=f"Guard Cloud address (default: {DEFAULT_CLOUD_ACTIONS_URL})",
-    )
+    _add_cloud_url(login)
     _add_cloud_workspace(login, required=False)
     login.add_argument("--no-browser", action="store_true", help="Print the sign-in link instead of opening it")
     login.add_argument(
@@ -229,6 +233,8 @@ def configure_guard_cloud_actions_parser(
     mode = configure.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="Show the exact changes without writing them")
     mode.add_argument("--apply", action="store_true", help="Write the changes, keeping a backup")
+    _add_cloud_url(configure)
+    configure.add_argument("--home", help=argparse.SUPPRESS)
     _add_json(configure)
     verify = _add_parser(tool_commands, "verify", "Check an AI tool's Cloud actions settings")
     verify.add_argument("ai_tool", type=_slug("AI tool"), metavar="AI_TOOL")

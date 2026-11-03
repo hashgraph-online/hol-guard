@@ -418,7 +418,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "find_artifact_inventory_item"
         | "get_artifact_capability"
         | "list_receipts"
-        | "observed_mcp_history"
+        | "observed_mcp_discovery"
         | "list_receipts_since_rowid"
         | "latest_receipt_rowid"
         | "get_receipt"
@@ -675,7 +675,9 @@ fn dispatch(
         "read_local_mcp_provider_actions" => mcp_provider_reads::provider_actions(connection, args),
         "read_local_mcp_workflows" => mcp_workflow_reads::workflow_proposals(connection, args),
         "read_local_mcp_skills" => mcp_workflow_reads::mcp_skill_page(connection, args),
-        "observed_mcp_history" => observed_mcp::observed_mcp_history(connection, args),
+        "observed_mcp_discovery" => {
+            observed_mcp::discovery::observed_mcp_discovery(connection, args)
+        }
         "read_local_cli_grant" => local_cli_grants::read_grant(connection, args),
         "read_local_cli_command_catalog" => {
             local_cli_grants::read_command_catalog(connection, args)

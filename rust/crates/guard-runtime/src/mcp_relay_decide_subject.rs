@@ -9,7 +9,7 @@ use guard_contracts::{
     BrowserMcpArtifactV1, LocalMcpServerMaterialV1, McpExtensionInputV1, McpToolCallArtifactV1,
     McpToolCallIdentityPayloadV1, McpToolPolicySubjectV1,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 use std::path::Path;
 
 const SUBJECT_INVALID: &str = "mcp_relay_subject_invalid";
@@ -182,22 +182,15 @@ pub(super) fn connection_hash(
         .get("server_name")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let payload = json!({
-        "version": 1,
-        "host": artifact.harness,
-        "source_scope": artifact.source_scope,
-        "configuration_hash": guard_policy_snapshot::digest_bytes(artifact.config_path.as_bytes()),
-        "server_name": server_name,
-        "server_identity_hash": server_hash,
-    });
-    let mut bytes = Vec::with_capacity(256);
-    guard_contracts::write_canonical_json_with_limit(
-        &payload,
-        &mut bytes,
-        usize::MAX,
+    let (_configuration, identity) = crate::harness_mcp_discovery::connection_identity_hash(
+        &artifact.harness,
+        &artifact.source_scope,
+        &artifact.config_path,
+        server_name,
+        server_hash,
         SUBJECT_INVALID,
     )?;
-    Ok(guard_policy_snapshot::digest_bytes(&bytes))
+    Ok(identity)
 }
 
 /// A metadata entry that is a mapping.
