@@ -520,8 +520,14 @@ def _observe(errors: dict[str, Exception], label: str, read: Callable[[], object
 
 def _read_script(path: Path) -> object:
     try:
-        regular = stat.S_ISREG(path.lstat().st_mode)
-        return {"regular": regular, "text": path.read_text(encoding="utf-8")}
+        mode = path.lstat().st_mode
+        if stat.S_ISREG(mode):
+            return {"regular": True, "text": path.read_text(encoding="utf-8")}
+        # Never open a link, pipe or device. A link to a file reads as tampered;
+        # anything else could not be read as a script, so it is missing.
+        if stat.S_ISLNK(mode) and path.is_file():
+            return {"regular": False, "text": ""}
+        return None
     except OSError:
         return None
 

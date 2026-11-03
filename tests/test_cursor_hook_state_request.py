@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -104,6 +105,26 @@ def test_absent_files_are_sent_as_null(tmp_path: Path, monkeypatch: pytest.Monke
     assert request["state_text"] is None
     assert request["scripts"] == [None, None]
     assert request["hooks_text"] is None
+
+
+def test_non_regular_scripts_are_never_opened(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    context = _context(tmp_path)
+    _attested(monkeypatch)
+    _plant(context)
+    script_path = cursor_hooks.cursor_hook_script_path(context)
+    managed_path = cursor_hooks.managed_hook_script_path(context)
+    script_path.unlink()
+    os.mkfifo(script_path)
+    target = tmp_path / "target.py"
+    target.write_text(_SOURCE, encoding="utf-8")
+    managed_path.unlink()
+    managed_path.symlink_to(target)
+    calls = _answering(monkeypatch, {"integrity_status": "missing", "reason": "guard_cursor_hook_script_missing"})
+
+    cursor_hooks.cursor_native_hook_state(context)
+
+    [(_kind, request)] = calls
+    assert request["scripts"] == [None, {"regular": False, "text": ""}]
 
 
 def test_a_raised_render_is_reraised_only_when_the_answer_names_it(
