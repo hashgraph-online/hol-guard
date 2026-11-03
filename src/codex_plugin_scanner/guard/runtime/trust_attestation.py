@@ -375,7 +375,9 @@ def _attestation_plan(raw_resolution: object, raw_layers: object, fields: dict[s
     try:
         return _plan({"resolution": raw_resolution, "layers": raw_layers}, fields)
     except NativeRunnerAuthorityRefusalError:
-        pass
+        # Shared fields the encoder refuses would refuse every claim alike, so
+        # that refusal fails the item instead of erasing its claims.
+        _plan({"resolution": None, "layers": []}, fields)
     # A claim the bounded encoder refuses (unencodable or oversized) drops
     # alone; the item keeps every other claim instead of losing all of them.
     resolution, _, signing = (

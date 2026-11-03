@@ -146,6 +146,7 @@ fn build_spells_an_unsigned_payload() {
     let mut fields = fields();
     fields.insert("captured_at".into(), json!("2026-10-23T12:00:00Z"));
     fields.insert("evidence_hash".into(), json!("c"));
+    fields.insert("claim_hash".into(), json!("d"));
     fields.insert("scope".into(), json!("trust_resolution"));
     let answer = dispatch(&json!({"op": "build", "fields": fields})).expect("build answer");
     let payload = &answer["payload"];
