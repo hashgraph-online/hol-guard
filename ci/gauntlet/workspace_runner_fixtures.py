@@ -54,6 +54,11 @@ WORKSPACE_QUIET_SCRIPT_RUN_CASE = "omp-native-workspace-quiet-script-run"
 # npm's own longer spelling of the same verb. The run it names is the script,
 # so it has to reach the same place the short spelling reaches.
 WORKSPACE_SCRIPT_RUN_ALIAS_CASE = "omp-native-workspace-script-run-alias"
+# The project's own suite, asked for the four ways a developer asks for it
+# without the manager's own chatter. Each option names no script and only
+# chooses how much npm prints, so every spelling has to reach the suite the
+# plain `npm test` reaches.
+WORKSPACE_QUIET_PACKAGE_TEST_CASE = "omp-native-workspace-quiet-package-test"
 # The type checker a TypeScript project installs for itself. `tsc` is the only
 # routine runner whose executable name is not its package name: npm installs it
 # inside `typescript`, so the tree, the manifest and the lockfile all say
@@ -96,6 +101,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_SCRIPT_PASSED_OPTION_CASE,
         WORKSPACE_QUIET_SCRIPT_RUN_CASE,
         WORKSPACE_SCRIPT_RUN_ALIAS_CASE,
+        WORKSPACE_QUIET_PACKAGE_TEST_CASE,
         WORKSPACE_TSC_CASE,
         WORKSPACE_TSC_GENERATED_PROJECT_CASE,
         WORKSPACE_PNPM_TSC_CASE,
@@ -141,6 +147,20 @@ _FILES = {
     ),
     "node_modules/import-local/index.js": "module.exports = () => false;\n",
     "node_modules/jest-cli/bin/jest.js": f"console.log('{RUNNER_MARKER}');\n",
+}
+# The one line the quiet package-test case's runner prints. Its manifest
+# names the plain `test` entry the command asks for, which the default
+# install deliberately does not declare, and its own line keeps the case
+# from passing for the plain jest case's reason.
+QUIET_PACKAGE_TEST_MARKER = f"jest-cli {_VERSION} ran quietly"
+_QUIET_PACKAGE_TEST_FILES = {
+    **_FILES,
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "scripts": {\n    "test": "jest --ci"\n  },\n'
+        f'  "devDependencies": {{\n    "jest": "{_VERSION}"\n  }}\n}}\n'
+    ),
+    "node_modules/jest-cli/bin/jest.js": f"console.log('{QUIET_PACKAGE_TEST_MARKER}');\n",
 }
 _MOCHA_VERSION = "11.7.5"
 # The one line the workspace's own Mocha prints, which only a real launch produces.
@@ -483,6 +503,7 @@ _INSTALLS = {
     WORKSPACE_SCRIPT_PASSED_OPTION_CASE: _Install("eslint", _ESLINT_FILES, ESLINT_MARKER),
     WORKSPACE_QUIET_SCRIPT_RUN_CASE: _Install("eslint", _QUIET_LINT_FILES, QUIET_LINT_MARKER),
     WORKSPACE_SCRIPT_RUN_ALIAS_CASE: _Install("eslint", _ALIAS_LINT_FILES, ALIAS_LINT_MARKER),
+    WORKSPACE_QUIET_PACKAGE_TEST_CASE: _Install("jest", _QUIET_PACKAGE_TEST_FILES, QUIET_PACKAGE_TEST_MARKER),
     WORKSPACE_TSC_CASE: _Install(
         "tsc",
         _TYPESCRIPT_FILES,

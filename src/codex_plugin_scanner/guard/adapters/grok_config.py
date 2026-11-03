@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-from collections.abc import Mapping
 from pathlib import Path
 
 GROK_PRETOOL_HOOK_TIMEOUT_SECONDS = 90
@@ -15,8 +13,6 @@ GROK_CONFIG_FILE = "config.toml"
 GROK_MANAGED_CONFIG_FILE = "managed_config.toml"
 GROK_HOOKS_DIR = "hooks"
 GUARD_MANAGED_BEGIN = "# BEGIN HOL GUARD MANAGED GROK"
-GUARD_MANAGED_END = "# END HOL GUARD MANAGED GROK"
-GUARD_MANAGED_MARKER = "HOL GUARD MANAGED GROK"
 GUARD_HOOK_PRETOOL_FILE = "hol-guard-pretooluse.json"
 GUARD_HOOK_PROMPT_FILE = "hol-guard-prompt.json"
 # Kept empty: a per-tool matcher list double-fired after Grok aliased Bash→run_terminal_command.
@@ -74,69 +70,3 @@ def build_observe_hook_json(hook_command: str) -> dict[str, object]:
 
 
 FOREIGN_HOOK_COMPAT_VENDORS = ("claude", "cursor")
-
-
-def _compat_table_span(text: str, vendor: str) -> tuple[int, int] | None:
-    match = re.search(
-        rf"(?m)^[ \t]*\[compat\.{re.escape(vendor)}\][ \t]*(?:#.*)?$",
-        text,
-    )
-    if match is None:
-        return None
-    rest = text[match.end() :]
-    nxt = re.search(r"(?m)^[ \t]*\[", rest)
-    end = match.end() + (nxt.start() if nxt else len(rest))
-    return match.start(), end
-
-
-def _compat_hooks_assignment(block: str) -> tuple[int, int, str, str] | None:
-    """Locate one compat hooks assignment and preserve its physical line ending."""
-
-    offset = 0
-    for line in block.splitlines(keepends=True):
-        body = line.rstrip("\r\n")
-        newline = line[len(body) :]
-        stripped = body.lstrip(" \t")
-        if stripped.startswith("hooks"):
-            remainder = stripped[len("hooks") :].lstrip(" \t")
-            if remainder.startswith("="):
-                value = remainder[1:].lstrip(" \t").strip()
-                return offset, offset + len(line), value, newline
-        offset += len(line)
-    return None
-
-
-def restore_compat_hooks(text: str, prior_hooks: Mapping[str, str | None]) -> str:
-    """Restore pre-install compat.hooks values after Guard uninstall."""
-
-    updated = text
-    for vendor, previous in prior_hooks.items():
-        span = _compat_table_span(updated, vendor)
-        if span is None or previous is None:
-            continue
-        start, end = span
-        block = updated[start:end]
-        assignment = _compat_hooks_assignment(block)
-        if previous == "":
-            if assignment is not None:
-                line_start, line_end, _, _ = assignment
-                block = block[:line_start] + block[line_end:]
-        else:
-            if assignment is not None:
-                line_start, line_end, _, newline = assignment
-                block = block[:line_start] + f"hooks = {previous}" + newline + block[line_end:]
-            else:
-                header = f"[compat.{vendor}]"
-                block = block.replace(header, header + f"\nhooks = {previous}", 1)
-        updated = updated[:start] + block + updated[end:]
-    return updated
-
-
-def remove_managed_block(text: str) -> str:
-    pattern = re.compile(
-        rf"^\s*{re.escape(GUARD_MANAGED_BEGIN)}.*?{re.escape(GUARD_MANAGED_END)}\s*\n?",
-        re.MULTILINE | re.DOTALL,
-    )
-    cleaned = pattern.sub("", text)
-    cleaned = re.sub(rf"^\s*#.*{re.escape(GUARD_MANAGED_MARKER)}.*$\n?", "", cleaned, flags=re.MULTILINE)
-    return cleaned

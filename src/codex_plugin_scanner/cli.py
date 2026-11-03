@@ -345,7 +345,7 @@ def _resolve_legacy_args(
         "disconnect",
         "login",
         "sync",
-        *("device", "cloud-review"),
+        *("device", "cloud-review", "cloud-actions"),
         "bridge",
         "daemon",
         "hook",

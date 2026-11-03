@@ -9,7 +9,9 @@
 //! command without the value, so such a verdict goes to the reviewed
 //! projection, which knows which profiles drop or carry settings.
 
-use super::{assignment, inert_assignment, shell_assignment, COMMAND_SEPARATORS};
+use super::settings::inert_assignment;
+use super::words::{assignment, shell_assignment};
+use super::COMMAND_SEPARATORS;
 use crate::cloud_scrub_shell::shell_tokens;
 
 /// True when a leading setting of any simple command in `command` is not

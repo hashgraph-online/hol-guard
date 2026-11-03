@@ -25,6 +25,7 @@ from .inventory_list_commands import is_inventory_list_command, run_inventory_li
 
 _EARLY_HANDLERS = {
     "mdm": "_run_guard_mdm_command",
+    "cloud-actions": "_run_guard_cloud_actions_command",
     "command": "_run_guard_command_inspection_command",
     "pytest-contained": "_run_guard_pytest_contained_command",
     "verified-read": "_run_guard_verified_read_command",

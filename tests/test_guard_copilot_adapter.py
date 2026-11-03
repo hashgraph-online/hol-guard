@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters import copilot as copilot_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter, _refresh_guard_proxy_entry
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -30,171 +30,6 @@ def _build_context(tmp_path: Path) -> HarnessContext:
         workspace_dir=workspace_dir,
         guard_home=guard_home,
     )
-
-
-def test_copilot_recognizes_bounded_hook_with_python_isolation_flag() -> None:
-    config = json.dumps(
-        {
-            "harness": "copilot",
-            "cli_args": ["guard", "hook", "--harness", "copilot"],
-        },
-        separators=(",", ":"),
-    )
-    command = shlex.join(
-        [
-            "python",
-            "-I",
-            "-c",
-            "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import main_from_argv",
-            config,
-        ]
-    )
-
-    assert copilot_module._is_managed_hook_command(command) is True
-
-
-def test_copilot_recognizes_frozen_bounded_hook() -> None:
-    config = json.dumps(
-        {
-            "harness": "copilot",
-            "cli_args": ["guard", "hook", "--harness", "copilot"],
-        },
-        separators=(",", ":"),
-    )
-    command = shlex.join(["/Applications/HOL Guard.app/Contents/MacOS/hol-guard", "__guard-bounded-hook", config])
-
-    assert copilot_module._is_managed_hook_command(command) is True
-
-
-def test_copilot_isolated_hook_requires_current_guard_paths(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    context = _build_context(tmp_path)
-    interpreter = tmp_path / "python3"
-    interpreter.write_text("#!/bin/sh\n", encoding="utf-8")
-    interpreter.chmod(0o755)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python",
-        lambda: str(interpreter),
-    )
-    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import bounded_hook_script_path
-
-    script = bounded_hook_script_path(context.guard_home, "copilot")
-    assert script is not None
-    script.parent.mkdir(parents=True, exist_ok=True)
-    script.write_text("# hook\n", encoding="utf-8")
-    managed = shlex.join([str(interpreter), "-I", str(script)])
-    unrelated = shlex.join(
-        [str(interpreter), "-I", str(tmp_path / "other" / "managed" / "bounded-hooks" / "copilot.py")]
-    )
-
-    assert copilot_module._is_managed_hook_command(managed, guard_home=context.guard_home) is True
-    assert copilot_module._is_managed_hook_command(unrelated, guard_home=context.guard_home) is False
-    preserved = copilot_module._merge_hook_entries(
-        [{"command": unrelated}],
-        {"bash": managed, "powershell": managed},
-        managed=copilot_module._managed_hook_commands([unrelated], guard_home=context.guard_home),
-    )
-    assert any(entry.get("command") == unrelated for entry in preserved if isinstance(entry, dict))
-
-
-class _StubClassifier:
-    """Answers `copilot-hook-commands` requests: commands starting `guard` are Guard's."""
-
-    def __init__(self, answer: object = None) -> None:
-        self.batches: list[list[str]] = []
-        self.answer = answer
-
-    def __call__(self, feature: str, command: str, request: dict[str, object], **_: object) -> object:
-        assert (feature, command) == ("native-copilot-hook-commands-v1", "copilot-hook-commands")
-        commands = request["commands"]
-        assert isinstance(commands, list)
-        self.batches.append([str(item) for item in commands])
-        if self.answer is not None:
-            return self.answer
-        return {"managed": [str(item).startswith("guard") for item in commands]}
-
-
-def _stub_classifier(monkeypatch: pytest.MonkeyPatch, answer: object = None) -> _StubClassifier:
-    stub = _StubClassifier(answer)
-    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", stub)
-    return stub
-
-
-def test_copilot_hook_ownership_is_read_once_per_distinct_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    stub = _stub_classifier(monkeypatch)
-
-    managed = copilot_module._managed_hook_commands(
-        ["user one", "guard old", "user one", "guard old", "user two"], guard_home=None
-    )
-
-    assert stub.batches == [["user one", "guard old", "user two"]]
-    assert managed == {"guard old"}
-
-
-def test_copilot_hook_ownership_splits_large_hook_lists(monkeypatch: pytest.MonkeyPatch) -> None:
-    stub = _stub_classifier(monkeypatch)
-    commands = [f"user {index}" for index in range(2500)] + ["guard old"]
-    wide = ["guard " + "x" * 200_000 + str(index) for index in range(5)]
-    oversized = "guard " + "y" * (copilot_module._HOOK_COMMANDS_BATCH_BYTES + 1)
-
-    managed = copilot_module._managed_hook_commands([*commands, *wide, oversized], guard_home=None)
-
-    assert [len(batch) for batch in stub.batches[:2]] == [1024, 1024]
-    assert [item for batch in stub.batches for item in batch] == [*commands, *wide]
-    for batch in stub.batches:
-        assert len(batch) <= copilot_module._HOOK_COMMANDS_BATCH_COUNT
-        assert sum(len(json.dumps(item)) + 1 for item in batch) <= copilot_module._HOOK_COMMANDS_BATCH_BYTES
-    assert managed == {"guard old", *wide}
-
-
-@pytest.mark.parametrize("answer", [None, {"managed": [True]}, {"managed": "yes"}, {}])
-def test_copilot_hook_ownership_fails_closed_without_an_answer(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", lambda *_args, **_kwargs: answer
-    )
-
-    with pytest.raises(copilot_module.CopilotHookOwnershipError):
-        copilot_module._managed_hook_commands(["guard old", "user hook"], guard_home=None)
-
-
-def test_copilot_hook_ownership_skips_the_runtime_without_commands(monkeypatch: pytest.MonkeyPatch) -> None:
-    stub = _stub_classifier(monkeypatch)
-
-    assert copilot_module._managed_hook_commands([], guard_home=None) == set()
-    assert stub.batches == []
-
-
-def test_copilot_merge_and_remove_keep_every_unmanaged_entry() -> None:
-    current: dict[str, object] = {"bash": "guard bash", "powershell": "guard pwsh"}
-    entries: list[object] = [
-        {"command": "user hook"},
-        {"command": "guard legacy"},
-        {"bash": "guard bash", "powershell": "other"},
-        {"bash": "user bash", "powershell": "user pwsh"},
-        "not an entry",
-    ]
-    managed = {"guard legacy"}
-
-    merged = copilot_module._merge_hook_entries(entries, current, managed=managed)
-    removed = copilot_module._remove_hook_entries(entries, "guard bash", "guard pwsh", managed=managed)
-
-    kept = [{"command": "user hook"}, {"bash": "user bash", "powershell": "user pwsh"}, "not an entry"]
-    assert merged == [*kept, current]
-    assert removed == kept
-    assert copilot_module._remove_hook_entries("not a list", "guard bash", "guard pwsh", managed=managed) == []
-
-
-def test_copilot_hooks_commands_reads_every_managed_event() -> None:
-    hooks: dict[str, object] = {
-        "preToolUse": [{"command": "a", "bash": "b"}, {"powershell": "c"}],
-        "postToolUse": [{"command": "a"}],
-        "notManaged": [{"command": "skipped"}],
-        "permissionRequest": "not a list",
-    }
-
-    assert copilot_module._hooks_commands(hooks) == ["a", "b", "c", "a"]
 
 
 def test_copilot_detects_documented_local_surfaces_and_redacts_secrets(tmp_path):
@@ -542,9 +377,13 @@ def test_copilot_without_a_hook_ownership_answer_changes_no_file(tmp_path, monke
     )
     adapter.install(context)
     before = _tree(tmp_path)
-    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", lambda *_args, **_kwargs: None)
 
-    with pytest.raises(copilot_module.CopilotHookOwnershipError):
+    def refused(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_runner_authority.native_runner_authority", refused)
+
+    with pytest.raises(copilot_module.CopilotHookOwnershipError, match="hol-guard doctor copilot"):
         adapter.uninstall(context)
     assert _tree(tmp_path) == before
 

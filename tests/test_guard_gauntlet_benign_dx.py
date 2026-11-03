@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -53,7 +54,11 @@ from ci.gauntlet.native_tools import native_tools_scope_error
 from ci.gauntlet.parent_fixtures import PARENT_WORKSPACE_CASE
 from ci.gauntlet.realism_fixtures import DASHBOARD, REVIEW_NOTES_MARKER, VITE_BUILD_MARKER
 from ci.gauntlet.source_output_fixtures import HELPER_MARKER, ROUTE_MARKER, SOURCES, WORKER_MARKER
-from ci.gauntlet.workspace_runner_fixtures import HOME_BUN_ENTRY_CASE
+from ci.gauntlet.workspace_runner_fixtures import (
+    HOME_BUN_ENTRY_CASE,
+    WORKSPACE_QUIET_PACKAGE_TEST_CASE,
+    runner_marker,
+)
 
 NEW_IDS = {
     ALIAS_ESCAPES_CASE,
@@ -141,6 +146,24 @@ def test_parent_directory_scenario_starts_in_a_plain_parent_of_a_repository(tmp_
     search = _shell(fixture, commands[0].replace("{{home}}", str(fixture.home)))
     assert search.stdout.split() == [str(repository / "src/report.ts")]
     assert _shell(fixture, commands[1].replace("{{home}}", str(fixture.home))).stdout.strip()
+
+
+def test_the_quiet_package_test_case_installs_the_entry_its_command_names(tmp_path: Path) -> None:
+    """`npm test` runs the manifest's `test` script, which the shared install does not declare.
+
+    The shared workspace install names its suite `test:unit`, so a case that asks for
+    `npm test` against it measures a missing script rather than the quiet spelling.
+    """
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=WORKSPACE_QUIET_PACKAGE_TEST_CASE)
+    manifest = json.loads((fixture.workspace / "package.json").read_text(encoding="utf-8"))
+    assert manifest["scripts"]["test"] == "jest --ci"
+    launcher = fixture.workspace / "node_modules/.bin/jest"
+    assert launcher.is_symlink() and launcher.resolve().is_file()
+    marker = runner_marker(WORKSPACE_QUIET_PACKAGE_TEST_CASE)
+    assert marker in (fixture.workspace / "node_modules/jest-cli/bin/jest.js").read_text(encoding="utf-8")
+    # The case's own line, so it cannot pass for the plain runner case's reason.
+    assert marker != runner_marker("omp-native-workspace-npx-jest")
+    assert commands_for(WORKSPACE_QUIET_PACKAGE_TEST_CASE) == ("npm test --silent",)
 
 
 REALISM_IDS = {

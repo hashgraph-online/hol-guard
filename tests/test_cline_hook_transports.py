@@ -15,17 +15,15 @@ from codex_plugin_scanner.guard.adapters import cline_state_paths as cline_state
 from codex_plugin_scanner.guard.adapters import guard_cli_attestation
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cline_hooks import (
+    _claim_slot,
     _hook_command,
-    _posix_wrapper,
-    _powershell_wrapper,
-    _slot_for_event,
-    _worker_config,
     cline_hook_roots,
     cline_native_hook_state,
     run_cline_hook_canary,
     uninstall_cline_hooks,
 )
 from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, install_cline_plugin
+from tests.cline_worker_config import worker_config as _worker_config
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -119,30 +117,15 @@ def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, 
     assert identity["command"] == [str(executable)]
 
 
-def test_native_hook_slots_are_platform_canonical_and_non_destructive(tmp_path: Path) -> None:
+def test_native_hook_slots_are_non_destructive(tmp_path: Path) -> None:
     root = tmp_path / "hooks"
     root.mkdir()
-    assert _slot_for_event(root, "PreToolUse", windows=False).name == "PreToolUse"
-    assert _slot_for_event(root, "PreToolUse", windows=True).name == "PreToolUse.ps1"
+    assert _claim_slot(root, "PreToolUse.ps1", "PreToolUse") == root / "PreToolUse.ps1"
     (root / "PreToolUse").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    with pytest.raises(RuntimeError):
-        _slot_for_event(root, "PreToolUse", windows=False)
-
-
-def test_posix_wrapper_execs_the_native_worker() -> None:
-    source = _posix_wrapper(worker=Path("/guard/PreToolUse.json"), runtime="/runtime/hol-guard-native")
-    assert source.startswith("#!/bin/sh\n")
-    assert "exec /runtime/hol-guard-native cline-hook-worker /guard/PreToolUse.json" in source
-    assert "python" not in source
-
-
-def test_windows_wrapper_runs_the_native_worker_and_fails_closed() -> None:
-    source = _powershell_wrapper(
-        worker=Path("C:/Guard/PreToolUse.json"), runtime="C:/Guard/hol-guard-native.exe", blocking=True
-    )
-    assert '$Args = @("cline-hook-worker", $Worker)' in source
-    assert "ConvertTo-Json -Compress" in source
-    assert "cancel=$true" in source
+    with pytest.raises(RuntimeError, match="user-owned PreToolUse hook"):
+        _claim_slot(root, "PreToolUse", "PreToolUse")
+    (root / "PreToolUse").write_text("# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n", encoding="utf-8")
+    assert _claim_slot(root, "PreToolUse", "PreToolUse") == root / "PreToolUse"
 
 
 def test_cline_canary_uses_only_the_canonical_managed_slot(tmp_path: Path, monkeypatch) -> None:

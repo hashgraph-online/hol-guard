@@ -60,7 +60,7 @@ fn plain_data(name: &str, value: &str) -> bool {
     // meaning whether its launcher forwards the setting or drops it: the run
     // reports differently, repeats or refuses a lint. The option leader in
     // `-Dwarnings` would otherwise fail the shape test below.
-    if super::inert_tool_setting(name, value) {
+    if super::settings::inert_tool_setting(name, value) {
         return true;
     }
     !matches!(

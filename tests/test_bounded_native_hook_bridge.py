@@ -28,6 +28,7 @@ from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import (
     daemon_start_command,
 )
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
+from tests.cline_worker_config import worker_config
 
 _NATIVE_HARNESSES = ("copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline")
 _POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="asserts POSIX hook command syntax")
@@ -160,7 +161,7 @@ def test_cline_worker_runs_the_native_bridge_once_per_payload(tmp_path: Path, mo
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
     argv = cline_hooks._bounded_hook_argv(context, sys.executable)
-    worker = json.loads(cline_hooks._worker_config(context, event_name="PreToolUse", guard_cli=list(argv)))
+    worker = json.loads(worker_config(context, event_name="PreToolUse", guard_cli=list(argv)))
 
     assert argv[:2] == (str(runtime), NATIVE_BOUNDED_HOOK_COMMAND)
     config = json.loads(argv[-1])

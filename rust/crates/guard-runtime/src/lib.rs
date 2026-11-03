@@ -142,6 +142,11 @@ mod cline_detect;
 #[cfg(all(test, unix))]
 #[path = "adapters/detection/cline_detect_tests.rs"]
 mod cline_detect_tests;
+#[path = "adapters/cline_hook_files.rs"]
+mod cline_hook_files;
+#[cfg(test)]
+#[path = "adapters/cline_hook_files_tests.rs"]
+mod cline_hook_files_tests;
 mod cline_hook_worker;
 #[path = "adapters/cline_plugin_render.rs"]
 mod cline_plugin_render;
@@ -263,11 +268,21 @@ mod contributed_mcp_decision_op;
 #[path = "adapters/detection/copilot_detect.rs"]
 mod copilot_detect;
 mod copilot_hook_commands;
+#[path = "adapters/copilot_hook_config.rs"]
+mod copilot_hook_config;
+#[cfg(test)]
+#[path = "adapters/copilot_hook_config_tests.rs"]
+mod copilot_hook_config_tests;
 #[cfg(all(test, unix))]
 mod copilot_vectors_tests;
 mod critical_floor_op;
 #[path = "adapters/detection/cursor_detect.rs"]
 mod cursor_detect;
+#[path = "adapters/cursor_editor_plan.rs"]
+mod cursor_editor_plan;
+#[cfg(test)]
+#[path = "adapters/cursor_editor_plan_tests.rs"]
+mod cursor_editor_plan_tests;
 mod cursor_hook_bridge;
 mod cursor_hook_bridge_response;
 mod cursor_hook_bridge_script;
@@ -278,6 +293,11 @@ mod cursor_hook_config;
 #[cfg(test)]
 #[path = "adapters/cursor_hook_config_tests.rs"]
 mod cursor_hook_config_tests;
+#[path = "adapters/cursor_hook_state.rs"]
+mod cursor_hook_state;
+#[cfg(test)]
+#[path = "adapters/cursor_hook_state_tests.rs"]
+mod cursor_hook_state_tests;
 mod cursor_observer_proof_op;
 mod custom_extension_continuity;
 mod custom_extension_suggestion;
@@ -368,6 +388,11 @@ mod github_workflow_prepare_op;
 mod grok_detect;
 mod grok_executable;
 mod grok_executable_paths;
+#[path = "adapters/detection/grok_legacy_settings.rs"]
+mod grok_legacy_settings;
+#[cfg(test)]
+#[path = "adapters/detection/grok_legacy_settings_tests.rs"]
+mod grok_legacy_settings_tests;
 #[path = "adapters/detection/grok_toml_engine.rs"]
 mod grok_toml_engine;
 #[path = "adapters/detection/grok_toml_scan.rs"]
@@ -800,11 +825,18 @@ mod openclaw_mcp;
 mod openclaw_skills;
 #[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
+#[path = "adapters/opencode_install_plan.rs"]
+mod opencode_install_plan;
+#[cfg(test)]
+#[path = "adapters/opencode_install_plan_tests.rs"]
+mod opencode_install_plan_tests;
 #[path = "adapters/opencode_plugin_render.rs"]
 mod opencode_plugin_render;
 #[cfg(test)]
 #[path = "adapters/opencode_plugin_render_tests.rs"]
 mod opencode_plugin_render_tests;
+#[path = "adapters/opencode_proxy_entry.rs"]
+mod opencode_proxy_entry;
 mod orphaned_worker_reap;
 mod ownership_acl_verdict;
 mod package_approval_hash_op;
@@ -1029,6 +1061,11 @@ mod workspace_snapshot_git;
 mod zcode_artifacts;
 #[path = "adapters/detection/zcode_detect.rs"]
 mod zcode_detect;
+#[path = "adapters/zcode_hook_settings.rs"]
+mod zcode_hook_settings;
+#[cfg(test)]
+#[path = "adapters/zcode_hook_settings_tests.rs"]
+mod zcode_hook_settings_tests;
 #[cfg(all(test, unix))]
 mod zcode_vectors_tests;
 

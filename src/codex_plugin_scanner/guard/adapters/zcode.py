@@ -21,7 +21,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TYPE_CHECKING
 
 from ..aibom_detection import extend_detection_with_workspace_aibom, native_adapter_detection
 from ..models import HarnessDetection
@@ -38,9 +38,6 @@ from .base import (
     _shell_command,
 )
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
-from .hook_group_merge import is_managed_handler as _shared_is_managed_handler
-from .hook_group_merge import merge_hook_entry as _shared_merge_hook_entry
-from .hook_group_merge import prune_managed_hook_entries as _shared_prune_managed_hook_entries
 from .zcode_config import (
     GUARD_MANAGED_MARKER,
     ZCODE_BUNDLE_IDENTIFIER,
@@ -48,17 +45,12 @@ from .zcode_config import (
     ZCODE_CLI_DIR,
     ZCODE_DIR,
     ZCODE_ENV_HINTS,
-    ZCODE_HOOK_EVENT_NAMES,
-    ZCODE_HOOKS_EVENTS_KEY,
     ZCODE_PLUGIN_CACHE_DIR,
     ZCODE_PLUGIN_MARKETPLACES_DIR,
-    ZCODE_PRETOOL_MATCHERS,
     ZCODE_V2_CONFIG_FILE,
     ZCODE_V2_DIR,
-    dedupe_hook_entries,
-    hook_event_groups,
-    is_guard_managed_hook_command,
 )
+from .zcode_hook_settings import plan_hook_settings
 
 _ZCODE_HOME_ENV_VAR = "ZCODE_HOME"
 # Current ZCode renders this label beside the hook in its Hooks settings UI
@@ -262,17 +254,6 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             prepared_files=prepared_files,
         )
 
-    @staticmethod
-    def _managed_command_wrapper(hook_command: str) -> str:
-        """Wrap a hook command so the Guard-managed marker travels with it.
-
-        The marker is appended as a trailing shell comment so ZCode still runs
-        the command verbatim while Guard can later detect and prune only its
-        own managed hook entries.
-        """
-
-        return f"{hook_command} # {GUARD_MANAGED_MARKER}"
-
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
         from ..codex_hook_recovery import _snapshot
         from ..runtime_transition import TransitionFile
@@ -291,7 +272,21 @@ class ZCodeHarnessAdapter(HarnessAdapter):
 
         hook_files: list[TransitionFile] = []
         hook_command = _shell_command(self._hook_command_parts(context, prepared_files=hook_files))
-        managed_hook_command = self._managed_command_wrapper(hook_command)
+        # The marker rides along as a trailing shell comment, so ZCode runs the
+        # command verbatim while Guard can later find and prune only its own.
+        managed_hook_command = f"{hook_command} # {GUARD_MANAGED_MARKER}"
+        handlers: dict[str, dict[str, object]] = {
+            event: {
+                "type": "command",
+                "command": managed_hook_command,
+                "timeout": timeout,
+                "statusMessage": _GUARD_HOOK_STATUS_MESSAGE,
+            }
+            for event, timeout in (
+                ("PreToolUse", _ZCODE_PRETOOL_TIMEOUT_SECONDS),
+                ("UserPromptSubmit", _ZCODE_PROMPT_TIMEOUT_SECONDS),
+            )
+        }
 
         config_path = self._config_path(context)
         surfaces: list[tuple[Path, dict[str, object], bytes | None, int]] = []
@@ -301,12 +296,16 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             if not isinstance(hooks, dict):
                 hooks = {}
             payload["hooks"] = hooks
-            enabled_history[str(path)] = self._recorded_enabled_for(previous_state, path, hooks)
-            if hooks.get("enabled") is False and self._hooks_have_handlers(hooks):
+            # Native plan: legacy flat groups fold into hooks.events (current
+            # ZCode rejects the flat keys and drops the whole file), then Guard's
+            # PreToolUse groups per matcher and UserPromptSubmit group refresh.
+            plan = plan_hook_settings("install", hooks, path=path, state=previous_state, handlers=handlers)
+            enabled_history[str(path)] = plan.enabled
+            if hooks.get("enabled") is False and plan.has_handlers:
                 raise ValueError(
                     f"ZCode user hooks are disabled in {path.name}; explicitly enable them before installing Guard."
                 )
-            self._sync_managed_hook_groups(hooks, managed_hook_command)
+            plan.apply(hooks)
             # Each ZCode surface only registers hooks when its own config
             # opts in with hooks.enabled: true; without the flag entries
             # never run.
@@ -440,98 +439,44 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             surfaces.append((path, payload))
         return surfaces
 
-    @staticmethod
-    def _hooks_have_managed_entries(hooks: dict[str, object]) -> bool:
-        return any(
-            _shared_is_managed_handler(handler, is_guard_managed_hook_command)
-            for entries in hook_event_groups(hooks).values()
-            if isinstance(entries, list)
-            for entry in entries
-            if isinstance(entry, dict)
-            for handler in entry.get("hooks", [])
-            if isinstance(handler, dict)
-        )
-
-    @staticmethod
-    def _valid_enabled_record(record: object) -> TypeGuard[dict[str, object]]:
-        return (
-            isinstance(record, dict)
-            and isinstance(record.get("present"), bool)
-            and "value" in record
-            and (not record["present"] or isinstance(record.get("value"), bool))
-        )
-
-    def _recorded_enabled_for(
-        self, state: dict[str, object], path: Path, hooks: dict[str, object]
-    ) -> dict[str, object]:
-        """Return the pre-install enabled preference for one hook surface.
-
-        A record only applies while Guard-managed entries are still present in
-        the file: once the user removes Guard's hooks, their own live value is
-        the freshest choice and wins. Legacy single-file state maps only onto
-        the file it managed.
-        """
-
-        if not self._hooks_have_managed_entries(hooks):
-            return {"present": "enabled" in hooks, "value": hooks.get("enabled")}
-        history = state.get("hooks_enabled_before")
-        if isinstance(history, dict) and self._valid_enabled_record(history.get(str(path))):
-            recorded = history[str(path)]
-            return {"present": recorded["present"], "value": recorded["value"]}
-        legacy = state.get("hooks_enabled_before")
-        if state.get("managed_config_path") == str(path) and self._valid_enabled_record(legacy):
-            return {"present": legacy["present"], "value": legacy["value"]}
-        return {"present": "enabled" in hooks, "value": hooks.get("enabled")}
-
-    @staticmethod
-    def _hooks_have_handlers(hooks: dict[str, object]) -> bool:
-        """Return True when ``hooks`` still carries event handlers."""
-
-        return any(isinstance(entries, list) and entries for entries in hook_event_groups(hooks).values())
-
     def install(self, context: HarnessContext) -> dict[str, object]:
         return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = remove_guard_shim(
-            self.harness,
-            context,
-            launcher_name=self.launcher_name,
-            display_name="zcode",
-        )
         _state_dir, _backup_path, state_path = self._managed_state_paths(context)
         state = _json_payload(state_path) if state_path.is_file() else {}
         config_path = self._config_path(context)
-        # Prune both hook surfaces so no managed entry survives anywhere,
-        # including installs that predate the dual-surface layout.
+        # Plan both hook surfaces (including installs that predate the
+        # dual-surface layout) before anything changes, so a refused plan
+        # leaves the shim, the files and the install state in place.
+        writes: list[tuple[Path, str]] = []
         for candidate in (self._file_config_path(context), self._config_path(context)):
             if not candidate.is_file():
                 continue
             _ensure_path_within_root(self._zcode_home_dir(context), candidate, label="ZCode")
             payload = _json_payload(candidate)
             hooks = payload.get("hooks")
-            if isinstance(hooks, dict):
-                hooks_before = json.dumps(hooks, sort_keys=True)
-                original = self._recorded_enabled_for(state, candidate, hooks)
-                self._prune_managed_hook_groups(hooks)
-                if original["present"] and hooks.get("enabled") is True:
-                    hooks["enabled"] = original.get("value")
-                elif not original["present"] and hooks.get("enabled") is True:
-                    hooks.pop("enabled", None)
-                if not original["present"]:
-                    events = hooks.get(ZCODE_HOOKS_EVENTS_KEY)
-                    if isinstance(events, dict) and not events:
-                        hooks.pop(ZCODE_HOOKS_EVENTS_KEY, None)
-                    if not hooks:
-                        hooks = {}
-                if json.dumps(hooks, sort_keys=True) == hooks_before:
-                    continue
-                if not hooks:
-                    payload.pop("hooks", None)
-                else:
-                    payload["hooks"] = hooks
-                write_text_at_authorized_path(candidate, json.dumps(payload, indent=2) + "\n")
+            if not isinstance(hooks, dict):
+                continue
+            hooks_before = json.dumps(hooks, sort_keys=True)
+            plan = plan_hook_settings("uninstall", hooks, path=candidate, state=state)
+            plan.apply(hooks)
+            if json.dumps(hooks, sort_keys=True) == hooks_before:
+                continue
+            if not hooks:
+                payload.pop("hooks", None)
+            else:
+                payload["hooks"] = hooks
+            writes.append((candidate, json.dumps(payload, indent=2) + "\n"))
 
+        shim_manifest = remove_guard_shim(
+            self.harness,
+            context,
+            launcher_name=self.launcher_name,
+            display_name="zcode",
+        )
+        for candidate, text in writes:
+            write_text_at_authorized_path(candidate, text)
         if state_path.is_file():
             state_path.unlink()
 
@@ -550,97 +495,6 @@ class ZCodeHarnessAdapter(HarnessAdapter):
                 *shim_notes,
             ],
         }
-
-    def _sync_managed_hook_groups(self, hooks: dict[str, object], managed_command: str) -> None:
-        """Reconcile Guard-managed PreToolUse and UserPromptSubmit hook groups.
-
-        Guard only writes the ``hooks.events`` layout; legacy flat ``hooks.<Event>``
-        groups (whether Guard-managed leftovers or user entries written by older
-        ZCode builds) are folded into ``events`` first because current ZCode
-        rejects the legacy keys and fails to load the whole config file.
-        """
-
-        events = self._migrate_legacy_hook_events(hooks)
-        pretool_raw = events.get("PreToolUse")
-        pretool_entries = self._prune_managed_entries(pretool_raw if isinstance(pretool_raw, list) else [])
-        prompt_raw = events.get("UserPromptSubmit")
-        prompt_entries = self._prune_managed_entries(prompt_raw if isinstance(prompt_raw, list) else [])
-        pretool_handler: dict[str, object] = {
-            "type": "command",
-            "command": managed_command,
-            "timeout": _ZCODE_PRETOOL_TIMEOUT_SECONDS,
-            "statusMessage": _GUARD_HOOK_STATUS_MESSAGE,
-        }
-        prompt_handler: dict[str, object] = {
-            "type": "command",
-            "command": managed_command,
-            "timeout": _ZCODE_PROMPT_TIMEOUT_SECONDS,
-            "statusMessage": _GUARD_HOOK_STATUS_MESSAGE,
-        }
-        for matcher in ZCODE_PRETOOL_MATCHERS:
-            pretool_entries = _merge_hook_entry(pretool_entries, matcher, pretool_handler)
-        prompt_entries = _merge_hook_entry(prompt_entries, None, prompt_handler)
-        events["PreToolUse"] = pretool_entries
-        events["UserPromptSubmit"] = prompt_entries
-
-    @staticmethod
-    def _migrate_legacy_hook_events(hooks: dict[str, object]) -> dict[str, object]:
-        """Fold legacy flat ``hooks.<Event>`` groups into the ``events`` mapping.
-
-        User settings keys beside ``events`` (``enabled``, ``timeoutMs``,
-        ``maxOutputBytes``) are preserved untouched, and legacy entries that
-        already exist in ``events`` are not duplicated. Returns the events
-        mapping, stored back onto ``hooks`` by the caller.
-        """
-
-        events_value = hooks.get(ZCODE_HOOKS_EVENTS_KEY)
-        events: dict[str, object] = dict(events_value) if isinstance(events_value, dict) else {}
-        for event_name, entries in list(hooks.items()):
-            if event_name == ZCODE_HOOKS_EVENTS_KEY or event_name not in ZCODE_HOOK_EVENT_NAMES:
-                continue
-            if not isinstance(entries, list):
-                continue
-            existing = events.get(event_name)
-            merged = list(existing) if isinstance(existing, list) else []
-            merged.extend(entries)
-            events[event_name] = dedupe_hook_entries(merged)
-            hooks.pop(event_name, None)
-        hooks[ZCODE_HOOKS_EVENTS_KEY] = events
-        return events
-
-    def _prune_managed_hook_groups(self, hooks: dict[str, object]) -> None:
-        events_value = hooks.get(ZCODE_HOOKS_EVENTS_KEY)
-        if isinstance(events_value, dict):
-            for event_name in list(events_value):
-                entries = events_value.get(event_name)
-                remaining = self._prune_managed_entries(entries if isinstance(entries, list) else [])
-                if remaining:
-                    events_value[event_name] = remaining
-                else:
-                    events_value.pop(event_name, None)
-            if not events_value:
-                hooks.pop(ZCODE_HOOKS_EVENTS_KEY, None)
-        # Legacy flat groups from older Guard installs are pruned too, but user
-        # entries in them are left exactly where the user put them.
-        for event_name in list(hooks):
-            entries = hooks.get(event_name)
-            if event_name == ZCODE_HOOKS_EVENTS_KEY or not isinstance(entries, list):
-                continue
-            remaining = self._prune_managed_entries(entries)
-            if remaining:
-                hooks[event_name] = remaining
-            else:
-                hooks.pop(event_name, None)
-
-    @staticmethod
-    def _prune_managed_entries(entries: list[object]) -> list[object]:
-        return _shared_prune_managed_hook_entries(entries, is_managed=is_guard_managed_hook_command)
-
-
-def _merge_hook_entry(entries: list[object], matcher: str | None, handler: dict[str, object]) -> list[object]:
-    """Add or refresh the Guard handler for a given matcher, preserving user hooks."""
-
-    return _shared_merge_hook_entry(entries, matcher, handler, is_managed=is_guard_managed_hook_command)
 
 
 __all__ = ["ZCodeHarnessAdapter"]

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import stat
 import subprocess
 import time
 from hashlib import sha256
 from pathlib import Path
+from typing import cast
 
 from .base import HarnessContext
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
@@ -23,13 +23,24 @@ from .native_hook_bridge import native_hook_bridge_executable
 
 _MARKER = "HOL_GUARD_MANAGED_CLINE_HOOK_V1"
 _SCHEMA = 1
-_WORKER_SCHEMA = "cline-hook-worker.v1"
 NATIVE_CLINE_HOOK_WORKER_FEATURE = "cline-hook-worker-v1"
 _TIMEOUT = 9
 # The bounded bridge answers inside the worker's own subprocess timeout.
 _BRIDGE_TIMEOUT_SECONDS = 8
-_PROOF_MAX_AGE = 7 * 24 * 60 * 60
 _EVENTS = ("PreToolUse", "PostToolUse", "UserPromptSubmit", "TaskStart", "TaskError", "SessionShutdown")
+_PROOF_EVENTS = ("PreToolUse", "PostToolUse")
+_FILE_KEYS = {"slot", "worker", "worker_sha256", "launcher", "launcher_sha256"}
+_PROOF_KEYS = ({"present", "fresh", "live"}, {"present", "fresh", "live", "event", "outcome"})
+_VERDICT_KEYS = {"installed", "integrity_ok", "ready", "missing_events"}
+_FULL_VERDICT_KEYS = _VERDICT_KEYS | {
+    "synthetic_canary_ok",
+    "live_pretool_proof",
+    "live_posttool_proof",
+    "pretool_blocking_proven",
+    "posttool_observation_proven",
+    "post_tool_output_mediation",
+    "modified_events",
+}
 
 
 def cline_hook_roots(context: HarnessContext) -> tuple[Path, ...]:
@@ -61,11 +72,10 @@ def _managed(path: Path) -> bool:
         return False
 
 
-def _slot_for_event(root: Path, event: str, *, windows: bool | None = None) -> Path:
-    """Return Cline's canonical slot, refusing to replace a user hook."""
+def _claim_slot(root: Path, name: str, event: str) -> Path:
+    """Return Cline's slot for one event, refusing to replace a user hook."""
 
-    is_windows = os.name == "nt" if windows is None else windows
-    path = root / f"{event}{'.ps1' if is_windows else ''}"
+    path = root / name
     if path.exists() and not _managed(path):
         raise RuntimeError(f"Cline already has a user-owned {event} hook in {root}; Guard will not overwrite it")
     return path
@@ -83,73 +93,50 @@ def _write(path: Path, text: str, *, executable: bool = False) -> None:
     os.replace(temporary, path)
 
 
-def _worker_config(context: HarnessContext, *, event_name: str, guard_cli: list[str]) -> str:
-    """The configuration the native Cline hook worker reads for one event.
+def _hook_files(context: HarnessContext, request: dict[str, object]) -> dict[str, object]:
+    """Ask the native ``cline_hook_files`` kind; a refusal is the adapter's RuntimeError."""
 
-    ``guard_cli`` is the complete argv the worker runs once per hook payload.
-    """
+    from ..native_context import _resolve_existing_digest_home
+    from ..native_runner_authority import native_runner_authority
 
-    config = {
-        "marker": _MARKER,
-        "schema": _WORKER_SCHEMA,
-        "event": event_name,
-        "guard": guard_cli,
-        "proof": str(_proof_path(context, event_name)),
-        "adapter_state": str(_adapter_state_path(context)),
+    try:
+        return native_runner_authority(
+            "cline_hook_files", request, guard_home=_resolve_existing_digest_home(context.guard_home)
+        )
+    except ValueError as error:
+        raise RuntimeError(f"Cline native hook files failed: {error}") from error
+
+
+def _malformed() -> RuntimeError:
+    return RuntimeError("Cline native hook files answer is malformed")
+
+
+def _render_hook_files(context: HarnessContext, *, runtime: str, guard_cli: list[str]) -> dict[str, dict[str, str]]:
+    """Every event's worker configuration and launcher, rendered natively."""
+
+    events = {
+        event: {"worker": str(_worker_path(context, event)), "proof": str(_proof_path(context, event))}
+        for event in _EVENTS
     }
-    return json.dumps(config, indent=2, sort_keys=True) + "\n"
-
-
-def _posix_wrapper(*, worker: Path, runtime: str) -> str:
-    return "\n".join(
-        (
-            "#!/bin/sh",
-            f"# {_MARKER}",
-            f"exec {shlex.quote(runtime)} cline-hook-worker {shlex.quote(worker.as_posix())}",
-            "",
-        )
-    )
-
-
-def _ps_quote(value: str) -> str:
-    return "'" + value.replace("'", "''") + "'"
-
-
-def _powershell_wrapper(*, worker: Path, runtime: str, blocking: bool) -> str:
-    message = (
-        "HOL Guard evaluation was unavailable; this Cline action was not allowed to proceed."
-        if blocking
-        else "HOL Guard hook diagnostic: evaluation was unavailable."
-    )
-    cancel = "$true" if blocking else "$false"
-    failure_payload = (
-        f"@{{cancel={cancel};"
-        f"errorMessage={_ps_quote(message)};"
-        f"contextModification={_ps_quote(message)}}} | ConvertTo-Json -Compress"
-    )
-    return "\n".join(
-        (
-            f"# {_MARKER}",
-            f"$Runtime = {_ps_quote(runtime)}",
-            f"$Worker = {_ps_quote(str(worker))}",
-            '$Args = @("cline-hook-worker", $Worker)',
-            "$Raw = [Console]::In.ReadToEnd()",
-            "try {",
-            "  $Lines = $Raw | & $Runtime @Args 2>$null",
-            "  $Code = $LASTEXITCODE",
-            "  $Text = ($Lines -join [Environment]::NewLine)",
-            "  if ($Code -ne 0 -or [string]::IsNullOrWhiteSpace($Text)) {",
-            "    " + failure_payload,
-            "    exit 0",
-            "  }",
-            "  [Console]::Out.WriteLine($Text)",
-            "} catch {",
-            "    " + failure_payload,
-            "}",
-            "exit 0",
-            "",
-        )
-    )
+    request: dict[str, object] = {
+        "op": "render",
+        "windows": os.name == "nt",
+        "runtime": runtime,
+        "guard_cli": guard_cli,
+        "adapter_state": str(_adapter_state_path(context)),
+        "events": events,
+    }
+    files = _hook_files(context, request).get("files")
+    if not isinstance(files, dict) or files.keys() != set(_EVENTS):
+        raise _malformed()
+    for entry in files.values():
+        if not isinstance(entry, dict) or entry.keys() != _FILE_KEYS:
+            raise _malformed()
+        if not all(isinstance(value, str) for value in entry.values()):
+            raise _malformed()
+        if entry["slot"] in {"", ".", ".."} or Path(entry["slot"]).name != entry["slot"]:
+            raise _malformed()
+    return cast(dict[str, dict[str, str]], files)
 
 
 def _bounded_hook_argv(context: HarnessContext, interpreter: str) -> tuple[str, ...]:
@@ -168,10 +155,17 @@ def _bounded_hook_argv(context: HarnessContext, interpreter: str) -> tuple[str, 
     )
 
 
-def _load_state(context: HarnessContext) -> dict[str, object]:
+def _read_text(path: Path) -> str | None:
     try:
-        value = json.loads(_state_path(context).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _load_state(context: HarnessContext, text: str | None = None) -> dict[str, object]:
+    try:
+        value = json.loads(text if text is not None else _read_text(_state_path(context)) or "")
+    except json.JSONDecodeError:
         return {}
     return value if isinstance(value, dict) else {}
 
@@ -188,30 +182,23 @@ def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
     interpreter = str(attested.python.executable)
     guard = list(_bounded_hook_argv(context, interpreter))
     root = cline_hook_roots(context)[0]
+    files = _render_hook_files(context, runtime=str(runtime), guard_cli=guard)
     paths: dict[str, str] = {}
     digests: dict[str, str] = {}
     workers: dict[str, str] = {}
     worker_digests: dict[str, str] = {}
     for event in _EVENTS:
-        slot = _slot_for_event(root, event)
-        worker = _worker_path(context, event)
+        rendered = files[event]
+        slot, worker = _claim_slot(root, rendered["slot"], event), _worker_path(context, event)
         ensure_safe_cline_destination(context, slot)
         ensure_safe_cline_destination(context, worker)
-        worker_source = _worker_config(context, event_name=event, guard_cli=guard)
-        _write(worker, worker_source)
+        _write(worker, rendered["worker"])
         legacy_worker = worker.with_suffix(".py")
         if _managed(legacy_worker):
             legacy_worker.unlink()
-        if os.name == "nt":
-            launcher = _powershell_wrapper(worker=worker, runtime=str(runtime), blocking=event == "PreToolUse")
-            _write(slot, launcher)
-        else:
-            launcher = _posix_wrapper(worker=worker, runtime=str(runtime))
-            _write(slot, launcher, executable=True)
-        paths[event] = str(slot)
-        digests[event] = sha256(launcher.encode()).hexdigest()
-        workers[event] = str(worker)
-        worker_digests[event] = sha256(worker_source.encode()).hexdigest()
+        _write(slot, rendered["launcher"], executable=os.name != "nt")
+        paths[event], digests[event] = str(slot), rendered["launcher_sha256"]
+        workers[event], worker_digests[event] = str(worker), rendered["worker_sha256"]
     state = {
         "schema_version": _SCHEMA,
         "transport": "hooks",
@@ -277,86 +264,64 @@ def run_cline_hook_canary(context: HarnessContext) -> dict[str, object]:
     return {"ok": result.returncode == 0 and isinstance(output, dict) and isinstance(output.get("cancel"), bool)}
 
 
-def _proof_state(context: HarnessContext, event: str) -> dict[str, object]:
+def _observed(context: HarnessContext, state: dict[str, object], event: str, group: str) -> dict[str, object] | None:
+    """What Guard reads back from one hook file bound to its canonical slot, if any."""
+
+    recorded = state.get(group)
+    path = _canonical_state_path(
+        context,
+        event,
+        recorded.get(event) if isinstance(recorded, dict) else None,
+        worker=group == "workers",
+        saved_root=state.get("root"),
+    )
     try:
-        value = json.loads(_proof_path(context, event).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {"present": False, "fresh": False, "live": False}
-    timestamp = value.get("timestamp") if isinstance(value, dict) else None
-    fresh = isinstance(timestamp, (int, float)) and time.time() - float(timestamp) <= _PROOF_MAX_AGE
-    return {
-        "present": True,
-        "fresh": fresh,
-        "live": fresh and value.get("source") == "cline",
-        "event": event,
-        "outcome": value.get("outcome"),
-    }
+        return None if path is None else {"sha256": sha256(path.read_bytes()).hexdigest(), "managed": _managed(path)}
+    except OSError:
+        return None
+
+
+def _valid_verdict(key: str, value: object) -> bool:
+    if key.endswith("_events"):
+        return isinstance(value, list) and all(isinstance(item, str) for item in value)
+    if key.startswith("live_"):
+        return (
+            isinstance(value, dict)
+            and value.keys() in _PROOF_KEYS
+            and all(isinstance(value[name], bool) for name in ("present", "fresh", "live"))
+            and isinstance(value.get("event", ""), str)
+        )
+    if key == "post_tool_output_mediation":
+        return value == "observation-only"
+    return isinstance(value, bool)
 
 
 def cline_native_hook_state(context: HarnessContext) -> dict[str, object]:
-    state = _load_state(context)
-    paths, digests = state.get("paths"), state.get("sha256")
-    workers, worker_digests = state.get("workers"), state.get("worker_sha256")
-    missing: list[str] = []
-    modified: list[str] = []
-    if not isinstance(paths, dict) or not isinstance(digests, dict):
-        return {"installed": False, "integrity_ok": False, "ready": False, "missing_events": list(_EVENTS)}
-    for event in _EVENTS:
-        path_value, digest = paths.get(event), digests.get(event)
-        if not isinstance(path_value, str) or not isinstance(digest, str):
-            missing.append(event)
-            continue
-        path = _canonical_state_path(context, event, path_value, saved_root=state.get("root"))
-        if path is None:
-            missing.append(event)
-            continue
-        try:
-            actual = sha256(path.read_bytes()).hexdigest()
-        except OSError:
-            missing.append(event)
-            continue
-        if not _managed(path):
-            missing.append(event)
-        elif actual != digest:
-            modified.append(event)
-    if not isinstance(workers, dict) or not isinstance(worker_digests, dict):
-        missing.extend(f"{event}:worker" for event in _EVENTS)
-    else:
-        for event in _EVENTS:
-            value, digest = workers.get(event), worker_digests.get(event)
-            if not isinstance(value, str) or not isinstance(digest, str):
-                missing.append(f"{event}:worker")
-                continue
-            worker = _canonical_state_path(context, event, value, worker=True)
-            if worker is None:
-                missing.append(f"{event}:worker")
-                continue
-            try:
-                actual = sha256(worker.read_bytes()).hexdigest()
-            except OSError:
-                missing.append(f"{event}:worker")
-                continue
-            if not _managed(worker):
-                missing.append(f"{event}:worker")
-            elif actual != digest:
-                modified.append(f"{event}:worker")
-    canary = run_cline_hook_canary(context) if not missing and not modified else {"ok": False}
-    pre, post = _proof_state(context, "PreToolUse"), _proof_state(context, "PostToolUse")
-    pretool_blocking_proven = pre.get("live") is True and pre.get("outcome") == "blocked"
-    posttool_observation_proven = post.get("live") is True and post.get("outcome") == "observed"
-    return {
-        "installed": not missing,
-        "integrity_ok": not missing and not modified,
-        "synthetic_canary_ok": canary.get("ok") is True,
-        "live_pretool_proof": pre,
-        "live_posttool_proof": post,
-        "pretool_blocking_proven": pretool_blocking_proven,
-        "posttool_observation_proven": posttool_observation_proven,
-        "post_tool_output_mediation": "observation-only",
-        "missing_events": missing,
-        "modified_events": modified,
-        "ready": not missing and not modified and canary.get("ok") is True and pretool_blocking_proven,
+    text = _read_text(_state_path(context))
+    state = _load_state(context, text)
+    request: dict[str, object] = {
+        "op": "state",
+        "now": time.time(),
+        "state_text": text,
+        "launchers": {event: _observed(context, state, event, "paths") for event in _EVENTS},
+        "workers": {event: _observed(context, state, event, "workers") for event in _EVENTS},
+        "proofs": {event: _read_text(_proof_path(context, event)) for event in _PROOF_EVENTS},
     }
+    answer = _hook_files(context, request)
+    verdict, canary = answer.get("state"), answer.get("canary")
+    if answer.keys() != {"state", "canary"} or not isinstance(verdict, dict) or not isinstance(canary, bool):
+        raise _malformed()
+    verdict = cast(dict[str, object], verdict)
+    if verdict.keys() not in (_VERDICT_KEYS, _FULL_VERDICT_KEYS) or not all(
+        _valid_verdict(key, value) for key, value in verdict.items()
+    ):
+        raise _malformed()
+    if canary:
+        # ``ready`` assumes the canary passes; it runs only over intact files.
+        canary_ok = run_cline_hook_canary(context).get("ok") is True
+        verdict["synthetic_canary_ok"] = canary_ok
+        verdict["ready"] = verdict["ready"] is True and canary_ok
+    return verdict
 
 
 __all__ = [

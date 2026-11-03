@@ -21,16 +21,21 @@ use super::antigravity_detect;
 use super::claude_code_detect;
 use super::claude_hook_config;
 use super::cline_detect;
+use super::cline_hook_files;
 use super::cline_plugin_render;
 use super::codex_detect;
 use super::context_digest_json::write_canonical_json_with_limit;
 use super::copilot_detect;
+use super::copilot_hook_config;
 use super::cursor_detect;
+use super::cursor_editor_plan;
 use super::cursor_hook_config;
+use super::cursor_hook_state;
 use super::devin_detect;
 use super::devin_jsonc;
 use super::gemini_detect;
 use super::grok_detect;
+use super::grok_legacy_settings;
 use super::grok_user_config_op;
 use super::harness_hook_settings;
 use super::hermes_detect;
@@ -39,11 +44,13 @@ use super::muse_detect;
 use super::oci_bundle_op as oci;
 use super::openclaw_detect;
 use super::opencode_detect;
+use super::opencode_install_plan;
 use super::opencode_plugin_render;
 use super::pi_detect;
 use super::pi_extension_render;
 use super::runner_authority_signature as signature;
 use super::zcode_detect;
+use super::zcode_hook_settings;
 use super::{
     cloud_receipt_payload as receipt, cloud_request_snapshot as snapshot,
     cloud_sync_privacy as privacy,
@@ -160,12 +167,15 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "aibom_primary_content" => crate::aibom_primary_content::dispatch(args),
         "package_command_redaction" => crate::package_command_redaction::dispatch(args),
         "zcode_detect" => zcode_detect::detect(args),
+        "zcode_hook_settings" => zcode_hook_settings::dispatch(args),
         "hermes_detect" => hermes_detect::detect(args),
         "pi_detect" => pi_detect::detect(args),
         "cline_plugin_render" => cline_plugin_render::render(args),
+        "cline_hook_files" => cline_hook_files::dispatch(args),
         "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
         "copilot_detect" => copilot_detect::detect(args),
+        "copilot_hook_config" => copilot_hook_config::dispatch(args),
         "claude_code_detect" => claude_code_detect::detect(args),
         "claude_hook_config" => claude_hook_config::dispatch(args),
         "cline_detect" => cline_detect::detect(args),
@@ -175,14 +185,18 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "devin_jsonc" => devin_jsonc::document(args),
         "harness_hook_settings" => harness_hook_settings::dispatch(args),
         "grok_detect" => grok_detect::detect(args),
+        "grok_legacy_settings" => grok_legacy_settings::dispatch(args),
         "grok_user_config" => grok_user_config_op::dispatch(args),
         "kimi_detect" => kimi_detect::detect(args),
         "muse_detect" => muse_detect::detect(args),
         "openclaw_detect" => openclaw_detect::detect(args),
         "cursor_detect" => cursor_detect::detect(args),
         "cursor_hook_config" => cursor_hook_config::dispatch(args),
+        "cursor_editor_plan" => cursor_editor_plan::plan(args),
+        "cursor_hook_state" => cursor_hook_state::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
+        "opencode_install_plan" => opencode_install_plan::dispatch(args),
         _ => Err(ERR_KIND),
     }
 }

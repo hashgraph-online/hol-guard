@@ -7,15 +7,13 @@ section (``plugins.enabledPlugins.<name@marketplace>``), and an optional
 ``hooks.events.<Event>`` (with optional ``enabled``/``timeoutMs``/
 ``maxOutputBytes`` settings keys) and rejects the legacy flat
 ``hooks.<Event>`` layout with a config load failure; both layouts are read for
-inventory while only the nested one is written. Plugins are cached
+inventory (by the native runtime) while only the nested one is written. Plugins are cached
 under ``~/.zcode/cli/plugins/cache/<marketplace>/<plugin>/<version>/`` with a
 ``.zcode-plugin/plugin.json`` manifest, a ``.zcode-plugin-seed.json`` provenance
 file, ``hooks/hooks.json``, ``.mcp.json``, ``skills/`` and ``commands/`` trees.
 """
 
 from __future__ import annotations
-
-import json
 
 ZCODE_DIR = ".zcode"
 ZCODE_CLI_DIR = ".zcode/cli"
@@ -34,15 +32,6 @@ GUARD_MANAGED_MARKER = "HOL_GUARD_MANAGED_ZCODE"
 # builds reject those legacy keys and fail to load the whole config file, so
 # Guard must only ever write the nested shape while still reading both.
 ZCODE_HOOKS_EVENTS_KEY = "events"
-ZCODE_HOOK_EVENT_NAMES = (
-    "SessionStart",
-    "UserPromptSubmit",
-    "PreToolUse",
-    "PermissionRequest",
-    "PostToolUse",
-    "PostToolUseFailure",
-    "Stop",
-)
 
 
 # Claude Code tool matchers ZCode surfaces. MCP tools arrive as mcp__<server>__<tool>;
@@ -81,60 +70,3 @@ ZCODE_ENV_HINTS = (
     "ZAI_OAUTH_ORIGIN",
     "ZAI_OAUTH_CLIENT_ID",
 )
-
-
-def is_guard_managed_hook_command(command: object) -> bool:
-    """Return True when a hook command string is owned by HOL Guard for ZCode."""
-
-    if not isinstance(command, str):
-        return False
-    return GUARD_MANAGED_MARKER in command or (
-        "codex_plugin_scanner.cli" in command and "'guard', 'hook'" in command and "--harness', 'zcode'" in command
-    )
-
-
-def _entry_key(entry: object) -> str:
-    try:
-        return json.dumps(entry, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
-    except (TypeError, ValueError):
-        return repr(entry)
-
-
-def dedupe_hook_entries(entries: list[object]) -> list[object]:
-    """Drop equal duplicate group entries so a handler listed in both schema
-    layouts is not inventoried or persisted twice (ZCode would run it twice)."""
-
-    seen: set[str] = set()
-    unique: list[object] = []
-    for entry in entries:
-        key = _entry_key(entry)
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(entry)
-    return unique
-
-
-def hook_event_groups(hooks_section: object) -> dict[str, list[object]]:
-    """Collect ``{event_name: entries}`` from both hooks schema generations.
-
-    Current ZCode stores event groups under ``hooks.events``; older builds put
-    them directly under ``hooks``. Both are read so inventories keep working
-    for configs written by either generation. Entries that already exist in the
-    nested layout are not duplicated from the legacy one.
-    """
-
-    if not isinstance(hooks_section, dict):
-        return {}
-    groups: dict[str, list[object]] = {}
-    events = hooks_section.get(ZCODE_HOOKS_EVENTS_KEY)
-    if isinstance(events, dict):
-        for event_name, entries in events.items():
-            if isinstance(event_name, str) and isinstance(entries, list):
-                groups.setdefault(event_name, []).extend(entries)
-    for event_name, entries in hooks_section.items():
-        if event_name == ZCODE_HOOKS_EVENTS_KEY or event_name not in ZCODE_HOOK_EVENT_NAMES:
-            continue
-        if isinstance(entries, list):
-            groups.setdefault(event_name, []).extend(entries)
-    return {event_name: dedupe_hook_entries(entries) for event_name, entries in groups.items()}
