@@ -35288,6 +35288,74 @@
       "expect": "not_allow"
     },
     {
+      "id": "nl-tab-separator-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "nl -s$'\\t' README.md | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "nl-tab-separator-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | nl -s$'\\t' | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tac-tab-separator-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "tac -s$'\\t' README.md | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "comm-tab-delimiter-worktree-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "comm -12 --output-delimiter=$'\\t' README.md README.md | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "nl-body-numbering-worktree-file",
       "fix_area": "shell",
       "harnesses": [
