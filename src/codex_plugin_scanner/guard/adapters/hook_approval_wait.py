@@ -1,12 +1,8 @@
-"""Ask the native runtime how a Grok or Muse hook waits on its approval.
+"""Ask the resident (``hook_approval_wait``) how a Grok or Muse hook waits on its approval.
 
-The resident (``hook_approval_wait``) decides whether a ``PreToolUse``
-review waits, which requests it waits on, what a settled wait means and how
-the answer is rewritten. Python keeps the store and the wait itself. A
-resident that cannot answer leaves the review unchanged, so the call stays
-blocked. The resident calls share the hook's deadline: the wait shrinks by
-the time ``plan`` took, and the one ``settle`` call after it is bounded to fit
-the five-second margin Grok and Muse keep between the wait and their hook.
+Python keeps the store and the wait. A resident that cannot answer leaves the
+review unchanged, so the call stays blocked. The wait shrinks by the time
+``plan`` took, and ``settle`` is bounded to fit the hook's five-second margin.
 """
 
 from __future__ import annotations
@@ -103,10 +99,6 @@ def rewrite_answer(edits: Mapping[str, object], response: Mapping[str, object]) 
     return rewritten
 
 
-def resume_metadata(payload: Mapping[str, object]) -> dict[str, object]:
-    return dict(_pairs(ask("grok", "resume_metadata", {"payload": _answer_fields(payload)}).get("fields")))
-
-
 def _edited(source: Mapping[str, object], sets: object, drops: object) -> dict[str, object]:
     target = {**source, **dict(_pairs(sets))}
     for key in drops if isinstance(drops, list) else []:
@@ -114,4 +106,4 @@ def _edited(source: Mapping[str, object], sets: object, drops: object) -> dict[s
     return target
 
 
-__all__ = ["plan_wait", "resume_metadata", "rewrite_answer", "settle_wait"]
+__all__ = ["plan_wait", "rewrite_answer", "settle_wait"]

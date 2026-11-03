@@ -182,6 +182,7 @@ mod codex_hook_trust;
 mod codex_hooks;
 #[cfg(test)]
 mod codex_hooks_parity_tests;
+mod codex_host_inventory;
 mod codex_identity;
 mod codex_live_operation;
 mod codex_live_wait_build;
@@ -1060,6 +1061,7 @@ mod windows_pytest;
 #[cfg(windows)]
 mod windows_readonly;
 mod windows_trusted_directories;
+mod workspace_assessment_sync;
 mod workspace_audit_sync;
 mod workspace_fix;
 mod workspace_fix_diff;

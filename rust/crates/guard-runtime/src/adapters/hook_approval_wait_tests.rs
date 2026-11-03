@@ -260,50 +260,6 @@ fn a_block_keeps_the_reason() {
     assert_eq!(rewrite("muse", "deny"), blocked);
 }
 
-fn resume(payload: Value) -> Value {
-    let request = json!({ "op": "resume_metadata", "harness": "grok", "payload": payload });
-    dispatch(&request).unwrap()["fields"].clone()
-}
-
-#[test]
-fn resume_metadata_names_the_poll_path_and_approval_links() {
-    assert_eq!(
-        resume(json!({
-            "primary_approval_request_id": " req-primary ",
-            "approval_requests": [{ "request_id": "req-queued" }],
-            "primary_approval_url": "https://guard/primary",
-            "approval_url": "https://guard/fallback",
-            "approval_center_url": " https://guard/center ",
-        })),
-        json!([
-            ["approval_request_id", "req-primary"],
-            ["resume_poll_path", "/v1/requests/req-primary"],
-            ["approval_url", "https://guard/primary"],
-            ["approval_center_url", "https://guard/center"],
-        ])
-    );
-    assert_eq!(
-        resume(json!({
-            "approval_requests": [{ "request_id": "req-queued" }, { "request_id": "req-two" }],
-            "primary_approval_url": " ",
-            "approval_url": "https://guard/fallback",
-        })),
-        json!([
-            ["approval_request_id", "req-queued"],
-            ["resume_poll_path", "/v1/requests/req-queued"],
-            ["approval_url", "https://guard/fallback"],
-        ])
-    );
-    assert_eq!(
-        resume(json!({ "guardApprovalRequestId": "req-guard" })),
-        json!([
-            ["approval_request_id", "req-guard"],
-            ["resume_poll_path", "/v1/requests/req-guard"],
-        ])
-    );
-    assert_eq!(resume(json!({ "approval_center_url": 3 })), json!([]));
-}
-
 #[test]
 fn refuses_malformed_requests() {
     for request in [

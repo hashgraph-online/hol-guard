@@ -2,8 +2,8 @@
 //! `PreToolUse` review waits for its approval inside the hook, and how the
 //! answer is rewritten once that wait settles. `settle` returns the rewrite
 //! with the decision, so only one resident call runs after the wait (`wait_for_grok_live_approval`,
-//! `apply_grok_pretool_approval_wait`, `grok_resume_metadata_from_guard_payload`
-//! and `apply_muse_pretool_approval_wait` before they moved here).
+//! `apply_grok_pretool_approval_wait` and `apply_muse_pretool_approval_wait`
+//! before they moved here).
 //!
 //! Python keeps the store: it marks the Grok operations waiting, waits on the
 //! requests this names and applies the edits this returns. A value that only
@@ -52,9 +52,6 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     match map.get("op").and_then(Value::as_str) {
         Some("plan") if map.len() == 6 => plan(map, harness),
         Some("settle") if map.len() == 5 => settle(map, harness),
-        Some("resume_metadata") if harness == Harness::Grok && map.len() == 3 => {
-            resume_metadata(map)
-        }
         _ => Err(ERR_INVALID),
     }
 }
@@ -222,31 +219,6 @@ fn edits(harness: Harness, allowed: bool) -> Value {
         "hook_set": hook_set,
         "hook_drop": hook_drop,
     })
-}
-
-/// `grok_resume_metadata_from_guard_payload`: where Grok polls for the
-/// queued request and where the user approves it.
-fn resume_metadata(map: &Map<String, Value>) -> KindResult {
-    let payload = object(map, "payload")?;
-    let request_id = stripped(payload.get("primary_approval_request_id"))
-        .map(str::to_owned)
-        .or_else(|| grok_request_ids(payload).into_iter().next());
-    let approval_url = stripped(payload.get("primary_approval_url"))
-        .or_else(|| stripped(payload.get("approval_url")));
-    let center_url = stripped(payload.get("approval_center_url"));
-    let mut fields = Vec::new();
-    if let Some(id) = request_id {
-        let poll_path = format!("/v1/requests/{id}");
-        fields.push(json!(["approval_request_id", id]));
-        fields.push(json!(["resume_poll_path", poll_path]));
-    }
-    if let Some(url) = approval_url {
-        fields.push(json!(["approval_url", url]));
-    }
-    if let Some(url) = center_url {
-        fields.push(json!(["approval_center_url", url]));
-    }
-    Ok(json!({ "fields": fields }))
 }
 
 #[cfg(test)]

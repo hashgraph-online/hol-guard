@@ -89,12 +89,10 @@ def apply_muse_pretool_approval_wait(
 ) -> dict[str, object]:
     """Wait for a queued Muse approval and rewrite the answer in place.
 
-    Mirrors ``apply_grok_pretool_approval_wait``: the native runtime
-    (``hook_approval_wait``) names the requests to wait on and reads the
-    settled wait. An approval lets the original ``PreToolUse`` call proceed
-    unchanged (approval resume); a denial keeps it blocked; a still-pending
-    approval returns the review unchanged so Muse shows the block and the
-    saved approval answers the retry.
+    Mirrors ``apply_grok_pretool_approval_wait`` (``hook_approval_wait`` plans
+    and settles it): an approval lets the original ``PreToolUse`` call proceed
+    (approval resume); a denial keeps it blocked; a still-pending approval
+    returns the review unchanged so the saved approval answers the retry.
     """
 
     request_ids, seconds = hook_approval_wait.plan_wait(

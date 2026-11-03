@@ -1,10 +1,4 @@
-"""Grok live-hook approval wait and resume metadata.
-
-The native runtime (``hook_approval_wait``) decides whether a review waits,
-which requests it waits on, what the settled wait means and how the answer
-is rewritten. This module keeps the store: it marks the Grok operations
-waiting and waits on the requests the resident named.
-"""
+"""Grok live-hook approval wait; ``hook_approval_wait`` decides it, this keeps the store."""
 
 from __future__ import annotations
 
@@ -19,12 +13,6 @@ from .grok_config import (
     GROK_HOOK_INTERNAL_TIMEOUT_SECONDS,
     GROK_PRETOOL_HOOK_TIMEOUT_SECONDS,
 )
-
-
-def grok_resume_metadata_from_guard_payload(approval_payload: Mapping[str, object] | None) -> dict[str, object]:
-    if approval_payload is None:
-        return {}
-    return hook_approval_wait.resume_metadata(approval_payload)
 
 
 def wait_for_grok_live_approval(
@@ -168,6 +156,5 @@ __all__ = [
     "GROK_HOOK_INTERNAL_TIMEOUT_SECONDS",
     "GROK_PRETOOL_HOOK_TIMEOUT_SECONDS",
     "apply_grok_pretool_approval_wait",
-    "grok_resume_metadata_from_guard_payload",
     "wait_for_grok_live_approval",
 ]
