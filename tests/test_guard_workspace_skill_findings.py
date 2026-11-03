@@ -186,6 +186,27 @@ def test_merged_findings_order_skills_by_severity_with_the_rest() -> None:
     assert merged[-1]["rule_ids"] == ["skill.hide-actions"]
 
 
+def test_a_runtime_that_cannot_check_rule_replies_leaves_each_detector_not_run(monkeypatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard.workspace_rule_findings import rule_findings
+
+    def refuse(kind: str, args: object) -> dict[str, object]:
+        raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", refuse)
+    base = {"status": "complete", "reasons": [], "detectors": {"supply_chain": "complete"}}
+    results = [("skill_content_v1", skills_result(native_finding())), ("mcp_config_v1", None)]
+    findings, coverage = rule_findings(base, results)
+    assert findings == []
+    assert coverage["status"] == "partial"
+    assert coverage["reasons"] == ["detector_not_run:skill_content_v1", "detector_not_run:mcp_config_v1"]
+    assert coverage["detectors"] == {
+        "supply_chain": "complete",
+        "skill_content_v1": "not_run",
+        "mcp_config_v1": "not_run",
+    }
+
+
 @pytest.fixture
 def native_binary(monkeypatch: pytest.MonkeyPatch) -> None:
     if not Path(os.environ.get("HOL_GUARD_NATIVE_BINARY") or "").is_file():
