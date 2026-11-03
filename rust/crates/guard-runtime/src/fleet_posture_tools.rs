@@ -57,7 +57,7 @@ fn object(value: Option<&Value>) -> Option<&Map<String, Value>> {
 
 /// `_auto_update_state`: the reported auto-update section and the release
 /// channel the last check stored.
-fn auto_update(raw: Option<&Value>) -> (Value, Option<&str>) {
+fn auto_update(raw: Option<&Value>) -> (Value, Option<&'static str>) {
     let empty = Map::new();
     let state = object(raw).unwrap_or(&empty);
     let status = object(state.get("last_status")).unwrap_or(&empty);
@@ -96,10 +96,11 @@ fn auto_update(raw: Option<&Value>) -> (Value, Option<&str>) {
         "lastCheckedAt": last_checked,
         "lastResult": result,
     });
-    let channel = status
-        .get("release_channel")
-        .and_then(Value::as_str)
-        .filter(|channel| matches!(*channel, "stable" | "alpha"));
+    let channel = match status.get("release_channel").and_then(Value::as_str) {
+        Some("stable") => Some("stable"),
+        Some("alpha") => Some("alpha"),
+        _ => None,
+    };
     (section, channel)
 }
 
