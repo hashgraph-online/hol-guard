@@ -414,7 +414,7 @@ class _CloudConnectRoutes:
             self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_proof_context_mismatch")
             return
         daemon_server = self._daemon_server()
-        challenge_identity = dashboard_reconnect_challenge_identity(raw_challenge)
+        challenge_identity = dashboard_reconnect_challenge_identity(daemon_server.store.guard_home, raw_challenge)
         if challenge_identity is None:
             self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_malformed_proof")
             return

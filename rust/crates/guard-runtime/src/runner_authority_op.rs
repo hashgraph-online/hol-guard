@@ -248,6 +248,10 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
         }
         // The OpenCode launch overlay is read from that verified home too.
         "opencode_launch" => opencode_launch::dispatch(&request.args, &request.guard_home),
+        // Dashboard reconnect proofs use that home's discovery key and store.
+        "dashboard_reconnect" => {
+            crate::dashboard_reconnect::dispatch(&request.args, &request.guard_home)
+        }
         _ => dispatch(&request.kind, &request.args),
     }
 }
