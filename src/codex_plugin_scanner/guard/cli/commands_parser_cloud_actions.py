@@ -212,9 +212,13 @@ def configure_guard_cloud_actions_parser(
     listing = _add_parser(account_commands, "list", "List the workspace's connected accounts")
     _add_cloud_workspace(listing, required=False)
     _add_json(listing)
-    connect = _add_parser(account_commands, "connect", "Start provider sign-in for a new connected account")
+    connect = _add_parser(
+        account_commands, "connect", "Open Guard Cloud to sign in with a provider and connect an account"
+    )
     connect.add_argument("provider", type=_slug("provider"), metavar="PROVIDER")
     _add_cloud_workspace(connect, required=True)
+    _add_cloud_url(connect)
+    connect.add_argument("--no-browser", action="store_true", help="Print the link instead of opening it")
     _add_json(connect)
     disconnect = _add_parser(account_commands, "disconnect", "Disconnect one connected account")
     disconnect.add_argument("connected_account", type=connected_account_id, metavar="CONNECTED_ACCOUNT_ID")

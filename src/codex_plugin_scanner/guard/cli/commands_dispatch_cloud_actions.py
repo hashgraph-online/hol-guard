@@ -2,9 +2,12 @@
 
 `login`, `logout`, `status` and `workspace select` act on a saved sign-in
 (profile). `ai-tools configure --dry-run` previews an AI tool's settings change
-without writing it. The other commands still report, without touching this device or
-the network, that they cannot act yet, and echo the contexts they parsed so
-scripts and tests can see which one each value landed in.
+without writing it. `accounts connect` opens the workspace's connected accounts
+in Guard Cloud, where the member signs in with the provider in the browser; no
+provider password or key passes through this command. The other commands still
+report, without touching this device or the network, that they cannot act yet,
+and echo the contexts they parsed so scripts and tests can see which one each
+value landed in.
 
 The commands_support facade imports this module on every hook, so the sign-in
 modules are imported only when a sign-in command runs.
@@ -16,6 +19,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.parse
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
@@ -277,6 +281,68 @@ def _configure_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
     )
 
 
+# Matches the provider names Guard Cloud shows, so the button named here is the one on the page.
+_PROVIDER_NAMES = {
+    "discord": "Discord",
+    "github": "GitHub",
+    "gitlab": "GitLab",
+    "google": "Google",
+    "hubspot": "HubSpot",
+    "linear": "Linear",
+    "notion": "Notion",
+    "salesforce": "Salesforce",
+    "slack": "Slack",
+}
+
+
+def provider_name(provider: str) -> str:
+    known = _PROVIDER_NAMES.get(provider)
+    if known is not None:
+        return known
+    words = provider.replace("_", " ").replace("-", " ").split()
+    return " ".join(word[:1].upper() + word[1:] for word in words) or "Service"
+
+
+def connected_accounts_url(origin: str, workspace: str) -> str:
+    """The workspace's connected accounts in Guard Cloud settings."""
+
+    query = urllib.parse.urlencode({"tab": "integrations", "workspaceId": workspace})
+    return f"{origin}/guard/settings?{query}#connected-accounts"
+
+
+def _connect_account(args: argparse.Namespace, reply: _Reply) -> int:
+    from .cloud_actions_oauth import CloudActionsSignInError, resolve_cloud_origin
+
+    try:
+        origin = resolve_cloud_origin(args.cloud_url)
+    except CloudActionsSignInError as error:
+        return reply(
+            CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
+            f"{error} Nothing was changed.",
+            state="failed",
+            reason=error.reason,
+            message=str(error),
+        )
+    url = connected_accounts_url(origin, args.cloud_workspace)
+    # Provider sign-in happens in the browser, so nothing secret is typed here.
+    opened = not args.no_browser and open_browser_url(url)
+    name = provider_name(args.provider)
+    step = (
+        f"To connect a {name} account to workspace {args.cloud_workspace}, "
+        f"choose Connect {name} under Connected accounts and sign in with {name} there."
+    )
+    lead = "Opened Guard Cloud in your browser." if opened else "Open this link in a browser where you use Guard Cloud:"
+    return reply(
+        0,
+        f"{lead}\n{url}\n{step}",
+        state="opened" if opened else "link",
+        opened=opened,
+        url=url,
+        provider=args.provider,
+        cloud_workspace=args.cloud_workspace,
+    )
+
+
 def _preview_text(plan: HostConfigPlan, workspace: str) -> str:
     lines = [f"Preview for {plan.display_name}: {plan.path}"]
     others = f"{plan.other_entries} other MCP server{'s' if plan.other_entries != 1 else ''}"
@@ -343,6 +409,8 @@ def _run_guard_cloud_actions_command(
         return _workspace_select(args, store, reply)
     if getattr(args, "cloud_actions_ai_tools_command", None) == "configure":
         return _configure_ai_tool(args, reply)
+    if getattr(args, "cloud_actions_accounts_command", None) == "connect":
+        return _connect_account(args, reply)
     return reply(
         CLOUD_ACTIONS_UNAVAILABLE_EXIT,
         f"`hol-guard cloud-actions {_command_path(args)}` is not available yet. Nothing was changed.",
