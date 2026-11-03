@@ -47022,6 +47022,22 @@
       "expect": "allow"
     },
     {
+      "id": "npm-config-loglevel-prefix-npx-jest",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NPM_CONFIG_LOGLEVEL=error npx jest --ci"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "goflags-count-prefix-go-test",
       "fix_area": "env-prefix",
       "harnesses": [
@@ -47113,6 +47129,70 @@
       "tool": "shell",
       "tool_input": {
         "command": "RUSTFLAGS=-Dwarnings cargo test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-config-loglevel-prefix-npm-test",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NPM_CONFIG_LOGLEVEL=error npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-config-lowercase-loglevel-prefix-npm-test",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm_config_loglevel=error npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-config-progress-prefix-npm-test",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NPM_CONFIG_PROGRESS=false npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-config-fund-prefix-npm-run-test",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NPM_CONFIG_FUND=false npm run test"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -47213,6 +47293,57 @@
       "tool": "shell",
       "tool_input": {
         "command": "PYTEST_ADDOPTS=-pevil .venv/bin/pytest -q"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-npm-config-script-shell-prefix-npm-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NPM_CONFIG_SCRIPT_SHELL=/bin/sh npm test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-npm-config-cache-prefix-npm-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NPM_CONFIG_CACHE=${PRIVATE_TMP}/npm-cache npm test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-npm-config-unknown-key-prefix-npm-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NPM_CONFIG_FOO=1 npm test"
       },
       "cwd": "worktree",
       "expect": "not_allow",

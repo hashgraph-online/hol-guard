@@ -33,6 +33,27 @@ const INERT_GO_FLAG_VALUES: &[(&str, &[&str])] = &[
 /// `RUSTFLAGS` worth refusing by name.
 const RUST_LINT_LEVELS: &[&str] = &["-A", "-D", "-F", "-W"];
 
+/// npm reads every one of its configuration keys from an `npm_config_<key>`
+/// variable, so the whole family is spelled with `CONFIG` and `npm` honours
+/// `NPM_CONFIG_SCRIPT_SHELL` and `NPM_CONFIG_USERCONFIG`, which do pick a
+/// program and a file. Only these keys are listed, and each against the
+/// closed set of values npm itself accepts for it: all of them decide how
+/// much the run prints, and none of them names a path, a program, a registry
+/// or an account.
+const NPM_DISPLAY_SETTINGS: &[(&str, &[&str])] = &[
+    ("AUDIT", &["false", "true"]),
+    ("COLOR", &["always", "false", "true"]),
+    ("FUND", &["false", "true"]),
+    (
+        "LOGLEVEL",
+        &[
+            "error", "http", "info", "notice", "silent", "silly", "verbose", "warn",
+        ],
+    ),
+    ("PROGRESS", &["false", "true"]),
+    ("UPDATE_NOTIFIER", &["false", "true"]),
+];
+
 /// A setting whose value the runtime can read, carrying only options that
 /// change how a run reports or repeats. The caller has already decided the
 /// word is a literal assignment in front of a command.
@@ -41,8 +62,20 @@ pub(crate) fn inert_tool_setting(name: &str, value: &str) -> bool {
         "GOFLAGS" => every_word(value, go_flag_inert),
         "PYTEST_ADDOPTS" => pytest_addopts_inert(value),
         "RUSTFLAGS" | "RUSTDOCFLAGS" => rust_lint_levels_only(value),
-        _ => false,
+        other => npm_display_setting(other, value),
     }
+}
+
+/// One npm reporting key, carrying one of the values npm reads for it. A key
+/// outside the list, or a value outside that key's own list, is no answer at
+/// all, so the command keeps failing closed the way it does today.
+fn npm_display_setting(upper: &str, value: &str) -> bool {
+    let Some(key) = upper.strip_prefix("NPM_CONFIG_") else {
+        return false;
+    };
+    NPM_DISPLAY_SETTINGS
+        .iter()
+        .any(|(known, allowed)| key == *known && allowed.contains(&value))
 }
 
 /// The shell hands a quoted setting over as one value holding several
