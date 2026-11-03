@@ -30,7 +30,7 @@ const object = (value: unknown): value is Record<string, unknown> => value !== n
 const text = (value: unknown): value is string => typeof value === "string";
 const digest = (value: unknown): value is string => text(value) && /^[a-f0-9]{64}$/.test(value);
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
-function invalid(): never { throw new ContextAssistanceApiError("workspace_payload_invalid", "Guard returned incompatible context data. Refresh its status."); }
+function invalid(): never { throw new ContextAssistanceApiError("workspace_payload_invalid", "CIGAR sent back something this page does not understand. Refresh and try again."); }
 
 export function validContextBrokerRevision(value: unknown): value is ContextBrokerRevision {
   return object(value) && digest(value.epoch) && text(value.version) && /^(0|[1-9][0-9]{0,19})$/.test(value.version)
@@ -87,18 +87,18 @@ async function ask(route: "workspace" | "workspace-access" | "workspace-grant", 
   if (!response.ok) {
     const code = object(body) && text(body.code) && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_request_refused";
     const message = code.endsWith("context_storage_repair_required")
-      ? "Saved evidence needs repair. Use Data & repair to remove saved evidence, then check the runtime and grant sources again."
+      ? "CIGAR's saved notes need repair. Delete them in CIGAR → Privacy, then add the project again."
       : code.endsWith("context_storage_outcome_unknown")
-        ? "Saved data may have changed before the operation ended. Inspect Data & repair before retrying."
+        ? "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again."
       : code.endsWith("context_resource_limit") && input.action === "authorize_agent"
-        ? "Context client capacity is full. Revoke an unused connection or workspace, then restart this app's Guard MCP connection and pair its new code."
+        ? "CIGAR is connected to as many apps as it can. Disconnect an app or remove a project you no longer use, then reconnect this app and use its new code."
       : code.endsWith("context_busy") || code.endsWith("_busy")
-        ? "Context work or cleanup is still running. Refresh status after it finishes."
+        ? "CIGAR is still finishing something. Try again in a moment."
       : code.endsWith("context_stale") || code.endsWith("context_scope_denied")
-        ? "Sources or access changed. Refresh sources or grant access again before using this context."
+        ? "The project or its files changed. Choose Read files again, or add the project again."
         : response.status === 403 || response.status === 401
-          ? "Guard needs your approval proof before granting source access."
-        : "Context did not return a verified result. Refresh its status before trying again.";
+          ? "Guard needs your approval password for this."
+        : "CIGAR could not finish that. Refresh and try again.";
     throw new ContextAssistanceApiError(code, message);
   }
   if (!object(body) || body.schema !== "guard-cigar-workspace-result.v1" || body.data_role !== true || !object(body.result)) invalid();

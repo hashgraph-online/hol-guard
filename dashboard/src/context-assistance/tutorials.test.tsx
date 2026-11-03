@@ -32,5 +32,5 @@ assert.match(render(ready, tutorial.steps.length - 1), /Finish walkthrough/);
 assert.doesNotMatch(render(ready), /role="switch"|type="password"/,
   "learning controls must not replace live feature or permission controls");
 assert.match(renderToStaticMarkup(<CigarWalkthrough tutorial={cigarTutorial("execution")} step={0}
-  status={null} dirty={false} onMove={() => {}} onOpen={() => {}} onExit={() => {}} />), /Full delivery from external apps has not yet been qualified/);
+  status={null} dirty={false} onMove={() => {}} onOpen={() => {}} onExit={() => {}} />), /Delivery to apps other than Pi and Oh My Pi is not tested end to end yet/);
 console.log("CIGAR tutorial identity, resumable progress, native-status separation and qualification guidance passed.");
