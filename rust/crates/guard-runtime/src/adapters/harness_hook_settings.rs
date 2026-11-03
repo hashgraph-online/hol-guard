@@ -171,6 +171,10 @@ fn ordered_keys<'a>(
     Ok(keys)
 }
 
+/// One event of the install answer: its name, its list plan (`None` keeps a
+/// value that is not a list) and the Guard group it holds.
+type EventPlan<'a> = (&'a str, Option<Vec<Step>>, Option<&'a Group>);
+
 enum Step {
     Keep(usize),
     Copy(usize, Vec<Option<usize>>),
@@ -323,11 +327,10 @@ fn install(harness: Harness, map: &Map<String, Value>) -> KindResult {
             return Ok(json!({ "error": ERR_NOT_LIST, "event": event }));
         }
     }
-    let mut events: Vec<(&str, Option<Vec<Step>>, Option<&Group>)> =
-        pruned_events(harness, hooks, &keys)
-            .into_iter()
-            .map(|(event, steps)| (event, steps, None))
-            .collect();
+    let mut events: Vec<EventPlan> = pruned_events(harness, hooks, &keys)
+        .into_iter()
+        .map(|(event, steps)| (event, steps, None))
+        .collect();
     for group in &groups {
         let entries = hooks
             .get(group.event)

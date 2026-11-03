@@ -272,13 +272,8 @@ class DevinHarnessAdapter(HarnessAdapter):
         return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = remove_guard_shim(
-            self.harness,
-            context,
-            launcher_name=self.launcher_name,
-            display_name="devin",
-        )
         config_path = self._user_config_path(context)
+        payload_to_write: dict[str, object] | None = None
         managed_hooks_left_in_place = False
         config_unreadable = False
         if config_path.is_file():
@@ -300,7 +295,18 @@ class DevinHarnessAdapter(HarnessAdapter):
                         payload["hooks"] = remaining
                     else:
                         payload.pop("hooks", None)
-                    _write_json_atomic(config_path, payload)
+                    payload_to_write = payload
+
+        # The prune asks the native runtime first, so a refusal leaves the
+        # launcher, the settings and the install state as they were.
+        shim_manifest = remove_guard_shim(
+            self.harness,
+            context,
+            launcher_name=self.launcher_name,
+            display_name="devin",
+        )
+        if payload_to_write is not None:
+            _write_json_atomic(config_path, payload_to_write)
 
         _state_dir, _backup_path, state_path = self._managed_state_paths(context)
         if state_path.is_file():

@@ -300,13 +300,8 @@ class MuseHarnessAdapter(HarnessAdapter):
         return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = remove_guard_shim(
-            self.harness,
-            context,
-            launcher_name=self.launcher_name,
-            display_name="muse",
-        )
         settings_path = self._user_settings_path(context)
+        payload_to_write: dict[str, object] | None = None
         settings_unreadable = False
         if settings_path.is_file():
             _ensure_path_within_root(self._muse_config_dir(context).parent, settings_path, label="Muse")
@@ -323,7 +318,18 @@ class MuseHarnessAdapter(HarnessAdapter):
                         payload["hooks"] = remaining
                     else:
                         payload.pop("hooks", None)
-                    _write_json_atomic(settings_path, payload)
+                    payload_to_write = payload
+
+        # The prune asks the native runtime first, so a refusal leaves the
+        # launcher, the settings and the install state as they were.
+        shim_manifest = remove_guard_shim(
+            self.harness,
+            context,
+            launcher_name=self.launcher_name,
+            display_name="muse",
+        )
+        if payload_to_write is not None:
+            _write_json_atomic(settings_path, payload_to_write)
 
         _state_dir, _backup_path, state_path = self._managed_state_paths(context)
         if state_path.is_file():

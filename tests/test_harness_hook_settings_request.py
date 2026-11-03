@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
@@ -160,3 +162,30 @@ def test_a_prune_refusal_is_malformed(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(NativeRunnerAuthorityError):
         settings.prune_guard_hooks("muse", {})
+
+
+@pytest.mark.parametrize("adapter_name", ["muse", "devin"])
+def test_a_refused_uninstall_prune_leaves_the_launcher_and_settings(
+    adapter_name: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.adapters import devin, muse
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+
+    module = muse if adapter_name == "muse" else devin
+    adapter = muse.MuseHarnessAdapter() if adapter_name == "muse" else devin.DevinHarnessAdapter()
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+    config = adapter._user_settings_path(context) if adapter_name == "muse" else adapter._user_config_path(context)  # pyright: ignore[reportPrivateUsage, reportAttributeAccessIssue]
+    config.parent.mkdir(parents=True)
+    original = json.dumps({"hooks": {"PreToolUse": [{"hooks": [_USER]}]}})
+    config.write_text(original, encoding="utf-8")
+    removed: list[str] = []
+    monkeypatch.setattr(module, "remove_guard_shim", lambda *_args, **_kwargs: removed.append("shim"))
+
+    def refuse(_kind: str, _request: dict[str, object]) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", refuse)
+    with pytest.raises(NativeRunnerAuthorityError):
+        adapter.uninstall(context)
+    assert removed == []
+    assert config.read_text(encoding="utf-8") == original
