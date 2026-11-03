@@ -5780,6 +5780,39 @@ function ExtensionActivity(props) {
     ] })
   ] });
 }
+const HERE = {
+  allowed: "On. Guard checks it for AI tools here.",
+  partial: "Partly on. Guard checks the Permissions you left on.",
+  required: "Always on. Guard requires it here.",
+  lockdown: "Lockdown. Matching actions stay blocked here.",
+  // Blocked can mean every Permission is off while the Extension itself stays on.
+  blocked: "Blocked. Matching actions stay blocked here."
+};
+const CLOUD = "Not turned on from this computer.";
+const CLOUD_RULE = "Guard Cloud runs an Extension's actions only after a workspace connects the account it needs and turns those actions on there. Installing it, turning it on here, or a verified or paid listing does not do that.";
+const CLOUD_POLICY = "Your Guard Cloud workspace's Policy sets some of its settings here and limits what can be changed on this computer. It does not let Guard Cloud run anything.";
+function extensionRunScope(cloudPolicy, localState) {
+  const notes = [CLOUD_RULE];
+  if (cloudPolicy) notes.push(CLOUD_POLICY);
+  return { here: HERE[localState], cloud: CLOUD, notes };
+}
+function ExtensionRunScope({ cloudPolicy, localState }) {
+  const copy = extensionRunScope(cloudPolicy, localState);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { "aria-labelledby": "extension-run-scope-heading", className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2", "data-testid": "extension-run-scope", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "extension-run-scope-heading", className: "text-lg font-semibold text-brand-dark", children: "Where it runs" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-4 grid gap-4 sm:grid-cols-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "On this computer" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: copy.here })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Cloud actions" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: copy.cloud })
+      ] })
+    ] }),
+    copy.notes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-3xl text-sm leading-6 text-brand-dark/75", children: note }, note))
+  ] });
+}
 function toolStateLabel(state) {
   if (state === "allow") return "Allow";
   if (state === "review") return "Review";
@@ -6355,7 +6388,8 @@ function ProtectionModuleDetail(props) {
           ] })
         ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(McpServerDefaults, { extension: props.extension })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(McpServerDefaults, { extension: props.extension }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionRunScope, { cloudPolicy: orgManaged, localState: protectionView.effectiveState })
     ] }) : null,
     activeTab === "permissions" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-permissions", role: "tabpanel", "aria-labelledby": "protection-tab-permissions", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
       ExtensionPolicyPanel,
