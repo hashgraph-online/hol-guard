@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 
 from ..aibom_detection import extend_detection_with_workspace_aibom, native_adapter_detection_with_warnings
 from ..codex_hook_integrity import atomic_write_text
-from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
+from ..config import load_guard_config
 from ..models import HarnessDetection
 from ..shims import prepare_guard_shim, remove_guard_shim
 from .base import (
@@ -40,19 +40,10 @@ from .base import (
     detection_request,
 )
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
-from .devin_config import (
-    DEVIN_CONFIG_FILE,
-    DEVIN_DIR,
-    DEVIN_GUARD_TOOL_MATCHER,
-    is_guard_managed_hook_command,
-    load_devin_jsonc,
-    parse_devin_jsonc,
-)
-from .hook_group_merge import merge_hook_entry, prune_managed_hook_entries
+from .devin_config import DEVIN_CONFIG_FILE, DEVIN_DIR, load_devin_jsonc, parse_devin_jsonc
+from .harness_hook_settings import HookSettingsRefusedError, plan_guard_hooks, prune_guard_hooks
 
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
-_DEVIN_MANAGED_HOOK_TIMEOUT_SECONDS = 30
-_DEVIN_MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 
 if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
@@ -181,21 +172,6 @@ class DevinHarnessAdapter(HarnessAdapter):
             prepared_files=prepared_files,
         )
 
-    @staticmethod
-    def _approval_wait_hook_timeout_seconds(context: HarnessContext) -> int:
-        configured_wait_timeout = load_guard_config(
-            context.guard_home,
-            context.workspace_dir,
-            create_home=False,
-        ).approval_wait_timeout_seconds
-        return (
-            min(
-                max(configured_wait_timeout, 0),
-                MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
-            )
-            + _DEVIN_MANAGED_HOOK_TIMEOUT_GRACE_SECONDS
-        )
-
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
         from ..codex_hook_file_integrity import CodexHookIntegrityError
         from ..codex_hook_recovery import _snapshot
@@ -227,9 +203,15 @@ class DevinHarnessAdapter(HarnessAdapter):
                     "hol-guard install devin."
                 )
             payload = document.payload
-            existing_hooks = payload.get("hooks")
-            if existing_hooks is not None and not isinstance(existing_hooks, dict):
-                raise ValueError("Devin config has a non-object hooks value; Guard will not rewrite it.")
+        approval_wait_seconds = load_guard_config(
+            context.guard_home,
+            context.workspace_dir,
+            create_home=False,
+        ).approval_wait_timeout_seconds
+        try:
+            hooks_plan = plan_guard_hooks("devin", payload.get("hooks"), approval_wait_seconds)
+        except HookSettingsRefusedError as refusal:
+            raise ValueError("Devin config has a non-object hooks value; Guard will not rewrite it.") from refusal
         prepared_shim = prepare_guard_shim(
             self.harness,
             context,
@@ -242,11 +224,7 @@ class DevinHarnessAdapter(HarnessAdapter):
         state_before = _snapshot(state_path)
         hook_files: list[TransitionFile] = []
         hook_command = _shell_command(self._hook_command_parts(context, prepared_files=hook_files))
-        hooks_value = payload.get("hooks")
-        hooks: dict[str, object] = hooks_value if isinstance(hooks_value, dict) else {}
-        payload["hooks"] = hooks
-
-        self._sync_managed_hook_groups(context, hooks, hook_command)
+        payload["hooks"] = hooks_plan.apply(hook_command)
         config_mode = config_path.stat().st_mode & 0o777 if config_before is not None else 0o600
         backup_mode = backup_path.stat().st_mode & 0o777 if backup_before is not None else config_mode
         state_mode = state_path.stat().st_mode & 0o777 if state_before is not None else 0o600
@@ -294,13 +272,8 @@ class DevinHarnessAdapter(HarnessAdapter):
         return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = remove_guard_shim(
-            self.harness,
-            context,
-            launcher_name=self.launcher_name,
-            display_name="devin",
-        )
         config_path = self._user_config_path(context)
+        payload_to_write: dict[str, object] | None = None
         managed_hooks_left_in_place = False
         config_unreadable = False
         if config_path.is_file():
@@ -317,23 +290,23 @@ class DevinHarnessAdapter(HarnessAdapter):
                 payload = document.payload
                 hooks = payload.get("hooks")
                 if isinstance(hooks, dict):
-                    for event_name in list(hooks):
-                        entries = hooks.get(event_name)
-                        if not isinstance(entries, list):
-                            continue
-                        remaining = prune_managed_hook_entries(
-                            entries,
-                            is_managed=is_guard_managed_hook_command,
-                        )
-                        if remaining:
-                            hooks[event_name] = remaining
-                        else:
-                            hooks.pop(event_name, None)
-                    if not hooks:
-                        payload.pop("hooks", None)
+                    remaining = prune_guard_hooks("devin", hooks)
+                    if remaining:
+                        payload["hooks"] = remaining
                     else:
-                        payload["hooks"] = hooks
-                    _write_json_atomic(config_path, payload)
+                        payload.pop("hooks", None)
+                    payload_to_write = payload
+
+        # The prune asks the native runtime first, so a refusal leaves the
+        # launcher, the settings and the install state as they were.
+        shim_manifest = remove_guard_shim(
+            self.harness,
+            context,
+            launcher_name=self.launcher_name,
+            display_name="devin",
+        )
+        if payload_to_write is not None:
+            _write_json_atomic(config_path, payload_to_write)
 
         _state_dir, _backup_path, state_path = self._managed_state_paths(context)
         if state_path.is_file():
@@ -358,53 +331,6 @@ class DevinHarnessAdapter(HarnessAdapter):
             shim_manifest=shim_manifest,
             notes=hook_notes,
         )
-
-    def _sync_managed_hook_groups(
-        self,
-        context: HarnessContext,
-        hooks: dict[str, object],
-        managed_command: str,
-    ) -> None:
-        """Reconcile Guard-managed hook groups inside ``hooks``.
-
-        User entries are preserved; stale Guard-managed handlers are pruned
-        before the current managed handler is merged back in so repeated
-        installs stay idempotent.
-        """
-
-        for event_name in list(hooks):
-            entries = hooks.get(event_name)
-            if not isinstance(entries, list):
-                continue
-            remaining = prune_managed_hook_entries(
-                entries,
-                is_managed=is_guard_managed_hook_command,
-            )
-            if remaining:
-                hooks[event_name] = remaining
-            else:
-                hooks.pop(event_name, None)
-
-        long_timeout = self._approval_wait_hook_timeout_seconds(context)
-        managed_groups: list[tuple[str, str | None, int]] = [
-            ("PreToolUse", DEVIN_GUARD_TOOL_MATCHER, long_timeout),
-            ("PermissionRequest", DEVIN_GUARD_TOOL_MATCHER, _DEVIN_MANAGED_HOOK_TIMEOUT_SECONDS),
-            ("UserPromptSubmit", None, _DEVIN_MANAGED_HOOK_TIMEOUT_SECONDS),
-            ("PostToolUse", DEVIN_GUARD_TOOL_MATCHER, long_timeout),
-        ]
-        for event_name, matcher, timeout in managed_groups:
-            handler: dict[str, object] = {
-                "type": "command",
-                "command": managed_command,
-                "timeout": timeout,
-            }
-            entries = hooks.get(event_name)
-            hooks[event_name] = merge_hook_entry(
-                entries if isinstance(entries, list) else [],
-                matcher,
-                handler,
-                is_managed=is_guard_managed_hook_command,
-            )
 
 
 __all__ = ["DevinHarnessAdapter"]
