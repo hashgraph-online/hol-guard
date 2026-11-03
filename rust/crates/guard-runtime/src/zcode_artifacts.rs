@@ -15,7 +15,7 @@ use super::pyjson::PyVal;
 
 pub(crate) const ERR_UNREPRESENTABLE: &str = "native_runner_authority_zcode_value_unrepresentable";
 
-const HOOK_EVENT_NAMES: [&str; 7] = [
+pub(crate) const HOOK_EVENT_NAMES: [&str; 7] = [
     "SessionStart",
     "UserPromptSubmit",
     "PreToolUse",
@@ -152,7 +152,7 @@ pub(crate) fn mcp_server(
 }
 
 /// `is_guard_managed_hook_command`.
-fn is_managed(command: &str) -> bool {
+pub(crate) fn is_managed(command: &str) -> bool {
     command.contains(MANAGED_MARKER)
         || (command.contains("codex_plugin_scanner.cli")
             && command.contains("'guard', 'hook'")

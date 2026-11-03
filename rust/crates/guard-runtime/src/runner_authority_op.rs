@@ -46,6 +46,7 @@ use super::pi_detect;
 use super::pi_extension_render;
 use super::runner_authority_signature as signature;
 use super::zcode_detect;
+use super::zcode_hook_settings;
 use super::{
     cloud_receipt_payload as receipt, cloud_request_snapshot as snapshot,
     cloud_sync_privacy as privacy,
@@ -162,6 +163,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "aibom_primary_content" => crate::aibom_primary_content::dispatch(args),
         "package_command_redaction" => crate::package_command_redaction::dispatch(args),
         "zcode_detect" => zcode_detect::detect(args),
+        "zcode_hook_settings" => zcode_hook_settings::dispatch(args),
         "hermes_detect" => hermes_detect::detect(args),
         "pi_detect" => pi_detect::detect(args),
         "cline_plugin_render" => cline_plugin_render::render(args),
