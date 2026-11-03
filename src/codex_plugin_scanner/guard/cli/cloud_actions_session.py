@@ -97,8 +97,11 @@ class CloudActionsSessionStore:
         return ref if isinstance(ref, str) and _SECRET_REF_PATTERN.fullmatch(ref) else None
 
     @contextmanager
-    def lock(self, name: str) -> Iterator[None]:
-        """Hold the profile's lock; raises CloudActionsProfileBusyError after a short wait."""
+    def lock(self, name: str, *, timeout: float | None = None) -> Iterator[None]:
+        """Hold the profile's lock; raises CloudActionsProfileBusyError after a short wait.
+
+        `timeout` shortens the wait (never lengthens it), for callers with their own time budget.
+        """
 
         path = self._profile_path(name)
         _ensure_private_dir(path.parent)
@@ -106,7 +109,8 @@ class CloudActionsSessionStore:
             if os.name != "nt":
                 # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
                 os.chmod(handle.name, 0o600)
-            deadline = time.monotonic() + _LOCK_WAIT_SECONDS
+            wait = _LOCK_WAIT_SECONDS if timeout is None else max(0.0, min(timeout, _LOCK_WAIT_SECONDS))
+            deadline = time.monotonic() + wait
             while True:
                 try:
                     acquire_file_lock(handle)

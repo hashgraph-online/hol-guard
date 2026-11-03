@@ -41,7 +41,7 @@ CLOUD_ACTIONS_STATUS_SCHEMA = "guard.cloud-actions.local-status.v1"
 STALE_AFTER = timedelta(minutes=5)
 CHECK_INTERVAL = timedelta(minutes=1)
 MAX_PROFILES = 32
-# One check request answers within this long, however many sign-ins are saved.
+# One check request starts no new work after this long, however many sign-ins are saved.
 CHECK_BUDGET_SECONDS = 20.0
 
 _CACHE_SCHEMA = "guard.cloud-actions.last-check.v1"
@@ -279,7 +279,9 @@ def check_cloud_actions(
 ) -> dict[str, object]:
     """Ask Guard Cloud about every saved sign-in once, save the answers, and return the projection.
 
-    Sign-ins still waiting when the time budget runs out stay `not_checked`.
+    Sign-ins with the oldest check (or none) go first. Any the time budget does
+    not reach keep their earlier saved check, so repeated checks cover every
+    sign-in even when some are slow.
     Raises CloudActionsCheckedRecentlyError within a minute of the last check
     and CloudActionsCheckBusyError while another check runs.
     """
@@ -297,18 +299,18 @@ def check_cloud_actions(
         run = checker or _live_checker
         deadline = _clock() + budget_seconds
         fresh: dict[str, dict[str, object]] = {}
-        for name in names:
+        for name in sorted(names, key=lambda item: str(cache.get(item, {}).get("checked_at") or "")):
             if _clock() >= deadline:
                 break
             try:
                 # Read the site and its access value together, so a sign-in to
                 # another site in between never sends one site's value to the other.
-                with store.lock(name):
+                with store.lock(name, timeout=deadline - _clock()):
                     profile = store.load(name)
                     secrets = store.load_secrets(name) if profile is not None else None
             except CloudActionsProfileBusyError:
                 continue
-            if profile is None or secrets is None:
+            if profile is None or secrets is None or _clock() >= deadline:
                 continue
             service, connection = run(profile, secrets.access_token, deadline)
             fresh[name] = {
@@ -317,6 +319,9 @@ def check_cloud_actions(
                 "service": _check_dict(service),
                 "connection": _check_dict(connection),
             }
+        for name in names:
+            if name not in fresh and name in cache:
+                fresh[name] = cache[name]
         _write_cache(store, fresh)
         return cloud_actions_local_status(guard_home, now=moment)
     finally:

@@ -209,8 +209,8 @@ def test_the_site_and_access_value_are_read_under_the_profile_lock(
     real_secrets = CloudActionsSessionStore.load_secrets
 
     @contextmanager
-    def tracked_lock(self: CloudActionsSessionStore, name: str) -> Iterator[None]:
-        with real_lock(self, name):
+    def tracked_lock(self: CloudActionsSessionStore, name: str, *, timeout: float | None = None) -> Iterator[None]:
+        with real_lock(self, name, timeout=timeout):
             held.append(name)
             try:
                 yield
@@ -255,6 +255,62 @@ def test_a_check_stops_at_its_time_budget(tmp_path: Path, monkeypatch: pytest.Mo
     payload = check_cloud_actions(tmp_path, now=NOW, checker=slow, budget_seconds=20.0)
 
     assert deadlines == [120.0]
+    states = {row["profile"]: row["check"].get("state", "checked") for row in payload["sign_ins"]}
+    assert states == {"client": "checked", "work": "not_checked"}
+
+
+def test_a_later_check_starts_with_the_sign_in_the_budget_missed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _sign_in(tmp_path, "client")
+    _sign_in(tmp_path, "work")
+    clock = [100.0]
+    monkeypatch.setattr(status_module, "_clock", lambda: clock[0])
+    order: list[str] = []
+
+    def slow(profile: CloudActionsProfile, access: str, deadline: float) -> tuple[CheckResult, CheckResult]:
+        order.append(profile.name)
+        clock[0] += 30.0
+        return _connected(profile, access)
+
+    check_cloud_actions(tmp_path, now=NOW, checker=slow, budget_seconds=20.0)
+    later = NOW + timedelta(minutes=2)
+    payload = check_cloud_actions(tmp_path, now=later, checker=slow, budget_seconds=20.0)
+
+    assert order == ["client", "work"]
+    checked_at = {row["profile"]: row["check"].get("checked_at") for row in payload["sign_ins"]}
+    # The first answer for "client" is kept rather than erased by the second check.
+    assert checked_at == {"client": "2026-11-03T12:00:00Z", "work": "2026-11-03T12:02:00Z"}
+
+
+def test_waiting_for_a_busy_sign_in_counts_against_the_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _sign_in(tmp_path, "client")
+    _sign_in(tmp_path, "work")
+    clock = [100.0]
+    monkeypatch.setattr(status_module, "_clock", lambda: clock[0])
+    real_lock = CloudActionsSessionStore.lock
+    timeouts: dict[str, float | None] = {}
+    checked: list[str] = []
+
+    @contextmanager
+    def waiting_lock(self: CloudActionsSessionStore, name: str, *, timeout: float | None = None) -> Iterator[None]:
+        timeouts[name] = timeout
+        with real_lock(self, name, timeout=timeout):
+            # Another process held "work" until after the budget ran out.
+            if name == "work":
+                clock[0] += 30.0
+            yield
+
+    def quick(profile: CloudActionsProfile, access: str, deadline: float) -> tuple[CheckResult, CheckResult]:
+        checked.append(profile.name)
+        clock[0] += 15.0
+        return _connected(profile, access)
+
+    monkeypatch.setattr(CloudActionsSessionStore, "lock", waiting_lock)
+    payload = check_cloud_actions(tmp_path, now=NOW, checker=quick, budget_seconds=20.0)
+
+    assert timeouts == {"client": 20.0, "work": 5.0}
+    assert checked == ["client"]
     states = {row["profile"]: row["check"].get("state", "checked") for row in payload["sign_ins"]}
     assert states == {"client": "checked", "work": "not_checked"}
 
