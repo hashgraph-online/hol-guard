@@ -63,6 +63,7 @@ const EXTRA_MUTABLE_LAUNCHERS: &[&str] = &[
     "jest",
     "vitest",
     "mocha",
+    "ava",
     "rake",
     "gradle",
     "mvn",

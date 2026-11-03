@@ -130,6 +130,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "surface_server_handshake" => crate::surface_server_handshake::dispatch(args),
         "trust_attestation_shape" => crate::trust_attestation_shape::dispatch(args),
         "mcp_registry_page" => crate::mcp_registry_page::dispatch(args),
+        "review_event_decode" => crate::review_event_decode::dispatch(args),
         "contained_denial_note" => crate::contained_denial_note::dispatch(args),
         "detector_authority" => detector::detector_authority(args),
         "detector_composition" => detector::detector_composition(args),

@@ -97,6 +97,11 @@ pub(crate) fn admissible_paths(
 /// meaning can miss, so the file the prompt names comes first with the chunk
 /// that holds the most of `words`, the walk's own words and quoted text from
 /// the whole prompt. A file whose chunks share none of them is not added.
+///
+/// When CIGAR did pick that file but none of its picks overlaps that chunk,
+/// the chunk still leads unless a pick of the file holds more of `words`: a
+/// pick by meaning can land on the file's neighbouring lines and leave out
+/// the ones the prompt quotes.
 fn led_by(
     mut picked: Vec<PickedExcerpt>,
     lead: Option<&AdmittedFile>,
@@ -105,12 +110,6 @@ fn led_by(
     let Some(file) = lead else {
         return picked;
     };
-    if picked
-        .iter()
-        .any(|excerpt| excerpt.path == file.relative_path)
-    {
-        return picked;
-    }
     let said = |text: &str| {
         let text = text.to_lowercase();
         words.iter().filter(|w| text.contains(w.as_str())).count()
@@ -121,17 +120,27 @@ fn led_by(
         .map(|doc| (said(&doc.text), doc))
         .filter(|(score, _)| *score > 0)
         .max_by_key(|(score, doc)| (*score, std::cmp::Reverse(doc.start_line)));
-    let Some((_, doc)) = best else {
+    let Some((score, doc)) = best else {
         return picked;
     };
     let start = u64::from(doc.start_line);
     let lines = doc.text.lines().count().max(1) as u64;
+    let end = start + lines - 1;
+    let of_file = || {
+        picked
+            .iter()
+            .filter(|excerpt| excerpt.path == file.relative_path)
+    };
+    let covered = of_file().any(|excerpt| excerpt.start_line <= end && excerpt.end_line >= start);
+    if covered || of_file().any(|excerpt| said(&excerpt.text) > score) {
+        return picked;
+    }
     picked.insert(
         0,
         PickedExcerpt {
             path: file.relative_path.clone(),
             start_line: start,
-            end_line: start + lines - 1,
+            end_line: end,
             text: doc.text.clone(),
         },
     );

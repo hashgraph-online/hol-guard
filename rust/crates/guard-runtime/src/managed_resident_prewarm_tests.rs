@@ -32,11 +32,79 @@ fn the_prewarm_asks_the_resident_for_its_health() {
 }
 
 #[test]
+fn the_prewarm_asks_the_resident_to_warm_cigar_for_its_guard_home() {
+    let guard_home = test_directory("warm");
+    let payload = warm_payload(&guard_home.join("native-runtime"))
+        .expect("an absolute Guard home has a warm request");
+    let value = crate::strict_json_value(&payload).expect("the payload should be a request");
+    assert_eq!(value["request"]["query"]["kind"], "warm");
+    assert_eq!(
+        value["request"]["query"]["guard_home"],
+        guard_home.to_str().expect("the test home is UTF-8")
+    );
+    let operation =
+        crate::strict_json::from_value::<crate::resident_protocol::ResidentOperationV1>(value)
+            .expect("the resident should accept the warm request");
+    assert!(
+        matches!(
+            operation,
+            crate::resident_protocol::ResidentOperationV1::ContextAssistance(_)
+        ),
+        "the warm goes to the CIGAR control surface: {operation:?}"
+    );
+    assert!(
+        warm_payload(Path::new("native-runtime")).is_none(),
+        "a relative state base names no Guard home the resident could match"
+    );
+    let _ = fs::remove_dir_all(&guard_home);
+}
+
+#[test]
+fn the_warm_is_asked_again_only_while_the_resident_waits_for_its_binding() {
+    let answer = |warm: &str| {
+        Ok(serde_json::to_vec(&json!({"status": "ok", "payload": {"warm": warm}})).unwrap())
+    };
+    let mut answers = vec![answer("sent"), answer("waiting"), answer("waiting")];
+    let mut asked = 0;
+    warm_until_answered(Duration::from_secs(5), Duration::from_millis(1), || {
+        asked += 1;
+        answers.pop().unwrap()
+    });
+    assert_eq!(
+        asked, 3,
+        "a resident that got its binding is not asked again"
+    );
+
+    for first in [
+        answer("skipped"),
+        Err("native_resident_not_serving".to_owned()),
+    ] {
+        let mut first = Some(first);
+        let mut asked = 0;
+        warm_until_answered(Duration::from_secs(5), Duration::from_millis(1), || {
+            asked += 1;
+            first.take().unwrap()
+        });
+        assert_eq!(asked, 1, "only a missing binding is worth waiting for");
+    }
+
+    let started = Instant::now();
+    warm_until_answered(Duration::from_millis(50), Duration::from_millis(5), || {
+        answer("waiting")
+    });
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "a binding that never arrives ends the wait at the window"
+    );
+}
+
+#[test]
 fn a_client_already_holding_a_lease_keeps_the_prewarm_out() {
     let state_base = test_directory("held");
     let held = super::super::lease::acquire(&state_base).expect("the test should hold a lease");
     let started = Instant::now();
-    run_with_hold(&state_base, Duration::from_secs(600)).expect("a held resident is a warm one");
+    run_with_hold(&state_base, Duration::from_secs(600), None)
+        .expect("a held resident is a warm one");
     assert!(
         started.elapsed() < PREWARM_HOLD,
         "the prewarm returned before taking a lease or a hold of its own"
@@ -128,7 +196,7 @@ fn a_nearly_spent_restart_budget_keeps_the_prewarm_out() {
     );
 
     let started = Instant::now();
-    run_with_hold(&state_base, Duration::from_secs(600))
+    run_with_hold(&state_base, Duration::from_secs(600), None)
         .expect("a prewarm that stands down is not a failure");
     assert!(
         started.elapsed() < PREWARM_HOLD,

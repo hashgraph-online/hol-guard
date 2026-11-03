@@ -102,3 +102,77 @@ fn a_chunk_holding_only_the_quoted_text_still_leads() {
     assert_eq!(led.len(), 1);
     assert_eq!(led[0].start_line, 2);
 }
+
+fn excerpt(path: &str, lines: (u64, u64), text: &str) -> PickedExcerpt {
+    PickedExcerpt {
+        path: path.into(),
+        start_line: lines.0,
+        end_line: lines.1,
+        text: text.into(),
+    }
+}
+
+/// "In the service recovery instructions, change "Restart Guard" to "Restart
+/// HOL Guard" in the native recovery step": CIGAR picked the right file but
+/// the lines after the step, which only mention restarting Guard in passing.
+#[test]
+fn the_chunk_the_prompt_quotes_joins_a_pick_of_the_same_file_that_missed_it() {
+    let recovery = file(
+        "src/service-recovery.ts",
+        &[
+            (
+                "steps: [\"Choose Restart Guard in the native recovery screen.\"],\n",
+                210,
+            ),
+            (
+                "body: \"A tab cannot restart Guard through a service.\",\n",
+                231,
+            ),
+        ],
+    );
+    let words: Vec<String> = [
+        "service",
+        "recovery",
+        "restart",
+        "guard",
+        "native",
+        "restart guard",
+    ]
+    .map(String::from)
+    .to_vec();
+    let cigar = excerpt(
+        "src/service-recovery.ts",
+        (230, 273),
+        "body: \"A tab cannot restart Guard through the recovery service.\",\n",
+    );
+    let led = led_by(vec![cigar], Some(&recovery), &words);
+    assert_eq!(led.len(), 2);
+    assert_eq!((led[0].start_line, led[0].end_line), (210, 210));
+    assert!(led[0].text.contains("Choose Restart Guard"));
+    assert_eq!(led[1].start_line, 230);
+}
+
+#[test]
+fn a_pick_that_overlaps_the_chunk_or_holds_more_of_the_prompt_stands_alone() {
+    let recovery = file(
+        "src/service-recovery.ts",
+        &[("Choose Restart in the native screen.\n", 210)],
+    );
+    let words: Vec<String> = ["restart", "guard", "native", "restart guard"]
+        .map(String::from)
+        .to_vec();
+    let overlapping = excerpt("src/service-recovery.ts", (205, 215), "steps");
+    assert_eq!(
+        led_by(vec![overlapping], Some(&recovery), &words).len(),
+        1,
+        "CIGAR already shows those lines"
+    );
+    let richer = excerpt(
+        "src/service-recovery.ts",
+        (300, 320),
+        "restart guard native recovery restart",
+    );
+    let led = led_by(vec![richer], Some(&recovery), &words);
+    assert_eq!(led.len(), 1, "CIGAR's pick holds more of the prompt");
+    assert_eq!(led[0].start_line, 300);
+}

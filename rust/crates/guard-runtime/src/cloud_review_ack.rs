@@ -228,7 +228,8 @@ fn py_str(value: &Value) -> String {
     }
 }
 
-fn py_repr(value: &Value) -> String {
+/// Python's `repr()` of a decoded JSON value, for refusal messages.
+pub(crate) fn py_repr(value: &Value) -> String {
     match value {
         Value::Null => "None".to_owned(),
         Value::Bool(true) => "True".to_owned(),

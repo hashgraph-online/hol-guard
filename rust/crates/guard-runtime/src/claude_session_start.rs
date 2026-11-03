@@ -320,7 +320,8 @@ fn hand_off(argv: &[String]) -> i32 {
 
 /// Run the lane; the exit status when this process is not replaced.
 /// Start this runtime's resident off to the side, so the session's first
-/// tool hook finds it up instead of paying for the start.
+/// tool hook finds it up instead of paying for the start, and ask it to wake
+/// a resting CIGAR worker, so the first prompt gets project context.
 ///
 /// The child is this same runtime (`resident-prewarm`), detached into its
 /// own process group with no stdio, and never waited for: the lane's own

@@ -14,7 +14,8 @@ pub(crate) fn contained_runner_call(arguments: &[String]) -> bool {
     matches!(arguments, [tool, rest @ ..]
         if (tool == "vitest" && vitest_runs_once(rest))
             || (tool == "jest" && jest_contained_call(rest))
-            || (tool == "mocha" && mocha_contained_call(rest)))
+            || (tool == "mocha" && mocha_contained_call(rest))
+            || (tool == "ava" && ava_contained_call(rest)))
 }
 
 /// True when a Vitest call finishes on its own.
@@ -140,6 +141,45 @@ pub(crate) fn mocha_runs_once(arguments: &[String]) -> bool {
         && !arguments.iter().enumerate().any(|(index, argument)| {
             short_options_carry_watch(argument)
                 || forwards_a_node_option(argument)
+                || (matches!(option_name(argument).as_str(), "watch" | "w")
+                    && jest_boolean(argument, arguments.get(index + 1)) != Some(false))
+        })
+}
+
+/// True when an AVA call both finishes on its own and takes everything it
+/// loads from the workspace.
+pub(crate) fn ava_contained_call(arguments: &[String]) -> bool {
+    ava_runs_once(arguments) && reads_its_own_workspace(arguments)
+}
+
+/// AVA runs its suite once and exits, like Mocha and unlike Vitest, so the
+/// reading looks for the spelling that turns the watch on.
+///
+/// AVA reads yargs, so `--watch` is read with its separators removed and a
+/// declared boolean takes a following `true` or `false`; `--watch false` and
+/// `--watch=false` are both a run that finishes, and `--no-watch` reads as
+/// `nowatch` and is left alone. `-w` is AVA's short `--watch`.
+///
+/// `debug` starts AVA under an inspector and waits for it, and `reset-cache`
+/// clears the precompiler cache rather than running tests. AVA takes its
+/// command from the first operand, and the reading cannot tell an operand
+/// from the value of an option it does not model, so either word anywhere on
+/// the line keeps the call at review.
+///
+/// `--node-arguments` forwards its value to the worker's Node, so
+/// `--node-arguments="--inspect-brk"` leaves a run that never finishes. The
+/// value names Node options rather than a path, so the workspace screen does
+/// not answer for it, and the reading does not model which values are safe:
+/// a call that forwards anything to Node keeps its review. AVA declares no
+/// short alias for it, so the name alone answers for both spellings.
+pub(crate) fn ava_runs_once(arguments: &[String]) -> bool {
+    let arguments = before_terminator(arguments);
+    !arguments
+        .iter()
+        .any(|argument| matches!(argument.as_str(), "debug" | "reset-cache"))
+        && !arguments.iter().enumerate().any(|(index, argument)| {
+            short_options_carry_watch(argument)
+                || option_name(argument) == "nodearguments"
                 || (matches!(option_name(argument).as_str(), "watch" | "w")
                     && jest_boolean(argument, arguments.get(index + 1)) != Some(false))
         })

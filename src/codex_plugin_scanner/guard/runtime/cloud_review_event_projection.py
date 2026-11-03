@@ -26,10 +26,9 @@ from .native_workspace_review_context import (
     build_native_workspace_review_context,
     native_workspace_review_context_cache_key,
 )
-from .review_event_delivery import StoredReviewEventError, decode_stored_review_event
+from .review_event_delivery import _NATIVE_UNAVAILABLE_REASON, StoredReviewEventError, decode_stored_review_event
 from .time_support import parse_utc_timestamp
 
-_NATIVE_UNAVAILABLE_REASON = "cloud_native_projection_unavailable"
 _EVENT_TYPE_MAP = {
     "pending": "request_created",
     "resolved": "request_resolved",
