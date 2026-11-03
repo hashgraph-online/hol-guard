@@ -2,21 +2,19 @@
 
 ``hol-guard mcp list``, ``status`` and ``doctor`` read the same observation
 store and the same filter as the local dashboard, so a connector that needs
-setup is counted once and the counts match the Protect page.
+setup is counted once and the counts match the Protect page. The runtime
+(``connector_setup_rows.rs``) owns that filter and the needs-setup rule.
 """
 
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote
 
 if TYPE_CHECKING:
     from ..store import GuardStore
-
-_SETUP_SURFACES = frozenset({"mcp", "cli"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,56 +70,55 @@ def listed_public_items(store: GuardStore) -> list[dict[str, object]]:
     ]
 
 
-def connector_needs_setup(item: Mapping[str, object]) -> bool:
-    """Mirror of the dashboard's needs-review rule for one listed connector."""
+_ITEM_KEYS = "cli_id display_name name surface state suggestable stale source_label remote_origin declared_sources"
+_ROW_TYPES: dict[str, type | tuple[type, ...]] = {
+    "cli_id": str,
+    "name": str,
+    "surface": str,
+    "state": str,
+    "source_label": (str, type(None)),
+    "remote_origin": (str, type(None)),
+    "needs_setup": bool,
+    "declared_sources": list,
+}
 
-    if item.get("stale") is True or item.get("state") == "unset":
-        return True
+
+def _setup_fields(item: dict[str, object]) -> dict[str, object]:
+    """The fields the setup check reads; command catalogs stay out of the request."""
+
+    fields: dict[str, object] = {key: item[key] for key in _ITEM_KEYS.split() if key in item}
     catalog = item.get("mcp_catalog")
-    if not isinstance(catalog, Mapping):
-        return False
-    changes = catalog.get("changes")
-    changed = isinstance(changes, Mapping) and any(changes.get(key) for key in ("added", "changed"))
-    return catalog.get("stale") is True or catalog.get("complete") is False or changed
-
-
-def workspace_items(items: Sequence[Mapping[str, object]]) -> list[Mapping[str, object]]:
-    """Mirror of the dashboard's Protect workspace filter, without catalog seeds."""
-
-    return [
-        item
-        for item in items
-        if item.get("state") != "unset" or (item.get("suggestable") is True and item.get("surface") in _SETUP_SURFACES)
-    ]
+    if isinstance(catalog, dict):
+        changes = cast("dict[str, object]", catalog).get("changes")
+        sliced = {key: catalog[key] for key in ("stale", "complete") if key in catalog}
+        if isinstance(changes, dict):
+            sliced["changes"] = {key: bool(changes[key]) for key in ("added", "changed") if key in changes}
+        fields["mcp_catalog"] = sliced
+    return fields
 
 
 def connector_setup_summary(store: GuardStore) -> ConnectorSetupSummary:
-    rows: list[ConnectorSetupItem] = []
-    for item in workspace_items(listed_public_items(store)):
-        cli_id = item.get("cli_id")
-        name = item.get("display_name") or item.get("name")
-        surface = item.get("surface")
-        state = item.get("state")
-        if not isinstance(cli_id, str) or not isinstance(name, str) or not isinstance(surface, str):
-            continue
-        label = item.get("source_label")
-        origin = item.get("remote_origin")
-        declared = item.get("declared_sources")
-        rows.append(
-            ConnectorSetupItem(
-                cli_id=cli_id,
-                name=name,
-                surface=surface,
-                state=state if isinstance(state, str) else "unset",
-                source_label=label if isinstance(label, str) and label else None,
-                remote_origin=origin if isinstance(origin, str) and origin else None,
-                needs_setup=connector_needs_setup(item),
-                declared_sources=tuple(value for value in declared if isinstance(value, str))
-                if isinstance(declared, list)
-                else (),
-            )
+    """Protect's connectors, filtered and checked for setup by the runtime."""
+
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    items = [_setup_fields(item) for item in listed_public_items(store)]
+    rows = native_runner_authority("connector_setup_rows", {"items": items}, guard_home=store.guard_home).get("rows")
+    checked = cast("list[dict[str, Any]]", rows if isinstance(rows, list) else [None])
+    for row in checked:
+        if not (
+            isinstance(row, dict)
+            and set(row) == set(_ROW_TYPES)
+            and all(isinstance(row[key], kind) for key, kind in _ROW_TYPES.items())
+            and all(isinstance(value, str) for value in row["declared_sources"])
+        ):
+            raise NativeRunnerAuthorityError("native_runner_authority_result_invalid")
+    return ConnectorSetupSummary(
+        items=tuple(
+            ConnectorSetupItem(**cast("dict[str, Any]", {**row, "declared_sources": tuple(row["declared_sources"])}))
+            for row in checked
         )
-    return ConnectorSetupSummary(items=tuple(rows))
+    )
 
 
 def connector_setup_href(dashboard_url: str | None, cli_id: str | None = None) -> str | None:

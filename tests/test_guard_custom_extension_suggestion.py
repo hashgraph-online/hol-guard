@@ -198,10 +198,16 @@ def test_native_failure_hides_suggestions_and_fails_identity_closed(monkeypatch)
 
 
 def test_recognize_operator_cli_reports_native_outage_not_common_utility(tmp_path, monkeypatch) -> None:
-    from codex_plugin_scanner.guard.runtime import custom_extension_suggestion, local_cli_identity
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.native_local_cli_identity import track_local_cli_identity_failures
+    from codex_plugin_scanner.guard.runtime import custom_extension_suggestion
 
-    monkeypatch.setattr(local_cli_identity, "identify_unlisted_cli", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(custom_extension_suggestion, "native_context_digest", lambda *_args, **_kwargs: None)
-    _, code, message = recognize_operator_cli("internal-deploy run", cwd=tmp_path, home_dir=tmp_path)
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise native_runner_authority.NativeRunnerAuthorityError("unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+    with track_local_cli_identity_failures() as failures:
+        _, code, message = recognize_operator_cli("internal-deploy run", cwd=tmp_path, home_dir=tmp_path)
+    assert failures == ["native_local_cli_identity_unavailable"]
     assert code == "native_unavailable"
     assert message == custom_extension_suggestion.NATIVE_UNAVAILABLE_MESSAGE
