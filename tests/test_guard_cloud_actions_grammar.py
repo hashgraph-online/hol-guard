@@ -174,6 +174,30 @@ def test_connect_uses_the_cloud_url_origin(monkeypatch: pytest.MonkeyPatch, caps
     assert json.loads(capsys.readouterr().out)["url"].startswith("http://127.0.0.1:3017/guard/settings?")
 
 
+def test_connect_keeps_the_guard_cloud_path_prefix(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _ = _opener(monkeypatch, accepted=True)
+    monkeypatch.setenv("HOL_GUARD_STAGING_ORIGIN", "https://guard-staging.example.test|/points")
+    exit_code = _run(
+        [
+            "accounts",
+            "connect",
+            "slack",
+            "--cloud-workspace",
+            VALUES["WS"],
+            "--cloud-url",
+            "https://guard-staging.example.test",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["url"].startswith(
+        "https://guard-staging.example.test/points/guard/settings?"
+    )
+
+
 def test_connect_refuses_a_cloud_url_outside_guard_cloud(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -306,8 +306,10 @@ def provider_name(provider: str) -> str:
 def connected_accounts_url(origin: str, workspace: str) -> str:
     """The workspace's connected accounts in Guard Cloud settings."""
 
+    from .oauth_client import guard_api_base_path
+
     query = urllib.parse.urlencode({"tab": "integrations", "workspaceId": workspace})
-    return f"{origin}/guard/settings?{query}#connected-accounts"
+    return f"{origin}{guard_api_base_path(origin)}/guard/settings?{query}#connected-accounts"
 
 
 def _connect_account(args: argparse.Namespace, reply: _Reply) -> int:
