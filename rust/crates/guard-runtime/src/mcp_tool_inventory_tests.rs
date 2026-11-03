@@ -152,3 +152,29 @@ fn lone_surrogates_round_trip_in_names() {
     let text = reply["answer"].as_str().expect("answer text");
     assert!(text.contains(r#""item_id":"s:tool:t\ud800""#));
 }
+
+#[test]
+fn private_use_characters_without_a_lone_surrogate_are_kept() {
+    // U+F0000 is where a lone surrogate would map; with no lone surrogate in
+    // the request it is a genuine character and the tool is still read.
+    let definitions = r#"{"tools":[{"name":"ping","title":"\udb80\udc00","description":"d\udb80\udc00","inputSchema":{"\udb80\udc00":1,"a":2}}]}"#;
+    let tool = answer("s", definitions, "null")["tools"][0].clone();
+    assert_eq!(tool["display_name"], json!("\u{f0000}"));
+    assert_eq!(tool["description"], json!("d\u{f0000}"));
+    assert_eq!(
+        tool["fingerprints"]["descriptionHash"],
+        json!("4427385ffd640931351bf15cb36cc091eb0db78da2aa5886fae45f16ace66b02")
+    );
+    assert_eq!(
+        tool["fingerprints"]["inputSchemaHash"],
+        json!("a2303ae6cbd1e3dfd17bfb391fe5965354409e4a81e36eb2436d386e483ab298")
+    );
+    // A lone surrogate elsewhere makes the private-use character ambiguous.
+    let reply = dispatch(&json!({
+        "harness": "codex",
+        "server_item_id": "s",
+        "definitions": definitions,
+        "trust_layers": r#"[{"layerType":"x\ud800"}]"#,
+    }));
+    assert_eq!(reply, Err(ERR_INVALID));
+}

@@ -82,9 +82,16 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     let server = text("server_item_id")?;
     let definitions = parse(text("definitions")?)?;
     let trust_layers = parse(text("trust_layers")?)?;
+    // Without a lone surrogate every private-use character is genuine; with
+    // one, a genuine character in the stand-in range could not be told apart.
+    let mapped = definitions.mapped || trust_layers.mapped;
+    if mapped && (definitions.collision || trust_layers.collision) {
+        return Err(ERR_INVALID);
+    }
+    let (definitions, trust_layers) = (definitions.value, trust_layers.value);
     let mut tools = Vec::new();
     for tool in tool_definitions(&definitions) {
-        tools.push(tool_entry(harness, server, tool)?);
+        tools.push(tool_entry(harness, server, tool, mapped)?);
     }
     let answer = PyVal::Dict(vec![
         ("tools".to_owned(), PyVal::List(tools)),
@@ -94,17 +101,13 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         ),
     ]);
     let mut encoded = String::new();
-    dumps(&answer, false, true, &mut encoded);
+    dumps(&answer, false, mapped, &mut encoded);
     Ok(json!({ "answer": encoded }))
 }
 
 /// A JSON text parsed the way `json.loads` reads it, lone surrogates kept.
-fn parse(text: &str) -> Result<PyVal, &'static str> {
-    let parsed = pyjson::parse_mapping_lone_surrogates(text).map_err(|_| ERR_INVALID)?;
-    if parsed.collision {
-        return Err(ERR_INVALID);
-    }
-    Ok(parsed.value)
+fn parse(text: &str) -> Result<pyjson::SurrogateMapped, &'static str> {
+    pyjson::parse_mapping_lone_surrogates(text).map_err(|_| ERR_INVALID)
 }
 
 /// `_mcp_tool_definitions`: the supported definition shapes, first
@@ -137,6 +140,7 @@ fn tool_entry(
     harness: &str,
     server: &str,
     tool: &[(String, PyVal)],
+    mapped: bool,
 ) -> Result<PyVal, &'static str> {
     let name = member(tool, "name").and_then(PyVal::as_str).unwrap_or("");
     let non_empty = |key: &str| {
@@ -146,7 +150,7 @@ fn tool_entry(
     };
     let display_name = non_empty("title").unwrap_or(name);
     let description = non_empty("description").unwrap_or("");
-    if description.chars().any(in_surrogate_plane) {
+    if mapped && description.chars().any(in_surrogate_plane) {
         // `str.encode("utf-8")` raises on a lone surrogate, so the
         // description has no content hash to report.
         return Err(ERR_INVALID);
@@ -161,21 +165,27 @@ fn tool_entry(
     let risk = risk_level(&capabilities);
     let schema_hash = |schema: &PyVal| match schema {
         PyVal::Null => PyVal::Null,
-        value => PyVal::Str(fingerprint(value)),
+        value => PyVal::Str(fingerprint(value, mapped)),
     };
-    let semantic_hash = fingerprint(&PyVal::Dict(vec![
-        ("server".to_owned(), str_val(server)),
-        ("name".to_owned(), str_val(name)),
-        ("description".to_owned(), str_val(description)),
-        ("inputSchema".to_owned(), input_schema.clone()),
-        ("outputSchema".to_owned(), output_schema.clone()),
-        ("annotations".to_owned(), annotations.clone()),
-    ]));
-    let source_fingerprint = fingerprint(&PyVal::Dict(vec![
-        ("harness".to_owned(), str_val(harness)),
-        ("server".to_owned(), str_val(server)),
-        ("tool".to_owned(), str_val(name)),
-    ]));
+    let semantic_hash = fingerprint(
+        &PyVal::Dict(vec![
+            ("server".to_owned(), str_val(server)),
+            ("name".to_owned(), str_val(name)),
+            ("description".to_owned(), str_val(description)),
+            ("inputSchema".to_owned(), input_schema.clone()),
+            ("outputSchema".to_owned(), output_schema.clone()),
+            ("annotations".to_owned(), annotations.clone()),
+        ]),
+        mapped,
+    );
+    let source_fingerprint = fingerprint(
+        &PyVal::Dict(vec![
+            ("harness".to_owned(), str_val(harness)),
+            ("server".to_owned(), str_val(server)),
+            ("tool".to_owned(), str_val(name)),
+        ]),
+        mapped,
+    );
     let fingerprints = PyVal::Dict(vec![
         (
             "descriptionHash".to_owned(),
@@ -390,32 +400,34 @@ fn inherited_layers(trust_layers: &PyVal, server: &str) -> Vec<PyVal> {
 }
 
 /// `fingerprint_mapping`: sha256 of the sorted, compact, ASCII `json.dumps`.
-fn fingerprint(value: &PyVal) -> String {
+fn fingerprint(value: &PyVal, mapped: bool) -> String {
     let mut encoded = String::new();
-    dumps(&sorted(value), true, true, &mut encoded);
+    dumps(&sorted(value, mapped), true, mapped, &mut encoded);
     sha256_hex(encoded.as_bytes())
 }
 
-fn sorted(value: &PyVal) -> PyVal {
+fn sorted(value: &PyVal, mapped: bool) -> PyVal {
     match value {
         PyVal::Dict(entries) => {
             let mut entries: Vec<(String, PyVal)> = entries
                 .iter()
-                .map(|(key, item)| (key.clone(), sorted(item)))
+                .map(|(key, item)| (key.clone(), sorted(item, mapped)))
                 .collect();
-            entries.sort_by(|left, right| code_points(&left.0).cmp(code_points(&right.0)));
+            entries.sort_by(|left, right| {
+                code_points(&left.0, mapped).cmp(code_points(&right.0, mapped))
+            });
             PyVal::Dict(entries)
         }
-        PyVal::List(items) => PyVal::List(items.iter().map(sorted).collect()),
+        PyVal::List(items) => PyVal::List(items.iter().map(|item| sorted(item, mapped)).collect()),
         other => other.clone(),
     }
 }
 
 /// `sort_keys` compares code points, and a mapped lone surrogate sorts at
 /// the surrogate it stands for.
-fn code_points(key: &str) -> impl Iterator<Item = u32> + '_ {
-    key.chars().map(|character| {
-        if in_surrogate_plane(character) {
+fn code_points(key: &str, mapped: bool) -> impl Iterator<Item = u32> + '_ {
+    key.chars().map(move |character| {
+        if mapped && in_surrogate_plane(character) {
             character as u32 - pyjson::SURROGATE_PLANE_BASE + 0xd800
         } else {
             character as u32
