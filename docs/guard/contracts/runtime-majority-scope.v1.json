@@ -334,6 +334,7 @@
           "src/codex_plugin_scanner/guard/cli/doctor_*.py",
           "src/codex_plugin_scanner/guard/cli/desktop_*.py",
           "src/codex_plugin_scanner/guard/cli/daemon_serve.py",
+          "src/codex_plugin_scanner/guard/cli/connect_cloud_actions.py",
           "src/codex_plugin_scanner/guard/cli/connect_flow.py",
           "src/codex_plugin_scanner/guard/cli/connect_sync_result.py",
           "src/codex_plugin_scanner/guard/cli/remote_pair_flow.py",
@@ -1656,6 +1657,7 @@
         "path": "src/codex_plugin_scanner/guard/cli/commands_support_connect.py",
         "symbols": [
           "_validate_policy_scope",
+          "_undo_unwanted_guard_connect_pairing",
           "_resolve_policy_expiry",
           "_guard_doctor_connect_health_payload",
           "_guard_doctor_oauth_storage_health_payload_from_health",
