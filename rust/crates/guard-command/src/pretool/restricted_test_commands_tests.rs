@@ -1,4 +1,4 @@
-use super::{package_permission_contained, readonly_test_reason};
+use super::{manager_local_bin_arguments, package_permission_contained, readonly_test_reason};
 use crate::contained_node_tool::{node_tool_route, NodeToolRoute, ToolMode};
 
 fn parsed(command: &str) -> crate::CanonicalCommandV1 {
@@ -438,3 +438,36 @@ fn a_runner_left_watching_keeps_its_review() {
 
 #[path = "restricted_test_commands_manager_tests.rs"]
 mod manager;
+
+#[test]
+fn pnpm_without_its_exec_verb_is_not_read_as_a_local_bin_run() {
+    // pnpm resolves a bare word against the manifest first and only falls back
+    // to `pnpm exec`, and since pnpm 7 the words after that bare word go to the
+    // script rather than to pnpm: `pnpm hello extra` runs the `hello` script
+    // with `extra`. So a tail cannot tell the two readings apart, and nothing
+    // here can tell them apart without the manifest the reading never sees.
+    // Reading the shorthand as the local-bin run would plan the installed
+    // binary for a line that runs a script body instead.
+    for command in [
+        "pnpm vitest run",
+        "pnpm jest --ci",
+        "pnpm mocha --reporter spec",
+        "pnpm tsc --noEmit",
+    ] {
+        assert_eq!(
+            manager_local_bin_arguments("pnpm", &words(command)[1..]),
+            None,
+            "{command}"
+        );
+        let explicit = command.replacen("pnpm ", "pnpm exec ", 1);
+        assert!(
+            manager_local_bin_arguments("pnpm", &words(&explicit)[1..]).is_some(),
+            "{explicit}"
+        );
+    }
+}
+
+/// The words of `command`, as the segment model hands them over.
+fn words(command: &str) -> Vec<String> {
+    command.split(' ').map(str::to_owned).collect()
+}

@@ -19,11 +19,14 @@ use serde_json::Value;
 use super::aibom_op as aibom;
 use super::antigravity_detect;
 use super::claude_code_detect;
+use super::claude_hook_config;
 use super::cline_detect;
+use super::cline_plugin_render;
 use super::codex_detect;
 use super::context_digest_json::write_canonical_json_with_limit;
 use super::copilot_detect;
 use super::cursor_detect;
+use super::cursor_hook_config;
 use super::devin_detect;
 use super::devin_jsonc;
 use super::gemini_detect;
@@ -158,10 +161,12 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "zcode_detect" => zcode_detect::detect(args),
         "hermes_detect" => hermes_detect::detect(args),
         "pi_detect" => pi_detect::detect(args),
+        "cline_plugin_render" => cline_plugin_render::render(args),
         "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
         "copilot_detect" => copilot_detect::detect(args),
         "claude_code_detect" => claude_code_detect::detect(args),
+        "claude_hook_config" => claude_hook_config::dispatch(args),
         "cline_detect" => cline_detect::detect(args),
         "gemini_detect" => gemini_detect::detect(args),
         "antigravity_detect" => antigravity_detect::detect(args),
@@ -173,6 +178,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "muse_detect" => muse_detect::detect(args),
         "openclaw_detect" => openclaw_detect::detect(args),
         "cursor_detect" => cursor_detect::detect(args),
+        "cursor_hook_config" => cursor_hook_config::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
         _ => Err(ERR_KIND),

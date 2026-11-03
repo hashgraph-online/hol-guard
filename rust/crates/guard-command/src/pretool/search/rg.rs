@@ -16,10 +16,6 @@ pub(in crate::pretool) fn safe_rg_stdin_arguments(arguments: &[String]) -> bool 
     )
 }
 
-pub(super) fn safe_rg_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
-    safe_rg_arguments_inner(arguments, context, false, true, true)
-}
-
 /// An `rg` segment inside its command. A missing operand is proven only
 /// while it stays missing: no other segment may create a file, directory or
 /// link there, because `rg` reads whatever appears at that path and walks it
@@ -52,7 +48,7 @@ pub(super) fn safe_rg_segment(
             .segments
             .iter()
             .filter(|other| other.span != segment.span)
-            .all(|other| super::grep::creates_nothing(other, true));
+            .all(super::grep::creates_nothing);
     safe_rg_arguments_inner(&segment.arguments, context, false, true, absent)
 }
 

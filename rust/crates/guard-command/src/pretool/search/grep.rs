@@ -10,7 +10,9 @@ struct AbsentOperands {
     recursive: bool,
 }
 
-/// The operand proof alone, as if `grep` were the whole command.
+/// The operand proof alone, as if `grep` were the whole command. Every caller
+/// outside this module reads a segment, so the bare form is a test vantage.
+#[cfg(test)]
 pub(super) fn safe_grep_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
     let absent = AbsentOperands {
         plain: true,
@@ -23,7 +25,7 @@ pub(super) fn safe_grep_arguments(arguments: &[String], context: ReadContext<'_>
 /// while it stays missing: no other segment may create a file, directory or
 /// link there (`ln -s <dir> <repo>/cfg && grep -rn . <repo>/cfg/` reads through
 /// the fresh link). A recursive search walks whatever appears at a missing
-/// root, so it accepts one only beside `cd` and downstream stdin filters.
+/// root, which is the same question, so both routes ask it the same way.
 pub(crate) fn safe_grep_segment(
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
@@ -38,20 +40,23 @@ pub(crate) fn safe_grep_segment(
     // drive path whose backslashes the shell drops before `grep` runs names
     // a different directory to the program than to the proof.
     let quoted = crate::pretool::directory_targets::drive_targets_quoted(segment);
+    let unplanted = quoted && others.iter().all(|other| creates_nothing(other));
     let absent = AbsentOperands {
-        plain: quoted && others.iter().all(|other| creates_nothing(other, false)),
-        recursive: quoted && others.iter().all(|other| creates_nothing(other, true)),
+        plain: unplanted,
+        recursive: unplanted,
     };
     safe_arguments(&segment.arguments, context, false, absent)
 }
 
 /// A peer that cannot create a filesystem entry: no output redirect beyond
-/// `/dev/null`, and a command that only prints, filters or changes directory.
-/// `strict` admits `cd`, stdin filters after a pipe, and the builtins that
-/// touch no path at all: `ls -R missing || echo absent` is how an agent probes
-/// for an optional tree, and the `echo` branch can no more create the root than
-/// `cd` can.
-pub(in crate::pretool) fn creates_nothing(segment: &crate::CommandSegmentV1, strict: bool) -> bool {
+/// `/dev/null`, and a program that only changes directory, prints, or opens
+/// paths to read them. `ln -s <dir> <repo>/cfg && grep -rn . <repo>/cfg/` is
+/// the shape this refuses, because `ln` puts a tree where the proof measured
+/// nothing. `grep -rln needle app; cat notes.md` is the shape it admits: an
+/// agent sweeps for a name it guessed at and prints a file it knows is there,
+/// and without the redirect already refused above, `cat` can no more create
+/// the missing root than `cd` or `echo` can.
+pub(in crate::pretool) fn creates_nothing(segment: &crate::CommandSegmentV1) -> bool {
     let text = ["2>&1", "2>/dev/null", ">/dev/null"]
         .iter()
         .fold(segment.text.clone(), |text, quiet| text.replace(quiet, ""));
@@ -60,35 +65,42 @@ pub(in crate::pretool) fn creates_nothing(segment: &crate::CommandSegmentV1, str
     }
     match segment.executable.as_deref() {
         Some("cd") => true,
-        Some(executable) if strict => {
-            (segment.pipeline_index > 0
-                && crate::pretool::segment_proof::stdin_filter_segment(segment))
+        Some(executable) => {
+            reads_only(executable)
                 || pathless_builtin(executable)
+                || (segment.pipeline_index > 0
+                    && crate::pretool::segment_proof::stdin_filter_segment(segment))
         }
-        Some(executable) => matches!(
-            executable,
-            "cat"
-                | "cut"
-                | "diff"
-                | "echo"
-                | "egrep"
-                | "fgrep"
-                | "grep"
-                | "head"
-                | "jq"
-                | "ls"
-                | "nl"
-                | "printf"
-                | "pwd"
-                | "rg"
-                | "tail"
-                | "test"
-                | "tr"
-                | "true"
-                | "wc"
-        ),
         None => false,
     }
+}
+
+/// A program that opens the paths it is given only to read them, and writes
+/// what it finds to standard output. None of them takes an option that names
+/// a file to write, so the redirect screen above is the whole write surface.
+fn reads_only(executable: &str) -> bool {
+    matches!(
+        executable,
+        "cat"
+            | "cut"
+            | "diff"
+            | "echo"
+            | "egrep"
+            | "fgrep"
+            | "grep"
+            | "head"
+            | "jq"
+            | "ls"
+            | "nl"
+            | "printf"
+            | "pwd"
+            | "rg"
+            | "tail"
+            | "test"
+            | "tr"
+            | "true"
+            | "wc"
+    )
 }
 
 /// A program that writes nothing and opens no path: its operands are words it

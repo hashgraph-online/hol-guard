@@ -125,6 +125,13 @@ mod claude_hook_bridge_http_text;
 mod claude_hook_bridge_render;
 mod claude_hook_bridge_transport;
 mod claude_hook_bridge_url;
+#[path = "adapters/claude_hook_config.rs"]
+mod claude_hook_config;
+#[cfg(test)]
+#[path = "adapters/claude_hook_config_tests.rs"]
+mod claude_hook_config_tests;
+#[path = "adapters/claude_hook_plan.rs"]
+mod claude_hook_plan;
 mod claude_session_start;
 mod claude_session_start_contract;
 mod claude_session_start_live;
@@ -136,6 +143,11 @@ mod cline_detect;
 #[path = "adapters/detection/cline_detect_tests.rs"]
 mod cline_detect_tests;
 mod cline_hook_worker;
+#[path = "adapters/cline_plugin_render.rs"]
+mod cline_plugin_render;
+#[cfg(test)]
+#[path = "adapters/cline_plugin_render_tests.rs"]
+mod cline_plugin_render_tests;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
 mod cloud_exception_lift;
@@ -259,6 +271,13 @@ mod cursor_detect;
 mod cursor_hook_bridge;
 mod cursor_hook_bridge_response;
 mod cursor_hook_bridge_script;
+#[path = "adapters/cursor_hook_command.rs"]
+mod cursor_hook_command;
+#[path = "adapters/cursor_hook_config.rs"]
+mod cursor_hook_config;
+#[cfg(test)]
+#[path = "adapters/cursor_hook_config_tests.rs"]
+mod cursor_hook_config_tests;
 mod cursor_observer_proof_op;
 mod custom_extension_continuity;
 mod custom_extension_suggestion;

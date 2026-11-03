@@ -422,6 +422,12 @@ fn cwd_effectful_executable(executable: Option<&str>) -> bool {
 }
 
 /// Executables a verified `cd` compound may run after the directory change.
+///
+/// Membership narrows; it never admits. Every caller pairs this with the
+/// segment proof for the same program, so a name here still has to prove its
+/// own arguments open nothing. A program whose segment proof exists but whose
+/// name is missing here is refused for the name alone, so the spellings that
+/// read the way `grep` and `rg` do belong beside them.
 pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool {
     if executable.is_some_and(super::super::digest_reads::digest_program) {
         return true;
@@ -459,6 +465,12 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "od"
                 | "rg"
                 | "grep"
+                | "egrep"
+                | "fgrep"
+                | "fd"
+                | "tree"
+                | "dirname"
+                | "basename"
                 | "sed"
                 | "sort"
                 | "uniq"
