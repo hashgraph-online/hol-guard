@@ -30,11 +30,45 @@ pub struct SourceStreamError {
     /// Zero-based position in command records, then MCP records, then cloud
     /// binding records.
     pub record: Option<usize>,
+    /// The binding inside a cloud binding record, when one is to blame.
+    pub binding: Option<usize>,
 }
 
 impl From<&'static str> for SourceStreamError {
     fn from(code: &'static str) -> Self {
-        Self { code, record: None }
+        Self {
+            code,
+            record: None,
+            binding: None,
+        }
+    }
+}
+
+impl SourceStreamError {
+    fn at(record: usize, code: &'static str) -> Self {
+        Self {
+            code,
+            record: Some(record),
+            binding: None,
+        }
+    }
+
+    pub(super) fn rejected(record: usize, rejection: cloud_binding::BindingRejection) -> Self {
+        Self {
+            code: rejection.code,
+            record: Some(record),
+            binding: rejection.binding,
+        }
+    }
+
+    /// JSON pointer to the record at fault, under the array named by `records`
+    /// (`/records` for a stream). Empty when no record is to blame.
+    pub fn pointer(&self, records: &str) -> String {
+        match (self.record, self.binding) {
+            (Some(record), Some(binding)) => format!("{records}/{record}/bindings/{binding}"),
+            (Some(record), None) => format!("{records}/{record}"),
+            (None, _) => String::new(),
+        }
     }
 }
 
@@ -117,10 +151,7 @@ pub fn compile_source_stream(
             }
             Ok(compact)
         };
-        let bytes = ingest().map_err(|code| SourceStreamError {
-            code,
-            record: Some(record),
-        })?;
+        let bytes = ingest().map_err(|code| SourceStreamError::at(record, code))?;
         if record < header.sources {
             commands.push(bytes);
         } else {
@@ -135,16 +166,14 @@ pub fn compile_source_stream(
         // the same compact-byte budget as the sources they extend.
         let parsed = frame(&mut reader)
             .and_then(|bytes| {
-                let compact = json::compact_record(
+                json::compact_record(
                     &json::decode(&bytes).map_err(|_| "cloud_binding_json_invalid")?,
                     &mut remaining,
-                )?;
-                cloud_binding::parse_binding_contribution(&compact)
+                )
             })
-            .map_err(|code| SourceStreamError {
-                code,
-                record: Some(record),
-            })?;
+            .map_err(cloud_binding::BindingRejection::from)
+            .and_then(|compact| cloud_binding::parse_contribution(&compact))
+            .map_err(|rejection| SourceStreamError::rejected(record, rejection))?;
         bindings.push((record, parsed));
     }
     let mut trailing = [0];
@@ -204,10 +233,7 @@ pub(super) fn resolve_bindings<'a>(
     let mut extended = BTreeSet::new();
     let mut actions = BTreeSet::new();
     for (record, contribution) in bindings {
-        let fail = |code| SourceStreamError {
-            code,
-            record: Some(*record),
-        };
+        let fail = |code| SourceStreamError::at(*record, code);
         let (bytes, server) = sources
             .get(&contribution.extension_id)
             .ok_or_else(|| fail("cloud_binding_extension_unknown"))?;
@@ -222,7 +248,8 @@ pub(super) fn resolve_bindings<'a>(
             return Err(fail("cloud_binding_duplicate_action"));
         }
         let target = cloud_binding::BindingTarget::from_source(bytes, *server).map_err(fail)?;
-        cloud_binding::resolve(contribution, &target).map_err(fail)?;
+        cloud_binding::resolve(contribution, &target)
+            .map_err(|rejection| SourceStreamError::rejected(*record, rejection))?;
         resolved.push((contribution, target));
     }
     Ok(resolved)

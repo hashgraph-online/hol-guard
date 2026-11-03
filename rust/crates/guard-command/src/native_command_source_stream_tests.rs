@@ -276,6 +276,32 @@ fn cloud_binding_record_errors_keep_their_position() {
         let error = compile_source_stream(binding_stream(&bindings).as_slice()).unwrap_err();
         assert_eq!(error.code, code);
         assert_eq!(error.record, Some(bindings.len()));
+        assert_eq!(error.binding, None);
+        assert_eq!(
+            error.pointer("/records"),
+            format!("/records/{}", bindings.len())
+        );
+    }
+    // A fault inside one binding names that binding, whether parsing or
+    // resolution finds it.
+    let mut unparsed = binding("command.example-cli", "example.resource.destroy");
+    let second = unparsed["bindings"][0].clone();
+    let mut defaulted = second.clone();
+    defaulted["actionId"] = json!("example.resource.remove");
+    defaulted["default"] = json!("allow");
+    unparsed["bindings"].as_array_mut().unwrap().push(defaulted);
+    let mut unresolved = binding("command.example-cli", "example.resource.destroy");
+    let mut foreign = second.clone();
+    foreign["actionId"] = json!("example.resource.remove");
+    foreign["permissionId"] = json!("command.other-cli.permission.destroy");
+    unresolved["bindings"].as_array_mut().unwrap().push(foreign);
+    for (contribution, code) in [
+        (unparsed, "cloud_binding_contract_invalid"),
+        (unresolved, "cloud_binding_permission_unknown"),
+    ] {
+        let error = compile_source_stream(binding_stream(&[contribution]).as_slice()).unwrap_err();
+        assert_eq!(error.code, code);
+        assert_eq!(error.pointer("/records"), "/records/1/bindings/1");
     }
     let mut too_many = binding_stream(&[]);
     let length = u32::from_be_bytes(too_many[5..9].try_into().unwrap()) as usize;

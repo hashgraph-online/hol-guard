@@ -141,37 +141,77 @@ impl BindingTarget {
     }
 }
 
+/// Why a contribution was rejected. `binding` is the index in its `bindings`
+/// array when one binding is to blame; diagnostics never echo its values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BindingRejection {
+    pub code: &'static str,
+    pub binding: Option<usize>,
+}
+
+impl From<&'static str> for BindingRejection {
+    fn from(code: &'static str) -> Self {
+        Self {
+            code,
+            binding: None,
+        }
+    }
+}
+
+fn at(binding: usize) -> impl Fn(&'static str) -> BindingRejection {
+    move |code| BindingRejection {
+        code,
+        binding: Some(binding),
+    }
+}
+
 /// Strictly parse a binding contribution without resolving its references.
 pub fn parse_binding_contribution(bytes: &[u8]) -> Result<CloudBindingContribution, &'static str> {
+    parse_contribution(bytes).map_err(|rejection| rejection.code)
+}
+
+pub(super) fn parse_contribution(
+    bytes: &[u8],
+) -> Result<CloudBindingContribution, BindingRejection> {
     let value: Value = json::decode(bytes).map_err(|_| "cloud_binding_json_invalid")?;
     if value["schemaVersion"].as_str() != Some(BINDING_CONTRIBUTION_SCHEMA) {
         return Err(if value["schemaVersion"].is_string() {
             "cloud_binding_unsupported_version"
         } else {
             "cloud_binding_contract_invalid"
-        });
+        }
+        .into());
     }
     let contribution: CloudBindingContribution =
-        serde_json::from_value(value).map_err(|_| "cloud_binding_contract_invalid")?;
+        serde_json::from_value(value.clone()).map_err(|_| BindingRejection {
+            code: "cloud_binding_contract_invalid",
+            // Name the first binding that fails on its own, if the fault is inside one.
+            binding: value["bindings"].as_array().and_then(|bindings| {
+                bindings.iter().position(|binding| {
+                    serde_json::from_value::<CloudBindingInput>(binding.clone()).is_err()
+                })
+            }),
+        })?;
     if contribution.extension_id.is_empty()
         || contribution.extension_id.len() > 256
         || !valid_label(&contribution.extension_id)
         || contribution.bindings.is_empty()
         || contribution.bindings.len() > MAX_BINDINGS_PER_EXTENSION
     {
-        return Err("cloud_binding_contract_invalid");
+        return Err("cloud_binding_contract_invalid".into());
     }
     let mut actions = BTreeSet::new();
-    for binding in &contribution.bindings {
+    for (index, binding) in contribution.bindings.iter().enumerate() {
+        let fail = at(index);
         if !valid_action_id(&binding.action_id) {
-            return Err("cloud_binding_action_invalid");
+            return Err(fail("cloud_binding_action_invalid"));
         }
         if !actions.insert(binding.action_id.as_str()) {
-            return Err("cloud_binding_duplicate_action");
+            return Err(fail("cloud_binding_duplicate_action"));
         }
         if let Some(resource) = &binding.resource {
             if !valid_label(&resource.kind) || !valid_label(&resource.argument) {
-                return Err("cloud_binding_resource_invalid");
+                return Err(fail("cloud_binding_resource_invalid"));
             }
         }
         if binding.cloud_support == CloudSupport::CloudExecutable
@@ -179,7 +219,7 @@ pub fn parse_binding_contribution(bytes: &[u8]) -> Result<CloudBindingContributi
                 .iter()
                 .all(|floor| binding.required_capabilities.contains(floor))
         {
-            return Err("cloud_binding_missing_required_capability");
+            return Err(fail("cloud_binding_missing_required_capability"));
         }
     }
     Ok(contribution)
@@ -189,31 +229,32 @@ pub fn parse_binding_contribution(bytes: &[u8]) -> Result<CloudBindingContributi
 pub(super) fn resolve(
     contribution: &CloudBindingContribution,
     target: &BindingTarget,
-) -> Result<(), &'static str> {
+) -> Result<(), BindingRejection> {
     if contribution.extension_id != target.extension_id {
-        return Err("cloud_binding_extension_mismatch");
+        return Err("cloud_binding_extension_mismatch".into());
     }
-    for binding in &contribution.bindings {
+    for (index, binding) in contribution.bindings.iter().enumerate() {
+        let fail = at(index);
         match (&target.kind, &binding.permission_id, &binding.tool) {
             (TargetKind::Command { permissions }, Some(permission), None) => {
                 if !permissions.contains(permission) {
-                    return Err("cloud_binding_permission_unknown");
+                    return Err(fail("cloud_binding_permission_unknown"));
                 }
                 // A command line is never a hosted action; only policy can carry over.
                 if binding.cloud_support == CloudSupport::CloudExecutable {
-                    return Err("cloud_binding_local_only_target");
+                    return Err(fail("cloud_binding_local_only_target"));
                 }
             }
             (TargetKind::Mcp { endpoint, tools }, None, Some(tool)) => {
                 if !tools.contains(tool) {
-                    return Err("cloud_binding_tool_unknown");
+                    return Err(fail("cloud_binding_tool_unknown"));
                 }
                 // A locally launched server needs a local process the cloud does not have.
                 if endpoint.is_none() && binding.cloud_support == CloudSupport::CloudExecutable {
-                    return Err("cloud_binding_local_only_target");
+                    return Err(fail("cloud_binding_local_only_target"));
                 }
             }
-            _ => return Err("cloud_binding_reference_invalid"),
+            _ => return Err(fail("cloud_binding_reference_invalid")),
         }
     }
     Ok(())
@@ -293,7 +334,8 @@ pub fn admit_binding_contribution(
     resolve(
         &contribution,
         &BindingTarget::from_source(source_bytes, server)?,
-    )?;
+    )
+    .map_err(|rejection| rejection.code)?;
     Ok(contribution)
 }
 
