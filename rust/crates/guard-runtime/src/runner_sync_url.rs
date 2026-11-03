@@ -28,9 +28,9 @@ const USES_RELATIVE: [&str; 20] = [
 pub(crate) struct Split {
     pub(crate) scheme: String,
     pub(crate) netloc: String,
-    path: String,
-    query: String,
-    fragment: String,
+    pub(crate) path: String,
+    pub(crate) query: String,
+    pub(crate) fragment: String,
 }
 
 pub(crate) fn urlsplit(raw: &str) -> Split {

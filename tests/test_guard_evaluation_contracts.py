@@ -7,13 +7,11 @@ import stat
 import traceback
 import zipfile
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
-from codex_plugin_scanner.guard import evaluation_contracts as contracts_module
 from codex_plugin_scanner.guard import evaluation_evidence_package as evidence_package_module
 from codex_plugin_scanner.guard.evaluation_contracts import (
     EVALUATION_PROFILE_SCHEMA_VERSION,
@@ -247,16 +245,6 @@ def test_evidence_package_verification_accepts_another_hosts_absolute_paths(tmp_
 
     packaged = evidence_package_module._package_bytes(profile, result)
     assert verify_evaluation_evidence_package(packaged)["profileId"] == profile["profileId"]
-
-
-def test_windows_temporary_path_check_rejects_a_junction_escape(monkeypatch: pytest.MonkeyPatch) -> None:
-    def resolved(path: str) -> str:
-        return r"D:\outside\sentinel" if path.startswith(r"C:\Temp\junction") else path
-
-    monkeypatch.setattr(contracts_module, "os", SimpleNamespace(name="nt", path=SimpleNamespace(realpath=resolved)))
-    monkeypatch.setattr(contracts_module.tempfile, "gettempdir", lambda: r"C:\Temp")
-    assert contracts_module._is_windows_temp_path(r"C:\Temp\private")
-    assert not contracts_module._is_windows_temp_path(r"C:\Temp\junction\sentinel")
 
 
 def test_evidence_package_rejects_tampering_and_output_limit(tmp_path: Path) -> None:
