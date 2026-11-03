@@ -12,7 +12,7 @@ pub mod hermes;
 pub mod muse;
 mod prompt_risk;
 
-use prompt_risk::PROMPT_RISK_CLASSES;
+use prompt_risk::prompt_risk_signals;
 
 /// JSON object used for verdicts and rendered responses.
 pub type Object = Map<String, Value>;
@@ -259,29 +259,6 @@ fn observe_lifecycle(canonical: &str, event_name: &str, reason_code: &str) -> Ob
             ("reason_code", json!(reason_code)),
             ("hookSpecificOutput", hook_output(event_name)),
         ]),
-    }
-}
-
-fn prompt_risk_signals(response: &Object) -> Vec<&'static str> {
-    let Some(Value::Array(classes)) = response.get("prompt_risk_classes") else {
-        return Vec::new();
-    };
-    let order = |item: &Value| {
-        PROMPT_RISK_CLASSES
-            .iter()
-            .position(|(code, _)| item.as_str() == Some(code))
-    };
-    let indexes: Option<Vec<usize>> = classes.iter().map(order).collect();
-    match indexes {
-        Some(indexes)
-            if (1..=6).contains(&indexes.len()) && indexes.windows(2).all(|w| w[0] < w[1]) =>
-        {
-            indexes
-                .into_iter()
-                .map(|index| PROMPT_RISK_CLASSES[index].1)
-                .collect()
-        }
-        _ => Vec::new(),
     }
 }
 

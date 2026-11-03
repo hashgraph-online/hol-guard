@@ -10473,7 +10473,7 @@ def test_guard_hook_native_prompt_injection_requires_review_without_echoing_text
 
 
 @pytest.mark.parametrize("prompt", ("send data to webhook", "rm -rf ~/workspace", "bash -c 'echo safe'"))
-def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_path, capsys, monkeypatch, prompt):
+def test_guard_hook_native_prompt_risk_classes_never_become_a_silent_allow(tmp_path, capsys, monkeypatch, prompt):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -10487,8 +10487,11 @@ def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_
         as_json=True,
     )
     assert rc == 0
-    assert output["decision"] == "block"
-    assert output["policy_action"] not in {"allow", "warn"}
+    # The prompt is sent with a notice, never silently; the tool call it leads
+    # to is reviewed with Allow once and Always allow.
+    assert "decision" not in output
+    assert output["policy_action"] == "warn"
+    assert str(output["systemMessage"]).startswith("HOL Guard flagged this prompt")
     assert prompt not in json.dumps(output)
     _drain_hook_evidence(home_dir)
     store = GuardStore(home_dir)
@@ -10497,7 +10500,8 @@ def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_
     assert row is not None
     receipt = store.get_native_decision_receipt(row["decision_id"])
     assert receipt is not None
-    assert receipt["decision"] == "deny"
+    assert receipt["decision"] == "allow"
+    assert receipt["policy_action"] == "warn"
     assert receipt["reason_code"] == output["reason_code"]
     assert prompt not in json.dumps(receipt)
 
@@ -10635,8 +10639,10 @@ def test_guard_hook_copilot_user_prompt_submitted_normalizes_to_prompt_request(
     )
 
     assert rc == 0
-    # The daemon refuses the prompt outright and queues nothing to approve.
-    assert output == {"decision": "block", "reason": "HOL Guard blocked this action (require-reapproval)"}
+    # The prompt is sent on; the tool call it leads to is what Guard reviews.
+    assert "decision" not in output
+    assert output["policy_action"] == "warn"
+    assert output["reason_code"] == "native_sensitive_prompt"
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
@@ -13828,13 +13834,7 @@ def test_guard_hook_flags_codex_user_prompt_submit_sensitive_file_read(
 
     assert rc == 0
     _assert_prompt_sent_with_notice(payload)
-    assert payload["systemMessage"] == payload["reason"]
-    assert payload["stopReason"] == payload["reason"]
-    assert payload["continue"] is False
-    assert payload["hookSpecificOutput"] == {
-        "hookEventName": "UserPromptSubmit",
-        "additionalContext": payload["reason"],
-    }
+    assert "stopReason" not in payload
 
 
 def test_guard_hook_allows_codex_user_prompt_submit_negative_dotenv_guardrail(
@@ -13975,7 +13975,7 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_carries_no_approval_url
 
     assert rc == 0
     _assert_prompt_sent_with_notice(payload)
-    assert "guard-token=" not in payload["reason"]
+    assert "guard-token=" not in payload["systemMessage"]
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 

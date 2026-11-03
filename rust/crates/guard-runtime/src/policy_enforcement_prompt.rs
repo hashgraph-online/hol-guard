@@ -16,7 +16,7 @@ use guard_contracts::{NativePromptRiskClassV1, PreToolActionTypeV1, PreToolResul
 const PROMPT_REVIEW_NOTICE: &str = "HOL Guard flagged this prompt and sent it. Guard will ask before the agent takes the sensitive action it leads to; approve that request with Allow once or Always allow if you meant it.";
 
 /// Sends a prompt held only for review, with Guard's notice as its reason.
-pub(super) fn defer_prompt_review(output: &mut PreToolResultV1) {
+pub(crate) fn defer_prompt_review(output: &mut PreToolResultV1) {
     if output.action.event != "UserPromptSubmit"
         || output.action.action_type != PreToolActionTypeV1::Prompt
         || !matches!(
