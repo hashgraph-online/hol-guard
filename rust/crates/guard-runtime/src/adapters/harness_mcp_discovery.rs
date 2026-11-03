@@ -5,8 +5,7 @@
 //! Python keeps the harness reads, env values and store writes. One `group`
 //! request carries every server a discovery pass found; the answer names each
 //! kept server by the index of the entry that first declared it. One `match`
-//! request answers the index of the single server an observation names. One
-//! `upstream` request recovers a Guard proxy's upstream launch.
+//! request answers the index of the single server an observation names.
 
 use std::collections::HashMap;
 
@@ -17,7 +16,6 @@ use crate::context_digest_local_cli::python_path_name;
 use crate::copilot_hook_config::{list2cmdline, shlex_join};
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
-
 #[path = "harness_mcp_upstream.rs"]
 mod upstream;
 

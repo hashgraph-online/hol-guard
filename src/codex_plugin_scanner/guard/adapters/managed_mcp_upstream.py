@@ -82,7 +82,10 @@ def read_managed_mcp_upstream(artifact: GuardArtifact, commands: frozenset[str])
         "args": list(artifact.args),
         "saved_origin": list(saved) if isinstance(saved, tuple) and all(isinstance(v, str) for v in saved) else None,
         "saved_guard_home": saved_home if isinstance(saved_home, str) else None,
-        "env_names": list(normalized_env),
+        # A key that cannot travel as UTF-8 is left out rather than refusing the
+        # whole request: a proxy that forwards it names it in its argv, which
+        # still refuses, and one that does not never needed it.
+        "env_names": [name for name in normalized_env if _encodable(name)],
     }
     try:
         # A value that cannot travel as UTF-8 refuses, so its launch stays unavailable.
@@ -100,6 +103,14 @@ def read_managed_mcp_upstream(artifact: GuardArtifact, commands: frozenset[str])
     except (NativeRunnerAuthorityError, KeyError, TypeError):
         return None
     return upstream
+
+
+def _encodable(name: str) -> bool:
+    try:
+        name.encode("utf-8")
+    except UnicodeError:
+        return False
+    return True
 
 
 def _text(value: object) -> str:

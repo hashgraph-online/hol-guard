@@ -86,6 +86,17 @@ def test_the_request_names_env_keys_and_the_answer_maps_their_values(monkeypatch
     )
 
 
+def test_an_env_key_that_cannot_travel_as_utf8_is_left_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _fake(monkeypatch, {"upstream": _FOUND})
+    artifact = _artifact(mcp_env={"API_KEY": "secret-value", "BAD\ud800": "x"})
+
+    upstream = managed_mcp_upstream.read_managed_mcp_upstream(artifact, _COMMANDS)
+
+    assert sent[0]["env_names"] == ["API_KEY"]
+    assert upstream is not None
+    assert upstream.env == {"API_KEY": "secret-value"}
+
+
 def test_saved_state_that_is_not_a_string_pair_is_not_sent(monkeypatch: pytest.MonkeyPatch) -> None:
     sent = _fake(monkeypatch, {"upstream": None})
 
