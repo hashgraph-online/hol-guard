@@ -168,6 +168,30 @@ def test_only_a_runtime_that_lists_its_features_can_be_older(monkeypatch: pytest
     assert bridge.resident_reads_sources_first() is True
 
 
+def test_a_source_read_the_runtime_cannot_answer_runs_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A failed read is not a compiled program, so the script is never run unread."""
+
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    script = _script(tmp_path, "pin.mjs", PIN_SCRIPT)
+    _resident(monkeypatch, {PIN_SCRIPT: _read("pin", "unpin")})
+    answer = authority.native_runner_authority
+
+    def _flaky(name: str, request: dict[str, object], guard_home: Path | None = None) -> dict[str, object]:
+        if request.get("op") == "read":
+            raise authority.NativeRunnerAuthorityError("resident unavailable")
+        return answer(name, request, guard_home)
+
+    monkeypatch.setattr(authority, "native_runner_authority", _flaky)
+    ran, probe = _probe()
+    commands, status = discover_local_cli_commands(
+        _identity("pin.mjs"), ("/usr/bin/node", str(script), "--help"), runner=probe
+    )
+    assert ran == []
+    assert status == "failed"
+    assert _ids(commands) == ["root", "other"]
+
+
 def test_a_script_that_answers_help_itself_runs_once_and_never_per_command(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
