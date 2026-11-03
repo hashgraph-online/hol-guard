@@ -1,16 +1,18 @@
 //! Reading the Node test runners that take one pass by default.
 //!
 //! Vitest, Jest, Mocha and AVA each carry enough of their own parser to need
-//! their own reading. The runners here do not. Jasmine, uvu, tape, tsd, tap
-//! and lab have no watch mode at all, and QUnit's, borp's and poku's are a
-//! single flag, so what these readings mostly name is the words that run
-//! something other than the suite: scaffolding a project, copying example
-//! files in, printing a report, opening a browser, setting the environment
-//! the tests inherit, or watching. Everything else on their lines is an
-//! option value or a spec file, and the shared workspace screen answers for
-//! those the way it does for the other runners.
+//! their own reading. The runners here do not. Jasmine, uvu, tape, tsd, tap,
+//! lab and cucumber-js have no watch mode at all, and QUnit's, borp's and
+//! poku's are a single flag, so what these readings mostly name is the words
+//! that run something other than the suite: scaffolding a project, copying
+//! example files in, printing a report, opening a browser, setting the
+//! environment the tests inherit, or watching. Everything else on their lines
+//! is an option value or a spec file, and the shared workspace screen answers
+//! for those the way it does for the other runners.
 
-use super::runner_calls::{option_name, reads_its_own_workspace, short_options_carry_watch};
+use super::runner_calls::{
+    before_terminator, option_name, reads_its_own_workspace, short_options_carry_watch,
+};
 
 /// True when a Jasmine call both runs its specs once and takes everything it
 /// loads from the workspace.
@@ -409,4 +411,82 @@ pub(crate) fn tap_sets_no_environment(arguments: &[String]) -> bool {
     !arguments
         .iter()
         .any(|argument| option_name(argument) == "testenv")
+}
+
+/// True when a cucumber-js call both finishes on its own and takes
+/// everything it loads from the workspace.
+pub(crate) fn cucumber_contained_call(arguments: &[String]) -> bool {
+    cucumber_runs_once(arguments)
+        && cucumber_prints_its_report(arguments)
+        && reads_its_own_workspace(arguments)
+}
+
+/// True when every formatter on the line writes to the terminal.
+///
+/// `--format TYPE[:TARGET]` sends that formatter's output to the target
+/// rather than to standard output, and the contained profile mounts the
+/// project read-only, so a report target inside the workspace is as
+/// unopenable as one outside it: the call would be admitted and then fail on
+/// the open. A formatter that names a target therefore keeps its review, and
+/// the workspace screen is left to answer for the paths the runner loads.
+///
+/// The target is read off whichever word carries it, so no spelling of the
+/// option has to be enumerated: `--format`, `--format=`, `-f`, `-fTYPE:PATH`
+/// and a short cluster ending in `f` all put the colon in a word of their
+/// own or in the word that follows. The one colon cucumber-js writes
+/// elsewhere is the `FILE:LINE` operand that picks a single scenario, whose
+/// tail is a line number, so that spelling stays contained.
+pub(crate) fn cucumber_prints_its_report(arguments: &[String]) -> bool {
+    let words = before_terminator(arguments);
+    words.iter().enumerate().all(|(index, argument)| {
+        if index > 0 && names_a_formatter(&words[index - 1]) {
+            return !argument.contains(':');
+        }
+        names_no_formatter_target(argument)
+    })
+}
+
+/// Whether a word is a formatter option that takes its value from the next
+/// word. `--format` spells it in full, and a short cluster ends in `f`, so
+/// `-f` and `-df` both leave the formatter's value standing alone. A value
+/// read there is a formatter's, never a scenario operand, so any colon in it
+/// names a target rather than a line number.
+fn names_a_formatter(argument: &str) -> bool {
+    argument == "--format"
+        || (argument.len() > 1
+            && argument.starts_with('-')
+            && !argument.starts_with("--")
+            && argument.ends_with('f'))
+}
+
+/// Whether a word carries no formatter target. A `FILE:LINE` operand is the
+/// exception: it starts no option and ends in a line number.
+fn names_no_formatter_target(argument: &str) -> bool {
+    let Some((_, tail)) = argument.rsplit_once(':') else {
+        return true;
+    };
+    !argument.starts_with('-') && !tail.is_empty() && tail.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// cucumber-js has no watch mode and no command verbs. Its operands are
+/// feature files, directories or `FILE:LINE` locations, and the rest of its
+/// line is options commander declares: the ones that name something loadable
+/// -- `--config`, `--require`, `--import`, `--loader`, `--require-module`,
+/// `--plugin`, `--profile` -- all name a path or a module specifier, and the
+/// shared workspace screen answers for those the way it does for Mocha's.
+///
+/// One option answers to nothing on the line. `--publish` uploads the run's
+/// report to cucumber's hosted reports service, so the call reaches the
+/// network rather than the workspace, and no path in it says so. A line
+/// carrying that word keeps its review.
+///
+/// commander matches an option by the exact spelling it declares: it expands
+/// no abbreviation and folds no case, so `--publish` is the only name for the
+/// flag. It accepts an attached value for a declared boolean and still reads
+/// the flag as set, so `--publish=false` publishes too and is read here with
+/// the bare word. Options stop at `--`, after which every word is an operand.
+pub(crate) fn cucumber_runs_once(arguments: &[String]) -> bool {
+    !before_terminator(arguments)
+        .iter()
+        .any(|argument| argument == "--publish" || argument.starts_with("--publish="))
 }

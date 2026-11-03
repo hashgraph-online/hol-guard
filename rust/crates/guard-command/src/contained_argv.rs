@@ -129,6 +129,17 @@ pub(crate) fn local_lab_entry(argument: &str) -> bool {
     local_package_entry(argument, "@hapi/lab/bin/lab") || local_bin_entry(argument, "lab")
 }
 
+/// cucumber-js's installed entry point, and the link its installer writes
+/// beside it. The package is scoped, so the entry it declares lands at
+/// `node_modules/@cucumber/cucumber/bin/cucumber.js`, while the link takes
+/// the executable's own name, `cucumber-js`. That file is a shim that
+/// requires the package's `lib/cli/run.js`, and the package has declared it
+/// at that path since cucumber-js 8.
+pub(crate) fn local_cucumber_entry(argument: &str) -> bool {
+    local_package_entry(argument, "@cucumber/cucumber/bin/cucumber.js")
+        || local_bin_entry(argument, "cucumber-js")
+}
+
 /// Whether a word names one of those installed entry points. A runtime handed
 /// this path starts the workspace's own runner, whichever of them it is.
 pub(crate) fn local_runner_entry(argument: &str) -> bool {
@@ -146,6 +157,7 @@ pub(crate) fn local_runner_entry(argument: &str) -> bool {
         || local_borp_entry(&entry)
         || local_poku_entry(&entry)
         || local_lab_entry(&entry)
+        || local_cucumber_entry(&entry)
 }
 
 /// Whether a call hands Bun one of those entry points as the file to run.
@@ -472,11 +484,12 @@ pub(crate) use runner_calls::{
     workspace_test_script,
 };
 pub(crate) use single_pass_runners::{
-    borp_contained_call, borp_runs_once, jasmine_contained_call, jasmine_runs_once,
-    jasmine_sets_no_environment, lab_contained_call, lab_runs_once, poku_contained_call,
-    poku_runs_once, poku_touches_nothing_else, qunit_contained_call, qunit_runs_once,
-    tap_contained_call, tap_runs_tests_once, tap_sets_no_environment, tape_contained_call,
-    tsd_contained_call, uvu_contained_call,
+    borp_contained_call, borp_runs_once, cucumber_contained_call, cucumber_prints_its_report,
+    cucumber_runs_once, jasmine_contained_call, jasmine_runs_once, jasmine_sets_no_environment,
+    lab_contained_call, lab_runs_once, poku_contained_call, poku_runs_once,
+    poku_touches_nothing_else, qunit_contained_call, qunit_runs_once, tap_contained_call,
+    tap_runs_tests_once, tap_sets_no_environment, tape_contained_call, tsd_contained_call,
+    uvu_contained_call,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
@@ -523,6 +536,7 @@ fn runner_tail(arguments: &[String]) -> Option<(&'static str, Vec<String>)> {
                 "borp" => "borp",
                 "poku" => "poku",
                 "lab" => "lab",
+                "cucumber-js" => "cucumber-js",
                 _ => "vitest",
             },
             rest.to_vec(),
@@ -648,6 +662,22 @@ fn runner_tail_or_error(
             Some("lab") => Err(RestrictedPytestError::new(
                 VITEST_INVALID,
                 "Protected lab reads its modules from this workspace.",
+            )),
+            Some("cucumber-js") if !cucumber_prints_its_report(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected cucumber-js prints its report here; it does not write it to a file.",
+                ))
+            }
+            Some("cucumber-js") if !cucumber_runs_once(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected cucumber-js runs its features here; it does not publish the report.",
+                ))
+            }
+            Some("cucumber-js") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected cucumber-js reads its features and support code from this workspace.",
             )),
             _ => invalid_vitest(),
         },
@@ -857,6 +887,7 @@ pub fn contained_runner_invocation(
                 | "borp"
                 | "poku"
                 | "lab"
+                | "cucumber-js"
         ) {
             let mut call = vec![name.to_owned()];
             call.extend_from_slice(&argv[1..]);
@@ -893,6 +924,8 @@ pub fn contained_runner_invocation(
                 "poku"
             } else if local_lab_entry(&entry) {
                 "lab"
+            } else if local_cucumber_entry(&entry) {
+                "cucumber-js"
             } else {
                 return invalid_vitest();
             };
@@ -1146,6 +1179,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                 | "borp"
                 | "poku"
                 | "lab"
+                | "cucumber-js"
         ) || manager_exec_runner(command).is_some()
             || bun.is_some()
             || bun_runner_entry_launch(command)
@@ -1166,6 +1200,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                         || local_borp_entry(&entry)
                         || local_poku_entry(&entry)
                         || local_lab_entry(&entry)
+                        || local_cucumber_entry(&entry)
                 })));
     let node_tool = bun.is_none()
         && !bun_test

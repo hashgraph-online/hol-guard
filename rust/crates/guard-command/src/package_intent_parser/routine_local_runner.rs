@@ -32,9 +32,10 @@ use lockfiles::locked_versions;
 /// The runners whose local identity is worth establishing: the lint, test,
 /// commit-hook and TypeScript entry points a project pins in its own manifest
 /// and runs through `bunx` or `npx` on every change.
-const ROUTINE_RUNNERS: [&str; 17] = [
+const ROUTINE_RUNNERS: [&str; 18] = [
     "ava",
     "borp",
+    "cucumber-js",
     "eslint",
     "jasmine",
     "jest",
