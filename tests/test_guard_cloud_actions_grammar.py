@@ -243,7 +243,7 @@ def _help(argv: list[str], capsys: pytest.CaptureFixture[str]) -> str:
 
 def test_help_separates_cloud_workspace_from_local_folder(capsys: pytest.CaptureFixture[str]) -> None:
     family = _help(["cloud-actions", "--help"], capsys)
-    assert "{login,logout,status,workspace,accounts,ai-tools}" in family
+    assert "{login,logout,status,doctor,workspace,accounts,ai-tools}" in family
     assert "Separate from `connect`, `apps` and `install`" in family
 
     connect = " ".join(_help(["cloud-actions", "accounts", "connect", "--help"], capsys).split())
