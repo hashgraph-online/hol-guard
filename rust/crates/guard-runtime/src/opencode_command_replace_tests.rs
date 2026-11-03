@@ -80,8 +80,21 @@ fn the_new_array_is_spelled_as_python_json_dumps_spells_it() {
     assert_eq!(python_json_list(&[]), "[]");
     assert_eq!(
         python_json_list(&["a b", "é", "😀", "q\"\\\n\r\t\u{8}\u{c}\u{1}\u{7f}~"]),
-        r#"["a b", "é", "😀", "q\"\\\n\r\t\b\f\u0001\u007f~"]"#
+        r#"["a b", "\u00e9", "\ud83d\ude00", "q\"\\\n\r\t\b\f\u0001\u007f~"]"#
     );
+}
+
+#[test]
+fn values_python_accepts_and_serde_would_not_are_passed_over() {
+    // NaN, a lone surrogate escape and deep nesting in sibling values do not
+    // stop the edit, as they did not stop Python's decoder.
+    let deep = format!("{}{}", "[".repeat(200), "]".repeat(200));
+    let text = format!(
+        "{{\"a\": NaN, \"b\": -Infinity, \"\\ud800\": \"\\udc00\", \"deep\": {deep},\n{}",
+        &config("[\"/old\"]")[1..]
+    );
+    let result = replaced(&text, &["/new"]);
+    assert_eq!(result, text.replace("[\"/old\"]", "[\"/new\"]"));
 }
 
 #[test]

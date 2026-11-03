@@ -6,9 +6,9 @@
 //! member order around `mcp.<name>.command` stay untouched. Comments inside
 //! the replaced array are kept as notes, one per line, before the new value.
 //!
-//! The member is found the way `json.JSONDecoder.raw_decode` walks the
-//! comment-masked text: each of `mcp`, `<name>` and `command` must appear
-//! exactly once in its object. A missing, repeated or malformed member answers
+//! The member is found by walking the comment-masked text the way
+//! `json.JSONDecoder.raw_decode` did: each of `mcp`, `<name>` and `command`
+//! must appear exactly once in its object. A missing, repeated or malformed member answers
 //! a reason instead of a text, and the caller leaves the file unchanged.
 //!
 //! Offsets count characters, as Python's do, so a comment holding non-ASCII
@@ -93,12 +93,68 @@ fn skip(text: &str, mut index: usize) -> usize {
     index
 }
 
-/// One JSON value starting at `index`, and the byte offset just past it.
-fn value_at(text: &str, index: usize) -> Result<(Value, usize), &'static str> {
-    let mut values = serde_json::Deserializer::from_str(&text[index..]).into_iter::<Value>();
-    match values.next() {
-        Some(Ok(value)) => Ok((value, index + values.byte_offset())),
-        _ => Err(INVALID_CONFIG),
+/// The byte offset just past the string token that opens at `index`.
+fn skip_string(bytes: &[u8], mut index: usize) -> Result<usize, &'static str> {
+    index += 1;
+    loop {
+        match bytes.get(index) {
+            Some(b'"') => return Ok(index + 1),
+            Some(b'\\') => index += 2,
+            Some(_) => index += 1,
+            None => return Err(INVALID_CONFIG),
+        }
+    }
+}
+
+/// The byte offset just past the JSON value that starts at `index`.
+///
+/// The caller has already parsed the whole document with Python's `json`, so
+/// this only finds where a value ends: strings and brackets are matched and a
+/// scalar runs to the next delimiter. Values Python accepts and a strict
+/// parser would not, such as `NaN`, lone surrogate escapes or deep nesting,
+/// are passed over like any other.
+fn skip_value(text: &str, index: usize) -> Result<usize, &'static str> {
+    let bytes = text.as_bytes();
+    match bytes.get(index) {
+        Some(b'"') => skip_string(bytes, index),
+        Some(b'{' | b'[') => {
+            let mut depth = 0usize;
+            let mut at = index;
+            loop {
+                match bytes.get(at) {
+                    Some(b'"') => {
+                        at = skip_string(bytes, at)?;
+                        continue;
+                    }
+                    Some(b'{' | b'[') => depth += 1,
+                    Some(b'}' | b']') => {
+                        depth -= 1;
+                        if depth == 0 {
+                            return Ok(at + 1);
+                        }
+                    }
+                    Some(_) => {}
+                    None => return Err(INVALID_CONFIG),
+                }
+                at += 1;
+            }
+        }
+        _ => {
+            let end = bytes[index..]
+                .iter()
+                .position(|byte| {
+                    matches!(
+                        byte,
+                        b',' | b'}' | b']' | b':' | b' ' | b'\t' | b'\n' | b'\r'
+                    )
+                })
+                .map_or(bytes.len(), |offset| index + offset);
+            if end == index {
+                Err(INVALID_CONFIG)
+            } else {
+                Ok(end)
+            }
+        }
     }
 }
 
@@ -113,17 +169,21 @@ fn member_span(text: &str, offset: usize, key: &str) -> Result<(usize, usize), &
     index = skip(text, index + 1);
     let mut found = Vec::new();
     while bytes.get(index) != Some(&b'}') {
-        let (member, end) = value_at(text, index)?;
-        let colon = skip(text, end);
-        let Value::String(member) = member else {
+        if bytes.get(index) != Some(&b'"') {
             return Err(INVALID_MEMBER);
-        };
+        }
+        let end = skip_string(bytes, index)?;
+        // A name that does not decode, such as one holding a lone surrogate
+        // escape, cannot equal `key`.
+        let matches =
+            serde_json::from_str::<String>(&text[index..end]).is_ok_and(|name| name == key);
+        let colon = skip(text, end);
         if bytes.get(colon) != Some(&b':') {
             return Err(INVALID_MEMBER);
         }
         let start = skip(text, colon + 1);
-        let (_, end) = value_at(text, start)?;
-        if member == key {
+        let end = skip_value(text, start)?;
+        if matches {
             found.push((start, end));
         }
         index = skip(text, end);
