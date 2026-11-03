@@ -40,6 +40,7 @@ use super::grok_user_config_op;
 use super::harness_hook_settings;
 use super::hermes_detect;
 use super::kimi_detect;
+use super::kimi_hook_config;
 use super::muse_detect;
 use super::oci_bundle_op as oci;
 use super::openclaw_detect;
@@ -189,6 +190,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "grok_legacy_settings" => grok_legacy_settings::dispatch(args),
         "grok_user_config" => grok_user_config_op::dispatch(args),
         "kimi_detect" => kimi_detect::detect(args),
+        "kimi_hook_config" => kimi_hook_config::dispatch(args),
         "muse_detect" => muse_detect::detect(args),
         "openclaw_detect" => openclaw_detect::detect(args),
         "cursor_detect" => cursor_detect::detect(args),

@@ -698,6 +698,11 @@ mod inventory_source_evidence_op;
 mod inventory_url_redaction_op;
 #[path = "adapters/detection/kimi_detect.rs"]
 mod kimi_detect;
+#[path = "adapters/detection/kimi_hook_config.rs"]
+mod kimi_hook_config;
+#[cfg(test)]
+#[path = "adapters/detection/kimi_hook_config_tests.rs"]
+mod kimi_hook_config_tests;
 mod local_authority_integrity_op;
 mod local_cli_grant_op;
 mod local_cli_help;
