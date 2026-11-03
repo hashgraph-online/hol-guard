@@ -361,6 +361,21 @@ fn a_hidden_directorys_configuration_document_reads_when_it_holds_no_credential(
             "{body}"
         );
     }
+    // A literal written right after a placeholder is still a literal: the
+    // hole has to be the whole value, so the sentinel it masks to cannot run
+    // into the characters beside it. A bare `$NAME` is the exception the
+    // shell itself makes — the letters after it belong to the name.
+    for body in [
+        "deploy:\n  token: ${{ secrets.NPM_TOKEN }}abc123\n",
+        "deploy:\n  token: ${REGISTRY_TOKEN}hunter2\n",
+        "[registry]\ntoken = \"{{ registry_token }}hunter2\"\n",
+    ] {
+        plant(&repo.join(".circleci/config.yml"), body);
+        assert!(
+            !read(&repo.join(".circleci/config.yml"), &home, &repo),
+            "{body}"
+        );
+    }
     std::fs::remove_dir_all(root).unwrap();
 }
 

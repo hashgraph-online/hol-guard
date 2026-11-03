@@ -85,20 +85,6 @@ const CREDENTIAL_WORDS: [&str; 8] = [
     "passphrase",
 ];
 
-/// Whether a value is written for something else to fill in: a shell
-/// variable, a CI expression or a template hole. The whole value has to be
-/// that hole — a literal password often carries a `$` or a brace of its own
-/// in the middle, and that names a credential like any other.
-fn is_placeholder(value: &str) -> bool {
-    if let Some(rest) = value.strip_prefix('$') {
-        return match rest.strip_prefix('{') {
-            Some(inner) => inner.ends_with('}'),
-            None => !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'),
-        };
-    }
-    value.starts_with("{{") && value.ends_with("}}")
-}
-
 /// The byte width of the placeholder that opens here, if one does. A CI
 /// expression and a template hole carry braces of their own, so they are
 /// recognised before a line is split on its braces.
@@ -120,16 +106,23 @@ fn placeholder_width(rest: &str) -> Option<usize> {
     (width > 0).then_some(1 + width)
 }
 
-/// One line with every placeholder replaced by a plain one of the same kind,
-/// so that splitting the line on its braces cannot tear a CI expression into
-/// pieces that read as a literal.
+/// The stand-in a placeholder leaves behind. It is a character no
+/// configuration document writes, so a literal written right after a
+/// placeholder cannot join it into one longer word: `${{ secrets.A }}abc123`
+/// masks to the sentinel followed by `abc123`, and the value is then not the
+/// hole alone.
+const PLACEHOLDER_MASK: &str = "\u{0}";
+
+/// One line with every placeholder replaced by the sentinel, so that
+/// splitting the line on its braces cannot tear a CI expression into pieces
+/// that read as a literal.
 fn mask_placeholders(line: &str) -> String {
     let mut masked = String::with_capacity(line.len());
     let mut index = 0;
     while index < line.len() {
         let rest = &line[index..];
         if let Some(width) = placeholder_width(rest) {
-            masked.push_str("$PLACEHOLDER");
+            masked.push_str(PLACEHOLDER_MASK);
             index += width;
             continue;
         }
@@ -162,7 +155,8 @@ fn credential_pair(segment: &str) -> Option<(String, &str)> {
 /// detector answers for material it recognises by shape, and a short password
 /// has no shape to recognise, so the word beside it carries the answer. A
 /// value the shell or the CI system fills in later names no credential of its
-/// own, and an empty one holds none.
+/// own, and an empty one holds none — but only while the hole is the whole
+/// value, so a literal written right after one still names a credential.
 ///
 /// A line can carry more than one pair — an inline table, a flow mapping, a
 /// document written on one line — so every pair on it is read, and the word
@@ -182,7 +176,7 @@ fn names_a_credential_value(text: &str) -> bool {
                 };
                 CREDENTIAL_WORDS.iter().any(|word| key.contains(word))
                     && !value.is_empty()
-                    && !is_placeholder(value)
+                    && value != PLACEHOLDER_MASK
                     && !matches!(value, "{}" | "[]" | "null" | "~" | "true" | "false")
             })
     })
