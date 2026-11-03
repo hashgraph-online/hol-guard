@@ -220,6 +220,7 @@ mod compound_git_inspection_op_tests;
 mod compound_git_inspection_vectors_tests;
 mod compound_git_paths;
 mod compound_git_segments;
+mod connector_regroup;
 mod connector_setup;
 mod connector_setup_context_op;
 mod consumer_artifact_compose_op;

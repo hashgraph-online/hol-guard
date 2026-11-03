@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+import hashlib
 import re
 import sqlite3
 from pathlib import Path
@@ -16,9 +16,6 @@ from codex_plugin_scanner.guard.store_local_cli_context import (
 )
 from codex_plugin_scanner.guard.store_local_cli_regroup import (
     NON_RECOGNITION_RISK_SUMMARIES,
-    connector_program_name,
-    connector_program_path,
-    connector_queue_group_id,
     regroup_pending_connector_reviews,
 )
 from codex_plugin_scanner.guard.store_local_cli_schema import (
@@ -29,7 +26,6 @@ from codex_plugin_scanner.guard.store_local_cli_schema import (
 )
 
 _ROOT = Path(__file__).resolve().parents[1]
-_VECTORS = _ROOT / "rust/crates/guard-runtime/testdata/connector_setup/connector_group_vectors.json"
 _UNRECOGNISED, _UNRECOGNISED_STEP, _OUTSIDE_ROOTS = NON_RECOGNITION_RISK_SUMMARIES
 _HASH = "a" * 64
 _OTHER_HASH = "b" * 64
@@ -87,6 +83,13 @@ def _queue(
         "values (?, ?, ?, ?, ?, ?)",
         (request_id, status, reason, command, group, workspace),
     )
+
+
+def _group(identity_hash: str, cwd: str, command: str) -> str:
+    """`connector_setup::queue_group_id` for the plain ASCII commands these tests store."""
+
+    material = cwd.encode() + b"\0" + " ".join(command.split()).encode()
+    return f"connector:{identity_hash}:{hashlib.sha256(material).hexdigest()[:16]}"
 
 
 def _groups(connection: sqlite3.Connection) -> dict[str, str]:
@@ -192,8 +195,8 @@ def test_pending_unrecognised_reviews_regroup_under_the_connector(tmp_path: Path
     ensure_local_cli_schema(connection)
 
     groups = _groups(connection)
-    assert groups["r1"] == connector_queue_group_id(_HASH, _WORKSPACE, "lanectl status")
-    assert groups["r2"] == connector_queue_group_id(_HASH, _WORKSPACE, "/usr/local/bin/lanectl ping --verbose")
+    assert groups["r1"] == _group(_HASH, _WORKSPACE, "lanectl status")
+    assert groups["r2"] == _group(_HASH, _WORKSPACE, "/usr/local/bin/lanectl ping --verbose")
     assert groups["r1"].startswith(f"connector:{_HASH}:")
     assert len(groups["r1"].rsplit(":", 1)[1]) == 16
     connection.close()
@@ -282,7 +285,7 @@ def test_a_program_written_with_a_path_must_be_the_observed_executable(
 
     ensure_local_cli_schema(connection)
 
-    expected = connector_queue_group_id(_HASH, _WORKSPACE, command) if moves else "action:old"
+    expected = _group(_HASH, _WORKSPACE, command) if moves else "action:old"
     assert _groups(connection) == {"r1": expected}
     connection.close()
 
@@ -323,6 +326,26 @@ def test_a_regroup_failure_never_blocks_the_schema_bump(tmp_path: Path) -> None:
     connection.close()
 
 
+def test_a_runtime_that_cannot_answer_moves_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    def unavailable(kind: str, args: object) -> dict[str, object]:
+        raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    connection = _v13_store(tmp_path)
+    _approvals(connection)
+    _observe(connection, "lanectl")
+    _queue(connection, "r1", "lanectl status")
+    connection.commit()
+
+    ensure_local_cli_schema(connection)
+
+    assert _marker(connection) == (14, _SCHEMA_CHECKSUM)
+    assert _groups(connection) == {"r1": "action:old"}
+    connection.close()
+
+
 def test_a_regroup_on_a_malformed_approval_table_moves_nothing() -> None:
     with sqlite3.connect(":memory:") as connection:
         connection.execute("create table approval_requests (request_id text, status text)")
@@ -347,30 +370,6 @@ def test_the_regroup_is_idempotent(tmp_path: Path) -> None:
     connection.close()
 
 
-def test_program_paths() -> None:
-    assert connector_program_path("lanectl status") is None
-    assert connector_program_path("/opt/tools/lanectl --json") == "/opt/tools/lanectl"
-    assert connector_program_path("./lanectl") == "./lanectl"
-    assert connector_program_path("") is None
-
-
-def test_plain_program_names() -> None:
-    assert connector_program_name("lanectl status") == "lanectl"
-    assert connector_program_name("/opt/tools/lanectl --json") == "lanectl"
-    assert connector_program_name("./lanectl status") == "lanectl"
-    for command in ["", "lanectl 'a b'", "pnpm lanectl", "FOO=1 lanectl", "lanectl;ls", "bin/ status", "x" * 5000]:
-        assert connector_program_name(command) is None, command
-
-
-def test_group_ids_match_the_resident_vectors() -> None:
-    payload = json.loads(_VECTORS.read_text(encoding="utf-8"))
-    assert payload["schema"] == "hol-guard.connector-group-vectors.v1"
-    assert len(payload["vectors"]) >= 10
-    for vector in payload["vectors"]:
-        group = connector_queue_group_id(vector["identity_hash"], vector["cwd"], vector["command"])
-        assert group == vector["queue_group_id"], vector
-
-
 def test_the_regroup_reasons_are_the_texts_the_resident_stores() -> None:
     pretool = (_ROOT / "rust/crates/guard-command/src/pretool/mod.rs").read_text(encoding="utf-8")
     contained = (_ROOT / "rust/crates/guard-command/src/pretool/workspace_contained.rs").read_text(encoding="utf-8")
@@ -393,6 +392,6 @@ def test_a_review_without_a_workspace_keeps_its_group(tmp_path: Path) -> None:
 
     groups = _groups(connection)
     assert groups["r1"] == "action:old"
-    assert groups["r2"] == connector_queue_group_id(_HASH, "/work/other", "lanectl status")
-    assert groups["r2"] != connector_queue_group_id(_HASH, _WORKSPACE, "lanectl status")
+    assert groups["r2"] == _group(_HASH, "/work/other", "lanectl status")
+    assert groups["r2"] != _group(_HASH, _WORKSPACE, "lanectl status")
     connection.close()
