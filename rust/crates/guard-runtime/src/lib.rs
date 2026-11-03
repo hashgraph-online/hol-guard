@@ -969,6 +969,7 @@ mod proxy_credentials;
 use guard_runtime_pyjson as pyjson;
 #[cfg(test)]
 mod registry_vectors_tests;
+mod receipt_embedded_scripts;
 mod release_feed_op;
 mod release_manifest_verify;
 mod release_manifest_verify_command;
