@@ -1187,6 +1187,14 @@
    "body": "2fd3a565b13a"
   },
   {
+   "file": "rust/crates/guard-runtime/src/isolation_provider_registry.rs",
+   "item": "fn writable_by_others(_metadata: &std::fs::Metadata) -> bool",
+   "verdict": "windows-permissive",
+   "note": "Windows does not read the registry's ACL, so a providers.json another user can write is not refused there. The Python reader it replaced read only the POSIX mode bits, which Windows never sets, so this is the same gap; Windows still opens the file directly and requires a regular file.",
+   "cfg": "not(unix)",
+   "body": "e293f077ce22"
+  },
+  {
    "verdict": "windows-equivalent",
    "note": "On Windows the metadata file is opened with `FILE_FLAG_OPEN_REPARSE_POINT` and read-only sharing, so it cannot be replaced or written while it is read, and the lstat-before/after and fstat-before/after comparisons still run; only the opened-handle versus path identity check is Unix-only, because a path lstat on Windows carries no file index to compare with the handle's. The index tests in `local_skill_index_tests.rs` are not `cfg(unix)`-gated, so the Windows test job runs this arm.",
    "file": "rust/crates/guard-runtime/src/local_skill_index.rs",

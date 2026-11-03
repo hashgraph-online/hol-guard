@@ -165,6 +165,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "oci_evidence_verdict" => oci::oci_evidence_verdict(args),
         "oci_bundle_digest" => oci::oci_bundle_digest(args),
         "oci_bundle_plan" => oci::oci_bundle_plan(args),
+        "isolation_provider" => crate::isolation_provider_registry::dispatch(args),
         "aibom_trust_claims" => crate::aibom_trust_claims::dispatch(args),
         "aibom_workspace_artifacts" => aibom::workspace_artifacts(args),
         "aibom_workspace_plan" => aibom::workspace_merge_plan(args),
