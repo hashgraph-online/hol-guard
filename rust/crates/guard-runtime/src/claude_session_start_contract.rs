@@ -162,7 +162,7 @@ pub(crate) fn contract() -> Result<HookGroupsContract, String> {
 }
 
 /// `is_guard_hook_command`.
-fn is_guard_command(contract: &HookGroupsContract, command: &str) -> bool {
+pub(crate) fn is_guard_command(contract: &HookGroupsContract, command: &str) -> bool {
     if command.contains(&contract.daemon_hook_marker)
         || command.contains(&contract.session_start_hook_marker)
     {
@@ -177,7 +177,7 @@ fn is_guard_command(contract: &HookGroupsContract, command: &str) -> bool {
 }
 
 /// `command_handler_argv`: the exec form when every part is a string.
-fn handler_argv(handler: &Map<String, Value>) -> Option<Vec<&str>> {
+pub(crate) fn handler_argv(handler: &Map<String, Value>) -> Option<Vec<&str>> {
     let command = handler.get("command")?.as_str()?;
     let args = handler.get("args")?.as_array()?;
     let mut argv = vec![command];
@@ -187,9 +187,14 @@ fn handler_argv(handler: &Map<String, Value>) -> Option<Vec<&str>> {
     Some(argv)
 }
 
-/// `is_guard_hook_handler`. `Err` is a handler type Python cannot hash,
-/// where the Python refresh itself would fail.
-fn is_guard_handler(contract: &HookGroupsContract, handler: &Value) -> Result<bool, ()> {
+/// `is_guard_hook_url`: the loopback daemon's Claude hook route.
+pub(crate) fn is_guard_url(url: &str) -> bool {
+    url.starts_with("http://127.0.0.1:") && url.contains("/v1/hooks/claude-code")
+}
+
+/// `is_guard_hook_handler`. `Err` is an unhashable handler type (a list or
+/// an object), which the Python helpers rejected with a `TypeError`.
+pub(crate) fn is_guard_handler(contract: &HookGroupsContract, handler: &Value) -> Result<bool, ()> {
     let Some(handler) = handler.as_object() else {
         return Ok(false);
     };
@@ -201,9 +206,7 @@ fn is_guard_handler(contract: &HookGroupsContract, handler: &Value) -> Result<bo
         Some(Value::String(kind)) if kind == "http" => Ok(handler
             .get("url")
             .and_then(Value::as_str)
-            .is_some_and(|url| {
-                url.starts_with("http://127.0.0.1:") && url.contains("/v1/hooks/claude-code")
-            })),
+            .is_some_and(is_guard_url)),
         Some(Value::Array(_) | Value::Object(_)) => Err(()),
         Some(_) => Ok(false),
     }
