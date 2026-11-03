@@ -12,7 +12,10 @@ never presented as settling another's.
 
 from __future__ import annotations
 
+import time
 from typing import Any
+
+import pytest
 
 from codex_plugin_scanner.guard.daemon.approval_extension_coverage import (
     COVERAGE_SCHEMA,
@@ -274,3 +277,23 @@ def test_delivery_stays_out_of_resolved_and_unhinted_requests() -> None:
     assert "extension_coverage" in with_approval_extension_coverage(
         {}, _pending(coverage), registry=registry, include=True
     )
+
+
+def test_the_shape_check_keeps_its_own_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard.runtime import extension_coverage_hint as module
+
+    deadlines: list[float | None] = []
+
+    def fake(
+        kind: str, args: object, *_: object, deadline_monotonic: float | None = None, **__: object
+    ) -> dict[str, Any]:
+        deadlines.append(deadline_monotonic)
+        return {}
+
+    monkeypatch.setattr(authority, "native_runner_authority", fake)
+    started = time.monotonic()
+    assert module.shaped_hint({"deadline-probe": started}, "coverage") is None
+    assert len(deadlines) == 1
+    assert deadlines[0] is not None
+    assert started < deadlines[0] <= time.monotonic() + module._SHAPE_BUDGET_SECONDS

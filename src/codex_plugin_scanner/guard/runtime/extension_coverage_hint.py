@@ -19,6 +19,7 @@ for a checked copy and carries coverage on an allow hint.
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Mapping
 from typing import cast
 
@@ -29,6 +30,9 @@ MAX_COVERED_SEGMENTS = 24
 MAX_SEGMENT_IDS = 12
 MAX_SEGMENT_TOTAL = 256
 _KIND = "extension_hint_shape"
+# Inside the runner allowance, so a slow check is the caller running out of
+# time and never counts against the shared resident circuit.
+_SHAPE_BUDGET_SECONDS = 4.0
 
 
 # Checked answers by canonical hint text. A queue listing reads each row's
@@ -43,6 +47,8 @@ def _shape_answer(canonical: str, deadline_monotonic: float | None) -> str:
         return cached
     from ..native_runner_authority import native_runner_authority
 
+    if deadline_monotonic is None:
+        deadline_monotonic = time.monotonic() + _SHAPE_BUDGET_SECONDS
     answer = json.dumps(
         native_runner_authority(_KIND, {"hint": json.loads(canonical)}, deadline_monotonic=deadline_monotonic)
     )
