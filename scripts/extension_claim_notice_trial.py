@@ -20,8 +20,9 @@ def trial_lines(extension_ids: Iterable[str]) -> list[str]:
         "",
         (
             "Community extensions stay off until enabled on a device. Once a HOL Guard release "
-            "includes yours, update with `hol-guard update` (or `pipx install hol-guard`), connect the "
-            "agent you use with `hol-guard install <harness>`, and turn the extension on:"
+            "includes yours, update an existing install with `hol-guard update` (new users install with "
+            "`pipx install hol-guard`), connect the agent you use with `hol-guard install <harness>`, and "
+            "turn the extension on:"
         ),
         "",
         "```sh",
