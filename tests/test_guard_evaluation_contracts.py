@@ -613,3 +613,28 @@ def test_passed_result_cannot_hide_unrun_case(tmp_path: Path) -> None:
     )
     with pytest.raises(EvaluationContractError, match="unpassed case"):
         EvaluationResult.from_dict(result_payload, profile=EvaluationProfile.from_dict(profile_payload))
+
+
+def test_result_at_the_case_limit_with_long_notes_still_checks(tmp_path: Path) -> None:
+    profile_payload = _profile(tmp_path)
+    result = _result(profile_payload)
+    template = result["cases"][0]  # type: ignore[index]
+    cases = []
+    for index in range(2048):
+        case = copy.deepcopy(template)
+        case["caseId"] = f"synthetic.case-{index}"
+        case["status"] = "failed"
+        case["witness"]["note"] = "é" * 512
+        cases.append(case)
+    result["cases"] = cases
+    result["status"] = "failed"
+    validate_evaluation_result(result)
+
+
+def test_oversized_result_reports_its_size(tmp_path: Path) -> None:
+    profile_payload = _profile(tmp_path)
+    result = _result(profile_payload)
+    long_path = str(Path(profile_payload["targetScope"]["rootPath"]) / ("x" * 4 * 1024 * 1024))  # type: ignore[index]
+    result["cases"][0]["witness"]["path"] = long_path  # type: ignore[index]
+    with pytest.raises(EvaluationContractError, match="too large to check"):
+        validate_evaluation_result(result, portable=True)

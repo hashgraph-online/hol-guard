@@ -64,13 +64,36 @@ def _schema_validate(payload: object, schema: dict[str, object], name: str) -> d
     return candidate
 
 
+# The resident takes requests up to 4 MiB; keep headroom for the envelope.
+_MAX_CHECK_BYTES = 3 * 1024 * 1024
+# Host checks resolve every witness path, so they get a wider budget.
+_HOST_CHECK_TIMEOUT_SECONDS = 30.0
+
+
+def _without_notes(result: dict[str, object]) -> dict[str, object]:
+    """Witness notes are free text the runtime never reads; leave them out of the request."""
+    cases = result.get("cases")
+    if not isinstance(cases, list):
+        return result
+    stripped: list[object] = []
+    for case in cases:
+        witness = case.get("witness") if isinstance(case, dict) else None
+        if isinstance(witness, dict) and "note" in witness:
+            case = {**case, "witness": {key: value for key, value in witness.items() if key != "note"}}
+        stripped.append(case)
+    return {**result, "cases": stripped}
+
+
 def _native_check(request: dict[str, object]) -> None:
     """Paths, endpoints, timestamps and the profile binding (``evaluation_contract.rs``)."""
     from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     request["temp_root"] = tempfile.gettempdir()
+    if len(json.dumps(request, separators=(",", ":")).encode()) > _MAX_CHECK_BYTES:
+        raise EvaluationContractError("evaluation record is too large to check")
+    timeout = None if request.get("portable") else _HOST_CHECK_TIMEOUT_SECONDS
     try:
-        answer = native_runner_authority("evaluation_contract", request)
+        answer = native_runner_authority("evaluation_contract", request, timeout_seconds=timeout)
     except NativeRunnerAuthorityError:
         raise EvaluationContractError("evaluation record could not be checked") from None
     error = answer.get("error")
@@ -95,7 +118,7 @@ def validate_evaluation_result(payload: object, profile: object | None = None, *
     if profile is not None:
         profile_mapping = _mapping(profile.data if isinstance(profile, EvaluationProfile) else profile, "profile")
         _ = _schema_validate(profile_mapping, evaluation_profile_schema(), "evaluation profile")
-    _native_check({"op": "result", "result": result, "profile": profile_mapping, "portable": portable})
+    _native_check({"op": "result", "result": _without_notes(result), "profile": profile_mapping, "portable": portable})
 
 
 @dataclass(frozen=True, slots=True)

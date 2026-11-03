@@ -137,11 +137,19 @@ fn portable_windows_paths_compare_case_insensitively() {
         error(&check_profile(&profile)),
         "targetScope.allowedPaths[] must be an absolute local path"
     );
-    profile["targetScope"]["allowedPaths"] = json!([r"\\server\share\x"]);
-    assert_eq!(
-        error(&check_profile(&profile)),
-        "targetScope.allowedPaths[] must be an absolute local path"
-    );
+    for share in [
+        r"\\server\share\x",
+        "//server/share/x",
+        r"/\server\share\x",
+        r"\/server/share/x",
+    ] {
+        profile["targetScope"]["allowedPaths"] = json!([share]);
+        assert_eq!(
+            error(&check_profile(&profile)),
+            "targetScope.allowedPaths[] must be an absolute local path",
+            "{share}"
+        );
+    }
 }
 
 #[test]
@@ -308,9 +316,7 @@ fn windows_temporary_rejects_a_junction_escape() {
         r"C:\Temp",
         &resolve
     ));
-    assert!(!windows_temporary(
-        r"\\server\share\x",
-        r"C:\Temp",
-        &resolve
-    ));
+    for share in [r"\\server\share\x", "//server/share/x"] {
+        assert!(!windows_temporary(share, r"C:\Temp", &resolve), "{share}");
+    }
 }

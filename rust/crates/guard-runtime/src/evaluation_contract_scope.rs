@@ -107,8 +107,9 @@ fn portable_style(value: &str) -> Option<Style> {
         return (!value.split('/').any(|part| part == "..")).then_some(Style::Posix);
     }
     let (drive, _, _) = nt_splitroot(value);
-    if !drive.is_empty() && nt_isabs(value) && !value.starts_with("\\\\") {
-        let spelled = value.replace('/', "\\");
+    // `//server/share` and mixed spellings are network shares too.
+    let spelled = value.replace('/', "\\");
+    if !drive.is_empty() && nt_isabs(value) && !spelled.starts_with("\\\\") {
         return (!spelled.split('\\').any(|part| part == "..")).then_some(Style::Windows);
     }
     None
@@ -133,7 +134,7 @@ pub(super) fn windows_temporary(
     temp_root: &str,
     realpath: &dyn Fn(&str) -> Option<String>,
 ) -> bool {
-    if path.contains('\0') || !nt_isabs(path) || path.starts_with("\\\\") {
+    if path.contains('\0') || !nt_isabs(path) || path.replace('/', "\\").starts_with("\\\\") {
         return false;
     }
     let (Some(candidate), Some(root)) = (realpath(path), realpath(temp_root)) else {
