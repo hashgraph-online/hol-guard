@@ -1049,6 +1049,11 @@ mod zcode_hook_settings;
 #[cfg(test)]
 #[path = "adapters/zcode_hook_settings_tests.rs"]
 mod zcode_hook_settings_tests;
+#[path = "adapters/zcode_hook_surface.rs"]
+mod zcode_hook_surface;
+#[cfg(test)]
+#[path = "adapters/zcode_hook_surface_tests.rs"]
+mod zcode_hook_surface_tests;
 #[cfg(all(test, unix))]
 mod zcode_vectors_tests;
 

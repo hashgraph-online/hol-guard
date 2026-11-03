@@ -24,7 +24,7 @@ pub(crate) const HOOK_EVENT_NAMES: [&str; 7] = [
     "PostToolUseFailure",
     "Stop",
 ];
-const MANAGED_MARKER: &str = "HOL_GUARD_MANAGED_ZCODE";
+pub(crate) const MANAGED_MARKER: &str = "HOL_GUARD_MANAGED_ZCODE";
 
 pub(crate) use guard_adapter_detection::{Fields, Scope};
 fn python_lower(text: &str) -> String {

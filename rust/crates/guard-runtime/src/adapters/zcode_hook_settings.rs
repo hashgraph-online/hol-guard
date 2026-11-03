@@ -1,36 +1,20 @@
-//! `runner_authority` kind `zcode_hook_settings`: Guard's hook groups in a
-//! ZCode `hooks` settings mapping (`config.json` and the CLI's
-//! `setting.json`), ported from `ZCodeHarnessAdapter` in `adapters/zcode.py`.
-//!
-//! Python keeps the file I/O, the install state, the handler rendering and
-//! the `enabled` flag writes. It sends the `hooks` mapping as JSON text so its
-//! key order survives, and every list in the answer names entries of the
-//! caller's own lists, so user objects and their key order are never rebuilt:
-//!
-//! - `["events", i]` / `["hooks", i]`: entry `i` of `hooks.events[name]` or of
-//!   the legacy flat `hooks[name]`, unchanged;
-//! - `{"copy": <ref>, "hooks": [j, "guard", ...]}`: `dict(entry)` holding
-//!   those of its own handlers and Guard's handler for the event;
-//! - `{"group": <matcher or null>}`: a new group holding Guard's handler.
-//!
-//! `install` answers the legacy flat keys to drop and the `hooks.events`
-//! lists to assign, in assignment order; `uninstall` answers every event list
-//! after pruning (`null` drops it). Both answer the saved pre-install
-//! `enabled` record, or `null` when the live flag still applies.
+//! The plan behind the `zcode_hook_settings` kind (see `zcode_hook_surface`):
+//! Guard's hook groups in a ZCode `hooks` settings mapping, ported from
+//! `ZCodeHarnessAdapter` in `adapters/zcode.py`. Every planned list names
+//! entries of the caller's own lists, so user objects and their key order
+//! are kept, and is then built over the parsed mapping.
 
 use std::collections::HashSet;
 
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 use super::context_digest::python_strip;
-use super::pyjson::{self, PyVal};
-use super::runner_authority_detector::args_object;
-use super::runner_authority_op::{KindResult, ERR_INVALID};
+use super::pyjson::PyVal;
 use super::zcode_artifacts::{hook_event_groups, is_managed, HOOK_EVENT_NAMES};
 
 const EVENTS_KEY: &str = "events";
-const PRETOOL: &str = "PreToolUse";
-const PROMPT: &str = "UserPromptSubmit";
+pub(crate) const PRETOOL: &str = "PreToolUse";
+pub(crate) const PROMPT: &str = "UserPromptSubmit";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Source {
@@ -59,59 +43,33 @@ type Ref = (Source, usize);
 type Assigned = Vec<(String, Vec<Entry>)>;
 type EventPlan = (String, Option<Vec<Entry>>);
 type EventPlans = Vec<EventPlan>;
+/// An ordered JSON object; also Guard's handler per event name.
+pub(crate) type Dict = Vec<(String, PyVal)>;
 
-pub(crate) fn dispatch(args: &Value) -> KindResult {
-    let map = args_object(args)?;
-    let op = map.get("op").and_then(Value::as_str).ok_or(ERR_INVALID)?;
-    let keys: &[&str] = match op {
-        "install" => &[
-            "hooks",
-            "path",
-            "history",
-            "managed_config_path",
-            "matchers",
-        ],
-        "uninstall" => &["hooks", "path", "history", "managed_config_path"],
-        _ => return Err(ERR_INVALID),
-    };
-    if map.len() != keys.len() + 1 || !keys.iter().all(|key| map.contains_key(*key)) {
-        return Err(ERR_INVALID);
-    }
-    let text = map["hooks"].as_str().ok_or(ERR_INVALID)?;
-    let hooks = pyjson::parse(text).map_err(|_| ERR_INVALID)?;
-    if hooks.as_dict().is_none() {
-        return Err(ERR_INVALID);
-    }
-    let path = map["path"].as_str().ok_or(ERR_INVALID)?;
-    let enabled = recorded_enabled(&hooks, path, &map["history"], &map["managed_config_path"]);
-    if op == "uninstall" {
-        let (events, flat) = uninstall(&hooks);
-        return Ok(json!({
-            "enabled": enabled,
-            "events": plans_json(&events),
-            "hooks": plans_json(&flat),
-        }));
-    }
-    let matchers = map["matchers"]
-        .as_array()
-        .ok_or(ERR_INVALID)?
+pub(crate) fn lookup<'a>(target: &'a [(String, PyVal)], key: &str) -> Option<&'a PyVal> {
+    target
         .iter()
-        .map(|matcher| matcher.as_str().ok_or(ERR_INVALID))
-        .collect::<Result<Vec<_>, _>>()?;
-    let (drop, events) = install(&hooks, &matchers);
-    let has_handlers = hook_event_groups(&hooks)
+        .find(|(name, _)| name == key)
+        .map(|(_, value)| value)
+}
+
+/// `target[key] = value`: in place when the key is there, else last.
+pub(crate) fn set_key(target: &mut Dict, key: &str, value: PyVal) {
+    match target.iter_mut().find(|(name, _)| name == key) {
+        Some((_, slot)) => *slot = value,
+        None => target.push((key.to_owned(), value)),
+    }
+}
+
+pub(crate) fn remove_key(target: &mut Dict, key: &str) {
+    target.retain(|(name, _)| name != key);
+}
+
+/// `_hooks_have_handlers`: any event group in either layout.
+pub(crate) fn has_handlers(hooks: &PyVal) -> bool {
+    hook_event_groups(hooks)
         .iter()
-        .any(|(_, entries)| !entries.is_empty());
-    let events: Vec<Value> = events
-        .iter()
-        .map(|(name, plan)| json!([name, plan_json(plan)]))
-        .collect();
-    Ok(json!({
-        "enabled": enabled,
-        "has_handlers": has_handlers,
-        "drop": drop,
-        "events": events,
-    }))
+        .any(|(_, entries)| !entries.is_empty())
 }
 
 /// The list `source` names for event `name`, or nothing when it is not one.
@@ -181,7 +139,12 @@ fn valid_record(record: &Value) -> Option<Value> {
 /// `_recorded_enabled_for`: a saved record applies only while Guard's
 /// entries are still in the file; legacy single-file state maps only onto
 /// the file it managed. `null` means the live flag applies.
-fn recorded_enabled(hooks: &PyVal, path: &str, history: &Value, managed_path: &Value) -> Value {
+pub(crate) fn recorded_enabled(
+    hooks: &PyVal,
+    path: &str,
+    history: &Value,
+    managed_path: &Value,
+) -> Value {
     if !has_managed_entries(hooks) {
         return Value::Null;
     }
@@ -352,43 +315,86 @@ fn uninstall(hooks: &PyVal) -> (EventPlans, EventPlans) {
     (events, flat)
 }
 
-fn reference_json((source, index): Ref) -> Value {
-    let source = match source {
-        Source::Events => "events",
-        Source::Hooks => "hooks",
-    };
-    json!([source, index])
-}
-
-fn plan_json(plan: &[Entry]) -> Value {
+/// Event `name`'s new list from its plan, over the caller's own entries.
+fn build(hooks: &PyVal, name: &str, plan: &[Entry], guard: Option<&PyVal>) -> PyVal {
     let entries = plan.iter().map(|entry| match entry {
-        Entry::Keep(source, index) => reference_json((*source, *index)),
+        Entry::Keep(source, index) => entry_at(hooks, name, (*source, *index)).clone(),
+        Entry::Group(matcher) => {
+            let mut group: Dict = vec![(
+                "hooks".to_owned(),
+                PyVal::List(guard.into_iter().cloned().collect()),
+            )];
+            if let Some(matcher) = matcher {
+                group.push(("matcher".to_owned(), PyVal::Str(matcher.clone())));
+            }
+            PyVal::Dict(group)
+        }
         Entry::Copy(source, index, items) => {
-            let handlers: Vec<Value> = items
+            let entry = entry_at(hooks, name, (*source, *index));
+            let own = entry
+                .get("hooks")
+                .and_then(PyVal::as_list)
+                .unwrap_or_default();
+            let kept = items
                 .iter()
-                .map(|item| match item {
-                    Handler::Own(position) => json!(position),
-                    Handler::Guard => json!("guard"),
+                .filter_map(|item| match item {
+                    Handler::Own(position) => own.get(*position).cloned(),
+                    Handler::Guard => guard.cloned(),
                 })
                 .collect();
-            let mut copy = Map::new();
-            copy.insert("copy".to_owned(), reference_json((*source, *index)));
-            copy.insert("hooks".to_owned(), Value::Array(handlers));
-            Value::Object(copy)
+            let mut copy = entry.as_dict().unwrap_or_default().to_vec();
+            set_key(&mut copy, "hooks", PyVal::List(kept));
+            PyVal::Dict(copy)
         }
-        Entry::Group(matcher) => json!({ "group": matcher }),
     });
-    Value::Array(entries.collect())
+    PyVal::List(entries.collect())
 }
 
-fn plans_json(plans: &[EventPlan]) -> Value {
-    Value::Array(
-        plans
-            .iter()
-            .map(|(name, plan)| match plan {
-                Some(plan) => json!([name, plan_json(plan)]),
-                None => json!([name, Value::Null]),
-            })
-            .collect(),
-    )
+/// The `hooks` mapping after install, before the `enabled` opt-in: legacy
+/// flat keys dropped and the planned `hooks.events` lists assigned.
+pub(crate) fn install_hooks(
+    hooks: &PyVal,
+    matchers: &[&str],
+    handlers: &[(String, PyVal)],
+) -> Dict {
+    let (drop, plans) = install(hooks, matchers);
+    let mut events = hooks
+        .get(EVENTS_KEY)
+        .and_then(PyVal::as_dict)
+        .map(<[_]>::to_vec)
+        .unwrap_or_default();
+    for (name, plan) in &plans {
+        let guard = lookup(handlers, name);
+        set_key(&mut events, name, build(hooks, name, plan, guard));
+    }
+    let mut after = hooks.as_dict().unwrap_or_default().to_vec();
+    after.retain(|(name, _)| !drop.contains(name));
+    set_key(&mut after, EVENTS_KEY, PyVal::Dict(events));
+    after
+}
+
+/// The `hooks` mapping after Guard's entries are pruned from both layouts;
+/// an emptied list goes, and so does an emptied `hooks.events`.
+pub(crate) fn uninstall_hooks(hooks: &PyVal) -> Dict {
+    let (events, flat) = uninstall(hooks);
+    let assign = |target: &mut Dict, plans: &EventPlans| {
+        for (name, plan) in plans {
+            match plan {
+                Some(plan) => set_key(target, name, build(hooks, name, plan, None)),
+                None => remove_key(target, name),
+            }
+        }
+    };
+    let mut after = hooks.as_dict().unwrap_or_default().to_vec();
+    if let Some(current) = hooks.get(EVENTS_KEY).and_then(PyVal::as_dict) {
+        let mut assigned = current.to_vec();
+        assign(&mut assigned, &events);
+        if assigned.is_empty() {
+            remove_key(&mut after, EVENTS_KEY);
+        } else {
+            set_key(&mut after, EVENTS_KEY, PyVal::Dict(assigned));
+        }
+    }
+    assign(&mut after, &flat);
+    after
 }
