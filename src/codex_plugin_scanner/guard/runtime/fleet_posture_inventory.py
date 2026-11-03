@@ -12,8 +12,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..native_runner_authority import native_runner_authority
-
 if TYPE_CHECKING:
     from ..store import GuardStore
 
@@ -110,6 +108,9 @@ def reportable_inventory_rows(
 ) -> list[ReportableInventoryRow]:
     """Rows fleet posture reports, so ``extensions list`` and ``mcp list`` show what Guard Cloud can receive."""
 
+    # Imported here: `extensions list` and `mcp list` sit on the CLI help path.
+    from ..native_runner_authority import native_runner_authority
+
     source = list(rows)
     payload = native_runner_authority("fleet_inventory_rows", {"rows": projected_rows(source)}, guard_home)
     selected: list[Any] = payload["rows"]
@@ -134,6 +135,7 @@ def inventory_items(store: GuardStore, *, hash_key: bytes) -> list[dict[str, obj
     or an accepted sync would tell Guard Cloud that everything was uninstalled.
     """
 
+    from ..native_runner_authority import native_runner_authority
     from .fleet_posture_aibom import fleet_inventory_rows
 
     payload = native_runner_authority(

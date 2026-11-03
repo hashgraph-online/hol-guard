@@ -121,7 +121,10 @@ fn items_key_the_config_path_under_the_install_secret() {
     assert_eq!(path_hash.len(), "sha256:".len() + 64);
     assert_ne!(
         path_hash,
-        format!("sha256:{}", super::sha256_hex("/home/u/.codex/skills/one"))
+        format!(
+            "sha256:{}",
+            super::selection::sha256_hex("/home/u/.codex/skills/one")
+        )
     );
     let other = dispatch(
         "fleet_inventory_items",
