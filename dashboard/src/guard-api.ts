@@ -2358,6 +2358,39 @@ export async function changeCloudReviewSettings(input: {
   });
 }
 
+export type CloudActionsCheckOutcome =
+  | { kind: "checked"; payload: unknown }
+  | { kind: "wait"; retryAfterSeconds: number; message: string };
+
+/** Saved Cloud actions sign-ins and their last check. The daemon answers without calling Guard Cloud. */
+export async function fetchCloudActionsStatus(): Promise<unknown> {
+  return readJson<unknown>("/v1/cloud-actions/status", { cache: "no-store" });
+}
+
+/** Ask Guard Cloud about every saved sign-in. The daemon allows one check a minute. */
+export async function checkCloudActionsNow(): Promise<CloudActionsCheckOutcome> {
+  const response = await fetchWithGuardAuth("/v1/cloud-actions/status", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+    cache: "no-store",
+  });
+  if (response.status === 429 || response.status === 409) {
+    const payload = (await response.json().catch(() => null)) as unknown;
+    const retry = isRecord(payload) ? payload["retry_after_seconds"] : null;
+    const message = isRecord(payload) && typeof payload["message"] === "string" ? payload["message"] : null;
+    return {
+      kind: "wait",
+      retryAfterSeconds: typeof retry === "number" && Number.isFinite(retry) && retry > 0 ? Math.min(retry, 60) : 10,
+      message: message ?? "Guard is already checking. Try again shortly.",
+    };
+  }
+  if (!response.ok) {
+    throw new Error(await requestErrorMessage(response, "Guard could not check Cloud actions. Try again."));
+  }
+  return { kind: "checked", payload: (await response.json()) as unknown };
+}
+
 function applyHarnessPosturePatch(
   current: GuardSettings["harness_postures"],
   patch: GuardHarnessPosturePatch,

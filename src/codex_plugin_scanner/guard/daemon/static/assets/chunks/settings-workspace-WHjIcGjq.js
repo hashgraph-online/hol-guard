@@ -1,8 +1,8 @@
-import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b4 as HiMiniPauseCircle, b5 as listContextAgentSessions, h as harnessDisplayName, b6 as HiMiniLink, b7 as revokeContextAgentSession, b8 as authorizeContextAgentSession, b9 as ContextAssistanceApiError, ba as ask, bb as parseContextScope, bc as validContextBrokerRevision, bd as isGuardDemoMode, be as fetchWithGuardAuth, bf as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bg as HiMiniCodeBracketSquare, bh as HiMiniFolder, u as HiMiniDocumentText, bi as HiMiniComputerDesktop, bj as HiMiniHome, k as HiMiniCheck, bk as HiMiniFolderPlus, bl as HiMiniClock, bm as commitDashboardLocation, bn as listContextWorkspaces, bo as HiMiniFolderOpen, bp as grantContextWorkspace, bq as manageContextWorkspace, br as compileWorkspaceContext, w as HiMiniArrowRight, M as HiMiniClipboardDocument, bs as HiMiniArrowLeft, bt as isCigarProducerVersion, bu as isCigarCoreLabel, bv as subscribeDashboardLocation, a5 as HiMiniSparkles, bw as HiMiniArrowUpCircle, bx as parseContextAssistanceStatus, by as isCigarBuildIdentity, bz as fetchContextInstallations, bA as HiMiniCloudArrowDown, f as fetchContextAssistance, c as controlContextAssistance, bB as HiMiniArrowDownTray, bC as downloadBlob, bD as savedEvidenceCopy, bE as guardAwareHref, bF as fetchContextData, bG as forgetContextHistory, bH as forgetSavedEvidence, bI as resolveProtectionLevelCopy, aA as fetchSettings, bJ as fetchRuntimeSnapshot, bK as clearHarnessWatchOverrides, bL as withHarnessPosturePatch, P as updateSettings, bM as clearPolicy, bN as clearReviewQueue, bO as revokeApprovalGateCooldown, bP as disableApprovalGateTotp, bQ as importSettings, bR as resetSettings, bS as enrollApprovalGateTotp, bT as verifyApprovalGateTotp, bU as clearEvidence, bV as exportDiagnostics, bW as repairApprovalCenter, bX as exportSettings, bY as setupDesktopNotifications, a7 as EmptyState, bZ as settingsWatchBannerModel, b_ as WorkspacePageHeader, Z as WatchProtectionBanner, b$ as navigateFromAnchor, g as HiMiniChevronDown, c0 as humanizeList, c1 as isProtectionPosture, c2 as deriveProtectionPosture, c3 as normalizeHarnessPostures, c4 as approvalGateCooldownLabel } from "../guard-dashboard.js";
-import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-_qdPvIXI.js";
+import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, a9 as HiMiniCloud, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as fetchCloudActionsStatus, b4 as checkCloudActionsNow, b5 as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b6 as HiMiniPauseCircle, b7 as listContextAgentSessions, h as harnessDisplayName, b8 as HiMiniLink, b9 as revokeContextAgentSession, ba as authorizeContextAgentSession, bb as ContextAssistanceApiError, bc as ask, bd as parseContextScope, be as validContextBrokerRevision, bf as isGuardDemoMode, bg as fetchWithGuardAuth, bh as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bi as HiMiniCodeBracketSquare, bj as HiMiniFolder, u as HiMiniDocumentText, bk as HiMiniComputerDesktop, bl as HiMiniHome, k as HiMiniCheck, bm as HiMiniFolderPlus, bn as HiMiniClock, bo as commitDashboardLocation, bp as listContextWorkspaces, bq as HiMiniFolderOpen, br as grantContextWorkspace, bs as manageContextWorkspace, bt as compileWorkspaceContext, w as HiMiniArrowRight, M as HiMiniClipboardDocument, bu as HiMiniArrowLeft, bv as isCigarProducerVersion, bw as isCigarCoreLabel, bx as subscribeDashboardLocation, a5 as HiMiniSparkles, by as HiMiniArrowUpCircle, bz as parseContextAssistanceStatus, bA as isCigarBuildIdentity, bB as fetchContextInstallations, bC as HiMiniCloudArrowDown, f as fetchContextAssistance, c as controlContextAssistance, bD as HiMiniArrowDownTray, bE as downloadBlob, bF as savedEvidenceCopy, bG as guardAwareHref, bH as fetchContextData, bI as forgetContextHistory, bJ as forgetSavedEvidence, bK as resolveProtectionLevelCopy, aA as fetchSettings, bL as fetchRuntimeSnapshot, bM as clearHarnessWatchOverrides, bN as withHarnessPosturePatch, P as updateSettings, bO as clearPolicy, bP as clearReviewQueue, bQ as revokeApprovalGateCooldown, bR as disableApprovalGateTotp, bS as importSettings, bT as resetSettings, bU as enrollApprovalGateTotp, bV as verifyApprovalGateTotp, bW as clearEvidence, bX as exportDiagnostics, bY as repairApprovalCenter, bZ as exportSettings, b_ as setupDesktopNotifications, a7 as EmptyState, b$ as settingsWatchBannerModel, c0 as WorkspacePageHeader, Z as WatchProtectionBanner, c1 as navigateFromAnchor, g as HiMiniChevronDown, c2 as humanizeList, c3 as isProtectionPosture, c4 as deriveProtectionPosture, c5 as normalizeHarnessPostures, c6 as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-DpNqpqFG.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
-import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-bAWZ8zmO.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-CjWFL3B3.js";
+import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-R8WOnNuC.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-q5ZpYwb7.js";
 import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-7c8X0j_V.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
@@ -2089,6 +2089,11 @@ const localSettingsNavGroups = [
     key: "local",
     label: "This machine",
     summary: "Protection, approval checks, alerts, tuning, and local upkeep."
+  },
+  {
+    key: "cloud",
+    label: "Guard Cloud",
+    summary: "Sign-ins to Guard Cloud. Protection on this machine does not depend on them."
   }
 ];
 const ICON_PROTECTION = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4", "aria-hidden": "true" });
@@ -2097,6 +2102,7 @@ const ICON_APPROVAL = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { 
 const ICON_NOTIFICATIONS = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBellAlert, { className: "h-4 w-4", "aria-hidden": "true" });
 const ICON_RISK = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "h-4 w-4", "aria-hidden": "true" });
 const ICON_MAINTENANCE = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { className: "h-4 w-4", "aria-hidden": "true" });
+const ICON_CLOUD_ACTIONS = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "h-4 w-4", "aria-hidden": "true" });
 const localSettingsNavItems = [
   {
     key: "protection",
@@ -2145,13 +2151,21 @@ const localSettingsNavItems = [
     summary: "Export, reset, clear logs, and fix connection issues.",
     group: "local",
     icon: ICON_MAINTENANCE
+  },
+  {
+    key: "cloud-actions",
+    label: "Cloud actions",
+    mobileLabel: "Cloud",
+    summary: "Which workspaces AI tools here are signed in to, and whether Guard Cloud still accepts them.",
+    group: "cloud",
+    icon: ICON_CLOUD_ACTIONS
   }
 ];
 const localSettingsMobileTabLabels = Object.fromEntries(
   localSettingsNavItems.map((item) => [item.key, item.mobileLabel ?? item.label])
 );
 function isLocalSettingsTabKey(value) {
-  return value === "protection" || value === "apps" || value === "approval" || value === "notifications" || value === "rules" || value === "maintenance";
+  return value === "protection" || value === "apps" || value === "approval" || value === "notifications" || value === "rules" || value === "maintenance" || value === "cloud-actions";
 }
 function SettingsSectionNavItem({ active, item, onSelect }) {
   const handleClick = reactExports.useCallback(() => {
@@ -2677,6 +2691,359 @@ function CloudReviewSettings() {
       }
     ) : null
   ] });
+}
+const CLOUD_ACTIONS_STATUS_SCHEMA = "guard.cloud-actions.local-status.v1";
+const MAX_SIGN_INS = 32;
+const MAX_MESSAGE_CHARS = 240;
+const PROFILE_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
+const WORKSPACE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const SITE_PATTERN = /^[A-Za-z0-9.-]{1,253}(?::\d{1,5})?$/;
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function text$1(value, pattern) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (pattern && !pattern.test(trimmed)) return null;
+  return trimmed;
+}
+function moment(value) {
+  const raw = text$1(value);
+  return raw !== null && Number.isFinite(Date.parse(raw)) ? raw : null;
+}
+function normalizeCheck(value) {
+  if (!isRecord(value) || value["state"] === "not_checked") {
+    return { checkedAt: null, stale: false, message: null };
+  }
+  const checkedAt = moment(value["checked_at"]);
+  const connection = isRecord(value["connection"]) ? value["connection"] : null;
+  const service = isRecord(value["service"]) ? value["service"] : null;
+  const source = service && service["state"] !== "current" ? service : connection;
+  const message2 = text$1(source?.["message"]);
+  return {
+    checkedAt,
+    stale: checkedAt === null || value["stale"] === true,
+    message: message2 === null ? null : message2.slice(0, MAX_MESSAGE_CHARS)
+  };
+}
+function normalizeSignIn(value) {
+  if (!isRecord(value)) return null;
+  const profile = text$1(value["profile"], PROFILE_PATTERN);
+  const state = text$1(value["state"], /^[a-z_]{1,40}$/);
+  if (profile === null || state === null) return null;
+  return {
+    profile,
+    workspace: text$1(value["workspace"], WORKSPACE_PATTERN),
+    site: text$1(value["site"], SITE_PATTERN),
+    signedInAt: moment(value["signed_in_at"]),
+    expiresAt: moment(value["expires_at"]),
+    state,
+    check: normalizeCheck(value["check"])
+  };
+}
+function normalizeCloudActionsStatus(payload) {
+  if (!isRecord(payload) || payload["schema"] !== CLOUD_ACTIONS_STATUS_SCHEMA) return null;
+  const rows = Array.isArray(payload["sign_ins"]) ? payload["sign_ins"].slice(0, MAX_SIGN_INS) : null;
+  if (rows === null) return null;
+  const staleAfter = payload["stale_after_seconds"];
+  return {
+    generatedAt: moment(payload["generated_at"]),
+    staleAfterSeconds: typeof staleAfter === "number" && Number.isFinite(staleAfter) && staleAfter > 0 ? staleAfter : 300,
+    nextCheckAllowedAt: moment(payload["next_check_allowed_at"]),
+    signIns: rows.map(normalizeSignIn).filter((row2) => row2 !== null)
+  };
+}
+const STATE_COPY = {
+  connected: { label: "Connected", tone: "good", remedy: null, signInAgain: false },
+  current: { label: "Connected", tone: "good", remedy: null, signInAgain: false },
+  not_checked: {
+    label: "Not checked yet",
+    tone: "neutral",
+    remedy: "Select Check now to ask Guard Cloud about this sign-in.",
+    signInAgain: false
+  },
+  offline: {
+    label: "Guard Cloud not reachable",
+    tone: "neutral",
+    remedy: "Check this computer's internet connection, then check again.",
+    signInAgain: false
+  },
+  not_turned_on: {
+    label: "Not turned on",
+    tone: "neutral",
+    remedy: "Cloud actions are not turned on for this Guard Cloud. Nothing on this computer needs changing.",
+    signInAgain: false
+  },
+  sign_in_expired: {
+    label: "Sign-in ended",
+    tone: "attention",
+    remedy: "This sign-in has ended. Sign in again to keep using Cloud actions.",
+    signInAgain: true
+  },
+  sign_in_again: {
+    label: "Sign in again",
+    tone: "attention",
+    remedy: "Guard Cloud no longer accepts this sign-in. Sign in again to keep using Cloud actions.",
+    signInAgain: true
+  },
+  changed: {
+    label: "Sign in again",
+    tone: "attention",
+    remedy: "Guard Cloud changed what Cloud actions offer. Sign in again to pick up the change.",
+    signInAgain: true
+  },
+  not_permitted: {
+    label: "No access",
+    tone: "attention",
+    remedy: "This member may not use Cloud actions in this workspace. Ask a workspace owner for access.",
+    signInAgain: false
+  },
+  workspace_mismatch: {
+    label: "Workspace refused",
+    tone: "attention",
+    remedy: "Guard Cloud refused this workspace. Sign in again with a workspace you belong to.",
+    signInAgain: true
+  },
+  unexpected_answer: {
+    label: "Unexpected answer",
+    tone: "neutral",
+    remedy: "Guard Cloud gave an answer Guard did not expect. Check again in a few minutes.",
+    signInAgain: false
+  },
+  profile_damaged: {
+    label: "Needs repair",
+    tone: "attention",
+    remedy: "This saved sign-in cannot be read. Sign out of it, then sign in again.",
+    signInAgain: true
+  }
+};
+const UNKNOWN_STATE = {
+  label: "Unknown",
+  tone: "neutral",
+  remedy: "Check again, or update Guard if this keeps happening.",
+  signInAgain: false
+};
+function cloudActionsStateCopy(state) {
+  return STATE_COPY[state] ?? UNKNOWN_STATE;
+}
+function cloudActionsSignInCommand(signIn) {
+  let command = "hol-guard cloud-actions login";
+  if (signIn.workspace !== null) command += ` --cloud-workspace ${signIn.workspace}`;
+  if (signIn.profile !== "default") command += ` --profile ${signIn.profile}`;
+  return command;
+}
+function cloudActionsSignOutCommand(signIn) {
+  return signIn.profile === "default" ? "hol-guard cloud-actions logout" : `hol-guard cloud-actions logout --profile ${signIn.profile}`;
+}
+function elapsedCopy(seconds) {
+  if (seconds < 60) return "less than a minute ago";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} days ago`;
+}
+function cloudActionsCheckedCopy(check, now) {
+  if (check.checkedAt === null) return "Not checked yet";
+  const seconds = Math.max(0, (now.getTime() - Date.parse(check.checkedAt)) / 1e3);
+  const when = `Checked ${elapsedCopy(seconds)}`;
+  return check.stale ? `${when}. This answer may be out of date.` : when;
+}
+function cloudActionsRetryAfterSeconds(nextCheckAllowedAt, now) {
+  if (nextCheckAllowedAt === null) return 0;
+  const seconds = Math.ceil((Date.parse(nextCheckAllowedAt) - now.getTime()) / 1e3);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, 60) : 0;
+}
+function cloudActionsSummary(status) {
+  const count2 = status.signIns.length;
+  if (count2 === 0) return "No AI tool on this computer is signed in to Cloud actions.";
+  const needsAttention = status.signIns.filter((row2) => cloudActionsStateCopy(row2.state).tone === "attention").length;
+  const signedIn = count2 === 1 ? "1 sign-in" : `${count2} sign-ins`;
+  if (needsAttention === 0) return `${signedIn} on this computer.`;
+  return `${signedIn} on this computer. ${needsAttention === 1 ? "1 needs" : `${needsAttention} need`} attention.`;
+}
+const TONE_CLASS = {
+  good: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  neutral: "border-slate-200 bg-slate-50 text-slate-700",
+  attention: "border-amber-200 bg-amber-50 text-amber-900"
+};
+const UNREADABLE = "Guard could not read the Cloud actions sign-ins on this computer. Update Guard, then reload this page.";
+function formatDate(value) {
+  if (value === null) return "Not recorded";
+  return new Date(value).toLocaleString(void 0, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+function CommandLine({ label: label2, command }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600", children: label2 }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block overflow-x-auto whitespace-pre rounded-md bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark", children: command })
+  ] });
+}
+function CloudActionsSignInRow({ signIn, now }) {
+  const copy = cloudActionsStateCopy(signIn.state);
+  const headingId = `cloud-actions-sign-in-${signIn.profile}`;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { "aria-labelledby": headingId, className: "py-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { id: headingId, className: "break-all text-sm font-semibold text-brand-dark", children: signIn.workspace ?? "Workspace not recorded" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 break-all text-xs text-slate-600", children: [
+          signIn.site ?? "Guard Cloud site not recorded",
+          signIn.profile !== "default" ? ` · Sign-in name ${signIn.profile}` : null
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${TONE_CLASS[copy.tone]}`, children: copy.label })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Signed in" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: formatDate(signIn.signedInAt) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Sign-in ends" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: formatDate(signIn.expiresAt) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Guard Cloud's answer" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: cloudActionsCheckedCopy(signIn.check, now) })
+      ] })
+    ] }),
+    signIn.check.message !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: signIn.check.message }) : null,
+    copy.remedy !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-700", children: copy.remedy }) : null,
+    signIn.state === "profile_damaged" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "Sign out of this sign-in", command: cloudActionsSignOutCommand(signIn) }) : null,
+    copy.signInAgain ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "Sign in again in a terminal", command: cloudActionsSignInCommand(signIn) }) : null
+  ] });
+}
+function CloudActionsSettingsView({
+  status,
+  error,
+  loading,
+  checking,
+  notice: notice2,
+  retryAfterSeconds,
+  now,
+  onCheck
+}) {
+  let summary2 = error ?? "Reading Cloud actions sign-ins...";
+  if (status !== null && !loading) summary2 = cloudActionsSummary(status);
+  const canCheck = status !== null && status.signIns.length > 0;
+  let checkLabel = "Check now";
+  if (checking) checkLabel = "Checking...";
+  else if (retryAfterSeconds > 0) checkLabel = `Check again in ${retryAfterSeconds}s`;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-xl border border-emerald-100 bg-emerald-50/60 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { "aria-hidden": "true", className: "mt-0.5 h-5 w-5 shrink-0 text-emerald-700" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-700", children: "Protection on this computer does not depend on Cloud actions. It keeps working when Guard Cloud is offline, when a sign-in ends, and when included actions run out." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cloud-actions-heading", className: "space-y-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { id: "cloud-actions-heading", className: "flex items-center gap-2 text-sm font-semibold text-brand-dark", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { "aria-hidden": "true", className: "h-5 w-5 shrink-0" }),
+            " Cloud actions sign-ins"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: "Each sign-in lets AI tools on this computer ask for actions in one Guard Cloud workspace. Guard Cloud decides those actions; they never approve anything Guard pauses on this computer." })
+        ] }),
+        canCheck ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            disabled: checking || loading || retryAfterSeconds > 0,
+            onClick: onCheck,
+            className: "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark hover:bg-slate-50 disabled:opacity-60 sm:min-h-10",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "h-4 w-4" }),
+              checkLabel
+            ]
+          }
+        ) : null
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-700", children: summary2 }),
+      notice2 !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "text-sm text-amber-900", children: notice2 }) : null,
+      status !== null && status.signIns.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white px-4", children: status.signIns.map((signIn) => /* @__PURE__ */ jsxRuntimeExports.jsx(CloudActionsSignInRow, { signIn, now }, signIn.profile)) }) : null,
+      status !== null && status.signIns.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "To sign in, run this in a terminal", command: "hol-guard cloud-actions login --cloud-workspace <workspace-id>" }) : null,
+      status !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600", children: "Included actions and connected accounts are shown in Guard Cloud. This computer does not receive them yet." }) : null
+    ] })
+  ] });
+}
+function CloudActionsSettings() {
+  const [status, setStatus] = reactExports.useState(null);
+  const [error, setError] = reactExports.useState(null);
+  const [loading, setLoading] = reactExports.useState(true);
+  const [checking, setChecking] = reactExports.useState(false);
+  const [notice2, setNotice] = reactExports.useState(null);
+  const [now, setNow] = reactExports.useState(() => /* @__PURE__ */ new Date());
+  const [waitUntil, setWaitUntil] = reactExports.useState(0);
+  const revision = reactExports.useRef(0);
+  const apply = reactExports.useCallback((payload) => {
+    const next = normalizeCloudActionsStatus(payload);
+    setStatus(next);
+    setError(next === null ? UNREADABLE : null);
+    const current = /* @__PURE__ */ new Date();
+    setNow(current);
+    if (next !== null) {
+      setWaitUntil(current.getTime() + cloudActionsRetryAfterSeconds(next.nextCheckAllowedAt, current) * 1e3);
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    const current = ++revision.current;
+    void (async () => {
+      try {
+        const payload = await fetchCloudActionsStatus();
+        if (current === revision.current) apply(payload);
+      } catch {
+        if (current === revision.current) {
+          setError("Guard on this computer did not answer. Protection status is on the Home page; reload to try again.");
+        }
+      } finally {
+        if (current === revision.current) setLoading(false);
+      }
+    })();
+    return () => {
+      revision.current += 1;
+    };
+  }, [apply]);
+  reactExports.useEffect(() => {
+    const timer = window.setInterval(() => setNow(/* @__PURE__ */ new Date()), 1e3);
+    return () => window.clearInterval(timer);
+  }, []);
+  const onCheck = reactExports.useCallback(() => {
+    const current = ++revision.current;
+    setChecking(true);
+    setNotice(null);
+    void (async () => {
+      try {
+        const outcome = await checkCloudActionsNow();
+        if (current !== revision.current) return;
+        if (outcome.kind === "wait") {
+          setNotice(outcome.message);
+          setWaitUntil(Date.now() + outcome.retryAfterSeconds * 1e3);
+        } else {
+          apply(outcome.payload);
+        }
+      } catch (cause) {
+        if (current === revision.current) {
+          setNotice(cause instanceof Error ? cause.message : "Guard could not check Cloud actions. Try again.");
+        }
+      } finally {
+        if (current === revision.current) setChecking(false);
+      }
+    })();
+  }, [apply]);
+  const retryAfterSeconds = Math.max(0, Math.ceil((waitUntil - now.getTime()) / 1e3));
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    CloudActionsSettingsView,
+    {
+      status,
+      error,
+      loading,
+      checking,
+      notice: notice2,
+      retryAfterSeconds,
+      now,
+      onCheck
+    }
+  );
 }
 function withContextProfile(config, profile) {
   const limits = profile === "low_memory" ? { context_tokens: 768, reserve_tokens: 128, max_active_workspaces: 1, idle_shutdown_seconds: 120 } : profile === "balanced" ? { context_tokens: 2048, reserve_tokens: 256, max_active_workspaces: 2, idle_shutdown_seconds: 600 } : config.limits;
@@ -9484,6 +9851,7 @@ function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, onNaviga
                 ] })
               ] })
             ] }),
+            activeTab === "cloud-actions" && /* @__PURE__ */ jsxRuntimeExports.jsx(CloudActionsSettings, {}),
             activeTab === "maintenance" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 ContextDataRepairPanel,
