@@ -36,8 +36,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "not_connected",
    "supported_ecosystems": [
@@ -188,8 +187,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "not_connected",
    "supported_ecosystems": [
@@ -342,8 +340,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "workspace_required",
    "supported_ecosystems": [
@@ -494,8 +491,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -646,8 +642,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -804,8 +799,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -966,8 +960,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -1120,8 +1113,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -1274,8 +1266,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -1428,8 +1419,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -1582,8 +1572,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -1736,8 +1725,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -1892,8 +1880,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -2047,8 +2034,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -2201,8 +2187,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -2355,8 +2340,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -2509,8 +2493,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -2663,8 +2646,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -2818,8 +2800,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "weird_state",
    "supported_ecosystems": [
@@ -2973,8 +2954,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "degraded",
    "supported_ecosystems": [
@@ -3127,8 +3107,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "degraded",
    "supported_ecosystems": [
@@ -3282,8 +3261,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -3436,8 +3414,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "not_connected",
    "supported_ecosystems": [
@@ -3590,8 +3567,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -3744,8 +3720,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "workspace_required",
    "supported_ecosystems": [
@@ -3898,8 +3873,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4053,8 +4027,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4208,8 +4181,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4363,8 +4335,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4518,8 +4489,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4673,8 +4643,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4828,8 +4797,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4984,8 +4952,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -5139,8 +5106,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -5294,8 +5260,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -5449,8 +5414,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "custom_ok",
    "supported_ecosystems": [
@@ -5604,8 +5568,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -5760,8 +5723,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -5919,8 +5881,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6078,8 +6039,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6237,8 +6197,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6391,8 +6350,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6547,8 +6505,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6703,8 +6660,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6859,8 +6815,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6939,8 +6894,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -7094,8 +7048,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -7249,8 +7202,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -7325,8 +7277,7 @@
     "managed_updated_at": "2026-05-30T00:00:00Z",
     "package_script_action": "block",
     "remote_policy_active": true,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -7481,8 +7432,7 @@
     "managed_updated_at": null,
     "package_script_action": "block",
     "remote_policy_active": true,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -7636,8 +7586,7 @@
     "managed_updated_at": null,
     "package_script_action": "review",
     "remote_policy_active": true,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -7793,8 +7742,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": true,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -7949,8 +7897,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": true,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -8103,8 +8050,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": true,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -8257,8 +8203,7 @@
     "managed_updated_at": null,
     "package_script_action": null,
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -8397,8 +8342,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -8546,8 +8490,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "strict",
-    "team_policy_active": false
+    "security_level": "strict"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -8698,8 +8641,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -8853,8 +8795,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -9007,8 +8948,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -9162,8 +9102,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -9316,8 +9255,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -9473,8 +9411,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -9628,8 +9565,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -9782,8 +9718,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -9937,8 +9872,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -10092,8 +10026,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -10247,8 +10180,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -10402,8 +10334,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [

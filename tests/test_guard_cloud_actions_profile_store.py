@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import threading
@@ -135,6 +136,23 @@ def test_a_profile_held_by_another_command_is_not_changed(
     assert store.load_secrets("default") == before
     second_access, second_refresh = cloud.issued[2:]
     assert {entry["token"] for entry in cloud.revocations} == {second_access, second_refresh}
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_a_sign_out_before_any_sign_in_keeps_cloud_actions_files_private(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    previous = os.umask(0o022)
+    try:
+        assert _cli("logout", "--profile", "second", "--guard-home", str(tmp_path), "--json") == 0
+    finally:
+        os.umask(previous)
+    capsys.readouterr()
+
+    assert (tmp_path / "cloud-actions").stat().st_mode & 0o777 == 0o700
+    _cli("doctor", "--guard-home", str(tmp_path), "--home", str(tmp_path / "user"), "--json")
+    payload, _ = _json_out(capsys)
+    assert payload["checks"]["files"]["state"] == "private"
 
 
 def test_the_lock_gives_up_after_its_wait(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
