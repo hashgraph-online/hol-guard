@@ -185,6 +185,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
         "codex_host_inventory" => crate::codex_host_inventory::dispatch(args),
+        "package_script_memory" => crate::package_script_memory::dispatch(args),
         "copilot_detect" => copilot_detect::detect(args),
         "copilot_hook_config" => copilot_hook_config::dispatch(args),
         "copilot_lifecycle_state" => copilot_lifecycle_state::dispatch(args),

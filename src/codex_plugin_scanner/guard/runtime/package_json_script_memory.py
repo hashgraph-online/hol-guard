@@ -1,37 +1,59 @@
-"""Remember package.json projects locally and redact paths on public payloads."""
+"""Remember package.json projects locally and redact paths on public payloads.
+
+Which projects are remembered, their workspace packages, whether a listed item
+is still shown, and the directory a paste is read in are decided by the native
+``package_script_memory`` kind. Python keeps the store calls and the redaction.
+"""
 
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from typing import Any
 
 from .package_json_scripts import (
     PackageJsonScriptsDiscovery,
-    find_nearest_package_json,
     looks_like_package_script_paste,
     recognize_package_json_scripts,
 )
 
 _SURFACE = "package-scripts"
 _PUBLIC_SOURCE = "user-tool"
-_MAX_REMEMBERED = 16
-_MAX_WORKSPACES = 8
 _PATH_CLASS_TOKENS = frozenset({"unknown", "package-store", "system-bin", "user-tool"})
+
+
+def _ask(op: str, **fields: Any) -> dict[str, Any]:
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        return native_runner_authority("package_script_memory", {"op": op, "cwd": os.getcwd(), **fields})
+    except NativeRunnerAuthorityError as exc:
+        raise RuntimeError("Package script memory requires the HOL Guard native runtime") from exc
+
+
+def _entries(items: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [{key: item.get(key) for key in ("surface", "source_path", "state")} for item in items]
 
 
 def operator_working_directory(payload: dict[str, object], *, home_dir: Path) -> Path:
     raw = payload.get("cwd")
+    requested = None
     if isinstance(raw, str) and raw.strip():
-        try:
-            resolved = Path(raw.strip()).expanduser().resolve()
-        except OSError:
-            resolved = None
-        if resolved is not None and resolved.is_dir():
-            return resolved
-    process_cwd = Path.cwd()
-    if process_cwd.is_dir() and find_nearest_package_json(process_cwd, home_dir=home_dir) is not None:
-        return process_cwd
-    return home_dir
+        requested = os.path.join(os.getcwd(), os.path.expanduser(raw.strip()))
+    chosen = _ask("operator_cwd", home=str(home_dir.absolute()), requested=requested).get("path")
+    if not isinstance(chosen, str):
+        raise RuntimeError("HOL Guard native runtime returned a malformed working directory")
+    return Path(chosen)
+
+
+def package_items_available(items: list[dict[str, object]]) -> list[bool]:
+    """Whether each listed item is still shown; package scripts drop out once their manifest is gone."""
+
+    available = _ask("available", entries=_entries(items)).get("available")
+    if not isinstance(available, list) or len(available) != len(items):
+        raise RuntimeError("HOL Guard native runtime returned a malformed availability list")
+    return [value is True for value in available]
 
 
 def public_local_cli_item(item: dict[str, object]) -> dict[str, object]:
@@ -86,7 +108,8 @@ def refresh_package_script_catalogs(store: object, *, home_dir: Path) -> list[di
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, json.JSONDecodeError):
             continue
     refreshed = _listed_items(store)
-    return [public_local_cli_item(item) for item in refreshed if _package_item_available(item)]
+    shown = package_items_available(refreshed)
+    return [public_local_cli_item(item) for item, keep in zip(refreshed, shown, strict=True) if keep]
 
 
 def recognize_operator_package_scripts(
@@ -127,22 +150,6 @@ def _listed_items(store: object) -> list[dict[str, object]]:
     return [item for item in raw if isinstance(item, dict)]
 
 
-def _package_item_available(item: dict[str, object]) -> bool:
-    if item.get("state") in {"allowed", "blocked"}:
-        return True
-    if item.get("surface") != _SURFACE:
-        return True
-    raw = item.get("source_path")
-    if not isinstance(raw, str) or raw in _PATH_CLASS_TOKENS:
-        return True
-    path = Path(raw)
-    manifest = path if path.name == "package.json" else path / "package.json"
-    try:
-        return manifest.is_file()
-    except OSError:
-        return False
-
-
 def _publish_root(
     store: object,
     root: Path,
@@ -178,75 +185,10 @@ def _publish_root(
 
 
 def _catalog_roots(items: list[dict[str, object]], *, include_cwd: bool = True) -> list[Path]:
-    candidates: list[Path] = []
-    if include_cwd:
-        cwd = Path.cwd()
-        if cwd.is_dir():
-            candidates.append(cwd)
-    for item in items:
-        if item.get("surface") != _SURFACE:
-            continue
-        raw = item.get("source_path")
-        if not isinstance(raw, str) or raw in _PATH_CLASS_TOKENS:
-            continue
-        path = Path(raw)
-        candidates.append(path.parent if path.name == "package.json" else path)
-    roots: list[Path] = []
-    seen: set[str] = set()
-    for candidate in candidates:
-        try:
-            resolved = candidate.resolve()
-        except OSError:
-            continue
-        manifest = resolved if resolved.name == "package.json" else resolved / "package.json"
-        if not manifest.is_file():
-            continue
-        root = manifest.parent
-        key = str(root)
-        if key in seen:
-            continue
-        seen.add(key)
-        roots.append(root)
-        for child in _workspace_package_roots(root):
-            child_key = str(child)
-            if child_key in seen:
-                continue
-            seen.add(child_key)
-            roots.append(child)
-        if len(roots) >= _MAX_REMEMBERED:
-            break
-    return roots
-
-
-def _workspace_package_roots(root: Path) -> list[Path]:
-    try:
-        payload = json.loads((root / "package.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
-        return []
-    if not isinstance(payload, dict):
-        return []
-    raw = payload.get("workspaces")
-    patterns: list[str] = []
-    if isinstance(raw, list):
-        patterns = [item for item in raw if isinstance(item, str)]
-    elif isinstance(raw, dict):
-        packages = raw.get("packages")
-        if isinstance(packages, list):
-            patterns = [item for item in packages if isinstance(item, str)]
-    found: list[Path] = []
-    for pattern in patterns[:6]:
-        if ".." in pattern or pattern.startswith("/") or "**" in pattern:
-            continue
-        try:
-            matches = sorted(root.glob(pattern))
-        except (OSError, ValueError):
-            continue
-        for match in matches:
-            if match.is_dir() and (match / "package.json").is_file():
-                found.append(match)
-            if len(found) >= _MAX_WORKSPACES:
-                return found
-    return found
+    roots = _ask("roots", include_cwd=include_cwd, entries=_entries(items)).get("roots")
+    if not isinstance(roots, list) or not all(isinstance(root, str) for root in roots):
+        raise RuntimeError("HOL Guard native runtime returned malformed package roots")
+    return [Path(root) for root in roots]
 
 
 def _folder_label(source_path: str | None) -> str | None:
