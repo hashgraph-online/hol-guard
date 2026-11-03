@@ -46,6 +46,8 @@ def test_grammar_fixture(case: dict[str, Any], capsys: pytest.CaptureFixture[str
     argv = [_fill(arg) for arg in case["argv"]]
     if case.get("guard_home"):
         argv += ["--guard-home", str(tmp_path)]
+    if case.get("home"):
+        argv += ["--home", str(tmp_path)]
     exit_code = _run(argv)
     captured = capsys.readouterr()
 
