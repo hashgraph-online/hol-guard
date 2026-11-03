@@ -227,12 +227,7 @@ pub(super) fn executable_evidence(
                         )
                         .then_some((
                             path,
-                            remaining_for_executable_path(
-                                contract,
-                                &arguments,
-                                &filtered,
-                                path,
-                            ),
+                            remaining_for_executable_path(contract, &arguments, &filtered, path),
                         ))
                     })
                 })
