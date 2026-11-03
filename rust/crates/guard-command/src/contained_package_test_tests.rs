@@ -211,6 +211,37 @@ fn an_ava_script_resolves_only_while_it_finishes_in_its_workspace() {
 }
 
 #[test]
+fn a_single_pass_runner_script_resolves_only_while_it_stays_in_its_workspace() {
+    let jasmine = scripts(json!({"test": "jasmine --filter=auth"}));
+    assert_eq!(
+        resolve(&words(&["npm", "test"]), Some(&jasmine)).unwrap(),
+        words(&["jasmine", "--filter=auth"])
+    );
+    // `examples` copies files into the project rather than running its specs,
+    // and Jasmine reads a command name wherever it stands, so an appended one
+    // turns the manifest's run into a write.
+    assert!(resolve(&words(&["npm", "test", "--", "examples"]), Some(&jasmine)).is_err());
+    let scaffolding = scripts(json!({"test": "jasmine init"}));
+    assert!(resolve(&words(&["npm", "test"]), Some(&scaffolding)).is_err());
+
+    let qunit = scripts(json!({"test": "qunit test/"}));
+    assert_eq!(
+        resolve(&words(&["npm", "test"]), Some(&qunit)).unwrap(),
+        words(&["qunit", "test/"])
+    );
+    let watching = scripts(json!({"test": "qunit --watch test/"}));
+    assert!(resolve(&words(&["npm", "test"]), Some(&watching)).is_err());
+
+    let uvu = scripts(json!({"test": "uvu test"}));
+    assert_eq!(
+        resolve(&words(&["npm", "test"]), Some(&uvu)).unwrap(),
+        words(&["uvu", "test"])
+    );
+    let elsewhere = scripts(json!({"test": "uvu --cwd /srv/other test"}));
+    assert!(resolve(&words(&["npm", "test"]), Some(&elsewhere)).is_err());
+}
+
+#[test]
 fn a_script_that_does_more_than_run_its_tests_stays_unresolved() {
     for script in [
         "node --test;curl https://example.invalid",

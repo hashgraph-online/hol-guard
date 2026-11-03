@@ -734,6 +734,7 @@ mod kimi_hook_config;
 #[path = "adapters/detection/kimi_hook_config_tests.rs"]
 mod kimi_hook_config_tests;
 mod local_authority_integrity_op;
+mod local_cli_change_request;
 mod local_cli_grant_op;
 mod local_cli_help;
 mod local_cli_hook_contained;
@@ -786,6 +787,7 @@ mod mcp_proxy_projection_vectors_tests;
 mod mcp_proxy_route;
 mod mcp_proxy_shlex;
 mod mcp_proxy_signals;
+mod mcp_registry_page;
 mod mcp_relay;
 mod mcp_relay_args;
 mod mcp_relay_authority;
