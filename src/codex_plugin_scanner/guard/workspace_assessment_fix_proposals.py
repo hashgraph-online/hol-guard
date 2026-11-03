@@ -45,6 +45,8 @@ _ROOT_UNAVAILABLE: Final = frozenset(
     }
 )
 _MAX_FIELD_CHARS: Final = 128
+# Newer runs finishing during each native call can only delay settling.
+_VERIFY_ATTEMPTS: Final = 3
 _VERIFY_RUN_KEYS: Final = ("run_id", "snapshot_digest", "started_at_ms", "coverage", "findings")
 _VERIFY_PROPOSAL_KEYS: Final = (
     "proposal_id",
@@ -223,11 +225,20 @@ def verify_proposals(store: Any, keys: assessments.WorktreeKeys, *, now_ms: int)
     native runtime decides each verdict: a run that cannot vouch for the whole
     supply-chain input leaves a proposal as it is, and nothing but such a run
     can mark one fixed. An unavailable native runtime also changes nothing.
+    A run that finishes while the native runtime answers is consulted next.
     """
+
+    for _ in range(_VERIFY_ATTEMPTS):
+        if _settle_against_newest(store, keys, now_ms=now_ms):
+            return
+
+
+def _settle_against_newest(store: Any, keys: assessments.WorktreeKeys, *, now_ms: int) -> bool:
+    """Settle against the newest run; False when a newer run finished meanwhile."""
 
     run = assessments.latest_assessed_run(store, keys)
     if run is None:
-        return
+        return True
     with store._connect() as connection:
         rows = connection.execute(
             """
@@ -239,7 +250,7 @@ def verify_proposals(store: Any, keys: assessments.WorktreeKeys, *, now_ms: int)
             (keys.codebase_key, keys.worktree_key),
         ).fetchall()
     if not rows:
-        return
+        return True
     proposals = [dict(zip(_VERIFY_PROPOSAL_KEYS, row, strict=True)) for row in rows]
     for item in proposals:
         item["advisory_ids"], item["rule_ids"] = json.loads(item["advisory_ids"]), json.loads(item["rule_ids"])
@@ -251,12 +262,12 @@ def verify_proposals(store: Any, keys: assessments.WorktreeKeys, *, now_ms: int)
             {"run": {key: run[key] for key in _VERIFY_RUN_KEYS}, "proposals": proposals},
         )
     except NativeRunnerAuthorityError:
-        return
+        return True
     updates = answer.get("updates")
     prior_by_id = {item["proposal_id"]: item for item in proposals}
     with store._connect() as connection:
         connection.execute("begin immediate")
-        # A run that finished while the resident answered decides instead.
+        # A run that finished while the native runtime answered decides instead.
         newest = connection.execute(
             """
             select run_id from workspace_assessment_runs
@@ -266,7 +277,7 @@ def verify_proposals(store: Any, keys: assessments.WorktreeKeys, *, now_ms: int)
             (keys.codebase_key, keys.worktree_key),
         ).fetchone()
         if newest is None or newest[0] != run["run_id"]:
-            return
+            return False
         for update in updates if isinstance(updates, list) else []:
             proposal = prior_by_id.get(update.get("proposal_id")) if isinstance(update, dict) else None
             if proposal is None or update.get("state") not in ("still_present", "verified_fixed"):
@@ -290,6 +301,7 @@ def verify_proposals(store: Any, keys: assessments.WorktreeKeys, *, now_ms: int)
                     proposal["verification_run_id"],
                 ),
             )
+    return True
 
 
 def _id_set(value: object) -> set[str]:
