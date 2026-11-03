@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.monomem",
+  "version": "1.0.0",
+  "name": "Monomem",
+  "description": "Self-hosted shared memory for AI coding agents: one SQLite file on the user's machine, shared by every connected tool. Each note carries a server-stamped writer, version history and undo. Reads and ordinary saves keep Guard's usual handling; deleting, replacing, merging, purging history, changing trust or quarantine, and queueing or approving tasks are gated on review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.calasdan-sketch",
+    "displayName": "Calas Automations",
+    "url": "https://github.com/calasdan-sketch"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0B1E33"
+  },
+  "homepage": "https://github.com/calasdan-sketch/monomem",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "monomem"
+  },
+  "riskClasses": [
+    "local-sqlite-write",
+    "local-data-access"
+  ],
+  "tools": [
+    { "name": "state_read", "state": "inherit" },
+    { "name": "state_search", "state": "inherit" },
+    { "name": "state_relevant", "state": "inherit" },
+    { "name": "state_list", "state": "inherit" },
+    { "name": "catch_up", "state": "inherit" },
+    { "name": "memory_get", "state": "inherit" },
+    { "name": "memory_index", "state": "inherit" },
+    { "name": "memory_since", "state": "inherit" },
+    { "name": "memory_timeline", "state": "inherit" },
+    { "name": "memory_history", "state": "inherit" },
+    { "name": "memory_stats", "state": "inherit" },
+    { "name": "memory_consolidation_candidates", "state": "inherit" },
+    { "name": "memory_supersede_preview", "state": "inherit" },
+    { "name": "session_list", "state": "inherit" },
+    { "name": "task_get", "state": "inherit" },
+    { "name": "task_list", "state": "inherit" },
+    { "name": "runner_status", "state": "inherit" },
+    { "name": "state_write", "state": "inherit" },
+    { "name": "memory_ack", "state": "inherit" },
+    { "name": "memory_supersede_undo", "state": "inherit" },
+    { "name": "session_handoff", "state": "inherit" },
+    { "name": "task_claim", "state": "inherit" },
+    { "name": "state_delete", "state": "review" },
+    { "name": "memory_supersede_confirm", "state": "review" },
+    { "name": "memory_restore_version", "state": "review" },
+    { "name": "memory_consolidate", "state": "review" },
+    { "name": "memory_rebuild_edges", "state": "review" },
+    { "name": "memory_history_purge", "state": "review" },
+    { "name": "memory_quarantine", "state": "review" },
+    { "name": "trust_policy", "state": "review" },
+    { "name": "task_put", "state": "review" },
+    { "name": "task_approve", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/calasdan-sketch/monomem",
+    "https://github.com/calasdan-sketch/monomem/blob/main/SECURITY.md",
+    "https://www.npmjs.com/package/monomem"
+  ],
+  "saferAlternatives": [
+    "Every tool reads or writes only the local SQLite store; nothing is sent off the machine and no model is called. The server binds 127.0.0.1 by default and ships no tunnel.",
+    "A default install registers only ten tools (state_*, catch_up and the supersede preview/confirm/undo trio). The rest appear only when MONOMEM_TOOLS opts them in.",
+    "written_by is stamped by the server from the authenticated token, never from tool input. Give each agent its own scoped read/write token to tell writers apart.",
+    "Every write is linted: likely secrets are refused, and prompt-injection text is quarantined until an admin reviews it. memory_quarantine releases or drops held writes, so it stays on review.",
+    "Replacing a note is a two-step preview then confirm, and memory_supersede_undo reverses it. state_delete removes the note text from the database file, so it stays on review.",
+    "task_put can queue a command task for the separately run, unpublished command runner, and task_approve lets it run; both stay on review.",
+    "This entry matches npx monomem mcp (npx -y monomem@1.0.4 mcp as written by monomem setup). A node <path>/cli.js mcp launch, or cmd /c npx on Windows, keeps Guard's normal handling."
+  ]
+}
