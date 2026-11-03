@@ -112,10 +112,15 @@ def apply_host_config(plan: HostConfigPlan, *, guard_home: Path) -> HostConfigBa
         # file then holds Guard's settings and must be put back too. Matching
         # bytes alone are not proof, since another apply may have written them.
         landed: bool | None = True if published else moved
-        if landed and not published and not _holds(path, plan.after):
+        if landed is None and _holds(path, plan.before):
+            # Whether the move happened is unknown, but the file is as it was
+            # (or still absent), so there is nothing to put back.
+            landed = False
+        put_back = _put_back(backup, plan.before, expected=None if published else plan.after) if landed else None
+        if put_back == "changed":
             # Changed again since Guard's move: leave it, and keep the copy.
             landed = None
-        if landed and not _put_back(backup, plan.before):
+        elif put_back == "failed":
             # The copy is the only way back now, so it stays for `restore`, and the
             # record now names what is on disk so restore puts the whole file back.
             _record_left_behind(backup)
@@ -234,7 +239,7 @@ def _read(path: Path) -> bytes | None:
         raise HostConfigWriteError("unreadable", str(error)) from None
 
 
-def _holds(path: Path, payload: bytes) -> bool:
+def _holds(path: Path, payload: bytes | None) -> bool:
     try:
         return _read(path) == payload
     except (OSError, HostConfigWriteError):
@@ -314,22 +319,34 @@ def _write_exact(path: Path, payload: bytes, *, mode: int, expected: bytes) -> N
     _sync_directory(path.parent)
 
 
-def _put_back(backup: HostConfigBackup, before: bytes | None) -> bool:
-    """Put the previewed file back; False when it could not be confirmed."""
+def _put_back(
+    backup: HostConfigBackup, before: bytes | None, *, expected: bytes | None
+) -> Literal["done", "changed", "failed"]:
+    """Put the previewed file back.
+
+    With `expected`, the file must still hold exactly those bytes right before
+    it is replaced; otherwise it is left alone and the result is "changed".
+    "failed" means the put-back could not be confirmed.
+    """
 
     try:
         if before is None:
+            if expected is not None and _read(backup.path) != expected:
+                return "changed"
             backup.path.unlink(missing_ok=True)
         else:
             temporary = _write_temporary(backup.path, before, backup.mode or _NEW_FILE_MODE)
             try:
+                # Read again right before the replace, so a later edit is never lost.
+                if expected is not None and _read(backup.path) != expected:
+                    return "changed"
                 replace_file(temporary, backup.path)
             finally:
                 temporary.unlink(missing_ok=True)
         _sync_directory(backup.path.parent)
-        return _read(backup.path) == before
+        return "done" if _read(backup.path) == before else "failed"
     except (OSError, HostConfigWriteError):
-        return False
+        return "failed"
 
 
 def _sync_directory(directory: Path) -> None:

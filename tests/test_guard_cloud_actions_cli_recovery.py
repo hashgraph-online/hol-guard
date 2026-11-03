@@ -182,6 +182,67 @@ def test_an_interrupt_before_the_move_leaves_another_writers_settings_alone(
     assert list(backups_dir(guard_home, "codex").glob("*")) == []
 
 
+def test_an_edit_made_while_guard_prepares_the_put_back_is_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _seed(tmp_path)
+    before = path.read_bytes()
+    guard_home = tmp_path / "guard"
+    plan = plan_host_config("codex", path=path, url=URL)
+    real_replace = cloud_actions_host_apply.replace_file
+    real_temporary = cloud_actions_host_apply._write_temporary
+    edited = b"# The AI tool wrote this while Guard was putting its file back.\n" + (plan.after or b"")
+    interrupted = False
+
+    def moved_then_interrupted(source: Path, destination: Path) -> None:
+        nonlocal interrupted
+        real_replace(source, destination)
+        if destination == path and not interrupted:
+            interrupted = True
+            raise KeyboardInterrupt
+
+    def edited_during_put_back(target: Path, payload: bytes, mode: int) -> Path:
+        temporary = real_temporary(target, payload, mode)
+        if target == path and payload == before and interrupted:
+            path.write_bytes(edited)
+        return temporary
+
+    monkeypatch.setattr(cloud_actions_host_apply, "replace_file", moved_then_interrupted)
+    monkeypatch.setattr(cloud_actions_host_apply, "_write_temporary", edited_during_put_back)
+    with pytest.raises(KeyboardInterrupt):
+        _ = apply_host_config(plan, guard_home=guard_home)
+
+    assert path.read_bytes() == edited
+    assert _strays(path.parent) == []
+    assert list(backups_dir(guard_home, "codex").glob("*.json"))
+
+
+def test_an_unknown_move_result_with_the_file_unchanged_keeps_no_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _seed(tmp_path)
+    before = path.read_bytes()
+    guard_home = tmp_path / "guard"
+    plan = plan_host_config("codex", path=path, url=URL)
+    real = cloud_actions_host_apply.replace_file
+
+    def interrupted(source: Path, destination: Path) -> None:
+        if destination == path:
+            raise KeyboardInterrupt
+        real(source, destination)
+
+    monkeypatch.setattr(cloud_actions_host_apply, "replace_file", interrupted)
+    # Guard cannot tell whether its file was moved (for example, the check itself failed).
+    monkeypatch.setattr(cloud_actions_host_apply, "_moved", lambda *_args, **_kwargs: None)
+    with pytest.raises(KeyboardInterrupt):
+        _ = apply_host_config(plan, guard_home=guard_home)
+
+    assert path.read_bytes() == before
+    assert list(backups_dir(guard_home, "codex").glob("*")) == []
+    monkeypatch.setattr(cloud_actions_host_apply, "replace_file", real)
+    assert restore_host_config("codex", path=path, guard_home=guard_home) is None
+
+
 @pytest.mark.skipif(os.name == "nt", reason="POSIX directory permissions")
 def test_a_settings_folder_guard_cannot_write_is_left_alone(tmp_path: Path) -> None:
     path = _seed(tmp_path)
