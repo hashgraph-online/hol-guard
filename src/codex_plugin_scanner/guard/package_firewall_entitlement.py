@@ -34,12 +34,15 @@ def build_oauth_package_firewall_entitlement(
     payload: dict[str, object],
     *,
     now: datetime | None = None,
+    required: bool = False,
 ) -> dict[str, object] | None:
     """The package-firewall grant an OAuth token response carries, per the runtime.
 
     The native runtime reads the response's ``guard_local_entitlement`` record.
     ``None`` means the response granted nothing, or the runtime could not say
-    what it granted; callers keep the entitlement they already stored.
+    what it granted. A token refresh keeps the entitlement it already stored
+    when it reads ``None``. A connect replaces the stored credentials, so it
+    passes ``required`` and fails instead of saving them without the plan.
     """
 
     from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
@@ -56,7 +59,11 @@ def build_oauth_package_firewall_entitlement(
                 "fallback_expires_at": (resolved_now + _OAUTH_ENTITLEMENT_FALLBACK_TTL).isoformat(),
             },
         )
-    except NativeRunnerAuthorityError:
+    except NativeRunnerAuthorityError as error:
+        if required:
+            raise RuntimeError(
+                "Guard OAuth token exchange failed: the HOL Guard runtime could not read the plan Guard Cloud granted."
+            ) from error
         return None
     entitlement = answer.get("entitlement")
     return entitlement if isinstance(entitlement, dict) else None

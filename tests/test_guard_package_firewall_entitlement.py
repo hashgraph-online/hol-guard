@@ -175,6 +175,20 @@ def test_build_oauth_package_firewall_entitlement_grants_nothing_unanswered(
     assert build_oauth_package_firewall_entitlement({"guard_local_entitlement": {"plan_id": "team"}}) is None
 
 
+def test_a_connect_fails_rather_than_saving_credentials_without_the_plan(monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake_runner_authority(monkeypatch, NativeRunnerAuthorityError("native_runner_authority_unavailable"))
+
+    with pytest.raises(RuntimeError, match="could not read the plan"):
+        build_oauth_package_firewall_entitlement({"guard_local_entitlement": {"plan_id": "team"}}, required=True)
+
+
+def test_a_connect_without_a_record_needs_no_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _fake_runner_authority(monkeypatch, NativeRunnerAuthorityError("native_runner_authority_unavailable"))
+
+    assert build_oauth_package_firewall_entitlement({}, required=True) is None
+    assert sent == []
+
+
 def test_reconcile_connect_state_clears_stale_sync_not_available_for_paid_oauth(
     tmp_path: Path,
 ) -> None:

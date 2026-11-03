@@ -544,6 +544,7 @@ def _parse_guard_token_exchange_payload(payload: dict[str, object]) -> GuardOAut
         supply_chain_entitlement=build_oauth_package_firewall_entitlement(
             payload,
             now=now,
+            required=True,
         ),
         workspace_id=_read_nested_string(claims, "workspace", "workspaceId"),
         cloud_user_profile=_extract_cloud_user_profile(payload),
