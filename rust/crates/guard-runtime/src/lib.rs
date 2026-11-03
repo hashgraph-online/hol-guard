@@ -793,6 +793,7 @@ mod mcp_proxy_route;
 mod mcp_proxy_shlex;
 mod mcp_proxy_signals;
 mod mcp_registry_page;
+mod mcp_registry_setup;
 mod mcp_relay;
 mod mcp_relay_args;
 mod mcp_relay_authority;

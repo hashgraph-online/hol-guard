@@ -137,6 +137,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "local_cli_recognize" => crate::local_cli_identify::recognize_dispatch(args),
         "network_status_build" => crate::network_status_build::dispatch(args),
         "mcp_registry_page" => crate::mcp_registry_page::dispatch(args),
+        "mcp_registry_setup" => crate::mcp_registry_setup::dispatch(args),
         "connector_setup_rows" => crate::connector_setup_rows::dispatch(args),
         "review_event_decode" => crate::review_event_decode::dispatch(args),
         "review_policy_memory_plan" => crate::review_policy_memory_plan::dispatch(args),
