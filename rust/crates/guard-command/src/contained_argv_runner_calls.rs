@@ -18,7 +18,9 @@ pub(crate) fn contained_runner_call(arguments: &[String]) -> bool {
             || (tool == "ava" && ava_contained_call(rest))
             || (tool == "jasmine" && super::single_pass_runners::jasmine_contained_call(rest))
             || (tool == "qunit" && super::single_pass_runners::qunit_contained_call(rest))
-            || (tool == "uvu" && super::single_pass_runners::uvu_contained_call(rest)))
+            || (tool == "uvu" && super::single_pass_runners::uvu_contained_call(rest))
+            || (tool == "tape" && super::single_pass_runners::tape_contained_call(rest))
+            || (tool == "tsd" && super::single_pass_runners::tsd_contained_call(rest)))
 }
 
 /// True when a Vitest call finishes on its own.
