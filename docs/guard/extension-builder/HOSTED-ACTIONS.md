@@ -21,10 +21,15 @@ credentials. A remote binding uses the endpoint from the server contribution
 it extends.
 
 [`examples/cloud-binding-build.json`](examples/cloud-binding-build.json) binds
-the synthetic command source and a fictional remote MCP server. Add the
-exported trust map and packaged validation base, then validate it offline:
+the synthetic command source and a fictional remote MCP server. Build the
+compiler as described in
+[Compile source with Rust](README.md#compile-source-with-rust), export the
+trust map and packaged build, add them to the example, then validate it
+offline:
 
 ```sh
+rust/target/release/guard-command-source export-trust > contracts/extensions/build-trust-class-map.v1.json
+rust/target/release/guard-command-source export-built > packaged-build.json
 jq --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
   --slurpfile built packaged-build.json \
   '.trust=$trust[0] | .validation_base={catalog:$built[0].catalog,programs:[]}' \
@@ -47,16 +52,23 @@ argument, the catch-all tool, a command run in the cloud and a repeated action
 ID. Each case changes the example above and names the expected `code` and
 `pointer`. The pointer locates the rejected binding in the request
 (`/cloud_bindings/1/bindings/0`); the error never repeats its values. Check
-every case against your compiler:
+every case against your compiler. A rejection exits 2, so the loop checks the
+status and the JSON separately:
 
 ```sh
 jq -c '.cases[]' docs/guard/extension-builder/examples/cloud-binding-rejected.json |
   while read -r case; do
+    name=$(jq -r .name <<<"$case")
     jq --argjson case "$case" 'reduce $case.set[] as $s (.; setpath($s.path; $s.value))' \
-      cloud-binding-build.json |
-      rust/target/release/guard-command-source validate |
-      jq --argjson case "$case" -e '.code == $case.code and .pointer == $case.pointer' >/dev/null ||
-      echo "unexpected result: $(jq -r .name <<<"$case")"
+      cloud-binding-build.json > case-build.json
+    status=0
+    result=$(rust/target/release/guard-command-source validate < case-build.json) || status=$?
+    if [ "$status" -ne 2 ]; then
+      echo "unexpected status $status: $name"
+    elif ! jq --argjson case "$case" -e '.code == $case.code and .pointer == $case.pointer' \
+      >/dev/null <<<"$result"; then
+      echo "unexpected result: $name"
+    fi
   done
 ```
 
@@ -81,9 +93,20 @@ its endpoint),
 its effect, resource, required capabilities and support label, plus a
 `binding_digest` over that meaning. The artifact as a whole carries the
 `program_digest` of the program compiled in the same request, the
-`compiler_version` and an `artifact_digest`. Changing the source or the binding
-changes these digests, so a reviewed binding cannot quietly follow a later
-version of the source.
+`compiler_version` and an `artifact_digest`. Each digest covers something
+different:
+
+- `binding_digest` covers what one action means: its extension, target,
+  effect, resource, required capabilities and support label. Changing the
+  binding changes it. Changing a source rule or tool state does not.
+- `program_digest` covers the compiled program. Changing the source changes it.
+  Changing a binding does not.
+- `artifact_digest` covers the whole artifact, including `program_digest` and
+  every `binding_digest`, so it changes when either the source or a binding
+  changes.
+
+Check a reviewed binding against `artifact_digest`; a binding cannot then
+quietly follow a later version of the source.
 
 ## Review a binding
 
