@@ -35288,6 +35288,261 @@
       "expect": "not_allow"
     },
     {
+      "id": "nl-tab-separator-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "nl -s$'\\t' README.md | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "nl-tab-separator-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | nl -s$'\\t' | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tac-tab-separator-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "tac -s$'\\t' README.md | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tac-worktree-file-tab-cut",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "tac README.md | cut -d$'\\t' -f1 | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rev-worktree-file-tab-cut",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rev README.md | cut -d$'\\t' -f1 | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rev-piped-tab-cut",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | rev | cut -d$'\\t' -f1 | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "fold-width-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fold -w 72 README.md | cut -d$'\\t' -f1 | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "fold-spaces-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | fold -s -w 72 | cut -d$'\\t' -f1 | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "expand-tabs-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "expand -t 4 README.md | cut -d$'\\t' -f1 | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "unexpand-tabs-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "unexpand -a -t 4 README.md | cut -d$'\\t' -f1 | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "fmt-width-cluster-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fmt -72 README.md | cut -d$'\\t' -f1 | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "comm-tab-delimiter-worktree-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "comm -12 --output-delimiter=$'\\t' README.md README.md | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-nl-home-private-key",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "nl -s$'\\t' ${HOME}/.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fmt-output-option",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fmt --output=$OUT README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-comm-third-operand",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "comm -12 --output-delimiter=$'\\t' README.md README.md README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "uniq-count-worktree-file",
       "fix_area": "shell",
       "harnesses": [
