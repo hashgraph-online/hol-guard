@@ -194,7 +194,7 @@ pub(super) fn answer(
 /// its own posture first, then the snapshot mode. Watch leaves CIGAR resting
 /// for a new session as it does for a prompt, and so does a binding whose
 /// lease has lapsed.
-pub(super) fn records_only(harness: &str, policy_store: &PolicySnapshotStore) -> bool {
+pub(crate) fn records_only(harness: &str, policy_store: &PolicySnapshotStore) -> bool {
     let Ok(binding) = policy_store.admit_direct_binding() else {
         return true;
     };

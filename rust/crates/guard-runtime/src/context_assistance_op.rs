@@ -35,6 +35,9 @@ pub(crate) enum Kind {
     WorkspaceAccess,
     WorkspaceGrant,
     Folders,
+    /// A Claude Code session started: start a resting worker for the
+    /// session's first prompt. Does nothing unless project context is on.
+    Warm,
 }
 impl Kind {
     fn name(self) -> &'static str {
@@ -49,6 +52,7 @@ impl Kind {
             Self::WorkspaceAccess => "workspace_access",
             Self::WorkspaceGrant => "workspace_grant",
             Self::Folders => "folders",
+            Self::Warm => "warm",
         }
     }
 }
@@ -137,6 +141,13 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
         match request.query.kind {
             Kind::Activate => service.schedule(Check::Activate, home.into())?,
             Kind::Recheck => service.schedule(Check::Recheck, home.into())?,
+            // Watch leaves CIGAR resting for a new session, as the
+            // SessionStart hook itself does.
+            Kind::Warm => {
+                if !crate::hook_direct::lifecycle::records_only("claude-code", store) {
+                    service.warm_prompt_lane(home);
+                }
+            }
             Kind::Status
             | Kind::Installations
             | Kind::Versions

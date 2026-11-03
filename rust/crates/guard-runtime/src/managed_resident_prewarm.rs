@@ -23,10 +23,20 @@
 //! prewarm returns before it takes a lease of its own, and so is a host whose
 //! restart budget is nearly spent: nothing a user is waiting on may be
 //! refused a spawn because a prewarm took the last one.
+//!
+//! The prewarm also asks the resident to start a resting CIGAR worker
+//! (`context_assistance` kind `warm`), including when another client already
+//! holds the resident: after an idle stop the resident is still up but the
+//! worker is not, and without this the session's first prompt finds it
+//! starting and gets only a list of files. The resident does nothing unless
+//! project context is on and the harness is not watch-only, and a request
+//! that fails changes nothing.
 
 use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};
+
+use serde_json::json;
 
 use crate::resident_process_identity::executable_missing;
 use crate::resident_state::{runtime_digest, state_scope};
@@ -43,17 +53,36 @@ const PREWARM_REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
 const PREWARM_HOLD: Duration = Duration::from_secs(120);
 /// How often the hold rechecks that this runtime is still installed.
 const PREWARM_POLL: Duration = Duration::from_millis(250);
+/// The CIGAR warm answers once the worker start is scheduled, not when it is
+/// up, so it needs little more than a busy resident's queue.
+const WARM_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(super) fn run(state_base: &Path) -> Result<(), String> {
-    run_with_hold(state_base, PREWARM_HOLD)
+    run_with_hold(
+        state_base,
+        PREWARM_HOLD,
+        warm_payload(state_base).as_deref(),
+    )
 }
 
-pub(super) fn run_with_hold(state_base: &Path, hold: Duration) -> Result<(), String> {
+/// The prewarm with its hold window and the CIGAR warm request to send, if
+/// any.
+pub(super) fn run_with_hold(
+    state_base: &Path,
+    hold: Duration,
+    warm: Option<&[u8]>,
+) -> Result<(), String> {
     let digest = runtime_digest()?;
-    if super::lease::any_live(state_base, &digest) {
+    let live = super::lease::any_live(state_base, &digest);
+    // A held resident should answer without a spawn, but one that exited
+    // since the check would be started again, so the budget gates both.
+    if !super::restart_budget::speculative_spawn_allowed(&state_scope(state_base, &digest)?)? {
         return Ok(());
     }
-    if !super::restart_budget::speculative_spawn_allowed(&state_scope(state_base, &digest)?)? {
+    if live {
+        if let Some(payload) = warm {
+            let _ = super::lease::client_request(state_base, payload, WARM_REQUEST_TIMEOUT);
+        }
         return Ok(());
     }
     let client_lease = super::lease::acquire(state_base)?;
@@ -63,8 +92,31 @@ pub(super) fn run_with_hold(state_base: &Path, hold: Duration) -> Result<(), Str
         PREWARM_REQUEST_TIMEOUT,
         &client_lease,
     )?;
+    if let Some(payload) = warm {
+        let _ = super::client_request_with_lease(
+            state_base,
+            payload,
+            WARM_REQUEST_TIMEOUT,
+            &client_lease,
+        );
+    }
     hold_lease(hold, std::env::current_exe().ok().as_deref());
     Ok(())
+}
+
+/// The CIGAR warm request for the Guard home holding `state_base`, or `None`
+/// when that home is not an absolute path the resident could match.
+fn warm_payload(state_base: &Path) -> Option<Vec<u8>> {
+    let guard_home = state_base.parent().filter(|home| home.is_absolute())?;
+    let frame = json!({
+        "operation": "context_assistance",
+        "request": {
+            "schema": "guard-context-assistance-request.v1",
+            "request_id": "session-start-warm",
+            "query": {"kind": "warm", "guard_home": guard_home.to_str()?, "input": {}},
+        },
+    });
+    serde_json::to_vec(&frame).ok()
 }
 
 /// What identifies the installed file, so a replacement at the same path is
