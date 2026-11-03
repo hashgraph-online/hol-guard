@@ -117,9 +117,12 @@ pub(super) fn normalized_command_segments(
 
 /// Whether npm still reads a project `.npmrc` for this segment.
 ///
-/// A `cd` that failed because the directory is missing, and the commands
-/// `&&` joins after it, do not run. Every other unplaced launch can still
-/// reach the directory the model could not name.
+/// A `cd` that failed because its own operand was missing, and the commands
+/// `&&` joins after it, do not run. The model also copies that reason onto a
+/// later `cd` once the directory is already unknown. That later `cd` can
+/// succeed, so its failure counts only when the directory before it was known.
+/// Every other unplaced launch can still reach a directory the model could
+/// not name.
 fn project_npmrc_applies(segments: &[ShellExecutionSegment], index: usize) -> bool {
     let mut cursor = index;
     while cursor > 0 {
@@ -131,6 +134,7 @@ fn project_npmrc_applies(segments: &[ShellExecutionSegment], index: usize) -> bo
         }
         let previous = &segments[cursor - 1];
         if previous.directory_operation.is_some()
+            && previous.effective_cwd.is_some()
             && matches!(
                 previous.reason_code.as_deref(),
                 Some(SHELL_CWD_MISSING_DIRECTORY) | Some(SHELL_CWD_NOT_DIRECTORY)

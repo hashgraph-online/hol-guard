@@ -110,6 +110,37 @@ fn a_directory_the_shell_could_not_name_keeps_the_package_unnamed() {
 }
 
 #[test]
+fn a_cd_after_a_failed_cd_keeps_the_package_unnamed() {
+    let (dir, project, environment) = project();
+    let app = project.join("app");
+    fs::create_dir_all(&app).unwrap();
+    fs::write(app.join(".npmrc"), "package=evil\n").unwrap();
+    let home = Path::new(&environment["HOME"]);
+    fs::write(home.join(".npmrc"), "package=left-pad\n").unwrap();
+    // The first `cd` fails. The shell stays put, so `cd app && npx` runs
+    // and npm reads both npmrc files. The model copies the missing-directory
+    // reason onto that second `cd`.
+    let command = format!("cd /nonexistent; cd {} && npx vitest run", app.display());
+
+    let intent = parse_package_intent(
+        &command,
+        Some(&project),
+        Some(home),
+        None,
+        Some(&environment),
+    )
+    .expect("npx intent");
+
+    assert_eq!(intent.targets.len(), 1);
+    assert!(intent.targets[0].package_name.is_none());
+    assert_eq!(
+        intent.targets[0].source_invalid_reason.as_deref(),
+        Some("npm_config_package_unidentified")
+    );
+    let _ = dir;
+}
+
+#[test]
 fn a_skipped_launch_does_not_read_home_config() {
     let (_dir, _project, environment) = project();
     let home = Path::new(&environment["HOME"]);
