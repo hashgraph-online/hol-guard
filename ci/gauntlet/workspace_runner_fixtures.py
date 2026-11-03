@@ -47,12 +47,14 @@ WORKSPACE_MOCHA_CASE = "omp-native-workspace-npx-mocha"
 # separate processes. AVA runs its suite once and exits unless it is asked to
 # watch, so the plain launch is the routine one.
 WORKSPACE_AVA_CASE = "omp-native-workspace-npx-ava"
-# The three runners that take one pass and have nowhere else to go. Jasmine and
-# uvu have no watch mode at all and QUnit watches only when it is asked to, so
-# for each of them the plain launch is the routine one.
+# The runners that take one pass and have nowhere else to go. Jasmine, uvu,
+# tape and tsd have no watch mode at all and QUnit watches only when it is
+# asked to, so for each of them the plain launch is the routine one.
 WORKSPACE_JASMINE_CASE = "omp-native-workspace-npx-jasmine"
 WORKSPACE_QUNIT_CASE = "omp-native-workspace-npx-qunit"
 WORKSPACE_UVU_CASE = "omp-native-workspace-npx-uvu"
+WORKSPACE_TAPE_CASE = "omp-native-workspace-npx-tape"
+WORKSPACE_TSD_CASE = "omp-native-workspace-npx-tsd"
 # The same install, launched through the project's own name for one part of its
 # suite. A project with more than one kind of test names them `test:unit`,
 # `test:types` and so on, and npm runs whatever the entry holds, so the named
@@ -122,6 +124,8 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_JASMINE_CASE,
         WORKSPACE_QUNIT_CASE,
         WORKSPACE_UVU_CASE,
+        WORKSPACE_TAPE_CASE,
+        WORKSPACE_TSD_CASE,
         WORKSPACE_NAMED_TEST_SCRIPT_CASE,
         WORKSPACE_SCRIPT_PASSED_OPTION_CASE,
         WORKSPACE_QUIET_SCRIPT_RUN_CASE,
@@ -264,10 +268,10 @@ def _single_pass_project(
 ) -> dict[str, str]:
     """A workspace that installed one single-pass runner, and nothing else.
 
-    Jasmine, QUnit and uvu install the same way: a dev dependency, a lockfile
+    Jasmine, QUnit, uvu, tape and tsd install the same way: a dev dependency, a lockfile
     that records it, one spec file, and a package whose declared `bin` is the
     executable npm links into `node_modules/.bin`. Only the names and the entry
-    path differ, so one builder plants all three and each case keeps its own
+    path differ, so one builder plants them all and each case keeps its own
     line to print.
 
     `passed` names the words the scenario's own command spells after the
@@ -345,6 +349,32 @@ _UVU_FILES = _single_pass_project(
     passed=("test",),
 )
 
+_TAPE_VERSION = "5.10.3"
+# The one line the workspace's own tape prints, which only a real launch produces.
+TAPE_MARKER = f"tape {_TAPE_VERSION}"
+# tape's declared `bin` is an extensionless file under `bin/`, so the install
+# below names it the way npm links it.
+_TAPE_FILES = _single_pass_project(
+    "tape",
+    _TAPE_VERSION,
+    "bin/tape",
+    "test/a.js",
+    TAPE_MARKER,
+    passed=("test/a.js",),
+)
+
+_TSD_VERSION = "0.33.0"
+# The one line the workspace's own tsd prints, which only a real launch produces.
+TSD_MARKER = f"tsd {_TSD_VERSION}"
+# tsd compiles its own CLI, so the executable npm links is the built file.
+_TSD_FILES = _single_pass_project(
+    "tsd",
+    _TSD_VERSION,
+    "dist/cli.js",
+    "test/types.test-d.ts",
+    TSD_MARKER,
+    passed=("--files", "test/types.test-d.ts", "--show-diff"),
+)
 
 
 _ESLINT_VERSION = "9.33.0"
@@ -654,6 +684,8 @@ _INSTALLS = {
     WORKSPACE_JASMINE_CASE: _Install("jasmine", _JASMINE_FILES, JASMINE_MARKER),
     WORKSPACE_QUNIT_CASE: _Install("qunit", _QUNIT_FILES, QUNIT_MARKER),
     WORKSPACE_UVU_CASE: _Install("uvu", _UVU_FILES, UVU_MARKER, entry="bin.js"),
+    WORKSPACE_TAPE_CASE: _Install("tape", _TAPE_FILES, TAPE_MARKER, entry="bin/tape"),
+    WORKSPACE_TSD_CASE: _Install("tsd", _TSD_FILES, TSD_MARKER, entry="dist/cli.js"),
     WORKSPACE_SCRIPT_PASSED_OPTION_CASE: _Install("eslint", _ESLINT_FILES, ESLINT_MARKER),
     WORKSPACE_QUIET_SCRIPT_RUN_CASE: _Install("eslint", _QUIET_LINT_FILES, QUIET_LINT_MARKER),
     WORKSPACE_SCRIPT_RUN_ALIAS_CASE: _Install("eslint", _ALIAS_LINT_FILES, ALIAS_LINT_MARKER),

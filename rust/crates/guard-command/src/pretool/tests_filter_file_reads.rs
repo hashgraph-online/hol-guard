@@ -29,6 +29,22 @@ fn a_filter_reading_a_proven_file_needs_no_review() {
         "uniq -c Cargo.toml",
         "cut -d= -f1 Cargo.toml",
         "cut -c1-10 Cargo.toml",
+        // `-k` and `-t` carry a key definition and a field separator, not a
+        // second file to read, attached or as the next word.
+        "sort -k2 Cargo.toml",
+        "sort -k 2,2 Cargo.toml",
+        "sort -t= -k2 Cargo.toml",
+        "sort -t = -k 1 Cargo.toml",
+        "sort -nk2 Cargo.toml",
+        "sort --key=2 --field-separator== Cargo.toml",
+        "sort -z -c Cargo.toml",
+        "sort -S 16M Cargo.toml",
+        // The shell writes `$'\\t'` out before Guard reads the word, so a tab
+        // separator arrives as the character itself and is screened as the
+        // one literal it is.
+        "sort -t$'\\t' -k2 -n Cargo.toml",
+        "sort --field-separator=$'\\t' --key=2 Cargo.toml",
+        "cut -d$'\\t' -f1 Cargo.toml",
     ] {
         assert!(allowed(command), "{command}");
     }
@@ -48,6 +64,20 @@ fn a_filter_that_could_write_or_reach_further_still_takes_review() {
         // An operand outside the proven read scope.
         "sort /nonexistent-guard-fixture/secret.key",
         "cut -d: -f1 /nonexistent-guard-fixture/passwd",
+        // `-T` names a directory for the temporary runs and
+        // `--compress-program` hands them to another program.
+        "sort -T /tmp Cargo.toml",
+        "sort --compress-program=gzip Cargo.toml",
+        // `--output` is `-o` spelled long, and an abbreviation of it is not a
+        // reading option either.
+        "sort --output=sorted.txt Cargo.toml",
+        "sort --out=sorted.txt Cargo.toml",
+        // A separator is still one literal character: a parameter is a
+        // reference the shell has not written out, and two tabs are not a
+        // delimiter.
+        "sort -t$SEPARATOR -k2 Cargo.toml",
+        "cut -d$'\\t\\t' -f1 Cargo.toml",
+        "cut -d$DELIMITER -f1 Cargo.toml",
     ] {
         assert!(!allowed(command), "{command}");
     }

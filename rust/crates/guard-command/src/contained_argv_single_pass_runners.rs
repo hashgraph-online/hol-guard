@@ -1,12 +1,12 @@
 //! Reading the Node test runners that take one pass by default.
 //!
 //! Vitest, Jest, Mocha and AVA each carry enough of their own parser to need
-//! their own reading. The three here do not. Jasmine and uvu have no watch
-//! mode at all, and QUnit's is a single flag, so what these readings mostly
-//! name is the words that run something other than the suite: scaffolding a
-//! project, copying example files in, or watching. Everything else on their
-//! lines is an option value or a spec file, and the shared workspace screen
-//! answers for those the way it does for the other four.
+//! their own reading. The five here do not. Jasmine, uvu, tape and tsd have
+//! no watch mode at all, and QUnit's is a single flag, so what these readings
+//! mostly name is the words that run something other than the suite:
+//! scaffolding a project, copying example files in, or watching. Everything
+//! else on their lines is an option value or a spec file, and the shared
+//! workspace screen answers for those the way it does for the other four.
 
 use super::runner_calls::{option_name, reads_its_own_workspace, short_options_carry_watch};
 
@@ -79,5 +79,28 @@ pub(crate) fn qunit_runs_once(arguments: &[String]) -> bool {
 /// call that stays inside its workspace is a single pass over it, and there
 /// is no second reading to make.
 pub(crate) fn uvu_contained_call(arguments: &[String]) -> bool {
+    reads_its_own_workspace(arguments)
+}
+
+/// True when a tape call takes everything it loads from the workspace.
+///
+/// tape's executable is a single pass by construction: it reads its line with
+/// minimist, aliasing `-r` to `require` and `-i` to `ignore`, and then hands
+/// every remaining operand to `require` as a path resolved against the
+/// working directory. There is no watch flag, no command verb and nothing
+/// that writes, so the only question a tape line raises is where its modules
+/// come from, which the shared workspace screen already answers.
+pub(crate) fn tape_contained_call(arguments: &[String]) -> bool {
+    reads_its_own_workspace(arguments)
+}
+
+/// True when a tsd call takes everything it checks from the workspace.
+///
+/// tsd reads its line with meow -- `--typings`, `--files` and `--show-diff`,
+/// nothing else -- and takes its first operand as the project directory to
+/// check. It type-checks in process against the TypeScript compiler it ships
+/// with, so it starts nothing, watches nothing and writes nothing: the paths
+/// on its line are all it reaches, and the workspace screen answers for them.
+pub(crate) fn tsd_contained_call(arguments: &[String]) -> bool {
     reads_its_own_workspace(arguments)
 }

@@ -376,3 +376,68 @@ fn a_jasmine_word_that_sets_the_environment_keeps_its_review() {
         );
     }
 }
+
+#[test]
+fn a_relative_tape_or_tsd_entry_reads_as_the_project_runner() {
+    for command in [
+        "node node_modules/tape/bin/tape test/a.js",
+        "node ./node_modules/.bin/tape test/a.js",
+        "node node_modules/tsd/dist/cli.js",
+        "node /work/app/node_modules/tsd/dist/cli.js packages/core",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_tape_or_tsd_run_inside_its_workspace_is_contained() {
+    // tape reads its line with minimist and then requires every operand as a
+    // path resolved against the run directory; tsd reads three meow flags and
+    // takes its first operand as the project to check. Neither watches, both
+    // only read, so a line that names nothing outside the workspace is a
+    // single contained pass.
+    for command in [
+        "npx tape",
+        "tape test/a.js",
+        "npx tape test/a.js test/b.js",
+        "npx tape -r ts-node/register test/a.js",
+        "npx tape --require tsm test/a.js",
+        "npx tape -i .taperignore test/a.js",
+        "bunx tape test/a.js",
+        "npx tsd",
+        "tsd",
+        "npx tsd packages/core",
+        "npx tsd --typings dist/index.d.ts",
+        "npx tsd --files test/types.test-d.ts --show-diff",
+        "npx tsd -f test/types.test-d.ts",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_tape_or_tsd_word_that_leaves_the_workspace_keeps_its_review() {
+    // What either runner loads is the paths on its line, so a word naming a
+    // module, an ignore file, a typings file or a project outside the
+    // workspace is the whole of what the screen has to refuse.
+    for command in [
+        "npx tape /etc/suite.js",
+        "npx tape -r /etc/setup.js test/a.js",
+        "npx tape --require ../../tools/tsm test/a.js",
+        "npx tape -i ~/.taperignore test/a.js",
+        "npx tape ../../other/test/a.js",
+        "npx tsd ../../other",
+        "npx tsd --typings /etc/index.d.ts",
+        "npx tsd --files ../../other/types.test-d.ts",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}

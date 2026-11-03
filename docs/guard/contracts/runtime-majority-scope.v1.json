@@ -1208,21 +1208,19 @@
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/adapters/claude_code.py",
         "symbols": [
-          "_guard_command_handler",
           "_handler_identity",
           "_is_guard_hook_command",
           "_is_guard_hook_url",
           "_manifest_notes",
           "ClaudeCodeHarnessAdapter._hook_command",
           "ClaudeCodeHarnessAdapter._hook_command_parts",
-          "ClaudeCodeHarnessAdapter._session_start_command_parts",
           "ClaudeCodeHarnessAdapter.prepare_install",
           "ClaudeCodeHarnessAdapter.install",
           "ClaudeCodeHarnessAdapter.uninstall"
         ],
         "entry_points": [],
         "reason": "Claude Code settings install and uninstall (shim notes, settings I/O) and the helpers only they use; the hook entry prune and merge, handler identity and Guard-handler checks run in the native claude_hook_config runner-authority kind.",
-        "evidence": "install, prepare_install and uninstall are invoked only from the excluded install, uninstall and repair dispatchers; the remaining helpers have no reference outside this excluded set. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "install, prepare_install and uninstall are invoked only from the excluded install, uninstall and repair dispatchers; the remaining helpers have no reference outside this excluded set. The SessionStart command builder and handler factory stay in scope because the retained runtime refresh rewrites the SessionStart entry after an upgrade. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "adapter-codex-setup",
@@ -1505,14 +1503,11 @@
         "category": "control_plane",
         "path": "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
         "symbols": [
-          "_SCRIPT_LAUNCHERS",
           "recognize_operator_cli",
-          "local_cli_recognition_candidates",
-          "_recognition_candidates",
-          "_first_executable_name"
+          "local_cli_recognition_candidates"
         ],
         "entry_points": [],
-        "evidence": "recognize_operator_cli and local_cli_recognition_candidates are called only from daemon/local_cli_api.py (dashboard-control-api); the excluded private helpers are reached only through them. identify_unlisted_cli, unlisted_cli_invocation_is_safe, is_local_cli_id and UnlistedCliIdentity stay counted. The report validates this reference closure on every run.",
+        "evidence": "recognize_operator_cli and local_cli_recognition_candidates are called only from daemon/local_cli_api.py (dashboard-control-api); both forward to the native local_cli_recognize kind. identify_unlisted_cli, unlisted_cli_invocation_is_safe, is_local_cli_id and UnlistedCliIdentity stay counted. The report validates this reference closure on every run.",
         "reason": "Recognition of operator-supplied CLI commands for the dashboard's local CLI registration flow."
       },
       {
@@ -1865,10 +1860,11 @@
           "ClineHarnessAdapter.install",
           "ClineHarnessAdapter.uninstall",
           "ClineHarnessAdapter._install_transport",
-          "ClineHarnessAdapter._reconcile_transport"
+          "ClineHarnessAdapter._reconcile_transport",
+          "_install_plan"
         ],
         "entry_points": [],
-        "reason": "Cline adapter install and uninstall, including transport selection and inactive-transport cleanup used only by them.",
+        "reason": "Cline adapter install and uninstall and the native request helper used only by install; transport selection, inactive-transport cleanup, coverage and blind spots are decided by the native cline_install_plan runner-authority kind, and Python keeps the transport installs, probes and file I/O.",
         "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. Install-only imports live inside these methods so the retained module imports only state and detection helpers."
       },
       {
@@ -2029,14 +2025,9 @@
         "category": "control_plane",
         "path": "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
         "symbols": [
-          "_INTERPRETER_NAMES",
-          "_RESERVED_TOOL_NAMES",
           "catalog_owned_executables",
           "unlisted_cli_invocation_is_safe",
-          "is_reserved_tool_name",
-          "_safe_primary_segment",
-          "_is_interpreter_name",
-          "_normalize_tool_name"
+          "_safe_primary_segment"
         ],
         "entry_points": [],
         "reason": "unlisted_cli_invocation_is_safe decides whether local MCP probing may start an unlisted CLI to list its tools. It runs only during discovery probing, never on a hook or proxy request. The operator CLI recognition helpers in this module are already excluded by operator-cli-recognition-api.",

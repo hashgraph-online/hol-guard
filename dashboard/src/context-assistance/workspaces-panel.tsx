@@ -75,6 +75,11 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
   }
 
   async function grant(input: AddProjectInput, credentials?: SettingsSaveProofCredentials): Promise<boolean> {
+    // Guard keeps one pick per project, so a second one would only be refused.
+    if (scopes.some((scope) => scope.app === "dashboard" && scope.workspace === input.workspace)) {
+      setError("This project is already added. Remove it first to pick different files.");
+      return false;
+    }
     let granted = false;
     await perform(async (signal) => {
       // One pick on this page counts for every app's prompts, so it is never tied to one app.

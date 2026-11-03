@@ -198,6 +198,14 @@ pub(crate) fn script_tokens(
             let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
             crate::contained_argv::uvu_contained_call(&call)
         }
+        "tape" => {
+            let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+            crate::contained_argv::tape_contained_call(&call)
+        }
+        "tsd" => {
+            let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+            crate::contained_argv::tsd_contained_call(&call)
+        }
         _ => false,
     };
     let bun = program_name(runner) == "bun" && {

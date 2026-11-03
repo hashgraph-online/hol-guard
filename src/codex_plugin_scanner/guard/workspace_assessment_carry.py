@@ -30,20 +30,14 @@ is not the run-wide ``finding_cap``.
 from __future__ import annotations
 
 import dataclasses
-import json
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any
 
-from .native_package_audit_projection import native_package_identities
+from .native_package_audit_projection import NativePackageAuditProjectionError, native_package_identities
 from .store_workspace_assessment_schema import FINDINGS_BYTE_BUDGET, MAX_FINDINGS
 
 if TYPE_CHECKING:
     from .workspace_assessment_store import RunOutcome
-
-RECHECKED: Final = frozenset({"complete", "no_inputs"})
-CARRIED_FINDING_CAP: Final = "carried_finding_cap"
-# The supply chain detector's findings and coverage name it differently.
-_COVERAGE_KEYS: Final = {"supply_chain_local_v1": "supply_chain"}
 
 
 def carry_unchecked_findings(
@@ -54,46 +48,43 @@ def carry_unchecked_findings(
     ``previous`` is the worktree's last completed or partial run. A detector
     the new run no longer names was retired, so its findings are not kept.
     ``settled`` marks, by position, the earlier package findings the new
-    audit reports again or no longer lists.
+    audit reports again or no longer lists. The resident picks the findings
+    to carry; one that cannot answer fails the run rather than dropping them.
     """
 
     coverage = outcome.coverage or {}
-    detectors = coverage.get("detectors")
     earlier = previous.get("findings") if previous is not None else None
-    if outcome.state != "partial" or not isinstance(detectors, Mapping) or not isinstance(earlier, list):
+    if outcome.state != "partial" or not isinstance(coverage.get("detectors"), Mapping):
         return outcome
-    run_id = previous.get("run_id") if previous is not None else None
+    if not isinstance(earlier, list) or not earlier:
+        return outcome
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
     findings = [dict(item) for item in outcome.findings]
-    seen = {item.get("finding_id") for item in findings}
-    used = sum(_size(item) for item in findings)
-    carried = 0
-    truncated = False
-    for index, item in enumerate(earlier):
-        if not isinstance(item, Mapping) or item.get("finding_id") in seen or _settled(settled, index):
-            continue
-        detector = item.get("detector")
-        status = detectors.get(_COVERAGE_KEYS.get(detector, detector)) if isinstance(detector, str) else None
-        if not isinstance(status, str) or status in RECHECKED:
-            continue
-        entry = {**item, "carried_from_run_id": item.get("carried_from_run_id") or run_id}
-        size = _size(entry)
-        if len(findings) >= MAX_FINDINGS or used + size > FINDINGS_BYTE_BUDGET:
-            truncated = True
-            continue
-        findings.append(entry)
-        seen.add(entry.get("finding_id"))
-        used += size
-        carried += 1
-    if not carried and not truncated:
+    try:
+        answer = native_runner_authority(
+            "workspace_findings_carry",
+            {
+                "coverage": dict(coverage),
+                "findings": findings,
+                "earlier": earlier,
+                "run_id": previous.get("run_id") if previous is not None else None,
+                "settled": [bool(flag) for flag in settled],
+                "max_findings": MAX_FINDINGS,
+                "byte_budget": FINDINGS_BYTE_BUDGET,
+            },
+        )
+    except NativeRunnerAuthorityError as error:
+        raise NativePackageAuditProjectionError("Native findings carry unavailable") from error
+    carried, reasons = answer.get("carried"), answer.get("reasons")
+    if carried is None:
         return outcome
-    reasons = coverage.get("reasons")
-    reasons = [str(reason) for reason in reasons] if isinstance(reasons, list) else []
-    if truncated and CARRIED_FINDING_CAP not in reasons:
-        reasons.append(CARRIED_FINDING_CAP)
+    if not isinstance(carried, list) or not isinstance(reasons, list):
+        raise NativePackageAuditProjectionError("Native findings carry invalid")
     return dataclasses.replace(
         outcome,
-        coverage={**coverage, "reasons": reasons, "carried_findings": carried},
-        findings=findings,
+        coverage={**coverage, "reasons": reasons, "carried_findings": len(carried)},
+        findings=[*findings, *carried],
     )
 
 
@@ -127,12 +118,4 @@ def _is_package(item: object) -> bool:
     return isinstance(item, Mapping) and item.get("source_kind") == "supply_chain"
 
 
-def _settled(settled: Sequence[bool], index: int) -> bool:
-    return index < len(settled) and settled[index]
-
-
-def _size(item: Mapping[str, object]) -> int:
-    return len(json.dumps(item, sort_keys=True, separators=(",", ":")).encode("utf-8")) + 1
-
-
-__all__ = ["CARRIED_FINDING_CAP", "RECHECKED", "carry_unchecked_findings", "keep_package_identities"]
+__all__ = ["carry_unchecked_findings", "keep_package_identities"]

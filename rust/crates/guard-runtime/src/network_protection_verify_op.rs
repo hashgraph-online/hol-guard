@@ -20,8 +20,24 @@ use guard_contracts::{
     NETWORK_PROTECTION_VERIFY_RESULT_SCHEMA,
 };
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::borrow::Cow;
 
 use crate::package_authority_op::request_digest_with_limit;
+
+/// Per-collection cap for a response sent as `response_json`. The request
+/// frame's own cap of 4,096 refuses real bundles, whose threat feeds hold
+/// tens of thousands of entries; the field's string bound keeps the document
+/// itself at a few megabytes.
+const MAX_RESPONSE_JSON_COLLECTION_ITEMS: usize = 262_144;
+
+/// Largest response file the resident reads. A production bundle is a few
+/// megabytes today; this leaves room for its feeds to grow many times over.
+const MAX_RESPONSE_FILE_BYTES: usize = 64 * 1024 * 1024;
+
+/// Per-collection cap for a response read from a file, scaled with
+/// [`MAX_RESPONSE_FILE_BYTES`] as the text cap is with its string bound.
+const MAX_RESPONSE_FILE_COLLECTION_ITEMS: usize = 2_097_152;
 
 pub(crate) fn evaluate_network_protection_verify_request(
     request: &NetworkProtectionVerifyRequestV1,
@@ -64,15 +80,105 @@ fn without_bundle(mut saved: Value) -> Value {
 fn verify(
     request: &NetworkProtectionVerifyRequestV1,
 ) -> Result<Value, NetworkProtectionBundleError> {
+    let response = response(request)?;
     let trusted = trusted_keys(request.trusted_keys.as_ref())?;
     verify_network_protection_response(
-        &request.response,
+        &response,
         &request.workspace_id,
         &trusted,
         request.cached_bundle_version.as_deref(),
         request.now,
         &RingRsaPssVerify,
     )
+}
+
+/// The response the caller sent, from whichever field carries it.
+///
+/// A request that fills more than one is refused rather than resolved by
+/// preference: they could differ, and the reply must speak to the one
+/// response the caller saves.
+fn response(
+    request: &NetworkProtectionVerifyRequestV1,
+) -> Result<Cow<'_, Value>, NetworkProtectionBundleError> {
+    let sources = usize::from(!request.response.is_null())
+        + usize::from(request.response_json.is_some())
+        + usize::from(request.response_path.is_some());
+    if sources > 1 {
+        return Err(refusal(
+            "Network protection bundle request carries the response twice",
+        ));
+    }
+    if request.response_sha256.is_some() && request.response_path.is_none() {
+        return Err(refusal(
+            "Network protection bundle request names a digest without a file",
+        ));
+    }
+    if let Some(path) = request.response_path.as_deref() {
+        let bytes = read_response_file(path, request.response_sha256.as_deref())?;
+        return parse_response(&bytes, MAX_RESPONSE_FILE_COLLECTION_ITEMS).map(Cow::Owned);
+    }
+    match request.response_json.as_deref() {
+        Some(text) => {
+            parse_response(text.as_bytes(), MAX_RESPONSE_JSON_COLLECTION_ITEMS).map(Cow::Owned)
+        }
+        None => Ok(Cow::Borrowed(&request.response)),
+    }
+}
+
+/// Read the response file the caller wrote and hold it to the digest the
+/// request carries.
+///
+/// The file is evidence, not authority: the verifier still checks the bundle
+/// inside it end to end. The digest is what ties it to this request, whose
+/// hash the reply is bound to, so a file that changed after the caller wrote
+/// it is refused rather than verified in its new form. The shared stable
+/// reader refuses links and anything but a regular file before it opens it,
+/// so a FIFO swapped in for the file cannot stall the resident.
+fn read_response_file(
+    path: &str,
+    expected: Option<&str>,
+) -> Result<Vec<u8>, NetworkProtectionBundleError> {
+    let Some(expected) = expected else {
+        return Err(refusal(
+            "Network protection bundle response file has no digest",
+        ));
+    };
+    let bytes = match guard_secure_fs::read_stable(
+        std::path::Path::new(path),
+        MAX_RESPONSE_FILE_BYTES,
+        false,
+    ) {
+        Ok(read) => read.bytes,
+        Err(guard_secure_fs::SecureReadError::TooLarge) => {
+            return Err(refusal(
+                "Network protection bundle response file is too large",
+            ))
+        }
+        Err(_) => {
+            return Err(refusal(
+                "Network protection bundle response file is unreadable",
+            ))
+        }
+    };
+    let actual = format!("sha256:{}", hex::encode(Sha256::digest(&bytes)));
+    if actual != expected {
+        return Err(refusal(
+            "Network protection bundle response file does not match its digest",
+        ));
+    }
+    Ok(bytes)
+}
+
+fn parse_response(
+    bytes: &[u8],
+    collection_items: usize,
+) -> Result<Value, NetworkProtectionBundleError> {
+    crate::strict_json::parse_with_collection_limit(bytes, collection_items)
+        .map_err(|_| refusal("Network protection bundle response is not valid JSON"))
+}
+
+fn refusal(message: &str) -> NetworkProtectionBundleError {
+    NetworkProtectionBundleError(message.to_owned())
 }
 
 /// A keyring the resident cannot read is not an empty keyring, so a malformed

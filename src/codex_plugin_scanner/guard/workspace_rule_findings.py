@@ -95,16 +95,4 @@ def _not_run(coverage: dict[str, object], detectors: list[str]) -> tuple[list[di
     }
 
 
-def project_rule_findings(detector: str, result: object) -> list[dict[str, object]]:
-    """Return the well-formed findings of one native rule result."""
-
-    return rule_findings({}, [(detector, result)])[0]
-
-
-def with_rule_coverage(detector: str, coverage: dict[str, object], result: object) -> dict[str, object]:
-    """Add one rule detector to a run's coverage."""
-
-    return rule_findings(coverage, [(detector, result)])[1]
-
-
-__all__ = ["project_rule_findings", "rule_findings", "with_rule_coverage"]
+__all__ = ["rule_findings"]

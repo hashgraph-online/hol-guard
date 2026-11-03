@@ -127,6 +127,34 @@ fn a_runner_bound_to_local_project_state_is_routine() {
     assert!(routine_local_runner(&intent(dir.path())));
 }
 
+#[test]
+fn npm_config_that_names_a_package_keeps_npx_out_of_the_routine_set() {
+    use std::collections::BTreeMap;
+
+    let dir = workspace();
+    let root = dir.path();
+    let value = intent(root);
+    assert!(routine_local_runner(&value));
+    let home = root.join("home");
+    let quiet = BTreeMap::from([("HOME".to_owned(), home.to_string_lossy().into_owned())]);
+    assert!(!npx_config_adds_package(&value, false, Some(&quiet), None));
+
+    // An assignment inside the command, which the wrapper strip removes.
+    assert!(npx_config_adds_package(&value, true, Some(&quiet), None));
+
+    let mut named = quiet.clone();
+    named.insert("NPM_CONFIG_PACKAGE".to_owned(), "left-pad".to_owned());
+    assert!(npx_config_adds_package(&value, false, Some(&named), None));
+
+    write(&root.join(".npmrc"), "package=left-pad\n");
+    assert!(npx_config_adds_package(&value, false, Some(&quiet), None));
+
+    // `bunx` reads no npm configuration this check knows of.
+    let mut bun = intent(root);
+    bun.package_manager = "bunx".to_owned();
+    assert!(!npx_config_adds_package(&bun, true, Some(&named), None));
+}
+
 /// A workspace that installs `name` the way its registry package does: the
 /// manifest, the installed tree and the lockfile all name the package, which
 /// is the executable's own name for every runner except `tsc`.

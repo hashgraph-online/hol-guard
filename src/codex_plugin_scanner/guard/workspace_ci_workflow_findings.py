@@ -18,30 +18,9 @@ from __future__ import annotations
 
 from typing import Final
 
-from .workspace_rule_findings import project_rule_findings, with_rule_coverage
-
 CI_WORKFLOW_DETECTOR: Final = "ci_workflow_v1"
-
-
-def project_ci_workflow_findings(result: object) -> list[dict[str, object]]:
-    """Return the well-formed findings of a native workflow result."""
-
-    return project_rule_findings(CI_WORKFLOW_DETECTOR, result)
-
-
-def with_ci_workflow_coverage(coverage: dict[str, object], result: object) -> dict[str, object]:
-    """Add the CI workflow detector to a run's coverage.
-
-    A runtime without the check leaves the detector not run; a check that
-    could not read every workflow, or a malformed reply, leaves it incomplete.
-    Both make the run partial. A worktree without workflows has no inputs.
-    """
-
-    return with_rule_coverage(CI_WORKFLOW_DETECTOR, coverage, result)
 
 
 __all__ = [
     "CI_WORKFLOW_DETECTOR",
-    "project_ci_workflow_findings",
-    "with_ci_workflow_coverage",
 ]

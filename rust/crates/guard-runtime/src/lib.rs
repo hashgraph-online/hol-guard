@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![recursion_limit = "512"]
 
+mod access_graph_snapshot;
 mod active_pack_security;
 #[path = "adapters/adapter_inventory.rs"]
 mod adapter_inventory;
@@ -90,7 +91,9 @@ mod browser_open;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
 mod business_document_compile;
+mod business_review_page;
 mod business_source_codec;
+mod catalog_provenance;
 mod cisco_containment;
 mod cisco_evidence;
 mod cisco_plan;
@@ -136,6 +139,7 @@ mod claude_session_start;
 mod claude_session_start_contract;
 mod claude_session_start_live;
 mod cli_copilot_resolution;
+mod cli_profiles;
 mod cli_runtime_support_op;
 #[path = "adapters/detection/cline_detect.rs"]
 mod cline_detect;
@@ -148,6 +152,11 @@ mod cline_hook_files;
 #[path = "adapters/cline_hook_files_tests.rs"]
 mod cline_hook_files_tests;
 mod cline_hook_worker;
+#[path = "adapters/cline_install_plan.rs"]
+mod cline_install_plan;
+#[cfg(test)]
+#[path = "adapters/cline_install_plan_tests.rs"]
+mod cline_install_plan_tests;
 #[path = "adapters/cline_paths.rs"]
 mod cline_paths;
 #[path = "adapters/cline_plugin_render.rs"]
@@ -220,8 +229,10 @@ mod compound_git_inspection_op_tests;
 mod compound_git_inspection_vectors_tests;
 mod compound_git_paths;
 mod compound_git_segments;
+mod connector_regroup;
 mod connector_setup;
 mod connector_setup_context_op;
+mod connector_setup_rows;
 mod consumer_artifact_compose_op;
 mod consumer_artifact_compose_runtime;
 mod consumer_artifact_project_op;
@@ -388,6 +399,7 @@ mod extension_control_preview_op;
 mod extension_control_proof;
 mod extension_control_terminal_op;
 mod extension_coverage_hint;
+mod extension_hint_shape;
 mod fleet_posture_inventory;
 /// Parser entry points for `rust/fuzz`; see `fuzz_entry.rs`.
 #[cfg(any(test, feature = "fuzzing"))]
@@ -763,6 +775,7 @@ mod managed_policy_plist;
 mod managed_policy_registry;
 mod managed_resident;
 mod mcp_classification_op;
+mod mcp_output;
 mod mcp_policy_input;
 mod mcp_probe_op;
 mod mcp_proxy_actions;
@@ -789,6 +802,7 @@ mod mcp_proxy_route;
 mod mcp_proxy_shlex;
 mod mcp_proxy_signals;
 mod mcp_registry_page;
+mod mcp_registry_setup;
 mod mcp_relay;
 mod mcp_relay_args;
 mod mcp_relay_authority;
@@ -827,6 +841,8 @@ mod mcp_tool_policy_lookup;
 mod mcp_tool_policy_proxy;
 mod mcp_tool_policy_revalidate;
 mod mdm_integrity_snapshot;
+mod memory_decision_event;
+mod memory_decision_receipt;
 mod memory_pattern;
 #[cfg(target_os = "macos")]
 mod native_bash_client;
@@ -961,6 +977,7 @@ mod protect_request_op;
 mod protection_health_report_op;
 mod proxy_credentials;
 use guard_runtime_pyjson as pyjson;
+mod receipt_embedded_scripts;
 #[cfg(test)]
 mod registry_vectors_tests;
 mod release_feed_op;
@@ -1099,6 +1116,7 @@ mod windows_readonly;
 mod windows_trusted_directories;
 mod workspace_assessment_sync;
 mod workspace_audit_sync;
+mod workspace_findings_carry;
 mod workspace_fix;
 mod workspace_fix_diff;
 mod workspace_fix_fs;

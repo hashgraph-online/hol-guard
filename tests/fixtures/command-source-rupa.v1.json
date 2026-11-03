@@ -1,0 +1,1926 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "build": {
+    "schema": "guard.command-extension-build.v1",
+    "base": "packaged",
+    "sources": [
+      {
+        "schema": "guard.command-extension-source.v1",
+        "extension": {
+          "action_classes": [
+            "rupa forced output overwrite command",
+            "rupa verify sheet write and delete command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews rupa commands that replace or delete local files the caller names: a render with --force, which can replace an existing file of any type, and `rupa verify --out DIR`, which writes and deletes review sheets in a chosen folder. A plain render is not matched, although it replaces an existing .html or .pdf without asking; `rupa --help` and `rupa --version` are read-only.",
+          "ecosystem_ids": [],
+          "executables": [
+            "rupa"
+          ],
+          "extension_id": "command.rupa",
+          "homepage": "https://github.com/VajraSarpa/rupa",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "name": "rupa command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "rupa forced output overwrite command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `rupa ... --force`. With --to, -o can name any path. If that file exists and isn't .html or .pdf, rupa refuses (exit 2) unless --force is given, and then replaces it: `rupa --to html --force -o notes.txt in.md` overwrites notes.txt. Covers the installed rupa script and `uv run rupa`, `uvx rupa` and `uv tool run rupa` launches. Known limit: a plain render without --force (`rupa in.md -o out.pdf`) is not matched, although it replaces an existing .html or .pdf at -o without asking; flagging it would review every normal run. `rupa verify` rejects --force (exit 2, nothing written), but a --force there is still matched: Guard compares arguments case-insensitively, and `rupa VERIFY --force ...` renders a file named VERIFY.",
+              "example_command": "rupa --to html --force -o notes.txt in.md",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "rupa forced output overwrite",
+              "permission_id": "command.rupa.permission.force",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Drop --force and write to a new .html or .pdf path; without --force rupa refuses to replace any other existing file.",
+                "Check that -o does not name a file you want to keep before adding --force."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "rupa verify sheet write and delete command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `rupa verify PDF --out DIR`, which writes verify.json and sheet-p<NNN>-<kind>.png files into a folder the caller picks, replacing files with the same names, and deletes the sheets that the previous verify.json in that folder listed (only names matching sheet-p<digits>-<word>.png). Without --out the sheets go to <PDF>.verify/ beside the PDF and this rule does not match. Covers the installed rupa script and `uv run rupa`, `uvx rupa` and `uv tool run rupa` launches.",
+              "example_command": "rupa verify out/report.pdf --out review",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "rupa verify sheets in a chosen folder",
+              "permission_id": "command.rupa.permission.verify-out",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Omit --out; rupa verify then writes its sheets to <PDF>.verify/ beside the PDF.",
+                "Point --out at a new, empty folder rather than one that holds other files."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Vajra Sarpa",
+            "id": "io.github.vajrasarpa",
+            "url": "https://github.com/VajraSarpa"
+          },
+          "reference_urls": [
+            "https://github.com/VajraSarpa/rupa/blob/v0.1.4/docs/cli-contract.md",
+            "https://github.com/VajraSarpa/rupa/blob/v0.1.4/src/rupa/cli.py"
+          ],
+          "required": false,
+          "risk_classes": [
+            "local_write"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "rupa forced output overwrite command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `rupa ... --force`. With --to, -o can name any path. If that file exists and isn't .html or .pdf, rupa refuses (exit 2) unless --force is given, and then replaces it: `rupa --to html --force -o notes.txt in.md` overwrites notes.txt. Covers the installed rupa script and `uv run rupa`, `uvx rupa` and `uv tool run rupa` launches. Known limit: a plain render without --force (`rupa in.md -o out.pdf`) is not matched, although it replaces an existing .html or .pdf at -o without asking; flagging it would review every normal run. `rupa verify` rejects --force (exit 2, nothing written), but a --force there is still matched: Guard compares arguments case-insensitively, and `rupa VERIFY --force ...` renders a file named VERIFY.",
+              "family": null,
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "rupa",
+                        "rupa.cmd",
+                        "rupa.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "-o",
+                        "--output",
+                        "--to",
+                        "--theme",
+                        "--pages"
+                      ],
+                      "required_flags": [
+                        "--force"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": []
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "-o",
+                        "--output",
+                        "--to",
+                        "--theme",
+                        "--pages"
+                      ],
+                      "required_flags": [
+                        "--force"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run",
+                        "rupa"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "-o",
+                        "--output",
+                        "--to",
+                        "--theme",
+                        "--pages"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "rupa",
+                      "required_flags": [
+                        "--force"
+                      ],
+                      "subcommands": []
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "-o",
+                        "--output",
+                        "--to",
+                        "--theme",
+                        "--pages"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "rupa",
+                      "required_flags": [
+                        "--force"
+                      ],
+                      "subcommands": []
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "permission_id": "command.rupa.permission.force",
+              "risk_classes": [
+                "local_write"
+              ],
+              "rule_id": "command.rupa.force",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "rupa",
+                            "rupa.cmd",
+                            "rupa.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "rupa",
+                            "rupa.cmd",
+                            "rupa.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "rupa",
+                            "rupa.cmd",
+                            "rupa.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        }
+                      }
+                    ]
+                  },
+                  "title": "rupa help and version",
+                  "variant_id": "help-and-version"
+                }
+              ],
+              "safer_alternatives": [
+                "Drop --force and write to a new .html or .pdf path."
+              ],
+              "severity": "high",
+              "title": "rupa forced output overwrite"
+            },
+            {
+              "action_classes": [
+                "rupa verify sheet write and delete command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `rupa verify PDF --out DIR`, which writes verify.json and sheet-p<NNN>-<kind>.png files into a folder the caller picks, replacing files with the same names, and deletes the sheets that the previous verify.json in that folder listed (only names matching sheet-p<digits>-<word>.png). Without --out the sheets go to <PDF>.verify/ beside the PDF and this rule does not match. Covers the installed rupa script and `uv run rupa`, `uvx rupa` and `uv tool run rupa` launches.",
+              "family": null,
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "rupa",
+                        "rupa.cmd",
+                        "rupa.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--wants",
+                        "--theme",
+                        "--out",
+                        "--sample"
+                      ],
+                      "required_flags": [
+                        "--out"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "verify"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--wants",
+                        "--theme",
+                        "--out",
+                        "--sample"
+                      ],
+                      "required_flags": [
+                        "--out"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run",
+                        "rupa",
+                        "verify"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--wants",
+                        "--theme",
+                        "--out",
+                        "--sample"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "rupa",
+                      "required_flags": [
+                        "--out"
+                      ],
+                      "subcommands": [
+                        "verify"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--wants",
+                        "--theme",
+                        "--out",
+                        "--sample"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "rupa",
+                      "required_flags": [
+                        "--out"
+                      ],
+                      "subcommands": [
+                        "verify"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "permission_id": "command.rupa.permission.verify-out",
+              "risk_classes": [
+                "local_write"
+              ],
+              "rule_id": "command.rupa.verify-out",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "rupa",
+                            "rupa.cmd",
+                            "rupa.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "rupa",
+                            "rupa.cmd",
+                            "rupa.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        }
+                      }
+                    ]
+                  },
+                  "title": "rupa verify help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Omit --out from rupa verify, or point it at a new, empty folder."
+              ],
+              "severity": "medium",
+              "title": "rupa verify sheets in a chosen folder"
+            }
+          ],
+          "safer_alternatives": [
+            "Drop --force and write to a new .html or .pdf path.",
+            "Omit --out from rupa verify, or point it at a new, empty folder."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        }
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.aether-vault",
+          "command.agent-gauntlet",
+          "command.agentbridge",
+          "command.agenticjobs",
+          "command.agentsocks",
+          "command.agi-memory",
+          "command.ai-dev",
+          "command.answerloops",
+          "command.apex",
+          "command.appimg",
+          "command.astrix",
+          "command.batterycontrol",
+          "command.blitcp",
+          "command.blkcp",
+          "command.ccx",
+          "command.claude-tmux",
+          "command.cloudg",
+          "command.codesage",
+          "command.codex-migrate",
+          "command.cogext",
+          "command.crisp-tui",
+          "command.cross-exam",
+          "command.cs",
+          "command.ctty",
+          "command.dataman",
+          "command.dearmour",
+          "command.digline",
+          "command.dispat",
+          "command.drip",
+          "command.envseal",
+          "command.errand",
+          "command.faf-cli",
+          "command.formicx",
+          "command.genclave",
+          "command.gitsync",
+          "command.givi",
+          "command.golive",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.hashdup",
+          "command.hcs-trace",
+          "command.iterlay",
+          "command.keibidrop",
+          "command.kelados",
+          "command.kim",
+          "command.kindling",
+          "command.kintsua",
+          "command.kranz",
+          "command.librarybridge",
+          "command.llmrig",
+          "command.macscope",
+          "command.master-of",
+          "command.mcp-agent-wire",
+          "command.mcp-agenthub",
+          "command.mcp-aletheia-mem",
+          "command.mcp-arch",
+          "command.mcp-architecture-intelligence-platform",
+          "command.mcp-asdecided",
+          "command.mcp-aseprite",
+          "command.mcp-askjev",
+          "command.mcp-astrix",
+          "command.mcp-authyouragent",
+          "command.mcp-authzloom",
+          "command.mcp-axpilot",
+          "command.mcp-azure-vm-pricing",
+          "command.mcp-borer",
+          "command.mcp-brickproof-adb",
+          "command.mcp-ccm",
+          "command.mcp-cf-mail-mcp",
+          "command.mcp-ci-guard",
+          "command.mcp-clipugc",
+          "command.mcp-codex-claude-bridge",
+          "command.mcp-compose-bridge",
+          "command.mcp-contribos",
+          "command.mcp-creatoros-studio",
+          "command.mcp-dchub",
+          "command.mcp-debuganything",
+          "command.mcp-duckdb-vectors",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-fetchsandbox",
+          "command.mcp-figlens",
+          "command.mcp-filesystem",
+          "command.mcp-ftp",
+          "command.mcp-g-krusch",
+          "command.mcp-garmin-coach-mcp",
+          "command.mcp-google-mcp-universal",
+          "command.mcp-google-workspace.gmail",
+          "command.mcp-halflife",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-jd-church-website-audit",
+          "command.mcp-keepawake",
+          "command.mcp-kranz",
+          "command.mcp-krusch",
+          "command.mcp-krusch-agentic-proxy",
+          "command.mcp-krusch-context-mcp",
+          "command.mcp-krusch-git",
+          "command.mcp-kuuhaku",
+          "command.mcp-lattice-talk",
+          "command.mcp-leadline",
+          "command.mcp-legwork",
+          "command.mcp-loomdesk",
+          "command.mcp-mac-address-lookup",
+          "command.mcp-mail-server",
+          "command.mcp-melra",
+          "command.mcp-musiccontext",
+          "command.mcp-nuvui",
+          "command.mcp-obsidian-kanban",
+          "command.mcp-oids",
+          "command.mcp-openscreenshot",
+          "command.mcp-ops-brain",
+          "command.mcp-p6-mcp",
+          "command.mcp-pc-control",
+          "command.mcp-pinpoint",
+          "command.mcp-plim",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-pumpkit",
+          "command.mcp-quidli-connect",
+          "command.mcp-raw-browser",
+          "command.mcp-reaper",
+          "command.mcp-remote-pc-mcp",
+          "command.mcp-repo-notebook",
+          "command.mcp-roslyngate",
+          "command.mcp-run",
+          "command.mcp-seahorse",
+          "command.mcp-seminara",
+          "command.mcp-seq-mcp",
+          "command.mcp-setup-doctor",
+          "command.mcp-smithguard",
+          "command.mcp-switchbord",
+          "command.mcp-tether",
+          "command.mcp-thingery",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-vulnify",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.mcp-xrpl-token-guard",
+          "command.mcp-xrpl-trading-lab",
+          "command.mcpguard",
+          "command.mori",
+          "command.netdoctor",
+          "command.noodle",
+          "command.ollama",
+          "command.omairc",
+          "command.opencomms",
+          "command.probe",
+          "command.procedural-memory",
+          "command.pyrig",
+          "command.redpen",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.repro-surgeon",
+          "command.rls-saboteur",
+          "command.routed",
+          "command.rungs",
+          "command.rupa",
+          "command.rwxmap",
+          "command.salesforce.sf",
+          "command.seatbelt-guard",
+          "command.shellroute",
+          "command.shieldenv",
+          "command.showtime",
+          "command.simgit",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.skills-check-updates",
+          "command.snoboard",
+          "command.storage-clearer",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.unwreck",
+          "command.vaultsync",
+          "command.vttforge",
+          "command.where-are-we",
+          "command.x402shield",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.digitalocean",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "HOL",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-leading",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa in.md --to html -o notes.txt --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-trailing",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa in.md --to html --output=notes.txt --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-output-equals",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa in.md --to html -onotes.txt --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-output-attached",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --to=html --force -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-to-equals",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa -o notes.txt --force in.md --to html",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-reordered",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --json --pages 2 --theme cyan --force --to pdf -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-json-pages",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa \"my notes.md\" --to html -o \"out dir/my notes.txt\" --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-quoted-paths",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa in.md --to html --output='my notes.txt' --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-output-quoted-equals",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --to html --force -o notes.txt -",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-stdin",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa.cmd --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-cmd-suffix",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa.exe --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-exe-suffix",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "\"/opt/My Tools/rupa\" --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-absolute-path-with-space",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa ./verify --force --to html -o notes.txt",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-dot-slash-verify-input",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --help && rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "force-after-and",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "cd docs; rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "force-after-semicolon",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "cat in.md | rupa --to html --force -o notes.txt",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "force-in-pipe",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --force --to pdf -o notes.txt in.md && rupa verify notes.txt",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-before-verify",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "env RUPA_LOG=off rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-env",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "RUPA_LOG=off rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-env-assignment",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "command rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-command",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "exec rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-exec",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "nohup rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "force-nohup-not-unwrapped",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "time rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-time",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "timeout 60 rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-timeout",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "bash -c 'rupa --force --to html -o notes.txt in.md'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-bash-c",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "sudo rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "require-reapproval",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-sudo",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "uv run rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-uv-run",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "uv run --no-sync rupa in.md --to html -o notes.txt --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-uv-run-no-sync",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "uv run -- rupa in.md --to html -o notes.txt --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-uv-run-terminator",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "uvx --from git+https://github.com/VajraSarpa/rupa@v0.1.4 rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-uvx-from-git",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "uvx rupa@0.1.4 in.md --to html -o notes.txt --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-uvx-versioned",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "uv tool run rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-uv-tool-run",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa -o notes.txt --force --to html verify",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-verify-file-after-output",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa VERIFY --force --to html -o notes.txt",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-uppercase-verify-file",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa verify out/report.pdf --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-on-verify",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --force in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-without-output",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa $ARGS",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "malformed-variable-args",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --force $ARGS",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "malformed-variable-force",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --force --to html -o \"notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "malformed-unbalanced-quote",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --to html --force -o",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "malformed-output-no-value",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "echo in.md | xargs rupa --force --to html -o notes.txt",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "malformed-xargs",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --force --to html -o $(cat target) in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "malformed-substitution",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --forc --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "abbreviation-rejected",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa in.md -o --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "force-as-output-value",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa in.md -o out.pdf",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "plain-render",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa notes.md -o out/notes.html",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "plain-render-html",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa ./verify -o out.pdf",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dot-slash-verify-render",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help-short",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "version",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --force --to html -o notes.txt in.md --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help-clears-force",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "other-rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "other-executable",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "echo rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "echo-mention",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "ls -la",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "unrelated",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "inactive",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa --force --to html -o notes.txt in.md",
+      "disabled_permissions": [
+        "command.rupa.permission.force"
+      ],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "permission-disabled",
+      "rule_id": "command.rupa.force"
+    },
+    {
+      "command": "rupa verify out/report.pdf --out review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-trailing",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify --out review out/report.pdf",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-leading",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify out/report.pdf --out=review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-equals",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify \"out/my report.pdf\" --out \"review sheets\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-quoted",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify --json --sample all --theme cyan --out review out/report.pdf",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-other-options",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa.cmd verify out/report.pdf --out review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-cmd-suffix",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa in.md -o out/report.pdf && rupa verify out/report.pdf --out review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "verify-out-after-render",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa --version; rupa verify out/report.pdf --out review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "verify-out-semicolon",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify out/report.pdf --out review --json | jq .ok",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-piped",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "env RUPA_LOG=off rupa verify out/report.pdf --out review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-env",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "bash -c 'rupa verify out/report.pdf --out review'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-bash-c",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "uv run rupa verify out/report.pdf --out review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-uv-run",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "uvx --from git+https://github.com/VajraSarpa/rupa@v0.1.4 rupa verify out/report.pdf --out review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-uvx",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "uv tool run rupa verify out/report.pdf --out=review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-uv-tool-run",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify out/report.pdf",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "verify-default-folder",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify --json out/report.pdf",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "verify-json",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "verify-help",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "verify-help-short",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify out/report.pdf --out review --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "verify-help-clears-out",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify out/report.pdf --wants --out",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "verify-out-as-wants-value",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa VERIFY out/report.pdf --out review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "uppercase-verify-out-over-match",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa ./verify -o out.pdf",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dot-slash-verify-is-render",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa -o out.pdf verify",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "verify-file-after-output",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "echo rupa verify out/report.pdf --out review",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "verify-out-echo-mention",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify out/report.pdf --out review",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "verify-out-inactive",
+      "rule_id": "command.rupa.verify-out"
+    },
+    {
+      "command": "rupa verify out/report.pdf --out review",
+      "disabled_permissions": [
+        "command.rupa.permission.verify-out"
+      ],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "verify-out-permission-disabled",
+      "rule_id": "command.rupa.verify-out"
+    }
+  ]
+}

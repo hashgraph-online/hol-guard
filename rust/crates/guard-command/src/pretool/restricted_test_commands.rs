@@ -16,7 +16,8 @@ mod tsx_tests;
 
 use crate::contained_argv::{
     ava_contained_call, contained_runner_call, jasmine_contained_call, jest_contained_call,
-    mocha_contained_call, npm_exec_inert_option, qunit_contained_call, uvu_contained_call,
+    mocha_contained_call, npm_exec_inert_option, qunit_contained_call, tape_contained_call,
+    tsd_contained_call, uvu_contained_call,
 };
 use crate::contained_node_tool::{entry_tool, supported_tool_in, writes_or_chains, ToolMode};
 use crate::CanonicalCommandV1;
@@ -166,9 +167,15 @@ fn tsx_test_script_args(name: &str, arguments: &[String]) -> bool {
     let (flags, rest) = rest.split_at(crate::contained_argv::tsx_runner_flag_count(rest));
     let named = |script: &String| crate::contained_argv::workspace_test_script(script);
     if crate::contained_argv::tsx_runner_test_mode(flags) {
-        // Node runs each remaining word as a test file of its own, so a word
-        // outside the workspace is code the run loads rather than inert argv.
-        return !rest.is_empty() && rest.iter().all(named);
+        // Node runs each remaining word as a test file of its own, walks a
+        // directory for the files inside it, or discovers them itself when the
+        // run names none. A word that leaves the workspace is code the run
+        // loads rather than inert argv, so the path still has to stay inside
+        // it -- but which leaf names count as tests is Node's own business,
+        // and `node --test` already takes the same paths without asking.
+        return rest
+            .iter()
+            .all(|value| crate::contained_argv::workspace_script_path(value));
     }
     matches!(rest, [script, ..] if named(script))
 }
@@ -522,6 +529,8 @@ fn local_runner_entry_call(arguments: &[String]) -> bool {
         || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_jasmine_entry(&entry.replace('\\', "/")) && jasmine_contained_call(rest))
         || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_qunit_entry(&entry.replace('\\', "/")) && qunit_contained_call(rest))
         || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_uvu_entry(&entry.replace('\\', "/")) && uvu_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_tape_entry(&entry.replace('\\', "/")) && tape_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_tsd_entry(&entry.replace('\\', "/")) && tsd_contained_call(rest))
 }
 
 /// The mode the supported tool behind this command runs in, read through the
@@ -801,6 +810,8 @@ pub(super) fn readonly_test_reason(
         "jasmine" => jasmine_contained_call(arguments),
         "qunit" => qunit_contained_call(arguments),
         "uvu" => uvu_contained_call(arguments),
+        "tape" => tape_contained_call(arguments),
+        "tsd" => tsd_contained_call(arguments),
         "node" | "nodejs" => local_runner_entry_call(arguments),
         _ => false,
     };

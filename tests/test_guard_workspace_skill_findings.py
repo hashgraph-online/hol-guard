@@ -23,6 +23,7 @@ from tests.test_guard_workspace_assessment_runner import (
     T0,
     queued_run,
 )
+from tests.workspace_rule_support import project_rule_findings, with_rule_coverage
 
 FINDING_ID = "0123456789abcdef0123456789abcdef"
 SKILL_PATH = ".claude/skills/setup/SKILL.md"
@@ -113,7 +114,8 @@ def test_a_skill_the_scan_could_not_read_leaves_the_run_partial(tmp_path: Path, 
 
 
 def test_a_skill_scan_at_its_cap_marks_findings_truncated() -> None:
-    coverage = skill_findings.with_skill_coverage(
+    coverage = with_rule_coverage(
+        skill_findings.SKILL_DETECTOR,
         {"status": "complete", "reasons": [], "detectors": {}},
         skills_result(native_finding(), status="incomplete", truncation_reasons=["max_findings"]),
     )
@@ -134,7 +136,9 @@ def test_a_skill_scan_at_its_cap_marks_findings_truncated() -> None:
     ],
 )
 def test_an_unreadable_skill_result_is_an_error(payload: dict[str, object]) -> None:
-    coverage = skill_findings.with_skill_coverage({"status": "complete", "reasons": [], "detectors": {}}, payload)
+    coverage = with_rule_coverage(
+        skill_findings.SKILL_DETECTOR, {"status": "complete", "reasons": [], "detectors": {}}, payload
+    )
     assert (coverage["status"], coverage["reasons"]) == ("partial", ["skills_incomplete"])
     assert coverage["detectors"]["skill_content_v1"] == "error"
 
@@ -168,17 +172,20 @@ def test_an_unreadable_skill_result_is_an_error(payload: dict[str, object]) -> N
 )
 def test_a_malformed_finding_is_dropped_and_leaves_the_scan_incomplete(bad: dict[str, object]) -> None:
     result = skills_result(native_finding(**bad))
-    assert skill_findings.project_skill_findings(result) == []
-    coverage = skill_findings.with_skill_coverage({"status": "complete", "reasons": [], "detectors": {}}, result)
+    assert project_rule_findings(skill_findings.SKILL_DETECTOR, result) == []
+    coverage = with_rule_coverage(
+        skill_findings.SKILL_DETECTOR, {"status": "complete", "reasons": [], "detectors": {}}, result
+    )
     assert coverage["detectors"]["skill_content_v1"] == "incomplete"
     assert coverage["skills"]["truncation_reasons"] == ["invalid_finding"]
 
 
 def test_merged_findings_order_skills_by_severity_with_the_rest() -> None:
-    low = skill_findings.project_skill_findings(
-        skills_result(native_finding(finding_id="f" * 32, severity="low", rule_id="skill.hide-actions"))
+    low = project_rule_findings(
+        skill_findings.SKILL_DETECTOR,
+        skills_result(native_finding(finding_id="f" * 32, severity="low", rule_id="skill.hide-actions")),
     )
-    critical = skill_findings.project_skill_findings(skills_result(native_finding()))
+    critical = project_rule_findings(skill_findings.SKILL_DETECTOR, skills_result(native_finding()))
     supply, _ = runner.project_supply_chain_findings("w" * 64, AUDIT)
     merged, truncated = runner.merge_findings(supply.findings, low, critical)
     assert not truncated

@@ -5047,6 +5047,10 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
     }
   }
   async function grant(input, credentials) {
+    if (scopes.some((scope) => scope.app === "dashboard" && scope.workspace === input.workspace)) {
+      setError("This project is already added. Remove it first to pick different files.");
+      return false;
+    }
     let granted = false;
     await perform(async (signal) => {
       const scope = await grantContextWorkspace(input.workspace, input.files, credentials, signal);
