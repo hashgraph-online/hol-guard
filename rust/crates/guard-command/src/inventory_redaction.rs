@@ -77,6 +77,13 @@ const SAFE_SERIALIZED_MARKERS: &[&str] = &[
     "malformed_url_redacted",
 ];
 
+/// Whether `value` is one of `_SAFE_SERIALIZED_MARKERS`: text the serializer
+/// itself produced in place of what it masked.
+#[must_use]
+pub fn is_safe_serialized_marker(value: &str) -> bool {
+    SAFE_SERIALIZED_MARKERS.contains(&value)
+}
+
 /// `_SENSITIVE_KEY_RE`. `(?i)` folds the negated class the same way CPython
 /// does, so `api[^a-z0-9]?key` keeps rejecting `apiXkey`.
 static SENSITIVE_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
