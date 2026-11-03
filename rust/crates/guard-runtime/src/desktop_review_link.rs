@@ -71,22 +71,25 @@ pub(crate) fn desktop_review_url(guard_home: &Path, approval_url: &str) -> Optio
 }
 
 /// `reason` with the Desktop link put first in its Open-HOL-Guard step and
-/// the browser link kept after it. A reason with no such step, one that
-/// already names the Desktop link, or a user without Desktop is unchanged.
+/// the browser link kept after it. Only the step that names `approval_url`
+/// changes: quoted text that repeats the phrase is left alone. A reason with
+/// no such step, one that already names the Desktop link, or a user without
+/// Desktop is unchanged.
 pub(crate) fn with_desktop_link(reason: String, guard_home: &Path, approval_url: &str) -> String {
-    if !reason.contains(OPEN_GUARD) {
+    let Some(step) = reason.rfind(&format!("{OPEN_GUARD} {approval_url}")) else {
         return reason;
-    }
+    };
     let Some(desktop_url) = desktop_review_url(guard_home, approval_url) else {
         return reason;
     };
     if reason.contains(&desktop_url) {
         return reason;
     }
-    reason.replacen(
-        OPEN_GUARD,
-        &format!("{OPEN_GUARD} {desktop_url} (HOL Guard Desktop), {OPEN_IN_BROWSER}"),
-        1,
+    let link_at = step + OPEN_GUARD.len();
+    format!(
+        "{} {desktop_url} (HOL Guard Desktop), {OPEN_IN_BROWSER}{}",
+        &reason[..link_at],
+        &reason[link_at..]
     )
 }
 

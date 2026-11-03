@@ -62,6 +62,34 @@ mod with_marker {
     }
 
     #[test]
+    fn only_the_step_naming_the_request_gets_the_desktop_link() {
+        let home = GuardHome::new("desktop-link-quoted");
+        write_private(
+            &home.home.join(MARKER_FILE),
+            &installed_marker(&home).to_string(),
+        );
+        let quoted = format!(
+            "echo '{OPEN_GUARD} http://example.test/x'. {}",
+            signed_reason()
+        );
+        let linked = with_desktop_link(quoted, &home.home, &approval_url());
+        assert_eq!(
+            linked,
+            format!(
+                "echo '{OPEN_GUARD} http://example.test/x'. Guard paused this command. \
+                 {OPEN_GUARD} hol-guard-desktop://requests/{REQUEST_ID} (HOL Guard Desktop), \
+                 or in a browser: {}#guard-token=gld1.payload.signature.",
+                approval_url()
+            )
+        );
+        let unlinked = format!("Guard paused this command. {OPEN_GUARD} http://example.test/x.");
+        assert_eq!(
+            with_desktop_link(unlinked.clone(), &home.home, &approval_url()),
+            unlinked
+        );
+    }
+
+    #[test]
     fn a_marker_whose_app_is_gone_offers_no_desktop_link() {
         let home = home_with_marker(
             "desktop-link-uninstalled",
