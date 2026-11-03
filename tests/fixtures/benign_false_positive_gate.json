@@ -5964,6 +5964,21 @@
       "expect": "allow"
     },
     {
+      "id": "read-jsx-password-prop",
+      "fix_area": "read",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "read",
+      "event": "PostToolUse",
+      "tool_input": {
+        "path": "${WORKTREE}/src/password-reset-email.tsx"
+      },
+      "source_ref": true,
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "omp-read-auth-feature-directory",
       "fix_area": "read",
       "harnesses": [

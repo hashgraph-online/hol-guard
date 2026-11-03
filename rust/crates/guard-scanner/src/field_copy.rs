@@ -5,6 +5,11 @@
 //! `token: session.token`. The assignment shape matches the credential rule,
 //! but the value is a member access, not secret material, so reading the
 //! script around it stopped agents mid-task.
+//!
+//! React and other JSX code hands a credential to a component the same way,
+//! as `password={password}`, `approvalPassword={approvalPassword}` or
+//! `token={session.token}`. The braces hold a variable, never a literal, so
+//! CIGAR refused to read ordinary form components.
 
 use regex::Regex;
 use std::sync::LazyLock;
@@ -50,6 +55,10 @@ const CREDENTIAL_FIELDS: [&str; 6] = [
 /// `API_KEY = process.env.API_KEY || "literal"`. A following field or a
 /// trailing comment does not continue it.
 pub(crate) fn is_field_copy(matched: &str, rest_of_line: &str) -> bool {
+    if let Some((name, variable)) = jsx_prop(matched, rest_of_line) {
+        let copy = format!("{name}={variable}");
+        return is_field_copy(&copy, "") || crate::self_named_value::is_self_named(&copy, "");
+    }
     let end = rest_of_line.find([',', ';']).unwrap_or(rest_of_line.len());
     if !ends_value(&rest_of_line[..end]) {
         return false;
@@ -77,6 +86,30 @@ pub(crate) fn is_field_copy(matched: &str, rest_of_line: &str) -> bool {
         .collect::<String>()
         .to_ascii_lowercase();
     CREDENTIAL_FIELDS.iter().any(|name| field.ends_with(name))
+}
+
+/// The prop name and the variable of a JSX attribute such as
+/// `password={password}`. The credential rule's value stops before `}`, so
+/// the match ends at `password={password` and the closing brace opens
+/// `rest_of_line`. After the brace only the tag or the next attribute may
+/// follow; `Password={value};` in a connection string continues with `;` and
+/// stays a literal.
+fn jsx_prop<'a>(matched: &'a str, rest_of_line: &str) -> Option<(&'a str, &'a str)> {
+    let index = matched.find(['=', ':'])?;
+    let name = &matched[..index];
+    let variable = matched[index..].strip_prefix("={")?;
+    let after = rest_of_line.strip_prefix('}')?;
+    let closes = after.is_empty()
+        || after.starts_with(char::is_whitespace)
+        || after.starts_with("/>")
+        || after.starts_with('>');
+    let bare = |text: &str| {
+        !text.is_empty()
+            && text.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '_' | '-')
+            })
+    };
+    (closes && bare(name)).then_some((name, variable))
 }
 
 #[cfg(test)]
@@ -136,6 +169,33 @@ mod tests {
             "{ token: session.token, \"user\": session.user }",
         ] {
             assert!(!credential_assignment(text), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn jsx_props_that_pass_a_credential_variable_are_copies() {
+        for text in [
+            "<Field password={password} />",
+            "              approvalPassword={approvalPassword}\n",
+            "<Login token={session.token}>",
+            "<Form apiKey={props.apiKey}\n  user={user} />",
+            "<Reset password={password2}/>",
+        ] {
+            assert!(!credential_assignment(text), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn jsx_braces_around_a_literal_still_match() {
+        for text in [
+            "<Field password={hunter2production} />",
+            "<Field password={\"hunter2-production\"} />",
+            "<Field password={'hunter2-production'} />",
+            "password={password};",
+            "password={password}+tail",
+            "<Login token={session.user} />",
+        ] {
+            assert!(credential_assignment(text), "{text:?}");
         }
     }
 
