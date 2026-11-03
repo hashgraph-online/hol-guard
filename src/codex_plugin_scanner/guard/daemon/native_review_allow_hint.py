@@ -160,8 +160,9 @@ def _ask_review_hint(
             validated_extension_allow_hint(hint, deadline_monotonic=deadline),
             validated_extension_coverage_hint(hint, deadline_monotonic=deadline),
         )
-        if checked is None:
-            raise _OPERATION.fail(_OPERATION.invalid)
+        # A hint only offers a choice. One the shape check cannot vouch for,
+        # malformed or out of budget, is dropped rather than counted against
+        # the resident, so a slow check never opens the shared circuit.
         parsed.append(checked)
 
     try:
