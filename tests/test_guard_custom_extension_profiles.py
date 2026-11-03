@@ -14,10 +14,11 @@ from codex_plugin_scanner.guard.daemon.local_cli_profiles_api import (
     seeded_profile_cli_id,
     seeded_profile_items,
 )
+from codex_plugin_scanner.guard.runtime import custom_extension_profiles
 from codex_plugin_scanner.guard.runtime.custom_extension_continuity import record_local_custom_extension_mutation
 from codex_plugin_scanner.guard.runtime.custom_extension_profiles import (
-    KNOWN_CLI_PROFILES,
-    WRANGLER_PROFILE,
+    KnownCliProfile,
+    known_cli_profiles,
     profile_for_executable,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_commands import (
@@ -37,8 +38,15 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.local_cli_command_id_client import match_command_id
 
 
-@pytest.mark.parametrize("profile", KNOWN_CLI_PROFILES, ids=lambda profile: profile.profile_id)
-def test_profile_command_tree_is_valid(profile) -> None:
+def _wrangler() -> KnownCliProfile:
+    profile = profile_for_executable("wrangler")
+    assert profile is not None
+    return profile
+
+
+@pytest.mark.parametrize("profile_id", ["wrangler"])
+def test_profile_command_tree_is_valid(profile_id: str) -> None:
+    profile = next(profile for profile in known_cli_profiles() if profile.profile_id == profile_id)
     ids = [entry.command.command_id for entry in profile.commands]
 
     assert len(ids) == len(set(ids))
@@ -52,7 +60,7 @@ def test_profile_command_tree_is_valid(profile) -> None:
 
 
 def test_wrangler_suggestions_leave_writes_to_guard_and_allow_reads_only() -> None:
-    suggested = WRANGLER_PROFILE.suggested_states()
+    suggested = _wrangler().suggested_states()
 
     # CLI commands cannot store an explicit review rule; inherit keeps them on
     # Guard's default review for commands it cannot prove read-only.
@@ -81,9 +89,25 @@ def test_wrangler_tokens_match_profile_ids(tokens: tuple[str, ...], expected: st
 
 
 def test_profile_for_executable_accepts_windows_shims() -> None:
-    assert profile_for_executable("wrangler.CMD") is WRANGLER_PROFILE
+    assert profile_for_executable("wrangler.CMD") is _wrangler()
     assert profile_for_executable("wrangle") is None
     assert profile_for_executable(None) is None
+
+
+def test_a_runtime_that_cannot_answer_offers_no_profile() -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise authority.NativeRunnerAuthorityError("unavailable")
+
+    custom_extension_profiles._profiles.cache_clear()
+    custom_extension_profiles._profile_id.cache_clear()
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(authority, "native_runner_authority", unavailable)
+        assert known_cli_profiles() == ()
+        assert profile_for_executable("wrangler") is None
+    # A failed answer is never cached, so the next read sees the profiles.
+    assert _wrangler().profile_id == "wrangler"
 
 
 def test_merge_profile_commands_prefers_discovered_help_and_adds_profile_paths() -> None:

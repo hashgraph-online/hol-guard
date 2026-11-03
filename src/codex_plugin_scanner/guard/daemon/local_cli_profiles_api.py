@@ -10,8 +10,8 @@ from pathlib import Path
 from ..native_context import _resolve_digest_home, native_context_digest
 from ..native_local_cli_identity import record_local_cli_identity_failure
 from ..runtime.custom_extension_profiles import (
-    KNOWN_CLI_PROFILES,
     KnownCliProfile,
+    known_cli_profiles,
     profile_for_executable,
 )
 from ..runtime.local_cli_commands import (
@@ -155,7 +155,7 @@ def seeded_profile_items(items: list[dict[str, object]], *, authority_revision: 
     matched = {profile.profile_id for item in items if (profile := _item_profile(item)) is not None}
     return [
         _seeded_item(profile, authority_revision=authority_revision)
-        for profile in KNOWN_CLI_PROFILES
+        for profile in known_cli_profiles()
         if profile.profile_id not in matched
     ]
 

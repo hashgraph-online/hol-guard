@@ -136,6 +136,7 @@ mod claude_session_start;
 mod claude_session_start_contract;
 mod claude_session_start_live;
 mod cli_copilot_resolution;
+mod cli_profiles;
 mod cli_runtime_support_op;
 #[path = "adapters/detection/cline_detect.rs"]
 mod cline_detect;
