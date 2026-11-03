@@ -20,8 +20,15 @@ use guard_contracts::{
     NETWORK_PROTECTION_VERIFY_RESULT_SCHEMA,
 };
 use serde_json::{json, Value};
+use std::borrow::Cow;
 
 use crate::package_authority_op::request_digest_with_limit;
+
+/// Per-collection cap for a response sent as `response_json`. The request
+/// frame's own cap of 4,096 refuses real bundles, whose threat feeds hold
+/// tens of thousands of entries; the field's string bound keeps the document
+/// itself at a few megabytes.
+const MAX_RESPONSE_JSON_COLLECTION_ITEMS: usize = 262_144;
 
 pub(crate) fn evaluate_network_protection_verify_request(
     request: &NetworkProtectionVerifyRequestV1,
@@ -64,15 +71,44 @@ fn without_bundle(mut saved: Value) -> Value {
 fn verify(
     request: &NetworkProtectionVerifyRequestV1,
 ) -> Result<Value, NetworkProtectionBundleError> {
+    let response = response(request)?;
     let trusted = trusted_keys(request.trusted_keys.as_ref())?;
     verify_network_protection_response(
-        &request.response,
+        &response,
         &request.workspace_id,
         &trusted,
         request.cached_bundle_version.as_deref(),
         request.now,
         &RingRsaPssVerify,
     )
+}
+
+/// The response the caller sent, from whichever field carries it.
+///
+/// A request that fills both is refused rather than resolved by preference:
+/// the two could differ, and the reply must speak to the one response the
+/// caller saves.
+fn response(
+    request: &NetworkProtectionVerifyRequestV1,
+) -> Result<Cow<'_, Value>, NetworkProtectionBundleError> {
+    let Some(text) = request.response_json.as_deref() else {
+        return Ok(Cow::Borrowed(&request.response));
+    };
+    if !request.response.is_null() {
+        return Err(NetworkProtectionBundleError(
+            "Network protection bundle request carries the response twice".to_owned(),
+        ));
+    }
+    crate::strict_json::parse_with_collection_limit(
+        text.as_bytes(),
+        MAX_RESPONSE_JSON_COLLECTION_ITEMS,
+    )
+    .map(Cow::Owned)
+    .map_err(|_| {
+        NetworkProtectionBundleError(
+            "Network protection bundle response is not valid JSON".to_owned(),
+        )
+    })
 }
 
 /// A keyring the resident cannot read is not an empty keyring, so a malformed

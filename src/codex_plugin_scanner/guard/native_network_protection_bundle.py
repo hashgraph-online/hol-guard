@@ -14,20 +14,29 @@ accepted.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
 from uuid import uuid4
 
 from .native_context import _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
+from .native_runtime import native_runtime_status
 from .native_store_policy import _payload
 from .runtime.network_protection_bundle import NetworkProtectionBundleError
 
 NETWORK_PROTECTION_VERIFY_FEATURE = "network-protection-verify-v1"
+# A request frame caps every JSON array at 4,096 items and a real bundle's
+# threat feeds run far past that, so a runtime advertising this takes the
+# response as text instead.
+NETWORK_PROTECTION_VERIFY_RESPONSE_JSON_FEATURE = "network-protection-verify-response-json-v1"
 _REQUEST_SCHEMA = "guard-network-protection-verify-request.v1"
 _RESULT_SCHEMA = "guard-network-protection-verify-result.v1"
 _TIMEOUT_SECONDS = 15.0
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
+# The frame parser bounds every string at 4 MiB of decoded text, the response
+# text included.
+_MAX_RESPONSE_JSON_BYTES = 4 * 1024 * 1024
 
 
 class NetworkProtectionBundleUnavailableError(NetworkProtectionBundleError):
@@ -67,6 +76,8 @@ def native_verify_network_protection_response(
     home = Path(_resolve_digest_home(guard_home))
     if not ensure_resident_prerequisite(home):
         raise NetworkProtectionBundleUnavailableError("resident_unavailable")
+    status = native_runtime_status()
+    features = set(status.capabilities.features) if status.capabilities is not None else set()
     wire: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"network-protection-verify-{uuid4().hex}",
@@ -77,6 +88,12 @@ def native_verify_network_protection_response(
         "now": now,
     }
     try:
+        if NETWORK_PROTECTION_VERIFY_RESPONSE_JSON_FEATURE in features:
+            text = json.dumps(dict(response), separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+            if len(text.encode("utf-8")) > _MAX_RESPONSE_JSON_BYTES:
+                raise NetworkProtectionBundleUnavailableError("response_too_large")
+            wire["response"] = None
+            wire["response_json"] = text
         reply = _resident_request(
             operation="network_protection_verify",
             request=wire,
@@ -86,6 +103,7 @@ def native_verify_network_protection_response(
             response_schema=_RESULT_SCHEMA,
             max_request_bytes=_MAX_REQUEST_BYTES,
             record_success=False,
+            status=status,
         )
     except (TypeError, ValueError, OSError, RuntimeError):
         raise NetworkProtectionBundleUnavailableError("request_refused") from None
