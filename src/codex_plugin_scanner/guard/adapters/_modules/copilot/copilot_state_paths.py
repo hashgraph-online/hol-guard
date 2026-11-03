@@ -379,15 +379,14 @@ def copilot_state_authorizes_backup_reuse(
         authenticated_adapter_path(context.guard_home, harness="copilot", payload=payload, field=field)
         for field in ("managed_config_path", "backup_path")
     ]
-    backup: dict[str, object] | None = None
-    if not backup_path.is_symlink() and backup_path.is_file():
-        try:
-            backup = {"text": backup_path.read_text(encoding="utf-8")}
-        except (OSError, UnicodeDecodeError):
-            backup = {"text": None}
     expected = [_spelling(target_path.resolve()), _spelling(backup_path.resolve())]
     recorded_spellings = [_spelling(path) for path in recorded]
-    request = {"action": "backup_reuse", "recorded": recorded_spellings, "expected": expected, "backup": backup}
+    request = {
+        "action": "backup_reuse",
+        "recorded": recorded_spellings,
+        "expected": expected,
+        "backup": str(backup_path),
+    }
     decision = _lifecycle_state(context, request).get("decision")
     if decision == "refuse":
         raise RuntimeError("Guard refused to overwrite an unreadable Copilot backup.")

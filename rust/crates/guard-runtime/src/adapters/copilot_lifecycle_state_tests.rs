@@ -11,32 +11,51 @@ const BACKUP: &str = "/guard/managed/copilot/abc.backup.json";
 const STATE: &str = "/guard/managed/copilot/abc.state.json";
 const ENVELOPE: &str = "{\"existed\": true, \"content\": \"{}\\n\"}";
 
-fn reuse(recorded: Value, backup: Value) -> Value {
+fn reuse(recorded: Value, backup: &std::path::Path) -> Value {
     let answer = dispatch(&json!({
         "action": "backup_reuse",
         "recorded": recorded,
         "expected": [TARGET, BACKUP],
-        "backup": backup,
+        "backup": backup.to_str().expect("utf-8 path"),
     }))
     .expect("decision");
     answer["decision"].clone()
 }
 
+fn backup_holding(directory: &tempfile::TempDir, bytes: &[u8]) -> std::path::PathBuf {
+    let backup = directory.path().join("abc.backup.json");
+    std::fs::write(&backup, bytes).expect("write backup");
+    backup
+}
+
 #[test]
 fn a_bound_readable_backup_is_reused() {
-    assert_eq!(
-        reuse(json!([TARGET, BACKUP]), json!({ "text": ENVELOPE })),
-        "reuse"
-    );
+    let directory = tempfile::tempdir().expect("tempdir");
     let absent = "{\"content\": null, \"existed\": false}";
-    assert_eq!(
-        reuse(json!([TARGET, BACKUP]), json!({ "text": absent })),
-        "reuse"
-    );
+    for envelope in [ENVELOPE, absent] {
+        let backup = backup_holding(&directory, envelope.as_bytes());
+        assert_eq!(
+            reuse(json!([TARGET, BACKUP]), &backup),
+            "reuse",
+            "{envelope}"
+        );
+    }
+}
+
+#[test]
+fn a_backup_larger_than_a_call_is_read_where_it_lies() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let content = "x".repeat(8 * 1024 * 1024);
+    let envelope = json!({ "existed": true, "content": content }).to_string();
+    let backup = backup_holding(&directory, envelope.as_bytes());
+    assert_eq!(reuse(json!([TARGET, BACKUP]), &backup), "reuse");
 }
 
 #[test]
 fn state_that_binds_another_pair_replaces_the_backup() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    // An unusable backup never matters when the state binds another pair.
+    let missing = directory.path().join("missing.backup.json");
     for recorded in [
         json!([null, null]),
         json!([TARGET, null]),
@@ -44,29 +63,40 @@ fn state_that_binds_another_pair_replaces_the_backup() {
         json!(["/home/dev/other.json", BACKUP]),
         json!([TARGET, "/guard/managed/copilot/def.backup.json"]),
     ] {
-        // An unusable backup never matters when the state binds another pair.
-        assert_eq!(
-            reuse(recorded.clone(), Value::Null),
-            "replace",
-            "{recorded}"
-        );
+        assert_eq!(reuse(recorded.clone(), &missing), "replace", "{recorded}");
     }
 }
 
 #[test]
 fn a_bound_backup_that_cannot_be_restored_is_refused() {
-    for backup in [
-        Value::Null,
-        json!({ "text": null }),
-        json!({ "text": "" }),
-        json!({ "text": "not json" }),
+    let directory = tempfile::tempdir().expect("tempdir");
+    assert_eq!(
+        reuse(json!([TARGET, BACKUP]), &directory.path().join("missing")),
+        "refuse"
+    );
+    assert_eq!(reuse(json!([TARGET, BACKUP]), directory.path()), "refuse");
+    for bytes in [
+        &b""[..],
+        b"not json",
+        b"{\"existed\": false, \"content\": null}\xff",
     ] {
+        let backup = backup_holding(&directory, bytes);
         assert_eq!(
-            reuse(json!([TARGET, BACKUP]), backup.clone()),
+            reuse(json!([TARGET, BACKUP]), &backup),
             "refuse",
-            "{backup}"
+            "{bytes:?}"
         );
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_bound_backup_reached_through_a_link_is_refused() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let backup = backup_holding(&directory, ENVELOPE.as_bytes());
+    let link = directory.path().join("link.backup.json");
+    std::os::unix::fs::symlink(&backup, &link).expect("symlink");
+    assert_eq!(reuse(json!([TARGET, BACKUP]), &link), "refuse");
 }
 
 #[test]
@@ -269,10 +299,11 @@ fn malformed_arguments_are_refused() {
         json!({}),
         json!({ "action": "other" }),
         json!({ "action": "backup_reuse", "recorded": [null, null], "expected": [TARGET, BACKUP] }),
-        json!({ "action": "backup_reuse", "recorded": [null], "expected": [TARGET, BACKUP], "backup": null }),
-        json!({ "action": "backup_reuse", "recorded": [1, null], "expected": [TARGET, BACKUP], "backup": null }),
-        json!({ "action": "backup_reuse", "recorded": [null, null], "expected": [TARGET, null], "backup": null }),
-        json!({ "action": "backup_reuse", "recorded": [null, null], "expected": [TARGET, BACKUP], "backup": { "text": 1 } }),
+        json!({ "action": "backup_reuse", "recorded": [null], "expected": [TARGET, BACKUP], "backup": BACKUP }),
+        json!({ "action": "backup_reuse", "recorded": [1, null], "expected": [TARGET, BACKUP], "backup": BACKUP }),
+        json!({ "action": "backup_reuse", "recorded": [null, null], "expected": [TARGET, null], "backup": BACKUP }),
+        json!({ "action": "backup_reuse", "recorded": [null, null], "expected": [TARGET, BACKUP], "backup": null }),
+        json!({ "action": "backup_reuse", "recorded": [null, null], "expected": [TARGET, BACKUP], "backup": { "text": "{}" } }),
         json!({ "action": "state_entries", "entries": {} }),
         json!({ "action": "state_entries", "entries": [good_entry], "extra": 1 }),
         json!({ "action": "state_entries", "entries": [state_entry(json!(TARGET), json!([bad_source]))] }),

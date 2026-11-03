@@ -4,12 +4,13 @@
 //! `guard/adapters/_modules/copilot/copilot_state_paths.py` before they moved
 //! here).
 //!
-//! Python keeps the locks, the file reads, the `lstat` calls, path resolution
+//! Python keeps the locks, the state file reads, the `lstat` calls, path resolution
 //! and the MAC check, which runs in the separate `adapter_state_integrity` op
 //! with the state key, so only state files that authenticated reach this kind.
 //! Python sends what those found; this kind decides.
 //!
-//! `backup_reuse` answers `{"decision": "reuse" | "replace" | "refuse"}`: reuse
+//! `backup_reuse` takes the backup's path and reads it here only when the
+//! state binds it, and answers `{"decision": "reuse" | "replace" | "refuse"}`: reuse
 //! the backup an authenticated state binds to this target, replace it when no
 //! authenticated state binds the pair, and refuse when the bound backup is not
 //! a regular file holding a backup envelope.
@@ -23,6 +24,8 @@
 //! stored backup spelling is compared as the exact string it was. Python's
 //! decoder also accepted `NaN`, `Infinity` and lone surrogate escapes; a
 //! backup holding one reads as invalid here, and Guard never writes one.
+
+use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
@@ -90,10 +93,7 @@ fn strings(value: &Value) -> Result<Vec<&str>, &'static str> {
 fn backup_reuse(fields: &Map<String, Value>) -> KindResult {
     let recorded = pair(&fields["recorded"])?.map(optional_str);
     let expected = pair(&fields["expected"])?.map(Value::as_str);
-    let backup = match &fields["backup"] {
-        Value::Null => None,
-        value => Some(optional_str(&object(value, &["text"])?["text"])?),
-    };
+    let backup = Path::new(fields["backup"].as_str().ok_or(ERR_INVALID)?);
     let mut bound = true;
     for (recorded, expected) in recorded.into_iter().zip(expected) {
         let expected = expected.ok_or(ERR_INVALID)?;
@@ -101,12 +101,23 @@ fn backup_reuse(fields: &Map<String, Value>) -> KindResult {
     }
     let decision = if !bound {
         "replace"
-    } else if backup.flatten().is_some_and(valid_backup_envelope) {
+    } else if read_backup(backup).is_some_and(|text| valid_backup_envelope(&text)) {
         "reuse"
     } else {
         "refuse"
     };
     Ok(json!({ "decision": decision }))
+}
+
+/// The bound backup's text, read only once the state binds it, so a large
+/// backup never travels through the call. A link, a non-file or unreadable
+/// text cannot be restored.
+fn read_backup(backup: &Path) -> Option<String> {
+    let metadata = std::fs::symlink_metadata(backup).ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+    std::fs::read_to_string(backup).ok()
 }
 
 /// `_valid_backup_envelope`: exactly `existed` and `content`, with content
