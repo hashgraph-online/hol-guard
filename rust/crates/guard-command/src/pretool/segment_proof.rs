@@ -139,6 +139,14 @@ pub(crate) fn benign_command_segments(
                         | "paste"
                         | "join"
                         | "column"
+                        | "nl"
+                        | "tac"
+                        | "rev"
+                        | "fold"
+                        | "expand"
+                        | "unexpand"
+                        | "fmt"
+                        | "comm"
                 ))
                 // A file operand prints a source line on a syntax error, so it
                 // gets the same session proof as `cat`.

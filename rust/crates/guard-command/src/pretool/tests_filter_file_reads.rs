@@ -151,6 +151,14 @@ fn a_filter_reading_a_file_without_a_verified_context_takes_review() {
         "paste Cargo.toml Cargo.toml",
         "join Cargo.toml Cargo.toml",
         "column -t Cargo.toml",
+        "nl Cargo.toml",
+        "tac Cargo.toml",
+        "rev Cargo.toml",
+        "fold -w 40 Cargo.toml",
+        "expand Cargo.toml",
+        "unexpand Cargo.toml",
+        "fmt Cargo.toml",
+        "comm -12 Cargo.toml Cargo.toml",
     ] {
         assert!(!allowed_without_context(command), "{command}");
     }
