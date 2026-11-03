@@ -11,6 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_runner_authority as authority
 from codex_plugin_scanner.guard.adapters import harness_mcp_discovery as discovery
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer, proxy_process_env
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
@@ -139,10 +140,11 @@ def test_no_identified_server_sends_nothing(monkeypatch: pytest.MonkeyPatch) -> 
         NativeRunnerAuthorityError("native_runner_authority_unavailable"),
     ],
 )
-def test_a_refused_group_answer_lists_nothing(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
+def test_a_refused_group_answer_raises(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
     _fake(monkeypatch, answer)
 
-    assert _discover(monkeypatch, {"cursor": (_server("cursor", "one", _identity("1")),)}) == ()
+    with pytest.raises(ValueError):
+        _discover(monkeypatch, {"cursor": (_server("cursor", "one", _identity("1")),)})
 
 
 def _discovered(seed: str, env: tuple[tuple[str, str], ...] = ()) -> discovery.DiscoveredHarnessMcpServer:
@@ -217,3 +219,26 @@ def test_launch_env_matches_by_id_and_keeps_values_local(monkeypatch: pytest.Mon
         "source_label": None,
     }
     assert _FAKE_SECRET not in json.dumps(sent)
+
+
+def test_a_refused_group_answer_still_records_remote_servers(monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake(monkeypatch, NativeRunnerAuthorityError("native_runner_authority_unavailable"))
+    detection = SimpleNamespace(harness="cursor")
+    remote = (SimpleNamespace(name="remote"),)
+    persisted: list[tuple[object, object]] = []
+    monkeypatch.setattr(discovery, "_safe_detections", lambda *_args: [detection])
+    monkeypatch.setattr(
+        discovery, "observable_stdio_servers_with_proxy", lambda _detection: (_server("cursor", "one", _identity("1")),)
+    )
+    monkeypatch.setattr(discovery, "_remote_servers", lambda _detections, _guard_home: remote)
+    monkeypatch.setattr(discovery, "remote_scan_harnesses", lambda _detections, _remote: ("cursor",))
+
+    def persist(_store: object, stdio: object, **kwargs: object) -> tuple[str, ...]:
+        persisted.append((stdio, kwargs["remote"]))
+        return ("remote",)
+
+    monkeypatch.setattr(discovery, "persist_discovered_harness_mcp_servers", persist)
+    context = HarnessContext(home_dir=Path("home"), workspace_dir=None, guard_home=Path("guard"))
+
+    assert discovery.observe_configured_mcp_servers(object(), context=context, seen_at="now") == 1
+    assert persisted == [((), remote)]

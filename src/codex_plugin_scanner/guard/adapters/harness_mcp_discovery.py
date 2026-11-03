@@ -136,12 +136,9 @@ def _stdio_servers(loaded: Sequence[HarnessDetection]) -> tuple[DiscoveredHarnes
     from ..native_runner_authority import native_runner_authority
 
     request = {"op": "group", "windows": os.name == "nt", "limit": MAX_DISCOVERED_MCP_SERVERS, "servers": entries}
-    try:
-        answer = native_runner_authority("harness_mcp_discovery", request)
-        return tuple(_grouped_server(servers[index], item) for index, item in _group_items(answer, len(servers)))
-    except (OSError, RuntimeError, ValueError) as exc:
-        logger.warning("MCP inventory skipped stdio servers after %s", type(exc).__name__)
-        return ()
+    # A refused answer raises: an explicit scan reports it instead of caching an empty list.
+    answer = native_runner_authority("harness_mcp_discovery", request)
+    return tuple(_grouped_server(servers[index], item) for index, item in _group_items(answer, len(servers)))
 
 
 def _group_entry(server: ManagedMcpServer, identity: McpServerIdentity) -> dict[str, object]:
@@ -287,9 +284,15 @@ def observe_configured_mcp_servers(store: object, *, context: HarnessContext, se
             # Local servers still record; with no remote read nothing is forgotten.
             logger.debug("configured remote MCP servers not read after %s", type(exc).__name__)
             remote, remote_harnesses = (), None
+        try:
+            stdio_servers = _stdio_servers(detections) if stdio else ()
+        except (OSError, RuntimeError, ValueError) as exc:
+            # Remote servers still record when the local grouping is refused.
+            logger.debug("configured stdio MCP servers not read after %s", type(exc).__name__)
+            stdio_servers = ()
         labels = persist_discovered_harness_mcp_servers(
             store,
-            _stdio_servers(detections) if stdio else (),
+            stdio_servers,
             seen_at=seen_at,
             remote=remote,
             remote_harnesses=remote_harnesses,
