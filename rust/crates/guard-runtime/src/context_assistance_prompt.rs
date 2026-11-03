@@ -12,7 +12,9 @@ use crate::context_assistance_engine::PickedExcerpt;
 use crate::context_assistance_prompt_files::{
     asks_for_tests, candidates, phrases, project_root, terms, test_file,
 };
+use crate::context_assistance_service::LaneMiss;
 use crate::policy_store::PolicySnapshotStore;
+use guard_context_assistance::SourceRoot;
 use guard_contracts::GuardHookEnvelopeV2;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -141,7 +143,8 @@ fn attach(
         return;
     }
     let deadline = Instant::now() + wait;
-    let listed = matched(&found);
+    // The engine refuses roots like these, so the plain file list does too.
+    let listed = matched(&found).filter(|_| SourceRoot::inspect(&root).is_ok());
     let request = Request {
         root,
         app: harness.to_owned(),
@@ -149,9 +152,10 @@ fn attach(
         words,
         found,
     };
-    // CIGAR still starting, or late: the matched files alone still save the
-    // agent a search.
-    let Some(context) = lookup(service, store.guard_home(), request, deadline).unwrap_or(listed)
+    // CIGAR still starting: the matched files alone still save the agent a
+    // search, as long as project context is still on.
+    let Some(context) = lookup(service, store.guard_home(), request, deadline)
+        .unwrap_or_else(|| listed.filter(|_| service.prompt_context_chosen()))
     else {
         return;
     };
@@ -161,15 +165,17 @@ fn attach(
 /// The files the search matched, best first, for a prompt CIGAR could not
 /// answer in time.
 fn matched(found: &[String]) -> Option<String> {
-    if found.is_empty() {
-        return None;
+    let mut listed = String::from(MATCHED_HEADER);
+    let mut separator = " ";
+    for file in found.iter().take(MAX_OTHER_FILES) {
+        if listed.len() + separator.len() + file.len() > MAX_CONTEXT_CHARS {
+            break;
+        }
+        listed.push_str(separator);
+        listed.push_str(file);
+        separator = ", ";
     }
-    let files: Vec<&str> = found
-        .iter()
-        .take(MAX_OTHER_FILES)
-        .map(String::as_str)
-        .collect();
-    Some(format!("{MATCHED_HEADER} {}", files.join(", ")))
+    (listed.len() > MATCHED_HEADER.len()).then_some(listed)
 }
 
 /// Whether this harness's prompt hook passes added context to the model.
@@ -222,9 +228,9 @@ fn flights() -> &'static Flights {
     FLIGHTS.get_or_init(Default::default)
 }
 
-/// CIGAR's rendered answer, `Some(None)` when it had nothing that fits or
-/// another prompt holds the lookup, and `None` when CIGAR was not ready or did
-/// not answer before `deadline`.
+/// CIGAR's rendered answer, `Some(None)` when it had nothing that fits, was
+/// off, failed, did not answer before `deadline`, or another prompt holds the
+/// lookup, and `None` only when CIGAR is on and still starting.
 fn lookup(
     service: &crate::context_assistance_service::Service,
     guard_home: &Path,
@@ -246,7 +252,11 @@ fn lookup(
     if let Some(flight) = flight {
         return answer(service, &flight, deadline);
     }
-    let lane = service.prompt_lane(guard_home, deadline)?;
+    let lane = match service.prompt_lane(guard_home, deadline) {
+        Ok(lane) => lane,
+        Err(LaneMiss::Starting) => return None,
+        Err(LaneMiss::Off) => return Some(None),
+    };
     let flight = Arc::new(Flight {
         prompt,
         lane,
@@ -305,13 +315,16 @@ fn lookup(
     answer(service, &flight, deadline)
 }
 
-/// The flight's answer, dropped if project context changed meanwhile.
+/// The flight's answer, dropped if project context changed meanwhile. A late
+/// answer adds nothing: the engine's own checks on the files never finished.
 fn answer(
     service: &crate::context_assistance_service::Service,
     flight: &Flight,
     deadline: Instant,
 ) -> Option<Option<String>> {
-    let rendered = wait_for(flight, deadline)?;
+    let Some(rendered) = wait_for(flight, deadline) else {
+        return Some(None);
+    };
     Some(rendered.filter(|_| service.prompt_lane_current(&flight.lane)))
 }
 

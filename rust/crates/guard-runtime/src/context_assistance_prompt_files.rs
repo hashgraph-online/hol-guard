@@ -19,6 +19,9 @@ const MAX_FILE_BYTES: u64 = 65_536;
 const MAX_DEPTH: usize = 10;
 const MAX_TERMS: usize = 12;
 const MAX_PHRASES: usize = 4;
+/// How far past an opening quote to look for its closing one, so a prompt
+/// full of unmatched quotes is still scanned in one pass.
+const MAX_PHRASE_SPAN: usize = 120;
 const WALK_BUDGET: Duration = Duration::from_millis(350);
 
 const SKIPPED_DIRS: &[&str] = &[
@@ -159,11 +162,15 @@ pub(crate) fn phrases(prompt: &str) -> Vec<String> {
                 continue;
             }
         };
-        let end = chars[at + 1..].iter().enumerate().position(|(offset, &c)| {
-            let next = chars.get(at + offset + 2);
-            (c == close || (close == '\u{201d}' && c == '"'))
-                && (close != '\'' || next.is_none_or(|n| !n.is_alphanumeric()))
-        });
+        let end = chars[at + 1..]
+            .iter()
+            .take(MAX_PHRASE_SPAN)
+            .enumerate()
+            .position(|(offset, &c)| {
+                let next = chars.get(at + offset + 2);
+                (c == close || (close == '\u{201d}' && c == '"'))
+                    && (close != '\'' || next.is_none_or(|n| !n.is_alphanumeric()))
+            });
         let Some(end) = end else {
             at += 1;
             continue;
@@ -204,7 +211,7 @@ struct Scored {
     modified: SystemTime,
 }
 
-/// Project files that mention the prompt's words, best first. An empty
+/// Project files that mention the prompt's words or quoted phrases, best first. An empty
 /// result means nothing in the project matched, so no context is added. The
 /// walk stops after `budget` or its own time limit, whichever comes first.
 pub(crate) fn candidates(
@@ -214,7 +221,7 @@ pub(crate) fn candidates(
     budget: Duration,
 ) -> Vec<String> {
     let budget = budget.min(WALK_BUDGET);
-    if terms.is_empty() {
+    if terms.is_empty() && phrases.is_empty() {
         return Vec::new();
     }
     let started = Instant::now();
@@ -290,7 +297,7 @@ pub(crate) fn candidates(
                 .map(|term| text.matches(term.as_str()).take(8).count() as u8)
                 .collect();
             let quoted: Vec<bool> = phrases.iter().map(|p| text.contains(p.as_str())).collect();
-            if in_path.contains(&true) || hits.iter().any(|&n| n > 0) {
+            if in_path.contains(&true) || hits.iter().any(|&n| n > 0) || quoted.contains(&true) {
                 seen.push(Seen {
                     relative,
                     modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),

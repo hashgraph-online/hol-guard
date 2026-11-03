@@ -9,6 +9,14 @@ pub(crate) struct PromptLane {
     generation: u64,
 }
 
+/// Why a prompt has no live worker to ask.
+pub(crate) enum LaneMiss {
+    /// Project context is off, Guard is closing, or CIGAR is not starting.
+    Off,
+    /// CIGAR is on and was still starting when the deadline came.
+    Starting,
+}
+
 fn chosen(settings: &AssistanceSettings) -> bool {
     settings.requested.enabled
         && settings.effective.enabled
@@ -42,16 +50,16 @@ impl Service {
         &self,
         guard_home: &std::path::Path,
         deadline: Instant,
-    ) -> Option<PromptLane> {
+    ) -> Result<PromptLane, LaneMiss> {
         self.wake(guard_home, chosen);
         loop {
             if let Ok(mut state) = self.state.try_lock() {
                 if state.closed || !chosen(&state.settings) {
-                    return None;
+                    return Err(LaneMiss::Off);
                 }
                 if let Some(actor) = state.runtime.as_ref().filter(|a| a.is_active()).cloned() {
                     state.last_used = Instant::now();
-                    return Some(PromptLane {
+                    return Ok(PromptLane {
                         actor,
                         generation: state.generation,
                     });
@@ -61,11 +69,11 @@ impl Service {
                     .as_ref()
                     .is_some_and(|job| job.operation == Check::Activate);
                 if !waking {
-                    return None;
+                    return Err(LaneMiss::Off);
                 }
             }
             if Instant::now() + Duration::from_millis(50) >= deadline {
-                return None;
+                return Err(LaneMiss::Starting);
             }
             std::thread::sleep(Duration::from_millis(50));
         }

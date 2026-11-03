@@ -291,3 +291,27 @@ fn rare_words_and_quoted_text_outrank_common_words_repeated() {
         "{found:?}"
     );
 }
+
+#[test]
+fn a_file_with_only_the_quoted_text_still_counts() {
+    let (_dir, root) = canonical();
+    let project = root.join("quoted");
+    fs::create_dir_all(project.join("src")).unwrap();
+    fs::write(
+        project.join("src/strings.ts"),
+        "export const LABEL = 'zq';\n// Ok, got it\n",
+    )
+    .unwrap();
+    let found = candidates(&project, &[], &["ok, got it".to_owned()], WALK_BUDGET);
+    assert_eq!(found, ["src/strings.ts"]);
+}
+
+#[test]
+fn unmatched_quotes_are_scanned_in_one_pass() {
+    let prompt = " \u{201c}".repeat(50_000);
+    let started = Instant::now();
+    assert!(phrases(&prompt).is_empty());
+    assert!(started.elapsed() < Duration::from_secs(1));
+    let far = format!("\"{}\" and \"keep this\"", "x".repeat(200));
+    assert_eq!(phrases(&far), ["keep this"]);
+}

@@ -205,3 +205,16 @@ fn a_prompt_cigar_cannot_answer_in_time_still_gets_the_matched_files() {
     assert!(listed.starts_with(MATCHED_HEADER), "{listed}");
     assert!(listed.ends_with(" src/f0.ts, src/f1.ts, src/f2.ts, src/f3.ts, src/f4.ts, src/f5.ts, src/f6.ts, src/f7.ts"), "{listed}");
 }
+
+#[test]
+fn long_matched_paths_stay_within_the_context_limit() {
+    let long = format!("src/{}.ts", "a".repeat(MAX_CONTEXT_CHARS / 3));
+    let found = vec![long.clone(); MAX_OTHER_FILES];
+    let listed = matched(&found).unwrap();
+    assert!(listed.len() <= MAX_CONTEXT_CHARS, "{}", listed.len());
+    assert_eq!(listed.matches(long.as_str()).count(), 2);
+    assert_eq!(
+        matched(&[format!("src/{}.ts", "b".repeat(MAX_CONTEXT_CHARS))]),
+        None
+    );
+}
