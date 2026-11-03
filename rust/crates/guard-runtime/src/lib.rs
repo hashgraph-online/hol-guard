@@ -187,6 +187,8 @@ mod codex_identity;
 mod codex_live_operation;
 mod codex_live_wait_build;
 mod codex_proxy;
+#[path = "adapters/codex_remote_launch.rs"]
+mod codex_remote_launch;
 mod codex_request_resume_busy;
 mod codex_request_resume_op;
 mod codex_request_resume_store;

@@ -24,6 +24,7 @@ use super::cline_detect;
 use super::cline_hook_files;
 use super::cline_plugin_render;
 use super::codex_detect;
+use super::codex_remote_launch;
 use super::context_digest_json::write_canonical_json_with_limit;
 use super::copilot_detect;
 use super::copilot_hook_config;
@@ -207,6 +208,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "muse_detect" => muse_detect::detect(args),
         "openclaw_detect" => openclaw_detect::detect(args),
         "cursor_detect" => cursor_detect::detect(args),
+        "codex_remote_launch" => codex_remote_launch::dispatch(args),
         "cursor_hook_config" => cursor_hook_config::dispatch(args),
         "cursor_editor_plan" => cursor_editor_plan::plan(args),
         "cursor_hook_script" => cursor_hook_script::dispatch(args),
