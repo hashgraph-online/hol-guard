@@ -519,7 +519,17 @@ def _require_string(payload: dict[str, object], key: str) -> str:
     return value
 
 
-def _parse_guard_token_exchange_payload(payload: dict[str, object]) -> GuardOAuthTokenExchangeResult:
+def _parse_guard_token_exchange_payload(
+    payload: dict[str, object],
+    *,
+    require_entitlement: bool = True,
+) -> GuardOAuthTokenExchangeResult:
+    """Parse a token response; a refresh passes ``require_entitlement=False``.
+
+    A connect replaces the stored credentials, so it needs the plan the
+    response grants. A refresh must still save a rotated refresh token when
+    the runtime cannot read the plan, and keeps the entitlement it stored.
+    """
     access_token = _require_string(payload, "access_token")
     token_type = _require_string(payload, "token_type")
     if token_type.lower() != "bearer":
@@ -544,7 +554,7 @@ def _parse_guard_token_exchange_payload(payload: dict[str, object]) -> GuardOAut
         supply_chain_entitlement=build_oauth_package_firewall_entitlement(
             payload,
             now=now,
-            required=True,
+            required=require_entitlement,
         ),
         workspace_id=_read_nested_string(claims, "workspace", "workspaceId"),
         cloud_user_profile=_extract_cloud_user_profile(payload),
@@ -882,7 +892,7 @@ def refresh_guard_access_token(
         now=now,
         on_http_error=_raise_guard_oauth_token_exchange_error,
     )
-    return _parse_guard_token_exchange_payload(_require_guard_oauth_payload(payload))
+    return _parse_guard_token_exchange_payload(_require_guard_oauth_payload(payload), require_entitlement=False)
 
 
 class GuardOAuthTokenExchangeError(RuntimeError):

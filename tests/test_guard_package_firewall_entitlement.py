@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
 from codex_plugin_scanner.guard import native_runner_authority as native_runner_authority_module
 from codex_plugin_scanner.guard import package_firewall_entitlement as entitlement_module
+from codex_plugin_scanner.guard.cli import connect_flow
 from codex_plugin_scanner.guard.native_hook_artifact_compose import (
     NativeHookComposeError,
     NativeHookComposeValidationError,
@@ -187,6 +188,49 @@ def test_a_connect_without_a_record_needs_no_runtime(monkeypatch: pytest.MonkeyP
 
     assert build_oauth_package_firewall_entitlement({}, required=True) is None
     assert sent == []
+
+
+_TOKEN_RESPONSE: dict[str, object] = {
+    "access_token": "opaque-access-token",
+    "token_type": "Bearer",
+    "refresh_token": "rotated-refresh-token",
+    "expires_in": 300,
+    "guard_local_entitlement": {"plan_id": "team"},
+}
+
+
+def test_a_connect_exchange_refuses_a_response_the_runtime_cannot_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake_runner_authority(monkeypatch, NativeRunnerAuthorityError("native_runner_authority_unavailable"))
+
+    with pytest.raises(RuntimeError, match="could not read the plan"):
+        connect_flow._parse_guard_token_exchange_payload(dict(_TOKEN_RESPONSE))
+
+
+def test_a_refresh_keeps_the_rotated_token_when_the_runtime_cannot_read_the_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fake_runner_authority(monkeypatch, NativeRunnerAuthorityError("native_runner_authority_unavailable"))
+    monkeypatch.setattr(
+        connect_flow,
+        "_post_guard_token_request_with_nonce_retry",
+        lambda **_kwargs: dict(_TOKEN_RESPONSE),
+    )
+
+    result = connect_flow.refresh_guard_access_token(
+        token_endpoint="https://hol.org/api/guard/oauth/token",
+        client_id="hol-guard-cli",
+        refresh_token="initial-refresh-token",
+        dpop_key_material=cast(Any, None),
+    )
+
+    assert result.refresh_token == "rotated-refresh-token"
+    assert result.supply_chain_entitlement is None
+
+
+def test_an_optional_read_survives_a_guard_home_that_cannot_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake_runner_authority(monkeypatch, OSError("home unavailable"))
+
+    assert build_oauth_package_firewall_entitlement({"guard_local_entitlement": {"plan_id": "team"}}) is None
 
 
 def test_reconcile_connect_state_clears_stale_sync_not_available_for_paid_oauth(

@@ -59,7 +59,8 @@ def build_oauth_package_firewall_entitlement(
                 "fallback_expires_at": (resolved_now + _OAUTH_ENTITLEMENT_FALLBACK_TTL).isoformat(),
             },
         )
-    except NativeRunnerAuthorityError as error:
+    except (NativeRunnerAuthorityError, OSError, RuntimeError, ValueError) as error:
+        # Resolving the Guard home can fail before the resident is asked.
         if required:
             raise RuntimeError(
                 "Guard OAuth token exchange failed: the HOL Guard runtime could not read the plan Guard Cloud granted."
