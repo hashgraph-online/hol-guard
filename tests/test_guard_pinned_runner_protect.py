@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -123,6 +124,20 @@ def _feed_asks_for_review(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_npm_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """npm settings come only from what a test writes.
+
+    The machine running the suite may carry its own `npm_config_*` variables
+    or `~/.npmrc`; pointing `userconfig` at an empty path keeps both out.
+    """
+
+    for key in list(os.environ):
+        if key.lower().startswith("npm_config_"):
+            monkeypatch.delenv(key)
+    monkeypatch.setenv("npm_config_userconfig", str(tmp_path / "user.npmrc"))
+
+
 @pytest.mark.parametrize("manager", ["npx", "bunx"])
 def test_protect_builds_no_package_request_for_a_pinned_runner(
     tmp_path: Path,
@@ -132,6 +147,43 @@ def test_protect_builds_no_package_request_for_a_pinned_runner(
     workspace = _pinned_runner_workspace(tmp_path, monkeypatch, "tsx", locked="4.22.4")
 
     assert _protect(tmp_path, workspace, [manager, "tsx", "scripts/generate-inventory.ts"]) is None
+
+
+@pytest.mark.parametrize("source", ["environment", "project", "parent", "user"])
+def test_protect_reviews_npx_when_npm_config_names_a_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+) -> None:
+    """npm's `package` setting makes `npx` install a package and run its bin.
+
+    The command is the same pinned `npx tsx` the exemption above covers; only
+    npm's configuration differs, so a request coming back is this check.
+    """
+
+    workspace = _pinned_runner_workspace(tmp_path, monkeypatch, "tsx", locked="4.22.4")
+    setting = "package=left-pad\n"
+    if source == "environment":
+        monkeypatch.setenv("NPM_CONFIG_PACKAGE", "left-pad")
+    elif source == "project":
+        (workspace / ".npmrc").write_text(setting, encoding="utf-8")
+    elif source == "parent":
+        (tmp_path / ".npmrc").write_text(setting, encoding="utf-8")
+    else:
+        (tmp_path / "user.npmrc").write_text(setting, encoding="utf-8")
+
+    assert _protect(tmp_path, workspace, ["npx", "tsx", "scripts/generate-inventory.ts"]) is not None
+
+
+def test_protect_keeps_the_pinned_runner_exemption_beside_ordinary_npm_settings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _pinned_runner_workspace(tmp_path, monkeypatch, "tsx", locked="4.22.4")
+    (workspace / ".npmrc").write_text("registry=https://registry.npmjs.org/\nsave-exact=true\n", encoding="utf-8")
+    monkeypatch.setenv("npm_config_fund", "false")
+
+    assert _protect(tmp_path, workspace, ["npx", "tsx", "scripts/generate-inventory.ts"]) is None
 
 
 @pytest.mark.parametrize("manager", ["npx", "bunx"])
