@@ -103,6 +103,11 @@ def apply_host_config(plan: HostConfigPlan, *, guard_home: Path) -> HostConfigBa
         if _read(path) != plan.after:
             raise HostConfigWriteError("write_not_verified", f"{path} did not read back as written.")
     except BaseException as error:
+        # An interrupt can land after the move but before it was noted; the
+        # file then already holds the new settings and must be put back too.
+        # Guard's own refusals happen before any move, so they never count.
+        if not published and not isinstance(error, HostConfigWriteError):
+            published = _holds(path, plan.after)
         if published and not _put_back(backup, plan.before):
             # The copy is the only way back now, so it stays for `restore`, and the
             # record now names what is on disk so restore puts the whole file back.
@@ -215,6 +220,13 @@ def _read(path: Path) -> bytes | None:
         return read_settings_bytes(path)
     except ValueError as error:
         raise HostConfigWriteError("unreadable", str(error)) from None
+
+
+def _holds(path: Path, payload: bytes) -> bool:
+    try:
+        return _read(path) == payload
+    except (OSError, HostConfigWriteError):
+        return False
 
 
 def _file_mode(path: Path) -> int:
