@@ -8,6 +8,7 @@ cannot answer leaves the ordinary launch.
 
 from __future__ import annotations
 
+import functools
 import os
 import signal
 import subprocess
@@ -131,10 +132,17 @@ def _ask(op: str, fields: Mapping[str, object], budget: float | None = None) -> 
 def _launch_tails(passthrough_args: list[str], socket_path: Path) -> list[list[str]]:
     """The argv tails after the executable, remote TUI first; only the plain one on a bad answer."""
 
-    tails = _ask("plan", {"args": list(passthrough_args), "socket": str(socket_path)}).get("tails")
+    return [list(tail) for tail in _planned_tails(tuple(passthrough_args), str(socket_path))]
+
+
+@functools.lru_cache(maxsize=32)
+def _planned_tails(passthrough_args: tuple[str, ...], socket: str) -> tuple[tuple[str, ...], ...]:
+    """One answer per launch, so preparation selects only among the previewed argv."""
+
+    tails = _ask("plan", {"args": list(passthrough_args), "socket": socket}).get("tails")
     if isinstance(tails, list) and tails and all(isinstance(tail, list) for tail in tails):
-        return [[str(arg) for arg in tail] for tail in tails]
-    return [list(passthrough_args)]
+        return tuple(tuple(str(arg) for arg in tail) for tail in tails)
+    return (passthrough_args,)
 
 
 def _wait_for_socket(socket_path: Path) -> bool:
@@ -162,7 +170,9 @@ def _start_direct_app_server(
             if tracked_command is None:
                 return False
             ours = _ask("tracked", {"command": tracked_command, "socket": str(socket_path)}).get("ours")
-            if ours is True:
+            if not isinstance(ours, bool):
+                return False
+            if ours:
                 if _wait_for_socket(socket_path):
                     return True
                 if not _stop_tracked_process(tracked_pid):

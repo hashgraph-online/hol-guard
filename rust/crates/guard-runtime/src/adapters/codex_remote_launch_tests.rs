@@ -63,8 +63,13 @@ fn a_tracked_process_is_ours_only_when_it_listens_on_this_socket() {
         tracked("/usr/bin/codex app-server --listen unix:///other.sock"),
         json!(false)
     );
+    // The socket path names `app-server`; the subcommand must appear on its own.
     assert_eq!(
         tracked(&format!("/usr/bin/sleep unix://{SOCKET}")),
+        json!(false)
+    );
+    assert_eq!(
+        tracked(&format!("/usr/bin/sleep --listen unix://{SOCKET}")),
         json!(false)
     );
 }

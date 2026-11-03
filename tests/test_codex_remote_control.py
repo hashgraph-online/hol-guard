@@ -287,6 +287,51 @@ def test_direct_app_server_recovers_when_pid_marker_is_stale(
     assert (socket_path.parent / "hol-guard-app-server.pid").read_text(encoding="utf-8") == "9876"
 
 
+def test_direct_app_server_keeps_tracking_when_the_resident_cannot_identify_it(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    socket_path = tmp_path / "home" / ".codex" / "app-server-control" / "app-server-control.sock"
+    socket_path.parent.mkdir(parents=True)
+    pid_path = socket_path.parent / "hol-guard-app-server.pid"
+    pid_path.write_text("4321", encoding="utf-8")
+
+    def fail_popen(*_args, **_kwargs):
+        raise AssertionError("an unidentified tracked server must not be replaced")
+
+    monkeypatch.setattr(codex_remote_control, "_wait_for_socket", lambda _path: False)
+    monkeypatch.setattr(codex_remote_control.os, "kill", lambda _pid, _signal: None)
+    monkeypatch.setattr(codex_remote_control, "_tracked_process_command", lambda _pid: "codex app-server")
+    monkeypatch.setattr(codex_remote_control, "_ask", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fail_popen)
+
+    started = codex_remote_control._start_direct_app_server(
+        executable_prefix=("codex",),
+        socket_path=socket_path,
+        environment={},
+    )
+
+    assert started is False
+    assert pid_path.read_text(encoding="utf-8") == "4321"
+
+
+def test_launch_preparation_selects_only_among_previewed_argv(tmp_path: Path, monkeypatch) -> None:
+    answers = iter([{}, {"tails": [["--remote", "unix:///x.sock", "fix"], ["fix"]]}])
+    monkeypatch.setattr(codex_remote_control, "_ask", lambda *_args, **_kwargs: next(answers))
+    monkeypatch.setattr(codex_remote_control, "_start_direct_app_server", lambda **_kwargs: True)
+    home = tmp_path / "home"
+
+    previewed = codex_remote_control.guarded_codex_launch_command_candidates(
+        executable="codex", home_dir=home, passthrough_args=["fix"]
+    )
+    prepared = codex_remote_control.guarded_codex_launch_command(
+        executable="codex", home_dir=home, passthrough_args=["fix"]
+    )
+
+    assert previewed == (["codex", "fix"],)
+    assert prepared == ["codex", "fix"]
+
+
 def test_direct_app_server_stops_matching_dead_listener_before_replacement(
     tmp_path: Path,
     monkeypatch,

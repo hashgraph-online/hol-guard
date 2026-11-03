@@ -120,7 +120,9 @@ fn wait(map: &Map<String, Value>) -> KindResult {
 fn tracked(map: &Map<String, Value>) -> KindResult {
     let command = text(map, "command")?;
     let listener = format!("unix://{}", text(map, "socket")?);
-    let ours = command.contains("app-server") && command.contains(&listener);
+    // The socket path itself names `app-server`, so the subcommand must
+    // appear outside the listener.
+    let ours = command.contains(&listener) && command.replace(&listener, "").contains("app-server");
     Ok(json!({ "ours": ours }))
 }
 
