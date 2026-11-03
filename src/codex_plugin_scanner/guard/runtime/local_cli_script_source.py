@@ -3,8 +3,10 @@
 A script's own source says what it takes and whether it answers --help
 before anything runs it. The native ``local_cli_script_source`` kind finds
 and reads the files: the verified script itself, and the few local modules it
-imports from inside its own folder. Without the native runtime nothing is
-read and no path is safe to probe, so nothing is run on its word: a read the
+imports from inside its own folder, and says whether those files, or the
+installed package an entry-point wrapper runs, show an MCP server. Without the
+native runtime nothing is read and no path is safe to probe, so nothing is run
+on its word: a read the
 runtime cannot answer raises ``ScriptSourceUnavailableError`` rather than looking
 like a file that is not a script.
 """
@@ -63,6 +65,17 @@ def local_import_paths(script: str, imports: Sequence[str], *, guard_home: Path 
     if not isinstance(paths, list):
         return ()
     return tuple(path for path in paths if isinstance(path, str))
+
+
+def script_serves_mcp(script: str, invocation: Sequence[str], *, guard_home: Path | None = None) -> bool:
+    """Whether a script's source, a local module it imports, or the installed
+    package its entry-point wrapper runs shows an MCP server.
+
+    Raises ``ScriptSourceUnavailableError`` when the runtime cannot answer.
+    """
+
+    fields = {"script": script, "invocation": [str(part) for part in invocation]}
+    return _ask("mcp_evidence", guard_home, **fields).get("serves") is True
 
 
 def safe_probe_path(path_text: str, *, guard_home: Path | None = None) -> bool:
