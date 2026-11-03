@@ -7,6 +7,8 @@
 //! exactly `True`). The answer is the snapshot id and the event payload;
 //! Python still builds the event and writes it to the outbox.
 
+use std::collections::HashSet;
+
 use hmac::{Hmac, Mac};
 use serde_json::{json, Map, Value};
 use sha2::Sha512;
@@ -75,7 +77,7 @@ struct Graph<'a> {
     now: &'a str,
     entities: Vec<Value>,
     edges: Vec<Value>,
-    seen: Vec<String>,
+    seen: HashSet<String>,
 }
 
 impl<'a> Graph<'a> {
@@ -84,7 +86,7 @@ impl<'a> Graph<'a> {
             now,
             entities: Vec::new(),
             edges: Vec::new(),
-            seen: Vec::new(),
+            seen: HashSet::new(),
         }
     }
 
@@ -162,10 +164,9 @@ impl<'a> Graph<'a> {
         fingerprint: &str,
         metadata: Value,
     ) {
-        if self.seen.iter().any(|seen| seen == fingerprint) {
+        if !self.seen.insert(fingerprint.to_owned()) {
             return;
         }
-        self.seen.push(fingerprint.to_owned());
         self.entities.push(json!({
             "entityType": entity_type,
             "entityId": entity_id,
