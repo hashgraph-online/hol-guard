@@ -66,6 +66,12 @@ fn malformed_requests_are_refused() {
         "2026-01-02T03:04:05.000Z",
         "2026-1-02T03:04:05Z0",
         "２０２６-01-02T03:04:05Z",
+        "2026-99-99T99:99:99Z",
+        "2026-02-30T03:04:05Z",
+        "2025-02-29T03:04:05Z",
+        "2026-01-02T24:00:00Z",
+        "2026-01-02T03:60:05Z",
+        "0000-01-02T03:04:05Z",
     ] {
         let error = render(&json!({"id":"blank","created_at":stamp})).expect_err("refused");
         assert_eq!(error["type"], "ValueError", "{stamp}");
@@ -75,7 +81,7 @@ fn malformed_requests_are_refused() {
 #[test]
 fn starter_text_is_quoted_as_ascii_json() {
     assert_eq!(quote("a \"b\" \\ c"), r#""a \"b\" \\ c""#);
-    assert_eq!(quote("\n\t\u{1}\u{7f}"), "\"\\n\\t\\u0001\u{7f}\"");
+    assert_eq!(quote("\n\t\u{1}\u{7f}~"), r#""\n\t\u0001\u007f~""#);
     assert_eq!(quote("é😀"), "\"\\u00e9\\ud83d\\ude00\"");
     for starter in STARTERS {
         assert!(starter.name.is_ascii() && starter.summary.is_ascii());

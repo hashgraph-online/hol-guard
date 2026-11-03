@@ -6,7 +6,9 @@
 
 use serde_json::{json, Value};
 
+use super::metadata::valid_calendar_prefix;
 use super::values::{failure, Error};
+use crate::shims::py_json_dumps;
 
 struct Event {
     harness: &'static str,
@@ -215,7 +217,8 @@ pub(super) fn render(input: &Value) -> Result<Value, Error> {
         }))
 }
 
-/// `YYYY-MM-DDTHH:MM:SSZ`, the only stamp a starter writes.
+/// `YYYY-MM-DDTHH:MM:SSZ` naming a real second, the only stamp a starter
+/// writes.
 fn is_utc_second(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 20
@@ -226,31 +229,12 @@ fn is_utc_second(value: &str) -> bool {
             19 => *byte == b'Z',
             _ => byte.is_ascii_digit(),
         })
+        && valid_calendar_prefix(value)
 }
 
+/// `json.dumps(value)` with its default `ensure_ascii=True`.
 fn quote(value: &str) -> String {
-    let mut quoted = String::with_capacity(value.len() + 2);
-    quoted.push('"');
-    for character in value.chars() {
-        match character {
-            '"' => quoted.push_str("\\\""),
-            '\\' => quoted.push_str("\\\\"),
-            '\n' => quoted.push_str("\\n"),
-            '\r' => quoted.push_str("\\r"),
-            '\t' => quoted.push_str("\\t"),
-            '\u{8}' => quoted.push_str("\\b"),
-            '\u{c}' => quoted.push_str("\\f"),
-            '\u{20}'..='\u{7f}' => quoted.push(character),
-            _ => {
-                let mut units = [0_u16; 2];
-                for unit in character.encode_utf16(&mut units) {
-                    quoted.push_str(&format!("\\u{unit:04x}"));
-                }
-            }
-        }
-    }
-    quoted.push('"');
-    quoted
+    py_json_dumps(&Value::String(value.to_owned()), false)
 }
 
 fn event_lines(lines: &mut Vec<String>, event: &Event, indent: &str) {
