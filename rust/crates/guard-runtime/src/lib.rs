@@ -866,6 +866,7 @@ mod openclaw_detect;
 mod openclaw_detect_tests;
 mod openclaw_mcp;
 mod openclaw_skills;
+mod opencode_command_replace;
 #[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
 #[path = "adapters/opencode_install_plan.rs"]

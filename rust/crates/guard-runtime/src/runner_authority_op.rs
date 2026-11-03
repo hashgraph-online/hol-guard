@@ -206,6 +206,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "harness_settings_file" => harness_settings_file::dispatch(args),
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
+        "opencode_command_replace" => crate::opencode_command_replace::dispatch(args),
         "omp_code_mode" => crate::omp_code_mode::dispatch(args),
         "user_command_lookup" => crate::user_command_lookup::dispatch(args),
         "local_cli_script_source" => crate::local_cli_script_source::dispatch(args),
