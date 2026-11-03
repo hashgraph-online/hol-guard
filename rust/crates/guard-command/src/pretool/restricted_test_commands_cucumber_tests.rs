@@ -71,7 +71,13 @@ fn a_cucumber_formatter_that_writes_a_file_keeps_its_review() {
     // read-only, so the run would be admitted and then fail on the open.
     // The target is read off the word that carries it, so a short cluster
     // spells it no differently: `-df html:out.html` reaches the same check.
+    // A value standing in the word after the option is a formatter's, never
+    // a scenario operand, so a digit tail there names a file called `12`
+    // rather than a line number.
     for command in [
+        "npx cucumber-js --format html:12",
+        "npx cucumber-js -f junit:1",
+        "npx cucumber-js -df html:3",
         "npx cucumber-js --format html:reports/cucumber.html",
         "npx cucumber-js --format=json:reports/cucumber.json",
         "npx cucumber-js -f junit:report.xml",

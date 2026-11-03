@@ -437,9 +437,26 @@ pub(crate) fn cucumber_contained_call(arguments: &[String]) -> bool {
 /// elsewhere is the `FILE:LINE` operand that picks a single scenario, whose
 /// tail is a line number, so that spelling stays contained.
 pub(crate) fn cucumber_prints_its_report(arguments: &[String]) -> bool {
-    before_terminator(arguments)
-        .iter()
-        .all(|argument| names_no_formatter_target(argument))
+    let words = before_terminator(arguments);
+    words.iter().enumerate().all(|(index, argument)| {
+        if index > 0 && names_a_formatter(&words[index - 1]) {
+            return !argument.contains(':');
+        }
+        names_no_formatter_target(argument)
+    })
+}
+
+/// Whether a word is a formatter option that takes its value from the next
+/// word. `--format` spells it in full, and a short cluster ends in `f`, so
+/// `-f` and `-df` both leave the formatter's value standing alone. A value
+/// read there is a formatter's, never a scenario operand, so any colon in it
+/// names a target rather than a line number.
+fn names_a_formatter(argument: &str) -> bool {
+    argument == "--format"
+        || (argument.len() > 1
+            && argument.starts_with('-')
+            && !argument.starts_with("--")
+            && argument.ends_with('f'))
 }
 
 /// Whether a word carries no formatter target. A `FILE:LINE` operand is the
