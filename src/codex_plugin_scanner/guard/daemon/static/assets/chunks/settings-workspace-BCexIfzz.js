@@ -4171,10 +4171,15 @@ const openSettings = () => {
   commitDashboardLocation(url.pathname + url.search + url.hash);
 };
 const plural = (count2, word2) => `${count2} ${word2}${count2 === 1 ? "" : "s"}`;
+const agentAppDescriptions = {
+  codex: "Its prompts get only the files you tick. It can also ask CIGAR about the project after you connect it.",
+  "claude-code": "Its prompts get only the files you tick. It can also ask CIGAR about the project after you connect it.",
+  cursor: "This app can ask CIGAR about the project after you connect it."
+};
 function projectAppOptions(agentsAllowed, executionAllowed) {
   return [
     { value: "dashboard", label: "Only this page", description: "You look things up here, in Guard. Your AI apps keep getting matching files on their own." },
-    ...agentsAllowed ? ["codex", "claude-code", "cursor"].map((name) => ({ value: name, label: harnessDisplayName(name), description: name === "cursor" ? "This app can ask CIGAR about the project after you connect it." : "Its prompts get only the files you tick. It can also ask CIGAR about the project after you connect it." })) : [],
+    ...agentsAllowed ? ["codex", "claude-code", "cursor"].map((name) => ({ value: name, label: harnessDisplayName(name), description: agentAppDescriptions[name] })) : [],
     ...executionAllowed ? ["pi", "omp"].map((name) => ({ value: name, label: harnessDisplayName(name), description: "Its prompts get only the files you tick, and commands it runs through Guard come back with project notes." })) : []
   ];
 }
