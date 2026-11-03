@@ -1602,6 +1602,11 @@ def _render_approvals(console: Console, payload: dict[str, object]) -> None:
         body = Table.grid(padding=(0, 1))
         body.add_row("Request", str(payload.get("request_id", "")))
         body.add_row("URL", f"[bold]{approval_url}[/bold]")
+        opened_in = payload.get("opened_in")
+        if opened_in == "desktop":
+            body.add_row("Opened", "In HOL Guard Desktop")
+        elif opened_in == "browser":
+            body.add_row("Opened", "In your browser, signed in")
         console.print(Panel(body, title="Open approval", border_style="cyan"))
         return
     if "title" in payload and "body" in payload:

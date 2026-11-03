@@ -4,9 +4,12 @@ import { QueueConnectionError } from "./queue-connection-error";
 import {
   QUEUE_CONNECTION_ERROR_HEADLINE,
   QUEUE_CONNECTION_ERROR_INSTRUCTION,
+  QUEUE_SESSION_COMMAND_INSTRUCTION,
   QUEUE_SESSION_ERROR_DETAIL,
   QUEUE_SESSION_ERROR_HEADLINE,
   QUEUE_SESSION_ERROR_INSTRUCTION,
+  approvalsOpenCommand,
+  desktopRequestUrl,
   queueErrorIsUnauthorizedSession,
 } from "./queue-connection-copy";
 
@@ -89,6 +92,44 @@ assert(
     !sessionMarkup.includes("Repair") &&
     !sessionMarkup.includes("Reconnect"),
   "401 inbox errors do not tell the user Guard is down or offer Reconnect",
+);
+
+const requestId = "2c79d707370b453886adf5b2e7e622ec";
+const sessionWithRequestMarkup = renderToStaticMarkup(
+  createElement(QueueConnectionError, {
+    message: "unauthorized (401)",
+    approvalUrl: null,
+    requestId,
+    onRetry: () => undefined,
+  }),
+);
+assert(
+  sessionWithRequestMarkup.includes(`href="hol-guard-desktop://requests/${requestId}"`) &&
+    sessionWithRequestMarkup.includes("Open in HOL Guard Desktop") &&
+    sessionWithRequestMarkup.includes(`hol-guard approvals open ${requestId}`) &&
+    sessionWithRequestMarkup.includes(QUEUE_SESSION_COMMAND_INSTRUCTION) &&
+    sessionWithRequestMarkup.includes("Retry") &&
+    !sessionWithRequestMarkup.includes("guard-token"),
+  "An unsigned request link offers HOL Guard Desktop and the signed open command",
+);
+assert(
+  !sessionMarkup.includes("hol-guard-desktop://") && !sessionMarkup.includes("approvals open"),
+  "No request id: no Desktop link or open command",
+);
+assert(
+  desktopRequestUrl("../x") === null &&
+    desktopRequestUrl("2C79D707370B453886ADF5B2E7E622EC") === null &&
+    approvalsOpenCommand("req; rm -rf ~") === null &&
+    desktopRequestUrl(null) === null,
+  "Only a queue-shaped request id becomes a link or a command",
+);
+const connectionWithRequestMarkup = renderToStaticMarkup(
+  createElement(QueueConnectionError, { message: "Failed to fetch", approvalUrl: null, requestId }),
+);
+assert(
+  !connectionWithRequestMarkup.includes("hol-guard-desktop://") &&
+    !connectionWithRequestMarkup.includes("approvals open"),
+  "A daemon that is down gets the start recovery, not the signed-session links",
 );
 
 console.log("queue-connection-error.test.ts: all tests passed");
