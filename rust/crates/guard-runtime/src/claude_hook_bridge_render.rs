@@ -174,7 +174,7 @@ fn py_repr(value: &PyVal) -> String {
     }
 }
 
-fn py_repr_str(text: &str) -> String {
+pub(crate) fn py_repr_str(text: &str) -> String {
     let quote = if text.contains('\'') && !text.contains('"') {
         '"'
     } else {
