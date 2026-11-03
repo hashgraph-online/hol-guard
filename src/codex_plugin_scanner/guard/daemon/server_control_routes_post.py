@@ -20,7 +20,6 @@ from ..native_daemon_route import NativeDaemonRouteError, native_resolve_request
 from ..native_resident_revival import native_route_unavailable_body
 from ..trusted_local_tools import LocalToolGrantUnavailableError
 from .background_diagnostics import failure_detail, record_background_event
-from .cloud_actions_status_http import handle_cloud_actions_check
 from .command_activity_api import handle_command_activity_feedback
 from .context_assistance_http import WRITE_PATHS as CONTEXT_ASSISTANCE_WRITE_PATHS
 from .context_assistance_http import respond as respond_context_assistance
@@ -175,6 +174,9 @@ class _ControlPostRoutes:
             self._handle_cloud_review_settings(payload)
             return
         if parsed.path == "/v1/cloud-actions/status":
+            # Loaded here so hook paths never import the sign-in modules.
+            from .cloud_actions_status_http import handle_cloud_actions_check
+
             handle_cloud_actions_check(self, payload)
             return
         if parsed.path == "/v1/read-state":
