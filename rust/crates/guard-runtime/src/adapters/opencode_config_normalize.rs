@@ -13,6 +13,10 @@
 //! "guard_home": str, "cwd": str}` answers `{"config": <JSON text>}`. `cwd` is
 //! the caller's working directory, which a relative path resolves against; an
 //! empty one leaves a relative path unresolvable, as `os.getcwd()` failing did.
+//!
+//! The same request with `"op": "refreshable"` answers `{"names": <JSON text>}`:
+//! the trusted companions whose proxy launch the launcher refresh may rewrite,
+//! in config order (the binding checks in `opencode_proxy_refresh`).
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -20,7 +24,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 
 use crate::claude_guard_question::python_lower;
-use crate::harness_coverage_artifacts::resolve_lenient;
+use crate::harness_coverage::artifacts::resolve_lenient;
 use crate::hook_env_stamp::{dumps, set_member};
 use crate::opencode_proxy_entry::is_guard_command;
 use crate::opencode_server_id::server_identifier;
@@ -29,6 +33,7 @@ use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
 const REQUEST_KEYS: [&str; 5] = ["config", "scope", "config_path", "guard_home", "cwd"];
+const REFRESHABLE_OP: &str = "refreshable";
 /// `GUARD_MCP_COMPANION_PREFIX`.
 const COMPANION_PREFIX: &str = "hol-guard::";
 const OPENCODE_PROXY: &str = "opencode-mcp-proxy";
@@ -46,7 +51,12 @@ type Entry = Vec<(String, PyVal)>;
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {
     let fields = args_object(args)?;
-    if fields.len() != REQUEST_KEYS.len()
+    let refreshable = match fields.get("op") {
+        None => false,
+        Some(op) if op.as_str() == Some(REFRESHABLE_OP) => true,
+        Some(_) => return Err(ERR_INVALID),
+    };
+    if fields.len() != REQUEST_KEYS.len() + usize::from(refreshable)
         || !REQUEST_KEYS.iter().all(|key| fields.contains_key(*key))
     {
         return Err(ERR_INVALID);
@@ -70,6 +80,15 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         mapped: parsed.mapped,
     };
     let mut answer = String::new();
+    if refreshable {
+        dumps(
+            &PyVal::List(refreshable_names(&config, &place)),
+            false,
+            parsed.mapped,
+            &mut answer,
+        );
+        return Ok(json!({ "names": answer }));
+    }
     dumps(
         &PyVal::Dict(normalized_config(config, &place)),
         false,
@@ -110,6 +129,35 @@ fn normalized_config(mut config: Entry, place: &Place<'_>) -> Entry {
     };
     config[slot].1 = PyVal::Dict(rebuilt_mcp(mcp, place));
     config
+}
+
+/// The trusted companions a launcher refresh may rewrite: those whose server
+/// is absent, or is a local server running the command the companion guards.
+fn refreshable_names(config: &Entry, place: &Place<'_>) -> Vec<PyVal> {
+    let Some(PyVal::Dict(mcp)) = member(config, "mcp") else {
+        return Vec::new();
+    };
+    let mut names: Vec<PyVal> = Vec::new();
+    for (name, entry) in mcp {
+        let PyVal::Dict(entry) = entry else {
+            continue;
+        };
+        let Some(binding) = verified_binding(name, entry, place) else {
+            continue;
+        };
+        if let Some(PyVal::Dict(native)) = member(mcp, binding.native_name) {
+            let local = match member(native, "type") {
+                None => true,
+                Some(PyVal::Str(kind)) => kind == "local" || kind == "stdio",
+                Some(_) => false,
+            };
+            if !local || !binding_matches_native(&binding, native) {
+                continue;
+            }
+        }
+        names.push(PyVal::Str(name.clone()));
+    }
+    names
 }
 
 /// The `mcp` object rebuilt by assignment, in the order of its entries.

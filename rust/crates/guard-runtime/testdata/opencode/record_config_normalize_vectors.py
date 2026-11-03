@@ -5,7 +5,8 @@ Run it with the source tree of the commit before the native kind replaced
 
     python record_config_normalize_vectors.py > config_normalize_vectors.json
 
-Every case is normalized by the original Python with the working directory at
+Every case is normalized by the original Python, and the companions the
+launcher refresh would rewrite are picked by the original refresh checks, with the working directory at
 `/`, against the Guard home and config path below, which need not exist.
 """
 
@@ -67,9 +68,38 @@ def proxy(name, scope, command, args, *, transport="local", home=HOME, cfg=CFG, 
 cases = []
 
 
+def refreshable(config, scope):
+    """The companions `_refresh_locked` rewrites, in config order."""
+    mcp = config.get("mcp")
+    if not isinstance(mcp, dict):
+        return []
+    names = []
+    for name, entry in mcp.items():
+        if not isinstance(entry, dict):
+            continue
+        binding = m._verified_proxy_binding(name, entry, context=ctx, scope=scope, expected_config_path=Path(CFG))
+        if binding is None:
+            continue
+        native = mcp.get(binding.native_name)
+        if isinstance(native, dict) and (
+            native.get("type", "local") not in {"local", "stdio"} or not m._binding_matches_native(binding, native)
+        ):
+            continue
+        names.append(name)
+    return names
+
+
 def case(label, config, scope="global"):
     out = m._normalized_config_payload(config, context=ctx, scope=scope, config_path=Path(CFG))
-    cases.append({"label": label, "scope": scope, "config": json.dumps(config), "expected": json.dumps(out)})
+    cases.append(
+        {
+            "label": label,
+            "scope": scope,
+            "config": json.dumps(config),
+            "expected": json.dumps(out),
+            "refreshable": json.dumps(refreshable(config, scope)),
+        }
+    )
 
 
 case("no mcp", {"b": 1, "a": [1.5, None]})
@@ -196,6 +226,27 @@ case(
             "hol-guard:: My Srv ": {
                 "command": proxy(" My Srv ", "global", "C:\\Tools\\Node.exe", ["~/x", "--Work_Dir=/q", "-/path= /r"])
             }
+        }
+    },
+)
+case(
+    "remote server is not refreshed",
+    {
+        "mcp": {
+            "srv": {"type": "remote", "command": ["node", "a"]},
+            "hol-guard::srv": {"command": proxy("srv", "global", "node", ["a"])},
+            "hol-guard::other": {"command": proxy("other", "global", "node", [])},
+        }
+    },
+)
+case(
+    "server with a non-string type is not refreshed",
+    {
+        "mcp": {
+            "srv": {"type": 1, "command": ["node"]},
+            "hol-guard::srv": {"command": proxy("srv", "global", "node", [])},
+            "stdio": {"type": "stdio", "command": ["uvx", "t"]},
+            "hol-guard::stdio": {"command": proxy("stdio", "global", "uvx", ["t"], transport="stdio")},
         }
     },
 )

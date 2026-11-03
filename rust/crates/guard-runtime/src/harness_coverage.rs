@@ -7,7 +7,7 @@
 //! was registered; verification reports only counts, never a home or a path.
 
 #[path = "harness_coverage_artifacts.rs"]
-mod artifacts;
+pub(crate) mod artifacts;
 #[path = "harness_coverage_registry.rs"]
 mod registry;
 #[path = "harness_coverage_request.rs"]

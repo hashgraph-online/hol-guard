@@ -25,6 +25,13 @@ fn normalized(config: &str, scope: &str) -> String {
     answer["config"].as_str().expect("config text").to_owned()
 }
 
+fn refreshable(config: &str, scope: &str) -> String {
+    let mut asked = request(config, scope);
+    asked["op"] = json!("refreshable");
+    let answer = dispatch(&asked).expect("answer");
+    answer["names"].as_str().expect("names text").to_owned()
+}
+
 #[test]
 fn normalized_configs_match_the_python_vectors() {
     // The vectors were recorded on a POSIX host, where these paths are
@@ -39,6 +46,12 @@ fn normalized_configs_match_the_python_vectors() {
         assert_eq!(
             normalized(config, scope),
             case["expected"].as_str().expect("expected"),
+            "{}",
+            case["label"]
+        );
+        assert_eq!(
+            refreshable(config, scope),
+            case["refreshable"].as_str().expect("refreshable"),
             "{}",
             case["label"]
         );
@@ -93,6 +106,16 @@ fn malformed_requests_are_refused() {
     let mut extra = valid.clone();
     extra["other"] = json!("");
     assert_eq!(dispatch(&extra), Err(ERR_INVALID));
+    let mut asked = valid.clone();
+    asked["op"] = json!("refreshable");
+    assert!(dispatch(&asked).is_ok());
+    for op in [json!("other"), json!(1), Value::Null] {
+        let mut wrong = valid.clone();
+        wrong["op"] = op;
+        assert_eq!(dispatch(&wrong), Err(ERR_INVALID));
+    }
+    asked["other"] = json!("");
+    assert_eq!(dispatch(&asked), Err(ERR_INVALID));
     for config in ["[]", "{", "1", r#"{"a\ud800": "󰀀"}"#] {
         assert_eq!(
             dispatch(&request(config, "global")),

@@ -8,6 +8,7 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .....ecosystems.opencode import _load_json_or_jsonc, _load_json_or_jsonc_text
 from ....models import HarnessDetection
@@ -149,27 +150,67 @@ def _normalized_config_payload(
     in-place proxy wrapper; the install derives Guard's entries again from it.
     """
 
+    try:
+        answer = _native_normalize(payload, context=context, scope=scope, config_path=config_path, op=None)
+        normalized: object = json.loads(answer["config"]) if answer.keys() == {"config"} else None
+    except (TypeError, ValueError) as error:
+        raise OpenCodeInstallSnapshotError(f"Could not read the OpenCode config at {config_path}.") from error
+    if not isinstance(normalized, dict):
+        raise OpenCodeInstallSnapshotError(f"Could not read the OpenCode config at {config_path}.")
+    return normalized
+
+
+def _refreshable_proxy_names(
+    payload: dict[str, object],
+    *,
+    context: HarnessContext,
+    scope: str,
+    config_path: Path,
+) -> list[str]:
+    """Names of the verified ``hol-guard::`` companions a launcher refresh may rewrite.
+
+    The native ``opencode_config_normalize`` kind keeps a companion when the
+    server it wraps is absent, or is a local server running the command the
+    companion says it guards.
+    """
+
+    try:
+        answer = _native_normalize(payload, context=context, scope=scope, config_path=config_path, op="refreshable")
+        names: object = json.loads(answer["names"]) if answer.keys() == {"names"} else None
+    except (TypeError, ValueError) as error:
+        raise OpenCodeInstallSnapshotError(f"Could not read the OpenCode config at {config_path}.") from error
+    if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+        raise OpenCodeInstallSnapshotError(f"Could not read the OpenCode config at {config_path}.")
+    return [name for name in names if isinstance(name, str)]
+
+
+def _native_normalize(
+    payload: dict[str, object],
+    *,
+    context: HarnessContext,
+    scope: str,
+    config_path: Path,
+    op: str | None,
+) -> dict[str, Any]:
     from ....native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     try:
         cwd = os.getcwd()
     except OSError:
         cwd = ""
-    request = {
+    request: dict[str, object] = {
         "config": json.dumps(payload),
         "scope": scope,
         "config_path": str(config_path),
         "guard_home": str(context.guard_home),
         "cwd": cwd,
     }
+    if op is not None:
+        request["op"] = op
     try:
-        answer = native_runner_authority("opencode_config_normalize", request)
-        normalized: object = json.loads(answer["config"]) if answer.keys() == {"config"} else None
-    except (NativeRunnerAuthorityError, TypeError, ValueError) as error:
+        return native_runner_authority("opencode_config_normalize", request)
+    except NativeRunnerAuthorityError as error:
         raise OpenCodeInstallSnapshotError(f"Could not read the OpenCode config at {config_path}.") from error
-    if not isinstance(normalized, dict):
-        raise OpenCodeInstallSnapshotError(f"Could not read the OpenCode config at {config_path}.")
-    return normalized
 
 
 def _scope_for(context: HarnessContext, path: Path) -> str:
