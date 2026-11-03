@@ -27,7 +27,7 @@ export const CIGAR_UPDATE_TUTORIAL: CigarTutorial = {
     {
       title: "Reconnect the scopes you need", description: "Saved evidence does not restore source or app permission.",
       instructions: ["If you selected while off, return to Settings, choose your enabled preference, save and explicitly start CIGAR.", "Use the live runtime status to confirm readiness before granting workspace access.", "Grant only the intended workspace sources and pair the current app connection again when needed."],
-      expect: "Your intended sources and apps have fresh access to the selected runtime.", target: "access", action: "Review projects & AI apps",
+      expect: "Your intended sources and apps have fresh access to the selected runtime.", target: "access", action: "Open Projects",
     },
     {
       title: "Use the last good build deliberately", description: "Rollback prepares current compatible data for the previous verified installation.",

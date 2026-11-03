@@ -1,9 +1,10 @@
 const CIGAR_TABS = [
+  { value: "overview", label: "Home" },
+  { value: "access", label: "Projects" },
   { value: "runtime", label: "Settings" },
-  { value: "access", label: "Projects & AI apps" },
   { value: "versions", label: "Updates" },
   { value: "data", label: "Privacy" },
-  { value: "guide", label: "Guides" }
+  { value: "guide", label: "Guide" }
 ];
 function canStartCigar(status, dirty) {
   return !dirty && status !== null && status.requested_enabled && status.preferences.enabled && status.effective_preferences.enabled && status.verification_permitted && Boolean(status.preferences.runtime_id) && !status.effective_enabled && status.job === null;
@@ -28,7 +29,7 @@ function cigarWillHelpPrompts(status) {
   return !sources.workspace_documents && !sources.source_set_id;
 }
 const PROMPT_PROMISE = "Every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it.";
-const NO_FILES_YET = "Prompts get no project files until Context for AI apps and workspace documents are on in Settings.";
+const NO_FILES_YET = "Prompts get no project files yet, because reading project files is off.";
 function cigarHomeCopy(status, loading, running) {
   if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. You can keep browsing.", setupHint: false };
   if (!status) {

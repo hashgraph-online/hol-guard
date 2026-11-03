@@ -176,3 +176,19 @@ fn a_pick_that_overlaps_the_chunk_or_holds_more_of_the_prompt_stands_alone() {
     assert_eq!(led.len(), 1, "CIGAR's pick holds more of the prompt");
     assert_eq!(led[0].start_line, 300);
 }
+
+/// One project added in the dashboard answers every app's prompts, so
+/// nobody has to choose an app; a pick made for one app still comes first.
+#[test]
+fn files_picked_in_the_dashboard_answer_every_apps_prompts() {
+    assert_eq!(pick_rank("codex", "codex", 0), Some(0));
+    assert_eq!(pick_rank("dashboard", "claude-code", 2), Some(1));
+    assert_eq!(pick_rank("dashboard", "pi", 1), Some(1));
+    assert!(pick_rank("codex", "codex", 0) < pick_rank("dashboard", "codex", 3));
+    assert_eq!(
+        pick_rank("dashboard", "codex", 0),
+        None,
+        "a folder picked without files leaves prompts to the automatic files"
+    );
+    assert_eq!(pick_rank("cursor", "codex", 4), None);
+}

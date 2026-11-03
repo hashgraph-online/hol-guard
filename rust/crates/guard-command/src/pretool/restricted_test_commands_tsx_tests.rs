@@ -45,18 +45,24 @@ fn a_word_behind_the_first_spec_is_another_file_the_test_runner_loads() {
     for command in [
         "npx tsx --test __tests__/media.test.ts __tests__/cdn.test.ts",
         "tsx --test --test-only src/parse.test.ts src/render.test.ts",
+        // A word behind the first spec is a path the runner loads, and the
+        // leaf name a project gives it is not the boundary -- the workspace
+        // is. `node --test scripts/deploy.ts` is contained today, and so is
+        // `node --test ../elsewhere/payload.test.mjs`, which this screen
+        // still refuses, so reading the tail here stays tighter than the
+        // sibling profile it mirrors.
+        "tsx --test src/parse.test.ts scripts/deploy.ts",
     ] {
         assert_eq!(reason(command), Some(TSX), "{command}");
     }
 
     // The same position is not inert argv. A word Node would load from
-    // outside the workspace, or a file this screen does not name a test,
-    // is code the run executes, so it keeps its review instead of riding in
-    // behind the first spec.
+    // outside the workspace, or an option the run carries into the runtime,
+    // is not a path the sink can resolve, so it keeps its review instead of
+    // riding in behind the first spec.
     for command in [
         "npx tsx --test __tests__/media.test.ts ../elsewhere/payload.test.mjs",
         "npx tsx --test __tests__/media.test.ts /tmp/payload.test.mjs",
-        "tsx --test src/parse.test.ts scripts/deploy.ts",
         "tsx --test src/parse.test.ts --expose-gc",
     ] {
         assert_ne!(reason(command), Some(TSX), "{command}");

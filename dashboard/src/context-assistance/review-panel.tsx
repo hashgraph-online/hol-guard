@@ -46,7 +46,7 @@ export function ContextReviewPanel({ item }: { item: GuardApprovalRequest }) {
         if (!authorized) {
           revision.current += 1; request.current?.abort();
           setContext(null); setPrevious(null); setBusy(false); setWatching(false);
-          setError("Context access changed. Check Projects & AI apps in CIGAR before preparing more context.");
+          setError("What CIGAR may read changed. Check Projects in CIGAR, then try again.");
         }
       }).catch(() => {
         if (!controller.signal.aborted) {
@@ -75,7 +75,7 @@ export function ContextReviewPanel({ item }: { item: GuardApprovalRequest }) {
       const scopes = await listContextWorkspaces(controller.signal);
       const scope = scopes.find((scope) => scope.app === "dashboard" && scope.workspace === item.workspace
         && !scope.revoked && scope.native_policy_facts);
-      if (!scope) throw new Error("Grant this workspace dashboard access with native Guard policy facts in CIGAR → Projects & AI apps.");
+      if (!scope) throw new Error("Add this project in CIGAR → Projects first, then try again.");
       const value = await prepareNativeDecisionContext(scope, decisionId, item.harness, controller.signal,
         explain ? context?.brief.snapshot_id : undefined);
       if (revision.current !== current || controller.signal.aborted) return;
@@ -104,7 +104,7 @@ export function ContextReviewPanel({ item }: { item: GuardApprovalRequest }) {
     </div>
     {error ? <p role="status" className="text-sm text-slate-600">{error} You can still use the approval controls.</p> : null}
     {context ? <section aria-label="Native decision context" className="space-y-3">
-      <p className="text-sm text-slate-600">Verified when prepared · {context.brief.rendered_tokens} tokens. Refresh after sources or access change.</p>
+      <p className="text-sm text-slate-600">Checked when prepared. Refresh after files or projects change.</p>
       <ContextBriefView brief={context.brief} scope={context.scope} />
       {context.explanation ? <p role="status" className="text-sm text-slate-600">The retained selection and its sources were verified again.</p> : null}
       <details><summary className="min-h-11 cursor-pointer text-sm font-semibold">Native decision association</summary>
