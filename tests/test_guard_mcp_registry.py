@@ -7,7 +7,8 @@ from typing import ClassVar
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.mcp_registry import reviewed_stdio_package_options, search_mcp_registry
+from codex_plugin_scanner.guard import native_runner_authority as authority
+from codex_plugin_scanner.guard.runtime.mcp_registry import search_mcp_registry
 
 
 class _Response(io.BytesIO):
@@ -75,7 +76,7 @@ def test_registry_does_not_accept_oversize_or_fabricated_metadata(monkeypatch):
             search_mcp_registry("test")
 
 
-def test_registry_exposes_only_literal_pinned_stdio_package_recipes():
+def test_registry_exposes_only_literal_pinned_stdio_package_recipes(monkeypatch):
     packages = [
         {
             "registryType": "pypi",
@@ -120,8 +121,36 @@ def test_registry_exposes_only_literal_pinned_stdio_package_recipes():
             "packageArguments": [{"type": "positional", "value": "${TOKEN}"}],
         },
     ]
-    options = reviewed_stdio_package_options(packages)
+    fixture = {
+        "metadata": {},
+        "servers": [
+            {
+                "server": {"name": "example/server", "version": "1.0.0", "packages": packages},
+                "_meta": {"io.modelcontextprotocol.registry/official": {"status": "active"}},
+            }
+        ],
+    }
+    _serve(monkeypatch, json.dumps(fixture).encode())
+    options = search_mcp_registry("example")["results"][0]["package_options"]
     assert len(options) == 2
     assert options[0]["command"] == "uvx" and options[0]["arguments"] == ["hol-guard@2.2.0", "mcp"]
     assert options[1]["command"] == "npx" and options[1]["arguments"] == ["-y", "@safe/example@1.2.3"]
     assert all(option["verified_package"] is False for option in options)
+
+
+def test_a_native_outage_reports_the_registry_unavailable(monkeypatch):
+    def unavailable(*_args, **_kwargs):
+        raise authority.NativeRunnerAuthorityError("native_runtime_unavailable")
+
+    _serve(monkeypatch, json.dumps({"metadata": {}, "servers": []}).encode())
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    with pytest.raises(ValueError, match="registry_unavailable"):
+        search_mcp_registry("example")
+
+
+def _serve(monkeypatch, payload: bytes) -> None:
+    class Opener:
+        def open(self, _request, data=None, timeout=None):
+            return _Response(payload)
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *_handlers: Opener())
