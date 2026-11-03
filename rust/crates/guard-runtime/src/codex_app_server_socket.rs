@@ -106,7 +106,10 @@ fn is_response_id(id: Option<&Value>) -> bool {
 /// Unix. An in-progress connect finishes by the deadline or fails. `EAGAIN`
 /// is a full backlog and fails immediately.
 #[cfg(unix)]
-fn connect(socket: &Path, deadline: Instant) -> Result<std::os::unix::net::UnixStream, Failure> {
+pub(crate) fn connect(
+    socket: &Path,
+    deadline: Instant,
+) -> Result<std::os::unix::net::UnixStream, Failure> {
     use nix::errno::Errno;
     use nix::fcntl::{fcntl, FcntlArg, FdFlag, OFlag};
     use nix::poll::{poll, PollFd, PollFlags, PollTimeout};

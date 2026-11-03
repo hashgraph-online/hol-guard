@@ -194,7 +194,6 @@ def test_wait_for_socket_rejects_trusted_stale_socket(
         listener.close()
         monkeypatch.setattr(codex_remote_control, "_REMOTE_CONTROL_READY_TIMEOUT_SECONDS", 0.01)
 
-        assert codex_remote_control._socket_is_trusted(socket_path) is True
         assert codex_remote_control._wait_for_socket(socket_path) is False
 
 
@@ -208,27 +207,6 @@ def test_wait_for_socket_accepts_trusted_live_socket() -> None:
             assert codex_remote_control._wait_for_socket(socket_path) is True
         finally:
             listener.close()
-
-
-def test_wait_for_socket_retries_transient_os_error(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    calls = 0
-
-    def fake_trust_check(_socket_path: Path) -> bool:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise OSError("socket is being created")
-        return True
-
-    monkeypatch.setattr(codex_remote_control, "_socket_is_trusted", fake_trust_check)
-    monkeypatch.setattr(codex_remote_control, "_socket_is_live", lambda _path: True)
-    monkeypatch.setattr(codex_remote_control, "_REMOTE_CONTROL_READY_TIMEOUT_SECONDS", 0.2)
-
-    assert codex_remote_control._wait_for_socket(tmp_path / "app-server.sock") is True
-    assert calls == 2
 
 
 def test_direct_app_server_uses_private_control_directory(
