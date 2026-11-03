@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote
 
 if TYPE_CHECKING:
@@ -70,31 +70,55 @@ def listed_public_items(store: GuardStore) -> list[dict[str, object]]:
     ]
 
 
+_ITEM_KEYS = "cli_id display_name name surface state suggestable stale source_label remote_origin declared_sources"
+_ROW_TYPES: dict[str, type | tuple[type, ...]] = {
+    "cli_id": str,
+    "name": str,
+    "surface": str,
+    "state": str,
+    "source_label": (str, type(None)),
+    "remote_origin": (str, type(None)),
+    "needs_setup": bool,
+    "declared_sources": list,
+}
+
+
+def _setup_fields(item: dict[str, object]) -> dict[str, object]:
+    """The fields the setup check reads; command catalogs stay out of the request."""
+
+    fields: dict[str, object] = {key: item[key] for key in _ITEM_KEYS.split() if key in item}
+    catalog = item.get("mcp_catalog")
+    if isinstance(catalog, dict):
+        changes = cast("dict[str, object]", catalog).get("changes")
+        sliced = {key: catalog[key] for key in ("stale", "complete") if key in catalog}
+        if isinstance(changes, dict):
+            sliced["changes"] = {key: bool(changes[key]) for key in ("added", "changed") if key in changes}
+        fields["mcp_catalog"] = sliced
+    return fields
+
+
 def connector_setup_summary(store: GuardStore) -> ConnectorSetupSummary:
     """Protect's connectors, filtered and checked for setup by the runtime."""
 
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
-    rows = native_runner_authority(
-        "connector_setup_rows", {"items": listed_public_items(store)}, guard_home=store.guard_home
-    ).get("rows")
-    try:
-        items = tuple(
-            ConnectorSetupItem(
-                cli_id=str(row["cli_id"]),
-                name=str(row["name"]),
-                surface=str(row["surface"]),
-                state=str(row["state"]),
-                source_label=cast("str | None", row["source_label"]),
-                remote_origin=cast("str | None", row["remote_origin"]),
-                needs_setup=row["needs_setup"] is True,
-                declared_sources=tuple(str(value) for value in cast("list[object]", row["declared_sources"])),
-            )
-            for row in cast("list[dict[str, object]]", rows)
+    items = [_setup_fields(item) for item in listed_public_items(store)]
+    rows = native_runner_authority("connector_setup_rows", {"items": items}, guard_home=store.guard_home).get("rows")
+    checked = cast("list[dict[str, Any]]", rows if isinstance(rows, list) else [None])
+    for row in checked:
+        if not (
+            isinstance(row, dict)
+            and set(row) == set(_ROW_TYPES)
+            and all(isinstance(row[key], kind) for key, kind in _ROW_TYPES.items())
+            and all(isinstance(value, str) for value in row["declared_sources"])
+        ):
+            raise NativeRunnerAuthorityError("native_runner_authority_result_invalid")
+    return ConnectorSetupSummary(
+        items=tuple(
+            ConnectorSetupItem(**cast("dict[str, Any]", {**row, "declared_sources": tuple(row["declared_sources"])}))
+            for row in checked
         )
-    except (KeyError, TypeError) as error:
-        raise NativeRunnerAuthorityError("native_runner_authority_result_invalid") from error
-    return ConnectorSetupSummary(items=items)
+    )
 
 
 def connector_setup_href(dashboard_url: str | None, cli_id: str | None = None) -> str | None:
