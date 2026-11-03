@@ -90,7 +90,7 @@ pub(super) fn safe_column_arguments<'a>(
 /// One filter's option line: the flags that carry no value, the flags that
 /// do, and the long options spelled either way. Anything else is refused, so
 /// an option this screen has not read keeps the command under review.
-fn screen_options<'a>(
+pub(super) fn screen_options<'a>(
     arguments: &'a [String],
     operands: &mut Vec<&'a str>,
     reading_flags: &str,

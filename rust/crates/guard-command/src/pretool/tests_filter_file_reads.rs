@@ -79,6 +79,31 @@ fn a_filter_reading_a_proven_file_needs_no_review() {
         "fmt -p '# ' -s Cargo.toml",
         "comm -12 Cargo.toml Cargo.toml",
         "comm --output-delimiter=, Cargo.toml Cargo.toml",
+        // `strings`, `hexdump`, `xxd`, `pr`, `shuf`, `iconv` and the base
+        // encoders print a rendering of what they read. Their value-taking
+        // options carry a length, an offset, a radix, a page geometry or a
+        // character set.
+        "strings Cargo.toml",
+        "strings -n 6 Cargo.toml",
+        "strings -a -t x Cargo.toml",
+        "hexdump -C Cargo.toml",
+        "hexdump -n 64 -s 16 Cargo.toml",
+        "xxd Cargo.toml",
+        "xxd -l 64 -c 16 Cargo.toml",
+        "xxd -p -g 1 Cargo.toml",
+        "pr -t Cargo.toml",
+        "pr -t -w 72 -l 60 Cargo.toml",
+        "pr -3 Cargo.toml",
+        "shuf -n 3 Cargo.toml",
+        "shuf --head-count=3 Cargo.toml",
+        "iconv -f utf-8 -t ascii Cargo.toml",
+        "iconv --from-code=utf-8 --to-code=ascii -c Cargo.toml",
+        "base32 Cargo.toml",
+        "base64 Cargo.toml",
+        "base64 -d Cargo.toml",
+        "base64 -w 76 Cargo.toml",
+        "base64 --wrap=0 Cargo.toml",
+        "base32 -w 0 Cargo.toml",
     ] {
         assert!(allowed(command), "{command}");
     }
@@ -128,6 +153,29 @@ fn a_filter_that_could_write_or_reach_further_still_takes_review() {
         "tac -s$SEPARATOR Cargo.toml",
         "fmt --output=wrapped.txt Cargo.toml",
         "fold --write=40 Cargo.toml",
+        // The dump filters write nothing only while the writing spellings
+        // stay out: `xxd INPUT OUTPUT` truncates its second operand, `shuf`
+        // and `iconv` spell an output file, `hexdump -f` reads a format file
+        // Guard has not proven, and `base64 -o` names a file to write. A
+        // line-wrap flag that carries no count swallows the operand instead,
+        // so nothing is proven read.
+        "xxd Cargo.toml dumped.hex",
+        "shuf -o shuffled.txt Cargo.toml",
+        "shuf --output=shuffled.txt Cargo.toml",
+        "shuf --random-source=Cargo.toml Cargo.toml",
+        "iconv -o converted.txt -f utf-8 -t ascii Cargo.toml",
+        "iconv --output=converted.txt Cargo.toml",
+        "hexdump -f format.txt Cargo.toml",
+        "base32 -o encoded.txt Cargo.toml",
+        "base32 --output=encoded.txt Cargo.toml",
+        "base64 -w notanumber Cargo.toml",
+        "base64 -b Cargo.toml",
+        // An operand outside the proven read scope, an option none of these
+        // screens has read, and a parameter the shell has not written out.
+        "strings /nonexistent-guard-fixture/secret.key",
+        "xxd /nonexistent-guard-fixture/secret.key",
+        "pr --unknown Cargo.toml",
+        "strings -t $RADIX Cargo.toml",
     ] {
         assert!(!allowed(command), "{command}");
     }

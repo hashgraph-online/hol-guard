@@ -103,6 +103,7 @@ pub(crate) fn benign_command_segments(
                         basename,
                     "ls" | "cat"
                         | "base64"
+                        | "base32"
                         | "dd"
                         | "cp"
                         | "mkdir"
@@ -397,7 +398,7 @@ pub(super) fn exact_safe_segment_with_context(
             (segment.pipeline_index > 0 && safe_reads::safe_cat_stdin_arguments(&segment.arguments))
                 || safe_reads::safe_plain_file_arguments(&segment.arguments, context)
         }
-        "base64" => {
+        "base64" | "base32" => {
             super::base64_reads::safe_base64_arguments(&segment.arguments, context)
                 || (segment.pipeline_index > 0
                     && super::stdin_filters::safe_arguments(basename, &segment.arguments))
@@ -533,7 +534,8 @@ pub(super) fn exact_safe_segment_with_context(
             )
         }
         "sort" | "uniq" | "cut" | "tr" | "paste" | "join" | "column" | "nl" | "tac" | "rev"
-        | "fold" | "expand" | "unexpand" | "fmt" | "comm" => {
+        | "fold" | "expand" | "unexpand" | "fmt" | "comm" | "strings" | "hexdump" | "xxd"
+        | "pr" | "shuf" | "iconv" => {
             (segment.pipeline_index > 0
                 && super::stdin_filters::safe_arguments(basename, &segment.arguments))
                 || super::stdin_filters::safe_file_arguments(basename, &segment.arguments, context)
