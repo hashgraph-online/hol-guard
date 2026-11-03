@@ -180,9 +180,11 @@
   .cigar-steps::before { background: CanvasText; }
   .cigar-tabs [aria-selected="true"] { border-bottom-color: Highlight; color: Highlight; }
   .cigar-setup-block { border-color: CanvasText; color: CanvasText; background: Canvas; }
-  .cigar-setup-track > li { border: 1px solid CanvasText; background: Canvas; }
-  .cigar-setup-track > li[data-state="done"], .cigar-setup-track > li[data-state="active"]::after { background: Highlight; }
-  .cigar-button-solid, .cigar-button-primary { background: ButtonFace; color: ButtonText; border-color: ButtonText; }
+  /* Listed with .cigar-home too so these beat the hero's own fills. */
+  .cigar-setup-track > li, .cigar-home .cigar-setup-track > li[data-state] { border: 1px solid CanvasText; background: Canvas; }
+  .cigar-setup-track > li[data-state="done"], .cigar-setup-track > li[data-state="active"]::after,
+  .cigar-home .cigar-setup-track > li[data-state="done"], .cigar-home .cigar-setup-track > li[data-state="active"]::after { background: Highlight; }
+  .cigar-button-solid, .cigar-button-primary, .cigar-home .cigar-button, .cigar-home .cigar-button-solid { background: ButtonFace; color: ButtonText; border-color: ButtonText; }
 }
 .cigar-picker { animation: cigar-picker-in .32s cubic-bezier(.16, 1, .3, 1); }
 .cigar-picker-list { animation: cigar-list-jump .22s cubic-bezier(.16, 1, .3, 1); }
