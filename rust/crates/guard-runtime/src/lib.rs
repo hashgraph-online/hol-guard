@@ -225,6 +225,7 @@ mod compound_git_segments;
 mod connector_regroup;
 mod connector_setup;
 mod connector_setup_context_op;
+mod connector_setup_rows;
 mod consumer_artifact_compose_op;
 mod consumer_artifact_compose_runtime;
 mod consumer_artifact_project_op;
