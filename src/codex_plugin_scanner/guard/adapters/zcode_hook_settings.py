@@ -98,7 +98,12 @@ def plan_hook_settings(
     enabled = answer["enabled"]
     if enabled is None:
         enabled = {"present": "enabled" in hooks, "value": hooks.get("enabled")}
-    elif not isinstance(enabled, dict) or enabled.keys() != {"present", "value"}:
+    elif (
+        not isinstance(enabled, dict)
+        or enabled.keys() != {"present", "value"}
+        or not isinstance(enabled["present"], bool)
+        or (enabled["present"] and not isinstance(enabled["value"], bool))
+    ):
         raise ValueError(_MALFORMED)
     # Flat lists, legacy on install, named in the mapping's own order.
     flat_names = [name for name, value in hooks.items() if name != ZCODE_HOOKS_EVENTS_KEY and isinstance(value, list)]

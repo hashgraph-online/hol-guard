@@ -188,6 +188,8 @@ BAD_INSTALL: dict[str, tuple[tuple[str | int, ...], object]] = {
     "plan_not_a_list": ((*_PTU,), None),
     "enabled_not_a_record": (("enabled",), True),
     "enabled_extra_key": (("enabled",), {"present": True, "value": True, "source": "live"}),
+    "enabled_present_not_bool": (("enabled",), {"present": 1, "value": True}),
+    "enabled_value_not_bool": (("enabled",), {"present": True, "value": "yes"}),
 }
 
 
