@@ -460,13 +460,18 @@ def _build_guard_device_connect_payload(
         workspace_id=_optional_string(payload.get("workspace_id")),
         cloud_workspace_id=cloud_workspace_id,
     )
-    if workspace_problem is not None:
-        # Undo the pairing before the first sync so nothing reaches the wrong workspace.
+    problem = workspace_problem or check_connect_cloud_actions_declined(
+        report=_connect_payload_cloud_actions_report(payload),
+        cloud_actions_declined=cloud_actions_declined,
+    )
+    if problem is not None:
+        # Undo the pairing before the first sync so nothing reaches a workspace, or turns on
+        # Cloud actions, the user did not choose.
         payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
         payload["disconnect"] = _undo_unwanted_guard_connect_pairing(store)
         payload["status"] = "disconnected"
-        payload["cloud_actions_problem"] = workspace_problem
-        print(workspace_problem, file=sys.stderr)
+        payload["cloud_actions_problem"] = problem
+        print(problem, file=sys.stderr)
         return payload, 1
     payload = _finalize_guard_connect_payload(
         store=store,
@@ -476,14 +481,6 @@ def _build_guard_device_connect_payload(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
     )
-    choice_problem = check_connect_cloud_actions_declined(
-        report=_connect_payload_cloud_actions_report(payload),
-        cloud_actions_declined=cloud_actions_declined,
-    )
-    if choice_problem is not None:
-        payload["cloud_actions_problem"] = choice_problem
-        print(choice_problem, file=sys.stderr)
-        return payload, 1
     return payload, 0
 
 def _connect_payload_cloud_actions_report(payload: dict[str, object]) -> CloudActionsConnectReport | None:
@@ -495,7 +492,8 @@ def _connect_payload_cloud_actions_report(payload: dict[str, object]) -> CloudAc
 def _undo_unwanted_guard_connect_pairing(store: GuardStore) -> dict[str, object]:
     try:
         return run_guard_disconnect_command(store=store, revoke_cloud_grant=True)
-    except (RuntimeError, ValueError, urllib.error.URLError, http.client.HTTPException) as error:
+    except (RuntimeError, ValueError, OSError, http.client.HTTPException) as error:
+        # OSError covers URLError and a timeout or reset while waiting for the answer.
         store.clear_oauth_local_credentials()
         return {"status": "disconnected", "cloud_grant_revoked": False, "detail": str(error)}
 

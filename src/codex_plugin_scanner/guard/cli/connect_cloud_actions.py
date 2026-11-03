@@ -171,12 +171,14 @@ def check_connect_cloud_actions_declined(
 ) -> str | None:
     """Return a problem message when Cloud actions came back on despite ``--no-cloud-actions``.
 
-    The pairing is kept; the caller reports the problem and exits non-zero so
-    scripts notice.
+    The caller undoes the pairing before the first sync, reports the problem and
+    exits non-zero so scripts notice. Without a report Guard Cloud did not turn
+    Cloud actions on for this pairing, which is what the option asked for.
     """
     if not cloud_actions_declined or report is None or report["status"] != "on":
         return None
     return (
         "Cloud actions were turned on in the browser although --no-cloud-actions was set. "
-        f"Run {CLOUD_ACTIONS_RECONNECT_COMMAND} --no-cloud-actions again and leave that option off."
+        "HOL Guard disconnected this computer before sending anything. "
+        f"Run {CLOUD_ACTIONS_RECONNECT_COMMAND} --no-cloud-actions again and leave Cloud actions off in the browser."
     )

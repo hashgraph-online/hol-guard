@@ -284,15 +284,26 @@ def test_browser_connect_undoes_pairing_to_wrong_workspace_before_first_sync(
     assert OTHER_WORKSPACE_ID in capsys.readouterr().err
 
 
-def test_headless_connect_flags_cloud_actions_turned_on_despite_decline(tmp_path: Path, monkeypatch) -> None:
+def test_headless_connect_undoes_the_pairing_when_cloud_actions_came_back_on_despite_decline(
+    tmp_path: Path, monkeypatch
+) -> None:
     seen: dict[str, object] = {}
+    disconnects: list[dict[str, object]] = []
 
     def fake_device_flow(**kwargs: object) -> dict[str, object]:
         seen.update(kwargs)
         return _connected_payload(workspace_id=WORKSPACE_ID, cloud_actions_status="on")
 
+    def fail_finalize(**kwargs: object) -> dict[str, object]:
+        raise AssertionError("first sync must not run when Cloud actions were declined")
+
+    def fake_disconnect(**kwargs: object) -> dict[str, object]:
+        disconnects.append(kwargs)
+        return {"status": "disconnected", "cloud_grant_revoked": True}
+
     monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", fake_device_flow)
-    monkeypatch.setattr(commands_support_connect, "_finalize_guard_connect_payload", lambda **kwargs: kwargs["payload"])
+    monkeypatch.setattr(commands_support_connect, "_finalize_guard_connect_payload", fail_finalize)
+    monkeypatch.setattr(guard_commands, "run_guard_disconnect_command", fake_disconnect)
 
     payload, exit_code = guard_commands._build_guard_device_connect_payload(
         store=GuardStore(tmp_path / "guard-home"),
@@ -304,7 +315,9 @@ def test_headless_connect_flags_cloud_actions_turned_on_despite_decline(tmp_path
     assert seen["cloud_actions_declined"] is True
     assert "cloud_workspace_id" not in seen
     assert exit_code == 1
-    assert payload is not None and "--no-cloud-actions" in str(payload["cloud_actions_problem"])
+    assert payload is not None and payload["status"] == "disconnected"
+    assert len(disconnects) == 1 and disconnects[0]["revoke_cloud_grant"] is True
+    assert "--no-cloud-actions" in str(payload["cloud_actions_problem"])
 
 
 def test_plain_connect_keeps_its_flow_call_and_succeeds(tmp_path: Path, monkeypatch) -> None:
@@ -326,3 +339,22 @@ def test_plain_connect_keeps_its_flow_call_and_succeeds(tmp_path: Path, monkeypa
     assert set(seen) == {"store", "connect_url", "wait_timeout_seconds"}
     assert exit_code == 0
     assert payload is not None and "cloud_actions_problem" not in payload
+
+
+@pytest.mark.parametrize("error", [TimeoutError("timed out"), ConnectionResetError("reset")])
+def test_undoing_a_pairing_clears_it_here_when_the_revoke_answer_never_arrives(
+    tmp_path: Path, monkeypatch, error: OSError
+) -> None:
+    cleared: list[bool] = []
+
+    def failing_disconnect(**kwargs: object) -> dict[str, object]:
+        raise error
+
+    monkeypatch.setattr(commands_support_connect, "run_guard_disconnect_command", failing_disconnect)
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(store, "clear_oauth_local_credentials", lambda: cleared.append(True))
+
+    result = commands_support_connect._undo_unwanted_guard_connect_pairing(store)
+
+    assert cleared == [True]
+    assert result["status"] == "disconnected" and result["cloud_grant_revoked"] is False
