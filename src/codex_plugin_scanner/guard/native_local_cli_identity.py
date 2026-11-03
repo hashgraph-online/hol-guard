@@ -139,7 +139,9 @@ def _valid_recognition(result: dict[str, Any], answer: str) -> bool:
     if answer == "candidates":
         found = result.get("candidates")
         return isinstance(found, list) and all(isinstance(item, str) for item in found)
-    identity = result.get("identity")
+    if "identity" not in result:
+        return False
+    identity = result["identity"]
     return (
         (identity is None or _valid_unlisted_cli(identity))
         and isinstance(result.get("error_code"), str)

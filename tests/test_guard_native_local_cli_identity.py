@@ -88,6 +88,7 @@ def test_no_resident_answer_for_the_local_cli_step_is_the_host_outage(
     [
         ("recognition", {"identity": {**_VALID}, "error_code": "", "message": ""}),
         ("recognition", {"identity": None, "error_code": 7, "message": ""}),
+        ("recognition", {"error_code": "", "message": ""}),
         ("candidates", {"candidates": ["tool", 3]}),
     ],
 )
