@@ -7,13 +7,13 @@
 //! with the host's own `Path` rules and sends the parts, so the decisions here
 //! never re-implement Windows path semantics.
 
-use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
+use super::local_skill_index::open_no_follow;
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 
@@ -238,17 +238,6 @@ fn is_absent(error: &std::io::Error) -> bool {
         error.kind(),
         std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
     )
-}
-
-fn open_no_follow(path: &Path) -> std::io::Result<File> {
-    let mut options = std::fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW);
-    }
-    options.open(path)
 }
 
 /// A group- or world-writable registry is not admin-owned.

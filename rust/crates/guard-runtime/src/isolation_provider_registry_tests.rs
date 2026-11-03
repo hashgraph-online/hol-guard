@@ -159,6 +159,27 @@ fn the_artifact_digest_reads_a_regular_file_and_never_a_link() {
 }
 
 #[cfg(unix)]
+#[test]
+fn a_fifo_with_no_writer_is_refused_without_blocking() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let fifo = directory.path().join("provider");
+    let made = std::process::Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .expect("mkfifo runs");
+    assert!(made.success());
+    let path = fifo.to_str().unwrap();
+    assert_eq!(
+        dispatch(&json!({ "op": "digest", "path": path })).unwrap(),
+        json!({ "refusal": "not_regular" })
+    );
+    assert_eq!(
+        dispatch(&json!({ "op": "registry", "config": path })).unwrap(),
+        json!({ "refusal": "managed provider registry is not admin-owned" })
+    );
+}
+
+#[cfg(unix)]
 mod registry {
     use std::os::unix::fs::PermissionsExt;
 
