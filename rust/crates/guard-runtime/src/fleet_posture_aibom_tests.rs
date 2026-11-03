@@ -1,6 +1,10 @@
 use serde_json::{json, Value};
 
-use super::dispatch;
+use crate::runner_authority_op::KindResult;
+
+fn dispatch(args: &Value) -> KindResult {
+    super::dispatch(args.as_object().expect("an object request"))
+}
 
 const HASH: &str = "sha256:bbbb";
 

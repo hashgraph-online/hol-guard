@@ -23,7 +23,6 @@ use crate::aibom_paths::py_join;
 use crate::cloud_request_text::py_truthy;
 use crate::guard_paths::python_realpath_lax;
 use crate::guard_store_json::py_strip;
-use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
 use super::selection::{item_kind, normalized_timestamp, text_or_empty, HARNESS_IDS};
@@ -304,8 +303,7 @@ fn union(args: &Map<String, Value>) -> KindResult {
     Ok(json!({"kept": kept}))
 }
 
-pub(crate) fn dispatch(args: &Value) -> KindResult {
-    let args = args_object(args)?;
+pub(super) fn dispatch(args: &Map<String, Value>) -> KindResult {
     match args.get("op").and_then(Value::as_str) {
         Some("remember") => remember(args),
         Some("union") => union(args),
