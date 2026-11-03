@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ._commands_shared import _SERVICE_RUNTIME_CHOICES, _SERVICE_RUNTIME_PROFILE_STATE_KEY, _now
@@ -16,6 +16,11 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..browser_opener import open_browser_url
+from .connect_cloud_actions import (
+    CloudActionsConnectReport,
+    check_connect_cloud_actions_choices,
+    parse_cloud_actions_connect_report,
+)
 from .connect_sync_result import apply_guard_connect_sync_result
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
@@ -357,6 +362,7 @@ def _run_guard_device_connect_flow(
     open_browser: Callable[[str], bool] | None = None,
     ci_safe: bool = False,
     machine_label: str | None = None,
+    cloud_actions_declined: bool = False,
 ) -> dict[str, object]:
     return run_guard_device_connect_command(
         store=store,
@@ -367,6 +373,7 @@ def _run_guard_device_connect_flow(
         ci_safe=ci_safe,
         machine_label=machine_label,
         include_sync_auth_context=True,
+        cloud_actions_declined=cloud_actions_declined,
     )
 
 def _run_guard_browser_connect_flow(
@@ -374,12 +381,16 @@ def _run_guard_browser_connect_flow(
     store: GuardStore,
     connect_url: str,
     wait_timeout_seconds: int,
+    cloud_workspace_id: str | None = None,
+    cloud_actions_declined: bool = False,
 ) -> dict[str, object]:
     return run_guard_browser_connect_command(
         store=store,
         connect_url=connect_url,
         wait_timeout_seconds=wait_timeout_seconds,
         include_sync_auth_context=True,
+        cloud_workspace_id=cloud_workspace_id,
+        cloud_actions_declined=cloud_actions_declined,
     )
 
 def _build_guard_device_connect_payload(
@@ -394,13 +405,25 @@ def _build_guard_device_connect_payload(
     machine_label: str | None = None,
     home_dir: Path | None = None,
     workspace_dir: Path | None = None,
+    cloud_workspace_id: str | None = None,
+    cloud_actions_declined: bool = False,
 ) -> tuple[dict[str, object] | None, int]:
+    # Pass only the Cloud actions choices that were made, so a plain connect
+    # keeps the flow call it always had.
+    browser_choices: dict[str, Any] = {}
+    if cloud_workspace_id is not None:
+        browser_choices["cloud_workspace_id"] = cloud_workspace_id
+    device_choices: dict[str, Any] = {}
+    if cloud_actions_declined:
+        browser_choices["cloud_actions_declined"] = True
+        device_choices["cloud_actions_declined"] = True
     try:
         if use_browser_oauth:
             payload = _run_guard_browser_connect_flow(
                 store=store,
                 connect_url=connect_url,
                 wait_timeout_seconds=wait_timeout_seconds,
+                **browser_choices,
             )
         elif open_device_browser:
             payload = _run_guard_device_connect_flow(
@@ -411,6 +434,7 @@ def _build_guard_device_connect_payload(
                 open_browser=open_browser_url,
                 ci_safe=ci_safe,
                 machine_label=machine_label,
+                **device_choices,
             )
         else:
             payload = _run_guard_device_connect_flow(
@@ -420,6 +444,7 @@ def _build_guard_device_connect_payload(
                 announce_copy=announce_copy,
                 ci_safe=ci_safe,
                 machine_label=machine_label,
+                **device_choices,
             )
     except json.JSONDecodeError as error:
         print(f"Guard authorization failed: {error}", file=sys.stderr)
@@ -438,7 +463,23 @@ def _build_guard_device_connect_payload(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
     )
+    choice_problem = check_connect_cloud_actions_choices(
+        workspace_id=_optional_string(payload.get("workspace_id")),
+        report=_connect_payload_cloud_actions_report(payload),
+        cloud_workspace_id=cloud_workspace_id,
+        cloud_actions_declined=cloud_actions_declined,
+    )
+    if choice_problem is not None:
+        payload["cloud_actions_problem"] = choice_problem
+        print(choice_problem, file=sys.stderr)
+        return payload, 1
     return payload, 0
+
+def _connect_payload_cloud_actions_report(payload: dict[str, object]) -> CloudActionsConnectReport | None:
+    summary = payload.get("cloud_actions")
+    if not isinstance(summary, dict):
+        return None
+    return parse_cloud_actions_connect_report({"guard_cloud_actions": summary})
 
 def _announce_guard_device_connect_copy(payload: dict[str, object]) -> None:
     user_code = _optional_string(payload.get("user_code")) or "unknown"

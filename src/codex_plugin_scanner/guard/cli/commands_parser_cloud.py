@@ -86,6 +86,19 @@ def _configure_guard_cloud_parsers(
         default="default",
         help="Named connection profile for multi-environment usage (e.g. 'staging'). Defaults to 'default'.",
     )
+    connect_parser.add_argument(
+        "--cloud-workspace",
+        metavar="WORKSPACE_ID",
+        help=(
+            "Guard Cloud workspace ID to pair with when your account has more than one. "
+            "This is not the local --workspace folder."
+        ),
+    )
+    connect_parser.add_argument(
+        "--no-cloud-actions",
+        action="store_true",
+        help="Pair this computer without letting its AI tools use Cloud actions.",
+    )
     _add_cloud_review_connect_consent(connect_parser)
     connect_parser.add_argument(
         "--confirm-source",
