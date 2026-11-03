@@ -308,6 +308,7 @@ pub(crate) fn apply_pre_tool_policy(
                 };
             output.explicitly_benign = effective == "allow";
         }
+        prompt::defer_prompt_review(&mut output);
         validate_pre_tool_result_matrix(&output)?;
         return Ok(output);
     }
@@ -345,6 +346,7 @@ pub(crate) fn apply_pre_tool_policy(
         "deny".to_owned()
     };
     output.explicitly_benign = effective == "allow";
+    prompt::defer_prompt_review(&mut output);
     validate_pre_tool_result_matrix(&output)?;
     Ok(output)
 }
@@ -353,6 +355,8 @@ pub(crate) fn apply_pre_tool_policy(
 mod eval_output;
 #[path = "policy_enforcement_post.rs"]
 mod post;
+#[path = "policy_enforcement_prompt.rs"]
+mod prompt;
 #[cfg(test)]
 pub(crate) use post::apply_post_tool_policy;
 pub(crate) use post::apply_post_tool_policy_with_delivery;

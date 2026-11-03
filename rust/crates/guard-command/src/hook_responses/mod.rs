@@ -292,14 +292,23 @@ pub fn prompt(harness: &str, response: &Object) -> Object {
     let reason_code = text_or(response, "reason_code", "native_prompt_unavailable");
     let signals = prompt_risk_signals(response);
     if is_allow(response) && matches!(action, Some("allow" | "warn")) {
+        // A flagged prompt Guard sent on tells the person why, where the
+        // harness shows a system message.
+        let notice = (action == Some("warn") && !signals.is_empty())
+            .then(|| text_or(response, "reason", ""))
+            .filter(|reason| !reason.is_empty());
         if canonical == "grok" {
             return Object::new();
         }
         if canonical == "codex" {
-            return object(vec![(
+            let mut output = object(vec![(
                 "hookSpecificOutput",
                 hook_output("UserPromptSubmit"),
             )]);
+            if let Some(notice) = notice {
+                output.insert("systemMessage".into(), json!(notice));
+            }
+            return output;
         }
         let mut output = object(vec![
             ("policy_action", json!(action)),
@@ -311,6 +320,9 @@ pub fn prompt(harness: &str, response: &Object) -> Object {
         }
         if !signals.is_empty() && canonical != "copilot" {
             output.insert("risk_signals".into(), json!(signals));
+        }
+        if let Some(notice) = notice.filter(|_| canonical == "claude-code") {
+            output.insert("systemMessage".into(), json!(notice));
         }
         return output;
     }

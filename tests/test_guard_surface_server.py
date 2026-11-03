@@ -2883,7 +2883,7 @@ class TestGuardSurfaceServer:
         finally:
             daemon.stop()
 
-        assert hook_payload["systemMessage"].startswith("HOL Guard intercepted this prompt")
+        assert hook_payload["systemMessage"].startswith("HOL Guard flagged this prompt")
         assert hook_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
         assert (
             "HOL Guard will intercept Claude's next attempt to access local secrets"
