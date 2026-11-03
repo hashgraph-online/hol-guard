@@ -39,6 +39,8 @@ _BACKUP_FORMAT = "guard.cloud-actions.settings-backup.v1"
 _KEEP_BACKUPS = 10
 _NEW_FILE_MODE = 0o600
 _PRIVATE_DIR_MODE = 0o700
+# Recorded as `after_sha256` when Guard's failed write left no file behind.
+_ABSENT = "absent"
 
 
 class HostConfigWriteError(Exception):
@@ -102,7 +104,9 @@ def apply_host_config(plan: HostConfigPlan, *, guard_home: Path) -> HostConfigBa
             raise HostConfigWriteError("write_not_verified", f"{path} did not read back as written.")
     except BaseException as error:
         if published and not _put_back(backup, plan.before):
-            # The copy is the only way back now, so it stays for `restore`.
+            # The copy is the only way back now, so it stays for `restore`, and the
+            # record now names what is on disk so restore puts the whole file back.
+            _record_left_behind(backup)
             raise HostConfigWriteError(
                 "put_back_failed",
                 f"{path} did not read back as written, and Guard could not put the earlier file back. "
@@ -138,7 +142,19 @@ def restore_host_config(ai_tool: str, *, path: Path, guard_home: Path) -> HostCo
     current = _read(path)
     before = _read_copy(backup)
     try:
-        if current is not None and _sha256(current) == backup.after_sha256:
+        if current is None and backup.after_sha256 == _ABSENT:
+            # A failed write removed the file; recreate the earlier one.
+            if before is not None:
+                temporary = _write_temporary(path, before, backup.mode or _NEW_FILE_MODE)
+                try:
+                    _publish(temporary, path, create=True)
+                finally:
+                    temporary.unlink(missing_ok=True)
+                _sync_directory(path.parent)
+            result = HostConfigRestore(
+                path=path, removed_file=False, scope="file", entry_removed=not backup.replaced_entry
+            )
+        elif current is not None and _sha256(current) == backup.after_sha256:
             if before is None:
                 if _read(path) != current:
                     raise _changed_since_preview(path)
@@ -319,25 +335,37 @@ def _save_backup(plan: HostConfigPlan, *, guard_home: Path, mode: int | None) ->
             record_file=record_file,
             copy_file=copy_file,
         )
-        record = {
-            "format": _BACKUP_FORMAT,
-            "ai_tool": backup.ai_tool,
-            "path": str(backup.path),
-            "url": backup.url,
-            "replaced_entry": backup.replaced_entry,
-            "existed": backup.existed,
-            "mode": backup.mode,
-            "before_sha256": backup.before_sha256,
-            "after_sha256": backup.after_sha256,
-            "copy": None if copy_file is None else copy_file.name,
-        }
-        _write_private(record_file, (json.dumps(record, sort_keys=True) + "\n").encode())
+        _write_record(backup, after_sha256=backup.after_sha256)
     except OSError as error:
         raise HostConfigWriteError(
             "backup_failed",
             f"Guard could not keep a copy of {plan.path} ({error.strerror or 'error'}), so nothing was written.",
         ) from None
     return backup
+
+
+def _record_left_behind(backup: HostConfigBackup) -> None:
+    """Point the kept record at the bytes a failed write left, so `restore` replaces the whole file."""
+
+    with contextlib.suppress(OSError, HostConfigWriteError):
+        on_disk = _read(backup.path)
+        _write_record(backup, after_sha256=_ABSENT if on_disk is None else _sha256(on_disk))
+
+
+def _write_record(backup: HostConfigBackup, *, after_sha256: str) -> None:
+    record = {
+        "format": _BACKUP_FORMAT,
+        "ai_tool": backup.ai_tool,
+        "path": str(backup.path),
+        "url": backup.url,
+        "replaced_entry": backup.replaced_entry,
+        "existed": backup.existed,
+        "mode": backup.mode,
+        "before_sha256": backup.before_sha256,
+        "after_sha256": after_sha256,
+        "copy": None if backup.copy_file is None else backup.copy_file.name,
+    }
+    _write_private(backup.record_file, (json.dumps(record, sort_keys=True) + "\n").encode())
 
 
 def _write_private(path: Path, payload: bytes) -> None:

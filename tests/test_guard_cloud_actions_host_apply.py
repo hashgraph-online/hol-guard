@@ -316,6 +316,47 @@ def test_a_write_that_cannot_be_put_back_keeps_the_copy(tmp_path: Path, monkeypa
     [record] = _records(tmp_path / "guard", "codex")
     assert record.with_suffix(".before").read_bytes() == before
 
+    # Following the message brings the earlier file back whole, damage included.
+    monkeypatch.setattr(cloud_actions_host_apply, "replace_file", real)
+    result = restore_host_config("codex", path=path, guard_home=tmp_path / "guard")
+
+    assert result is not None
+    assert result.scope == "file"
+    assert path.read_bytes() == before
+    assert _records(tmp_path / "guard", "codex") == []
+
+
+def test_a_failed_write_that_removed_the_file_is_restored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = _seed(tmp_path, "codex")
+    before = path.read_bytes()
+    plan = plan_host_config("codex", path=path, url=URL)
+    real = cloud_actions_host_apply.replace_file
+    calls = 0
+
+    def remove_then_refuse(source: Path, destination: Path) -> None:
+        nonlocal calls
+        if destination != path:
+            real(source, destination)
+            return
+        calls += 1
+        if calls > 1:
+            raise PermissionError(13, "Permission denied")
+        destination.unlink()
+
+    monkeypatch.setattr(cloud_actions_host_apply, "replace_file", remove_then_refuse)
+
+    with pytest.raises(HostConfigWriteError) as error:
+        _ = apply_host_config(plan, guard_home=tmp_path / "guard")
+    assert error.value.reason == "put_back_failed"
+    assert not path.exists()
+
+    monkeypatch.setattr(cloud_actions_host_apply, "replace_file", real)
+    result = restore_host_config("codex", path=path, guard_home=tmp_path / "guard")
+
+    assert result is not None
+    assert result.scope == "file"
+    assert path.read_bytes() == before
+
 
 def test_nothing_is_created_without_hard_links(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / PATHS["cursor"]
