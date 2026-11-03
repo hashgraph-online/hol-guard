@@ -383,6 +383,11 @@ mod github_workflow_prepare_op;
 mod grok_detect;
 mod grok_executable;
 mod grok_executable_paths;
+#[path = "adapters/detection/grok_legacy_settings.rs"]
+mod grok_legacy_settings;
+#[cfg(test)]
+#[path = "adapters/detection/grok_legacy_settings_tests.rs"]
+mod grok_legacy_settings_tests;
 #[path = "adapters/detection/grok_toml_engine.rs"]
 mod grok_toml_engine;
 #[path = "adapters/detection/grok_toml_scan.rs"]
