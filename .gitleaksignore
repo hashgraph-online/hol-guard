@@ -254,3 +254,9 @@ b6926bac2ef58d0794d1df6e2bb9ee401d8ac18b:tests/test_guard_runtime.py:generic-api
 # Synthetic canary value in the Cloud actions settings preview tests, not a credential.
 30151f99e991cfd2da9cca4a26b18c01880ea499:tests/test_guard_cloud_actions_host_config.py:generic-api-key:28
 30151f99e991cfd2da9cca4a26b18c01880ea499:tests/test_guard_cloud_actions_host_config.py:generic-api-key:30
+0e020fd16a9337cbdfffff2e0a48b56b39e645b5:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:9
+0e020fd16a9337cbdfffff2e0a48b56b39e645b5:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:10
+538fefd8906198efe479da55528ae299a0a4be2f:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:9
+538fefd8906198efe479da55528ae299a0a4be2f:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:10
+6fcf7e37361c9e0da39fecde6c13e0473a3a0580:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:9
+6fcf7e37361c9e0da39fecde6c13e0473a3a0580:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:10
