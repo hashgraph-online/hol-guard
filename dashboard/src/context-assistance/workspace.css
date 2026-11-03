@@ -11,12 +11,31 @@
 .cigar-button-solid { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
 .cigar-button-solid:hover { background: #1e40af; }
 .cigar-workspace button:focus-visible, .cigar-workspace summary:focus-visible, .cigar-workspace a:focus-visible { outline: 2px solid #3972c8; outline-offset: 4px; }
-.cigar-home { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1.75rem 3rem; border: 1px solid #e3e7f0; border-radius: 1.25rem; padding: clamp(1.5rem, 3vw, 2.5rem); background: #fff; }
+.cigar-home { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1.75rem 3rem; border-radius: 1.25rem; padding: clamp(1.5rem, 3vw, 2.5rem); background: radial-gradient(ellipse at 15% 0%, #53538c 0%, transparent 65%), linear-gradient(120deg, #34345d, #303955); color: #fff; overflow: hidden; }
 .cigar-home-main { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
 .cigar-home-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; align-self: stretch; margin: -.35rem -.5rem .5rem 0; }
-.cigar-home h2 { margin-top: .25rem; font-size: clamp(1.6rem, 2.6vw, 2.15rem); font-weight: 600; line-height: 1.2; letter-spacing: -.035em; }
-.cigar-home-detail { max-width: 34rem; margin-top: .75rem; font-size: 1rem; line-height: 1.65; color: #475569; }
-.cigar-home .cigar-text-button { margin-top: .25rem; }
+.cigar-home h2 { margin-top: .25rem; font-size: clamp(1.7rem, 2.7vw, 2.45rem); font-weight: 600; line-height: 1.18; letter-spacing: -.04em; text-wrap: balance; }
+.cigar-home-detail { max-width: 34rem; margin-top: .75rem; font-size: 1rem; line-height: 1.65; color: #d4daf1; }
+.cigar-home .cigar-text-button { margin-top: .25rem; color: #bfdbfe; }
+.cigar-home .cigar-text-button:hover { color: #fff; }
+.cigar-home .cigar-icon-button { color: #c8d1ec; }
+.cigar-home .cigar-icon-button:hover { background: #ffffff1a; color: #fff; }
+.cigar-home .cigar-status { border-color: #ffffff33; background: #ffffff14; color: #e0e7ff; }
+.cigar-home .cigar-status[data-ready="true"] { border-color: #6ee7b766; background: #34d39926; color: #a7f3d0; }
+.cigar-home .cigar-button { border-color: #ffffff4d; background: transparent; color: #fff; }
+.cigar-home .cigar-button:not(:disabled):hover { background: #ffffff1a; }
+.cigar-home .cigar-button-solid { border-color: #fff; background: #fff; color: #303955; }
+.cigar-home .cigar-button-solid:not(:disabled):hover { background: #eef2ff; }
+.cigar-home .cigar-setup-caption { color: #c8d1ec; }
+.cigar-home .cigar-setup-block { border-top-color: #ffffff26; color: #d4daf1; }
+.cigar-home .cigar-setup-block strong { color: #fff; }
+.cigar-home .cigar-setup-body { color: #d4daf1; }
+.cigar-home .cigar-setup-track > li { background: #ffffff26; }
+.cigar-home .cigar-setup-track > li[data-state="done"] { background: #34d399; }
+.cigar-home .cigar-setup-track > li[data-state="failed"] { background: #f87171; }
+.cigar-home .cigar-setup-track > li[data-state="active"] { background: #ffffff33; }
+.cigar-home .cigar-setup-track > li[data-state="active"]::after { background: #93c5fd; }
+.cigar-workspace .cigar-home :is(button, a):focus-visible { outline-color: #bfdbfe; }
 .cigar-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: .65rem; color: #64748b; cursor: pointer; }
 .cigar-icon-button:hover { background: #f4f7fc; color: var(--brand-dark); }
 .cigar-icon-button:disabled { opacity: .5; cursor: not-allowed; }
@@ -24,9 +43,9 @@
 .cigar-status { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid #dce2ed; border-radius: 2rem; padding: .25rem .65rem; background: #f8fafc; color: #475569; font-size: .72rem; font-weight: 600; }
 .cigar-status > span { height: .4rem; width: .4rem; border-radius: 50%; background: currentColor; }
 .cigar-status[data-ready="true"] { color: #187543; border-color: #c9ebd7; background: #ecfdf3; }
-.cigar-facts { display: grid; align-content: center; gap: 1rem; border-left: 1px solid #e8edf3; padding-left: 3rem; }
-.cigar-facts li { display: flex; align-items: flex-start; gap: .65rem; font-size: .875rem; line-height: 1.6; color: #475569; }
-.cigar-facts svg { width: 1.15rem; height: 1.15rem; flex-shrink: 0; margin-top: .15rem; color: #4d77bb; }
+.cigar-facts { display: grid; align-content: center; gap: 1rem; border-left: 1px solid #ffffff24; padding-left: 3rem; }
+.cigar-facts li { display: flex; align-items: flex-start; gap: .65rem; font-size: .875rem; line-height: 1.6; color: #d4daf1; }
+.cigar-facts svg { width: 1.15rem; height: 1.15rem; flex-shrink: 0; margin-top: .15rem; color: #93c5fd; }
 .cigar-setup-action { display: grid; justify-items: start; gap: .65rem; margin-top: 1.5rem; max-width: 32rem; }
 .cigar-setup-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
 .cigar-setup-action .cigar-button-primary { min-height: 3rem; padding: .75rem 1.4rem; font-size: .875rem; }
@@ -87,7 +106,7 @@
 .cigar-note .cigar-setup-action { margin-top: .9rem; }
 @media (max-width: 64rem) {
   .cigar-home { grid-template-columns: minmax(0, 1fr); }
-  .cigar-facts { border-left: 0; border-top: 1px solid #e8edf3; padding: 1.5rem 0 0; }
+  .cigar-facts { border-left: 0; border-top: 1px solid #ffffff24; padding: 1.5rem 0 0; }
   .cigar-benefits { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 42rem) {
@@ -102,6 +121,7 @@
 @media (prefers-reduced-motion: reduce) { .cigar-tabs [role="tab"], .cigar-advanced-toggle svg { transition: none; } }
 @media (forced-colors: active) {
   .cigar-home, .cigar-advanced-toggle, .cigar-card, .cigar-note { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
+  .cigar-home :is(h2, p, li, span, button, svg) { color: CanvasText; }
   .cigar-facts { border-color: CanvasText; }
   .cigar-tabs [aria-selected="true"] { border-bottom-color: Highlight; color: Highlight; }
   .cigar-setup-block { border-color: CanvasText; color: CanvasText; background: Canvas; }

@@ -349,7 +349,7 @@ test("the guide explains CIGAR in plain words and links to the deeper sections",
   const calls = await fixture(page);
   await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=guide");
   await expect(page.getByRole("heading", { name: "How CIGAR works", exact: true })).toBeVisible();
-  await expect(page.locator(".cigar-guide").getByText(/every prompt you send in Claude Code or Codex gets the few project files that match it/)).toBeVisible();
+  await expect(page.locator(".cigar-guide").getByText(/every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it/)).toBeVisible();
   await expect(page.getByText("CIGAR stands for Context Intelligence Graph Agentic Runtime.", { exact: true })).toBeVisible();
   await page.getByText("Why did a prompt get no files?", { exact: true }).click();
   await expect(page.getByText(/A vague prompt, or an empty or brand-new folder, matches nothing/)).toBeVisible();
