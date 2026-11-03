@@ -37,7 +37,7 @@ fn build_with(rows: &[Value], last: &Value, now: &str, extra: &[(&str, Value)]) 
         "machine": {"hostHash": "h"},
         "policy": {"mode": "enforce"},
         "runtimes": null,
-        "tools": [{"harness": "codex", "protectionState": "protected", "blindSpots": ["x"]}],
+        "tools": [{"harness": "codex", "setupStatus": "installed", "coverage": {"blindSpots": ["x"]}}],
     });
     for (key, value) in extra {
         args[*key] = value.clone();

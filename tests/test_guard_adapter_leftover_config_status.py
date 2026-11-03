@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext, artifacts_use_guard
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
-from codex_plugin_scanner.guard.runtime.fleet_posture_tools import derive_protection_state
 
 
 class _StubAdapter(HarnessAdapter):
@@ -55,22 +53,12 @@ def _diagnostics(adapter: HarnessAdapter, tmp_path: Path) -> dict[str, object]:
     return adapter.diagnostics(context)
 
 
-def _protection_state(diagnostics: dict[str, object]) -> str:
-    now = datetime.now(timezone.utc)
-    return derive_protection_state(
-        setup_status=str(diagnostics["setup_status"]),
-        has_config_paths=bool(diagnostics["config_paths"]),
-        paused=False,
-        last_activity_at=None,
-        now=now,
-    )
-
-
 def test_guard_config_for_uninstalled_tool_is_not_reported_broken(tmp_path: Path) -> None:
     diagnostics = _diagnostics(_StubAdapter(command_available=False), tmp_path)
 
     assert diagnostics["setup_status"] == "not_found"
-    assert _protection_state(diagnostics) == "needs_setup"
+    # Configuration left behind is what makes fleet posture report the tool as needing setup.
+    assert diagnostics["config_paths"]
     warnings = [str(warning) for warning in diagnostics["warnings"]]  # type: ignore[union-attr]
     assert any("hol-guard uninstall stubtool" in warning for warning in warnings)
 
@@ -93,7 +81,6 @@ def test_other_setup_failures_stay_broken_when_tool_is_missing(tmp_path: Path, f
     diagnostics = _diagnostics(_StubAdapter(command_available=False, warnings=(failure,)), tmp_path)
 
     assert diagnostics["setup_status"] == "broken"
-    assert _protection_state(diagnostics) == "broken"
 
 
 def test_other_setup_failures_stay_broken_when_tool_is_installed(tmp_path: Path) -> None:
@@ -122,7 +109,6 @@ def test_a_fault_in_the_adapter_own_words_stays_broken(tmp_path: Path, fault: st
     diagnostics = _diagnostics(_StubAdapter(command_available=False, warnings=(fault,)), tmp_path)
 
     assert diagnostics["setup_status"] == "broken"
-    assert _protection_state(diagnostics) == "broken"
 
 
 class _EditorStubAdapter(_StubAdapter):
@@ -178,7 +164,6 @@ def test_a_launcher_beside_an_unmanaged_config_stays_broken(tmp_path: Path) -> N
     diagnostics = _diagnostics(_LauncherOnlyStubAdapter(command_available=False), tmp_path)
 
     assert diagnostics["setup_status"] == "broken"
-    assert _protection_state(diagnostics) == "broken"
 
 
 _WIDE = 4096 + 5

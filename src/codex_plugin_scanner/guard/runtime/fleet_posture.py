@@ -2,10 +2,10 @@
 
 The contract lives in ``contracts/fleet-posture/v1`` and is documented in
 ``docs/guard/fleet-posture.md``. This module collects the machine, AI-tool,
-inventory and policy sections, derives each tool's protection state, and decides
-whether the inventory goes out as ``full``, ``delta`` or ``digest_only``. The
-native runtime plans the inventory and fits the payload under its byte cap
-(``fleet_posture_inventory.rs``); this module collects the sections it needs.
+inventory and policy facts. The native runtime derives each tool's protection
+state, decides whether the inventory goes out as ``full``, ``delta`` or
+``digest_only``, and fits the payload under its byte cap
+(``fleet_posture_inventory.rs``).
 
 Building never writes inventory state. ``build_fleet_posture_state`` returns the
 payload together with the next "last sent" snapshot, and the caller commits that
@@ -29,7 +29,6 @@ from .fleet_posture_common import (
     HASH_KEY_STATE_KEY,
     LAST_SENT_STATE_KEY,
     MAX_PAYLOAD_BYTES,
-    MAX_TOOLS,
     SCHEMA_VERSION,
     SETTINGS_STATE_KEY,
     clip,
@@ -44,8 +43,7 @@ from .fleet_posture_tools import (
     AUTO_UPDATE_STATE_KEY,
     DIAGNOSTICS_TTL_SECONDS,
     DiagnosticsCache,
-    client_section,
-    derive_protection_state,
+    client_facts,
     machine_section,
     tool_row,
 )
@@ -202,10 +200,6 @@ def build_fleet_posture_state(
     force_full = settings.force_full if settings.force_full is not None else full_inventory_requested(store)
     last_raw = store.get_sync_payload(LAST_SENT_STATE_KEY)
     last = last_raw if isinstance(last_raw, dict) else None
-    previous_tool_states: dict[str, Any] = {}
-    last_tools = last.get("tools") if last is not None else None
-    if isinstance(last_tools, dict):
-        previous_tool_states = last_tools
 
     now_text = iso(now)
     # Raises when the inventory cannot be read: the runner then omits this posture
@@ -223,18 +217,7 @@ def build_fleet_posture_state(
         diagnostics = diagnostics_cache.lookup(adapter, settings.context)
         if diagnostics is None:
             continue
-        row = tool_row(
-            adapter=adapter,
-            diagnostics=diagnostics,
-            store=store,
-            config=config,
-            now=now,
-            include_blind_spots=detail,
-        )
-        absent = row["protectionState"] == "not_detected"
-        if absent and previous_tool_states.get(harness) in (None, "not_detected"):
-            continue
-        tools.append(row)
+        tools.append(tool_row(adapter=adapter, diagnostics=diagnostics, store=store, config=config))
     diagnostics_cache.save()
 
     # Runtime identities are detail: a minimal report leaves them out.
@@ -253,11 +236,11 @@ def build_fleet_posture_state(
             "force_full": bool(force_full),
             "detail": bool(detail),
             "max_payload_bytes": MAX_PAYLOAD_BYTES,
-            "client": client_section(store, settings.runtime),
+            "client": client_facts(store, settings.runtime),
             "machine": machine_section(include_os_version=detail, hash_key=hash_key),
             "policy": policy_section(store, acknowledgement),
             "runtimes": runtimes,
-            "tools": tools[:MAX_TOOLS],
+            "tools": tools,
         },
         store_home(store),
     )
@@ -295,7 +278,6 @@ __all__ = [
     "FleetPostureSettings",
     "build_fleet_posture_state",
     "commit_fleet_posture_sent",
-    "derive_protection_state",
     "fleet_posture_managed",
     "fleet_posture_opted_out",
     "fleet_posture_reporting_enabled",
