@@ -14,9 +14,7 @@ mod tsx_tests;
 use crate::contained_argv::{
     contained_runner_call, jest_contained_call, mocha_contained_call, npm_exec_inert_option,
 };
-use crate::contained_node_tool::{
-    entry_tool, local_package_entry, supported_tool_in, writes_or_chains, ToolMode,
-};
+use crate::contained_node_tool::{entry_tool, supported_tool_in, writes_or_chains, ToolMode};
 use crate::CanonicalCommandV1;
 use std::path::Path;
 
@@ -514,7 +512,7 @@ pub(crate) fn manager_script_task<'a>(
 /// answer: the tail still has to read as a single contained pass.
 fn local_runner_entry_call(arguments: &[String]) -> bool {
     matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_vitest_entry(&entry.replace('\\', "/")) && crate::contained_argv::vitest_runs_once(rest))
-        || matches!(arguments, [entry, rest @ ..] if local_package_entry(&entry.replace('\\', "/"), "jest/bin/jest.js") && jest_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_jest_entry(&entry.replace('\\', "/")) && jest_contained_call(rest))
         || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_mocha_entry(&entry.replace('\\', "/")) && mocha_contained_call(rest))
 }
 

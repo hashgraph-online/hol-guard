@@ -21,7 +21,8 @@ mod tests;
 pub(crate) mod node_tool_modes;
 
 pub(crate) use node_tool_modes::{
-    config_declares_no_emit, entry_tool, local_package_entry, supported_tool, supported_tool_in,
+    config_declares_no_emit, entry_tool, local_bin_entry, local_package_entry, supported_tool,
+    supported_tool_in,
 };
 
 use crate::pretool::{manager_local_bin_arguments, manager_script_task};

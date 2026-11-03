@@ -5,7 +5,7 @@ mod tests;
 #[cfg(test)]
 #[path = "contained_argv_tsx_tests.rs"]
 mod tsx_tests;
-use crate::contained_node_tool::local_package_entry;
+use crate::contained_node_tool::{entry_tool, local_bin_entry, local_package_entry};
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
 use crate::sfrs_shlex::{split_with, PLAIN_LEXER, STRICT_LEXER};
 use regex::Regex;
@@ -17,11 +17,13 @@ const NODE_INVALID: &str = "node_test_restricted_invalid_command";
 const VITEST_INVALID: &str = "vitest_restricted_invalid_command";
 
 /// Vitest's installed entry points. `vitest.mjs` is the package's declared
-/// `bin` shim and `dist/cli.js` is the module that shim imports, so both
-/// spellings start the project's own installed runner.
+/// `bin` shim, `dist/cli.js` is the module that shim imports, and
+/// `node_modules/.bin/vitest` is the link the installer writes to the first
+/// of them, so every spelling starts the project's own installed runner.
 pub(crate) fn local_vitest_entry(argument: &str) -> bool {
     local_package_entry(argument, "vitest/vitest.mjs")
         || local_package_entry(argument, "vitest/dist/cli.js")
+        || local_bin_entry(argument, "vitest")
 }
 
 /// Mocha's installed entry points. `bin/mocha.js` is the package's declared
@@ -29,19 +31,27 @@ pub(crate) fn local_vitest_entry(argument: &str) -> bool {
 /// the extension. Both name the installed package's own entry, and the sink
 /// runs whichever of them this workspace holds, so reading only the newer
 /// spelling would send a working `node node_modules/mocha/bin/mocha` to
-/// review while the `npx mocha` beside it runs.
+/// review while the `npx mocha` beside it runs. The installer's link to that
+/// shim names the same run.
 pub(crate) fn local_mocha_entry(argument: &str) -> bool {
     local_package_entry(argument, "mocha/bin/mocha.js")
         || local_package_entry(argument, "mocha/bin/mocha")
+        || local_bin_entry(argument, "mocha")
+}
+
+/// Jest's installed entry point, and the link its installer writes beside it.
+/// `jest-cli` publishes the executable Jest's own `bin` field points at, and
+/// `node_modules/.bin/jest` is the link to it, so a call that hands either to
+/// a runtime starts this workspace's installed Jest.
+pub(crate) fn local_jest_entry(argument: &str) -> bool {
+    local_package_entry(argument, "jest/bin/jest.js") || local_bin_entry(argument, "jest")
 }
 
 /// Whether a word names one of those installed entry points. A runtime handed
 /// this path starts the workspace's own runner, whichever of the three it is.
 pub(crate) fn local_runner_entry(argument: &str) -> bool {
     let entry = argument.replace('\\', "/");
-    local_vitest_entry(&entry)
-        || local_package_entry(&entry, "jest/bin/jest.js")
-        || local_mocha_entry(&entry)
+    local_vitest_entry(&entry) || local_jest_entry(&entry) || local_mocha_entry(&entry)
 }
 
 /// Whether a call hands Bun one of those entry points as the file to run.
@@ -614,7 +624,7 @@ pub fn contained_runner_invocation(
                 .unwrap_or_default();
             let tool = if local_vitest_entry(&entry) {
                 "vitest"
-            } else if local_package_entry(&entry, "jest/bin/jest.js") {
+            } else if local_jest_entry(&entry) {
                 "jest"
             } else if local_mocha_entry(&entry) {
                 "mocha"
@@ -863,7 +873,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                 && entries.clone().any(|v| {
                     let entry = v.replace('\\', "/");
                     local_vitest_entry(&entry)
-                        || local_package_entry(&entry, "jest/bin/jest.js")
+                        || local_jest_entry(&entry)
                         || local_mocha_entry(&entry)
                 })));
     let node_tool = bun.is_none()
@@ -878,18 +888,13 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
             && entries
                 .clone()
                 .any(|v| matches!(v.as_str(), "eslint" | "tsc" | "vite" | "prettier")))
+            // The entry a `node` command names is read back to its tool
+            // through the same table the route and the sink read, so a
+            // spelling one of them admits cannot be a kind the others miss.
             || (matches!(name, "node" | "nodejs")
-                && entries.clone().any(|v| {
-                    [
-                        "eslint/bin/eslint.js",
-                        "typescript/bin/tsc",
-                        "vite/bin/vite.js",
-                        "prettier/bin/prettier.cjs",
-                        "prettier/bin-prettier.js",
-                    ]
-                    .iter()
-                    .any(|entry| local_package_entry(v, entry))
-                })));
+                && entries
+                    .clone()
+                    .any(|v| !entry_tool(&v.replace('\\', "/")).is_empty())));
     // The package-test alias travels with the other kinds so the sink reads
     // every route a command can take in one answer, and an ordinary contained
     // run never pays for a second reading to learn it is not an alias.
