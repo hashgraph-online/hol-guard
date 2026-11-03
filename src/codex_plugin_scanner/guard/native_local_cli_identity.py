@@ -43,6 +43,9 @@ _UNLISTED_OPTIONAL_KEYS = ("interpreter_name", "source_path", "path_class", "run
 # The resident gets one budget for parsing, launch derivation and hashing.
 _IDENTIFY_BUDGET_MS = 2000
 _IDENTIFY_TIMEOUT_SECONDS = 2.5
+# Recognition may identify the paste and then the file it names.
+_RECOGNIZE_BUDGET_MS = 4000
+_RECOGNIZE_TIMEOUT_SECONDS = 4.5
 _FAILURES: ContextVar[list[str] | None] = ContextVar("local_cli_identity_failures", default=None)
 
 
@@ -132,7 +135,64 @@ def native_unlisted_cli_identities(
     return records
 
 
+def _valid_recognition(result: dict[str, Any], answer: str) -> bool:
+    if answer == "candidates":
+        found = result.get("candidates")
+        return isinstance(found, list) and all(isinstance(item, str) for item in found)
+    if "identity" not in result:
+        return False
+    identity = result["identity"]
+    return (
+        (identity is None or _valid_unlisted_cli(identity))
+        and isinstance(result.get("error_code"), str)
+        and isinstance(result.get("message"), str)
+    )
+
+
+def native_local_cli_recognition(
+    command_text: str,
+    *,
+    cwd: Path,
+    home_dir: Path,
+    answer: str = "recognition",
+    guard_home: Path | None = None,
+) -> dict[str, Any] | None:
+    """Return the resident's ``local_cli_recognize`` answer for a pasted command.
+
+    ``answer="recognition"`` names the one unlisted CLI, or the reason there
+    is none; ``answer="candidates"`` returns only the spellings it would try.
+    A failed or malformed answer records a failure and yields ``None``.
+    """
+
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    request = {
+        "command_text": command_text,
+        "cwd": str(cwd),
+        "home_dir": str(home_dir),
+        "user_home": str(Path.home()),
+        "env": dict(os.environ),
+        "budget_ms": _RECOGNIZE_BUDGET_MS,
+        "answer": answer,
+    }
+    try:
+        result = native_runner_authority(
+            "local_cli_recognize",
+            request,
+            guard_home=_resolve_digest_home(guard_home),
+            timeout_seconds=_RECOGNIZE_TIMEOUT_SECONDS,
+        )
+    except NativeRunnerAuthorityError:
+        record_local_cli_identity_failure("native_local_cli_identity_unavailable")
+        return None
+    if not _valid_recognition(result, answer):
+        record_local_cli_identity_failure("native_local_cli_identity_malformed")
+        return None
+    return result
+
+
 __all__ = [
+    "native_local_cli_recognition",
     "native_unlisted_cli_identities",
     "record_local_cli_identity_failure",
     "track_local_cli_identity_failures",

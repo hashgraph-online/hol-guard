@@ -137,6 +137,7 @@ mod claude_session_start;
 mod claude_session_start_contract;
 mod claude_session_start_live;
 mod cli_copilot_resolution;
+mod cli_profiles;
 mod cli_runtime_support_op;
 #[path = "adapters/detection/cline_detect.rs"]
 mod cline_detect;
@@ -224,6 +225,7 @@ mod compound_git_segments;
 mod connector_regroup;
 mod connector_setup;
 mod connector_setup_context_op;
+mod connector_setup_rows;
 mod consumer_artifact_compose_op;
 mod consumer_artifact_compose_runtime;
 mod consumer_artifact_project_op;
