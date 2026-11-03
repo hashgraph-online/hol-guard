@@ -203,8 +203,12 @@ def _state_case(
                 if shape == "omitted":
                     continue
                 recorded[event] = 7 if shape == "path_not_str" else str(path)
-                digest = sha256(content).hexdigest()
-                digests[event] = None if shape == "digest_not_str" else ("0" * 64 if shape == "modified" else digest)
+                if shape == "digest_not_str":
+                    digests[event] = None
+                elif shape == "modified":
+                    digests[event] = "0" * 64
+                else:
+                    digests[event] = sha256(content).hexdigest()
             return recorded, digests
 
         paths, digests = plant("launchers", launcher_spec)
