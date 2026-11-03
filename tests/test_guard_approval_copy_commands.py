@@ -586,6 +586,7 @@ _QUEUE_REQUEST_ID = "2c79d707370b453886adf5b2e7e622ec"
 
 
 def _write_desktop_marker(home_dir: Path, *, app_path: Path) -> None:
+    home_dir.chmod(0o700)
     marker = home_dir / "desktop-deep-link.json"
     marker.write_text(
         json.dumps({"version": 1, "scheme": "hol-guard-desktop", "routes": ["requests"], "app_path": str(app_path)}),

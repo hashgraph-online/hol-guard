@@ -25,6 +25,7 @@ def _marker(home: Path, mode: int = 0o600, **overrides: object) -> None:
         "app_path": str(home),
     }
     marker.update(overrides)
+    home.chmod(0o700)
     path = home / "desktop-deep-link.json"
     path.write_text(json.dumps(marker), encoding="utf-8")
     path.chmod(mode)

@@ -47,6 +47,11 @@ export function QueueConnectionError(props: {
   const headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
   const detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
   const instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  // The Desktop button leads when it shows, so Retry steps back beside it.
+  let sessionRetryVariant: "outline" | undefined;
+  if (desktopUrl !== null) {
+    sessionRetryVariant = "outline";
+  }
 
   return (
     <div className="space-y-4">
@@ -60,7 +65,7 @@ export function QueueConnectionError(props: {
           {desktopUrl !== null && <ActionButton href={desktopUrl}>Open in HOL Guard Desktop</ActionButton>}
           {sessionMissing ? (
             props.onRetry !== undefined && (
-              <ActionButton onClick={props.onRetry} variant={desktopUrl === null ? undefined : "outline"}>
+              <ActionButton onClick={props.onRetry} variant={sessionRetryVariant}>
                 Retry
               </ActionButton>
             )

@@ -9,10 +9,10 @@ whether to offer the link; a marker whose app is gone offers nothing.
 from __future__ import annotations
 
 import json
-import os
 import re
-import stat
 from pathlib import Path
+
+from .private_file_io import read_private_regular_text
 
 DESKTOP_LINK_SCHEME = "hol-guard-desktop"
 _MARKER_FILE = "desktop-deep-link.json"
@@ -22,25 +22,14 @@ _REQUESTS_ROUTE = "requests"
 _REQUEST_ID = re.compile(r"[0-9a-f]{32}")
 
 
-def _private_marker_text(path: Path) -> str | None:
-    try:
-        status = path.lstat()
-    except OSError:
-        return None
-    if not stat.S_ISREG(status.st_mode) or status.st_size > _MARKER_MAX_BYTES:
-        return None
-    if os.name == "posix" and (status.st_mode & 0o077 or status.st_uid != os.getuid()):
-        return None
-    try:
-        return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return None
-
-
 def desktop_opens_requests(guard_home: Path) -> bool:
     """Whether Desktop's marker in ``guard_home`` says it opens request links."""
 
-    text = _private_marker_text(guard_home / _MARKER_FILE)
+    text = read_private_regular_text(
+        guard_home / _MARKER_FILE,
+        max_bytes=_MARKER_MAX_BYTES,
+        require_private_parent=True,
+    )
     if text is None:
         return False
     try:
