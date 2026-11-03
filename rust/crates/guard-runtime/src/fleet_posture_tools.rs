@@ -190,11 +190,7 @@ fn blind_spots(coverage: &Map<String, Value>) -> Vec<String> {
 }
 
 /// `tool_row`: one AI tool's row from its collected facts.
-fn tool_row(
-    tool: &Map<String, Value>,
-    now: i64,
-    detail: bool,
-) -> Result<ToolRow, &'static str> {
+fn tool_row(tool: &Map<String, Value>, now: i64, detail: bool) -> Result<ToolRow, &'static str> {
     let harness = tool
         .get("harness")
         .and_then(Value::as_str)
