@@ -190,3 +190,62 @@ pub(super) fn safe_iconv_arguments<'a>(
         &["from-code", "to-code"],
     )
 }
+
+/// The `ul` options that carry no value.
+const UL_READING_FLAGS: &str = "i";
+
+/// `ul` renders underlines for a terminal. `-t` names the terminal type.
+pub(super) fn safe_ul_arguments<'a>(arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
+    super::stdin_filter_options::screen_options(
+        arguments,
+        operands,
+        UL_READING_FLAGS,
+        "t",
+        &["indicated"],
+        &["terminal"],
+    )
+}
+
+/// `tsort` topologically sorts the pairs it reads and carries no option at
+/// all, so every word is an operand.
+pub(super) fn safe_tsort_arguments<'a>(
+    arguments: &'a [String],
+    operands: &mut Vec<&'a str>,
+) -> bool {
+    super::stdin_filter_options::screen_options(arguments, operands, "", "", &[], &[])
+}
+
+/// The `numfmt` options that carry no value.
+const NUMFMT_READING_FLAGS: &str = "z";
+
+/// `numfmt` rewrites the numbers it prints. Every option that takes a value
+/// names a unit, a field, a format or a delimiter. `--header` is admitted
+/// only in its bare spelling: the screen cannot tell an attached count from
+/// a value taken off the next word, and reading the operand as a count would
+/// lose the file.
+pub(super) fn safe_numfmt_arguments<'a>(
+    arguments: &'a [String],
+    operands: &mut Vec<&'a str>,
+) -> bool {
+    super::stdin_filter_options::screen_options(
+        arguments,
+        operands,
+        NUMFMT_READING_FLAGS,
+        "d",
+        &["debug", "zero-terminated", "header"],
+        &[
+            "delimiter",
+            "field",
+            "format",
+            "from",
+            "from-unit",
+            "to",
+            "to-unit",
+            "grouping",
+            "invalid",
+            "padding",
+            "round",
+            "suffix",
+        ],
+    )
+}

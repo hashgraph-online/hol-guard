@@ -11,6 +11,9 @@
 //! joins or lays out the columns of what it reads and has no option that
 //! names a file to write.
 //!
+//! `ul`, `tsort` and `numfmt` render what they read the same way,
+//! and the `zcat` family does it through a decompressor.
+//!
 //! `strings`, `hexdump`, `xxd`, `pr`, `shuf` and `iconv` belong here too:
 //! each prints a rendering of what it reads. `xxd` is the second exception
 //! that writes — `xxd INPUT OUTPUT` truncates its second operand — so only a
@@ -49,9 +52,14 @@ pub(super) fn safe_arguments(tool: &str, arguments: &[String]) -> bool {
             let mut operands: Vec<&str> = Vec::new();
             layout_arguments(tool, arguments, &mut operands) && operands.is_empty()
         }
-        "strings" | "hexdump" | "xxd" | "pr" | "shuf" | "iconv" => {
+        "strings" | "hexdump" | "xxd" | "pr" | "shuf" | "iconv" | "ul" | "tsort" | "numfmt" => {
             let mut operands: Vec<&str> = Vec::new();
             dump_arguments(tool, arguments, &mut operands) && operands.is_empty()
+        }
+        name if super::decompress_reads::decompress_viewer(name) => {
+            let mut operands: Vec<&str> = Vec::new();
+            super::decompress_reads::decompress_arguments(name, arguments, &mut operands)
+                && operands.is_empty()
         }
         _ => false,
     }
@@ -67,6 +75,9 @@ fn dump_arguments<'a>(tool: &str, arguments: &'a [String], operands: &mut Vec<&'
         "xxd" => super::dump_filter_options::safe_xxd_arguments(arguments, operands),
         "pr" => super::dump_filter_options::safe_pr_arguments(arguments, operands),
         "shuf" => super::dump_filter_options::safe_shuf_arguments(arguments, operands),
+        "ul" => super::dump_filter_options::safe_ul_arguments(arguments, operands),
+        "tsort" => super::dump_filter_options::safe_tsort_arguments(arguments, operands),
+        "numfmt" => super::dump_filter_options::safe_numfmt_arguments(arguments, operands),
         "iconv" => super::dump_filter_options::safe_iconv_arguments(arguments, operands),
         _ => false,
     }
@@ -263,6 +274,9 @@ pub(super) fn safe_file_arguments(
         "column" => super::stdin_filter_options::safe_column_arguments(arguments, &mut operands),
         "nl" | "tac" | "rev" | "fold" | "expand" | "unexpand" | "fmt" | "comm" => {
             layout_arguments(tool, arguments, &mut operands)
+        }
+        name if super::decompress_reads::decompress_viewer(name) => {
+            super::decompress_reads::decompress_arguments(name, arguments, &mut operands)
         }
         other => dump_arguments(other, arguments, &mut operands),
     };
