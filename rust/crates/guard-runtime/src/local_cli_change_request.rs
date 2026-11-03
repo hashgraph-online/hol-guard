@@ -29,7 +29,6 @@ use crate::runner_authority_op::{KindResult, ERR_INVALID};
 const MAX_PROVIDER_ACTIONS: usize = 100;
 /// `MAX_LOCAL_CLI_COMMANDS`: one hundred listed commands and the Other row.
 const MAX_LOCAL_CLI_COMMANDS: usize = 101;
-const MAX_COMMAND_DEPTH: usize = 4;
 const NAME_LIMIT: usize = 120;
 const EXAMPLE_LABEL_LIMIT: usize = 160;
 const INVALID_PROVIDER_ACTIONS: &str = "invalid_provider_actions";
@@ -39,13 +38,6 @@ static CLI_ID: LazyLock<Regex> = LazyLock::new(|| {
 });
 static TOOL_SLUG: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$").expect("provider tool slug pattern")
-});
-static COMMAND_NAME: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[A-Za-z][A-Za-z0-9_-]{0,40}$").expect("local CLI command name pattern")
-});
-static OPTION_NAME: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(?:--[A-Za-z0-9][A-Za-z0-9_-]{0,39}|-[A-Za-z0-9])$")
-        .expect("local CLI option name pattern")
 });
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {
@@ -173,15 +165,6 @@ fn provider_updates(payload: &Map<String, Value>) -> Result<Value, String> {
     Ok(Value::Array(updates))
 }
 
-/// A dotted command path, or one option a help text or script named.
-fn is_command_id(value: &str) -> bool {
-    if matches!(value, "root" | "other") || OPTION_NAME.is_match(value) {
-        return true;
-    }
-    let parts: Vec<&str> = value.split('.').collect();
-    parts.len() <= MAX_COMMAND_DEPTH && parts.iter().all(|part| COMMAND_NAME.is_match(part))
-}
-
 fn command_states(payload: &Map<String, Value>) -> Result<Value, String> {
     let entries = match payload.get("commands") {
         None | Some(Value::Null) => return Ok(json!([])),
@@ -196,7 +179,7 @@ fn command_states(payload: &Map<String, Value>) -> Result<Value, String> {
         let command_id = entry
             .get("command_id")
             .and_then(Value::as_str)
-            .filter(|command_id| is_command_id(command_id))
+            .filter(|command_id| crate::local_mcp_grant_identity::is_command_id(command_id))
             .ok_or_else(|| "invalid_command_id".to_owned())?;
         let state = entry
             .get("state")
