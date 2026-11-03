@@ -484,6 +484,22 @@ def test_doctor_notices_a_guard_home_others_can_write(
     assert payload["checks"]["files"]["paths"] == ["."]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_a_sign_out_before_any_sign_in_keeps_cloud_actions_files_private(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    previous = os.umask(0o022)
+    try:
+        assert _cli("logout", "--profile", "second", "--guard-home", str(tmp_path), "--json") == 0
+    finally:
+        os.umask(previous)
+    capsys.readouterr()
+
+    assert (tmp_path / "cloud-actions").stat().st_mode & 0o777 == 0o700
+    _, payload, _ = _doctor(tmp_path, capsys)
+    assert payload["checks"]["files"]["state"] == "private"
+
+
 def test_doctor_without_a_sign_in_reads_no_ai_tool_settings(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     code, payload, _ = _doctor(tmp_path, capsys)
 
