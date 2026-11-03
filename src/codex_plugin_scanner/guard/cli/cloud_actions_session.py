@@ -153,6 +153,15 @@ class CloudActionsSessionStore:
             return None
         return profile
 
+    def has_saved_secret(self, name: str) -> bool:
+        """Whether the profile names a saved secret, read from the profile file alone.
+
+        Unlike `load_secrets`, this never opens the secret store, so it takes no
+        lock and changes no file or permission.
+        """
+
+        return self._secret_ref(name) is not None
+
     def load_secrets(self, name: str) -> CloudActionsSecrets | None:
         ref = self._secret_ref(name)
         raw = self._secrets.get_secret(ref) if ref is not None else None

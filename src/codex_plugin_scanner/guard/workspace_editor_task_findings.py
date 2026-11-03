@@ -19,31 +19,9 @@ from __future__ import annotations
 
 from typing import Final
 
-from .workspace_rule_findings import project_rule_findings, with_rule_coverage
-
 EDITOR_TASK_DETECTOR: Final = "editor_task_v1"
-
-
-def project_editor_task_findings(result: object) -> list[dict[str, object]]:
-    """Return the well-formed findings of a native editor task result."""
-
-    return project_rule_findings(EDITOR_TASK_DETECTOR, result)
-
-
-def with_editor_task_coverage(coverage: dict[str, object], result: object) -> dict[str, object]:
-    """Add the editor task detector to a run's coverage.
-
-    A runtime without the check leaves the detector not run; a check that
-    could not read or parse every configuration, or a malformed reply, leaves
-    it incomplete. Both make the run partial. A worktree without editor or dev
-    container configuration has no inputs.
-    """
-
-    return with_rule_coverage(EDITOR_TASK_DETECTOR, coverage, result)
 
 
 __all__ = [
     "EDITOR_TASK_DETECTOR",
-    "project_editor_task_findings",
-    "with_editor_task_coverage",
 ]

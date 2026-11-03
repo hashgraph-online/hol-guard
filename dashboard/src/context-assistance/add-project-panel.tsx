@@ -1,89 +1,65 @@
 import { useId, useState } from "react";
 import { HiMiniClock, HiMiniCodeBracketSquare, HiMiniFolderPlus, HiMiniXMark } from "react-icons/hi2";
 import type { GuardApprovalGatePublicConfig } from "../guard-types";
-import { harnessDisplayName } from "../approval-center-utils";
-import { commitDashboardLocation } from "../dashboard-location";
 import { SettingsSaveProofModal, type SettingsSaveProofCredentials } from "../settings-save-proof-modal";
+import { CigarAllowFilesButton, type CigarAllowFiles } from "./allow-files";
 import { FolderPickerDialog } from "./folder-picker";
 import { MAX_PROJECT_FILES, ProjectFilesPicker } from "./project-files-picker";
 import { forgetProject, readRecentProjects, rememberProject, type RecentProject } from "./recent-projects";
 import { versionButton, versionHeading, versionLead, versionPrimary } from "./versions-view";
 
-export type AddProjectInput = { workspace: string; files: string[]; app: string; notes?: { read: boolean; propose: boolean } };
+/** A project picked here counts for every AI app, so there is no app to choose. */
+export type AddProjectInput = { workspace: string; files: string[] };
 type Props = {
-  busy: boolean; dirty: boolean; documentsAllowed: boolean; agentsAllowed: boolean; sharingAllowed: boolean; executionAllowed: boolean;
+  busy: boolean; dirty: boolean; documentsAllowed: boolean; executionAllowed: boolean;
   gate: GuardApprovalGatePublicConfig | null; error: string | null; first: boolean;
+  /** Turns on reading project files in place when it is off. */
+  allowFiles?: CigarAllowFiles;
   /** Folders that already have access, so Recent only offers ones that need adding back. */
   active?: string[];
   onGrant: (input: AddProjectInput, credentials?: SettingsSaveProofCredentials) => Promise<boolean>;
 };
-type AppOption = { value: string; label: string; description: string };
 
 const question = "text-sm font-semibold text-brand-dark";
 const folderName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-const openSettings = () => {
-  const url = new URL(window.location.href); url.searchParams.set("section", "runtime");
-  commitDashboardLocation(url.pathname + url.search + url.hash);
-};
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
-const agentAppDescriptions: Record<string, string> = {
-  codex: "Its prompts get only the files you tick. It can also ask CIGAR about the project after you connect it.",
-  "claude-code": "Its prompts get only the files you tick. It can also ask CIGAR about the project after you connect it.",
-  cursor: "This app can ask CIGAR about the project after you connect it.",
-};
-
-/** Which apps may ask CIGAR for this project. Only the dashboard exists unless agent features are on. */
-export function projectAppOptions(agentsAllowed: boolean, executionAllowed: boolean): AppOption[] {
-  return [
-    { value: "dashboard", label: "Only this page", description: "You look things up here, in Guard. Your AI apps keep getting matching files on their own." },
-    ...(agentsAllowed ? ["codex", "claude-code", "cursor"].map((name) => ({ value: name, label: harnessDisplayName(name), description: agentAppDescriptions[name] })) : []),
-    ...(executionAllowed ? ["pi", "omp"].map((name) => ({ value: name, label: harnessDisplayName(name), description: "Its prompts get only the files you tick, and commands it runs through Guard come back with project notes." })) : []),
-  ];
-}
-
-export function proofDetail(input: AddProjectInput, executionAllowed: boolean, sharingAllowed: boolean): string {
-  const who = input.app === "dashboard" ? "" : ` for ${harnessDisplayName(input.app)}`;
+export function proofDetail(input: AddProjectInput, executionAllowed: boolean): string {
   const files = input.files.length ? plural(input.files.length, "file") : "no files";
-  const notes = sharingAllowed && input.app !== "dashboard"
-    ? ` Shared notes: ${input.notes?.read ? "allowed" : "off"}${input.notes?.propose ? ", and it may suggest new ones for you to review" : ""}.` : "";
-  const execution = executionAllowed && (input.app === "pi" || input.app === "omp") ? " This does not approve any command." : "";
-  return `CIGAR can read ${files} in ${folderName(input.workspace)}${who}, plus Guard's own safety facts for that folder. Nothing else in it is opened.${execution}${notes}`;
+  const execution = executionAllowed ? " This does not approve any command." : "";
+  return `CIGAR can read ${files} in ${folderName(input.workspace)}, plus Guard's own safety facts for that folder, for prompts in every AI app. Nothing else in it is opened.${execution}`;
 }
 
-export function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, sharingAllowed, executionAllowed, gate, error, first, active = [], onGrant }: Props) {
+function summary(workspace: string, files: number, documentsAllowed: boolean): string {
+  if (documentsAllowed && files) return `Prompts about ${folderName(workspace)} will use these ${plural(files, "file")}, in every AI app.`;
+  return `No files picked, so your AI apps keep finding matching files in ${folderName(workspace)} on their own.`;
+}
+
+export function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate, error, first, allowFiles, active = [], onGrant }: Props) {
   const id = useId();
   const [workspace, setWorkspace] = useState<string | null>(null);
   const [files, setFiles] = useState<string[]>([]);
-  const [app, setApp] = useState("dashboard");
-  const [notesRead, setNotesRead] = useState(false);
-  const [notesPropose, setNotesPropose] = useState(false);
   const [picking, setPicking] = useState(false);
   const [proofOpen, setProofOpen] = useState(false);
   const [recent, setRecent] = useState<RecentProject[]>(() => readRecentProjects());
   const [preset, setPreset] = useState<string[] | null>(null);
   const shortcuts = recent.filter((project) => !active.includes(project.workspace));
-  const apps = projectAppOptions(agentsAllowed, executionAllowed);
-  const chosenApp = apps.some((option) => option.value === app) ? app : "dashboard";
-  const input: AddProjectInput | null = workspace ? {
-    workspace, files: documentsAllowed ? files : [], app: chosenApp,
-    notes: sharingAllowed && chosenApp !== "dashboard" ? { read: notesRead, propose: notesPropose } : undefined,
-  } : null;
+  const input: AddProjectInput | null = workspace ? { workspace, files: documentsAllowed ? files : [] } : null;
 
   async function grant(credentials?: SettingsSaveProofCredentials) {
     if (!input) return;
     if (await onGrant(input, credentials)) {
-      setRecent(rememberProject(input)); setProofOpen(false); setWorkspace(null); setFiles([]); setPreset(null);
+      setRecent(rememberProject({ ...input, app: "dashboard" })); setProofOpen(false); setWorkspace(null); setFiles([]); setPreset(null);
     }
   }
 
   function reuse(project: RecentProject) {
-    setPreset(project.files); setFiles(project.files); setApp(project.app); setWorkspace(project.workspace);
+    setPreset(project.files); setFiles(project.files); setWorkspace(project.workspace);
   }
 
   return <section className="space-y-5 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-6" aria-labelledby={`${id}-add`}>
     <div><h3 id={`${id}-add`} className={versionHeading}>{first && !shortcuts.length ? "Add your first project" : "Add a project"}</h3>
-      <p className={versionLead}>Choose a folder and the notes CIGAR may read. Secret files, like passwords and keys, are always skipped.</p></div>
+      <p className={versionLead}>Choose a folder and tick the files CIGAR should read. Secret files, like passwords and keys, are always skipped.</p></div>
 
     <fieldset disabled={busy || dirty} className="space-y-6">
       <legend className="sr-only">Add a project</legend>
@@ -104,42 +80,26 @@ export function AddProjectPanel({ busy, dirty, documentsAllowed, agentsAllowed, 
       {!workspace && shortcuts.length ? <RecentProjects projects={shortcuts} onReuse={reuse} onForget={(path) => setRecent(forgetProject(path))} /> : null}
 
       {workspace ? <div className="guard-surface-in space-y-2.5">
-        <h4 className={question}>What should CIGAR read?</h4>
+        <h4 className={question}>Which files should CIGAR read?</h4>
         {documentsAllowed ? <ProjectFilesPicker workspace={workspace} selected={files} onChange={setFiles} disabled={busy || dirty} preset={preset} />
-          : <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-surface-1/70 px-4 py-3">
-            <p className="min-w-0 flex-1 text-sm leading-6 text-brand-dark/70">Reading project files is off, so CIGAR uses only Guard's own safety facts here. Turn on “Allow selected workspace documents” in Settings to pick notes.</p>
-            <button type="button" className={versionButton} onClick={openSettings}>Open Settings</button>
+          : <div className="space-y-3 rounded-xl bg-surface-1/70 px-4 py-4">
+            <p className="text-sm leading-6 text-brand-dark/75">Reading project files is off right now. Turn it on to pick files here and to give your AI apps matching files with each prompt.</p>
+            {allowFiles ? <CigarAllowFilesButton allow={allowFiles} className={versionPrimary} /> : null}
           </div>}
       </div> : null}
-
-      {workspace && apps.length > 1 ? <fieldset className="guard-surface-in space-y-2.5">
-        <legend className={question}>Which app can use it?</legend>
-        <div className="grid gap-2 sm:grid-cols-2">{apps.map((option) => <label key={option.value}
-          className="flex cursor-pointer gap-3 rounded-xl border border-brand-dark/10 p-3 transition-colors hover:border-brand-dark/25 has-[:checked]:border-brand-blue/50 has-[:checked]:bg-brand-blue/[0.04] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-blue/40">
-          <input type="radio" name={`${id}-app`} value={option.value} className="mt-0.5 size-4 shrink-0 accent-brand-blue" checked={chosenApp === option.value} onChange={() => setApp(option.value)} />
-          <span className="min-w-0"><span className="block text-sm font-semibold text-brand-dark">{option.label}</span>
-            <span className="mt-0.5 block text-xs leading-5 text-brand-dark/60">{option.description}</span></span>
-        </label>)}</div>
-        {sharingAllowed && chosenApp !== "dashboard" ? <div className="space-y-0.5 rounded-xl bg-surface-1/70 px-3 py-1.5 text-sm text-brand-dark/80">
-          <label className="flex min-h-11 cursor-pointer items-center gap-3"><input type="checkbox" className="size-4 accent-brand-blue" checked={notesRead}
-            onChange={(event) => { setNotesRead(event.target.checked); if (!event.target.checked) setNotesPropose(false); }} />Let it read shared notes you approved</label>
-          <label className="flex min-h-11 cursor-pointer items-center gap-3"><input type="checkbox" className="size-4 accent-brand-blue" checked={notesPropose} disabled={!notesRead}
-            onChange={(event) => setNotesPropose(event.target.checked)} />Let it suggest new notes for you to review</label>
-        </div> : null}
-      </fieldset> : null}
 
       {dirty ? <p role="status" className="cigar-note">Save your preferences first, then add the project.</p> : null}
       {workspace ? <div className="flex flex-wrap items-center gap-3 border-t border-brand-dark/[0.07] pt-4">
         <button className={versionPrimary} type="button" disabled={files.length > MAX_PROJECT_FILES}
-          onClick={() => { if (gate?.enabled) setProofOpen(true); else void grant(); }}>Give CIGAR access</button>
-        <p className="text-xs leading-5 text-brand-dark/60">{documentsAllowed && files.length ? `CIGAR will read ${plural(files.length, "file")} from ${folderName(workspace)}.` : `CIGAR will use Guard's safety facts for ${folderName(workspace)}.`}</p>
+          onClick={() => { if (gate?.enabled) setProofOpen(true); else void grant(); }}>Add project</button>
+        <p className="text-xs leading-5 text-brand-dark/60">{summary(workspace, input?.files.length ?? 0, documentsAllowed)}</p>
       </div> : null}
     </fieldset>
 
     <FolderPickerDialog open={picking} initialPath={workspace} onCancel={() => setPicking(false)}
       onChoose={(path) => { setPicking(false); if (path !== workspace) { setPreset(null); setFiles([]); setWorkspace(path); } }} />
-    <SettingsSaveProofModal open={proofOpen && !!input} mode="verify-save" gate={gate} title="Confirm CIGAR access"
-      detail={input ? proofDetail(input, executionAllowed, sharingAllowed) : ""} confirmLabel="Give access"
+    <SettingsSaveProofModal open={proofOpen && !!input} mode="verify-save" gate={gate} title="Add this project"
+      detail={input ? proofDetail(input, executionAllowed) : ""} confirmLabel="Add project"
       error={error} pending={busy} onCancel={() => { if (!busy) setProofOpen(false); }} onConfirm={(credentials) => void grant(credentials)} />
   </section>;
 }
@@ -150,12 +110,11 @@ export function RecentProjects({ projects, onReuse, onForget }: { projects: Rece
     <h4 className={question}>Recent projects</h4>
     <ul className="grid gap-2 sm:grid-cols-2">{projects.map((project) => {
       const name = folderName(project.workspace);
-      const who = project.app === "dashboard" ? "this page" : harnessDisplayName(project.app);
       return <li key={project.workspace} className="flex items-center rounded-xl border border-brand-dark/10 bg-white transition-colors hover:border-brand-dark/25 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-blue/40">
         <button type="button" className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-l-xl p-2.5 text-left focus-visible:outline-none" title={project.workspace} onClick={() => onReuse(project)}>
           <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-dark/[0.05] text-brand-dark/55"><HiMiniClock className="size-4" /></span>
           <span className="min-w-0"><span className="block truncate text-sm font-semibold text-brand-dark">{name}</span>
-            <span className="block truncate text-xs text-brand-dark/60">{plural(project.files.length, "file")} · for {who}</span></span>
+            <span className="block truncate text-xs text-brand-dark/60">{project.files.length ? plural(project.files.length, "file") : "Guard's safety facts only"}</span></span>
         </button>
         <button type="button" aria-label={`Remove ${name} from this list`} className="mr-1.5 flex size-9 shrink-0 items-center justify-center rounded-lg text-brand-dark/40 hover:bg-brand-dark/[0.05] hover:text-brand-dark focus-visible:outline-none" onClick={() => onForget(project.workspace)}>
           <HiMiniXMark className="size-4" /></button>

@@ -119,6 +119,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         | "decision_build" => crate::decision_authority_op::dispatch(kind, args),
         "cli_runtime_support" => crate::cli_runtime_support_op::dispatch(args),
         "cli_profiles" => crate::cli_profiles::dispatch(args),
+        "connector_regroup" => crate::connector_regroup::dispatch(args),
         "mcp_policy_input" => crate::mcp_policy_input::dispatch(args),
         "approval_copy" => crate::approval_copy::dispatch(args),
         "workspace_assessment_build" | "workspace_assessment_fit" => {
@@ -132,6 +133,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "consumer_mode_contract" => crate::consumer_mode_contract::dispatch(args),
         "surface_server_handshake" => crate::surface_server_handshake::dispatch(args),
         "trust_attestation_shape" => crate::trust_attestation_shape::dispatch(args),
+        "network_status_build" => crate::network_status_build::dispatch(args),
         "mcp_registry_page" => crate::mcp_registry_page::dispatch(args),
         "review_event_decode" => crate::review_event_decode::dispatch(args),
         "review_policy_memory_plan" => crate::review_policy_memory_plan::dispatch(args),

@@ -464,3 +464,19 @@ def test_no_runtime_falls_back_with_its_own_reason(monkeypatch: pytest.MonkeyPat
     assert payload["reason_code"] == "native-runtime-unavailable"
     assert payload["protection_active"] is False
     assert payload["backends"] == []
+
+
+def test_a_native_outage_reports_no_protection(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    def unavailable(*_: object, **__: object) -> dict[str, object]:
+        raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    status = build_network_status(platform_name="linux", legacy_domain_action="sandbox-required")
+
+    assert status["protection_active"] is False
+    assert status["effective_grade"] == "unavailable"
+    assert status["reason_code"] == "native-runtime-unavailable"
+    assert status["backends"] == []
+    assert isinstance(status["legacy_domain_policy"], dict)
