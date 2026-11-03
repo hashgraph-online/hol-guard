@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.rel-time",
+  "version": "1.2.11",
+  "name": "Rel-Time Protocol",
+  "description": "Reviews the Rel-Time zero-knowledge VDF and Bitcoin timestamping tools that spend hash credits or write proof artifacts to disk: reltime_anchor, reltime_anchor_file, reltime_anchor_directory and reltime_download_certificate. Local SHA-256 hashing, Bitcoin ledger verification, account status and bit-for-bit forensic integrity audits keep Guard's usual handling. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.relsun369-dev",
+    "displayName": "Rel-Time Protocol",
+    "url": "https://github.com/relsun369-dev/reltime-mcp"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniBolt", "background": "#0F172A" },
+  "homepage": "https://rel-time.com",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "@rel-time/mcp-server"
+  },
+  "riskClasses": [
+    "local-file-read",
+    "local-file-write",
+    "external-credit-spend",
+    "external-ledger-anchor"
+  ],
+  "tools": [
+    { "name": "reltime_anchor", "state": "review" },
+    { "name": "reltime_anchor_file", "state": "review" },
+    { "name": "reltime_anchor_directory", "state": "review" },
+    { "name": "reltime_download_certificate", "state": "review" },
+    { "name": "reltime_hash_file", "state": "inherit" },
+    { "name": "reltime_verify_hash", "state": "inherit" },
+    { "name": "reltime_get_status", "state": "inherit" },
+    { "name": "reltime_audit_file", "state": "inherit" },
+    { "name": "reltime_audit_folder", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/relsun369-dev/reltime-mcp",
+    "https://www.npmjs.com/package/@rel-time/mcp-server",
+    "https://rel-time.com",
+    "https://rel-time.com/docs/api"
+  ],
+  "saferAlternatives": [
+    "All file hashing in reltime_hash_file, reltime_anchor_file, reltime_audit_file and reltime_audit_folder runs locally via SHA-256; raw file contents never leave the machine.",
+    "Use reltime_get_status, reltime_verify_hash, reltime_audit_file and reltime_audit_folder to inspect credit balance and verify ledger proofs before anchoring new batches."
+  ]
+}
