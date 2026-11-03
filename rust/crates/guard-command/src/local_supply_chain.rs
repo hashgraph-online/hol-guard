@@ -1966,9 +1966,6 @@ pub fn build_local_supply_chain_posture(
         .synced_policy_payload(store)
         .and_then(|p| dict_payload(Some(&p)))
         .unwrap_or_default();
-    // Legacy team-policy siblings are not signed policy-bundle content and
-    // therefore cannot contribute enforcement or managed-policy status.
-    let team_policy_pack: Map<String, Value> = Map::new();
     let cached_bundle = workspace_id
         .as_deref()
         .and_then(|id| store.get_cached_supply_chain_bundle(id));
@@ -2001,16 +1998,9 @@ pub fn build_local_supply_chain_posture(
         .or_else(|| string_value(remote_policy.get("package_script_action")));
     let remote_cloud_advisory_action = string_value(remote_policy.get("cloudAdvisoryAction"))
         .or_else(|| string_value(remote_policy.get("cloud_advisory_action")));
-    let managed_by_cloud = !remote_policy.is_empty() || !team_policy_pack.is_empty();
-    let managed_label = string_value(team_policy_pack.get("name")).or_else(|| {
-        if managed_by_cloud {
-            Some("Guard Cloud sync".to_string())
-        } else {
-            None
-        }
-    });
-    let managed_updated_at = string_value(team_policy_pack.get("updatedAt"))
-        .or_else(|| string_value(remote_policy.get("updatedAt")));
+    let managed_by_cloud = !remote_policy.is_empty();
+    let managed_label = managed_by_cloud.then(|| "Guard Cloud sync".to_string());
+    let managed_updated_at = string_value(remote_policy.get("updatedAt"));
 
     let mut posture = Map::new();
     posture.insert("generated_at".into(), json!(now_text));
@@ -2055,7 +2045,6 @@ pub fn build_local_supply_chain_posture(
                 .or_else(|| resolve_risk_action(config, Some("package_script"), None)),
             "managed_by_cloud": managed_by_cloud,
             "remote_policy_active": !remote_policy.is_empty(),
-            "team_policy_active": !team_policy_pack.is_empty(),
             "managed_label": managed_label,
             "managed_updated_at": managed_updated_at,
         }),
