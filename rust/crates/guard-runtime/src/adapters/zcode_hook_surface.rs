@@ -23,7 +23,7 @@
 use serde_json::{json, Value};
 
 use super::hook_removal_prune::write_indented;
-use super::pyjson::{self, JsonFailure, PyVal, LONE_SURROGATE_MARK};
+use super::pyjson::{self, JsonFailure, PyVal, SurrogateMapped};
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 use super::zcode_artifacts::MANAGED_MARKER;
@@ -66,8 +66,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         |hooks: &PyVal| recorded_enabled(hooks, path, &map["history"], &map["managed_config_path"]);
     if op == "uninstall" {
         // `_json_payload`: text that is not a JSON object reads as `{}`.
-        let payload = read_payload(text.unwrap_or_default())?.unwrap_or_default();
-        return Ok(json!({ "text": uninstall_surface(payload, saved)? }));
+        let (payload, lone) = read_payload(text.unwrap_or_default())?.unwrap_or_default();
+        return Ok(json!({ "text": uninstall_surface(payload, lone, saved)? }));
     }
     let desktop = map["desktop"].as_bool().ok_or(ERR_INVALID)?;
     let matchers = map["matchers"]
@@ -78,12 +78,12 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         .collect::<Result<Vec<_>, _>>()?;
     let command = map["command"].as_str().ok_or(ERR_INVALID)?;
     let handlers = guard_handlers(command, &map["timeouts"])?;
-    let mut payload = Dict::new();
+    let (mut payload, mut lone) = (Dict::new(), false);
     if let Some(text) = text {
         let Some(read) = read_payload(text)? else {
             return Ok(json!({ "refusal": "not_object" }));
         };
-        payload = read;
+        (payload, lone) = read;
         if desktop {
             for key in ["mcp", "plugins"] {
                 if !matches!(lookup(&payload, key), Some(PyVal::Dict(_))) {
@@ -96,7 +96,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         Some(hooks @ PyVal::Dict(_)) => hooks.clone(),
         _ => PyVal::Dict(Dict::new()),
     };
-    let enabled = enabled_text(&hooks, saved(&hooks))?;
+    let enabled = enabled_text(&hooks, saved(&hooks), lone)?;
     if matches!(hooks.get("enabled"), Some(PyVal::Bool(false))) && has_handlers(&hooks) {
         return Ok(json!({ "refusal": "hooks_disabled" }));
     }
@@ -104,15 +104,21 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     // Each surface registers hooks only after its own `hooks.enabled` opt-in.
     set_key(&mut after, "enabled", PyVal::Bool(true));
     set_key(&mut payload, "hooks", PyVal::Dict(after));
-    Ok(json!({ "text": render_file(payload)?, "enabled": enabled }))
+    Ok(json!({ "text": render_file(payload, lone)?, "enabled": enabled }))
 }
 
 /// `json.loads(text)` when it is an object, `None` for text that is not one
 /// (`json.JSONDecodeError` or another value); input CPython raises anything
-/// else on is refused.
-fn read_payload(text: &str) -> Result<Option<Dict>, &'static str> {
-    match pyjson::parse_marking_lone_surrogates(text) {
-        Ok(PyVal::Dict(entries)) => Ok(Some(entries)),
+/// else on is refused. The flag says whether a lone surrogate escape was
+/// mapped, so only a mapped one is refused when rendered and a genuine
+/// character in that range still round-trips.
+fn read_payload(text: &str) -> Result<Option<(Dict, bool)>, &'static str> {
+    match pyjson::parse_mapping_lone_surrogates(text) {
+        Ok(SurrogateMapped {
+            value: PyVal::Dict(entries),
+            mapped,
+            ..
+        }) => Ok(Some((entries, mapped))),
         Ok(_) | Err(JsonFailure::Syntax) => Ok(None),
         Err(_) => Err(ERR_INVALID),
     }
@@ -152,7 +158,11 @@ fn guard_handlers(command: &str, timeouts: &Value) -> Result<Dict, &'static str>
 
 /// The pre-install `enabled` record as JSON text: the saved one, else the
 /// live flag (any JSON value, rendered the way Python saves it).
-pub(crate) fn enabled_text(hooks: &PyVal, saved: Value) -> Result<String, &'static str> {
+pub(crate) fn enabled_text(
+    hooks: &PyVal,
+    saved: Value,
+    lone: bool,
+) -> Result<String, &'static str> {
     if !saved.is_null() {
         return serde_json::to_string(&saved).map_err(|_| ERR_INVALID);
     }
@@ -161,13 +171,14 @@ pub(crate) fn enabled_text(hooks: &PyVal, saved: Value) -> Result<String, &'stat
         ("present".to_owned(), PyVal::Bool(value.is_some())),
         ("value".to_owned(), value.cloned().unwrap_or(PyVal::Null)),
     ];
-    render(&PyVal::Dict(record))
+    render(&PyVal::Dict(record), lone)
 }
 
 /// One uninstalled surface's new text, `None` when nothing changed or the
 /// file holds no `hooks` object.
 fn uninstall_surface(
     mut payload: Dict,
+    lone: bool,
     saved: impl Fn(&PyVal) -> Value,
 ) -> Result<Option<String>, &'static str> {
     let Some(hooks) = lookup(&payload, "hooks").filter(|hooks| hooks.as_dict().is_some()) else {
@@ -195,13 +206,15 @@ fn uninstall_surface(
         PyVal::Dict(entries) if entries.is_empty() => remove_key(&mut payload, "hooks"),
         after => set_key(&mut payload, "hooks", after),
     }
-    render_file(payload).map(Some)
+    render_file(payload, lone).map(Some)
 }
 
 /// `json.dumps(value, indent=2)`. A lone surrogate escape, which CPython
-/// keeps and writes back, has no Rust string form, so it is refused.
-fn render(value: &PyVal) -> Result<String, &'static str> {
-    if marked(value) {
+/// keeps and writes back, has no Rust string form, so a value carrying one
+/// is refused. When the parse mapped one, any character in the mapped range
+/// is treated as one, since the two can no longer be told apart.
+fn render(value: &PyVal, lone: bool) -> Result<String, &'static str> {
+    if lone && marked(value) {
         return Err(ERR_INVALID);
     }
     let mut out = Vec::new();
@@ -209,17 +222,17 @@ fn render(value: &PyVal) -> Result<String, &'static str> {
     String::from_utf8(out).map_err(|_| ERR_INVALID)
 }
 
-fn render_file(payload: Dict) -> Result<String, &'static str> {
-    render(&PyVal::Dict(payload)).map(|text| text + "\n")
+fn render_file(payload: Dict, lone: bool) -> Result<String, &'static str> {
+    render(&PyVal::Dict(payload), lone).map(|text| text + "\n")
 }
 
 fn marked(value: &PyVal) -> bool {
     match value {
-        PyVal::Str(text) => text.contains(LONE_SURROGATE_MARK),
+        PyVal::Str(text) => text.chars().any(pyjson::in_surrogate_plane),
         PyVal::List(items) => items.iter().any(marked),
         PyVal::Dict(entries) => entries
             .iter()
-            .any(|(key, item)| key.contains(LONE_SURROGATE_MARK) || marked(item)),
+            .any(|(key, item)| key.chars().any(pyjson::in_surrogate_plane) || marked(item)),
         _ => false,
     }
 }

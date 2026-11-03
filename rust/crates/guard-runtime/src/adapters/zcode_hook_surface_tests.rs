@@ -111,6 +111,19 @@ fn refuses_a_lone_surrogate_it_would_write_back() {
 }
 
 #[test]
+fn keeps_a_genuine_noncharacter_and_refuses_a_lone_surrogate_key() {
+    for text in [r#"{"theme": "\ufdd0"}"#, "{\"theme\": \"\u{fdd0}\"}"] {
+        let answer = dispatch(&install_request(json!(text))).expect("rendered");
+        assert!(answer["text"]
+            .as_str()
+            .expect("text")
+            .contains("\"theme\": \"\\ufdd0\""));
+    }
+    let key = json!(r#"{"\udc00": 1}"#);
+    assert_eq!(dispatch(&install_request(key)), Err(ERR_INVALID));
+}
+
+#[test]
 fn refuses_malformed_requests() {
     let good = install_request(Value::Null);
     assert!(dispatch(&good).is_ok());

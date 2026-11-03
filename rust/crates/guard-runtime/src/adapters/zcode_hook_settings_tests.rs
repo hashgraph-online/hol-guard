@@ -56,7 +56,7 @@ fn replays_vectors_recorded_from_the_python_adapter() {
             &request["history"],
             &request["managed_config_path"],
         );
-        let enabled = enabled_text(&hooks, saved).expect("enabled record");
+        let enabled = enabled_text(&hooks, saved, false).expect("enabled record");
         let enabled: Value = serde_json::from_str(&enabled).expect("enabled json");
         assert_eq!(enabled, expected["enabled"], "{name}");
     }
