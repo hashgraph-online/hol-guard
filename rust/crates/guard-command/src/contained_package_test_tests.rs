@@ -395,3 +395,44 @@ fn an_aliased_verb_resolves_the_manifest_test_entry() {
     // yarn keeps the literal reading: `t` is a script it does not declare.
     assert!(script_tokens("yarn", &words(&["t"]), Some(&declared)).is_err());
 }
+
+#[test]
+fn npms_trailing_reporting_option_resolves_the_same_script() {
+    // The admission routes `npm test --silent` to this sink because npm takes
+    // its own configuration options anywhere on the line and forwards none of
+    // them to the script. The sink has to read the tail the same way: a
+    // refusal here turns a run the admission admitted into an unauthorized
+    // one, which stops the command rather than merely reviewing it.
+    let manifest = scripts(json!({"test": "node --test"}));
+    for command in [
+        words(&["npm", "test", "--silent"]),
+        words(&["npm", "test", "-s"]),
+        words(&["npm", "test", "--loglevel=error"]),
+        words(&["npm", "test", "--loglevel", "error"]),
+        words(&["npm", "run", "test", "--silent"]),
+    ] {
+        assert_eq!(
+            resolve(&command, Some(&manifest)).unwrap(),
+            words(&["node", "--test"]),
+            "{command:?}"
+        );
+    }
+    // The words after `--` are the script's own at either spelling.
+    assert_eq!(
+        resolve(
+            &words(&["npm", "test", "--silent", "--", "test/sample.test.js"]),
+            Some(&manifest)
+        )
+        .unwrap(),
+        words(&["node", "--test", "test/sample.test.js"])
+    );
+    // pnpm, yarn and Bun pass the same word through to the script, so the
+    // sink keeps refusing it there exactly as the admission does.
+    for command in [
+        words(&["pnpm", "test", "--silent"]),
+        words(&["yarn", "test", "--silent"]),
+        words(&["bun", "run", "test", "--silent"]),
+    ] {
+        assert!(resolve(&command, Some(&manifest)).is_err(), "{command:?}");
+    }
+}
