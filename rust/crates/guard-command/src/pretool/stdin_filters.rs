@@ -10,6 +10,10 @@
 //! `paste`, `join` and `column` belong here for the same reason: each one
 //! joins or lays out the columns of what it reads and has no option that
 //! names a file to write.
+//!
+//! `nl`, `tac`, `rev`, `fold`, `expand`, `unexpand`, `fmt` and `comm` number,
+//! reverse, wrap, retab, reflow or compare the lines of what they read, and
+//! none of them has an option that names a file to write either.
 
 /// Enough operands for an ordinary command line, not a fan-out.
 const MAX_INPUTS: usize = 16;
@@ -36,6 +40,27 @@ pub(super) fn safe_arguments(tool: &str, arguments: &[String]) -> bool {
             super::stdin_filter_options::safe_column_arguments(arguments, &mut operands)
                 && operands.is_empty()
         }
+        "nl" | "tac" | "rev" | "fold" | "expand" | "unexpand" | "fmt" => {
+            let mut operands: Vec<&str> = Vec::new();
+            layout_arguments(tool, arguments, &mut operands) && operands.is_empty()
+        }
+        _ => false,
+    }
+}
+
+/// One layout filter's option line. Each of these reshapes the lines of what
+/// it reads; none of them has an option that names a file to write.
+fn layout_arguments<'a>(tool: &str, arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
+    match tool {
+        "nl" => super::stdin_filter_options::safe_nl_arguments(arguments, operands),
+        "tac" => super::stdin_filter_options::safe_tac_arguments(arguments, operands),
+        "rev" => super::stdin_filter_options::safe_rev_arguments(arguments, operands),
+        "fold" => super::stdin_filter_options::safe_fold_arguments(arguments, operands),
+        "expand" | "unexpand" => {
+            super::stdin_filter_options::safe_expand_arguments(arguments, operands)
+        }
+        "fmt" => super::stdin_filter_options::safe_fmt_arguments(arguments, operands),
+        "comm" => super::stdin_filter_options::safe_comm_arguments(arguments, operands),
         _ => false,
     }
 }
@@ -213,12 +238,15 @@ pub(super) fn safe_file_arguments(
         "paste" => super::stdin_filter_options::safe_paste_arguments(arguments, &mut operands),
         "join" => super::stdin_filter_options::safe_join_arguments(arguments, &mut operands),
         "column" => super::stdin_filter_options::safe_column_arguments(arguments, &mut operands),
+        "nl" | "tac" | "rev" | "fold" | "expand" | "unexpand" | "fmt" | "comm" => {
+            layout_arguments(tool, arguments, &mut operands)
+        }
         _ => false,
     };
     let maximum = match tool {
         "uniq" => 1,
-        // `join` pairs exactly two sorted inputs.
-        "join" => 2,
+        // `join` pairs exactly two sorted inputs, and `comm` compares two.
+        "join" | "comm" => 2,
         _ => MAX_INPUTS,
     };
     // A file operand is opened, so it takes the read proof `cat` takes, and

@@ -58,6 +58,27 @@ fn a_filter_reading_a_proven_file_needs_no_review() {
         "column -t Cargo.toml",
         "column -t -s$'\\t' Cargo.toml",
         "column -t -s, -o ' | ' Cargo.toml",
+        // `nl`, `tac`, `rev`, `fold`, `expand`, `unexpand`, `fmt` and `comm`
+        // number, reverse, wrap, retab, reflow or compare the lines of what
+        // they read, and their value-taking options carry a separator, a
+        // width, a prefix or a set of tab stops.
+        "nl Cargo.toml",
+        "nl -ba -w2 Cargo.toml",
+        "nl -s$'\\t' Cargo.toml",
+        "nl --number-separator=$'\\t' --number-width=3 Cargo.toml",
+        "tac Cargo.toml",
+        "tac -s$'\\t' Cargo.toml",
+        "tac -r -s '^#' Cargo.toml",
+        "rev Cargo.toml",
+        "fold -w 40 Cargo.toml",
+        "fold -s -w40 Cargo.toml",
+        "expand -t4 Cargo.toml",
+        "unexpand -a -t 4 Cargo.toml",
+        "fmt -w 72 Cargo.toml",
+        "fmt -72 Cargo.toml",
+        "fmt -p '# ' -s Cargo.toml",
+        "comm -12 Cargo.toml Cargo.toml",
+        "comm --output-delimiter=, Cargo.toml Cargo.toml",
     ] {
         assert!(allowed(command), "{command}");
     }
@@ -99,6 +120,14 @@ fn a_filter_that_could_write_or_reach_further_still_takes_review() {
         "join -t$SEPARATOR Cargo.toml Cargo.toml",
         "column -t -s$'\\t' --json Cargo.toml",
         "paste --output-delimiter=x Cargo.toml",
+        // The layout filters reach no further either: `comm` compares exactly
+        // two inputs, an unread option keeps the command under review, and a
+        // parameter is still a reference the shell has not written out.
+        "nl -s$'\\t' /nonexistent-guard-fixture/secret.key",
+        "comm -12 Cargo.toml Cargo.toml Cargo.toml",
+        "tac -s$SEPARATOR Cargo.toml",
+        "fmt --output=wrapped.txt Cargo.toml",
+        "fold --write=40 Cargo.toml",
     ] {
         assert!(!allowed(command), "{command}");
     }
@@ -122,6 +151,14 @@ fn a_filter_reading_a_file_without_a_verified_context_takes_review() {
         "paste Cargo.toml Cargo.toml",
         "join Cargo.toml Cargo.toml",
         "column -t Cargo.toml",
+        "nl Cargo.toml",
+        "tac Cargo.toml",
+        "rev Cargo.toml",
+        "fold -w 40 Cargo.toml",
+        "expand Cargo.toml",
+        "unexpand Cargo.toml",
+        "fmt Cargo.toml",
+        "comm -12 Cargo.toml Cargo.toml",
     ] {
         assert!(!allowed_without_context(command), "{command}");
     }
