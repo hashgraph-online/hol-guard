@@ -12,9 +12,10 @@ const MAX_INPUTS: usize = 16;
 
 pub(super) fn safe_arguments(tool: &str, arguments: &[String]) -> bool {
     match tool {
-        "sort" => arguments
-            .iter()
-            .all(|argument| short_flags(argument, "bnrufdhMVs")),
+        "sort" => {
+            let mut operands: Vec<&str> = Vec::new();
+            safe_sort_arguments(arguments, &mut operands) && operands.is_empty()
+        }
         "uniq" => arguments
             .iter()
             .all(|argument| short_flags(argument, "cdui")),
@@ -130,7 +131,7 @@ fn cut_arguments<'a>(arguments: &'a [String], operands: &mut Vec<&'a str>) -> bo
             attached
         };
         if flag == 'd' {
-            if delimiter || value.chars().count() != 1 || value.chars().any(char::is_control) {
+            if delimiter || !single_delimiter(value) {
                 return false;
             }
             delimiter = true;
@@ -186,7 +187,7 @@ pub(super) fn safe_file_arguments(
 ) -> bool {
     let mut operands: Vec<&str> = Vec::new();
     let options_proven = match tool {
-        "sort" => partition_short_flags(arguments, "bnrufdhMVs", &mut operands),
+        "sort" => safe_sort_arguments(arguments, &mut operands),
         "uniq" => partition_short_flags(arguments, "cdui", &mut operands),
         "cut" => cut_arguments(arguments, &mut operands),
         _ => false,
@@ -198,6 +199,133 @@ pub(super) fn safe_file_arguments(
         && operands
             .iter()
             .all(|operand| super::safe_reads::command_read_target(operand, context, false))
+}
+
+/// One delimiter character. A tab is the separator tabular output really
+/// carries, and the shell writes it out before Guard reads the word — `-d
+/// $'\t'` and a quoted tab both arrive here as the character itself — so it
+/// is admitted by name while the other control characters stay out.
+fn single_delimiter(value: &str) -> bool {
+    let mut characters = value.chars();
+    let Some(character) = characters.next() else {
+        return false;
+    };
+    characters.next().is_none() && (character == '\t' || !character.is_control())
+}
+
+/// The `sort` options that carry no value. Its one writing option is
+/// `-o`/`--output`; `-T`/`--temporary-directory` names a directory Guard has
+/// not read and `--compress-program` hands the run to another program, so the
+/// screen names the reading options instead of allowing every leading dash.
+const SORT_READING_FLAGS: &str = "bCcdfghiMmnrsuVz";
+
+/// The value a `sort` key, separator, buffer size or worker count carries.
+/// It describes how to order the input rather than naming anything to open,
+/// so a short literal is admitted and an expansion is not.
+fn safe_sort_value(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 32
+        && !value.contains(['$', '`', '\\', '\'', '"'])
+        && value
+            .chars()
+            .all(|character| character == '\t' || !character.is_control())
+}
+
+/// `sort` reshapes what it reads and writes only to standard output. `-k`,
+/// `-t`, `-S` and the long `--key`, `--field-separator`, `--buffer-size` and
+/// `--parallel` take a value, attached or as the next word, so a key
+/// definition or a field separator is not mistaken for a file to read.
+fn safe_sort_arguments<'a>(arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
+    let mut after_options = false;
+    let mut expecting_value = false;
+    for argument in arguments {
+        let value = argument.as_str();
+        if expecting_value {
+            if !safe_sort_value(value) {
+                return false;
+            }
+            expecting_value = false;
+            continue;
+        }
+        if after_options || !value.starts_with('-') || value == "-" {
+            operands.push(value);
+            continue;
+        }
+        if value == "--" {
+            after_options = true;
+            continue;
+        }
+        if let Some(long) = value.strip_prefix("--") {
+            if !safe_sort_long_option(long, &mut expecting_value) {
+                return false;
+            }
+            continue;
+        }
+        if !safe_sort_short_flags(&value[1..], &mut expecting_value) {
+            return false;
+        }
+    }
+    !expecting_value
+}
+
+/// One long `sort` option, with its value attached by `=` or still to come.
+fn safe_sort_long_option(long: &str, expecting_value: &mut bool) -> bool {
+    let (name, attached) = match long.split_once('=') {
+        Some((name, attached)) => (name, Some(attached)),
+        None => (long, None),
+    };
+    match name {
+        "key" | "field-separator" | "buffer-size" | "parallel" => match attached {
+            Some(attached) => safe_sort_value(attached),
+            None => {
+                *expecting_value = true;
+                true
+            }
+        },
+        // `--check` reports on its own; `--sort` always carries its word.
+        "check" => true,
+        "sort" => attached.is_some_and(safe_sort_value),
+        "ignore-leading-blanks"
+        | "dictionary-order"
+        | "ignore-case"
+        | "general-numeric-sort"
+        | "ignore-nonprinting"
+        | "month-sort"
+        | "human-numeric-sort"
+        | "numeric-sort"
+        | "reverse"
+        | "stable"
+        | "unique"
+        | "version-sort"
+        | "zero-terminated"
+        | "merge"
+        | "debug" => attached.is_none(),
+        _ => false,
+    }
+}
+
+/// One short `sort` cluster. A value-taking flag ends the cluster: the rest of
+/// the word is its value, or the next word is when nothing follows it.
+fn safe_sort_short_flags(cluster: &str, expecting_value: &mut bool) -> bool {
+    if cluster.is_empty() {
+        return false;
+    }
+    let mut characters = cluster.chars();
+    while let Some(flag) = characters.next() {
+        if SORT_READING_FLAGS.contains(flag) {
+            continue;
+        }
+        if !matches!(flag, 'k' | 't' | 'S') {
+            return false;
+        }
+        let attached = characters.as_str();
+        if attached.is_empty() {
+            *expecting_value = true;
+            return true;
+        }
+        return safe_sort_value(attached);
+    }
+    true
 }
 
 /// Split a short-flag command line into its flags and its file operands.
