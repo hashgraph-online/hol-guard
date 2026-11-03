@@ -24,6 +24,7 @@ from codex_plugin_scanner.guard.cli.commands_dispatch_cloud_actions import (
     CLOUD_ACTIONS_UNAVAILABLE_EXIT,
     _run_guard_cloud_actions_command,  # pyright: ignore[reportPrivateUsage]
 )
+from tests.cloud_actions_pairing_support import FakeCloud, pair
 
 FIXTURE = json.loads(
     (Path(__file__).resolve().parent / "fixtures" / "guard-cloud-actions-grammar.v1.json").read_text(encoding="utf-8")
@@ -44,7 +45,11 @@ def _run(argv: list[str]) -> int:
 
 
 @pytest.mark.parametrize("case", FIXTURE["cases"], ids=[case["id"] for case in FIXTURE["cases"]])
-def test_grammar_fixture(case: dict[str, Any], capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+def test_grammar_fixture(
+    case: dict[str, Any], capsys: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if "paired" in case:
+        _ = pair(monkeypatch, FakeCloud(workspace_id=VALUES["WS"], paired=bool(case["paired"])))
     argv = [_fill(arg) for arg in case["argv"]]
     if case.get("guard_home"):
         argv += ["--guard-home", str(tmp_path)]

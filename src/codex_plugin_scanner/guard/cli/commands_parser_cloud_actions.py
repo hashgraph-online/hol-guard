@@ -246,15 +246,19 @@ def configure_guard_cloud_actions_parser(
     )
     configure = _add_parser(tool_commands, "configure", "Preview or apply an AI tool's Cloud actions settings")
     configure.add_argument("ai_tool", type=_slug("AI tool"), metavar="AI_TOOL")
-    _add_cloud_workspace(configure, required=True)
+    # Optional: the workspace is the one this computer is paired with; naming it only checks that.
+    _add_cloud_workspace(configure, required=False)
     mode = configure.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="Show the exact changes without writing them")
     mode.add_argument("--apply", action="store_true", help="Write the changes, keeping a backup")
-    _add_cloud_url(configure)
     configure.add_argument("--home", help=argparse.SUPPRESS)
     configure.add_argument("--guard-home", help=argparse.SUPPRESS)
     _add_json(configure)
-    restore = _add_parser(tool_commands, "restore", "Put back the AI tool's settings file from before Guard changed it")
+    restore = _add_parser(
+        tool_commands,
+        "restore",
+        "Put back the AI tool's settings file from before Guard changed it and end its Cloud actions access",
+    )
     restore.add_argument("ai_tool", type=_slug("AI tool"), metavar="AI_TOOL")
     restore.add_argument("--home", help=argparse.SUPPRESS)
     restore.add_argument("--guard-home", help=argparse.SUPPRESS)
@@ -263,6 +267,11 @@ def configure_guard_cloud_actions_parser(
     verify.add_argument("ai_tool", type=_slug("AI tool"), metavar="AI_TOOL")
     _add_cloud_workspace(verify, required=False)
     _add_json(verify)
+
+    # Launched by the AI tool from the entry `ai-tools configure` writes; not for people to run.
+    bridge = commands.add_parser("bridge", allow_abbrev=False)
+    bridge.add_argument("ai_tool", type=_slug("AI tool"), metavar="AI_TOOL")
+    bridge.add_argument("--guard-home", help=argparse.SUPPRESS)
 
 
 __all__ = [

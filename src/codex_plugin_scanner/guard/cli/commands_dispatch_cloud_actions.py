@@ -289,6 +289,15 @@ def _run_guard_cloud_actions_command(
 
             return (status if command == "status" else doctor)(args, store, reply)
         return _workspace_select(args, store, reply)
+    if command == "bridge":
+        from .cloud_actions_bridge import run_cloud_actions_bridge
+
+        return run_cloud_actions_bridge(
+            resolve_guard_home(getattr(args, "guard_home", None)),
+            ai_tool=args.ai_tool,
+            input_stream=sys.stdin,
+            output_stream=stream,
+        )
     ai_tools_command = getattr(args, "cloud_actions_ai_tools_command", None)
     if ai_tools_command in {"configure", "restore"}:
         from .commands_dispatch_cloud_actions_ai_tools import configure_ai_tool, restore_ai_tool
