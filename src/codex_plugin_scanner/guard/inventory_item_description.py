@@ -107,12 +107,12 @@ def resolve_inventory_item_description(
     from .inventory_contract import (
         _SAFE_SERIALIZED_MARKERS,
         _safe_finding_text,
-        _sanitize_serializer_string,
+        _safe_json,
     )
 
     candidate = explicit_description or _metadata_description(metadata)
     if candidate:
-        sanitized = _sanitize_serializer_string(candidate, parent_key="description")
+        sanitized = str(_safe_json(candidate, parent_key="description"))
         if home_dir is not None:
             sanitized = _safe_finding_text(
                 sanitized,

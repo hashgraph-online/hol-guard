@@ -27,32 +27,6 @@ def _is_sensitive_key(key: str) -> bool:
 _SENSITIVE_VALUE_RE = re.compile(r"(?i)(gh[pousr]_[a-z0-9_]+|sk-[a-z0-9_-]+|guard_live_[a-z0-9_-]+|bearer\s+\S+)")
 
 
-_UNSAFE_PATH_MARKERS = (
-    "".join(("/", "Users", "/")),
-    "".join(("/", "home", "/")),
-    "".join(("/", "root", "/")),
-    "".join(("\\", "Users", "\\")),
-    "".join(("/", "var", "/", "folders", "/")),
-    "".join(("/", "workspace", "/")),
-    "".join(("/", "tmp", "/")),
-    "".join(("/", "etc", "/")),
-    "".join(("/", "mnt", "/")),
-)
-
-
-_SERIALIZER_UNSAFE_PATH_PATTERN = (
-    r"(?:^|[\s\"'=:({])(?:" + "|".join(re.escape(marker) for marker in _UNSAFE_PATH_MARKERS) + ")"
-)
-
-
-_SERIALIZER_UNSAFE_PATH_RE = re.compile(_SERIALIZER_UNSAFE_PATH_PATTERN, re.IGNORECASE)
-
-
-_SERIALIZER_SECRET_ASSIGNMENT_RE = re.compile(
-    r"(?i)\b(?:api[_-]?key|authorization|password|secret|token|access[_-]?token|refresh[_-]?token)\b\s*[:=]\s*(?!redacted\b)\S+",
-)
-
-
 _SERIALIZER_REDACTED_VALUE = "[REDACTED]"
 
 

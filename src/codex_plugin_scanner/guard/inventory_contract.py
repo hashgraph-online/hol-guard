@@ -48,10 +48,6 @@ from .inventory_contract_constants import _SAFE_SERIALIZED_MARKERS as _SAFE_SERI
 from .inventory_contract_constants import _SENSITIVE_KEY_RE as _SENSITIVE_KEY_RE
 from .inventory_contract_constants import _SENSITIVE_VALUE_RE as _SENSITIVE_VALUE_RE
 from .inventory_contract_constants import _SERIALIZER_REDACTED_VALUE as _SERIALIZER_REDACTED_VALUE
-from .inventory_contract_constants import _SERIALIZER_SECRET_ASSIGNMENT_RE as _SERIALIZER_SECRET_ASSIGNMENT_RE
-from .inventory_contract_constants import _SERIALIZER_UNSAFE_PATH_PATTERN as _SERIALIZER_UNSAFE_PATH_PATTERN
-from .inventory_contract_constants import _SERIALIZER_UNSAFE_PATH_RE as _SERIALIZER_UNSAFE_PATH_RE
-from .inventory_contract_constants import _UNSAFE_PATH_MARKERS as _UNSAFE_PATH_MARKERS
 from .inventory_contract_constants import _WHITESPACE_RE as _WHITESPACE_RE
 from .inventory_contract_constants import _path_has_symlink_component as _path_has_symlink_component
 from .inventory_contract_fingerprints import fingerprint_mapping as fingerprint_mapping
@@ -98,7 +94,6 @@ from .inventory_contract_redaction import _safe_finding_text as _safe_finding_te
 from .inventory_contract_redaction import _safe_json as _safe_json
 from .inventory_contract_redaction import _safe_source_detail as _safe_source_detail
 from .inventory_contract_redaction import _sanitize_paths as _sanitize_paths
-from .inventory_contract_redaction import _sanitize_serializer_string as _sanitize_serializer_string
 from .inventory_contract_redaction import classify_endpoint_host as classify_endpoint_host
 from .inventory_contract_redaction import redact_headers as redact_headers
 from .inventory_contract_redaction import redact_local_path as redact_local_path
