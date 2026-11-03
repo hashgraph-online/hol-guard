@@ -23,6 +23,7 @@ from tests.test_guard_workspace_assessment_runner import (
     T0,
     queued_run,
 )
+from tests.workspace_rule_support import project_rule_findings, with_rule_coverage
 
 FINDING_ID = "0123456789abcdef0123456789abcdef"
 HOOK_PATH = ".claude/settings.json"
@@ -134,8 +135,10 @@ def test_a_configuration_the_scan_could_not_read_leaves_the_run_partial(
 
 
 def test_a_hook_scan_at_its_cap_marks_findings_truncated() -> None:
-    coverage = hook_findings.with_hook_config_coverage(
-        EMPTY_COVERAGE, hooks_result(native_finding(), status="incomplete", truncation_reasons=["max_findings"])
+    coverage = with_rule_coverage(
+        hook_findings.HOOK_CONFIG_DETECTOR,
+        EMPTY_COVERAGE,
+        hooks_result(native_finding(), status="incomplete", truncation_reasons=["max_findings"]),
     )
     assert coverage["reasons"] == ["hook_config_incomplete", "finding_cap"]
 
@@ -153,7 +156,7 @@ def test_a_hook_scan_at_its_cap_marks_findings_truncated() -> None:
     ],
 )
 def test_an_unreadable_hook_result_is_an_error(payload: dict[str, object]) -> None:
-    coverage = hook_findings.with_hook_config_coverage(EMPTY_COVERAGE, payload)
+    coverage = with_rule_coverage(hook_findings.HOOK_CONFIG_DETECTOR, EMPTY_COVERAGE, payload)
     assert (coverage["status"], coverage["reasons"]) == ("partial", ["hook_config_incomplete"])
     assert coverage["detectors"]["hook_config_v1"] == "error"
 
@@ -188,8 +191,8 @@ def test_an_unreadable_hook_result_is_an_error(payload: dict[str, object]) -> No
 )
 def test_a_malformed_finding_is_dropped_and_leaves_the_scan_incomplete(bad: dict[str, object]) -> None:
     result = hooks_result(native_finding(**bad))
-    assert hook_findings.project_hook_config_findings(result) == []
-    coverage = hook_findings.with_hook_config_coverage(EMPTY_COVERAGE, result)
+    assert project_rule_findings(hook_findings.HOOK_CONFIG_DETECTOR, result) == []
+    coverage = with_rule_coverage(hook_findings.HOOK_CONFIG_DETECTOR, EMPTY_COVERAGE, result)
     assert coverage["detectors"]["hook_config_v1"] == "incomplete"
     assert coverage["hook_config"]["truncation_reasons"] == ["invalid_finding"]
 
@@ -208,8 +211,8 @@ def test_every_configuration_the_runtime_reads_is_accepted() -> None:
         ".github/hooks/ci.json",
     ]
     result = hooks_result(*(native_finding(finding_id=f"{index:032x}", path=path) for index, path in enumerate(paths)))
-    assert [item["path"] for item in hook_findings.project_hook_config_findings(result)] == paths
-    coverage = hook_findings.with_hook_config_coverage(EMPTY_COVERAGE, result)
+    assert [item["path"] for item in project_rule_findings(hook_findings.HOOK_CONFIG_DETECTOR, result)] == paths
+    coverage = with_rule_coverage(hook_findings.HOOK_CONFIG_DETECTOR, EMPTY_COVERAGE, result)
     assert coverage["detectors"]["hook_config_v1"] == "complete"
 
 
