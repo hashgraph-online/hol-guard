@@ -40,8 +40,8 @@ for (const malformed of [
     { ...scope.receipt_window, dropped: "-1" }, { ...scope.receipt_window, coverage: "complete_history" }]
     .map((receipt_window) => ({ ...scope, receipt_window })),
 ]) assert.throws(() => parseContextScope(malformed), /does not understand/);
-// A refused pick says why; "read files again" cannot help with a file that looks like it holds a secret.
-assert.match(contextRefusalMessage("native_context_assistance_context_scope_denied", "grant", 403), /looks like it holds a password or key/);
+// A refused pick says why; "read files again" cannot help with a secret-looking file or a private folder.
+assert.match(contextRefusalMessage("native_context_assistance_context_scope_denied", "grant", 403), /password or key, a file your settings block, or a folder Guard keeps private/);
 assert.match(contextRefusalMessage("native_context_assistance_context_scope_denied", "refresh", 403), /files changed/);
 assert.match(contextRefusalMessage("native_context_assistance_context_stale", "grant", 409), /files changed/);
 assert.match(contextRefusalMessage("context_request_refused", "grant", 403), /approval password/);

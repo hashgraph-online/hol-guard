@@ -75,7 +75,7 @@ export function parseContextBrief(value: unknown): ContextBrief {
 }
 
 /** Plain words for a refused request. A refused pick names its likely cause:
- *  reading files again cannot help when one file looks like it holds a secret. */
+ *  reading files again cannot help with a secret-looking, blocked or private file. */
 function refusal(code: string, action: string, status: number): string {
   if (code.endsWith("context_storage_repair_required")) return "CIGAR's saved notes need repair. Delete them in CIGAR → Privacy, then add the project again.";
   if (code.endsWith("context_storage_outcome_unknown")) return "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again.";
@@ -84,7 +84,7 @@ function refusal(code: string, action: string, status: number): string {
   }
   if (code.endsWith("context_busy") || code.endsWith("_busy")) return "CIGAR is still finishing something. Try again in a moment.";
   if (code.endsWith("context_scope_denied") && action === "grant") {
-    return "CIGAR couldn't add these files. It won't read a file that looks like it holds a password or key. Take that file out and try again.";
+    return "CIGAR couldn't add these files. It won't read a file that looks like it holds a password or key, a file your settings block, or a folder Guard keeps private. Take that file out, or pick another folder, and try again.";
   }
   if (code.endsWith("context_stale") || code.endsWith("context_scope_denied")) return "The project or its files changed. Choose Read files again, or add the project again.";
   if (status === 403 || status === 401) return "Guard needs your approval password for this.";

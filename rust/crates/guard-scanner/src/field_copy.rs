@@ -89,15 +89,18 @@ pub(crate) fn is_field_copy(matched: &str, rest_of_line: &str) -> bool {
 }
 
 /// The prop name and the variable of a JSX attribute such as
-/// `password={password}`. The credential rule's value stops before `}`, so
-/// the match ends at `password={password` and the closing brace opens
-/// `rest_of_line`. After the brace only the tag or the next attribute may
-/// follow; `Password={value};` in a connection string continues with `;` and
+/// `password={password}`, with or without spaces around `=`. The credential
+/// rule's value stops before `}`, so the match ends at `password={password`
+/// and the closing brace opens `rest_of_line`. After the brace only the tag or
+/// the next attribute may follow; `Password={value};` in a connection string continues with `;` and
 /// stays a literal.
 fn jsx_prop<'a>(matched: &'a str, rest_of_line: &str) -> Option<(&'a str, &'a str)> {
     let index = matched.find(['=', ':'])?;
-    let name = &matched[..index];
-    let variable = matched[index..].strip_prefix("={")?;
+    let name = matched[..index].trim_end();
+    let variable = matched[index..]
+        .strip_prefix('=')?
+        .trim_start()
+        .strip_prefix('{')?;
     let after = rest_of_line.strip_prefix('}')?;
     let closes = after.is_empty()
         || after.starts_with(char::is_whitespace)
@@ -180,6 +183,7 @@ mod tests {
             "<Login token={session.token}>",
             "<Form apiKey={props.apiKey}\n  user={user} />",
             "<Reset password={password2}/>",
+            "<Field password = {password} />",
         ] {
             assert!(!credential_assignment(text), "{text:?}");
         }
@@ -194,6 +198,7 @@ mod tests {
             "password={password};",
             "password={password}+tail",
             "<Login token={session.user} />",
+            "<Field password = {hunter2production} />",
         ] {
             assert!(credential_assignment(text), "{text:?}");
         }
