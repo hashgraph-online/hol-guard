@@ -126,6 +126,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "catalog_provenance" => crate::catalog_provenance::dispatch(args),
         "connector_regroup" => crate::connector_regroup::dispatch(args),
         "mcp_policy_input" => crate::mcp_policy_input::dispatch(args),
+        "mcp_tool_inventory" => crate::mcp_tool_inventory::dispatch(args),
         "approval_copy" => crate::approval_copy::dispatch(args),
         "access_graph_snapshot" => crate::access_graph_snapshot::dispatch(args),
         "memory_decision_event" => crate::memory_decision_event::dispatch(args),

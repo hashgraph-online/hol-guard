@@ -70,51 +70,6 @@ _SAFE_SERIALIZED_MARKERS = frozenset(
 _WHITESPACE_RE = re.compile(r"\s+")
 
 
-_MCP_READ_RE = re.compile(
-    r"(?<![a-z0-9])(read|reads|reading|search|searches|list|lists)(?![a-z0-9])",
-    re.IGNORECASE,
-)
-
-
-_MCP_DELETE_RE = re.compile(
-    r"(?<![a-z0-9])(delete|deletes|remove|removes|destroy|destroys)(?![a-z0-9])",
-    re.IGNORECASE,
-)
-
-
-_MCP_WRITE_RE = re.compile(
-    r"(?<![a-z0-9])(write|writes|update|updates|create|creates|modify|modifies)(?![a-z0-9])",
-    re.IGNORECASE,
-)
-
-
-_MCP_SHELL_RE = re.compile(
-    r"(?<![a-z0-9])(shell|command|commands|execute|exec|subprocess)(?![a-z0-9])",
-    re.IGNORECASE,
-)
-
-
-_MCP_SECRET_RE = re.compile(
-    r"(?<![a-z0-9])(secret|secrets|token|tokens|password|passwords|credential|credentials|api[_\-\s]?key)(?![a-z0-9])",
-    re.IGNORECASE,
-)
-
-
-_MCP_NETWORK_RE = re.compile(
-    r"(?<![a-z0-9])(http|url|urls|network|fetch|webhook|webhooks)(?![a-z0-9])",
-    re.IGNORECASE,
-)
-
-
-_MCP_MODEL_RE = re.compile(r"(?<![a-z0-9])(sampling|model|models|llm)(?![a-z0-9])", re.IGNORECASE)
-
-
-_MCP_PERMISSION_RE = re.compile(
-    r"(?<![a-z0-9])(permission|permissions|chmod)(?![a-z0-9])",
-    re.IGNORECASE,
-)
-
-
 _AIBOM_METADATA_KEYS = (
     "instructionRole",
     "localSecurity",
