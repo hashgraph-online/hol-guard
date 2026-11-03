@@ -34,6 +34,7 @@ from codex_plugin_scanner.guard.daemon.cloud_actions_status import (
     check_cloud_actions,
     cloud_actions_local_status,
 )
+from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
 NOW = datetime(2026, 11, 3, 12, 0, tzinfo=timezone.utc)
@@ -42,12 +43,19 @@ REFRESH = "cloud-actions-refresh-canary-81aa"
 WS = "11111111-1111-4111-8111-111111111111"
 
 
-def _sign_in(home: Path, name: str = "default", *, expires: datetime | None = None, signed_in: str = "") -> None:
+def _sign_in(
+    home: Path,
+    name: str = "default",
+    *,
+    expires: datetime | None = None,
+    signed_in: str = "",
+    issuer: str = "https://cloud.example.test:8443",
+) -> None:
     store = CloudActionsSessionStore(home)
     profile = CloudActionsProfile(
         name=name,
-        issuer="https://cloud.example.test:8443",
-        resource="https://cloud.example.test:8443/api/guard/gateway/mcp",
+        issuer=issuer,
+        resource=f"{issuer}/api/guard/gateway/mcp",
         client_id="client-1",
         workspace_id=WS,
         scopes=("guard:gateway",),
@@ -93,6 +101,7 @@ def test_saved_sign_in_is_shown_unchecked_with_host_only(tmp_path: Path) -> None
             "workspace": WS,
             "site": "cloud.example.test:8443",
             "cloud_url": "https://cloud.example.test:8443",
+            "cloud_base_url": None,
             "signed_in_at": "2026-11-03T11:00:00Z",
             "expires_at": "2026-11-03T13:00:00Z",
             "expired": False,
@@ -101,6 +110,28 @@ def test_saved_sign_in_is_shown_unchecked_with_host_only(tmp_path: Path) -> None
         }
     ]
     _assert_nothing_private(payload, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("issuer", "staging", "expected"),
+    [
+        ("https://hol.org", "", "https://hol.org"),
+        ("https://staging.example.test", "https://staging.example.test|/points", "https://staging.example.test/points"),
+        ("http://127.0.0.1:3017", "", "http://127.0.0.1:3017"),
+        ("https://cloud.example.test:8443", "", None),
+        ("https://hol.org.example.test", "", None),
+    ],
+)
+def test_guard_cloud_pages_are_offered_only_for_sites_guard_recognises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, issuer: str, staging: str, expected: str | None
+) -> None:
+    monkeypatch.setenv("HOL_GUARD_STAGING_ORIGIN", staging)
+    _sign_in(tmp_path, issuer=issuer)
+
+    row = cloud_actions_local_status(tmp_path, now=NOW)["sign_ins"][0]
+
+    assert row["cloud_base_url"] == expected
+    _assert_nothing_private(row, tmp_path)
 
 
 def test_check_is_saved_privately_and_labelled_stale_after_five_minutes(tmp_path: Path) -> None:
@@ -317,11 +348,16 @@ def test_waiting_for_a_busy_sign_in_counts_against_the_budget(tmp_path: Path, mo
 
 
 def _request(
-    port: int, path: str, *, method: str = "GET", headers: dict[str, str] | None = None
+    port: int,
+    path: str,
+    *,
+    method: str = "GET",
+    headers: dict[str, str] | None = None,
+    body: dict[str, Any] | None = None,
 ) -> tuple[int, dict[str, Any]]:
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}",
-        data=b"{}" if method == "POST" else None,
+        data=json.dumps(body or {}).encode("utf-8") if method == "POST" else None,
         headers={"Content-Type": "application/json", **(headers or {})},
         method=method,
     )
@@ -329,12 +365,17 @@ def _request(
         with urllib.request.urlopen(request, timeout=5) as response:
             return response.status, json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
-        return error.code, json.loads(error.read().decode("utf-8"))
+        raw = error.read().decode("utf-8")
+        try:
+            return error.code, json.loads(raw)
+        except json.JSONDecodeError:
+            return error.code, {"raw": raw}
 
 
 @pytest.fixture
 def daemon(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
-    _sign_in(tmp_path)
+    # The daemon reads the real clock, so its sign-in expires relative to it.
+    _sign_in(tmp_path, expires=datetime.now(timezone.utc) + timedelta(hours=1))
     monkeypatch.setattr(status_module, "_live_checker", _connected)
     server = GuardDaemonServer(GuardStore(tmp_path), host="127.0.0.1", port=0)
     server.start()
@@ -369,3 +410,101 @@ def test_daemon_serves_the_projection_and_one_check_a_minute(daemon: Any, tmp_pa
     assert again["error"] == "checked_recently"
     for payload in (read, checked, again):
         _assert_nothing_private(payload, tmp_path)
+
+
+def _pause_on_this_computer(home: Path) -> str:
+    request_id = "req-local-pause"
+    GuardStore(home).add_approval_request(
+        GuardApprovalRequest(
+            request_id=request_id,
+            harness="codex",
+            artifact_id="codex:session:tool:local-pause",
+            artifact_name="local pause",
+            artifact_type="tool_action_request",
+            artifact_hash="hash-local-pause",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("args",),
+            source_scope="session",
+            config_path=str(home / "workspace" / ".codex" / "config.toml"),
+            review_command=f"hol-guard approvals approve {request_id}",
+            approval_url=f"http://127.0.0.1/pending/{request_id}",
+        ),
+        "2026-11-03T11:30:00+00:00",
+    )
+    return request_id
+
+
+@pytest.mark.parametrize(
+    "cloud_id",
+    [
+        "gxr1:hosted_action:0b5e7c1d-4f7a-4c39-9d3e-6a1f2b3c4d5e",
+        "gxr1%3Ahosted_action%3A0b5e7c1d-4f7a-4c39-9d3e-6a1f2b3c4d5e",
+        "0b5e7c1d-4f7a-4c39-9d3e-6a1f2b3c4d5e",
+    ],
+)
+def test_a_guard_cloud_decision_id_cannot_resolve_anything_on_this_computer(
+    daemon: Any, tmp_path: Path, cloud_id: str
+) -> None:
+    pending = _pause_on_this_computer(tmp_path)
+    token = {"X-Guard-Token": daemon._server.auth_token}
+
+    for action in ("approve", "block"):
+        status, payload = _request(
+            daemon.port,
+            f"/v1/requests/{cloud_id}/{action}",
+            method="POST",
+            headers=token,
+            body={"scope": "artifact", "reason": "approved in Guard Cloud"},
+        )
+        assert status >= 400, (cloud_id, action, payload)
+        assert payload.get("resolved") is not True
+
+    assert GuardStore(tmp_path).get_approval_request(pending)["status"] == "pending"
+
+
+@pytest.mark.parametrize("cloud_answer", ["connected", "offline", "expired", "out_of_actions"])
+def test_local_approvals_keep_working_whatever_guard_cloud_says(
+    daemon: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cloud_answer: str
+) -> None:
+    pending = _pause_on_this_computer(tmp_path)
+    token = {"X-Guard-Token": daemon._server.auth_token}
+    if cloud_answer == "offline":
+        monkeypatch.setattr(
+            status_module,
+            "_live_checker",
+            lambda *_args: (CheckResult("offline", "Guard Cloud did not answer.", None),) * 2,
+        )
+    if cloud_answer == "out_of_actions":
+        # Guard Cloud refusing work, as when a workspace has used its included actions.
+        monkeypatch.setattr(
+            status_module,
+            "_live_checker",
+            lambda *_args: (
+                CheckResult("current", "Guard Cloud answered.", 200),
+                CheckResult("unexpected_answer", "Guard Cloud answered HTTP 402.", 402),
+            ),
+        )
+    if cloud_answer == "expired":
+        _sign_in(tmp_path, expires=datetime.now(timezone.utc) - timedelta(hours=1))
+
+    check_status, checked = _request(daemon.port, "/v1/cloud-actions/status", method="POST", headers=token)
+    status, payload = _request(
+        daemon.port,
+        f"/v1/requests/{pending}/approve",
+        method="POST",
+        headers=token,
+        body={"scope": "artifact", "reason": "approved on this computer"},
+    )
+
+    expected = {
+        "connected": "connected",
+        "offline": "offline",
+        "expired": "sign_in_expired",
+        "out_of_actions": "unexpected_answer",
+    }[cloud_answer]
+    assert check_status == 200
+    assert checked["sign_ins"][0]["state"] == expected
+    assert status == 200
+    assert payload["resolved"] is True
+    assert GuardStore(tmp_path).get_approval_request(pending)["status"] != "pending"

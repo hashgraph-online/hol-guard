@@ -1429,7 +1429,6 @@ def _build_runtime_cloud_context(
         "cloud_policy_sync_error": cached_policy_bundle_error
         or _optional_string(policy_bundle_last_error.get("reason")),
         "cloud_policy_last_ack_at": cloud_status["cloud_policy_last_ack_at"],
-        "team_policy_active": False,
         "proof_status": cloud_status["proof_status"],
     }
 

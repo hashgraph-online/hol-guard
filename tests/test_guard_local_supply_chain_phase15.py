@@ -688,7 +688,7 @@ def test_runtime_snapshot_marks_supply_chain_policy_as_cloud_managed(tmp_path: P
 
     assert snapshot["supply_chain"]["policy"]["managed_by_cloud"] is True
     assert snapshot["supply_chain"]["policy"]["remote_policy_active"] is True
-    assert snapshot["supply_chain"]["policy"]["team_policy_active"] is False
+    assert "team_policy_active" not in snapshot["supply_chain"]["policy"]
     assert snapshot["supply_chain"]["policy"]["managed_label"] == "Guard Cloud sync"
 
 

@@ -116,6 +116,23 @@ def _site_origin(issuer: str) -> str | None:
     return f"{parts.scheme}://{parts.netloc.lower()}"
 
 
+def _cloud_base_url(issuer: str) -> str | None:
+    """Where Guard Cloud's pages live for this sign-in, or None for a site Guard does not recognise.
+
+    Links are only offered for allowlisted HOL sites, so a saved sign-in to an
+    unknown address never becomes a clickable link on this computer.
+    """
+    from ..cli.oauth_client import guard_api_base_path, is_guard_oauth_origin_allowed
+
+    origin = _site_origin(issuer)
+    if origin is None or not is_guard_oauth_origin_allowed(origin):
+        return None
+    try:
+        return f"{origin}{guard_api_base_path(origin)}"
+    except ValueError:
+        return None
+
+
 def _profile_names(store: CloudActionsSessionStore) -> list[str]:
     folder = store.root / "profiles"
     try:
@@ -217,6 +234,7 @@ def _row(
         "workspace": profile.workspace_id,
         "site": _site_host(profile.issuer),
         "cloud_url": _site_origin(profile.issuer),
+        "cloud_base_url": _cloud_base_url(profile.issuer),
         "signed_in_at": profile.signed_in_at,
         "expires_at": profile.expires_at,
         "expired": expired,

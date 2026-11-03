@@ -235,7 +235,6 @@ fn posture(request: &PackagePostureRequestV1) -> Result<Value, String> {
             "package_script_action": action(remote_package_script, "package_script"),
             "managed_by_cloud": managed_by_cloud,
             "remote_policy_active": !remote_policy.is_empty(),
-            "team_policy_active": false,
             "managed_label": if managed_by_cloud { json!("Guard Cloud sync") } else { Value::Null },
             "managed_updated_at": text(remote_policy.get("updatedAt")),
         },

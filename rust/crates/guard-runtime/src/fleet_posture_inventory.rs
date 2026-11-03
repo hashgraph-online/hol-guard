@@ -27,6 +27,8 @@ mod aibom;
 mod plan;
 #[path = "fleet_posture_selection.rs"]
 mod selection;
+#[path = "fleet_posture_tools.rs"]
+mod tools;
 
 use plan::{items_patch, previous_items, stored_items, Plan, Request};
 use selection::{inventory_items, iso, item_digest, reportable};
@@ -88,7 +90,7 @@ fn flag(args: &Map<String, Value>, key: &str) -> Result<bool, &'static str> {
 /// The static sections every candidate payload shares.
 struct Sections<'a> {
     collected_at: String,
-    client: &'a Value,
+    client: Value,
     machine: &'a Value,
     policy: &'a Value,
     tools: Vec<Value>,
@@ -117,42 +119,39 @@ impl Sections<'_> {
     }
 }
 
-/// Each tool row gains its artifact count and inventory digest.
+/// The reported tool rows, each with its artifact count and inventory digest.
 fn tool_rows(
     args: &Map<String, Value>,
     items: &BTreeMap<String, Map<String, Value>>,
+    request: &Request<'_>,
 ) -> Result<Vec<Value>, &'static str> {
     let tools = args
         .get("tools")
         .and_then(Value::as_array)
         .ok_or(ERR_INVALID)?;
-    tools
-        .iter()
-        .take(MAX_TOOLS)
-        .map(|tool| {
-            let mut tool = tool.as_object().ok_or(ERR_INVALID)?.clone();
-            let harness = tool
-                .get("harness")
-                .and_then(Value::as_str)
-                .ok_or(ERR_INVALID)?
-                .to_owned();
-            let owned: Vec<&Map<String, Value>> = items
-                .values()
-                .filter(|item| {
-                    item.get("harness").and_then(Value::as_str) == Some(harness.as_str())
-                })
-                .collect();
-            tool.insert(
-                "artifactCount".to_owned(),
-                Value::from(owned.len().min(MAX_ARTIFACT_COUNT)),
-            );
-            tool.insert(
-                "inventoryDigest".to_owned(),
-                Value::from(item_digest(owned.into_iter())),
-            );
-            Ok(Value::Object(tool))
-        })
-        .collect()
+    Ok(
+        tools::reported_tools(tools, request.last, request.now, request.detail)?
+            .into_iter()
+            .take(MAX_TOOLS)
+            .map(|(harness, mut tool)| {
+                let owned: Vec<&Map<String, Value>> = items
+                    .values()
+                    .filter(|item| {
+                        item.get("harness").and_then(Value::as_str) == Some(harness.as_str())
+                    })
+                    .collect();
+                tool.insert(
+                    "artifactCount".to_owned(),
+                    Value::from(owned.len().min(MAX_ARTIFACT_COUNT)),
+                );
+                tool.insert(
+                    "inventoryDigest".to_owned(),
+                    Value::from(item_digest(owned.into_iter())),
+                );
+                Value::Object(tool)
+            })
+            .collect(),
+    )
 }
 
 /// `build_fleet_posture_state` after collection: plan, assemble and fit.
@@ -181,10 +180,10 @@ fn build(args: &Map<String, Value>) -> KindResult {
     };
     let sections = Sections {
         collected_at: now_text.clone(),
-        client: args.get("client").ok_or(ERR_INVALID)?,
+        client: tools::client_section(args.get("client").ok_or(ERR_INVALID)?)?,
         machine: args.get("machine").ok_or(ERR_INVALID)?,
         policy: args.get("policy").ok_or(ERR_INVALID)?,
-        tools: tool_rows(args, &current)?,
+        tools: tool_rows(args, &current, &request)?,
     };
     // Runtime identities are detail: a minimal report leaves them out.
     let mut runtimes = match args.get("runtimes") {

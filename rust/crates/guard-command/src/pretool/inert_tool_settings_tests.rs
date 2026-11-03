@@ -19,6 +19,17 @@ fn a_reporting_or_repeating_value_is_inert() {
         ("RUSTFLAGS", "-Aunused_imports -Dwarnings"),
         ("RUSTDOCFLAGS", "-Dwarnings"),
         ("goflags", "-count=1"),
+        ("BROWSERSLIST_DISABLE_CACHE", "1"),
+        ("BROWSERSLIST_IGNORE_OLD_DATA", "1"),
+        ("CYPRESS_INSTALL_BINARY", "0"),
+        ("ELECTRON_SKIP_BINARY_DOWNLOAD", "true"),
+        ("ESLINT_USE_FLAT_CONFIG", "true"),
+        ("ESLINT_USE_FLAT_CONFIG", "false"),
+        ("HUSKY_SKIP_HOOKS", "1"),
+        ("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1"),
+        ("PUPPETEER_SKIP_DOWNLOAD", "true"),
+        ("SHARP_IGNORE_GLOBAL_LIBVIPS", "0"),
+        ("puppeteer_skip_download", "1"),
         ("NPM_CONFIG_LOGLEVEL", "error"),
         ("NPM_CONFIG_LOGLEVEL", "silent"),
         ("NPM_CONFIG_PROGRESS", "false"),
@@ -101,6 +112,28 @@ fn a_value_that_can_name_code_a_file_or_a_search_path_is_not_inert() {
         ("NODE_OPTIONS", "--no-warnings"),
         ("LD_PRELOAD", ""),
         ("MAKEFLAGS", "-j4"),
+        // The switches above are read for the one word each accepts. A value
+        // that names somewhere to fetch from, a file, or anything the tool
+        // would read as more than a yes or a no leaves the setting refused.
+        ("CYPRESS_INSTALL_BINARY", "https://example.test/cypress.zip"),
+        ("CYPRESS_INSTALL_BINARY", "/tmp/cypress.zip"),
+        ("CYPRESS_INSTALL_BINARY", "1"),
+        ("CYPRESS_INSTALL_BINARY", "true"),
+        ("ESLINT_USE_FLAT_CONFIG", "1"),
+        ("ESLINT_USE_FLAT_CONFIG", "./eslint.config.js"),
+        ("PUPPETEER_SKIP_DOWNLOAD", "maybe"),
+        ("PUPPETEER_SKIP_DOWNLOAD", "1 2"),
+        ("PUPPETEER_SKIP_DOWNLOAD", ""),
+        ("SHARP_IGNORE_GLOBAL_LIBVIPS", "/usr/lib"),
+        // A longer name that only starts with one of them is a different
+        // setting, and keeps the screens the name test gives it.
+        ("PUPPETEER_SKIP_DOWNLOAD_DIR", "1"),
+        ("ESLINT_USE_FLAT_CONFIG_PATH", "true"),
+        ("PUPPETEER_SKIP", "1"),
+        // Neighbours in the same families that really do name code or a path.
+        ("PUPPETEER_EXECUTABLE_PATH", "/usr/bin/chrome"),
+        ("PLAYWRIGHT_BROWSERS_PATH", "/tmp/browsers"),
+        ("ELECTRON_RUN_AS_NODE", "1"),
     ] {
         assert!(!inert_tool_setting(name, value), "{name}={value}");
     }

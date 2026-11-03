@@ -3104,10 +3104,6 @@ def _build_cloud_summary_panel(payload: dict[str, object]) -> Panel:
     body.add_row("Cached advisories", str(payload.get("advisory_count") or 0))
     if payload.get("advisory_headline"):
         body.add_row("Latest advisory", str(payload.get("advisory_headline")))
-    if payload.get("team_policy_name"):
-        body.add_row("Team policy", str(payload.get("team_policy_name")))
-    elif payload.get("team_policy_active"):
-        body.add_row("Team policy", "active")
     if payload.get("watchlist_enabled"):
         body.add_row("Watchlist", "enabled")
     if payload.get("team_alerts_enabled"):
