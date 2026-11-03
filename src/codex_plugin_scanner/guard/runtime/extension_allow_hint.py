@@ -49,10 +49,13 @@ def connector_setup_deep_link(cli_id: str) -> str:
     return f"/extensions/local-cli/{quote(cli_id, safe='')}"
 
 
-def validated_connector_setup_hint(value: object, *, strict: bool = False) -> dict[str, object] | None:
+def validated_connector_setup_hint(
+    value: object, *, strict: bool = False, deadline_monotonic: float | None = None
+) -> dict[str, object] | None:
     """Return a shape-checked copy of a stored connector hint, or None.
 
     ``strict`` raises when the runtime cannot check the hint at all.
+    ``deadline_monotonic`` keeps the check inside a caller's own budget.
     """
 
-    return shaped_hint(value, "connector", strict=strict)
+    return shaped_hint(value, "connector", strict=strict, deadline_monotonic=deadline_monotonic)

@@ -279,19 +279,28 @@ def test_an_unchecked_grouped_row_keeps_the_caution(monkeypatch: pytest.MonkeyPa
 
     _items(monkeypatch)
     checked = recommendation.validated_connector_setup_hint
+    deadlines: list[float | None] = []
 
-    def unavailable_for_siblings(value: object, *, strict: bool = False) -> dict[str, object] | None:
+    def unavailable_for_siblings(
+        value: object, *, strict: bool = False, deadline_monotonic: float | None = None
+    ) -> dict[str, object] | None:
         if strict:
+            deadlines.append(deadline_monotonic)
             raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
         return checked(value)
 
     monkeypatch.setattr(recommendation, "validated_connector_setup_hint", unavailable_for_siblings)
 
-    result = _build(_approval(_hint()), _Store({"req-2": _hint(risk_classes=["destructive"])}))
+    store = _Store({"req-2": _hint(risk_classes=["destructive"]), "req-3": _hint()})
+    result = _build(_approval(_hint()), store)
 
     assert result is not None
     assert result["caution"] is True
     assert result["caution_risk_classes"] == []
+    # Every sibling check shares the scan's one deadline.
+    assert len(deadlines) == 2
+    assert deadlines[0] is not None
+    assert set(deadlines) == {deadlines[0]}
 
 
 def test_the_resident_of_the_stores_home_decides_the_caution(

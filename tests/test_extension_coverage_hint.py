@@ -304,3 +304,17 @@ def test_the_shape_check_keeps_its_own_deadline_once_the_resident_is_warm(
         return
     assert deadlines[0] is not None
     assert started < deadlines[0] <= time.monotonic() + module._SHAPE_BUDGET_SECONDS
+
+
+def test_strict_checks_raise_a_refusal_instead_of_reading_it_as_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard.runtime import extension_coverage_hint as module
+
+    def refuse(*_: object, **__: object) -> dict[str, Any]:
+        raise authority.NativeRunnerAuthorityRefusalError("native_runner_authority_refused")
+
+    monkeypatch.setattr(authority, "native_runner_authority", refuse)
+    monkeypatch.setattr(module, "_resident_warm", lambda: False)
+    assert module.shaped_hint({"refusal-probe": 1}, "connector") is None
+    with pytest.raises(authority.NativeRunnerAuthorityRefusalError):
+        module.shaped_hint({"refusal-probe": 2}, "connector", strict=True)

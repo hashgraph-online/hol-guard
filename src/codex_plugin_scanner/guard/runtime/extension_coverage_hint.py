@@ -75,20 +75,20 @@ def shaped_hint(
 
     ``key`` is ``allow``, ``coverage`` or ``connector``. A hint only ever offers
     a choice, so a value the runtime cannot check is dropped like a bad one.
-    ``strict`` raises instead when the check itself is unavailable, for callers
-    that must not read a skipped hint as an absent one.
+    ``strict`` raises instead when the check gives no answer, refused or
+    unavailable, for callers that must not read a skipped hint as an absent one.
     ``deadline_monotonic`` keeps the check inside a caller's own budget.
     """
 
     if not isinstance(value, Mapping):
         return None
-    from ..native_runner_authority import NativeRunnerAuthorityError, NativeRunnerAuthorityRefusalError
+    from ..native_runner_authority import NativeRunnerAuthorityError
 
     try:
         canonical = json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False)
         answer = json.loads(_shape_answer(canonical, deadline_monotonic))
-    except NativeRunnerAuthorityError as error:
-        if strict and not isinstance(error, NativeRunnerAuthorityRefusalError):
+    except NativeRunnerAuthorityError:
+        if strict:
             raise
         return None
     except (TypeError, ValueError):

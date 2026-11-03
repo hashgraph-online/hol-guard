@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from urllib.parse import urlencode
@@ -28,6 +29,8 @@ CONNECTOR_RECOMMENDATION_SCHEMA = "guard.approval-connector-recommendation.v1"
 # scan that stops early is cautioned: unread rows are never treated as safe.
 _GROUP_PAGE_ROWS = 200
 _MAX_GROUP_SCAN_ROWS = 2000
+# Total resident budget for checking every sibling hint in one scan.
+_SIBLING_SCAN_BUDGET_SECONDS = 8.0
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -100,9 +103,14 @@ def _group_risk_classes(
 
     classes = set(current)
     rows, complete = pending_connector_group_rows(store, identity_hash)
+    # One budget for the whole scan: a slow resident cannot hold the approval
+    # read for a check per sibling. Checks past it fail without a resident call.
+    deadline = time.monotonic() + _SIBLING_SCAN_BUDGET_SECONDS
     for row in rows:
         try:
-            hint = validated_connector_setup_hint(read_hint(str(row.get("request_id", ""))), strict=True)
+            hint = validated_connector_setup_hint(
+                read_hint(str(row.get("request_id", ""))), strict=True, deadline_monotonic=deadline
+            )
         except NativeRunnerAuthorityError:
             # An unchecked sibling may carry a destructive class: not a full scan.
             complete = False
