@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand, slug_local_cli_command_id
+from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand, slug_local_cli_command_ids
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.store import GuardStore
@@ -367,7 +367,7 @@ def test_the_other_tools_choice_reviews_only_the_tools_folded_into_it(tmp_path: 
         identity.cli_id,
         (
             *_commands("read", "other"),
-            LocalCliCommand(slug_local_cli_command_id("other"), "other", "other", "Fixture tool"),
+            LocalCliCommand(slug_local_cli_command_ids(("other",))[0], "other", "other", "Fixture tool"),
         ),
         mcp_catalog=_catalog("read", "Résumé", "other"),
         identity_hash=identity.identity_hash,

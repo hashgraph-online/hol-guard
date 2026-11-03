@@ -255,7 +255,7 @@ def test_runtimes_give_way_before_inventory_rows(
     monkeypatch.setattr(fpr, "_observe", lambda *_: _posture([]))
     without = _build(store, context, adapters, runtimes_ttl_seconds=0).payload
     del without["runtimes"]
-    budget = fp.json_size(without) + 16
+    budget = len(json.dumps(without, separators=(",", ":"), ensure_ascii=False).encode("utf-8")) + 16
     monkeypatch.setattr(fp, "MAX_PAYLOAD_BYTES", budget)
     monkeypatch.setattr(fpr, "_observe", lambda *_: _posture([_runtime()] * fpr.MAX_RUNTIMES))
 

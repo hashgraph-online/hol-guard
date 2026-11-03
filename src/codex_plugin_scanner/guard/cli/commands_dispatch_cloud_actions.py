@@ -1,8 +1,15 @@
 """Early dispatch for `cloud-actions`.
 
-`login`, `logout`, `status` and `workspace select` act on a saved sign-in
-(profile). The other commands still report, without touching this device or
-the network, that they cannot act yet, and echo the contexts they parsed so
+`login`, `logout`, `status`, `doctor` and `workspace select` act on a saved
+sign-in (profile). `status` and `doctor` also ask Guard Cloud whether it still
+accepts that sign-in (`cloud_actions_health`); `status --offline` does not.
+`ai-tools configure --dry-run` previews an AI tool's settings change without
+writing it, `--apply` writes it and keeps a copy of the previous file, and
+`ai-tools restore` undoes that change. `accounts connect` opens the
+workspace's connected accounts in Guard Cloud, where the member signs in with
+the provider in the browser; no provider password or key passes through this
+command. The other commands still report, without touching this device or the
+network, that they cannot act yet, and echo the contexts they parsed so
 scripts and tests can see which one each value landed in.
 
 The commands_support facade imports this module on every hook, so the sign-in
@@ -14,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import urllib.parse
 from collections.abc import Callable
 from typing import TYPE_CHECKING, TextIO
 
@@ -151,34 +159,6 @@ def _logout(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _R
     return reply(0, text, state="signed_out", profile=args.profile, was_signed_in=was_signed_in, revoked=revoked)
 
 
-def _status(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Reply) -> int:
-    profile = store.load(args.profile)
-    requested = args.cloud_workspace
-    if profile is None or store.load_secrets(args.profile) is None:
-        return reply(
-            0,
-            f"Not signed in (profile {args.profile}). Run `{_login_hint(args.profile, requested)}`.",
-            state="signed_out",
-            profile=args.profile,
-            accounts="not_available_yet",
-        )
-    state = "expired" if profile.is_expired() else "signed_in"
-    fields = {"state": state, **_profile_fields(profile), "accounts": "not_available_yet"}
-    lines = [
-        f"Profile {profile.name}: {'sign-in expired' if state == 'expired' else 'signed in'}",
-        f"Guard Cloud: {profile.issuer}",
-        f"Workspace: {profile.workspace_id}",
-        "Connected accounts: not available yet",
-    ]
-    if requested is not None:
-        fields["workspace_matches"] = requested == profile.workspace_id
-        if requested != profile.workspace_id:
-            lines.append(f"Workspace {requested} needs its own sign-in: `{_login_hint(args.profile, requested)}`.")
-    if state == "expired":
-        lines.append(f"Sign in again: `{_login_hint(profile.name, profile.workspace_id)}`.")
-    return reply(0, "\n".join(lines), **fields)
-
-
 def _workspace_select(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Reply) -> int:
     requested = args.cloud_workspace
     profile = store.load(args.profile)
@@ -211,6 +191,70 @@ def _workspace_select(args: argparse.Namespace, store: CloudActionsSessionStore,
     )
 
 
+# Matches the provider names Guard Cloud shows, so the button named here is the one on the page.
+_PROVIDER_NAMES = {
+    "discord": "Discord",
+    "github": "GitHub",
+    "gitlab": "GitLab",
+    "google": "Google",
+    "hubspot": "HubSpot",
+    "linear": "Linear",
+    "notion": "Notion",
+    "salesforce": "Salesforce",
+    "slack": "Slack",
+}
+
+
+def provider_name(provider: str) -> str:
+    known = _PROVIDER_NAMES.get(provider)
+    if known is not None:
+        return known
+    words = provider.replace("_", " ").replace("-", " ").split()
+    return " ".join(word[:1].upper() + word[1:] for word in words) or "Service"
+
+
+def connected_accounts_url(origin: str, workspace: str) -> str:
+    """The workspace's connected accounts in Guard Cloud settings."""
+
+    from .oauth_client import guard_api_base_path
+
+    query = urllib.parse.urlencode({"tab": "integrations", "workspaceId": workspace})
+    return f"{origin}{guard_api_base_path(origin)}/guard/settings?{query}#connected-accounts"
+
+
+def _connect_account(args: argparse.Namespace, reply: _Reply) -> int:
+    from .cloud_actions_oauth import CloudActionsSignInError, resolve_cloud_origin
+
+    try:
+        origin = resolve_cloud_origin(args.cloud_url)
+    except CloudActionsSignInError as error:
+        return reply(
+            CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
+            f"{error} Nothing was changed.",
+            state="failed",
+            reason=error.reason,
+            message=str(error),
+        )
+    url = connected_accounts_url(origin, args.cloud_workspace)
+    # Provider sign-in happens in the browser, so nothing secret is typed here.
+    opened = not args.no_browser and open_browser_url(url)
+    name = provider_name(args.provider)
+    step = (
+        f"To connect a {name} account to workspace {args.cloud_workspace}, "
+        f"choose Connect {name} under Connected accounts and sign in with {name} there."
+    )
+    lead = "Opened Guard Cloud in your browser." if opened else "Open this link in a browser where you use Guard Cloud:"
+    return reply(
+        0,
+        f"{lead}\n{url}\n{step}",
+        state="opened" if opened else "link",
+        opened=opened,
+        url=url,
+        provider=args.provider,
+        cloud_workspace=args.cloud_workspace,
+    )
+
+
 def _run_guard_cloud_actions_command(
     args: argparse.Namespace,
     *,
@@ -223,7 +267,7 @@ def _run_guard_cloud_actions_command(
     reply = _Reply(args, stream)
     command = args.cloud_actions_command
     workspace_command = getattr(args, "cloud_actions_workspace_command", None)
-    if command in {"login", "logout", "status"} or workspace_command == "select":
+    if command in {"login", "logout", "status", "doctor"} or workspace_command == "select":
         from .cloud_actions_session import CloudActionsSessionStore
 
         store = CloudActionsSessionStore(resolve_guard_home(getattr(args, "guard_home", None)))
@@ -240,9 +284,18 @@ def _run_guard_cloud_actions_command(
                 )
         if command == "logout":
             return _logout(args, store, reply)
-        if command == "status":
-            return _status(args, store, reply)
+        if command in {"status", "doctor"}:
+            from .commands_dispatch_cloud_actions_status import doctor, status
+
+            return (status if command == "status" else doctor)(args, store, reply)
         return _workspace_select(args, store, reply)
+    ai_tools_command = getattr(args, "cloud_actions_ai_tools_command", None)
+    if ai_tools_command in {"configure", "restore"}:
+        from .commands_dispatch_cloud_actions_ai_tools import configure_ai_tool, restore_ai_tool
+
+        return (configure_ai_tool if ai_tools_command == "configure" else restore_ai_tool)(args, reply)
+    if getattr(args, "cloud_actions_accounts_command", None) == "connect":
+        return _connect_account(args, reply)
     return reply(
         CLOUD_ACTIONS_UNAVAILABLE_EXIT,
         f"`hol-guard cloud-actions {_command_path(args)}` is not available yet. Nothing was changed.",

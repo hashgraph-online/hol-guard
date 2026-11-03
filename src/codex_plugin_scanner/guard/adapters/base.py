@@ -12,7 +12,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field
 from functools import cached_property, wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from ...path_support import resolves_within_root
 from ..models import GuardArtifact, HarnessDetection
@@ -107,95 +107,36 @@ def detection_request(harness: str, context: HarnessContext) -> dict[str, object
     return request
 
 
-_SYSTEM_ONLY_PATH_ENTRIES = frozenset({"/usr/bin", "/bin", "/usr/sbin", "/sbin"})
-
-
-def _system_only_path(path_value: str | None) -> bool:
-    """True when PATH is the bare default launchd and GUI launchers hand to apps."""
-
-    entries = [entry.rstrip("/") or "/" for entry in (path_value or "").split(os.pathsep) if entry]
-    return bool(entries) and all(entry in _SYSTEM_ONLY_PATH_ENTRIES for entry in entries)
-
-
-def _user_command_directories(command: str, home: Path) -> tuple[Path, ...]:
-    """Install directories a terminal PATH normally has and a GUI-launched app does not.
-
-    Guard Desktop starts the daemon with only the system directories on PATH, so a
-    plain ``shutil.which`` misses CLIs from Homebrew, npm and nvm, bun or a tool's own
-    installer, and diagnostics then report a working tool as broken.
-    """
-
-    directories = [
-        Path("/opt/homebrew/bin"),
-        Path("/usr/local/bin"),
-        Path("/home/linuxbrew/.linuxbrew/bin"),
-        home / ".local" / "bin",
-        home / "bin",
-        home / ".bun" / "bin",
-        home / ".npm-global" / "bin",
-        home / ".volta" / "bin",
-        home / ".asdf" / "shims",
-        home / ".cargo" / "bin",
-        home / "Library" / "pnpm",
-        home / ".local" / "share" / "pnpm",
-        home / f".{command}" / "bin",
-    ]
-    nvm_versions = home / ".nvm" / "versions" / "node"
-    try:
-        node_versions = sorted(nvm_versions.iterdir(), key=_node_version_key, reverse=True)
-    except OSError:
-        node_versions = []
-    directories.extend(version / "bin" for version in node_versions)
-    return tuple(directories)
-
-
-def _node_version_key(path: Path) -> tuple[int, ...]:
-    parts = path.name.lstrip("v").split(".")
-    return tuple(int(part) if part.isdigit() else -1 for part in parts)
-
-
-def _user_owned_executable(candidate: Path) -> bool:
-    # Match what the user's terminal would run, but only when both the install directory
-    # and the directory holding the resolved target are owned by root or the user and
-    # nobody else can write to them. Package managers such as bun install world-writable
-    # entrypoints, so the file's own mode is not checked.
-    try:
-        resolved = candidate.resolve(strict=True)
-        file_stat = resolved.stat()
-        directory_stats = (candidate.parent.stat(), resolved.parent.stat())
-    except (OSError, RuntimeError):
-        # Python before 3.13 raises RuntimeError for a symlink loop.
-        return False
-    owners = {0, os.getuid()}
-    if file_stat.st_uid not in owners:
-        return False
-    if any(stat.st_uid not in owners or stat.st_mode & 0o022 for stat in directory_stats):
-        return False
-    return resolved.is_file() and os.access(resolved, os.X_OK)
-
-
 def _which_from_user_directories(
     command: str, home: Path | None = None, extra_directories: tuple[Path, ...] = ()
 ) -> str | None:
     """Locate a CLI the user installed outside the process PATH.
 
-    The usual user install directories are searched only under the bare desktop launch
-    PATH. ``extra_directories`` names a tool's own installer directory and is searched
-    under any PATH. Every candidate must pass the same ownership and write checks.
-    Only availability checks use this. Launch and probe commands keep resolving through
-    PATH, so nothing found here is ever executed.
+    The native ``user_command_lookup`` kind searches the usual user install
+    directories under the bare desktop launch PATH and ``extra_directories``
+    (a tool's own installer directory) under any PATH, with the same ownership
+    and write checks for every candidate. Only availability checks use this;
+    nothing found here is ever executed. No answer finds nothing.
     """
 
-    if os.name == "nt" or os.sep in command:
+    # The runtime never finds a command on Windows or one with a separator, so
+    # those skip the call.
+    if os.name == "nt" or "/" in command:
         return None
-    directories: tuple[Path, ...] = ()
-    if _system_only_path(os.environ.get("PATH")):
-        directories = _user_command_directories(command, Path.home() if home is None else home)
-    for directory in (*directories, *extra_directories):
-        candidate = directory / command
-        if _user_owned_executable(candidate):
-            return str(candidate)
-    return None
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    request = {
+        "command": command,
+        "home": str(Path.home() if home is None else home),
+        "path": os.environ.get("PATH"),
+        "extra": [str(directory) for directory in extra_directories],
+    }
+    try:
+        answer = native_runner_authority("user_command_lookup", request)
+    except NativeRunnerAuthorityError:
+        return None
+    found = answer.get("path")
+    return found if isinstance(found, str) else None
 
 
 def _command_available(command: str, home: Path | None = None, extra_directories: tuple[Path, ...] = ()) -> bool:
@@ -275,6 +216,7 @@ def _ensure_path_within_root(root: Path, path: Path, *, label: str) -> None:
 
 
 _MutationResult = TypeVar("_MutationResult")
+_T = TypeVar("_T")
 
 
 def _owned_adapter_mutation(method: Callable[..., _MutationResult]) -> Callable[..., _MutationResult]:
@@ -531,34 +473,16 @@ class HarnessAdapter:
         detection: HarnessDetection,
         runtime_probe: dict[str, object] | None,
     ) -> list[str]:
-        warnings = list(detection.warnings)
-        guard_managed = _detection_has_guard_management(detection)
-        if detection.config_paths and not guard_managed:
-            warnings.append(
-                f"{self.harness} config was found, but Guard is not installed for this harness. "
-                f"Run `hol-guard install {self.harness}` to enable protection."
-            )
-        if guard_managed and not detection.command_available and self.command_absence_proves_uninstalled:
-            warnings.append(
-                f"Guard is configured for {self.harness}, but the {self.executable} command is not available on "
-                f"this machine. Install {self.executable}, or run `hol-guard uninstall {self.harness}` to remove "
-                "the leftover Guard configuration."
-            )
-        elif guard_managed and not detection.command_available:
-            # The tool runs Guard's hooks without its CLI, so the configuration is in use,
-            # not left behind: naming it leftover would invite an uninstall that drops live protection.
-            warnings.append(
-                f"Guard is configured for {self.harness}, but the {self.executable} command is not available on "
-                f"this machine. Install {self.executable} to protect {self.harness} command-line sessions. "
-                f"The configuration is still in use, because {self.harness} runs Guard's hooks without it."
-            )
-        elif detection.config_paths and not detection.command_available:
-            warnings.append(
-                f"{self.harness} config was found, but the {self.executable} command is not available on PATH."
-            )
-        if runtime_probe is not None and runtime_probe.get("timed_out") is True:
-            warnings.append(f"{self.executable} diagnostics timed out before Guard could confirm runtime state.")
-        return warnings
+        added = _harness_diagnostics(
+            "warnings",
+            lambda value: isinstance(value, list) and all(isinstance(item, str) for item in value),
+            harness=self.harness,
+            executable=self.executable,
+            command_absence_proves_uninstalled=self.command_absence_proves_uninstalled,
+            runtime_probe_timed_out=runtime_probe is not None and runtime_probe.get("timed_out") is True,
+            detection=_detection_request(detection),
+        )
+        return [*detection.warnings, *added]
 
     def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
         del managed_install
@@ -617,55 +541,72 @@ class HarnessAdapter:
         )
 
 
+# The native request parser refuses any JSON array wider than 4096 entries, so
+# every list crosses in chunks that the runtime joins back in order.
+_NATIVE_JSON_WIDTH = 4096
+_SETUP_STATUSES = ("active", "broken", "partial", "not_found")
+
+
+def _chunks(items: Sequence[_T]) -> list[list[_T]]:
+    return [list(items[start : start + _NATIVE_JSON_WIDTH]) for start in range(0, len(items), _NATIVE_JSON_WIDTH)]
+
+
+def _artifacts_request(artifacts: Sequence[GuardArtifact]) -> list[list[dict[str, object]]]:
+    return _chunks(
+        [
+            {
+                "artifact_type": artifact.artifact_type,
+                "command": artifact.command,
+                "args": _chunks(artifact.args),
+                "harness": artifact.harness,
+            }
+            for artifact in artifacts
+        ]
+    )
+
+
+def _detection_request(detection: HarnessDetection) -> dict[str, object]:
+    return {
+        "config_paths": _chunks(detection.config_paths),
+        "command_available": detection.command_available,
+        "artifacts": _artifacts_request(detection.artifacts),
+    }
+
+
+def _harness_diagnostics(op: str, valid: Callable[[object], bool], **fields: object) -> Any:
+    """The native ``harness_diagnostics`` answer to ``op``, which it returns under the op's own name."""
+
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    value = native_runner_authority("harness_diagnostics", {"op": op, **fields}).get(op)
+    if not valid(value):
+        raise NativeRunnerAuthorityError("harness diagnostics answer is malformed")
+    return value
+
+
 def _diagnostic_setup_status(
     detection: HarnessDetection,
     warnings: list[str],
     *,
     command_absence_proves_uninstalled: bool = True,
 ) -> str:
-    guard_managed = _detection_has_guard_management(detection)
-    if guard_managed and _warnings_include_setup_failure(warnings):
-        if command_absence_proves_uninstalled and _only_tool_command_missing(detection, warnings):
-            # Guard config left behind for a tool that is no longer installed. Nothing can run
-            # unprotected, so report the tool as absent rather than as a broken Guard setup.
-            return "not_found"
-        return "broken"
-    if guard_managed:
-        return "active"
-    if detection.config_paths or detection.command_available:
-        return "partial"
-    return "not_found"
+    return _harness_diagnostics(
+        "setup_status",
+        lambda value: value in _SETUP_STATUSES,
+        command_absence_proves_uninstalled=command_absence_proves_uninstalled,
+        detection=_detection_request(detection),
+        warnings=_chunks(warnings),
+    )
 
 
-def _detection_has_guard_management(detection: HarnessDetection) -> bool:
-    if any(_guard_managed_path(path) for path in detection.config_paths):
-        return True
-    return any(_artifact_uses_guard(artifact) for artifact in detection.artifacts)
+def artifacts_use_guard(artifacts: Sequence[GuardArtifact]) -> bool:
+    """Whether any artifact is Guard's launcher, Guard's command, or a command line naming Guard."""
 
-
-def _guard_managed_path(path: str) -> bool:
-    return Path(path).name.lower().startswith("hol-guard")
-
-
-def _artifact_uses_guard(artifact: GuardArtifact) -> bool:
-    if artifact.artifact_type == "guard_launcher_shim":
-        return True
-    if artifact.command is not None and _is_guard_command_name(artifact.command, artifact.harness):
-        return True
-    values = [artifact.command or "", *artifact.args]
-    return any(_value_mentions_guard(value) for value in values)
-
-
-def _is_guard_command_name(value: str, harness: str) -> bool:
-    normalized = Path(value.replace("\\", "/")).name.lower()
-    if normalized.endswith(".cmd"):
-        normalized = normalized[:-4]
-    return normalized == f"guard-{harness}"
-
-
-def _value_mentions_guard(value: str) -> bool:
-    normalized = value.lower()
-    return "codex_plugin_scanner.cli" in normalized or "hol-guard" in normalized
+    if not artifacts:
+        return False
+    return _harness_diagnostics(
+        "uses_guard", lambda value: isinstance(value, bool), artifacts=_artifacts_request(artifacts)
+    )
 
 
 def _is_guard_launcher_shim(path: Path) -> bool:
@@ -681,16 +622,6 @@ def _is_guard_launcher_shim(path: Path) -> bool:
 _MISSING_COMMAND_MARKER = "command is not available"
 
 
-def _warnings_include_setup_failure(warnings: list[str]) -> bool:
-    setup_markers = (
-        "guard is not installed",
-        _MISSING_COMMAND_MARKER,
-        "native hooks are disabled",
-        "managed codex hooks are missing",
-    )
-    return any(any(marker in warning.lower() for marker in setup_markers) for warning in warnings)
-
-
 def setup_failures_besides_missing_command(warnings: Sequence[str]) -> bool:
     """Whether any warning remains once the one about the missing tool command is set aside.
 
@@ -703,30 +634,6 @@ def setup_failures_besides_missing_command(warnings: Sequence[str]) -> bool:
     return any(_MISSING_COMMAND_MARKER not in warning.lower() for warning in warnings)
 
 
-def _guard_management_is_launcher_only(detection: HarnessDetection) -> bool:
-    """Whether a Guard launcher is the only thing Guard manages for this tool.
-
-    A launcher beside an ordinary, unmanaged tool config leaves `config_paths`
-    nonempty, so the config alone cannot tell leftover Guard configuration from a
-    tool config Guard never touched.
-    """
-
-    if any(_guard_managed_path(path) for path in detection.config_paths):
-        return False
-    managed = [artifact for artifact in detection.artifacts if _artifact_uses_guard(artifact)]
-    return bool(managed) and all(artifact.artifact_type == "guard_launcher_shim" for artifact in managed)
-
-
-def _only_tool_command_missing(detection: HarnessDetection, warnings: list[str]) -> bool:
-    # A Guard launcher is kept broken so it stays visible rather than vanishing, whether or not
-    # an unmanaged tool config sits beside it.
-    if detection.command_available or not detection.config_paths:
-        return False
-    if _guard_management_is_launcher_only(detection):
-        return False
-    return not setup_failures_besides_missing_command(warnings)
-
-
 __all__ = [
     "GuardArtifact",
     "HarnessAdapter",
@@ -736,5 +643,6 @@ __all__ = [
     "_json_payload",
     "_resolve_command",
     "_run_command_probe",
+    "artifacts_use_guard",
     "setup_failures_besides_missing_command",
 ]

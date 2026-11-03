@@ -182,7 +182,9 @@ pub(super) fn answer(
     if harness == CLAUDE_CODE && event == STOP {
         claude_turn_stop_answer(guard_home, payload, policy_store)?;
     }
-    if compact == "sessionstart" && !records_only(harness, policy_store) {
+    // A finished turn wakes it too: the person reads the answer and types the
+    // next prompt while CIGAR starts, instead of that prompt paying for it.
+    if matches!(compact.as_str(), "sessionstart" | "stop") && !records_only(harness, policy_store) {
         crate::context_assistance_prompt::wake(harness, policy_store);
     }
     Ok(json!({ "harness_response": constant_response(harness, event) }))

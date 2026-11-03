@@ -39,7 +39,6 @@ from .base import (
 )
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .zcode_config import (
-    GUARD_MANAGED_MARKER,
     ZCODE_BUNDLE_IDENTIFIER,
     ZCODE_CLI_CONFIG_FILE,
     ZCODE_CLI_DIR,
@@ -50,12 +49,9 @@ from .zcode_config import (
     ZCODE_V2_CONFIG_FILE,
     ZCODE_V2_DIR,
 )
-from .zcode_hook_settings import plan_hook_settings
+from .zcode_hook_settings import install_hook_surface, uninstall_hook_surface
 
 _ZCODE_HOME_ENV_VAR = "ZCODE_HOME"
-# Current ZCode renders this label beside the hook in its Hooks settings UI
-# instead of the full managed command string.
-_GUARD_HOOK_STATUS_MESSAGE = "HOL Guard runtime policy enforcement"
 # The npm CLI's file-config and hook surface; the Desktop app reads config.json.
 _ZCODE_CLI_FILE_CONFIG = "setting.json"
 _ZCODE_PRETOOL_TIMEOUT_SECONDS = 30
@@ -272,46 +268,30 @@ class ZCodeHarnessAdapter(HarnessAdapter):
 
         hook_files: list[TransitionFile] = []
         hook_command = _shell_command(self._hook_command_parts(context, prepared_files=hook_files))
-        # The marker rides along as a trailing shell comment, so ZCode runs the
-        # command verbatim while Guard can later find and prune only its own.
-        managed_hook_command = f"{hook_command} # {GUARD_MANAGED_MARKER}"
-        handlers: dict[str, dict[str, object]] = {
-            event: {
-                "type": "command",
-                "command": managed_hook_command,
-                "timeout": timeout,
-                "statusMessage": _GUARD_HOOK_STATUS_MESSAGE,
-            }
-            for event, timeout in (
-                ("PreToolUse", _ZCODE_PRETOOL_TIMEOUT_SECONDS),
-                ("UserPromptSubmit", _ZCODE_PROMPT_TIMEOUT_SECONDS),
-            )
-        }
+        timeouts = {"PreToolUse": _ZCODE_PRETOOL_TIMEOUT_SECONDS, "UserPromptSubmit": _ZCODE_PROMPT_TIMEOUT_SECONDS}
 
         config_path = self._config_path(context)
-        surfaces: list[tuple[Path, dict[str, object], bytes | None, int]] = []
+        surfaces: list[tuple[Path, bytes, bytes | None, int]] = []
         enabled_history: dict[str, object] = {}
-        for path, payload in self._hook_surface_payloads(context):
-            hooks = payload.get("hooks")
-            if not isinstance(hooks, dict):
-                hooks = {}
-            payload["hooks"] = hooks
-            # Native plan: legacy flat groups fold into hooks.events (current
-            # ZCode rejects the flat keys and drops the whole file), then Guard's
-            # PreToolUse groups per matcher and UserPromptSubmit group refresh.
-            plan = plan_hook_settings("install", hooks, path=path, state=previous_state, handlers=handlers)
-            enabled_history[str(path)] = plan.enabled
-            if hooks.get("enabled") is False and plan.has_handlers:
-                raise ValueError(
-                    f"ZCode user hooks are disabled in {path.name}; explicitly enable them before installing Guard."
-                )
-            plan.apply(hooks)
-            # Each ZCode surface only registers hooks when its own config
-            # opts in with hooks.enabled: true; without the flag entries
-            # never run.
-            hooks["enabled"] = True
+        for path, text in self._hook_surface_texts(context):
+            # Native: legacy flat groups fold into hooks.events (current ZCode
+            # rejects the flat keys and drops the whole file), Guard's groups
+            # refresh, and hooks.enabled opts the surface in.
+            rendered, enabled_history[str(path)] = install_hook_surface(
+                text,
+                path=path,
+                desktop=path == config_path,
+                state=previous_state,
+                command=hook_command,
+                timeouts=timeouts,
+            )
             surfaces.append(
-                (path, payload, _snapshot(path), (path.stat().st_mode & 0o777) if path.is_file() else 0o644)
+                (
+                    path,
+                    rendered.encode("utf-8"),
+                    _snapshot(path),
+                    (path.stat().st_mode & 0o777) if path.is_file() else 0o644,
+                )
             )
 
         file_config = self._file_config_path(context)
@@ -345,13 +325,13 @@ class ZCodeHarnessAdapter(HarnessAdapter):
                 after_mode=backup_mode,
             ),
         )
-        for path, payload, before, mode in surfaces:
+        for path, after, before, mode in surfaces:
             files = (
                 *files,
                 TransitionFile(
                     path.resolve(strict=False),
                     before,
-                    (json.dumps(payload, indent=2) + "\n").encode("utf-8"),
+                    after,
                     before_mode=mode,
                     after_mode=mode,
                 ),
@@ -390,11 +370,11 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         return PreparedHarnessInstall(files, manifest)
 
     def _surface_notes(
-        self, context: HarnessContext, surfaces: list[tuple[Path, dict[str, object], bytes | None, int]]
+        self, context: HarnessContext, surfaces: list[tuple[Path, bytes, bytes | None, int]]
     ) -> list[str]:
         """Report only the hook surfaces install actually wrote."""
 
-        wrote_cli = any(path == self._file_config_path(context) for path, _payload, _before, _mode in surfaces)
+        wrote_cli = any(path == self._file_config_path(context) for path, _after, _before, _mode in surfaces)
         if wrote_cli:
             return [
                 "Guard hook entries added to ~/.zcode/cli/config.json (Desktop) and ~/.zcode/cli/setting.json (CLI)"
@@ -404,8 +384,8 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             "The CLI's ~/.zcode/cli/setting.json does not exist yet; its own settings migration carries the hooks over",
         ]
 
-    def _hook_surface_payloads(self, context: HarnessContext) -> list[tuple[Path, dict[str, object]]]:
-        """Load both ZCode hook surfaces.
+    def _hook_surface_texts(self, context: HarnessContext) -> list[tuple[Path, str | None]]:
+        """Read both ZCode hook surfaces; ``None`` for an absent ``config.json``.
 
         Current ZCode splits hook loading per surface: the Desktop app reads
         user hooks from ``~/.zcode/cli/config.json`` while the npm CLI reads
@@ -414,29 +394,18 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         file, so Guard maintains managed hooks in both.
         """
 
-        surfaces: list[tuple[Path, dict[str, object]]] = []
+        surfaces: list[tuple[Path, str | None]] = []
         for path in (self._config_path(context), self._file_config_path(context)):
             _ensure_path_within_root(self._zcode_home_dir(context), path, label="ZCode")
             if not path.is_file():
                 if path == self._config_path(context):
-                    surfaces.append((path, {}))
+                    surfaces.append((path, None))
                 # An absent setting.json means the npm CLI has not migrated
                 # yet; creating it here would mark that migration done and
                 # strand the user's config.json settings. The CLI's own
                 # migration copies Guard's config.json hooks over instead.
                 continue
-            try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError as error:
-                raise ValueError(f"ZCode config must be a JSON object: {path.name}") from error
-            if not isinstance(payload, dict):
-                raise ValueError(f"ZCode config must be a JSON object: {path.name}")
-            if path == self._config_path(context):
-                if not isinstance(payload.get("mcp"), dict):
-                    payload["mcp"] = {}
-                if not isinstance(payload.get("plugins"), dict):
-                    payload["plugins"] = {}
-            surfaces.append((path, payload))
+            surfaces.append((path, path.read_text(encoding="utf-8")))
         return surfaces
 
     def install(self, context: HarnessContext) -> dict[str, object]:
@@ -454,20 +423,13 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             if not candidate.is_file():
                 continue
             _ensure_path_within_root(self._zcode_home_dir(context), candidate, label="ZCode")
-            payload = _json_payload(candidate)
-            hooks = payload.get("hooks")
-            if not isinstance(hooks, dict):
+            try:
+                text = candidate.read_text(encoding="utf-8")
+            except OSError:
                 continue
-            hooks_before = json.dumps(hooks, sort_keys=True)
-            plan = plan_hook_settings("uninstall", hooks, path=candidate, state=state)
-            plan.apply(hooks)
-            if json.dumps(hooks, sort_keys=True) == hooks_before:
-                continue
-            if not hooks:
-                payload.pop("hooks", None)
-            else:
-                payload["hooks"] = hooks
-            writes.append((candidate, json.dumps(payload, indent=2) + "\n"))
+            rendered = uninstall_hook_surface(text, path=candidate, state=state)
+            if rendered is not None:
+                writes.append((candidate, rendered))
 
         shim_manifest = remove_guard_shim(
             self.harness,

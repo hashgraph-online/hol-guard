@@ -10,7 +10,10 @@
 use serde_json::{Map, Value};
 
 use super::bounded_hook_bridge::BRIDGE_COMMAND;
-use super::pyjson::{float_repr, parse_marking_lone_surrogates, PyVal, LONE_SURROGATE_MARK};
+use super::pyjson::{
+    float_repr, in_surrogate_plane, parse_marking_lone_surrogates, PyVal, LONE_SURROGATE_MARK,
+    SURROGATE_PLANE_BASE,
+};
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 
 // The plugin template is split in two; only the first part carries placeholders.
@@ -259,11 +262,20 @@ fn hook_launcher_code(import_roots: &[String]) -> String {
 /// `json.dumps(value)`: insertion order, `", "` and `": "`, ASCII only.
 pub(crate) fn dumps(value: &PyVal) -> String {
     let mut out = String::new();
-    write(value, &mut out);
+    write(value, false, &mut out);
     out
 }
 
-fn write(value: &PyVal, out: &mut String) {
+/// [`dumps`] of a value read with `parse_mapping_lone_surrogates`: each
+/// mapped character is written back as the lone `\udXXX` escape
+/// `json.dumps` writes for the surrogate CPython kept.
+pub(crate) fn dumps_unmapping(value: &PyVal) -> String {
+    let mut out = String::new();
+    write(value, true, &mut out);
+    out
+}
+
+fn write(value: &PyVal, unmap: bool, out: &mut String) {
     match value {
         PyVal::Null => out.push_str("null"),
         PyVal::Bool(true) => out.push_str("true"),
@@ -276,14 +288,14 @@ fn write(value: &PyVal, out: &mut String) {
             "-Infinity"
         }),
         PyVal::Float(number) => out.push_str(&float_repr(*number)),
-        PyVal::Str(text) => write_string(text, out),
+        PyVal::Str(text) => write_string(text, unmap, out),
         PyVal::List(items) => {
             out.push('[');
             for (index, item) in items.iter().enumerate() {
                 if index > 0 {
                     out.push_str(", ");
                 }
-                write(item, out);
+                write(item, unmap, out);
             }
             out.push(']');
         }
@@ -293,9 +305,9 @@ fn write(value: &PyVal, out: &mut String) {
                 if index > 0 {
                     out.push_str(", ");
                 }
-                write_string(key, out);
+                write_string(key, unmap, out);
                 out.push_str(": ");
-                write(item, out);
+                write(item, unmap, out);
             }
             out.push('}');
         }
@@ -303,7 +315,7 @@ fn write(value: &PyVal, out: &mut String) {
 }
 
 /// `json.encoder.py_encode_basestring_ascii`.
-fn write_string(value: &str, out: &mut String) {
+fn write_string(value: &str, unmap: bool, out: &mut String) {
     out.push('"');
     for character in value.chars() {
         match character {
@@ -315,6 +327,10 @@ fn write_string(value: &str, out: &mut String) {
             '\u{8}' => out.push_str("\\b"),
             '\u{c}' => out.push_str("\\f"),
             ' '..='~' => out.push(character),
+            _ if unmap && in_surrogate_plane(character) => {
+                let surrogate = 0xd800 + (character as u32 - SURROGATE_PLANE_BASE);
+                out.push_str(&format!("\\u{surrogate:04x}"));
+            }
             _ => {
                 let code = character as u32;
                 if code <= 0xffff {

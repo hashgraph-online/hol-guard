@@ -340,7 +340,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         className="guard-shell-content flex flex-col"
         data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
       >
-        <main id="main-content" className="guard-shell-main flex-1" tabIndex={-1}>
+        <main id="main-content" className="guard-shell-main flex-1 focus:outline-none" tabIndex={-1}>
           <div className="guard-shell-workspace" data-view={props.view}>
             {updateBannerModel ? (
               <div className="mb-4">

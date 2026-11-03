@@ -94,6 +94,7 @@ import { SettingsFormSection, SettingsSelectRow, SettingsToggleRow } from "./set
 import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/settings-ia";
 import { ApprovalPasswordSection } from "./settings/approval-password-copy";
 import { CloudReviewSettings } from "./settings/cloud-review-settings";
+import { CloudActionsSettings } from "./settings/cloud-actions-settings";
 import { ContextAssistanceSettings } from "./context-assistance/settings-panel";
 import { ContextDataRepairPanel } from "./context-assistance/data-repair-panel";
 import { settingsWithContextOff } from "./context-assistance/settings-model";
@@ -1699,9 +1700,9 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
               </SettingsFormSection>
             ) : null}
 
-            <SettingsFormSection title="CIGAR context assistance" description="Optional context for reviews, AI apps, and supported execution flows.">
+            <SettingsFormSection title="CIGAR" description="Gives your AI app the project files that match what you ask.">
               <div className="flex flex-wrap items-center justify-between gap-3 py-4">
-                <p className="max-w-xl text-sm text-slate-500">CIGAR has its own workspace for getting started, runtime preferences, sources, app access, and data controls.</p>
+                <p className="max-w-xl text-sm text-slate-500">Turn it on, pick project folders and choose which AI apps use it on the CIGAR page.</p>
                 <a className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 px-4 text-sm font-semibold text-brand-dark hover:bg-slate-50"
                   href={guardAwareHref("/cigar")} onClick={(event) => { if (onNavigate) navigateFromAnchor(event, "/cigar", { onNavigate }); }}>Open CIGAR</a>
               </div>
@@ -1991,6 +1992,8 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
             </details>
           </div>
         )}
+
+        {activeTab === "cloud-actions" && <CloudActionsSettings />}
 
         {activeTab === "maintenance" && (
           <div className="flex min-h-0 flex-1 flex-col space-y-6">

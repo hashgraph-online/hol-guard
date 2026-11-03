@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from ...ecosystems.opencode import _strip_jsonc
 from ..aibom_detection import native_adapter_detection_with_warnings
@@ -36,16 +37,14 @@ from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .codex_detect_sources import path_restorations, restore_paths
 from .copilot_hook_config import CopilotHookOwnershipError, CopilotHookPlan, plan_copilot_hooks
 from .hook_payloads import inline_hooks_payload
-from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
+from .mcp_relay_native import mcp_proxy_launch
 from .mcp_servers import (
     ManagedMcpServer,
-    is_guard_proxy_command,
     managed_stdio_servers,
     proxy_launcher_entry,
     skipped_stdio_server_names,
 )
 from .state_files import load_backup_payload
-from .workspace_overrides import should_skip_workspace_override
 
 if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
@@ -53,6 +52,9 @@ if TYPE_CHECKING:
 _MANAGED_HOOK_FILENAME = "hol-guard-copilot.json"
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
 __all__ = ["CopilotHarnessAdapter", "CopilotHookOwnershipError"]
+_MCP_KEYS = ("mcpServers", "servers")
+_PLAN_KEYS = ("key", "source", "refresh", "add", "fields")
+_MALFORMED = "Copilot MCP plan answer is malformed"
 
 
 def _manifest_notes(payload: dict[str, object]) -> list[str]:
@@ -129,42 +131,106 @@ def _hook_entry(context: HarnessContext, plan: CopilotHookPlan) -> dict[str, obj
 _inline_hooks_payload = inline_hooks_payload
 
 
-def _mcp_servers_payload(target_path: Path, payload: dict[str, object]) -> dict[str, object] | None:
-    preferred_key = CopilotHarnessAdapter._mcp_payload_key(target_path, payload)
-    preferred_servers = payload.get(preferred_key)
-    if isinstance(preferred_servers, dict):
-        return preferred_servers
-    fallback_key = "servers" if preferred_key == "mcpServers" else "mcpServers"
-    fallback_servers = payload.get(fallback_key)
-    if isinstance(fallback_servers, dict):
-        return fallback_servers
-    return None
+def _launch_slot(payload: dict[str, object], key: str) -> object:
+    """A servers key as the native plan reads it: absent, not an object, or launch-only pairs."""
+    if key not in payload:
+        return None
+    servers = payload[key]
+    if not isinstance(servers, dict):
+        return False
+    return [
+        [name, {k: v for k, v in config.items() if k in ("command", "args")} if isinstance(config, dict) else None]
+        for name, config in cast(dict[str, object], servers).items()
+    ]
 
 
-def _command_parts(server_config: dict[str, object]) -> tuple[str | None, tuple[str, ...]]:
-    command = server_config.get("command")
-    args_payload = server_config.get("args")
-    args = (
-        tuple(str(value) for value in args_payload if isinstance(value, str)) if isinstance(args_payload, list) else ()
-    )
-    if isinstance(command, str):
-        return command, args
-    if isinstance(command, list):
-        command_parts = [str(value) for value in command if isinstance(value, str)]
-        if len(command_parts) == 0:
-            return None, args
-        return command_parts[0], (*tuple(command_parts[1:]), *args)
-    return None, args
+def _plan_mcp_targets(
+    context: HarnessContext,
+    targets: list[tuple[Path, dict[str, object]]],
+    managed: tuple[ManagedMcpServer, ...],
+) -> tuple[list[Any], list[str]]:
+    """Ask the native ``copilot_mcp_plan`` kind for each MCP target's plan and the install notes."""
+    from ..native_runner_authority import native_runner_authority
+
+    def key(path: str | Path) -> str:
+        return os.path.normcase(str(Path(path)))
+
+    request: dict[str, object] = {
+        "workspace": context.workspace_dir is not None,
+        "managed": [[server.name, server.source_scope, key(server.config_path)] for server in managed],
+        "targets": [
+            {"path": key(path), "name": path.name, **{name: _launch_slot(payload, name) for name in _MCP_KEYS}}
+            for path, payload in targets
+        ],
+    }
+    answer = native_runner_authority("copilot_mcp_plan", request)
+    plans, notes = _list(answer.get("targets")), _list(answer.get("notes"))
+    if set(answer) != {"targets", "notes"} or len(plans) != len(targets) or not _strings(notes):
+        raise ValueError(_MALFORMED)
+    return plans, notes
+
+
+def _list(value: object) -> list[Any]:
+    if not isinstance(value, list):
+        raise ValueError(_MALFORMED)
+    return cast(list[Any], value)
+
+
+def _strings(value: object) -> bool:
+    return all(isinstance(item, str) for item in _list(value))
+
+
+def _increasing(value: object, bound: int) -> bool:
+    items = _list(value)
+    return all(type(item) is int and 0 <= item < bound for item in items) and items == sorted(set(items))
+
+
+def _apply_mcp_plan(
+    context: HarnessContext, plan: object, payload: dict[str, object], managed: tuple[ManagedMcpServer, ...]
+) -> None:
+    """Apply one target's native plan to its payload in place, refusing a malformed plan."""
+    if not isinstance(plan, dict) or set(plan) != set(_PLAN_KEYS):
+        raise ValueError(_MALFORMED)
+    key, source, refresh, add, fields = (cast(dict[str, object], plan)[name] for name in _PLAN_KEYS)
+    if source is None:
+        servers: object = {}
+    elif source in _MCP_KEYS:
+        servers = payload.get(source)
+    else:
+        servers = None
+    configs: list[tuple[str, Any]] = list(cast(dict[str, object], servers).items()) if isinstance(servers, dict) else []
+    rows, pairs = _list(refresh), _list(fields)
+    if (
+        key not in _MCP_KEYS
+        or not isinstance(servers, dict)
+        or not all(len(_list(row)) == 2 and _strings(row[1]) for row in rows)
+        or not _increasing([row[0] for row in rows], len(configs))
+        or not all(isinstance(configs[row[0]][1], dict) for row in rows)
+        or not _increasing(add, len(managed))
+        or not all(len(_list(pair)) == 2 and isinstance(pair[0], str) for pair in pairs)
+    ):
+        raise ValueError(_MALFORMED)
+    normalized = dict(configs)
+    for index, python_args in rows:
+        name, config = configs[index]
+        env = config.get("env") if isinstance(config.get("env"), dict) else config.get("environment")
+        env = cast(dict[str, str], env) if isinstance(env, dict) else {}
+        normalized[name] = _refresh_guard_proxy_entry(config, python_args, launcher_env=merge_guard_launcher_env(env))
+    for index in _list(add):
+        entry = proxy_launcher_entry(proxy_command="copilot-mcp-proxy", context=context, server=managed[index])
+        entry.update(pairs)
+        normalized[managed[index].name] = entry
+    payload[cast(str, key)] = normalized
+    payload.pop("servers" if key == "mcpServers" else "mcpServers", None)
 
 
 def _refresh_guard_proxy_entry(
     server_config: dict[str, object],
+    python_args: list[str],
     *,
     launcher_env: dict[str, str],
 ) -> dict[str, object]:
     refreshed = dict(server_config)
-    _command, args = _command_parts(server_config)
-    _, python_args = python_proxy_launch(_command, args)
     refreshed["command"], refreshed["args"] = mcp_proxy_launch(guard_cli_launcher(), python_args)
     if launcher_env:
         refreshed["env"] = launcher_env
@@ -234,16 +300,6 @@ class CopilotHarnessAdapter(HarnessAdapter):
         target = str(target_path.resolve())
         digest = sha256(target.encode("utf-8")).hexdigest()[:12]
         return context.guard_home / "managed" / "copilot" / f"{digest}.backup.json"
-
-    @staticmethod
-    def _mcp_payload_key(target_path: Path, payload: dict[str, object]) -> str:
-        if "mcpServers" in payload and "servers" not in payload:
-            return "mcpServers"
-        if "servers" in payload and "mcpServers" not in payload:
-            return "servers"
-        if target_path.name in {".mcp.json", "mcp-config.json"}:
-            return "mcpServers"
-        return "servers"
 
     @staticmethod
     def _strict_json_object(path: Path, *, label: str, recover_malformed: bool = False) -> dict[str, object]:
@@ -425,6 +481,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
         target_mcp_paths = self._target_mcp_paths(context)
         backup_paths: list[str] = []
         state_paths: list[str] = []
+        gathered: list[tuple[Path, Path, bytes | None, str | None, dict[str, object]]] = []
         for target_mcp_path in target_mcp_paths:
             target_root = context.workspace_dir if context.workspace_dir is not None else context.home_dir
             _ensure_path_within_root(target_root, target_mcp_path, label="Copilot MCP")
@@ -440,39 +497,17 @@ class CopilotHarnessAdapter(HarnessAdapter):
             state_path = self._state_path(target_mcp_path, context)
             _ensure_path_within_root(context.guard_home, state_path, label="Copilot state")
             state_paths.append(str(state_path))
-            mcp_payload = parsed(target_mcp_path)
-            existing_servers = _mcp_servers_payload(target_mcp_path, mcp_payload)
-            normalized_servers = dict(existing_servers) if isinstance(existing_servers, dict) else {}
-            for name, server_config in tuple(normalized_servers.items()):
-                if not isinstance(name, str) or not isinstance(server_config, dict):
-                    continue
-                command, args = _command_parts(server_config)
-                if not is_guard_proxy_command(command, args):
-                    continue
-                existing_env = server_config.get("env")
-                if not isinstance(existing_env, dict):
-                    existing_env = server_config.get("environment")
-                normalized_servers[name] = _refresh_guard_proxy_entry(
-                    server_config,
-                    launcher_env=merge_guard_launcher_env(existing_env if isinstance(existing_env, dict) else {}),
-                )
-            existing_workspace_server_names = {
-                name
-                for name, server in normalized_servers.items()
-                if isinstance(name, str) and isinstance(server, dict)
-            }
-            for server in self._managed_servers_for_target(managed_servers, target_mcp_path):
-                if self._should_skip_workspace_override(
-                    context=context,
-                    server=server,
-                    existing_workspace_server_names=existing_workspace_server_names,
-                ):
-                    continue
-                normalized_servers[server.name] = self._proxy_server_entry(context, server, target_mcp_path)
-            payload_key = self._mcp_payload_key(target_mcp_path, mcp_payload)
-            mcp_payload[payload_key] = normalized_servers
-            alternate_key = "servers" if payload_key == "mcpServers" else "mcpServers"
-            mcp_payload.pop(alternate_key, None)
+            gathered.append((backup_path, state_path, target_before, original_text, parsed(target_mcp_path)))
+        plans, mcp_notes = _plan_mcp_targets(
+            context, [(path, item[4]) for path, item in zip(target_mcp_paths, gathered, strict=True)], managed_servers
+        )
+        # Every plan is checked and applied in memory before the first write, so
+        # a malformed plan for a later target leaves every file untouched.
+        for item, plan in zip(gathered, plans, strict=True):
+            _apply_mcp_plan(context, plan, item[4], managed_servers)
+        for target_mcp_path, (backup_path, state_path, target_before, original_text, mcp_payload) in zip(
+            target_mcp_paths, gathered, strict=True
+        ):
             if prepared_files is None:
                 target_mcp_path.parent.mkdir(parents=True, exist_ok=True)
                 commit_copilot_target_and_state(
@@ -558,12 +593,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
             "state_paths": state_paths,
             "managed_servers": [server.name for server in managed_servers],
             "skipped_servers": list(skipped_servers),
-            "notes": [
-                "Guard hook entries added to ~/.copilot/config.json for Copilot CLI.",
-                "Guard workspace hook entries added to .github/hooks/hol-guard-copilot.json for VS Code Copilot.",
-                "Guard MCP proxies added to Copilot CLI and VS Code workspace MCP config files.",
-                *_manifest_notes(shim_manifest),
-            ],
+            "notes": [*mcp_notes, *_manifest_notes(shim_manifest)],
         }
 
     @copilot_lifecycle_uninstall
@@ -682,24 +712,6 @@ class CopilotHarnessAdapter(HarnessAdapter):
             warnings.append("Copilot CLI was found on PATH, but `copilot --help` did not complete successfully.")
         return warnings
 
-    def _proxy_server_entry(
-        self,
-        context: HarnessContext,
-        server: ManagedMcpServer,
-        target_path: Path,
-    ) -> dict[str, object]:
-        entry = proxy_launcher_entry(
-            proxy_command="copilot-mcp-proxy",
-            context=context,
-            server=server,
-        )
-        if target_path.name in {".mcp.json", "mcp-config.json"}:
-            entry["type"] = "local"
-            entry["tools"] = ["*"]
-        else:
-            entry["type"] = "stdio"
-        return entry
-
     _backup_payload = staticmethod(load_backup_payload)
 
     @staticmethod
@@ -746,19 +758,3 @@ class CopilotHarnessAdapter(HarnessAdapter):
         # replaces the orphaned backup and writes authenticated lifecycle
         # state. They never authorize destructive cleanup on their own.
         return []
-
-    @staticmethod
-    def _managed_servers_for_target(
-        servers: tuple[ManagedMcpServer, ...],
-        target_mcp_path: Path,
-    ) -> tuple[ManagedMcpServer, ...]:
-        filtered: list[ManagedMcpServer] = []
-        for server in servers:
-            if server.source_scope == "global":
-                filtered.append(server)
-                continue
-            if Path(server.config_path) == target_mcp_path:
-                filtered.append(server)
-        return tuple(filtered)
-
-    _should_skip_workspace_override = staticmethod(should_skip_workspace_override)

@@ -149,7 +149,7 @@ fn iterated_strings(value: Option<&Value>) -> Result<Vec<String>, &'static str> 
 }
 
 /// `is_guard_proxy_command`, with `proxy_argument_tail`'s native relay form.
-fn is_guard_proxy(command: Option<&str>, args: &[String]) -> bool {
+pub(crate) fn is_guard_proxy(command: Option<&str>, args: &[String]) -> bool {
     let Some(command) = command else {
         return false;
     };

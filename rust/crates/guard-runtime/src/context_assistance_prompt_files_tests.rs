@@ -75,7 +75,12 @@ fn dotted_test_names_are_tests() {
 fn a_color_change_finds_the_header_and_its_styles_only() {
     let (_dir, root) = canonical();
     let project = app(&root);
-    let found = candidates(&project, &terms("add a color to the header"), WALK_BUDGET);
+    let found = candidates(
+        &project,
+        &terms("add a color to the header"),
+        &[],
+        WALK_BUDGET,
+    );
     assert_eq!(found[0], "src/components/Header.tsx", "{found:?}");
     assert!(found.contains(&"src/theme.css".to_owned()), "{found:?}");
     for skipped in [
@@ -108,20 +113,35 @@ fn tests_that_quote_the_request_give_way_to_the_source() {
     ] {
         fs::write(project.join(test), quoted).unwrap();
     }
-    let found = candidates(&project, &terms("add a color to the header"), WALK_BUDGET);
+    let found = candidates(
+        &project,
+        &terms("add a color to the header"),
+        &[],
+        WALK_BUDGET,
+    );
     assert_eq!(
         found,
         ["src/components/Header.tsx", "src/theme.css"],
         "no test files when the source matched"
     );
-    let asked = candidates(&project, &terms("fix the header color tests"), WALK_BUDGET);
+    let asked = candidates(
+        &project,
+        &terms("fix the header color tests"),
+        &[],
+        WALK_BUDGET,
+    );
     assert!(
         asked.contains(&"src/components/Header.test.tsx".to_owned()),
         "{asked:?}"
     );
     fs::remove_file(project.join("src/components/Header.tsx")).unwrap();
     fs::remove_file(project.join("src/theme.css")).unwrap();
-    let only_tests = candidates(&project, &terms("add a color to the header"), WALK_BUDGET);
+    let only_tests = candidates(
+        &project,
+        &terms("add a color to the header"),
+        &[],
+        WALK_BUDGET,
+    );
     assert!(
         only_tests.contains(&"tests/header_color.py".to_owned()),
         "tests remain when nothing else matched: {only_tests:?}"
@@ -135,6 +155,7 @@ fn no_time_left_means_no_walk() {
     assert!(candidates(
         &project,
         &terms("add a color to the header"),
+        &[],
         Duration::ZERO
     )
     .is_empty());
@@ -145,9 +166,15 @@ fn an_empty_folder_or_unrelated_prompt_adds_nothing() {
     let (_dir, root) = canonical();
     let empty = root.join("fresh");
     fs::create_dir(&empty).unwrap();
-    assert!(candidates(&empty, &terms("build a to-do app"), WALK_BUDGET).is_empty());
+    assert!(candidates(&empty, &terms("build a to-do app"), &[], WALK_BUDGET).is_empty());
     let project = app(&root);
-    assert!(candidates(&project, &terms("write a haiku about winter"), WALK_BUDGET).is_empty());
+    assert!(candidates(
+        &project,
+        &terms("write a haiku about winter"),
+        &[],
+        WALK_BUDGET
+    )
+    .is_empty());
 }
 
 #[test]
@@ -161,7 +188,7 @@ fn files_git_ignores_never_become_candidates() {
     fs::write(project.join("src/notes/local/header.md"), "header\n").unwrap();
     fs::write(project.join("src/notes/.gitignore"), "local/\n").unwrap();
     fs::write(project.join(".gitignore"), "*.log\nsrc/private/\n").unwrap();
-    let found = candidates(&project, &terms("the header"), WALK_BUDGET);
+    let found = candidates(&project, &terms("the header"), &[], WALK_BUDGET);
     assert!(
         found.contains(&"src/notes/header.md".to_owned()),
         "{found:?}"
@@ -183,7 +210,7 @@ fn a_linked_folder_is_never_walked() {
     fs::create_dir(&outside).unwrap();
     fs::write(outside.join("header.ts"), "header\n").unwrap();
     std::os::unix::fs::symlink(&outside, project.join("linked")).unwrap();
-    let found = candidates(&project, &terms("the header"), WALK_BUDGET);
+    let found = candidates(&project, &terms("the header"), &[], WALK_BUDGET);
     assert!(
         found.iter().all(|path| !path.starts_with("linked")),
         "{found:?}"
@@ -213,4 +240,78 @@ fn the_project_is_the_enclosing_repository_never_home_or_guard() {
         "never Guard's own files"
     );
     assert_eq!(project_root(&root, &home, &guard), None, "never above home");
+}
+
+#[test]
+fn quoted_text_is_kept_as_a_phrase() {
+    assert_eq!(
+        phrases(
+            "The confirm dialog's cancel button should say \"Never mind\" instead of \"Cancel\"."
+        ),
+        ["never mind", "cancel"]
+    );
+    assert_eq!(
+        phrases("rename \u{201c}Try again\u{201d} to `Reload` and 'Retry now'"),
+        ["try again", "reload", "retry now"]
+    );
+    assert!(phrases("don't change the user's \"ok\" label").is_empty());
+}
+
+/// A big settings file that says the request's everyday words many times
+/// must not outrank the small file the request names. The settings file
+/// never says "never mind" as one phrase, so only the words repeat.
+#[test]
+fn rare_words_and_quoted_text_outrank_common_words_repeated() {
+    let (_dir, root) = canonical();
+    let project = root.join("dash");
+    fs::create_dir_all(project.join(".git")).unwrap();
+    fs::create_dir_all(project.join("src")).unwrap();
+    for n in 0..20 {
+        fs::write(
+            project.join(format!("src/panel-{n}.tsx")),
+            "// Never say instead; mind the default button.\nexport const Panel = () => <button />;\n",
+        )
+        .unwrap();
+    }
+    fs::write(
+        project.join("src/settings-workspace.tsx"),
+        "default button: say mind, never instead, cancel dialog\n".repeat(8),
+    )
+    .unwrap();
+    fs::write(
+        project.join("src/confirm-dialog.tsx"),
+        "export function ConfirmDialog({ cancelLabel = \"Cancel\" }) {\n  return <button>{cancelLabel}</button>;\n}\n",
+    )
+    .unwrap();
+    let prompt = "The confirm dialog's default cancel button should say \"Never mind\" instead of \"Cancel\".";
+    let found = candidates(&project, &terms(prompt), &phrases(prompt), WALK_BUDGET);
+    assert_eq!(
+        found.first().map(String::as_str),
+        Some("src/confirm-dialog.tsx"),
+        "{found:?}"
+    );
+}
+
+#[test]
+fn a_file_with_only_the_quoted_text_still_counts() {
+    let (_dir, root) = canonical();
+    let project = root.join("quoted");
+    fs::create_dir_all(project.join("src")).unwrap();
+    fs::write(
+        project.join("src/strings.ts"),
+        "export const LABEL = 'zq';\n// Ok, got it\n",
+    )
+    .unwrap();
+    let found = candidates(&project, &[], &["ok, got it".to_owned()], WALK_BUDGET);
+    assert_eq!(found, ["src/strings.ts"]);
+}
+
+#[test]
+fn unmatched_quotes_are_scanned_in_one_pass() {
+    let prompt = " \u{201c}".repeat(50_000);
+    let started = Instant::now();
+    assert!(phrases(&prompt).is_empty());
+    assert!(started.elapsed() < Duration::from_secs(1));
+    let far = format!("\"{}\" and \"keep this\"", "x".repeat(200));
+    assert_eq!(phrases(&far), ["keep this"]);
 }

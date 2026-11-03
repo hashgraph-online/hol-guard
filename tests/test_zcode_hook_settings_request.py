@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import copy
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,265 +13,195 @@ from codex_plugin_scanner.guard import native_runner_authority as native_module
 from codex_plugin_scanner.guard.adapters import zcode
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.zcode import ZCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.zcode_config import GUARD_MANAGED_MARKER, ZCODE_PRETOOL_MATCHERS
-from codex_plugin_scanner.guard.adapters.zcode_hook_settings import plan_hook_settings
+from codex_plugin_scanner.guard.adapters.zcode_config import ZCODE_PRETOOL_MATCHERS
+from codex_plugin_scanner.guard.adapters.zcode_hook_settings import install_hook_surface, uninstall_hook_surface
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 
 PATH = Path("/home/user/.zcode/cli/config.json")
-GUARD = f"guard-hook # {GUARD_MANAGED_MARKER}"
-HANDLERS: dict[str, dict[str, object]] = {
-    "PreToolUse": {"type": "command", "command": GUARD, "timeout": 30},
-    "UserPromptSubmit": {"type": "command", "command": GUARD, "timeout": 30},
-}
+LIVE = json.dumps({"present": True, "value": True})
+Answer = Callable[[dict[str, object]], object]
 
 
 class _Native:
-    def __init__(self, answer: object) -> None:
+    def __init__(self, answer: Answer) -> None:
         self.answer = answer
         self.sent: list[tuple[str, dict[str, object]]] = []
 
     def __call__(self, kind: str, args: dict[str, object], **_kwargs: object) -> object:
         self.sent.append((kind, dict(args)))
-        if isinstance(self.answer, Exception):
-            raise self.answer
-        return copy.deepcopy(self.answer)
+        return self.answer(args)
 
 
 def _native(monkeypatch: pytest.MonkeyPatch, answer: object) -> _Native:
-    native = _Native(answer)
+    def reply(args: dict[str, object]) -> object:
+        if isinstance(answer, Exception):
+            raise answer
+        return answer(args) if callable(answer) else answer
+
+    native = _Native(reply)
     monkeypatch.setattr(native_module, "native_runner_authority", native)
     return native
 
 
-def _hooks() -> dict[str, object]:
-    return {
-        "enabled": True,
-        "PreToolUse": [{"matcher": "Bash", "hooks": [{"command": "echo legacy"}]}],
-        "events": {
-            "PreToolUse": [{"matcher": "Read", "hooks": [{"command": "echo read"}, {"command": GUARD}]}],
-            "Stop": [{"hooks": [{"command": "echo stop"}]}],
-        },
+def _context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[HarnessContext, Path, Path, Path]:
+    monkeypatch.delenv("ZCODE_HOME", raising=False)
+    monkeypatch.setattr(zcode, "prepare_guard_shim", lambda *_a, **_k: SimpleNamespace(manifest={}, files=()))
+    monkeypatch.setattr(ZCodeHarnessAdapter, "_hook_command_parts", staticmethod(lambda *_a, **_k: ("guard", "hook")))
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+    cli = context.home_dir / ".zcode" / "cli"
+    cli.mkdir(parents=True)
+    state = context.guard_home / "managed" / "zcode" / "install.state.json"
+    return context, cli / "config.json", cli / "setting.json", state
+
+
+def _rendered(args: dict[str, object]) -> object:
+    return {"text": f"new {Path(str(args['path'])).name}\n", "enabled": LIVE}
+
+
+def test_install_sends_each_surface_and_keeps_the_rendered_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context, config, setting, state = _context(tmp_path, monkeypatch)
+    config.write_text('{"mcp": {}}', encoding="utf-8")
+    setting.write_text("{oops", encoding="utf-8")
+    state.parent.mkdir(parents=True)
+    history = {str(config): {"present": True, "value": False}}
+    state.write_text(json.dumps({"managed_config_path": "m", "hooks_enabled_before": history}), encoding="utf-8")
+    native = _native(monkeypatch, _rendered)
+
+    prepared = ZCodeHarnessAdapter().prepare_install(context)
+
+    common = {
+        "op": "install",
+        "history": history,
+        "managed_config_path": "m",
+        "matchers": list(ZCODE_PRETOOL_MATCHERS),
+        "command": "guard hook",
+        "timeouts": {"PreToolUse": 30, "UserPromptSubmit": 30},
     }
-
-
-INSTALL: dict[str, object] = {
-    "enabled": None,
-    "has_handlers": True,
-    "drop": ["PreToolUse"],
-    "events": [
-        [
-            "PreToolUse",
-            [
-                {"copy": ["events", 0], "hooks": [0, "guard"]},
-                {"copy": ["hooks", 0], "hooks": [0, "guard"]},
-                {"group": "Write"},
-            ],
-        ],
-        ["UserPromptSubmit", [{"group": None}]],
-    ],
-}
-UNINSTALL: dict[str, object] = {
-    "enabled": None,
-    "events": [["PreToolUse", [{"copy": ["events", 0], "hooks": [0]}]], ["Stop", [["events", 0]]]],
-    "hooks": [["PreToolUse", None]],
-}
-
-
-def test_install_request_carries_ordered_hooks_text_and_matchers(monkeypatch: pytest.MonkeyPatch) -> None:
-    native = _native(monkeypatch, INSTALL)
-    hooks = _hooks()
-    state = {"hooks_enabled_before": {str(PATH): {"present": False, "value": None}}, "managed_config_path": "x"}
-
-    plan_hook_settings("install", hooks, path=PATH, state=state, handlers=HANDLERS)
-
     assert native.sent == [
-        (
-            "zcode_hook_settings",
-            {
-                "op": "install",
-                "hooks": json.dumps(hooks, ensure_ascii=False),
-                "path": str(PATH),
-                "history": state["hooks_enabled_before"],
-                "managed_config_path": "x",
-                "matchers": list(ZCODE_PRETOOL_MATCHERS),
-            },
-        )
+        ("zcode_hook_settings", {**common, "text": '{"mcp": {}}', "path": str(config), "desktop": True}),
+        ("zcode_hook_settings", {**common, "text": "{oops", "path": str(setting), "desktop": False}),
     ]
+    after = {change.path: change.after for change in prepared.files}
+    assert after[config.resolve()] == b"new config.json\n"
+    assert after[setting.resolve()] == b"new setting.json\n"
+    saved = json.loads(after[state.resolve()] or b"")
+    assert saved["hooks_enabled_before"] == {str(config): json.loads(LIVE), str(setting): json.loads(LIVE)}
 
 
-def test_uninstall_request_has_no_matchers(monkeypatch: pytest.MonkeyPatch) -> None:
-    native = _native(monkeypatch, UNINSTALL)
-    plan_hook_settings("uninstall", _hooks(), path=PATH, state={})
-    assert native.sent[0][0] == "zcode_hook_settings"
-    assert set(native.sent[0][1]) == {"op", "hooks", "path", "history", "managed_config_path"}
-    assert native.sent[0][1]["op"] == "uninstall"
+def test_install_sends_an_absent_config_as_null_and_skips_an_absent_setting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context, config, setting, state = _context(tmp_path, monkeypatch)
+    native = _native(monkeypatch, _rendered)
+
+    prepared = ZCodeHarnessAdapter().prepare_install(context)
+
+    assert [(args["text"], args["path"], args["history"]) for _kind, args in native.sent] == [(None, str(config), None)]
+    saved = json.loads({change.path: change.after for change in prepared.files}[state.resolve()] or b"")
+    # The CLI migration copies config.json into setting.json, Guard's opt-in included.
+    assert saved["hooks_enabled_before"] == {str(config): json.loads(LIVE), str(setting): json.loads(LIVE)}
 
 
-def test_install_plan_keeps_the_callers_own_entries(monkeypatch: pytest.MonkeyPatch) -> None:
-    _native(monkeypatch, INSTALL)
-    hooks = _hooks()
-    events = hooks["events"]
-    assert isinstance(events, dict)
-    stop, legacy = events["Stop"], hooks["PreToolUse"]
-    plan = plan_hook_settings("install", hooks, path=PATH, state={}, handlers=HANDLERS)
-    plan.apply(hooks)
-
-    assert plan.enabled == {"present": True, "value": True}
-    assert plan.has_handlers is True
-    assert list(hooks) == ["enabled", "events"]
-    after = hooks["events"]
-    assert isinstance(after, dict)
-    assert list(after) == ["PreToolUse", "Stop", "UserPromptSubmit"]
-    assert after["Stop"] is stop
-    assert after["PreToolUse"] == [
-        {"matcher": "Read", "hooks": [{"command": "echo read"}, HANDLERS["PreToolUse"]]},
-        {"matcher": "Bash", "hooks": [{"command": "echo legacy"}, HANDLERS["PreToolUse"]]},
-        {"hooks": [HANDLERS["PreToolUse"]], "matcher": "Write"},
-    ]
-    assert isinstance(legacy, list)
-    assert after["PreToolUse"][1]["hooks"][0] is legacy[0]["hooks"][0]
-    assert after["UserPromptSubmit"] == [{"hooks": [HANDLERS["UserPromptSubmit"]]}]
+@pytest.mark.parametrize(
+    ("refusal", "message"),
+    [
+        ("not_object", "ZCode config must be a JSON object: config.json"),
+        ("hooks_disabled", "ZCode user hooks are disabled in config.json"),
+    ],
+)
+def test_install_refusals_keep_their_messages(refusal: str, message: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    _native(monkeypatch, {"refusal": refusal})
+    with pytest.raises(ValueError, match=message):
+        install_hook_surface("{}", path=PATH, desktop=True, state={}, command="g", timeouts={})
 
 
-def test_uninstall_plan_prunes_and_drops_lists(monkeypatch: pytest.MonkeyPatch) -> None:
-    _native(monkeypatch, UNINSTALL)
-    hooks = _hooks()
-    plan_hook_settings("uninstall", hooks, path=PATH, state={}).apply(hooks)
-    assert hooks == {
-        "enabled": True,
-        "events": {
-            "PreToolUse": [{"matcher": "Read", "hooks": [{"command": "echo read"}]}],
-            "Stop": [{"hooks": [{"command": "echo stop"}]}],
-        },
-    }
-
-
-def test_enabled_record_is_the_saved_one_or_the_live_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    for answer, expected in (
-        ({"present": True, "value": False}, {"present": True, "value": False}),
-        ({"present": False, "value": None}, {"present": False, "value": None}),
-        (None, {"present": True, "value": True}),
-    ):
-        _native(monkeypatch, {**UNINSTALL, "enabled": answer})
-        assert plan_hook_settings("uninstall", _hooks(), path=PATH, state={}).enabled == expected
-
-
-def _variant(base: dict[str, object], path: tuple[str | int, ...], value: object) -> dict[str, object]:
-    answer = copy.deepcopy(base)
-    target: Any = answer
-    for step in path[:-1]:
-        target = target[step]
-    if value is _DELETE:
-        del target[path[-1]]
-    else:
-        target[path[-1]] = value
-    return answer
-
-
-_DELETE = object()
-_PTU = ("events", 0, 1)
-BAD_INSTALL: dict[str, tuple[tuple[str | int, ...], object]] = {
-    "extra_key": (("surprise",), True),
-    "missing_key": (("drop",), _DELETE),
-    "has_handlers_not_bool": (("has_handlers",), "yes"),
-    "drop_not_a_list_key": (("drop",), ["enabled"]),
-    "drop_repeated": (("drop",), ["PreToolUse", "PreToolUse"]),
-    "events_wrong_order": (("events",), [["UserPromptSubmit", [{"group": None}]], ["PreToolUse", []]]),
-    "events_extra": (("events",), [*cast(list[object], INSTALL["events"]), ["Stop", []]]),
-    "index_out_of_range": ((*_PTU, 0, "copy", 1), 5),
-    "index_bool": ((*_PTU, 0, "copy", 1), True),
-    "unknown_source": ((*_PTU, 0, "copy", 0), "other"),
-    "group_unknown_matcher": ((*_PTU, 2), {"group": "Nope"}),
-    "group_extra_key": ((*_PTU, 2), {"group": "Write", "x": 1}),
-    "handler_out_of_range": ((*_PTU, 0, "hooks"), [2]),
-    "handler_unknown_word": ((*_PTU, 0, "hooks"), ["user"]),
-    "plan_not_a_list": ((*_PTU,), None),
-    "enabled_not_a_record": (("enabled",), True),
-    "enabled_extra_key": (("enabled",), {"present": True, "value": True, "source": "live"}),
-    "enabled_present_not_bool": (("enabled",), {"present": 1, "value": True}),
-    "enabled_value_not_bool": (("enabled",), {"present": True, "value": "yes"}),
-}
-
-
-@pytest.mark.parametrize("name", sorted(BAD_INSTALL))
-def test_install_refuses_malformed_answers(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    path, value = BAD_INSTALL[name]
-    _native(monkeypatch, _variant(INSTALL, path, value))
-    hooks = _hooks()
-    before = json.dumps(hooks)
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        {"text": "x"},
+        {"text": "x", "enabled": LIVE, "more": 1},
+        {"text": 1, "enabled": LIVE},
+        {"text": "x", "enabled": {"present": True, "value": True}},
+        {"text": "x", "enabled": "{not json"},
+        {"text": "x", "enabled": "[]"},
+        {"text": "x", "enabled": json.dumps({"present": 1, "value": True})},
+        {"text": "x", "enabled": json.dumps({"present": True})},
+        {"refusal": "unknown"},
+        {"refusal": "not_object", "text": "x"},
+    ],
+)
+def test_install_refuses_malformed_answers(answer: object, monkeypatch: pytest.MonkeyPatch) -> None:
+    _native(monkeypatch, answer)
     with pytest.raises(ValueError, match="answer is malformed"):
-        plan_hook_settings("install", hooks, path=PATH, state={}, handlers=HANDLERS)
-    assert json.dumps(hooks) == before
+        install_hook_surface("{}", path=PATH, desktop=True, state={}, command="g", timeouts={})
 
 
-def test_install_refuses_a_flat_reference_outside_the_dropped_keys(monkeypatch: pytest.MonkeyPatch) -> None:
-    _native(monkeypatch, _variant(INSTALL, ("drop",), []))
+@pytest.mark.parametrize("answer", [None, {}, {"text": 1}, {"text": None, "x": 1}, {"refusal": "not_object"}])
+def test_uninstall_refuses_malformed_answers(answer: object, monkeypatch: pytest.MonkeyPatch) -> None:
+    _native(monkeypatch, answer)
     with pytest.raises(ValueError, match="answer is malformed"):
-        plan_hook_settings("install", _hooks(), path=PATH, state={}, handlers=HANDLERS)
-
-
-BAD_UNINSTALL: dict[str, tuple[tuple[str | int, ...], object]] = {
-    "has_install_keys": (("drop",), []),
-    "names_mismatch": (("events",), [["Stop", [["events", 0]]]]),
-    "empty_list_not_null": (("events", 1, 1), []),
-    "guard_handler": (("events", 0, 1, 0, "hooks"), [0, "guard"]),
-    "group": (("events", 1, 1), [{"group": None}]),
-    "flat_refers_events": (("hooks", 0, 1), [["events", 0]]),
-    "events_refers_flat": (("events", 1, 1), [["hooks", 0]]),
-    "flat_names_mismatch": (("hooks",), []),
-}
-
-
-@pytest.mark.parametrize("name", sorted(BAD_UNINSTALL))
-def test_uninstall_refuses_malformed_answers(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    path, value = BAD_UNINSTALL[name]
-    _native(monkeypatch, _variant(UNINSTALL, path, value))
-    with pytest.raises(ValueError, match="answer is malformed"):
-        plan_hook_settings("uninstall", _hooks(), path=PATH, state={})
+        uninstall_hook_surface("{}", path=PATH, state={})
 
 
 def test_native_refusal_becomes_a_zcode_error(monkeypatch: pytest.MonkeyPatch) -> None:
     _native(monkeypatch, NativeRunnerAuthorityError("native_runner_authority_invalid"))
     with pytest.raises(ValueError, match="ZCode hook settings plan failed"):
-        plan_hook_settings("uninstall", _hooks(), path=PATH, state={})
+        uninstall_hook_surface("{}", path=PATH, state={})
 
 
-def _managed_install(tmp_path: Path) -> tuple[HarnessContext, Path, Path, bytes]:
-    ctx = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    config = ctx.home_dir / ".zcode" / "cli" / "config.json"
-    config.parent.mkdir(parents=True)
-    hooks = {"enabled": True, "events": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"command": GUARD}]}]}}
-    config.write_text(json.dumps({"hooks": hooks}, indent=2), encoding="utf-8")
-    state = ctx.guard_home / "managed" / "zcode" / "install.state.json"
+def _managed_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[HarnessContext, Path, Path, Path]:
+    context, config, setting, state = _context(tmp_path, monkeypatch)
+    config.write_text('{"hooks": {"enabled": true}}', encoding="utf-8")
+    setting.write_text('{"hooks": {}}', encoding="utf-8")
     state.parent.mkdir(parents=True)
     state.write_text(json.dumps({"managed_config_path": str(config)}), encoding="utf-8")
-    return ctx, config, state, config.read_bytes()
+    return context, config, setting, state
+
+
+def test_uninstall_writes_only_the_surfaces_that_changed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    context, config, setting, state = _managed_install(tmp_path, monkeypatch)
+    native = _native(monkeypatch, lambda args: {"text": "{}\n" if args["path"] == str(config) else None})
+    monkeypatch.setattr(zcode, "remove_guard_shim", lambda *_a, **_k: {})
+
+    ZCodeHarnessAdapter().uninstall(context)
+
+    assert [args for _kind, args in native.sent] == [
+        {
+            "op": "uninstall",
+            "text": '{"hooks": {}}',
+            "path": str(setting),
+            "history": None,
+            "managed_config_path": str(config),
+        },
+        {
+            "op": "uninstall",
+            "text": '{"hooks": {"enabled": true}}',
+            "path": str(config),
+            "history": None,
+            "managed_config_path": str(config),
+        },
+    ]
+    assert config.read_text(encoding="utf-8") == "{}\n"
+    assert setting.read_text(encoding="utf-8") == '{"hooks": {}}'
+    assert not state.exists()
 
 
 @pytest.mark.parametrize("answer", [NativeRunnerAuthorityError("native_runner_authority_invalid"), {"enabled": 1}])
-def test_refused_uninstall_plan_leaves_shim_files_and_state(
+def test_refused_uninstall_leaves_shim_files_and_state(
     answer: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    ctx, config, state, before = _managed_install(tmp_path)
-    native = _native(monkeypatch, answer)
+    context, config, setting, state = _managed_install(tmp_path, monkeypatch)
+    before = config.read_bytes(), setting.read_bytes()
+    _native(monkeypatch, answer)
     removed: list[str] = []
-    monkeypatch.setattr(zcode, "remove_guard_shim", lambda harness, *_args, **_kwargs: removed.append(harness))
+    monkeypatch.setattr(zcode, "remove_guard_shim", lambda harness, *_a, **_k: removed.append(harness))
 
     with pytest.raises(ValueError, match="ZCode hook settings"):
-        ZCodeHarnessAdapter().uninstall(ctx)
+        ZCodeHarnessAdapter().uninstall(context)
 
-    assert [kind for kind, _args in native.sent] == ["zcode_hook_settings"]
     assert removed == []
-    assert config.read_bytes() == before
+    assert (config.read_bytes(), setting.read_bytes()) == before
     assert state.is_file()
-
-
-def test_refused_install_plan_leaves_config_unchanged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    ctx, config, _state, before = _managed_install(tmp_path)
-    native = _native(monkeypatch, NativeRunnerAuthorityError("native_runner_authority_invalid"))
-
-    with pytest.raises(ValueError, match="ZCode hook settings plan failed"):
-        ZCodeHarnessAdapter().prepare_install(ctx)
-
-    assert [kind for kind, _args in native.sent] == ["zcode_hook_settings"]
-    assert config.read_bytes() == before

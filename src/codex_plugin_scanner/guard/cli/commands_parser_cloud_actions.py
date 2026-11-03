@@ -126,6 +126,15 @@ def _add_cloud_workspace(parser: argparse.ArgumentParser, *, required: bool) -> 
     )
 
 
+def _add_cloud_url(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--cloud-url",
+        default=DEFAULT_CLOUD_ACTIONS_URL,
+        metavar="URL",
+        help=f"Guard Cloud address (default: {DEFAULT_CLOUD_ACTIONS_URL})",
+    )
+
+
 def _add_json(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Emit the versioned JSON contract")
 
@@ -157,16 +166,11 @@ def configure_guard_cloud_actions_parser(
         dest="cloud_actions_command",
         required=True,
         parser_class=FriendlyArgumentParser,
-        metavar="{login,logout,status,workspace,accounts,ai-tools}",
+        metavar="{login,logout,status,doctor,workspace,accounts,ai-tools}",
     )
 
     login = _add_parser(commands, "login", "Sign in to Guard Cloud for Cloud actions in one workspace")
-    login.add_argument(
-        "--cloud-url",
-        default=DEFAULT_CLOUD_ACTIONS_URL,
-        metavar="URL",
-        help=f"Guard Cloud address (default: {DEFAULT_CLOUD_ACTIONS_URL})",
-    )
+    _add_cloud_url(login)
     _add_cloud_workspace(login, required=False)
     login.add_argument("--no-browser", action="store_true", help="Print the sign-in link instead of opening it")
     login.add_argument(
@@ -185,8 +189,21 @@ def configure_guard_cloud_actions_parser(
 
     status = _add_parser(commands, "status", "Show Cloud actions sign-in, workspace and connected accounts")
     _add_cloud_workspace(status, required=False)
+    status.add_argument(
+        "--offline", action="store_true", help="Show only what is saved on this computer; do not ask Guard Cloud"
+    )
     _add_profile(status)
     _add_json(status)
+
+    doctor = _add_parser(commands, "doctor", "Check the Cloud actions sign-in, Guard Cloud and AI tool settings")
+    doctor.add_argument(
+        "--bundle",
+        metavar="FILE",
+        help="Also save the results to a new file to share with support; it never holds the sign-in itself",
+    )
+    doctor.add_argument("--home", help=argparse.SUPPRESS)
+    _add_profile(doctor)
+    _add_json(doctor)
 
     workspace = _add_parser(commands, "workspace", "Choose the Guard Cloud workspace these commands use")
     workspace_commands = workspace.add_subparsers(
@@ -208,9 +225,13 @@ def configure_guard_cloud_actions_parser(
     listing = _add_parser(account_commands, "list", "List the workspace's connected accounts")
     _add_cloud_workspace(listing, required=False)
     _add_json(listing)
-    connect = _add_parser(account_commands, "connect", "Start provider sign-in for a new connected account")
+    connect = _add_parser(
+        account_commands, "connect", "Open Guard Cloud to sign in with a provider and connect an account"
+    )
     connect.add_argument("provider", type=_slug("provider"), metavar="PROVIDER")
     _add_cloud_workspace(connect, required=True)
+    _add_cloud_url(connect)
+    connect.add_argument("--no-browser", action="store_true", help="Print the link instead of opening it")
     _add_json(connect)
     disconnect = _add_parser(account_commands, "disconnect", "Disconnect one connected account")
     disconnect.add_argument("connected_account", type=connected_account_id, metavar="CONNECTED_ACCOUNT_ID")
@@ -229,7 +250,15 @@ def configure_guard_cloud_actions_parser(
     mode = configure.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="Show the exact changes without writing them")
     mode.add_argument("--apply", action="store_true", help="Write the changes, keeping a backup")
+    _add_cloud_url(configure)
+    configure.add_argument("--home", help=argparse.SUPPRESS)
+    configure.add_argument("--guard-home", help=argparse.SUPPRESS)
     _add_json(configure)
+    restore = _add_parser(tool_commands, "restore", "Put back the AI tool's settings file from before Guard changed it")
+    restore.add_argument("ai_tool", type=_slug("AI tool"), metavar="AI_TOOL")
+    restore.add_argument("--home", help=argparse.SUPPRESS)
+    restore.add_argument("--guard-home", help=argparse.SUPPRESS)
+    _add_json(restore)
     verify = _add_parser(tool_commands, "verify", "Check an AI tool's Cloud actions settings")
     verify.add_argument("ai_tool", type=_slug("AI tool"), metavar="AI_TOOL")
     _add_cloud_workspace(verify, required=False)

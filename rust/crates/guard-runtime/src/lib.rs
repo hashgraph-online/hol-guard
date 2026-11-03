@@ -148,6 +148,8 @@ mod cline_hook_files;
 #[path = "adapters/cline_hook_files_tests.rs"]
 mod cline_hook_files_tests;
 mod cline_hook_worker;
+#[path = "adapters/cline_paths.rs"]
+mod cline_paths;
 #[path = "adapters/cline_plugin_render.rs"]
 mod cline_plugin_render;
 #[cfg(test)]
@@ -164,6 +166,7 @@ mod cloud_request_snapshot;
 mod cloud_request_text;
 #[cfg(test)]
 mod cloud_request_vectors_tests;
+mod cloud_review_ack;
 mod cloud_sync_privacy;
 mod codex_app_server_socket;
 #[path = "adapters/detection/codex_detect.rs"]
@@ -182,10 +185,13 @@ mod codex_hook_trust;
 mod codex_hooks;
 #[cfg(test)]
 mod codex_hooks_parity_tests;
+mod codex_host_inventory;
 mod codex_identity;
 mod codex_live_operation;
 mod codex_live_wait_build;
 mod codex_proxy;
+#[path = "adapters/codex_remote_launch.rs"]
+mod codex_remote_launch;
 mod codex_request_resume_busy;
 mod codex_request_resume_op;
 mod codex_request_resume_store;
@@ -273,6 +279,16 @@ mod copilot_hook_config;
 #[cfg(test)]
 #[path = "adapters/copilot_hook_config_tests.rs"]
 mod copilot_hook_config_tests;
+#[path = "adapters/copilot_lifecycle_state.rs"]
+mod copilot_lifecycle_state;
+#[cfg(test)]
+#[path = "adapters/copilot_lifecycle_state_tests.rs"]
+mod copilot_lifecycle_state_tests;
+#[path = "adapters/copilot_mcp_plan.rs"]
+mod copilot_mcp_plan;
+#[cfg(test)]
+#[path = "adapters/copilot_mcp_plan_tests.rs"]
+mod copilot_mcp_plan_tests;
 #[cfg(all(test, unix))]
 mod copilot_vectors_tests;
 mod critical_floor_op;
@@ -293,6 +309,8 @@ mod cursor_hook_config;
 #[cfg(test)]
 #[path = "adapters/cursor_hook_config_tests.rs"]
 mod cursor_hook_config_tests;
+#[path = "adapters/cursor_hook_script.rs"]
+mod cursor_hook_script;
 #[path = "adapters/cursor_hook_state.rs"]
 mod cursor_hook_state;
 #[cfg(test)]
@@ -367,6 +385,7 @@ mod extension_control_preview_op;
 mod extension_control_proof;
 mod extension_control_terminal_op;
 mod extension_coverage_hint;
+mod fleet_posture_inventory;
 /// Parser entry points for `rust/fuzz`; see `fuzz_entry.rs`.
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod fuzz_entry;
@@ -581,11 +600,19 @@ mod guard_store_write_cache;
 mod hardening;
 mod harness_coverage;
 mod harness_coverage_command;
+mod harness_diagnostics;
 #[path = "adapters/harness_hook_settings.rs"]
 mod harness_hook_settings;
 #[cfg(test)]
 #[path = "adapters/harness_hook_settings_tests.rs"]
 mod harness_hook_settings_tests;
+#[path = "adapters/harness_mcp_discovery.rs"]
+mod harness_mcp_discovery;
+#[cfg(test)]
+#[path = "adapters/harness_mcp_discovery_tests.rs"]
+mod harness_mcp_discovery_tests;
+#[path = "adapters/harness_settings_file.rs"]
+mod harness_settings_file;
 mod harness_version_compat;
 mod health_lease_contract;
 mod health_lease_state;
@@ -605,6 +632,8 @@ mod hermes_yaml_resolve;
 #[path = "adapters/hook_adapter_op.rs"]
 mod hook_adapter_op;
 mod hook_approval_context;
+#[path = "adapters/hook_approval_wait.rs"]
+mod hook_approval_wait;
 mod hook_artifact_compose_codex_live_allow;
 mod hook_artifact_compose_op;
 mod hook_artifact_compose_package_firewall;
@@ -691,8 +720,14 @@ mod inventory_scan_targets_op;
 mod inventory_snapshot_digest_op;
 mod inventory_source_evidence_op;
 mod inventory_url_redaction_op;
+mod isolation_provider_registry;
 #[path = "adapters/detection/kimi_detect.rs"]
 mod kimi_detect;
+#[path = "adapters/detection/kimi_hook_config.rs"]
+mod kimi_hook_config;
+#[cfg(test)]
+#[path = "adapters/detection/kimi_hook_config_tests.rs"]
+mod kimi_hook_config_tests;
 mod local_authority_integrity_op;
 mod local_cli_grant_op;
 mod local_cli_help;
@@ -700,9 +735,11 @@ mod local_cli_hook_contained;
 mod local_cli_hook_op;
 mod local_cli_identify;
 mod local_cli_observer;
+mod local_cli_script_source;
 mod local_mcp_grant_identity;
 mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
+mod local_mcp_probe;
 mod local_once_store;
 mod local_risk_report;
 mod local_skill_index;
@@ -830,6 +867,8 @@ mod opencode_install_plan;
 #[cfg(test)]
 #[path = "adapters/opencode_install_plan_tests.rs"]
 mod opencode_install_plan_tests;
+#[path = "adapters/opencode_launch.rs"]
+mod opencode_launch;
 #[path = "adapters/opencode_plugin_render.rs"]
 mod opencode_plugin_render;
 #[cfg(test)]
@@ -856,6 +895,7 @@ mod package_posture_op;
 mod package_protect_finalize_op;
 mod package_protect_projection_op;
 mod package_review_plan_op;
+mod package_script_memory;
 mod package_workspace_scope_op;
 mod paseo_providers;
 mod persistence_action_class;
@@ -1026,6 +1066,7 @@ mod trust_attestation_verify_op;
 #[cfg(test)]
 #[path = "../../../test_support/unique_nanos.rs"]
 mod unique_nanos;
+mod user_command_lookup;
 mod user_health_state;
 mod verified_read_decision_op;
 #[cfg(unix)]
@@ -1043,6 +1084,7 @@ mod windows_pytest;
 #[cfg(windows)]
 mod windows_readonly;
 mod windows_trusted_directories;
+mod workspace_assessment_sync;
 mod workspace_audit_sync;
 mod workspace_fix;
 mod workspace_fix_diff;
@@ -1066,6 +1108,11 @@ mod zcode_hook_settings;
 #[cfg(test)]
 #[path = "adapters/zcode_hook_settings_tests.rs"]
 mod zcode_hook_settings_tests;
+#[path = "adapters/zcode_hook_surface.rs"]
+mod zcode_hook_surface;
+#[cfg(test)]
+#[path = "adapters/zcode_hook_surface_tests.rs"]
+mod zcode_hook_surface_tests;
 #[cfg(all(test, unix))]
 mod zcode_vectors_tests;
 

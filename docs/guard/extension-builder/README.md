@@ -139,44 +139,11 @@ does not discover Cargo or fall back to Python matcher semantics.
 
 ## Bind a hosted action
 
-A command source or MCP server contribution is local-only until a sibling
-`guard.cloud-action-binding-contribution.v1` document names the hosted actions
-it covers. Each binding ties one `actionId` to a `permissionId` the command
-source declares, or a `tool` the MCP server declares, and adds only what can
-make hosted use stricter:
-
-- `effect`: `read`, `write`, `destructive` or `admin`.
-- `resource` (optional): the argument that names the affected resource.
-- `requiredCapabilities`: restrictions the hosting service must enforce.
-  `cloud-executable` bindings need at least `egress-pinned` and
-  `bounded-output`.
-- `cloudSupport`: `portable-policy` when hosted policy evaluates the action and
-  nothing runs, or `cloud-executable` when a reviewed remote MCP server may run
-  it. Command sources and locally launched MCP servers are never
-  `cloud-executable`.
-
-Bindings carry no defaults, decisions, code, includes, endpoints or
-credentials. A remote binding uses the endpoint from the server contribution
-it extends.
-
-[`examples/cloud-binding-build.json`](examples/cloud-binding-build.json) binds
-the synthetic command source and a fictional remote MCP server. Add the
-exported trust map and packaged validation base, then validate it offline:
-
-```sh
-jq --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
-  --slurpfile built packaged-build.json \
-  '.trust=$trust[0] | .validation_base={catalog:$built[0].catalog,programs:[]}' \
-  docs/guard/extension-builder/examples/cloud-binding-build.json > cloud-binding-build.json
-rust/target/release/guard-command-source validate < cloud-binding-build.json
-rust/target/release/guard-command-source compile < cloud-binding-build.json > cloud-binding-compiled.json
-```
-
-`validate` reports `cloud_actions` and `cloud_binding_digest`. `compile` adds a
-`cloud_bindings` artifact beside the program; the program itself is the same
-with or without bindings. A binding must extend a source in the same request,
-at most once per extension, and an action ID may appear only once. Validation
-needs no account, network access or provider credentials.
+A command source or MCP server contribution stays local-only unless a sibling
+`guard.cloud-action-binding-contribution.v1` document names hosted actions it
+covers. Most contributions need none. [Bind a hosted action](HOSTED-ACTIONS.md)
+explains when to add a binding, how to validate and compile it offline, what
+reviewers check and what a merged binding changes today.
 
 ## Run portable fixtures
 

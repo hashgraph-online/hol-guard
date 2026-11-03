@@ -2942,6 +2942,10 @@
     border-color: var(--color-cyan-200);
   }
 
+  .border-emerald-100 {
+    border-color: var(--color-emerald-100);
+  }
+
   .border-emerald-200 {
     border-color: var(--color-emerald-200);
   }
@@ -7847,6 +7851,10 @@
 
     .sm\:min-h-9 {
       min-height: calc(var(--spacing) * 9);
+    }
+
+    .sm\:min-h-10 {
+      min-height: calc(var(--spacing) * 10);
     }
 
     .sm\:w-48 {

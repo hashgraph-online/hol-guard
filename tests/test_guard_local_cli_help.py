@@ -22,7 +22,7 @@ from codex_plugin_scanner.guard.runtime.local_cli_commands import (
     LocalCliCommand,
     is_local_cli_command_id,
     merge_discovered_commands,
-    slug_local_cli_command_id,
+    slug_local_cli_command_ids,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_help import (
     _HELP_OUTPUT_LIMIT,
@@ -561,7 +561,7 @@ def test_option_ids_are_catalog_ids_but_never_tool_slugs() -> None:
         assert is_local_cli_command_id(option)
     for bad in ("-", "--", "-xy", "---x", "--a.b"):
         assert not is_local_cli_command_id(bad)
-    assert not slug_local_cli_command_id("--dry-run").startswith("-")
+    assert not slug_local_cli_command_ids(("--dry-run",))[0].startswith("-")
 
 
 def test_a_catalog_without_options_keeps_its_root_wording() -> None:

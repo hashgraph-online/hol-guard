@@ -58,6 +58,86 @@ fn bytes(file: &AdmittedFile) -> usize {
     file.documents.iter().map(|doc| doc.text.len()).sum()
 }
 
+/// The matched files CIGAR would take into an automatic scope, for a prompt
+/// that arrives while CIGAR is starting or busy. It applies the engine's own
+/// checks: the app, the project root, the workspace's setting and each file's
+/// source screen. It stops at `until` and names paths only, never file text.
+pub(crate) fn admissible_paths(
+    home: &std::path::Path,
+    workspace: &std::path::Path,
+    app: &str,
+    found: &[String],
+    limit: usize,
+    until: Instant,
+) -> Vec<String> {
+    if crate::guard_config_harness::canonical_harness_id(app) != Some(app) {
+        return Vec::new();
+    }
+    let Ok(root) = SourceRoot::inspect(workspace) else {
+        return Vec::new();
+    };
+    let permitted = !root.path().starts_with(home)
+        && effective(home, &root).is_ok_and(|policy| {
+            policy.features.agent_context && policy.sources.workspace_documents
+        });
+    if !permitted {
+        return Vec::new();
+    }
+    found
+        .iter()
+        .take_while(|_| Instant::now() < until)
+        .filter(|relative| stamp(&root, relative).is_some() && root.read(relative).is_ok())
+        .take(limit)
+        .cloned()
+        .collect()
+}
+
+/// CIGAR's picks, led by the walk's best file when CIGAR left it out. The walk
+/// ranks files by the prompt's exact words and quoted text, which a pick by
+/// meaning can miss, so the file the prompt names comes first with the chunk
+/// that holds the most of `words`, the walk's own words and quoted text from
+/// the whole prompt. A file whose chunks share none of them is not added.
+fn led_by(
+    mut picked: Vec<PickedExcerpt>,
+    lead: Option<&AdmittedFile>,
+    words: &[String],
+) -> Vec<PickedExcerpt> {
+    let Some(file) = lead else {
+        return picked;
+    };
+    if picked
+        .iter()
+        .any(|excerpt| excerpt.path == file.relative_path)
+    {
+        return picked;
+    }
+    let said = |text: &str| {
+        let text = text.to_lowercase();
+        words.iter().filter(|w| text.contains(w.as_str())).count()
+    };
+    let best = file
+        .documents
+        .iter()
+        .map(|doc| (said(&doc.text), doc))
+        .filter(|(score, _)| *score > 0)
+        .max_by_key(|(score, doc)| (*score, std::cmp::Reverse(doc.start_line)));
+    let Some((_, doc)) = best else {
+        return picked;
+    };
+    let start = u64::from(doc.start_line);
+    let lines = doc.text.lines().count().max(1) as u64;
+    picked.insert(
+        0,
+        PickedExcerpt {
+            path: file.relative_path.clone(),
+            start_line: start,
+            end_line: start + lines - 1,
+            text: doc.text.clone(),
+        },
+    );
+    picked
+}
+
 /// Reads the wanted files that are not in the scope yet. A file the source
 /// screen refuses (a secret, a key, binary text) is simply left out.
 fn admit(
@@ -97,6 +177,7 @@ impl Engine {
         app: String,
         wanted: Vec<String>,
         query: String,
+        words: &[String],
     ) -> Result<Option<Vec<PickedExcerpt>>, RuntimeError> {
         if crate::guard_config_harness::canonical_harness_id(&app) != Some(app.as_str()) {
             return Err(RuntimeError::ScopeDenied);
@@ -134,7 +215,15 @@ impl Engine {
                 None => return Ok(None),
             },
         };
-        self.pick(runtime, &id, &query).map(Some)
+        let picked = self.pick(runtime, &id, &query)?;
+        let lead = wanted.first().and_then(|first| {
+            let scope = self.scopes.get(&id)?;
+            scope
+                .sources
+                .values()
+                .find(|file| &file.relative_path == first)
+        });
+        Ok(Some(led_by(picked, lead, words)))
     }
 
     /// Before a hand-picked grant: drop the automatic scope for the same
@@ -377,3 +466,7 @@ impl Engine {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "context_assistance_engine_lead_tests.rs"]
+mod lead_tests;

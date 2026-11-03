@@ -47,7 +47,20 @@ class FakeCloud:
     token_requests: list[dict[str, str]] = field(default_factory=list)
     revocations: list[dict[str, str]] = field(default_factory=list)
     issued: list[str] = field(default_factory=list)
+    gateway_requests: list[dict[str, str]] = field(default_factory=list)
+    rejected: set[str] = field(default_factory=set)
     counter: int = 0
+
+    def gateway(self, authorization: str) -> tuple[int, dict[str, Any]]:
+        """Answer like the gateway before its methods land: 501 once the bearer is accepted."""
+
+        status = self.overrides.get("gateway_status")
+        if isinstance(status, int):
+            return status, {"jsonrpc": "2.0", "id": None, "error": {"code": -32000, "message": "refused"}}
+        token = authorization.removeprefix("Bearer ")
+        if token not in self.issued or token in self.rejected:
+            return 401, {"jsonrpc": "2.0", "id": None, "error": {"code": -32000, "message": "Invalid token"}}
+        return 501, {"jsonrpc": "2.0", "id": None, "error": {"code": -32601, "message": "Not available yet"}}
 
     def protected_resource(self) -> dict[str, Any]:
         body = {
@@ -128,6 +141,32 @@ def serve_fake_cloud() -> Iterator[FakeCloud]:
                 form = dict(urllib.parse.parse_qsl(raw))
                 state.token_requests.append(form)
                 self._send(200, state.token(form))
+            elif self.path == RESOURCE_PATH:
+                if state.overrides.get("disabled"):
+                    self._send(404, {"error": "not_found"})
+                    return
+                state.gateway_requests.append({key.lower(): value for key, value in self.headers.items()})
+                raw_reply = state.overrides.get("gateway_raw")
+                if isinstance(raw_reply, tuple):
+                    # (status, content type, body bytes, declared length): a declared length
+                    # above the body's size cuts the reply off mid-body.
+                    status, content_type, payload, length = raw_reply
+                    self.send_response(status)
+                    self.send_header("Content-Type", content_type)
+                    self.send_header("Content-Length", str(length))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    self.wfile.flush()
+                    self.close_connection = True
+                    return
+                redirect = state.overrides.get("gateway_redirect")
+                if isinstance(redirect, str):
+                    self.send_response(307)
+                    self.send_header("Location", redirect)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                self._send(*state.gateway(self.headers.get("Authorization", "")))
             elif self.path == "/api/guard/oauth/revoke":
                 state.revocations.append(dict(urllib.parse.parse_qsl(raw)))
                 self.send_response(200)

@@ -499,6 +499,21 @@ class TestOpenCodeLaunchEnvironment:
         env = OpenCodeHarnessAdapter().launch_environment(ctx)
         assert env == {}
 
+    def test_launch_environment_merges_over_the_callers_config_in_order(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = _ctx(tmp_path)
+        runtime_path = runtime_config_path(ctx)
+        runtime_path.parent.mkdir(parents=True, exist_ok=True)
+        runtime_path.write_text('{"mcp": {"b": {"enabled": false}}, "permission": "ask"}', encoding="utf-8")
+        monkeypatch.setenv("OPENCODE_CONFIG_CONTENT", '{"z": 1.0, "mcp": {"b": {"command": ["x"]}, "a": 2}}')
+        env = OpenCodeHarnessAdapter().launch_environment(ctx)
+        assert env == {
+            "OPENCODE_CONFIG_CONTENT": (
+                '{"z": 1.0, "mcp": {"b": {"command": ["x"], "enabled": false}, "a": 2}, "permission": "ask"}'
+            )
+        }
+
 
 class TestOpenCodeLaunchCommand:
     def test_launch_command_no_passthrough_args_uses_interactive(self, tmp_path: Path) -> None:
@@ -517,6 +532,12 @@ class TestOpenCodeLaunchCommand:
         ctx = _ctx(tmp_path)
         cmd = OpenCodeHarnessAdapter().launch_command(ctx, ["--model", "gpt-4"])
         assert "opencode" in cmd[0]
+
+    def test_a_prompt_wider_than_one_native_array_joins_whole(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path, workspace=True)
+        words = [f"w{index}" for index in range(5000)]
+        cmd = OpenCodeHarnessAdapter().launch_command(ctx, ["--port", "4096", *words])
+        assert cmd == ["opencode", str(ctx.workspace_dir), "--port", "4096", "--prompt", " ".join(words)]
 
 
 class TestOpenCodeResiliency:
