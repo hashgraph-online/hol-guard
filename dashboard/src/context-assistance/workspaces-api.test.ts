@@ -15,7 +15,7 @@ for (const malformed of [
   { ...observed, excerpts: [{ text: 42, citations: [] }] },
   { ...observed, citations: [{ ...observed.citations[0], start_line: 0 }] },
   { ...observed, citations: [{ ...observed.citations[0], document_digest: "forged" }] },
-]) assert.throws(() => parseContextBrief(malformed), /incompatible context data/);
+]) assert.throws(() => parseContextBrief(malformed), /does not understand/);
 const scope = { scope_id: "scope:local", workspace: "/workspace", app: "dashboard", policy_revision: "a".repeat(64),
   sources: [], retained_contexts: 0, revoked: false, native_policy_facts: true,
   receipt_window: { enabled: true, retained: 16, dropped: "18446744073709551615", coverage: "bounded_recent_native_receipts" } };
@@ -39,5 +39,5 @@ for (const malformed of [
   ...[{ ...scope.receipt_window, retained: 17 }, { ...scope.receipt_window, dropped: -1 },
     { ...scope.receipt_window, dropped: "-1" }, { ...scope.receipt_window, coverage: "complete_history" }]
     .map((receipt_window) => ({ ...scope, receipt_window })),
-]) assert.throws(() => parseContextScope(malformed), /incompatible context data/);
+]) assert.throws(() => parseContextScope(malformed), /does not understand/);
 console.log("Actual native cited-context projection and malformed disclosure payload checks passed.");
