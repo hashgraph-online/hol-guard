@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
@@ -226,24 +227,63 @@ def test_sync_saves_a_bundle_whose_threat_feed_is_wider_than_a_request_frame_arr
     assert saved["payloadHash"] == response["payloadHash"]
 
 
-@pytest.mark.usefixtures("native_approval_reuse_runtime")
-def test_sync_names_a_bundle_too_large_for_a_request_frame(
-    tmp_path, monkeypatch: pytest.MonkeyPatch, signing_key: RSAPrivateKey
-) -> None:
-    # The frame parser bounds a string at 4 MiB, so a larger bundle cannot reach
-    # the verifier as text. The sync says so instead of failing as an unbound reply.
-    store = _connected_store(tmp_path, monkeypatch)
-    store.set_sync_payload(
-        "supply_chain_bundle_keyring",
-        {"workspace_id": WORKSPACE_ID, "keys": [_verification_key(signing_key)]},
-        "2026-10-21T00:00:00Z",
-    )
+def _huge_response(signing_key: RSAPrivateKey) -> tuple[dict[str, object], list[str]]:
+    # About 5 MiB of JSON text: past the 4 MiB a request frame allows any one
+    # string, so it cannot travel as text.
     huge_feed = [f"https://{index:064x}.example/" for index in range(60_000)]
     response = _response(
         signing_key,
         generated_at=datetime.now(timezone.utc) - timedelta(minutes=1),
         threatUrls={"malware_distribution": huge_feed},
     )
+    return response, huge_feed
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_sync_saves_a_bundle_too_large_for_a_request_frame_through_a_file(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, signing_key: RSAPrivateKey
+) -> None:
+    # A production bundle's text already sits near the frame's 4 MiB string
+    # bound, so the resident reads the response from a private file instead,
+    # and the file is gone once the sync is done.
+    store = _connected_store(tmp_path, monkeypatch)
+    store.set_sync_payload(
+        "supply_chain_bundle_keyring",
+        {"workspace_id": WORKSPACE_ID, "keys": [_verification_key(signing_key)]},
+        "2026-10-21T00:00:00Z",
+    )
+    response, huge_feed = _huge_response(signing_key)
+    monkeypatch.setattr(guard_runner, "_fetch_supply_chain_bundle_payload", lambda request: response)
+
+    summary = guard_runner.sync_network_protection_bundle(store)
+
+    assert summary["status"] == "synced"
+    saved = store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
+    assert saved["bundle"]["threatUrls"]["malware_distribution"] == huge_feed
+    assert saved["payloadHash"] == response["payloadHash"]
+    from codex_plugin_scanner.guard import native_network_protection_bundle as bridge
+
+    homes = {tmp_path, Path(bridge._resolve_digest_home(None))}
+    assert [path for home in homes for path in home.rglob(".network-protection-response-*")] == []
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_sync_names_a_bundle_too_large_for_a_runtime_without_the_file_route(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, signing_key: RSAPrivateKey
+) -> None:
+    # A runtime that takes the response only as text cannot take one past the
+    # frame's 4 MiB string bound. The sync says so instead of failing as an
+    # unbound reply.
+    from codex_plugin_scanner.guard import native_network_protection_bundle as bridge
+
+    monkeypatch.setattr(bridge, "NETWORK_PROTECTION_VERIFY_RESPONSE_FILE_FEATURE", "not-advertised")
+    store = _connected_store(tmp_path, monkeypatch)
+    store.set_sync_payload(
+        "supply_chain_bundle_keyring",
+        {"workspace_id": WORKSPACE_ID, "keys": [_verification_key(signing_key)]},
+        "2026-10-21T00:00:00Z",
+    )
+    response, _ = _huge_response(signing_key)
     monkeypatch.setattr(guard_runner, "_fetch_supply_chain_bundle_payload", lambda request: response)
 
     failed = guard_runner.sync_network_protection_bundle_best_effort(store)
