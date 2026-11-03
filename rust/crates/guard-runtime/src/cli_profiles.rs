@@ -13,9 +13,11 @@
 //! running anything it cannot prove read-only. Legacy colon forms such as
 //! `kv:key` do not match a command id, so allow rules never reach them.
 //!
-//! `{}` answers `{"profiles": [profile, ...]}`; `{"executable": name}`
-//! answers `{"profile_id": id | null}` for the profile whose executable the
-//! name is, ignoring case, surrounding whitespace and a `.cmd`/`.exe` suffix.
+//! `{}` answers `{"profiles": [profile, ...]}`; `{"executables": [name, ...]}`
+//! answers `{"profile_ids": [id | null, ...]}`, one per name, for the profile
+//! whose executable the name is, ignoring case, surrounding whitespace and a
+//! `.cmd`/`.exe` suffix. One call covers a whole listing, so a slow runtime
+//! costs one deadline rather than one per listed CLI.
 
 use guard_contracts::python_strip;
 use serde_json::{json, Value};
@@ -146,15 +148,26 @@ const WRANGLER_COMMANDS: &[(&str, &str, &str)] = &[
     ),
 ];
 
+/// The most names one lookup answers; callers send a longer listing in chunks.
+const MAX_EXECUTABLES: usize = 1024;
+
 pub(crate) fn dispatch(args: &Value) -> KindResult {
     let args = args_object(args)?;
-    match args.get("executable") {
+    match args.get("executables") {
         None if args.is_empty() => Ok(json!({
             "profiles": PROFILES.iter().map(profile_value).collect::<Vec<_>>()
         })),
-        Some(Value::String(name)) if args.len() == 1 => Ok(json!({
-            "profile_id": profile_for_executable(name).map(|profile| profile.id)
-        })),
+        Some(Value::Array(names)) if args.len() == 1 && names.len() <= MAX_EXECUTABLES => {
+            let ids = names
+                .iter()
+                .map(|name| {
+                    name.as_str()
+                        .map(|name| profile_for_executable(name).map(|profile| profile.id))
+                })
+                .collect::<Option<Vec<_>>>()
+                .ok_or(ERR_INVALID)?;
+            Ok(json!({ "profile_ids": ids }))
+        }
         _ => Err(ERR_INVALID),
     }
 }
@@ -165,12 +178,9 @@ fn profile_for_executable(name: &str) -> Option<&'static Profile> {
     for suffix in [".cmd", ".exe"] {
         normalized = normalized.strip_suffix(suffix).unwrap_or(normalized);
     }
-    PROFILES.iter().find(|profile| {
-        profile
-            .executables
-            .iter()
-            .any(|executable| *executable == normalized)
-    })
+    PROFILES
+        .iter()
+        .find(|profile| profile.executables.contains(&normalized))
 }
 
 fn profile_value(profile: &Profile) -> Value {

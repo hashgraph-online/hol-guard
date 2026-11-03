@@ -101,11 +101,12 @@ def test_a_runtime_that_cannot_answer_offers_no_profile() -> None:
         raise authority.NativeRunnerAuthorityError("unavailable")
 
     custom_extension_profiles._profiles.cache_clear()
-    custom_extension_profiles._profile_id.cache_clear()
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(authority, "native_runner_authority", unavailable)
         assert known_cli_profiles() == ()
         assert profile_for_executable("wrangler") is None
+        wrangler = {"cli_id": "local-cli.wrangler-1234abcd", "name": "wrangler", "surface": "cli", "commands": []}
+        assert annotate_cli_profiles([wrangler]) == [wrangler]
     # A failed answer is never cached, so the next read sees the profiles.
     assert _wrangler().profile_id == "wrangler"
 
@@ -359,3 +360,20 @@ def test_an_unreadable_runner_answer_only_covers_a_runner_paste(monkeypatch, com
         lambda *args, **kwargs: {"status": "unavailable"},
     )
     assert profiled_cli_package_launch(command.split()) is expected
+
+
+def test_an_unanswered_profile_lookup_spawns_nothing(monkeypatch) -> None:
+    """A runner target the runtime read, with no profile answer, is treated as profiled."""
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_profiles_api.native_context_digest",
+        lambda *args, **kwargs: {"status": "ok", "package_runner_target": "cowsay"},
+    )
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise custom_extension_profiles.CliProfileUnavailableError("cli_profiles")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_profiles_api.profiles_for_executables", unavailable
+    )
+    assert profiled_cli_package_launch(["npx", "cowsay"]) is True

@@ -8,7 +8,7 @@ fn profiles() -> Vec<Value> {
 }
 
 fn lookup(name: &str) -> Value {
-    dispatch(&json!({ "executable": name })).expect("lookup")["profile_id"].clone()
+    dispatch(&json!({ "executables": [name] })).expect("lookup")["profile_ids"][0].clone()
 }
 
 #[test]
@@ -70,7 +70,13 @@ fn lookup_ignores_case_whitespace_and_windows_shims() {
 
 #[test]
 fn an_unknown_shape_is_refused() {
-    assert!(dispatch(&json!({"executable": 1})).is_err());
-    assert!(dispatch(&json!({"executable": "wrangler", "x": 1})).is_err());
+    assert!(dispatch(&json!({"executables": [1]})).is_err());
+    assert!(dispatch(&json!({"executables": "wrangler"})).is_err());
+    assert!(dispatch(&json!({"executables": ["wrangler"], "x": 1})).is_err());
+    assert!(dispatch(&json!({ "executables": vec!["wrangler"; 1025] })).is_err());
+    assert_eq!(
+        dispatch(&json!({"executables": ["npx", "WRANGLER.exe"]})).expect("batch"),
+        json!({"profile_ids": [null, "wrangler"]})
+    );
     assert!(dispatch(&json!({"x": 1})).is_err());
 }

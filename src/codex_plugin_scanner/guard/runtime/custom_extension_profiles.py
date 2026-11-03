@@ -8,8 +8,10 @@ runtime that cannot answer offers no profile rather than a guessed one.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import cast
 
 from .local_cli_commands import LocalCliCommand, LocalCliCommandState
@@ -63,11 +65,11 @@ def _profile(row: dict[str, object]) -> KnownCliProfile:
     )
 
 
-@lru_cache(maxsize=1)
-def _profiles() -> tuple[KnownCliProfile, ...]:
+@lru_cache(maxsize=4)
+def _profiles(guard_home: Path | None = None) -> tuple[KnownCliProfile, ...]:
     from ..native_runner_authority import native_runner_authority
 
-    rows = native_runner_authority(_KIND, {}).get("profiles")
+    rows = native_runner_authority(_KIND, {}, guard_home=guard_home).get("profiles")
     return tuple(_profile(row) for row in cast("list[dict[str, object]]", rows))
 
 
@@ -82,29 +84,55 @@ def known_cli_profiles() -> tuple[KnownCliProfile, ...]:
         return ()
 
 
-@lru_cache(maxsize=256)
-def _profile_id(name: str) -> str | None:
-    from ..native_runner_authority import native_runner_authority
+# A listing is answered in chunks no longer than the runtime accepts.
+_LOOKUP_CHUNK = 1024
 
-    profile_id = native_runner_authority(_KIND, {"executable": name}).get("profile_id")
-    return profile_id if isinstance(profile_id, str) else None
+
+class CliProfileUnavailableError(RuntimeError):
+    """The runtime could not say which names launch a profiled CLI."""
+
+
+def profiles_for_executables(
+    names: Sequence[object], *, guard_home: Path | None = None
+) -> tuple[KnownCliProfile | None, ...]:
+    """The profile each name launches, in one runtime call per chunk.
+
+    Raises ``CliProfileUnavailableError`` when the runtime cannot answer, so a
+    caller that must not guess can tell an outage from a name with no profile.
+    ``guard_home`` is the home whose resident answers.
+    """
+
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    unique = list(dict.fromkeys(name for name in names if isinstance(name, str)))
+    found: dict[str, str | None] = {}
+    try:
+        for offset in range(0, len(unique), _LOOKUP_CHUNK):
+            chunk = unique[offset : offset + _LOOKUP_CHUNK]
+            ids = native_runner_authority(_KIND, {"executables": chunk}, guard_home=guard_home).get("profile_ids")
+            if not isinstance(ids, list) or len(ids) != len(chunk):
+                raise CliProfileUnavailableError(_KIND)
+            found.update(zip(chunk, (value if isinstance(value, str) else None for value in ids), strict=True))
+        by_id = {profile.profile_id: profile for profile in _profiles(guard_home)} if any(found.values()) else {}
+    except (NativeRunnerAuthorityError, KeyError, TypeError) as error:
+        raise CliProfileUnavailableError(_KIND) from error
+    return tuple(by_id.get(found.get(name) or "") if isinstance(name, str) else None for name in names)
 
 
 def profile_for_executable(name: object) -> KnownCliProfile | None:
-    if not isinstance(name, str):
-        return None
-    from ..native_runner_authority import NativeRunnerAuthorityError
+    """The profile ``name`` launches, or none while the runtime cannot answer."""
 
     try:
-        profile_id = _profile_id(name)
-    except NativeRunnerAuthorityError:
+        return profiles_for_executables([name])[0]
+    except CliProfileUnavailableError:
         return None
-    return next((profile for profile in known_cli_profiles() if profile.profile_id == profile_id), None)
 
 
 __all__ = [
+    "CliProfileUnavailableError",
     "KnownCliProfile",
     "ProfileCommand",
     "known_cli_profiles",
     "profile_for_executable",
+    "profiles_for_executables",
 ]
