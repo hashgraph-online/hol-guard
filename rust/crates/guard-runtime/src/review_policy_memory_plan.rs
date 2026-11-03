@@ -14,10 +14,12 @@
 //! - `{"rejected_rule_ids": [str, ...]}` when any rule names no harness,
 //!   artifact, scope or canonical action, or allows at a scope wider than one
 //!   workspace. Nothing is applied, so the registry is not read.
-//! - `{"rejected_rule_ids": [], "applied_rule_count": int, "registry": [...],
-//!   "decisions": [...]}`: revocations drop their rules, every rule replaces
-//!   or joins the registry in order, and the decisions are the kept
-//!   `policy-bundle` decisions followed by one decision per registry rule.
+//! - `{"rejected_rule_ids": [], "applied_rule_count": int,
+//!   "registry_rule_ids": [str, ...], "decisions": [...]}`: revocations drop
+//!   their rules, every rule replaces or joins the registry in order, and the
+//!   decisions are the kept `policy-bundle` decisions followed by one decision
+//!   per registry rule, in `registry_rule_ids` order. The caller stores those
+//!   trailing decisions as the registry, so each decision crosses back once.
 //! - `{"error": "invalid_decision_memory_rule"}` when a rule is not an object
 //!   or has no `ruleId`, or `{"error": "invalid_decision_memory_registry"}`
 //!   when a stored registry decision is unusable.
@@ -26,6 +28,7 @@ use guard_command::attestation_timestamp::python_strip;
 use guard_contracts::GuardAction;
 use serde_json::{json, Map, Value};
 
+use crate::cloud_request_text::py_truthy;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::KindResult;
 
@@ -71,17 +74,15 @@ fn plan(args: &Map<String, Value>) -> Result<Value, &'static str> {
         .iter()
         .filter_map(bundle_policy)
         .collect();
-    for (_, decision) in &registry {
-        decisions.push(registry_decision(decision).ok_or(INVALID_REGISTRY)?);
+    let mut registry_rule_ids = Vec::with_capacity(registry.len());
+    for (rule_id, decision) in registry {
+        decisions.push(registry_decision(&decision).ok_or(INVALID_REGISTRY)?);
+        registry_rule_ids.push(rule_id);
     }
-    let registry: Vec<Value> = registry
-        .into_iter()
-        .map(|(rule_id, decision)| json!({ "decision": decision, "ruleId": rule_id }))
-        .collect();
     Ok(json!({
         "rejected_rule_ids": [],
         "applied_rule_count": applied_rule_count,
-        "registry": registry,
+        "registry_rule_ids": registry_rule_ids,
         "decisions": decisions,
     }))
 }
@@ -182,21 +183,10 @@ fn registry_decision(decision: &Value) -> Option<Value> {
     // source is not one this kind wrote.
     let source = match decision.get("source") {
         Some(Value::String(source)) if !source.is_empty() => source.clone(),
-        Some(value) if truthy(value) => return None,
+        Some(value) if py_truthy(value) => return None,
         _ => MEMORY_SOURCE.to_owned(),
     };
     policy(decision, source)
-}
-
-fn truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(flag) => *flag,
-        Value::Number(number) => number.as_f64().is_some_and(|number| number != 0.0),
-        Value::String(text) => !text.is_empty(),
-        Value::Array(items) => !items.is_empty(),
-        Value::Object(members) => !members.is_empty(),
-    }
 }
 
 fn policy(item: &Value, source: String) -> Option<Value> {

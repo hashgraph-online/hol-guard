@@ -57,10 +57,7 @@ fn a_workspace_rule_becomes_a_signed_memory_decision_for_its_target_workspace() 
         "source": "cloud-signed-memory",
         "expires_at": "2026-12-01T00:00:00+00:00",
     });
-    assert_eq!(
-        answer["registry"],
-        json!([{ "decision": decision, "ruleId": "r1" }])
-    );
+    assert_eq!(answer["registry_rule_ids"], json!(["r1"]));
     assert_eq!(answer["decisions"], json!([decision]));
 }
 
@@ -130,13 +127,7 @@ fn revocations_drop_rules_and_new_rules_replace_in_place() {
         ],
     }));
     assert_eq!(answer["applied_rule_count"], 2);
-    let order: Vec<&str> = answer["registry"]
-        .as_array()
-        .expect("registry list")
-        .iter()
-        .filter_map(|entry| entry["ruleId"].as_str())
-        .collect();
-    assert_eq!(order, ["keep", "other", "new"]);
+    assert_eq!(answer["registry_rule_ids"], json!(["keep", "other", "new"]));
     let harnesses: Vec<&str> = answer["decisions"]
         .as_array()
         .expect("decision list")
