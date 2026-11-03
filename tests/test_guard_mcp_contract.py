@@ -55,6 +55,33 @@ class TestMCPModuleImport:
         )
         assert result["harness"] == "devin"
 
+    def test_sanitized_output_keeps_only_allowlisted_fields(self):
+        from codex_plugin_scanner.guard.mcp.sanitizers import sanitize_fetch_result
+
+        result = sanitize_fetch_result(
+            {"id": "r1", "title": "\uff54\x1b", "kind": "secret", "text": "\u00e9" * 20000, "path": "/private"}
+        )
+        assert result == {
+            "id": "r1",
+            "title": "t",
+            "kind": "receipt",
+            "harness": "",
+            "decision": "unknown",
+            "text": "\u00e9" * 16384,
+            "truncated": True,
+        }
+
+    def test_sanitizers_fail_closed_without_the_native_runtime(self, monkeypatch: pytest.MonkeyPatch):
+        from codex_plugin_scanner.guard import native_runner_authority
+        from codex_plugin_scanner.guard.mcp import sanitizers
+
+        def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+            raise native_runner_authority.NativeRunnerAuthorityError("unavailable")
+
+        monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+        with pytest.raises(sanitizers.MCPOutputUnavailableError):
+            sanitizers.sanitize_search_results([{"id": "r1"}])
+
 
 class TestMCPServerInitialization:
     """Verify the MCP server initializes correctly."""
