@@ -124,11 +124,18 @@ fn the_test_runner_takes_the_paths_node_takes_rather_than_the_names_it_ignores()
     }
 
     // Outside test-runner mode the first word is a script Node runs, so its
-    // leaf still has to name a test file and a bare `tsx` names nothing.
+    // leaf still has to name a test file and a bare `tsx` names nothing. The
+    // flags that only shape a test run do not start one: without `--test`
+    // Node runs the named script the ordinary way, so these stay at review
+    // exactly as the same line without them does.
     for line in [
         "npx tsx src/index.ts",
         "npx tsx",
         "npx tsx watch src/app.ts",
+        "npx tsx --test-only src/index.ts",
+        "npx tsx --test-force-exit src/index.ts",
+        "npx tsx --test-timeout=30000 src/index.ts",
+        "npx tsx --test-only",
     ] {
         assert_eq!(tsx_test_invocation(&words(line)).unwrap(), None, "{line}");
     }

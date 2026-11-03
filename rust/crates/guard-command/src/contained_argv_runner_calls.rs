@@ -420,8 +420,12 @@ pub(crate) fn tsx_runner_flag_count(arguments: &[String]) -> usize {
 ///
 /// There Node reads every remaining word as a test file it runs, not as the
 /// first script's own arguments, so a trailing word is another file to load.
+/// Only `--test` turns that mode on. `--test-only`, `--test-force-exit` and
+/// the two timing flags shape a run that is already a test run; on their own
+/// Node runs the named script the ordinary way, so a run carrying one of them
+/// alone stays an ordinary script run and keeps its review.
 pub(crate) fn tsx_runner_test_mode(flags: &[String]) -> bool {
-    flags.iter().any(|flag| flag.starts_with("--test"))
+    flags.iter().any(|flag| flag == "--test")
 }
 
 /// A test-named file the workspace holds: `math.test.ts`, `api.spec.mjs` or
