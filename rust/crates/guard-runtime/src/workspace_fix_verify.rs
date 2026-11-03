@@ -73,7 +73,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     if !supply_chain_verifiable(run.get("coverage")) {
         return Ok(json!({"updates": []}));
     }
-    let findings = run
+    let findings: Vec<&Map<String, Value>> = run
         .get("findings")
         .and_then(Value::as_array)
         .map(|items| items.iter().filter_map(Value::as_object).collect())

@@ -256,6 +256,17 @@ def verify_proposals(store: Any, keys: assessments.WorktreeKeys, *, now_ms: int)
     prior_by_id = {item["proposal_id"]: item for item in proposals}
     with store._connect() as connection:
         connection.execute("begin immediate")
+        # A run that finished while the resident answered decides instead.
+        newest = connection.execute(
+            """
+            select run_id from workspace_assessment_runs
+            where codebase_key = ? and worktree_key = ? and state in ('completed', 'partial')
+            order by finished_at_ms desc, rowid desc limit 1
+            """,
+            (keys.codebase_key, keys.worktree_key),
+        ).fetchone()
+        if newest is None or newest[0] != run["run_id"]:
+            return
         for update in updates if isinstance(updates, list) else []:
             proposal = prior_by_id.get(update.get("proposal_id")) if isinstance(update, dict) else None
             if proposal is None or update.get("state") not in ("still_present", "verified_fixed"):
