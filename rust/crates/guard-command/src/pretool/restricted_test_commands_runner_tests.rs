@@ -460,6 +460,21 @@ fn a_tap_borp_poku_or_lab_entry_reads_as_the_project_runner() {
 }
 
 #[test]
+fn a_relative_cucumber_entry_reads_as_the_project_runner() {
+    for command in [
+        "node node_modules/@cucumber/cucumber/bin/cucumber.js",
+        "node ./node_modules/.bin/cucumber-js features",
+        "node /work/app/node_modules/@cucumber/cucumber/bin/cucumber.js features/login.feature",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn a_tap_borp_poku_or_lab_run_inside_its_workspace_is_contained() {
     // lab cannot watch at all, and tap, borp and poku watch only when the
     // flag is on the line, so the plain call is the contained one for each
@@ -488,6 +503,36 @@ fn a_tap_borp_poku_or_lab_run_inside_its_workspace_is_contained() {
         "npx borp -r spec",
         "npx borp --reporter=tap:stdout",
         "npx borp --reporter tap:stderr",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_cucumber_run_inside_its_workspace_is_contained() {
+    // cucumber-js has no watch mode and no command verbs: its operands are
+    // feature files, directories or `FILE:LINE` locations, and the options
+    // that load anything name a workspace path or a module specifier, which
+    // the shared screen already answers for.
+    for command in [
+        "npx cucumber-js",
+        "cucumber-js",
+        "npx cucumber-js features/login.feature",
+        "npx cucumber-js features/login.feature:12",
+        "npx cucumber-js --require features/support/world.js",
+        "npx cucumber-js -r features/step_definitions",
+        "npx cucumber-js --import features/support/hooks.ts",
+        "npx cucumber-js --config cucumber.cjs --profile ci",
+        "npx cucumber-js --tags @smoke --fail-fast",
+        "npx cucumber-js --format progress-bar",
+        "npx cucumber-js --format html:reports/cucumber.html",
+        "npx cucumber-js --parallel 4 --retry 2",
+        "npx cucumber-js --dry-run",
+        "bunx cucumber-js features",
     ] {
         assert_eq!(
             reason(command),
@@ -627,6 +672,25 @@ fn a_tap_borp_poku_or_lab_lookalike_entry_reads_as_no_runner() {
         "node node_modules/poku/lib/bin/index.mjs",
         "node node_modules/lab/bin/lab",
         "node node_modules/@hapi/lab/lib/cli.js",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_cucumber_word_that_leaves_the_workspace_keeps_its_review() {
+    // `--publish` uploads the report to cucumber's hosted service, which no
+    // path on the line names; everything else the runner loads is a path the
+    // workspace screen reads.
+    for command in [
+        "npx cucumber-js --publish",
+        "npx cucumber-js --publish=false",
+        "npx cucumber-js features --publish",
+        "npx cucumber-js /etc/features",
+        "npx cucumber-js --require /etc/world.js",
+        "npx cucumber-js --config ../../other/cucumber.cjs",
+        "npx cucumber-js --format html:/tmp/cucumber.html",
+        "npx cucumber-js --import ~/.cucumber/hooks.js",
     ] {
         assert_eq!(reason(command), None, "{command}");
     }

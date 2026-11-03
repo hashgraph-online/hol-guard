@@ -177,6 +177,7 @@ fn local_executable_package_alias(name: &str) -> &str {
     match name {
         "tsc" => "typescript",
         "lab" => "@hapi/lab",
+        "cucumber-js" => "@cucumber/cucumber",
         other => other,
     }
 }

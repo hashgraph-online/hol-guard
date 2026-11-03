@@ -48,13 +48,14 @@ WORKSPACE_MOCHA_CASE = "omp-native-workspace-npx-mocha"
 # watch, so the plain launch is the routine one.
 WORKSPACE_AVA_CASE = "omp-native-workspace-npx-ava"
 # The runners that take one pass and have nowhere else to go. Jasmine, uvu,
-# tape and tsd have no watch mode at all and QUnit watches only when it is
-# asked to, so for each of them the plain launch is the routine one.
+# tape, tsd and cucumber-js have no watch mode at all and QUnit watches only
+# when it is asked to, so for each of them the plain launch is the routine one.
 WORKSPACE_JASMINE_CASE = "omp-native-workspace-npx-jasmine"
 WORKSPACE_QUNIT_CASE = "omp-native-workspace-npx-qunit"
 WORKSPACE_UVU_CASE = "omp-native-workspace-npx-uvu"
 WORKSPACE_TAPE_CASE = "omp-native-workspace-npx-tape"
 WORKSPACE_TSD_CASE = "omp-native-workspace-npx-tsd"
+WORKSPACE_CUCUMBER_CASE = "omp-native-workspace-npx-cucumber-js"
 # The same install, launched through the project's own name for one part of its
 # suite. A project with more than one kind of test names them `test:unit`,
 # `test:types` and so on, and npm runs whatever the entry holds, so the named
@@ -126,6 +127,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_UVU_CASE,
         WORKSPACE_TAPE_CASE,
         WORKSPACE_TSD_CASE,
+        WORKSPACE_CUCUMBER_CASE,
         WORKSPACE_NAMED_TEST_SCRIPT_CASE,
         WORKSPACE_SCRIPT_PASSED_OPTION_CASE,
         WORKSPACE_QUIET_SCRIPT_RUN_CASE,
@@ -265,14 +267,19 @@ def _single_pass_project(
     spec: str,
     marker: str,
     passed: tuple[str, ...] = (),
+    executable: str | None = None,
 ) -> dict[str, str]:
     """A workspace that installed one single-pass runner, and nothing else.
 
-    Jasmine, QUnit, uvu, tape and tsd install the same way: a dev dependency, a lockfile
-    that records it, one spec file, and a package whose declared `bin` is the
-    executable npm links into `node_modules/.bin`. Only the names and the entry
-    path differ, so one builder plants them all and each case keeps its own
-    line to print.
+    Jasmine, QUnit, uvu, tape, tsd and cucumber-js install the same way: a dev
+    dependency, a lockfile that records it, one spec file, and a package whose
+    declared `bin` is the executable npm links into `node_modules/.bin`. Only
+    the names and the entry path differ, so one builder plants them all and
+    each case keeps its own line to print.
+
+    `executable` names that link where it is not the dependency's own name.
+    A scoped package cannot be linked under its scope, so `@cucumber/cucumber`
+    installs under its scoped directory and links as `cucumber-js`.
 
     `passed` names the words the scenario's own command spells after the
     runner. A launch that lost them would still start this executable, so the
@@ -280,6 +287,7 @@ def _single_pass_project(
     run actually happened, and the case fails on the effect rather than on a
     missing file.
     """
+    binary = executable or name
     return {
         "package.json": (
             '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
@@ -292,18 +300,18 @@ def _single_pass_project(
             f'        "{name}": "{version}"\n      }}\n    }},\n'
             f'    "node_modules/{name}": {{\n'
             f'      "version": "{version}",\n      "dev": true,\n'
-            f'      "bin": {{\n        "{name}": "{entry}"\n      }}\n    }}\n  }}\n}}\n'
+            f'      "bin": {{\n        "{binary}": "{entry}"\n      }}\n    }}\n  }}\n}}\n'
         ),
         spec: f"// One spec for the workspace's own {name} to find.\n",
         f"node_modules/{name}/package.json": (
-            f'{{"name": "{name}", "version": "{version}", "bin": {{"{name}": "{entry}"}}}}\n'
+            f'{{"name": "{name}", "version": "{version}", "bin": {{"{binary}": "{entry}"}}}}\n'
         ),
         f"node_modules/{name}/{entry}": (
             "#!/usr/bin/env node\n"
             f"const passed = {json.dumps(list(passed))};\n"
             "const seen = process.argv.slice(2);\n"
             "const whole = passed.every((word) => seen.includes(word));\n"
-            f"console.log(whole ? '{marker}' : '{name}: ' + JSON.stringify(seen));\n"
+            f"console.log(whole ? '{marker}' : '{binary}: ' + JSON.stringify(seen));\n"
         ),
     }
 
@@ -374,6 +382,22 @@ _TSD_FILES = _single_pass_project(
     "test/types.test-d.ts",
     TSD_MARKER,
     passed=("--files", "test/types.test-d.ts", "--show-diff"),
+)
+
+_CUCUMBER_VERSION = "13.3.0"
+# The one line the workspace's own cucumber-js prints, which only a real launch
+# produces.
+CUCUMBER_MARKER = f"cucumber-js {_CUCUMBER_VERSION}"
+# cucumber-js is the one scoped package here: npm installs it under
+# `@cucumber/cucumber` and links its executable as `cucumber-js`.
+_CUCUMBER_FILES = _single_pass_project(
+    "@cucumber/cucumber",
+    _CUCUMBER_VERSION,
+    "bin/cucumber.js",
+    "features/login.feature",
+    CUCUMBER_MARKER,
+    passed=("features/login.feature",),
+    executable="cucumber-js",
 )
 
 
@@ -686,6 +710,13 @@ _INSTALLS = {
     WORKSPACE_UVU_CASE: _Install("uvu", _UVU_FILES, UVU_MARKER, entry="bin.js"),
     WORKSPACE_TAPE_CASE: _Install("tape", _TAPE_FILES, TAPE_MARKER, entry="bin/tape"),
     WORKSPACE_TSD_CASE: _Install("tsd", _TSD_FILES, TSD_MARKER, entry="dist/cli.js"),
+    WORKSPACE_CUCUMBER_CASE: _Install(
+        "cucumber-js",
+        _CUCUMBER_FILES,
+        CUCUMBER_MARKER,
+        package="@cucumber/cucumber",
+        entry="bin/cucumber.js",
+    ),
     WORKSPACE_SCRIPT_PASSED_OPTION_CASE: _Install("eslint", _ESLINT_FILES, ESLINT_MARKER),
     WORKSPACE_QUIET_SCRIPT_RUN_CASE: _Install("eslint", _QUIET_LINT_FILES, QUIET_LINT_MARKER),
     WORKSPACE_SCRIPT_RUN_ALIAS_CASE: _Install("eslint", _ALIAS_LINT_FILES, ALIAS_LINT_MARKER),
