@@ -131,3 +131,15 @@ def test_an_unusable_answer_fails_the_export(monkeypatch: pytest.MonkeyPatch, an
 
     with pytest.raises(NativeInventoryUrlRedactionError, match="native_inventory_url_redaction_unavailable"):
         _ = resolve_inventory_item_description(harness="codex", item_kind="skill", display_name="s", metadata={})
+
+
+def test_resolve_inventory_item_description_reads_lone_surrogates_as_replacement_characters() -> None:
+    result = resolve_inventory_item_description(
+        harness="codex",
+        item_kind="skill",
+        display_name="name-\udcff",
+        metadata={"description": "Reads \udcff bytes."},
+        home_dir=Path("/opt/agent-\udcff"),
+    )
+
+    assert result == "Reads � bytes."

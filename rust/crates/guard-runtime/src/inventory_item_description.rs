@@ -18,10 +18,8 @@
 
 use std::path::Path;
 
-use guard_command::inventory_path_redaction::redact_command_value;
-use guard_command::inventory_redaction::{
-    is_safe_serialized_marker, sanitize_serializer_string, substitute_sensitive_values,
-};
+use guard_command::inventory_path_redaction::safe_finding_text;
+use guard_command::inventory_redaction::{is_safe_serialized_marker, sanitize_serializer_string};
 use guard_contracts::{is_python_space, python_strip};
 use serde_json::{json, Map, Value};
 
@@ -41,8 +39,7 @@ const KEYS: [&str; 10] = [
     "cwd",
 ];
 const METADATA_DESCRIPTIONS: usize = 4;
-/// `_MAX_DESCRIPTION_LENGTH`, and the cut `_safe_finding_text` makes, in
-/// code points.
+/// `_MAX_DESCRIPTION_LENGTH`, in code points.
 const MAX_DESCRIPTION_CHARS: usize = 500;
 
 pub(super) fn dispatch(fields: &Map<String, Value>) -> KindResult {
@@ -68,15 +65,12 @@ pub(super) fn dispatch(fields: &Map<String, Value>) -> KindResult {
     if let Some(candidate) = candidate {
         let mut sanitized = sanitize_serializer_string(candidate, "description", false);
         if let Some(home_dir) = home_dir {
-            sanitized = redact_command_value(
-                &substitute_sensitive_values(&sanitized),
+            sanitized = safe_finding_text(
+                &sanitized,
                 Path::new(home_dir),
                 workspace_dir.map(Path::new),
                 Path::new(cwd),
-            )
-            .chars()
-            .take(MAX_DESCRIPTION_CHARS)
-            .collect();
+            );
         }
         let cleaned = clean(&sanitized);
         if !cleaned.is_empty() && !is_safe_serialized_marker(&cleaned) {

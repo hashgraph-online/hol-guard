@@ -54,21 +54,32 @@ def resolve_inventory_item_description(
     answer = _native_export_redaction(
         {
             "op": "item_description",
-            "harness": harness,
-            "item_kind": item_kind,
-            "display_name": display_name,
-            "publisher": publisher,
-            "explicit_description": explicit_description,
+            "harness": _wire_text(harness),
+            "item_kind": _wire_text(item_kind),
+            "display_name": _wire_text(display_name),
+            "publisher": _wire_text(publisher),
+            "explicit_description": _wire_text(explicit_description),
             "metadata_descriptions": [
-                value if isinstance(value, str) else None
+                _wire_text(value) if isinstance(value, str) else None
                 for value in (metadata.get(key) for key in _DESCRIPTION_METADATA_KEYS)
             ],
-            "home_dir": None if home_dir is None else str(home_dir),
-            "workspace_dir": None if workspace_dir is None else str(workspace_dir),
-            "cwd": _cwd(),
+            "home_dir": None if home_dir is None else _wire_text(str(home_dir)),
+            "workspace_dir": None if workspace_dir is None else _wire_text(str(workspace_dir)),
+            "cwd": _wire_text(_cwd()),
         }
     )
     description = answer.get("description")
     if not isinstance(description, str):
         raise NativeInventoryUrlRedactionError("native_inventory_url_redaction_unavailable")
     return description
+
+
+def _wire_text(value: str | None) -> str | None:
+    """The text with each lone surrogate as U+FFFD, the way the JSON transport reads one.
+
+    A surrogate-escaped name or path cannot be encoded as UTF-8, so sending it
+    unchanged would refuse the whole export.
+    """
+    if value is None:
+        return None
+    return value.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
