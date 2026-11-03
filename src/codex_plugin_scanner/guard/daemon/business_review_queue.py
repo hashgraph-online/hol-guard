@@ -19,6 +19,11 @@ _CURSOR_PREFIX = "native-business-v1:"
 
 def _native_page(store, summaries: list[dict[str, object]], **request: object) -> dict[str, Any]:
     """The runtime projects, filters and pages the rows (``business_review_page.rs``)."""
+    if not summaries:
+        # An empty queue needs no runtime; no native cursor can name it.
+        if "cursor" in request:
+            raise InvalidApprovalCursorError("invalid native cursor")
+        return {"count": 0, "items": [], "next_cursor": None}
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     try:
