@@ -290,10 +290,13 @@ fn tsx_test_parts(command: &[String]) -> Result<Option<TsxTestParts<'_>>, Restri
         }))
 }
 
+/// The script a tsx run names, if it names one, and that script's own argv.
+pub type TsxTestInvocation = (Option<String>, Vec<String>);
+
 /// The test script a tsx run names, and the arguments the script is passed.
 pub fn tsx_test_invocation(
     command: &[String],
-) -> Result<Option<(Option<String>, Vec<String>)>, RestrictedPytestError> {
+) -> Result<Option<TsxTestInvocation>, RestrictedPytestError> {
     Ok(tsx_test_parts(command)?.map(|parts| (parts.script.cloned(), parts.arguments.to_vec())))
 }
 
