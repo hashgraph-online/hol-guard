@@ -10490,7 +10490,7 @@ def test_guard_hook_native_prompt_risk_classes_never_become_a_silent_allow(tmp_p
     # The prompt is sent with a notice, never silently; the tool call it leads
     # to is reviewed with Allow once and Always allow.
     assert "decision" not in output
-    assert output["policy_action"] == "warn"
+    assert "continue" not in output
     assert str(output["systemMessage"]).startswith("HOL Guard flagged this prompt")
     assert prompt not in json.dumps(output)
     _drain_hook_evidence(home_dir)

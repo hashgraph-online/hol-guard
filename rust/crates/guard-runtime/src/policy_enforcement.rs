@@ -33,7 +33,7 @@ mod policy_enforcement_policy;
 #[path = "policy_enforcement_reason.rs"]
 mod policy_enforcement_reason;
 pub(crate) use policy_enforcement_matrix::{validate_pre_tool_result_matrix, ActionFloor};
-pub(crate) use prompt::defer_prompt_review;
+pub(crate) use prompt::deferred_prompt_review;
 
 /// Recheck business rules above the authenticated native receipt's intrinsic
 /// floor. This validates review eligibility; it grants no execution authority.

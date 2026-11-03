@@ -346,13 +346,8 @@ fn evaluate_validated_envelope<Lease>(
             );
             let evaluated = crate::network_protection::apply_to_envelope(&envelope, evaluated);
             let evaluated = runtime_risk::apply_to_envelope(&envelope, policy_snapshot, evaluated);
-            let mut evaluated =
-                exact_review::apply_to_envelope(&envelope, policy_snapshot, evaluated);
-            // A prompt has no execution binding to approve, so a held review
-            // moves to the tool call it leads to. This runs last because a
-            // review can also come from the native result alone, with no
-            // installed policy, or from the runtime risk steps above.
-            crate::policy_enforcement::defer_prompt_review(&mut evaluated);
+            let evaluated = exact_review::apply_to_envelope(&envelope, policy_snapshot, evaluated);
+            let evaluated = crate::policy_enforcement::deferred_prompt_review(evaluated);
             let value = serde_json::to_value(evaluated)
                 .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;
             edge_result_check::validate_pre_tool_result(&value)?;

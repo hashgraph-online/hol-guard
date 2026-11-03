@@ -16,7 +16,7 @@ use guard_contracts::{NativePromptRiskClassV1, PreToolActionTypeV1, PreToolResul
 const PROMPT_REVIEW_NOTICE: &str = "HOL Guard flagged this prompt and sent it. Guard will ask before the agent takes the sensitive action it leads to; approve that request with Allow once or Always allow if you meant it.";
 
 /// Sends a prompt held only for review, with Guard's notice as its reason.
-pub(crate) fn defer_prompt_review(output: &mut PreToolResultV1) {
+pub(super) fn defer_prompt_review(output: &mut PreToolResultV1) {
     if output.action.event != "UserPromptSubmit"
         || output.action.action_type != PreToolActionTypeV1::Prompt
         || !matches!(
@@ -46,6 +46,14 @@ fn reaches_a_tool_call(class: &NativePromptRiskClassV1) -> bool {
             | NativePromptRiskClassV1::DestructiveIntent
             | NativePromptRiskClassV1::SubprocessIntent
     )
+}
+
+/// The edge's owned form of [`defer_prompt_review`]. The edge runs it last, so
+/// a review held by the native result alone, with no installed policy, or by
+/// a runtime risk step after the policy join defers as well.
+pub(crate) fn deferred_prompt_review(mut output: PreToolResultV1) -> PreToolResultV1 {
+    defer_prompt_review(&mut output);
+    output
 }
 
 #[cfg(test)]
