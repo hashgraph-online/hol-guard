@@ -3,7 +3,7 @@
   "id": "mcp.rel-time",
   "version": "1.2.11",
   "name": "Rel-Time Protocol",
-  "description": "Reviews the Rel-Time zero-knowledge VDF and Bitcoin timestamping tools that spend hash credits or write proof artifacts to disk: reltime_anchor, reltime_anchor_file, reltime_anchor_directory and reltime_download_certificate. Local SHA-256 hashing, Bitcoin ledger verification, account status and bit-for-bit forensic integrity audits keep Guard's usual handling. Off until you turn it on.",
+  "description": "Reviews the Rel-Time zero-knowledge VDF and Bitcoin timestamping tools that spend hash credits, provision API keys, link hardware Passkeys or write stamped proof files to disk: reltime_anchor_file, reltime_anchor_hash, reltime_provision_agent_key, reltime_link_passkey and reltime_stamp_file. Sun-Stamp SVG retrieval (reltime_get_sun_stamp), Bitcoin proof verification (reltime_check_proof), account balance checks (reltime_account_status) and Superhighway forensic integrity audits (reltime_audit_trail) keep Guard's usual handling. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -23,18 +23,19 @@
     "local-file-read",
     "local-file-write",
     "external-credit-spend",
+    "external-metered-payment",
     "external-ledger-anchor"
   ],
   "tools": [
-    { "name": "reltime_anchor", "state": "review" },
     { "name": "reltime_anchor_file", "state": "review" },
-    { "name": "reltime_anchor_directory", "state": "review" },
-    { "name": "reltime_download_certificate", "state": "review" },
-    { "name": "reltime_hash_file", "state": "inherit" },
-    { "name": "reltime_verify_hash", "state": "inherit" },
-    { "name": "reltime_get_status", "state": "inherit" },
-    { "name": "reltime_audit_file", "state": "inherit" },
-    { "name": "reltime_audit_folder", "state": "inherit" },
+    { "name": "reltime_anchor_hash", "state": "review" },
+    { "name": "reltime_provision_agent_key", "state": "review" },
+    { "name": "reltime_link_passkey", "state": "review" },
+    { "name": "reltime_stamp_file", "state": "review" },
+    { "name": "reltime_get_sun_stamp", "state": "inherit" },
+    { "name": "reltime_check_proof", "state": "inherit" },
+    { "name": "reltime_account_status", "state": "inherit" },
+    { "name": "reltime_audit_trail", "state": "inherit" },
     { "name": "other", "state": "inherit" }
   ],
   "referenceUrls": [
@@ -44,7 +45,7 @@
     "https://rel-time.com/docs/api"
   ],
   "saferAlternatives": [
-    "All file hashing in reltime_hash_file, reltime_anchor_file, reltime_audit_file and reltime_audit_folder runs locally via SHA-256; raw file contents never leave the machine.",
-    "Use reltime_get_status, reltime_verify_hash, reltime_audit_file and reltime_audit_folder to inspect credit balance and verify ledger proofs before anchoring new batches."
+    "All file hashing in reltime_anchor_file, reltime_stamp_file, reltime_check_proof and reltime_audit_trail runs locally via SHA-256; raw file contents never leave the machine.",
+    "Use reltime_account_status, reltime_check_proof, reltime_get_sun_stamp and reltime_audit_trail to inspect credit balance, download 64-ray Sun-Stamps and verify Bitcoin ledger proofs before anchoring new files or provisioning credits."
   ]
 }
