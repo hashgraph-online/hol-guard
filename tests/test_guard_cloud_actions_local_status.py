@@ -463,7 +463,7 @@ def test_a_guard_cloud_decision_id_cannot_resolve_anything_on_this_computer(
     assert GuardStore(tmp_path).get_approval_request(pending)["status"] == "pending"
 
 
-@pytest.mark.parametrize("cloud_answer", ["connected", "offline", "expired"])
+@pytest.mark.parametrize("cloud_answer", ["connected", "offline", "expired", "out_of_actions"])
 def test_local_approvals_keep_working_whatever_guard_cloud_says(
     daemon: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cloud_answer: str
 ) -> None:
@@ -474,6 +474,16 @@ def test_local_approvals_keep_working_whatever_guard_cloud_says(
             status_module,
             "_live_checker",
             lambda *_args: (CheckResult("offline", "Guard Cloud did not answer.", None),) * 2,
+        )
+    if cloud_answer == "out_of_actions":
+        # Guard Cloud refusing work, as when a workspace has used its included actions.
+        monkeypatch.setattr(
+            status_module,
+            "_live_checker",
+            lambda *_args: (
+                CheckResult("current", "Guard Cloud answered.", 200),
+                CheckResult("unexpected_answer", "Guard Cloud answered HTTP 402.", 402),
+            ),
         )
     if cloud_answer == "expired":
         _sign_in(tmp_path, expires=datetime.now(timezone.utc) - timedelta(hours=1))
@@ -487,7 +497,12 @@ def test_local_approvals_keep_working_whatever_guard_cloud_says(
         body={"scope": "artifact", "reason": "approved on this computer"},
     )
 
-    expected = {"connected": "connected", "offline": "offline", "expired": "sign_in_expired"}[cloud_answer]
+    expected = {
+        "connected": "connected",
+        "offline": "offline",
+        "expired": "sign_in_expired",
+        "out_of_actions": "unexpected_answer",
+    }[cloud_answer]
     assert check_status == 200
     assert checked["sign_ins"][0]["state"] == expected
     assert status == 200
