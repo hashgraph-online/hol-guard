@@ -95,12 +95,12 @@ pub(crate) fn admissible_paths(
 /// CIGAR's picks, led by the walk's best file when CIGAR left it out. The walk
 /// ranks files by the prompt's exact words and quoted text, which a pick by
 /// meaning can miss, so the file the prompt names comes first with the chunk
-/// that says the most of them. A file whose chunks share none of them is not
-/// added.
+/// that holds the most of `words`, the walk's own words and quoted text from
+/// the whole prompt. A file whose chunks share none of them is not added.
 fn led_by(
     mut picked: Vec<PickedExcerpt>,
     lead: Option<&AdmittedFile>,
-    query: &str,
+    words: &[String],
 ) -> Vec<PickedExcerpt> {
     let Some(file) = lead else {
         return picked;
@@ -111,12 +111,9 @@ fn led_by(
     {
         return picked;
     }
-    let words = crate::context_assistance_prompt_files::terms(query);
-    let quoted = crate::context_assistance_prompt_files::phrases(query);
     let said = |text: &str| {
         let text = text.to_lowercase();
-        let count = |list: &[String]| list.iter().filter(|w| text.contains(w.as_str())).count();
-        count(&words) + 2 * count(&quoted)
+        words.iter().filter(|w| text.contains(w.as_str())).count()
     };
     let best = file
         .documents
@@ -180,6 +177,7 @@ impl Engine {
         app: String,
         wanted: Vec<String>,
         query: String,
+        words: &[String],
     ) -> Result<Option<Vec<PickedExcerpt>>, RuntimeError> {
         if crate::guard_config_harness::canonical_harness_id(&app) != Some(app.as_str()) {
             return Err(RuntimeError::ScopeDenied);
@@ -225,7 +223,7 @@ impl Engine {
                 .values()
                 .find(|file| &file.relative_path == first)
         });
-        Ok(Some(led_by(picked, lead, &query)))
+        Ok(Some(led_by(picked, lead, words)))
     }
 
     /// Before a hand-picked grant: drop the automatic scope for the same
