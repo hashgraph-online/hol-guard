@@ -263,6 +263,11 @@ mod contributed_mcp_decision_op;
 #[path = "adapters/detection/copilot_detect.rs"]
 mod copilot_detect;
 mod copilot_hook_commands;
+#[path = "adapters/copilot_hook_config.rs"]
+mod copilot_hook_config;
+#[cfg(test)]
+#[path = "adapters/copilot_hook_config_tests.rs"]
+mod copilot_hook_config_tests;
 #[cfg(all(test, unix))]
 mod copilot_vectors_tests;
 mod critical_floor_op;
