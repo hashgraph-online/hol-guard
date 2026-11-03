@@ -10,7 +10,7 @@ import pytest
 
 _ROOT = Path(__file__).resolve().parents[1]
 _DOCS = _ROOT / "docs/guard/extension-builder"
-_REFERENCE_FILES = {"README.md", "VALIDATION.md"}
+_REFERENCE_FILES = {"HOSTED-ACTIONS.md", "README.md", "VALIDATION.md"}
 _LINK = re.compile(r"\[[^\]\n]+\]\(([^)\n]+)\)")
 
 

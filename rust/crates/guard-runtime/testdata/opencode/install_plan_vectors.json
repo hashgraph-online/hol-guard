@@ -1,0 +1,6415 @@
+{
+ "schema": "guard-opencode-install-plan-vectors.v1",
+ "cases": [
+  {
+   "name": "empty",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      null
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": []
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": []
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "permission-string",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      "ask"
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "*",
+         "ask"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "ask"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": []
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": []
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "permission-list",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      [
+       "allow"
+      ]
+     ],
+     [
+      "mcp",
+      []
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": []
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": []
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "permission-bash-string-keeps-key-order",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "z",
+         "deny"
+        ],
+        [
+         "bash",
+         "ask"
+        ],
+        [
+         "*",
+         "allow"
+        ],
+        [
+         "a",
+         {
+          "o": [
+           [
+            "y",
+            1
+           ],
+           [
+            "b",
+            2
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "z",
+         "deny"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "ask"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ],
+        [
+         "*",
+         "allow"
+        ],
+        [
+         "a",
+         {
+          "o": [
+           [
+            "y",
+            1
+           ],
+           [
+            "b",
+            2
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": []
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": []
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "permission-bash-object-merges-over-defaults",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "z *",
+            "ask"
+           ],
+           [
+            "rm -rf *",
+            "allow"
+           ],
+           [
+            "*",
+            "deny"
+           ],
+           [
+            "a *",
+            {
+             "o": [
+              [
+               "k",
+               1
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ],
+        [
+         "edit",
+         "ask"
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "deny"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "allow"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ],
+           [
+            "z *",
+            "ask"
+           ],
+           [
+            "a *",
+            {
+             "o": [
+              [
+               "k",
+               1
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ],
+        [
+         "edit",
+         "ask"
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": []
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": []
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "permission-wildcard-without-bash",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "edit",
+         "deny"
+        ],
+        [
+         "*",
+         "ask"
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "edit",
+         "deny"
+        ],
+        [
+         "*",
+         "ask"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "ask"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": []
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": []
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "permission-wildcard-not-text",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "*",
+         {
+          "o": [
+           [
+            "x",
+            1
+           ]
+          ]
+         }
+        ],
+        [
+         "bash",
+         [
+          "no"
+         ]
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "*",
+         {
+          "o": [
+           [
+            "x",
+            1
+           ]
+          ]
+         }
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": []
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": []
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "permission-bash-null-wildcard-text",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "bash",
+         null
+        ],
+        [
+         "*",
+         "deny"
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "deny"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ],
+        [
+         "*",
+         "deny"
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": []
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": []
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "mcp-user-entries-keep-order",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      null
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "zeta",
+         {
+          "o": [
+           [
+            "type",
+            "remote"
+           ],
+           [
+            "url",
+            "https://example.invalid/mcp"
+           ],
+           [
+            "enabled",
+            true
+           ]
+          ]
+         }
+        ],
+        [
+         "alpha",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node",
+             "a.js"
+            ]
+           ],
+           [
+            "z",
+            1
+           ],
+           [
+            "a",
+            2
+           ]
+          ]
+         }
+        ],
+        [
+         "not-an-object",
+         "x"
+        ],
+        [
+         "hol-guard::kept",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "anything"
+            ]
+           ],
+           [
+            "b",
+            1
+           ],
+           [
+            "a",
+            2
+           ]
+          ]
+         }
+        ],
+        [
+         "list",
+         [
+          1,
+          2
+         ]
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp_keys",
+      [
+       "zeta",
+       "alpha",
+       "not-an-object",
+       "hol-guard::kept",
+       "list"
+      ]
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "zeta",
+         {
+          "o": [
+           [
+            "type",
+            "remote"
+           ],
+           [
+            "url",
+            "https://example.invalid/mcp"
+           ],
+           [
+            "enabled",
+            true
+           ]
+          ]
+         }
+        ],
+        [
+         "alpha",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node",
+             "a.js"
+            ]
+           ],
+           [
+            "z",
+            1
+           ],
+           [
+            "a",
+            2
+           ]
+          ]
+         }
+        ],
+        [
+         "hol-guard::kept",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "anything"
+            ]
+           ],
+           [
+            "b",
+            1
+           ],
+           [
+            "a",
+            2
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": []
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "mcp-legacy-proxy-wrappers-restore",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      null
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "first",
+         {
+          "o": [
+           [
+            "enabled",
+            false
+           ],
+           [
+            "command",
+            [
+             "/usr/bin/python3",
+             "-m",
+             "codex_plugin_scanner.cli",
+             "guard",
+             "opencode-mcp-proxy",
+             "--server-name",
+             "files",
+             "--command",
+             "npx",
+             "--arg=-y",
+             "--arg=@scope/files=1",
+             "--arg="
+            ]
+           ],
+           [
+            "environment",
+            {
+             "o": [
+              [
+               "Z",
+               "1"
+              ],
+              [
+               "A",
+               "2"
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ],
+        [
+         "second",
+         {
+          "o": [
+           [
+            "type",
+            {
+             "o": [
+              [
+               "odd",
+               true
+              ]
+             ]
+            }
+           ],
+           [
+            "command",
+            [
+             "x",
+             "opencode-mcp-proxy",
+             "--command",
+             "a",
+             "--command",
+             "b",
+             "--arg=1",
+             7
+            ]
+           ],
+           [
+            "environment",
+            "not-an-object"
+           ],
+           [
+            "enabled",
+            null
+           ]
+          ]
+         }
+        ],
+        [
+         "dangling",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "hol-guard",
+             "opencode-mcp-proxy",
+             "--command"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "string-command",
+         {
+          "o": [
+           [
+            "command",
+            "opencode-mcp-proxy --command x"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp_keys",
+      [
+       "first",
+       "second",
+       "dangling",
+       "string-command"
+      ]
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "first",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "npx",
+             "-y",
+             "@scope/files=1",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            false
+           ],
+           [
+            "environment",
+            {
+             "o": [
+              [
+               "Z",
+               "1"
+              ],
+              [
+               "A",
+               "2"
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ],
+        [
+         "second",
+         {
+          "o": [
+           [
+            "type",
+            {
+             "o": [
+              [
+               "odd",
+               true
+              ]
+             ]
+            }
+           ],
+           [
+            "command",
+            [
+             "b",
+             "1"
+            ]
+           ],
+           [
+            "enabled",
+            null
+           ]
+          ]
+         }
+        ],
+        [
+         "string-command",
+         {
+          "o": [
+           [
+            "command",
+            "opencode-mcp-proxy --command x"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": []
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "mcp-guard-proxy-commands-drop",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      null
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "launcher",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "/opt/HOL-Guard.EXE",
+             "guard",
+             "cursor-mcp-proxy",
+             "--x"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "windows",
+         {
+          "o": [
+           [
+            "command",
+            "C:\\tools\\current-hol-guard.cmd"
+           ],
+           [
+            "args",
+            [
+             "codex-mcp-proxy"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "module",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "python",
+             "-m",
+             "codex_plugin_scanner.cli",
+             "guard",
+             "mcp-proxy"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "relay",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "hol-guard",
+             "mcp-relay",
+             "/usr/bin/python3",
+             "-m",
+             "codex_plugin_scanner.cli",
+             "guard",
+             "hermes-mcp-proxy"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "relay-not-proxy",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "hol-guard",
+             "mcp-relay",
+             "py",
+             "mcp-proxy"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "launcher-no-proxy",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "hol-guard",
+             "run",
+             "mcp-proxy"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "dotted",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "/opt/hol-guard/.",
+             "mcp-proxy"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "trailing",
+         {
+          "o": [
+           [
+            "command",
+            "/opt/hol-guard/"
+           ],
+           [
+            "args",
+            [
+             "guard",
+             "copilot-mcp-proxy",
+             3
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "module-missing-guard",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "python",
+             "-m",
+             "codex_plugin_scanner.cli",
+             "mcp-proxy"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "empty-command",
+         {
+          "o": [
+           [
+            "command",
+            [
+             1,
+             2
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "user",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node",
+             "server.js"
+            ]
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp_keys",
+      [
+       "launcher",
+       "windows",
+       "module",
+       "relay",
+       "relay-not-proxy",
+       "launcher-no-proxy",
+       "dotted",
+       "trailing",
+       "module-missing-guard",
+       "empty-command",
+       "user"
+      ]
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      []
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "relay-not-proxy",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "hol-guard",
+             "mcp-relay",
+             "py",
+             "mcp-proxy"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "launcher-no-proxy",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "hol-guard",
+             "run",
+             "mcp-proxy"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "module-missing-guard",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "python",
+             "-m",
+             "codex_plugin_scanner.cli",
+             "mcp-proxy"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "empty-command",
+         {
+          "o": [
+           [
+            "command",
+            [
+             1,
+             2
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "user",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node",
+             "server.js"
+            ]
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": []
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "global-server-gets-native-and-companion",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      [
+       {
+        "o": [
+         [
+          "name",
+          "files"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "npx"
+         ],
+         [
+          "args",
+          [
+           "-y",
+           "@scope/files"
+          ]
+         ],
+         [
+          "env",
+          {
+           "o": [
+            [
+             "TOKEN",
+             "t"
+            ],
+            [
+             "PYTHONPATH",
+             "x/y"
+            ]
+           ]
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": [
+            [
+             "TOKEN",
+             "t"
+            ]
+           ]
+          }
+         ],
+         [
+          "source",
+          {
+           "o": [
+            [
+             "timeout",
+             5
+            ],
+            [
+             "command",
+             [
+              "old"
+             ]
+            ],
+            [
+             "enabled",
+             true
+            ],
+            [
+             "env",
+             {
+              "o": []
+             }
+            ]
+           ]
+          }
+         ]
+        ]
+       }
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "files_*",
+         "deny"
+        ],
+        [
+         "edit",
+         "ask"
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "other",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node"
+            ]
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp_keys",
+      [
+       "other"
+      ]
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      [
+       0
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "files_*",
+         "ask"
+        ],
+        [
+         "edit",
+         "ask"
+        ],
+        [
+         "hol-guard::files_*",
+         "ask"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "other",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "files",
+         {
+          "o": [
+           [
+            "timeout",
+            5
+           ],
+           [
+            "command",
+            [
+             "npx",
+             "-y",
+             "@scope/files"
+            ]
+           ],
+           [
+            "enabled",
+            false
+           ],
+           [
+            "env",
+            {
+             "o": []
+            }
+           ],
+           [
+            "type",
+            "local"
+           ],
+           [
+            "environment",
+            {
+             "o": [
+              [
+               "TOKEN",
+               "t"
+              ],
+              [
+               "PYTHONPATH",
+               "x/y"
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ],
+        [
+         "hol-guard::files",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "files",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            true
+           ],
+           [
+            "environment",
+            {
+             "o": [
+              [
+               "TOKEN",
+               "t"
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": [
+           [
+            "files_*",
+            "ask"
+           ],
+           [
+            "hol-guard::files_*",
+            "ask"
+           ]
+          ]
+         }
+        ],
+        [
+         "mcp",
+         {
+          "o": [
+           [
+            "files",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "files",
+                ""
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ],
+              [
+               "environment",
+               {
+                "o": [
+                 [
+                  "TOKEN",
+                  "t"
+                 ]
+                ]
+               }
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "existing-native-and-companion-update-in-place",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      [
+       {
+        "o": [
+         [
+          "name",
+          "files"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": [
+            [
+             "B",
+             "2"
+            ],
+            [
+             "A",
+             "1"
+            ]
+           ]
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": [
+            [
+             "B",
+             "2"
+            ],
+            [
+             "A",
+             "1"
+            ]
+           ]
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       },
+       {
+        "o": [
+         [
+          "name",
+          "db"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "uvx"
+         ],
+         [
+          "args",
+          [
+           "db"
+          ]
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          {
+           "o": [
+            [
+             "type",
+             "custom"
+            ],
+            [
+             "z",
+             1
+            ]
+           ]
+          }
+         ]
+        ]
+       }
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      null
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "hol-guard::files",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "stale"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "zz",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "files",
+         {
+          "o": [
+           [
+            "z",
+            1
+           ],
+           [
+            "enabled",
+            true
+           ],
+           [
+            "command",
+            [
+             "node"
+            ]
+           ],
+           [
+            "a",
+            2
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp_keys",
+      [
+       "hol-guard::files",
+       "zz",
+       "files"
+      ]
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      [
+       0,
+       1
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "files_*",
+         "ask"
+        ],
+        [
+         "hol-guard::files_*",
+         "ask"
+        ],
+        [
+         "db_*",
+         "ask"
+        ],
+        [
+         "hol-guard::db_*",
+         "ask"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "hol-guard::files",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "files",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            true
+           ],
+           [
+            "environment",
+            {
+             "o": [
+              [
+               "B",
+               "2"
+              ],
+              [
+               "A",
+               "1"
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ],
+        [
+         "zz",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "files",
+         {
+          "o": [
+           [
+            "z",
+            1
+           ],
+           [
+            "enabled",
+            false
+           ],
+           [
+            "command",
+            [
+             "node"
+            ]
+           ],
+           [
+            "a",
+            2
+           ]
+          ]
+         }
+        ],
+        [
+         "db",
+         {
+          "o": [
+           [
+            "type",
+            "custom"
+           ],
+           [
+            "z",
+            1
+           ],
+           [
+            "command",
+            [
+             "uvx",
+             "db"
+            ]
+           ],
+           [
+            "enabled",
+            false
+           ]
+          ]
+         }
+        ],
+        [
+         "hol-guard::db",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "db",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            true
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": [
+           [
+            "files_*",
+            "ask"
+           ],
+           [
+            "hol-guard::files_*",
+            "ask"
+           ],
+           [
+            "db_*",
+            "ask"
+           ],
+           [
+            "hol-guard::db_*",
+            "ask"
+           ]
+          ]
+         }
+        ],
+        [
+         "mcp",
+         {
+          "o": [
+           [
+            "files",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "files",
+                ""
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ],
+              [
+               "environment",
+               {
+                "o": [
+                 [
+                  "B",
+                  "2"
+                 ],
+                 [
+                  "A",
+                  "1"
+                 ]
+                ]
+               }
+              ]
+             ]
+            }
+           ],
+           [
+            "db",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "db",
+                ""
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "workspace-scopes-and-shadowing",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      true
+     ],
+     [
+      "servers",
+      [
+       {
+        "o": [
+         [
+          "name",
+          "proj"
+         ],
+         [
+          "source_scope",
+          "project"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       },
+       {
+        "o": [
+         [
+          "name",
+          "shadow-global"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       },
+       {
+        "o": [
+         [
+          "name",
+          "shadow-custom"
+         ],
+         [
+          "source_scope",
+          "custom"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       },
+       {
+        "o": [
+         [
+          "name",
+          "shadow-custom-off"
+         ],
+         [
+          "source_scope",
+          "custom"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          false
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       },
+       {
+        "o": [
+         [
+          "name",
+          "free"
+         ],
+         [
+          "source_scope",
+          "custom"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       }
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      [
+       "proj",
+       "shadow-custom",
+       "shadow-custom-off",
+       "shadow-global",
+       "unrelated"
+      ]
+     ],
+     [
+      "permission",
+      null
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "proj",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node"
+            ]
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp_keys",
+      [
+       "proj"
+      ]
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      [
+       0,
+       1,
+       2,
+       3,
+       4
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "proj_*",
+         "ask"
+        ],
+        [
+         "hol-guard::shadow-global_*",
+         "ask"
+        ],
+        [
+         "hol-guard::shadow-custom_*",
+         "ask"
+        ],
+        [
+         "free_*",
+         "ask"
+        ],
+        [
+         "hol-guard::free_*",
+         "ask"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "proj",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "free",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "node"
+            ]
+           ],
+           [
+            "enabled",
+            false
+           ]
+          ]
+         }
+        ],
+        [
+         "hol-guard::shadow-global",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "shadow-global",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            true
+           ]
+          ]
+         }
+        ],
+        [
+         "hol-guard::free",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "free",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            true
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": [
+           [
+            "proj_*",
+            "ask"
+           ],
+           [
+            "hol-guard::shadow-global_*",
+            "ask"
+           ],
+           [
+            "hol-guard::shadow-custom_*",
+            "ask"
+           ],
+           [
+            "free_*",
+            "ask"
+           ],
+           [
+            "hol-guard::free_*",
+            "ask"
+           ]
+          ]
+         }
+        ],
+        [
+         "mcp",
+         {
+          "o": [
+           [
+            "proj",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "proj",
+                "nonexistent-guard/work"
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ]
+             ]
+            }
+           ],
+           [
+            "free",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "free",
+                "nonexistent-guard/work"
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "no-workspace-ignores-workspace-names",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      [
+       {
+        "o": [
+         [
+          "name",
+          "shadow-global"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       },
+       {
+        "o": [
+         [
+          "name",
+          "proj"
+         ],
+         [
+          "source_scope",
+          "project"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       }
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      [
+       "proj",
+       "shadow-global"
+      ]
+     ],
+     [
+      "permission",
+      null
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      [
+       0,
+       1
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "shadow-global_*",
+         "ask"
+        ],
+        [
+         "hol-guard::shadow-global_*",
+         "ask"
+        ],
+        [
+         "proj_*",
+         "ask"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "shadow-global",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "node"
+            ]
+           ],
+           [
+            "enabled",
+            false
+           ]
+          ]
+         }
+        ],
+        [
+         "hol-guard::shadow-global",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "shadow-global",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            true
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": [
+           [
+            "shadow-global_*",
+            "ask"
+           ],
+           [
+            "hol-guard::shadow-global_*",
+            "ask"
+           ],
+           [
+            "proj_*",
+            "ask"
+           ]
+          ]
+         }
+        ],
+        [
+         "mcp",
+         {
+          "o": [
+           [
+            "shadow-global",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "shadow-global",
+                ""
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ]
+             ]
+            }
+           ],
+           [
+            "proj",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "proj",
+                ""
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "disabled-servers",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      true
+     ],
+     [
+      "servers",
+      [
+       {
+        "o": [
+         [
+          "name",
+          "off"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          false
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       },
+       {
+        "o": [
+         [
+          "name",
+          "off-project"
+         ],
+         [
+          "source_scope",
+          "project"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          false
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       }
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "off_*",
+         "allow"
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      [
+       0,
+       1
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "off_*",
+         "allow"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "off",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "node"
+            ]
+           ],
+           [
+            "enabled",
+            false
+           ]
+          ]
+         }
+        ],
+        [
+         "hol-guard::off",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "off",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            false
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": []
+         }
+        ],
+        [
+         "mcp",
+         {
+          "o": [
+           [
+            "off",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "off",
+                "nonexistent-guard/work"
+               ]
+              ],
+              [
+               "enabled",
+               false
+              ]
+             ]
+            }
+           ],
+           [
+            "off-project",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "off-project",
+                "nonexistent-guard/work"
+               ]
+              ],
+              [
+               "enabled",
+               false
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "companion-prefixed-servers-and-artifacts",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      [
+       {
+        "o": [
+         [
+          "name",
+          "hol-guard::files"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       },
+       {
+        "o": [
+         [
+          "name",
+          "files"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       },
+       {
+        "o": [
+         [
+          "name",
+          "hol-guard::"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       }
+      ]
+     ],
+     [
+      "skipped",
+      [
+       "remote",
+       "hol-guard::b",
+       "remote"
+      ]
+     ],
+     [
+      "artifacts",
+      [
+       "hol-guard::b",
+       "hol-guard::a",
+       "plain",
+       "hol-guard::a"
+      ]
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      null
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      [
+       1
+      ]
+     ],
+     [
+      "skipped",
+      [
+       "remote",
+       "hol-guard::b",
+       "hol-guard::a"
+      ]
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "files_*",
+         "ask"
+        ],
+        [
+         "hol-guard::files_*",
+         "ask"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "files",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "node"
+            ]
+           ],
+           [
+            "enabled",
+            false
+           ]
+          ]
+         }
+        ],
+        [
+         "hol-guard::files",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "files",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            true
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": [
+           [
+            "files_*",
+            "ask"
+           ],
+           [
+            "hol-guard::files_*",
+            "ask"
+           ]
+          ]
+         }
+        ],
+        [
+         "mcp",
+         {
+          "o": [
+           [
+            "files",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "files",
+                ""
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "empty-command-skips-native",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      [
+       {
+        "o": [
+         [
+          "name",
+          "blank"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          ""
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       }
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      null
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      [
+       0
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "blank_*",
+         "ask"
+        ],
+        [
+         "hol-guard::blank_*",
+         "ask"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "hol-guard::blank",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "blank",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            true
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": [
+           [
+            "blank_*",
+            "ask"
+           ],
+           [
+            "hol-guard::blank_*",
+            "ask"
+           ]
+          ]
+         }
+        ],
+        [
+         "mcp",
+         {
+          "o": [
+           [
+            "blank",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "blank",
+                ""
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "duplicate-server-names",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      true
+     ],
+     [
+      "servers",
+      [
+       {
+        "o": [
+         [
+          "name",
+          "dup"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "a"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          {
+           "o": [
+            [
+             "note",
+             "global"
+            ]
+           ]
+          }
+         ]
+        ]
+       },
+       {
+        "o": [
+         [
+          "name",
+          "dup"
+         ],
+         [
+          "source_scope",
+          "project"
+         ],
+         [
+          "command",
+          "b"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          {
+           "o": [
+            [
+             "note",
+             "project"
+            ]
+           ]
+          }
+         ]
+        ]
+       }
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      null
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      [
+       0,
+       1
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "dup_*",
+         "ask"
+        ],
+        [
+         "hol-guard::dup_*",
+         "ask"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "dup",
+         {
+          "o": [
+           [
+            "note",
+            "global"
+           ],
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "a"
+            ]
+           ],
+           [
+            "enabled",
+            false
+           ]
+          ]
+         }
+        ],
+        [
+         "hol-guard::dup",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "dup",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            true
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": [
+           [
+            "dup_*",
+            "ask"
+           ],
+           [
+            "hol-guard::dup_*",
+            "ask"
+           ]
+          ]
+         }
+        ],
+        [
+         "mcp",
+         {
+          "o": [
+           [
+            "dup",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "dup",
+                "nonexistent-guard/work"
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "launcher-environment-without-server-env",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      [
+       {
+        "o": [
+         [
+          "name",
+          "env"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": [
+            [
+             "PYTHONHOME",
+             "x/y"
+            ],
+            [
+             " ",
+             "blank"
+            ],
+            [
+             " PAD ",
+             "kept"
+            ]
+           ]
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": [
+            [
+             "PYTHONPATH",
+             "nonexistent-guard/src"
+            ],
+            [
+             "PAD",
+             "kept"
+            ]
+           ]
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       }
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      null
+     ],
+     [
+      "mcp",
+      null
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      [
+       0
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "env_*",
+         "ask"
+        ],
+        [
+         "hol-guard::env_*",
+         "ask"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "env",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "node"
+            ]
+           ],
+           [
+            "enabled",
+            false
+           ],
+           [
+            "environment",
+            {
+             "o": [
+              [
+               "PYTHONHOME",
+               "x/y"
+              ],
+              [
+               " ",
+               "blank"
+              ],
+              [
+               " PAD ",
+               "kept"
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ],
+        [
+         "hol-guard::env",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "env",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            true
+           ],
+           [
+            "environment",
+            {
+             "o": [
+              [
+               "PYTHONPATH",
+               "nonexistent-guard/src"
+              ],
+              [
+               "PAD",
+               "kept"
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": [
+           [
+            "env_*",
+            "ask"
+           ],
+           [
+            "hol-guard::env_*",
+            "ask"
+           ]
+          ]
+         }
+        ],
+        [
+         "mcp",
+         {
+          "o": [
+           [
+            "env",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "env",
+                ""
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ],
+              [
+               "environment",
+               {
+                "o": [
+                 [
+                  "PYTHONPATH",
+                  "nonexistent-guard/src"
+                 ],
+                 [
+                  "PAD",
+                  "kept"
+                 ]
+                ]
+               }
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "unicode-names",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      [
+       {
+        "o": [
+         [
+          "name",
+          "dätä ✓"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          [
+           "--flag",
+           "ünï"
+          ]
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       }
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "ü",
+         "ask"
+        ],
+        [
+         "*",
+         "allow"
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "ü",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "a",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node"
+            ]
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp_keys",
+      [
+       "ü",
+       "a"
+      ]
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      [
+       0
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "ü",
+         "ask"
+        ],
+        [
+         "*",
+         "allow"
+        ],
+        [
+         "dätä ✓_*",
+         "ask"
+        ],
+        [
+         "hol-guard::dätä ✓_*",
+         "ask"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "ü",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "a",
+         {
+          "o": [
+           [
+            "command",
+            [
+             "node"
+            ]
+           ]
+          ]
+         }
+        ],
+        [
+         "dätä ✓",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "node",
+             "--flag",
+             "ünï"
+            ]
+           ],
+           [
+            "enabled",
+            false
+           ]
+          ]
+         }
+        ],
+        [
+         "hol-guard::dätä ✓",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "dätä ✓",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            true
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": [
+           [
+            "dätä ✓_*",
+            "ask"
+           ],
+           [
+            "hol-guard::dätä ✓_*",
+            "ask"
+           ]
+          ]
+         }
+        ],
+        [
+         "mcp",
+         {
+          "o": [
+           [
+            "dätä ✓",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "dätä ✓",
+                ""
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "name": "mcp-not-an-object",
+   "request": {
+    "o": [
+     [
+      "op",
+      "plan"
+     ],
+     [
+      "workspace",
+      false
+     ],
+     [
+      "servers",
+      [
+       {
+        "o": [
+         [
+          "name",
+          "files"
+         ],
+         [
+          "source_scope",
+          "global"
+         ],
+         [
+          "command",
+          "node"
+         ],
+         [
+          "args",
+          []
+         ],
+         [
+          "env",
+          {
+           "o": []
+          }
+         ],
+         [
+          "enabled",
+          true
+         ],
+         [
+          "proxy_environment",
+          {
+           "o": []
+          }
+         ],
+         [
+          "source",
+          null
+         ]
+        ]
+       }
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "artifacts",
+      []
+     ],
+     [
+      "workspace_servers",
+      []
+     ],
+     [
+      "permission",
+      3
+     ],
+     [
+      "mcp",
+      "nope"
+     ],
+     [
+      "mcp_keys",
+      []
+     ]
+    ]
+   },
+   "expect": {
+    "o": [
+     [
+      "managed",
+      [
+       0
+      ]
+     ],
+     [
+      "skipped",
+      []
+     ],
+     [
+      "permission",
+      {
+       "o": [
+        [
+         "files_*",
+         "ask"
+        ],
+        [
+         "hol-guard::files_*",
+         "ask"
+        ],
+        [
+         "bash",
+         {
+          "o": [
+           [
+            "*",
+            "allow"
+           ],
+           [
+            "git checkout *",
+            "deny"
+           ],
+           [
+            "git checkout",
+            "deny"
+           ],
+           [
+            "git revert *",
+            "deny"
+           ],
+           [
+            "git revert",
+            "deny"
+           ],
+           [
+            "git restore *",
+            "deny"
+           ],
+           [
+            "git restore",
+            "deny"
+           ],
+           [
+            "git reset *",
+            "deny"
+           ],
+           [
+            "git reset",
+            "deny"
+           ],
+           [
+            "rm -rf *",
+            "deny"
+           ],
+           [
+            "rm -r *",
+            "deny"
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "mcp",
+      {
+       "o": [
+        [
+         "files",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "node"
+            ]
+           ],
+           [
+            "enabled",
+            false
+           ]
+          ]
+         }
+        ],
+        [
+         "hol-guard::files",
+         {
+          "o": [
+           [
+            "type",
+            "local"
+           ],
+           [
+            "command",
+            [
+             "relay",
+             "guard-cli",
+             "opencode-mcp-proxy",
+             "files",
+             ""
+            ]
+           ],
+           [
+            "enabled",
+            true
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ],
+     [
+      "overlay",
+      {
+       "o": [
+        [
+         "$schema",
+         "https://opencode.ai/config.json"
+        ],
+        [
+         "permission",
+         {
+          "o": [
+           [
+            "files_*",
+            "ask"
+           ],
+           [
+            "hol-guard::files_*",
+            "ask"
+           ]
+          ]
+         }
+        ],
+        [
+         "mcp",
+         {
+          "o": [
+           [
+            "files",
+            {
+             "o": [
+              [
+               "type",
+               "local"
+              ],
+              [
+               "command",
+               [
+                "relay",
+                "guard-cli",
+                "opencode-mcp-proxy",
+                "files",
+                ""
+               ]
+              ],
+              [
+               "enabled",
+               true
+              ]
+             ]
+            }
+           ]
+          ]
+         }
+        ]
+       ]
+      }
+     ]
+    ]
+   }
+  }
+ ]
+}

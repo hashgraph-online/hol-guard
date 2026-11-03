@@ -61,11 +61,14 @@ def native_runner_authority(
     args: Mapping[str, Any],
     guard_home: Path | None = None,
     timeout_seconds: float | None = None,
+    *,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
     """Run one authority ``kind`` in the resident and return its bound payload.
 
     ``timeout_seconds`` widens the per-call budget for file-heavy kinds; the
-    envelope deadline stays bounded by the resident call cap.
+    envelope deadline stays bounded by the resident call cap. A caller's
+    ``deadline_monotonic`` only ever shortens it.
     """
 
     guard_home = _resolve_digest_home(guard_home)
@@ -87,6 +90,7 @@ def native_runner_authority(
         guard_home=guard_home,
         status=_native_runtime_status_memo(),
         timeout_seconds=timeout_seconds,
+        deadline_monotonic=deadline_monotonic,
         cold_start=True,
     )
     return reply.payload()

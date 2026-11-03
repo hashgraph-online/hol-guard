@@ -311,3 +311,55 @@ fn cloud_bindings_must_extend_a_source_in_the_same_request() {
         "cloud_binding_extension_unknown"
     );
 }
+
+const CLOUD_BINDING_REJECTED: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../docs/guard/extension-builder/examples/cloud-binding-rejected.json"
+));
+
+fn set_path(value: &mut Value, path: &[Value], replacement: Value) {
+    let (last, parents) = path.split_last().unwrap();
+    let mut target = value;
+    for step in parents {
+        target = match step {
+            Value::String(key) => &mut target[key.as_str()],
+            index => &mut target[index.as_u64().unwrap() as usize],
+        };
+    }
+    match last {
+        Value::String(key) => target[key.as_str()] = replacement,
+        index => target[index.as_u64().unwrap() as usize] = replacement,
+    }
+}
+
+#[test]
+fn documented_rejected_cloud_bindings_name_the_binding_without_echoing_it() {
+    let example: Value = serde_json::from_slice(CLOUD_BINDING_EXAMPLE).unwrap();
+    let rejected: Value = serde_json::from_slice(CLOUD_BINDING_REJECTED).unwrap();
+    let cases = rejected["cases"].as_array().unwrap();
+    assert!(cases.len() >= 10);
+    for case in cases {
+        let mut request = example.clone();
+        let mut injected = Vec::new();
+        for change in case["set"].as_array().unwrap() {
+            set_path(
+                &mut request,
+                change["path"].as_array().unwrap(),
+                change["value"].clone(),
+            );
+            strings(&change["value"], &mut injected);
+        }
+        let output = invoke(&["validate"], &cloud_binding_request(&request));
+        let name = &case["name"];
+        assert_eq!(output.status.code(), Some(2), "{name}");
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&text).unwrap(),
+            json!({"ok": false, "code": case["code"], "pointer": case["pointer"]}),
+            "{name}"
+        );
+        for value in injected {
+            assert!(!text.contains(value), "{name} repeats {value:?}");
+        }
+    }
+}

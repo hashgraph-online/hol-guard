@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
+from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext, artifacts_use_guard
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.fleet_posture_tools import derive_protection_state
 
@@ -179,3 +179,51 @@ def test_a_launcher_beside_an_unmanaged_config_stays_broken(tmp_path: Path) -> N
 
     assert diagnostics["setup_status"] == "broken"
     assert _protection_state(diagnostics) == "broken"
+
+
+_WIDE = 4096 + 5
+
+
+def _plain_artifact(index: int, config_path: str, args: tuple[str, ...] = ()) -> GuardArtifact:
+    return GuardArtifact(
+        artifact_id=f"stubtool:server:{index}",
+        name=f"server {index}",
+        harness="stubtool",
+        artifact_type="mcp_server",
+        source_scope="global",
+        config_path=config_path,
+        command="node",
+        args=args,
+    )
+
+
+class _WideStubAdapter(_StubAdapter):
+    """A detection whose every list is wider than one native request array may be."""
+
+    def detect(self, context: HarnessContext) -> HarnessDetection:
+        config_dir = context.home_dir / ".stubtool"
+        config_paths = tuple(str(config_dir / f"config-{index}.json") for index in range(_WIDE))
+        plain = tuple(_plain_artifact(index, config_paths[0]) for index in range(_WIDE))
+        # Only the last argument of the last artifact names Guard.
+        wide_args = (*(f"--flag-{index}" for index in range(_WIDE)), "hol-guard")
+        return HarnessDetection(
+            harness=self.harness,
+            installed=True,
+            command_available=self._command_available,
+            config_paths=config_paths,
+            artifacts=(*plain, _plain_artifact(_WIDE, config_paths[0], wide_args)),
+            warnings=tuple(f"note {index}" for index in range(_WIDE)),
+        )
+
+
+def test_a_detection_wider_than_one_native_array_crosses_whole(tmp_path: Path) -> None:
+    adapter = _WideStubAdapter(command_available=True)
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
+    detection = adapter.detect(context)
+
+    diagnostics = adapter.diagnostics(context)
+
+    assert diagnostics["setup_status"] == "active"
+    assert diagnostics["warnings"] == list(detection.warnings)
+    assert artifacts_use_guard(detection.artifacts)
+    assert not artifacts_use_guard(detection.artifacts[:-1])

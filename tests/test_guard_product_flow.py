@@ -1052,3 +1052,25 @@ args = ["workspace-skill.js", "--changed"]
         )
         assert args_file.read_text(encoding="utf-8").strip() == "--help"
         assert env_file.read_text(encoding="utf-8") == os.pathsep.join((str(runtime_pythonpath), str(source_root)))
+
+
+def test_harness_summary_survives_an_unavailable_registration_check(tmp_path: Path, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard.cli import product as product_module
+    from codex_plugin_scanner.guard.models import HarnessDetection
+    from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+
+    def unavailable(_artifacts: object) -> bool:
+        raise NativeRunnerAuthorityError("resident unavailable")
+
+    monkeypatch.setattr(product_module, "artifacts_use_guard", unavailable)
+    monkeypatch.setattr(product_module, "count_review_artifacts", lambda *_args: 0)
+    monkeypatch.setattr(product_module, "get_adapter", lambda _h: SimpleNamespace(approval_flow=lambda **_k: {}))
+    detection = HarnessDetection(
+        harness="cursor", installed=True, command_available=False, config_paths=(), artifacts=()
+    )
+
+    summary = product_module._summarize_harness(detection, GuardStore(tmp_path / "guard-home"), tmp_path)
+
+    assert summary["guard_registered"] is False

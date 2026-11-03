@@ -24,7 +24,7 @@ from .store_local_cli_capabilities import (
     write_local_cli_capabilities,
 )
 from .store_local_cli_schema import ensure_local_cli_schema
-from .store_mcp_catalog import acknowledge_catalog_changes
+from .store_mcp_catalog import acknowledge_catalog_changes, catalog_change_ids
 from .store_mcp_provider_permissions import ProviderUpdate, write_provider_choices
 
 
@@ -47,6 +47,8 @@ class CustomExtensionContinuityMutation:
     capability_updates: Mapping[str, Mapping[str, str]] | None = None
     # The MCP catalog revision each saved choice set was made against.
     catalog_reviews: Mapping[str, int] | None = None
+    # Command ids for the flagged tool names, resolved before the write lock.
+    catalog_change_ids: Mapping[str, str] | None = None
 
 
 class StoreCustomExtensionContinuityMixin:
@@ -71,6 +73,9 @@ class StoreCustomExtensionContinuityMixin:
     ) -> int:
         """Commit exact local authority, continuity state, and receipts together."""
 
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection)
+            change_ids = catalog_change_ids(connection, catalog_reviews or {})
         mutation = CustomExtensionContinuityMutation(
             expected_revision=expected_revision,
             authority_updates=tuple(authority_updates),
@@ -83,6 +88,7 @@ class StoreCustomExtensionContinuityMixin:
             catalog_seeds=catalog_seeds,
             capability_updates=capability_updates,
             catalog_reviews=catalog_reviews,
+            catalog_change_ids=change_ids,
         )
         with self._connect() as connection:
             _ = connection.execute("begin immediate")
@@ -126,6 +132,7 @@ def apply_custom_extension_continuity_mutation_locked(
             updated_at=mutation.updated_at,
             command_states=command_states,
             reviewed_catalog_revision=(mutation.catalog_reviews or {}).get(identity.cli_id),
+            catalog_change_ids=mutation.catalog_change_ids,
         )
         updates = (mutation.provider_updates or {}).get(identity.cli_id, ())
         if updates:
@@ -271,6 +278,7 @@ def _write_local_cli_grant(
     updated_at: str,
     command_states: Mapping[str, LocalCliCommandState] | None,
     reviewed_catalog_revision: int | None = None,
+    catalog_change_ids: Mapping[str, str] | None = None,
 ) -> int:
     from .store_local_cli import _write_command_states
 
@@ -313,6 +321,7 @@ def _write_local_cli_grant(
                     identity.identity_hash,
                     set(command_states),
                     catalog_revision=reviewed_catalog_revision,
+                    change_ids=catalog_change_ids or {},
                 )
     _ = connection.execute("update local_cli_authority set revision = ? where singleton = 1", (next_revision,))
     return next_revision

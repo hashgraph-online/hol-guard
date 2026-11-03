@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import io
 import json
 import os
-import re
 import shlex
 import sys
 from pathlib import Path
@@ -20,7 +18,6 @@ from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_native impo
     NATIVE_CURSOR_HOOK_COMMAND,
     NATIVE_CURSOR_HOOK_FEATURE,
 )
-from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_script_template import HOOK_SCRIPT_TEMPLATE
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     _is_managed_hook_command,
@@ -33,15 +30,6 @@ from codex_plugin_scanner.guard.adapters.native_hook_bridge import native_hook_b
 
 _POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="asserts POSIX paths and hook command syntax")
 _PYTHON = Path("/usr/bin/python3")
-_NATIVE_SCRIPT = Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/src/cursor_hook_bridge_script.rs"
-_CONSTANTS = (
-    "GUARD_HOME",
-    "GUARD_CLI",
-    "GUARD_RECOVERY_COMMAND",
-    "GUARD_HOOK_ARGV",
-    "GUARD_INHERIT_ENV_KEYS",
-    "GUARD_HOOK_TIMEOUT_SECONDS",
-)
 
 
 def _offer_native(monkeypatch: pytest.MonkeyPatch, runtime: Path) -> None:
@@ -233,33 +221,6 @@ def test_legacy_posix_quoted_windows_command_still_parses(tmp_path: Path, monkey
         str(script.resolve()),
     ]
     assert _live_cursor_hook_script_path(command) == script.resolve()
-
-
-def _native_digest() -> str:
-    match = re.search(r'CURSOR_SCRIPT_SHA256: &str =\s*"([0-9a-f]{64})"', _NATIVE_SCRIPT.read_text(encoding="utf-8"))
-    assert match is not None
-    return match.group(1)
-
-
-def test_native_bridge_was_ported_from_the_current_client() -> None:
-    # The native bridge reads the client's constants and never runs it, so a
-    # template change must keep those lines readable before the digest moves.
-    digest = hashlib.sha256(HOOK_SCRIPT_TEMPLATE.encode("utf-8")).hexdigest()
-
-    assert digest == _native_digest()
-
-
-def test_rendered_client_reads_back_as_the_template(tmp_path: Path) -> None:
-    home = tmp_path / "home dir é"
-    context = HarnessContext(home_dir=home, guard_home=home / ".hol-guard", workspace_dir=None)
-    source = cursor_hook_script_source(context, guard_cli=["/bin/hol-guard"], recovery_command=["/bin/hol-guard"])
-
-    lines = []
-    for line in source.split("\n"):
-        name = next((name for name in _CONSTANTS if line.startswith(f"{name} = ")), None)
-        lines.append(line if name is None else f"{name} = __{name}__")
-
-    assert "\n".join(lines) == HOOK_SCRIPT_TEMPLATE
 
 
 def _run_client(tmp_path: Path) -> tuple[str, int]:

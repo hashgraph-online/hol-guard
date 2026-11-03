@@ -4,7 +4,7 @@
 
 use crate::native_command_program::packaged_command_program_bytes;
 use crate::native_command_program::source::{
-    compare_programs, compile_build_request, compile_pack_stream, compile_source_stream,
+    compare_programs, compile_build_request_located, compile_pack_stream, compile_source_stream,
     descriptor_schema, evaluate_batch, run_fixtures, source_schema, MAX_SOURCE_INPUT_BYTES,
 };
 use serde_json::{json, Value};
@@ -148,7 +148,9 @@ pub fn is_command(arguments: &[String]) -> bool {
     }
 }
 
-fn run(arguments: &[String]) -> Result<Value, &'static str> {
+/// `pointer` receives the JSON pointer of a rejected cloud binding in a build
+/// request; every other failure leaves it empty.
+fn run(arguments: &[String], pointer: &mut String) -> Result<Value, &'static str> {
     if arguments == ["bundle-compatibility"] {
         return crate::bundle_metadata::compatibility_stream();
     }
@@ -253,7 +255,10 @@ fn run(arguments: &[String]) -> Result<Value, &'static str> {
     if operation == "evaluate-batch" {
         return evaluate_batch(&bytes);
     }
-    let output = compile_build_request(&bytes)?;
+    let output = compile_build_request_located(&bytes).map_err(|error| {
+        *pointer = error.pointer("/cloud_bindings");
+        error.code
+    })?;
     if operation == "check"
         && output.program["program_digest"].as_str() != Some(arguments[1].as_str())
     {
@@ -300,17 +305,10 @@ pub fn main(arguments: Vec<String>) -> i32 {
             .and_then(|output| {
                 serde_json::to_value(output).map_err(|_| "command_source_encoding_failed".into())
             })
-            .map_err(|error| {
-                (
-                    error.code,
-                    error
-                        .record
-                        .map(|index| format!("/records/{index}"))
-                        .unwrap_or_default(),
-                )
-            })
+            .map_err(|error| (error.code, error.pointer("/records")))
     } else {
-        run(&arguments).map_err(|code| (code, String::new()))
+        let mut pointer = String::new();
+        run(&arguments, &mut pointer).map_err(|code| (code, pointer))
     };
     let (value, code) = match result {
         Ok(value) => {
@@ -336,7 +334,7 @@ mod tests {
 
     #[test]
     fn exported_build_preserves_program_and_catalog_binding() {
-        let output = run(&["export-built".to_owned()]).unwrap();
+        let output = run(&["export-built".to_owned()], &mut String::new()).unwrap();
         let program: Value = serde_json::from_slice(packaged_command_program_bytes()).unwrap();
         assert_eq!(output["program"], program);
         let ids = |rows: &Value| {

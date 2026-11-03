@@ -325,7 +325,7 @@
       {
         "id": "install-uninstall-doctor",
         "category": "install_config",
-        "reason": "Install/uninstall/doctor/connect/pairing/OAuth/desktop-bootstrap CLI flows and repair/inverse lifecycle. codex_hook_recovery.py/codex_hook_rollback.py are the hook-publication journal, called only from CodexHarnessAdapter._write_authenticated_hook_config_owned, prepare_* migration/backup functions, prepare_install, the shim and cursor prepare functions and the excluded repair/inverse modules. commands_remove_hooks, hook_removal_presence, daemon_stop and commands_repair back the uninstall/repair CLI commands and are imported only by the commands_support facade and the excluded parser/dispatchers.",
+        "reason": "Install/uninstall/doctor/connect/pairing/OAuth/desktop-bootstrap CLI flows and repair/inverse lifecycle. codex_hook_recovery.py/codex_hook_rollback.py are the hook-publication journal, called only from CodexHarnessAdapter._write_authenticated_hook_config_owned, prepare_* migration/backup functions, prepare_install, the shim and cursor prepare functions and the excluded repair/inverse modules. commands_remove_hooks, hook_removal_presence, daemon_stop and commands_repair back the uninstall/repair CLI commands and are imported only by the commands_support facade and the excluded parser/dispatchers. cloud_actions_* and commands_dispatch_cloud_actions back `hol-guard cloud-actions` sign-in, sign-out and profile status (a browser OAuth flow for Guard Cloud actions). The commands_support facade imports the dispatcher, which hook_worker also loads, but the dispatcher imports cloud_actions_* only inside its sign-in handlers, so no hook run loads them.",
         "path": [
           "src/codex_plugin_scanner/guard/cli/install_*.py",
           "src/codex_plugin_scanner/guard/cli/uninstall_commands.py",
@@ -338,6 +338,8 @@
           "src/codex_plugin_scanner/guard/cli/connect_sync_result.py",
           "src/codex_plugin_scanner/guard/cli/remote_pair_flow.py",
           "src/codex_plugin_scanner/guard/cli/oauth_*.py",
+          "src/codex_plugin_scanner/guard/cli/cloud_actions_*.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud_actions.py",
           "src/codex_plugin_scanner/guard/cli/trust_install_surface.py",
           "src/codex_plugin_scanner/guard/cli/grok_hook_validation.py",
           "src/codex_plugin_scanner/guard/cli/codex_authority_repair.py",
@@ -369,7 +371,6 @@
           "src/codex_plugin_scanner/guard/cli/progress.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_admin.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud.py",
-          "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud_actions.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_mdm.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_policy_document.py",
@@ -496,8 +497,6 @@
           "src/codex_plugin_scanner/guard/adapters/pi_extension_source*.py",
           "src/codex_plugin_scanner/guard/adapters/_modules/*/pi_extension_source*.py",
           "src/codex_plugin_scanner/guard/adapters/pi_extension_runtime_ownership.py",
-          "src/codex_plugin_scanner/guard/adapters/cursor_hook_script_template*.py",
-          "src/codex_plugin_scanner/guard/adapters/_modules/*/cursor_hook_script_template*.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_*template.py",
           "src/codex_plugin_scanner/guard/adapters/_modules/*/opencode_*template.py",
           "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py",
@@ -938,8 +937,6 @@
         "src/codex_plugin_scanner/guard/adapters/pi_extension_source*.py",
         "src/codex_plugin_scanner/guard/adapters/_modules/*/pi_extension_source*.py",
         "src/codex_plugin_scanner/guard/adapters/pi_extension_runtime_ownership.py",
-        "src/codex_plugin_scanner/guard/adapters/cursor_hook_script_template*.py",
-        "src/codex_plugin_scanner/guard/adapters/_modules/*/cursor_hook_script_template*.py",
         "src/codex_plugin_scanner/guard/adapters/opencode_*template.py",
         "src/codex_plugin_scanner/guard/adapters/_modules/*/opencode_*template.py",
         "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py",
@@ -1387,10 +1384,17 @@
           "CopilotHarnessAdapter.uninstall",
           "CopilotHarnessAdapter._backup_path",
           "CopilotHarnessAdapter._uninstall_targets",
-          "CopilotHarnessAdapter._state_entries"
+          "CopilotHarnessAdapter._state_entries",
+          "_launch_slot",
+          "_plan_mcp_targets",
+          "_list",
+          "_strings",
+          "_increasing",
+          "_apply_mcp_plan",
+          "_refresh_guard_proxy_entry"
         ],
         "entry_points": [],
-        "reason": "Copilot adapter install, uninstall and rendering of the managed config (file I/O, backups, shim, MCP proxies), plus the helpers only they use; which hook entries are Guard's, the bash and PowerShell spellings of Guard's hook command and the workspace hook file normalization are decided by the native copilot_hook_config runner-authority kind.",
+        "reason": "Copilot adapter install, uninstall and rendering of the managed config (file I/O, backups, shim, MCP proxies), plus the helpers only they use; which hook entries are Guard's, the bash and PowerShell spellings of Guard's hook command and the workspace hook file normalization are decided by the native copilot_hook_config runner-authority kind. Each MCP target's servers key, the Guard proxies to relaunch, the managed servers to add and the install notes are planned by the native copilot_mcp_plan runner-authority kind.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
@@ -1412,10 +1416,16 @@
           "CursorHarnessAdapter._cli_install_manifest",
           "CursorHarnessAdapter._uninstall_cli",
           "CursorHarnessAdapter._proxy_server_entry",
-          "CursorHarnessAdapter._backup_path"
+          "CursorHarnessAdapter._backup_path",
+          "CursorHarnessAdapter._editor_manifest",
+          "CursorHarnessAdapter._editor_state",
+          "CursorHarnessAdapter._backup_document",
+          "CursorHarnessAdapter._editor_payload",
+          "CursorHarnessAdapter._editor_plan",
+          "CursorHarnessAdapter._apply_editor_servers"
         ],
         "entry_points": [],
-        "reason": "Cursor adapter editor and CLI install, uninstall and manifest rendering, plus the helpers only they use.",
+        "reason": "Cursor adapter editor and CLI install, uninstall and manifest rendering, plus the helpers only they use. The editor install's origin merge, Guard proxy selection and notes are planned by the native cursor_editor_plan runner-authority kind.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
@@ -1440,11 +1450,10 @@
           "KimiHarnessAdapter.prepare_install",
           "KimiHarnessAdapter.install",
           "KimiHarnessAdapter.uninstall",
-          "KimiHarnessAdapter._hook_command_parts",
-          "KimiHarnessAdapter._build_managed_block"
+          "KimiHarnessAdapter._hook_command_parts"
         ],
         "entry_points": [],
-        "reason": "Kimi adapter hook install and uninstall and the managed block builder used only to write the install.",
+        "reason": "Kimi adapter hook install and uninstall and the hook command builder used only to write the install.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
@@ -1457,12 +1466,11 @@
           "MuseHarnessAdapter.uninstall",
           "MuseHarnessAdapter._hook_command_parts",
           "MuseHarnessAdapter._managed_state_paths",
-          "_adapter_result",
-          "_write_json_atomic"
+          "_adapter_result"
         ],
         "entry_points": [],
         "reason": "Muse adapter hook install and uninstall and the settings helpers used only to write or remove that install.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_command_parts, _managed_state_paths, _adapter_result and _write_json_atomic are called only from those three methods. _bridge_timeout_seconds and the approval wait it reads stay in scope: the bounded hook refresh recomputes that timeout on every update. detect and policy_path stay in scope with the helpers they call. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_command_parts, _managed_state_paths and _adapter_result are called only from those three methods. _bridge_timeout_seconds and the approval wait it reads stay in scope: the bounded hook refresh recomputes that timeout on every update. detect and policy_path stay in scope with the helpers they call. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "approval-continuation-replay",
@@ -1484,16 +1492,11 @@
         "category": "control_plane",
         "path": "src/codex_plugin_scanner/guard/runtime/observed_mcp_tools.py",
         "symbols": [
-          "MAX_OBSERVED_MCP_RECEIPTS",
-          "MAX_OBSERVED_MCP_SERVERS",
           "MAX_OBSERVED_MCP_TOOLS",
-          "_receipt_tools",
-          "tools_from_receipts",
-          "_latest_seen_by_connector",
           "discover_observed_mcp_tools"
         ],
         "entry_points": [],
-        "evidence": "discover_observed_mcp_tools is called only from daemon/local_cli_api.py (dashboard-control-api); tools_from_receipts and the receipt helpers are reached only through it. ObservedMcpTool, observed_mcp_tool and the native MCP tool action builders stay counted. The report validates this reference closure on every run.",
+        "evidence": "discover_observed_mcp_tools is called only from daemon/local_cli_api.py (dashboard-control-api); the native store groups the observed tools into connectors and it records them. ObservedMcpTool, observed_mcp_tool and the native MCP tool action builders stay counted. The report validates this reference closure on every run.",
         "reason": "Discovery of MCP tools observed in recent receipts for the dashboard's local CLI and MCP listing. It reads receipts on request from the dashboard API and returns a list; it makes no decision."
       },
       {
@@ -1550,7 +1553,7 @@
           "OpenCodeHarnessAdapter._backup_path_from_state"
         ],
         "entry_points": [],
-        "reason": "OpenCode adapter install and uninstall and the backup path helpers used only by them.",
+        "reason": "OpenCode adapter install and uninstall and the backup path helpers used only by them; which servers Guard manages, the root config's permission and mcp values and the runtime overlay are decided by the native opencode_install_plan runner-authority kind, and Python keeps the source config read, Guard's proxy argv and file I/O.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
@@ -1578,7 +1581,7 @@
           "ZCodeHarnessAdapter._hook_command_parts"
         ],
         "entry_points": [],
-        "reason": "ZCode adapter hook install and uninstall (settings I/O, handler rendering, the enabled flag) and the helpers used only to write the install; the legacy hook-event migration, the managed hook prune and merge, and the saved enabled-record choice run in the native zcode_hook_settings runner-authority kind.",
+        "reason": "ZCode adapter hook install and uninstall (file reads, path checks, install state and writes) and the helpers used only to write the install; the hook settings rewrite itself (legacy hook-event migration, managed hook prune and merge, Guard handler rendering, the enabled flag and its saved record, and the settings file rendering) runs in the native zcode_hook_settings runner-authority kind.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {

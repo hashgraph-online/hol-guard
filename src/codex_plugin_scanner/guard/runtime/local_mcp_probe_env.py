@@ -17,12 +17,6 @@ def probe_search_path() -> str:
     return os.pathsep.join(filtered)
 
 
-def is_package_shim_executable(path: str) -> bool:
-    candidate = Path(path)
-    parent = candidate.parent
-    return parent.name == "bin" and parent.parent.name == "package-shims"
-
-
 def _is_package_shim_dir(entry: str) -> bool:
     path = Path(entry)
     return path.name == "bin" and path.parent.name == "package-shims"

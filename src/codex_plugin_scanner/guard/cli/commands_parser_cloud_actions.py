@@ -21,6 +21,8 @@ from collections.abc import Callable, Sequence
 from ...argparse_utils import FriendlyArgumentParser
 
 _SLUG = re.compile(r"[a-z][a-z0-9-]{0,62}")
+_PROFILE = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
+DEFAULT_CLOUD_ACTIONS_URL = "https://hol.org"
 _LOCAL_WORKSPACE_MESSAGE = (
     "--workspace names a local project folder and does not choose a Guard Cloud workspace. Use --cloud-workspace <id>."
 )
@@ -68,6 +70,24 @@ def _slug(kind: str) -> Callable[[str], str]:
     return parse
 
 
+def profile_name(value: str) -> str:
+    if _PROFILE.fullmatch(value) is None:
+        raise argparse.ArgumentTypeError(
+            f"{value!r} is not a profile name. Use lowercase letters, digits and dashes (up to 32)."
+        )
+    return value
+
+
+def _sign_in_wait(value: str) -> int:
+    try:
+        seconds = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a number of seconds.") from None
+    if not 30 <= seconds <= 1800:
+        raise argparse.ArgumentTypeError("--timeout must be between 30 and 1800 seconds.")
+    return seconds
+
+
 class _RejectLocalWorkspace(argparse.Action):
     """Refuse `--workspace` here instead of letting it read as a Cloud workspace."""
 
@@ -106,8 +126,27 @@ def _add_cloud_workspace(parser: argparse.ArgumentParser, *, required: bool) -> 
     )
 
 
+def _add_cloud_url(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--cloud-url",
+        default=DEFAULT_CLOUD_ACTIONS_URL,
+        metavar="URL",
+        help=f"Guard Cloud address (default: {DEFAULT_CLOUD_ACTIONS_URL})",
+    )
+
+
 def _add_json(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Emit the versioned JSON contract")
+
+
+def _add_profile(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--profile",
+        type=profile_name,
+        default="default",
+        help="Saved sign-in to use; each profile holds one Guard Cloud workspace (default: default)",
+    )
+    parser.add_argument("--guard-home", help=argparse.SUPPRESS)
 
 
 def configure_guard_cloud_actions_parser(
@@ -127,12 +166,44 @@ def configure_guard_cloud_actions_parser(
         dest="cloud_actions_command",
         required=True,
         parser_class=FriendlyArgumentParser,
-        metavar="{status,workspace,accounts,ai-tools}",
+        metavar="{login,logout,status,doctor,workspace,accounts,ai-tools}",
     )
+
+    login = _add_parser(commands, "login", "Sign in to Guard Cloud for Cloud actions in one workspace")
+    _add_cloud_url(login)
+    _add_cloud_workspace(login, required=False)
+    login.add_argument("--no-browser", action="store_true", help="Print the sign-in link instead of opening it")
+    login.add_argument(
+        "--timeout",
+        type=_sign_in_wait,
+        default=300,
+        metavar="SECONDS",
+        help="How long to wait for the browser sign-in (default: 300)",
+    )
+    _add_profile(login)
+    _add_json(login)
+
+    logout = _add_parser(commands, "logout", "Sign out of Cloud actions and remove the saved sign-in")
+    _add_profile(logout)
+    _add_json(logout)
 
     status = _add_parser(commands, "status", "Show Cloud actions sign-in, workspace and connected accounts")
     _add_cloud_workspace(status, required=False)
+    status.add_argument(
+        "--offline", action="store_true", help="Show only what is saved on this computer; do not ask Guard Cloud"
+    )
+    _add_profile(status)
     _add_json(status)
+
+    doctor = _add_parser(commands, "doctor", "Check the Cloud actions sign-in, Guard Cloud and AI tool settings")
+    doctor.add_argument(
+        "--bundle",
+        metavar="FILE",
+        help="Also save the results to a new file to share with support; it never holds the sign-in itself",
+    )
+    doctor.add_argument("--home", help=argparse.SUPPRESS)
+    _add_profile(doctor)
+    _add_json(doctor)
 
     workspace = _add_parser(commands, "workspace", "Choose the Guard Cloud workspace these commands use")
     workspace_commands = workspace.add_subparsers(
@@ -142,6 +213,7 @@ def configure_guard_cloud_actions_parser(
     )
     select = _add_parser(workspace_commands, "select", "Use one Guard Cloud workspace by default")
     select.add_argument("cloud_workspace", type=cloud_workspace_id, metavar="CLOUD_WORKSPACE_ID")
+    _add_profile(select)
     _add_json(select)
 
     accounts = _add_parser(commands, "accounts", "List, connect or disconnect connected accounts")
@@ -153,9 +225,13 @@ def configure_guard_cloud_actions_parser(
     listing = _add_parser(account_commands, "list", "List the workspace's connected accounts")
     _add_cloud_workspace(listing, required=False)
     _add_json(listing)
-    connect = _add_parser(account_commands, "connect", "Start provider sign-in for a new connected account")
+    connect = _add_parser(
+        account_commands, "connect", "Open Guard Cloud to sign in with a provider and connect an account"
+    )
     connect.add_argument("provider", type=_slug("provider"), metavar="PROVIDER")
     _add_cloud_workspace(connect, required=True)
+    _add_cloud_url(connect)
+    connect.add_argument("--no-browser", action="store_true", help="Print the link instead of opening it")
     _add_json(connect)
     disconnect = _add_parser(account_commands, "disconnect", "Disconnect one connected account")
     disconnect.add_argument("connected_account", type=connected_account_id, metavar="CONNECTED_ACCOUNT_ID")
@@ -174,7 +250,15 @@ def configure_guard_cloud_actions_parser(
     mode = configure.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="Show the exact changes without writing them")
     mode.add_argument("--apply", action="store_true", help="Write the changes, keeping a backup")
+    _add_cloud_url(configure)
+    configure.add_argument("--home", help=argparse.SUPPRESS)
+    configure.add_argument("--guard-home", help=argparse.SUPPRESS)
     _add_json(configure)
+    restore = _add_parser(tool_commands, "restore", "Put back the AI tool's settings file from before Guard changed it")
+    restore.add_argument("ai_tool", type=_slug("AI tool"), metavar="AI_TOOL")
+    restore.add_argument("--home", help=argparse.SUPPRESS)
+    restore.add_argument("--guard-home", help=argparse.SUPPRESS)
+    _add_json(restore)
     verify = _add_parser(tool_commands, "verify", "Check an AI tool's Cloud actions settings")
     verify.add_argument("ai_tool", type=_slug("AI tool"), metavar="AI_TOOL")
     _add_cloud_workspace(verify, required=False)
@@ -182,7 +266,9 @@ def configure_guard_cloud_actions_parser(
 
 
 __all__ = [
+    "DEFAULT_CLOUD_ACTIONS_URL",
     "cloud_workspace_id",
     "configure_guard_cloud_actions_parser",
     "connected_account_id",
+    "profile_name",
 ]

@@ -224,3 +224,36 @@ fn a_new_session_wakes_project_context_only_when_it_is_on() {
         "waking never changes consent"
     );
 }
+
+#[test]
+fn a_lane_watch_waits_for_a_start_from_another_thread() {
+    let service = Service::default();
+    service.hold_start_for_tests();
+    let watch = service.lane_watch();
+    let soon = Instant::now() + Duration::from_millis(120);
+    let waited = std::thread::spawn(move || watch.wait(soon)).join().unwrap();
+    assert!(matches!(waited, Err(LaneMiss::Starting)));
+    service.end_start_for_tests();
+    assert!(
+        matches!(service.lane_watch().wait(soon), Err(LaneMiss::Off)),
+        "a start that ended without a worker is not waited on"
+    );
+}
+
+#[test]
+fn changed_settings_may_wake_the_worker_again_at_once() {
+    let home = home();
+    let service = Service::default();
+    let mut settings = saved_on(&service);
+    lock(&service.state).unwrap().woke = Some(Instant::now());
+    assert!(
+        !service.wake(home.path(), |_| true),
+        "one attempt per retry window"
+    );
+    settings.effective.features.agent_context = true;
+    service.configure(settings).unwrap();
+    assert!(
+        lock(&service.state).unwrap().woke.is_none(),
+        "turning a feature on or off starts a new retry window"
+    );
+}

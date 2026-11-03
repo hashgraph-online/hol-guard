@@ -93,6 +93,18 @@ pub(crate) fn evaluate_local_cli_help_parse_request(
     })
 }
 
+/// What a script's source says about serving MCP, for
+/// [`crate::local_cli_script_source`]: whether its code imports an MCP server
+/// library or answers `tools/list`, the module a generated entry-point wrapper
+/// runs, and the local modules it imports as `./`-relative paths.
+pub(crate) fn mcp_source_facts(
+    text: &str,
+    invocation: &[String],
+) -> (bool, Option<String>, Vec<String>) {
+    let facts = options::script_facts(text, invocation);
+    (facts.mcp_server, facts.entry_point, facts.imports)
+}
+
 /// The subcommands a help text names, or, when it names none, the options
 /// that make its calls different; a script source reports both. Options are
 /// read only at the top level: a nested command's help is read for its

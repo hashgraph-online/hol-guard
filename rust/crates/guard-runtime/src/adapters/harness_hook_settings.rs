@@ -36,21 +36,22 @@ const DEVIN_TOOLS: &str =
     "^(exec|read|write|edit|apply_patch|notebook_read|notebook_edit|grep|glob|webfetch|mcp_call_tool|mcp__.*)$";
 
 #[derive(Clone, Copy)]
-enum Harness {
+pub(crate) enum Harness {
     Muse,
     Devin,
 }
 
 /// One Guard-managed hook group.
-struct Group {
+#[derive(Clone, Copy)]
+pub(crate) struct Group {
     event: &'static str,
     matcher: Option<&'static str>,
-    timeout: i64,
-    status: Option<&'static str>,
+    pub(crate) timeout: i64,
+    pub(crate) status: Option<&'static str>,
 }
 
 impl Harness {
-    fn parse(value: Option<&Value>) -> Result<Self, &'static str> {
+    pub(crate) fn parse(value: Option<&Value>) -> Result<Self, &'static str> {
         match value.and_then(Value::as_str) {
             Some("muse") => Ok(Self::Muse),
             Some("devin") => Ok(Self::Devin),
@@ -58,7 +59,7 @@ impl Harness {
         }
     }
 
-    fn timing_key(self) -> &'static str {
+    pub(crate) fn timing_key(self) -> &'static str {
         match self {
             Self::Muse => "bridge_seconds",
             Self::Devin => "wait_seconds",
@@ -85,7 +86,7 @@ impl Harness {
     /// bridge deadline Python computed; Devin's outlasts the clamped approval
     /// wait. Muse's groups name no matcher, which Muse reads as every tool:
     /// naming a subset would exempt the rest from review.
-    fn groups(self, timing: i64) -> Result<Vec<Group>, &'static str> {
+    pub(crate) fn groups(self, timing: i64) -> Result<Vec<Group>, &'static str> {
         let group = |event: &'static str, matcher: Option<&'static str>, timeout: i64| Group {
             event,
             matcher,
@@ -173,9 +174,9 @@ fn ordered_keys<'a>(
 
 /// One event of the install answer: its name, its list plan (`None` keeps a
 /// value that is not a list) and the Guard group it holds.
-type EventPlan<'a> = (&'a str, Option<Vec<Step>>, Option<&'a Group>);
+pub(crate) type EventPlan<'a> = (&'a str, Option<Vec<Step>>, Option<Group>);
 
-enum Step {
+pub(crate) enum Step {
     Keep(usize),
     Copy(usize, Vec<Option<usize>>),
     Group(Option<String>),
@@ -276,7 +277,7 @@ fn merge(entries: &[Value], mut steps: Vec<Step>, matcher: Option<&str>) -> Vec<
 
 /// Every event in the caller's order: a list is pruned and dropped once
 /// empty; any other value is kept as it is (`None`).
-fn pruned_events<'a>(
+pub(crate) fn pruned_events<'a>(
     harness: Harness,
     hooks: &Map<String, Value>,
     keys: &[&'a str],
@@ -301,15 +302,19 @@ fn prune_events(harness: Harness, hooks: &Map<String, Value>, keys: &[&str]) -> 
     Value::Array(events)
 }
 
+/// The bridge or approval-wait seconds; an integer past `i64` saturates so
+/// the Muse deadline overflow refuses it.
+pub(crate) fn timing_seconds(timing: &Value) -> Result<i64, &'static str> {
+    timing
+        .as_i64()
+        .or_else(|| timing.as_u64().map(|_| i64::MAX))
+        .ok_or(ERR_INVALID)
+}
+
 /// The install rewrite: `[[event, plan | null, guard | null], ...]`, where
 /// `guard` names the timeout and status message of Guard's handler.
 fn install(harness: Harness, map: &Map<String, Value>) -> KindResult {
-    let timing = &map[harness.timing_key()];
-    let timing = timing
-        .as_i64()
-        .or_else(|| timing.as_u64().map(|_| i64::MAX))
-        .ok_or(ERR_INVALID)?;
-    let groups = harness.groups(timing)?;
+    let groups = harness.groups(timing_seconds(&map[harness.timing_key()])?)?;
     let empty = Map::new();
     let (hooks, keys) = match &map["hooks"] {
         Value::Null if map["hooks_keys"].is_null() => (&empty, Vec::new()),
@@ -319,37 +324,10 @@ fn install(harness: Harness, map: &Map<String, Value>) -> KindResult {
         }
         _ => return Err(ERR_INVALID),
     };
-    if matches!(harness, Harness::Muse) {
-        if let Some(event) = keys
-            .iter()
-            .find(|key| !matches!(hooks[**key], Value::Null | Value::Array(_)))
-        {
-            return Ok(json!({ "error": ERR_NOT_LIST, "event": event }));
-        }
-    }
-    let mut events: Vec<EventPlan> = pruned_events(harness, hooks, &keys)
-        .into_iter()
-        .map(|(event, steps)| (event, steps, None))
-        .collect();
-    for group in &groups {
-        let entries = hooks
-            .get(group.event)
-            .and_then(Value::as_array)
-            .map_or(&[][..], Vec::as_slice);
-        match events.iter().position(|(event, ..)| *event == group.event) {
-            Some(position) => {
-                let (_, steps, guard) = &mut events[position];
-                let pruned = steps.take().unwrap_or_default();
-                *steps = Some(merge(entries, pruned, group.matcher));
-                *guard = Some(group);
-            }
-            None => events.push((
-                group.event,
-                Some(merge(entries, Vec::new(), group.matcher)),
-                Some(group),
-            )),
-        }
-    }
+    let events = match install_events(harness, &groups, hooks, &keys) {
+        Ok(events) => events,
+        Err(event) => return Ok(json!({ "error": ERR_NOT_LIST, "event": event })),
+    };
     let events: Vec<Value> = events
         .into_iter()
         .map(|(event, steps, guard)| {
@@ -359,4 +337,48 @@ fn install(harness: Harness, map: &Map<String, Value>) -> KindResult {
         })
         .collect();
     Ok(json!({ "hooks": events }))
+}
+
+/// Every event of the install rewrite in its final order, or (Muse only) the
+/// first event whose value is neither a list nor null, which Guard will not
+/// rewrite.
+pub(crate) fn install_events<'a>(
+    harness: Harness,
+    groups: &[Group],
+    hooks: &Map<String, Value>,
+    keys: &[&'a str],
+) -> Result<Vec<EventPlan<'a>>, &'a str> {
+    if matches!(harness, Harness::Muse) {
+        if let Some(event) = keys
+            .iter()
+            .copied()
+            .find(|key| !matches!(hooks[*key], Value::Null | Value::Array(_)))
+        {
+            return Err(event);
+        }
+    }
+    let mut events: Vec<EventPlan> = pruned_events(harness, hooks, keys)
+        .into_iter()
+        .map(|(event, steps)| (event, steps, None))
+        .collect();
+    for group in groups {
+        let entries = hooks
+            .get(group.event)
+            .and_then(Value::as_array)
+            .map_or(&[][..], Vec::as_slice);
+        match events.iter().position(|(event, ..)| *event == group.event) {
+            Some(position) => {
+                let (_, steps, guard) = &mut events[position];
+                let pruned = steps.take().unwrap_or_default();
+                *steps = Some(merge(entries, pruned, group.matcher));
+                *guard = Some(*group);
+            }
+            None => events.push((
+                group.event,
+                Some(merge(entries, Vec::new(), group.matcher)),
+                Some(*group),
+            )),
+        }
+    }
+    Ok(events)
 }

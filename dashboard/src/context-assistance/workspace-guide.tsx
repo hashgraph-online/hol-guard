@@ -9,7 +9,7 @@ export function CigarGuide({ onSelect, walkthroughs }: Props) {
   return <div className="cigar-guide">
     <section className="cigar-card" aria-labelledby="cigar-explained-heading">
       <h2 id="cigar-explained-heading">How CIGAR works</h2>
-      <p>With CIGAR on, and Context for AI apps and workspace documents turned on in Settings, every prompt you send in Claude Code or Codex gets the few project files that match it. The Turn on CIGAR button sets both up on a fresh install. CIGAR finds your project from the folder your AI app runs in. A prompt about the header color brings the header and its styles. A prompt that matches nothing, like &ldquo;build a to-do app&rdquo; in an empty folder, adds nothing.</p>
+      <p>With CIGAR on, and Context for AI apps and workspace documents turned on in Settings, every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it. The Turn on CIGAR button sets both up on a fresh install. CIGAR finds your project from the folder your AI app runs in. A prompt about the header color brings the header and its styles. A prompt that matches nothing, like &ldquo;build a to-do app&rdquo; in an empty folder, adds nothing.</p>
       <p>Secrets, keys, hidden files, generated folders and anything your project's .gitignore files leave out are always skipped. To stop it, turn off CIGAR, or turn off Context for AI apps in Settings.</p>
       <p className="cigar-caption">CIGAR stands for {CIGAR_FULL_NAME}.</p>
     </section>
@@ -22,7 +22,7 @@ export function CigarGuide({ onSelect, walkthroughs }: Props) {
       </details>
       <details><summary>Does turning on CIGAR give it access to all my files?</summary><p>No. CIGAR only looks at the project your AI app is working in, and it skips secrets, keys, hidden files, generated folders and anything .gitignore leaves out. Starting CIGAR grants no access to anything else.</p></details>
       <details><summary>Do I have to pick a project folder?</summary>
-        <p>No. Without one, CIGAR uses the files that match each prompt. Pick a folder if you want to choose exactly which files it uses for that project.</p>
+        <p>No. Your AI apps get the files that match each prompt from the folder they work in. To limit one app to files you tick, pick the folder and choose that app. A folder picked for Only this page is for looking things up here and does not change what your AI apps get.</p>
         <button type="button" className="cigar-text-button" onClick={() => onSelect("access")}>Open Projects &amp; AI apps<HiMiniArrowRight aria-hidden="true" /></button>
       </details>
       <details><summary>Why did a prompt get no files?</summary><p>CIGAR adds only files that match the prompt. A vague prompt, or an empty or brand-new folder, matches nothing, so nothing is added. Name a file, a feature or a term from your project and try again. Also check that Context for AI apps and Allow selected workspace documents are on in Settings.</p></details>

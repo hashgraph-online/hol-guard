@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.gitferry",
+  "version": "1.0.0",
+  "name": "GitFerry MCP",
+  "description": "Packs unpushed commits, worktree changes, and untracked files into one portable bundle, inspects a bundle, and applies it to another repository for air-gapped transfer. pack_changes and inspect_bundle read a repository or validate a bundle and inherit Guard policy; apply_bundle replays commits and applies patches into a target repository and requires review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.mayank1307",
+    "displayName": "GitFerry (@mayank1307)",
+    "url": "https://github.com/mayank1307/gitferry"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://github.com/mayank1307/gitferry",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "gitferry"
+  },
+  "riskClasses": [
+    "external-repository-read",
+    "external-repository-write"
+  ],
+  "tools": [
+    {
+      "name": "pack_changes",
+      "state": "inherit"
+    },
+    {
+      "name": "inspect_bundle",
+      "state": "inherit"
+    },
+    {
+      "name": "apply_bundle",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/mayank1307/gitferry",
+    "https://www.npmjs.com/package/gitferry",
+    "https://github.com/mayank1307/gitferry/blob/main/SECURITY.md",
+    "https://github.com/mayank1307/gitferry/blob/main/INSTALL.md"
+  ],
+  "saferAlternatives": [
+    "Keep apply_bundle on Review: it replays commits and applies patches into the target repository. Inspect the bundle first with inspect_bundle and review its file list and diffs before applying.",
+    "Use pack_changes and inspect_bundle for read-only packing and validation; neither modifies an existing repository's tracked history."
+  ]
+}

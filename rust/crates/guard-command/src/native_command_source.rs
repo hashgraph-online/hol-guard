@@ -99,21 +99,29 @@ enum BaseProgram {
 /// Decode an owned build envelope. Sources cannot contain file/remote includes;
 /// callers supply the separately reviewed trust input outside each source.
 pub fn compile_build_request(bytes: &[u8]) -> Result<CompiledSourceCatalog, &'static str> {
+    compile_owned_request(bytes, false).map_err(|error| error.code)
+}
+
+/// [`compile_build_request`], keeping which cloud binding was rejected:
+/// `error.pointer("/cloud_bindings")` names it in the request.
+pub fn compile_build_request_located(
+    bytes: &[u8],
+) -> Result<CompiledSourceCatalog, SourceStreamError> {
     compile_owned_request(bytes, false)
 }
 
 fn compile_fixture_build_request(bytes: &[u8]) -> Result<CompiledSourceCatalog, &'static str> {
-    compile_owned_request(bytes, true)
+    compile_owned_request(bytes, true).map_err(|error| error.code)
 }
 
 fn compile_owned_request(
     bytes: &[u8],
     fixture: bool,
-) -> Result<CompiledSourceCatalog, &'static str> {
+) -> Result<CompiledSourceCatalog, SourceStreamError> {
     let request: BuildRequest = serde_json::from_value(json::decode(bytes)?)
         .map_err(|_| "command_source_build_contract_invalid")?;
     if request.schema != "guard.command-extension-build.v1" {
-        return Err("command_source_build_version_unsupported");
+        return Err("command_source_build_version_unsupported".into());
     }
     let sources: Vec<Vec<u8>> = request
         .sources
@@ -157,13 +165,13 @@ fn compile_owned_request(
         .enumerate()
         .map(|(record, binding)| {
             serde_json::to_vec(binding)
-                .map_err(|_| "command_source_encoding_failed")
-                .and_then(|bytes| cloud_binding::parse_binding_contribution(&bytes))
+                .map_err(|_| "command_source_encoding_failed".into())
+                .and_then(|bytes| cloud_binding::parse_contribution(&bytes))
                 .map(|parsed| (record, parsed))
+                .map_err(|rejection| SourceStreamError::rejected(record, rejection))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let resolved =
-        stream::resolve_bindings(&bindings, &sources, &mcp_sources).map_err(|error| error.code)?;
+    let resolved = stream::resolve_bindings(&bindings, &sources, &mcp_sources)?;
     if !resolved.is_empty() {
         let program_digest = output.program["program_digest"]
             .as_str()

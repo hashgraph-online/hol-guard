@@ -48,7 +48,7 @@ export function cigarWillHelpPrompts(status: ContextAssistanceStatus | null): bo
 
 export type CigarHomeCopy = { headline: string; detail: string; setupHint: boolean };
 
-const PROMPT_PROMISE = "Every prompt you send in Claude Code or Codex gets the few project files that match it.";
+const PROMPT_PROMISE = "Every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it.";
 const NO_FILES_YET = "Prompts get no project files until Context for AI apps and workspace documents are on in Settings.";
 
 /** One headline and one sentence for the home screen. Only native state proves CIGAR is on. */
