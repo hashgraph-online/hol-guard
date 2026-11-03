@@ -847,6 +847,8 @@ mod opencode_install_plan;
 #[cfg(test)]
 #[path = "adapters/opencode_install_plan_tests.rs"]
 mod opencode_install_plan_tests;
+#[path = "adapters/opencode_launch.rs"]
+mod opencode_launch;
 #[path = "adapters/opencode_plugin_render.rs"]
 mod opencode_plugin_render;
 #[cfg(test)]

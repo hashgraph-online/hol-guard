@@ -8,7 +8,7 @@
 mod jq;
 mod module_scan;
 mod package_profile;
-pub(crate) mod python_digit;
+pub mod python_digit;
 mod routine;
 mod routine_config;
 mod routine_identity;
