@@ -19,6 +19,16 @@ fn a_reporting_or_repeating_value_is_inert() {
         ("RUSTFLAGS", "-Aunused_imports -Dwarnings"),
         ("RUSTDOCFLAGS", "-Dwarnings"),
         ("goflags", "-count=1"),
+        ("NPM_CONFIG_LOGLEVEL", "error"),
+        ("NPM_CONFIG_LOGLEVEL", "silent"),
+        ("NPM_CONFIG_PROGRESS", "false"),
+        ("NPM_CONFIG_FUND", "false"),
+        ("NPM_CONFIG_AUDIT", "false"),
+        ("NPM_CONFIG_COLOR", "always"),
+        ("NPM_CONFIG_UPDATE_NOTIFIER", "false"),
+        // npm reads the lowercase spelling, which is the one a shell prefix
+        // usually carries.
+        ("npm_config_loglevel", "error"),
     ] {
         assert!(inert_tool_setting(name, value), "{name}={value}");
     }
@@ -63,6 +73,30 @@ fn a_value_that_can_name_code_a_file_or_a_search_path_is_not_inert() {
         ("RUSTFLAGS", "-Zunstable-options"),
         ("RUSTFLAGS", "-Dwarnings -Clinker=./ld"),
         ("RUSTFLAGS", ""),
+        // npm's own keys for the shell it runs scripts with, the files it
+        // reads its configuration from, where it caches and which registry
+        // it talks to. Each is the reason the whole `npm_config_` family is
+        // refused by name, and none of them is on the reporting list.
+        ("NPM_CONFIG_SCRIPT_SHELL", "/bin/sh"),
+        ("NPM_CONFIG_SHELL", "/bin/sh"),
+        ("NPM_CONFIG_USERCONFIG", "/tmp/npmrc"),
+        ("NPM_CONFIG_GLOBALCONFIG", "/tmp/npmrc"),
+        ("NPM_CONFIG_CACHE", "/tmp/cache"),
+        ("NPM_CONFIG_PREFIX", "/tmp/prefix"),
+        ("NPM_CONFIG_REGISTRY", "https://example.invalid/"),
+        ("NPM_CONFIG_NODE_OPTIONS", "--require ./evil.js"),
+        // A listed key carrying a value npm does not read for it. The list
+        // answers for the pair, never for the key alone.
+        ("NPM_CONFIG_LOGLEVEL", "/tmp/log"),
+        ("NPM_CONFIG_LOGLEVEL", "error extra"),
+        ("NPM_CONFIG_LOGLEVEL", ""),
+        ("NPM_CONFIG_PROGRESS", "maybe"),
+        // A key outside the list, however harmless it reads.
+        ("NPM_CONFIG_FOO", "1"),
+        // The prefix is the whole family marker, so a name that only starts
+        // like it is not one of npm's keys at all.
+        ("NPM_CONFIGLOGLEVEL", "error"),
+        ("NPM_CONFIG", "error"),
         // A name this module does not read stays with the shared screens.
         ("NODE_OPTIONS", "--no-warnings"),
         ("LD_PRELOAD", ""),
