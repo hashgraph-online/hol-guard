@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.neuro-mcp-router",
+  "version": "1.0.0",
+  "name": "neuro-mcp-router",
+  "description": "99.5% EEG/bio-signal BPE token compression, live ASCII cortical waveform HUDs, HIPAA/PII scrubbing, and biometric cognitive safety guardrails that hard-lock destructive agent commands during high stress or fatigue.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.its-shahvez",
+    "displayName": "Mohd Shahvez",
+    "url": "https://github.com/its-shahvez"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCpuChip",
+    "background": "#0F172A"
+  },
+  "homepage": "https://github.com/its-shahvez/neuro-mcp-router",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "neuro-mcp-router"
+  },
+  "riskClasses": [
+    "external-network-read"
+  ],
+  "tools": [
+    {
+      "name": "check_cognitive_guardrail",
+      "state": "inherit"
+    },
+    {
+      "name": "analyze_clinical_eeg_mri",
+      "state": "review"
+    },
+    {
+      "name": "render_ascii_brain_hud",
+      "state": "inherit"
+    },
+    {
+      "name": "expand_raw_microvolts",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/its-shahvez/neuro-mcp-router"
+  ],
+  "saferAlternatives": [
+    "Keep the Python Neuro-Foundation sidecar offline to rely strictly on the local deterministic fallback without outbound sidecar calls."
+  ]
+}
