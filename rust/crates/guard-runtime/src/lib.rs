@@ -734,6 +734,7 @@ mod kimi_hook_config;
 #[path = "adapters/detection/kimi_hook_config_tests.rs"]
 mod kimi_hook_config_tests;
 mod local_authority_integrity_op;
+mod local_cli_change_request;
 mod local_cli_grant_op;
 mod local_cli_help;
 mod local_cli_hook_contained;
