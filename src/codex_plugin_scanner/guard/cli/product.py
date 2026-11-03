@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, TypeGuard
 
 from ..adapters import get_adapter
-from ..adapters.base import HarnessContext, _artifact_uses_guard
+from ..adapters.base import HarnessContext, artifacts_use_guard
 from ..config import GuardConfig
 from ..consumer import detect_all
 from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
@@ -237,7 +237,7 @@ def _summarize_harness(
     approval_flow = get_adapter(detection.harness).approval_flow(managed_install=managed_install)
     review_count = count_review_artifacts(store, detection.artifacts, detection.harness)
     managed = bool(managed_install and managed_install.get("active"))
-    guard_registered = any(_artifact_uses_guard(artifact) for artifact in detection.artifacts)
+    guard_registered = artifacts_use_guard(detection.artifacts)
     shim_path = None
     if managed_install is not None:
         manifest = managed_install.get("manifest")
