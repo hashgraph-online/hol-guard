@@ -59,6 +59,9 @@ class CloudActionsProfile:
             expires = datetime.fromisoformat(self.expires_at.replace("Z", "+00:00"))
         except ValueError:
             return True
+        if expires.tzinfo is None:
+            # Guard always saves an offset; a value without one is damaged.
+            return True
         return expires <= (now or datetime.now(timezone.utc))
 
 

@@ -23,18 +23,26 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from ..cli.cloud_actions_session import PROFILE_PATTERN, CloudActionsProfile, CloudActionsSessionStore
+from ..cli.cloud_actions_session import (
+    PROFILE_PATTERN,
+    CloudActionsProfile,
+    CloudActionsProfileBusyError,
+    CloudActionsSessionStore,
+)
 
 CLOUD_ACTIONS_STATUS_SCHEMA = "guard.cloud-actions.local-status.v1"
 STALE_AFTER = timedelta(minutes=5)
 CHECK_INTERVAL = timedelta(minutes=1)
 MAX_PROFILES = 32
+# One check request answers within this long, however many sign-ins are saved.
+CHECK_BUDGET_SECONDS = 20.0
 
 _CACHE_SCHEMA = "guard.cloud-actions.last-check.v1"
 _CACHE_FILE = "last-check.json"
@@ -52,7 +60,9 @@ class CheckResult:
     http_status: int | None = None
 
 
-Checker = Callable[[CloudActionsProfile, str], tuple[CheckResult, CheckResult]]
+# Arguments: the profile, its access value, and the monotonic deadline for the whole check.
+Checker = Callable[[CloudActionsProfile, str, float], tuple[CheckResult, CheckResult]]
+_clock = time.monotonic
 
 
 class CloudActionsCheckBusyError(RuntimeError):
@@ -240,14 +250,20 @@ def cloud_actions_local_status(guard_home: Path, *, now: datetime | None = None)
     }
 
 
-def _live_checker(profile: CloudActionsProfile, access_token: str) -> tuple[CheckResult, CheckResult]:
+def _time_left(deadline: float) -> float:
+    from ..cli.cloud_actions_health import HEALTH_TIMEOUT_SECONDS
+
+    return min(float(HEALTH_TIMEOUT_SECONDS), max(1.0, deadline - _clock()))
+
+
+def _live_checker(profile: CloudActionsProfile, access_token: str, deadline: float) -> tuple[CheckResult, CheckResult]:
     from ..cli.cloud_actions_health import check_connection, check_service
 
-    service = check_service(profile)
+    service = check_service(profile, timeout=_time_left(deadline))
     if service.state in {"offline", "not_turned_on", "profile_damaged"}:
         same = CheckResult(service.state, service.message, service.http_status)
         return same, same
-    connection = check_connection(profile, access_token)
+    connection = check_connection(profile, access_token, timeout=_time_left(deadline))
     return (
         CheckResult(service.state, service.message, service.http_status),
         CheckResult(connection.state, connection.message, connection.http_status),
@@ -259,9 +275,11 @@ def check_cloud_actions(
     *,
     now: datetime | None = None,
     checker: Checker | None = None,
+    budget_seconds: float = CHECK_BUDGET_SECONDS,
 ) -> dict[str, object]:
     """Ask Guard Cloud about every saved sign-in once, save the answers, and return the projection.
 
+    Sign-ins still waiting when the time budget runs out stay `not_checked`.
     Raises CloudActionsCheckedRecentlyError within a minute of the last check
     and CloudActionsCheckBusyError while another check runs.
     """
@@ -277,13 +295,22 @@ def check_cloud_actions(
         if latest is not None and timedelta(0) <= moment - latest < CHECK_INTERVAL:
             raise CloudActionsCheckedRecentlyError(max(1, int((latest + CHECK_INTERVAL - moment).total_seconds())))
         run = checker or _live_checker
+        deadline = _clock() + budget_seconds
         fresh: dict[str, dict[str, object]] = {}
         for name in names:
-            profile = store.load(name)
-            secrets = store.load_secrets(name) if profile is not None else None
+            if _clock() >= deadline:
+                break
+            try:
+                # Read the site and its access value together, so a sign-in to
+                # another site in between never sends one site's value to the other.
+                with store.lock(name):
+                    profile = store.load(name)
+                    secrets = store.load_secrets(name) if profile is not None else None
+            except CloudActionsProfileBusyError:
+                continue
             if profile is None or secrets is None:
                 continue
-            service, connection = run(profile, secrets.access_token)
+            service, connection = run(profile, secrets.access_token, deadline)
             fresh[name] = {
                 "checked_at": _iso(moment),
                 "signed_in_at": profile.signed_in_at,

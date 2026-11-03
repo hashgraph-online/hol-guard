@@ -13,6 +13,8 @@ import json
 import os
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -57,7 +59,7 @@ def _sign_in(home: Path, name: str = "default", *, expires: datetime | None = No
         store.save(profile, CloudActionsSecrets(access_token=ACCESS, refresh_token=REFRESH))
 
 
-def _connected(_profile: CloudActionsProfile, access: str) -> tuple[CheckResult, CheckResult]:
+def _connected(_profile: CloudActionsProfile, access: str, _deadline: float = 0.0) -> tuple[CheckResult, CheckResult]:
     assert access == ACCESS
     return (
         CheckResult("current", "Guard Cloud offers Cloud actions as this sign-in expects.", 200),
@@ -135,7 +137,7 @@ def test_checks_run_at_most_once_a_minute(tmp_path: Path) -> None:
 def test_offline_answer_is_reported_as_offline(tmp_path: Path) -> None:
     _sign_in(tmp_path)
 
-    def offline(_profile: CloudActionsProfile, _access: str) -> tuple[CheckResult, CheckResult]:
+    def offline(_profile: CloudActionsProfile, _access: str, _deadline: float) -> tuple[CheckResult, CheckResult]:
         result = CheckResult("offline", "Guard Cloud could not be reached.")
         return result, result
 
@@ -181,6 +183,80 @@ def test_missing_secret_or_damaged_profile_is_profile_damaged(tmp_path: Path) ->
     states = {row["profile"]: row["state"] for row in payload["sign_ins"]}
     assert states == {"default": "profile_damaged", "work": "profile_damaged"}
     _assert_nothing_private(payload, tmp_path)
+
+
+def test_a_profile_without_a_time_zone_reads_as_expired(tmp_path: Path) -> None:
+    _sign_in(tmp_path)
+    profiles = tmp_path / "cloud-actions" / "profiles"
+    record = json.loads((profiles / "default.json").read_text())
+    record["expires_at"] = "2026-11-03T13:00:00"
+    (profiles / "default.json").write_text(json.dumps(record))
+
+    payload = cloud_actions_local_status(tmp_path, now=NOW)
+
+    assert payload["sign_ins"][0]["expired"] is True
+    assert payload["sign_ins"][0]["state"] == "sign_in_expired"
+
+
+def test_the_site_and_access_value_are_read_under_the_profile_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _sign_in(tmp_path)
+    held: list[str] = []
+    reads: list[tuple[str, bool]] = []
+    real_lock = CloudActionsSessionStore.lock
+    real_load = CloudActionsSessionStore.load
+    real_secrets = CloudActionsSessionStore.load_secrets
+
+    @contextmanager
+    def tracked_lock(self: CloudActionsSessionStore, name: str) -> Iterator[None]:
+        with real_lock(self, name):
+            held.append(name)
+            try:
+                yield
+            finally:
+                held.remove(name)
+
+    def tracked_load(self: CloudActionsSessionStore, name: str) -> CloudActionsProfile | None:
+        reads.append(("profile", name in held))
+        return real_load(self, name)
+
+    def tracked_secrets(self: CloudActionsSessionStore, name: str) -> CloudActionsSecrets | None:
+        reads.append(("secrets", name in held))
+        return real_secrets(self, name)
+
+    monkeypatch.setattr(CloudActionsSessionStore, "lock", tracked_lock)
+    monkeypatch.setattr(CloudActionsSessionStore, "load", tracked_load)
+    monkeypatch.setattr(CloudActionsSessionStore, "load_secrets", tracked_secrets)
+    reads_before = len(reads)
+    seen: list[str] = []
+
+    def checker(profile: CloudActionsProfile, access: str, _deadline: float) -> tuple[CheckResult, CheckResult]:
+        seen.extend(kind for kind, locked in reads[reads_before:] if locked)
+        return _connected(profile, access)
+
+    check_cloud_actions(tmp_path, now=NOW, checker=checker)
+
+    assert seen == ["profile", "secrets"]
+
+
+def test_a_check_stops_at_its_time_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _sign_in(tmp_path, "client")
+    _sign_in(tmp_path, "work")
+    clock = [100.0]
+    monkeypatch.setattr(status_module, "_clock", lambda: clock[0])
+    deadlines: list[float] = []
+
+    def slow(profile: CloudActionsProfile, access: str, deadline: float) -> tuple[CheckResult, CheckResult]:
+        deadlines.append(deadline)
+        clock[0] += 30.0
+        return _connected(profile, access)
+
+    payload = check_cloud_actions(tmp_path, now=NOW, checker=slow, budget_seconds=20.0)
+
+    assert deadlines == [120.0]
+    states = {row["profile"]: row["check"].get("state", "checked") for row in payload["sign_ins"]}
+    assert states == {"client": "checked", "work": "not_checked"}
 
 
 def _request(
