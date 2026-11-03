@@ -148,6 +148,8 @@ mod cline_hook_files;
 #[path = "adapters/cline_hook_files_tests.rs"]
 mod cline_hook_files_tests;
 mod cline_hook_worker;
+#[path = "adapters/cline_paths.rs"]
+mod cline_paths;
 #[path = "adapters/cline_plugin_render.rs"]
 mod cline_plugin_render;
 #[cfg(test)]

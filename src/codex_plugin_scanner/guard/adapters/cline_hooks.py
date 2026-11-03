@@ -15,7 +15,7 @@ from .base import HarnessContext
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .cline_paths import cline_hook_roots as _resolve_cline_hook_roots
 from .cline_paths import ensure_safe_cline_destination
-from .cline_state_paths import canonical_cline_state_path as _canonical_state_path
+from .cline_state_paths import bound_cline_state_paths
 from .cline_state_paths import cline_hook_command as _hook_command
 from .cline_state_paths import uninstall_persisted_cline_hooks as uninstall_cline_hooks
 from .guard_cli_attestation import resolve_attested_guard_cli
@@ -227,14 +227,7 @@ def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
 
 
 def run_cline_hook_canary(context: HarnessContext) -> dict[str, object]:
-    state = _load_state(context)
-    paths = state.get("paths")
-    path = _canonical_state_path(
-        context,
-        "PreToolUse",
-        paths.get("PreToolUse") if isinstance(paths, dict) else None,
-        saved_root=state.get("root"),
-    )
+    path = bound_cline_state_paths(context, _load_state(context))[0].get("PreToolUse")
     if path is None or not _managed(path):
         return {"ok": False, "reason": "pretool_hook_missing"}
     command = _hook_command(path)
@@ -264,17 +257,9 @@ def run_cline_hook_canary(context: HarnessContext) -> dict[str, object]:
     return {"ok": result.returncode == 0 and isinstance(output, dict) and isinstance(output.get("cancel"), bool)}
 
 
-def _observed(context: HarnessContext, state: dict[str, object], event: str, group: str) -> dict[str, object] | None:
+def _observed(path: Path | None) -> dict[str, object] | None:
     """What Guard reads back from one hook file bound to its canonical slot, if any."""
 
-    recorded = state.get(group)
-    path = _canonical_state_path(
-        context,
-        event,
-        recorded.get(event) if isinstance(recorded, dict) else None,
-        worker=group == "workers",
-        saved_root=state.get("root"),
-    )
     try:
         return None if path is None else {"sha256": sha256(path.read_bytes()).hexdigest(), "managed": _managed(path)}
     except OSError:
@@ -298,13 +283,13 @@ def _valid_verdict(key: str, value: object) -> bool:
 
 def cline_native_hook_state(context: HarnessContext) -> dict[str, object]:
     text = _read_text(_state_path(context))
-    state = _load_state(context, text)
+    launchers, workers = bound_cline_state_paths(context, _load_state(context, text))
     request: dict[str, object] = {
         "op": "state",
         "now": time.time(),
         "state_text": text,
-        "launchers": {event: _observed(context, state, event, "paths") for event in _EVENTS},
-        "workers": {event: _observed(context, state, event, "workers") for event in _EVENTS},
+        "launchers": {event: _observed(launchers.get(event)) for event in _EVENTS},
+        "workers": {event: _observed(workers.get(event)) for event in _EVENTS},
         "proofs": {event: _read_text(_proof_path(context, event)) for event in _PROOF_EVENTS},
     }
     answer = _hook_files(context, request)
