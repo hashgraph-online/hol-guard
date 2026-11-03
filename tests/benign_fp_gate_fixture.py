@@ -454,6 +454,18 @@ def build_fixture(root: Path) -> BenignFixture:
         _write(repository / ".codex-plugin" / "runtime.node", "\x00binary\n")
         # A tool's own tree, a config file spelled as a directory and a
         # credential store holding a file named as source.
+        # Tooling settings the checkout keeps under its own hidden
+        # directories. Their stems name a credential store as often as they
+        # name an ordinary project document, so the file is read rather than
+        # refused on its name alone.
+        _write(repository / ".circleci" / "config.yml", "version: 2.1\njobs: {}\n")
+        _write(repository / ".changeset" / "config.json", '{"changelog": "@changesets/cli/changelog"}\n')
+        _write(repository / ".storybook" / "settings.json", '{"framework": "react"}\n')
+        # The same stem over a registry credential, for the negative beside it.
+        _write(
+            repository / ".cargo" / "config.toml",
+            '[registries.internal]\ntoken = "' + "AKIA" + "QYLPT3K7" + "R4FXM2WD" + '"\n',
+        )
         _write(repository / ".cursor" / "mcp.json", '{"mcpServers": {}}\n')
         _write(repository / ".dockerignore" / "notes.md", "# fixture\n")
         _write(repository / ".secrets" / "read.py", "TOKEN = 'fixture'\n")

@@ -278,6 +278,53 @@ fn a_repositorys_own_documents_read_from_hidden_directories() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+#[test]
+fn a_hidden_directorys_configuration_document_reads_when_it_holds_no_credential() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let repo = home.join("app");
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    // `config`, `configuration` and `settings` name a credential store as
+    // often as they name an ordinary project document, so the name alone used
+    // to hold every one of these back while `cat` of the same bytes ran
+    // contained.
+    for document in [
+        ".circleci/config.yml",
+        ".changeset/config.json",
+        ".cargo/config.toml",
+        ".storybook/settings.json",
+        ".husky/configuration.json",
+    ] {
+        plant(&repo.join(document), "[build]\njobs = 4\n");
+        assert!(read(&repo.join(document), &home, &repo), "{document}");
+    }
+    // The same name over a credential keeps its review: the document is read
+    // against the detector, not waved past on its extension.
+    let token = format!("{}{}{}", "AKIA", "QYLPT3K7", "R4FXM2WD");
+    plant(
+        &repo.join(".cargo/config.toml"),
+        &format!("[registries.internal]\ntoken = \"{token}\"\n"),
+    );
+    assert!(!read(&repo.join(".cargo/config.toml"), &home, &repo));
+    // A credential store's own directory is untouched by this: the parent
+    // answers before the leaf is read at all.
+    for document in [
+        ".aws/config.json",
+        ".ssh/config.toml",
+        ".vscode/settings.json",
+    ] {
+        plant(&repo.join(document), "{}\n");
+        assert!(!read(&repo.join(document), &home, &repo), "{document}");
+    }
+    // And a name that holds material rather than describing a job stays held
+    // however clean the bytes are.
+    for document in [".github/credentials.json", ".github/keys.json"] {
+        plant(&repo.join(document), "{}\n");
+        assert!(!read(&repo.join(document), &home, &repo), "{document}");
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 #[path = "hidden_listing_git_tests.rs"]
 mod git_tests;
 
