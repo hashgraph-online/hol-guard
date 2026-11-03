@@ -82,8 +82,22 @@ pub(crate) fn local_uvu_entry(argument: &str) -> bool {
     local_package_entry(argument, "uvu/bin.js") || local_bin_entry(argument, "uvu")
 }
 
+/// tape's installed entry point, and the link its installer writes beside it.
+/// tape declares `bin/tape` as its `bin`, an extensionless file it has
+/// shipped at that path since 4.0.
+pub(crate) fn local_tape_entry(argument: &str) -> bool {
+    local_package_entry(argument, "tape/bin/tape") || local_bin_entry(argument, "tape")
+}
+
+/// tsd's installed entry point, and the link its installer writes beside it.
+/// tsd compiles its TypeScript CLI to `dist/cli.js` and declares that file as
+/// its `bin`.
+pub(crate) fn local_tsd_entry(argument: &str) -> bool {
+    local_package_entry(argument, "tsd/dist/cli.js") || local_bin_entry(argument, "tsd")
+}
+
 /// Whether a word names one of those installed entry points. A runtime handed
-/// this path starts the workspace's own runner, whichever of the three it is.
+/// this path starts the workspace's own runner, whichever of them it is.
 pub(crate) fn local_runner_entry(argument: &str) -> bool {
     let entry = argument.replace('\\', "/");
     local_vitest_entry(&entry)
@@ -93,6 +107,8 @@ pub(crate) fn local_runner_entry(argument: &str) -> bool {
         || local_jasmine_entry(&entry)
         || local_qunit_entry(&entry)
         || local_uvu_entry(&entry)
+        || local_tape_entry(&entry)
+        || local_tsd_entry(&entry)
 }
 
 /// Whether a call hands Bun one of those entry points as the file to run.
@@ -420,7 +436,7 @@ pub(crate) use runner_calls::{
 };
 pub(crate) use single_pass_runners::{
     jasmine_contained_call, jasmine_runs_once, jasmine_sets_no_environment, qunit_contained_call,
-    qunit_runs_once, uvu_contained_call,
+    qunit_runs_once, tape_contained_call, tsd_contained_call, uvu_contained_call,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
@@ -461,6 +477,8 @@ fn runner_tail(arguments: &[String]) -> Option<(&'static str, Vec<String>)> {
                 "jasmine" => "jasmine",
                 "qunit" => "qunit",
                 "uvu" => "uvu",
+                "tape" => "tape",
+                "tsd" => "tsd",
                 _ => "vitest",
             },
             rest.to_vec(),
@@ -532,6 +550,14 @@ fn runner_tail_or_error(
             Some("uvu") => Err(RestrictedPytestError::new(
                 VITEST_INVALID,
                 "Protected uvu reads its modules from this workspace.",
+            )),
+            Some("tape") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected tape reads its modules from this workspace.",
+            )),
+            Some("tsd") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected tsd reads its types from this workspace.",
             )),
             _ => invalid_vitest(),
         },
@@ -728,7 +754,7 @@ pub fn contained_runner_invocation(
             args.to_vec()
         } else if matches!(
             name,
-            "vitest" | "jest" | "mocha" | "ava" | "jasmine" | "qunit" | "uvu"
+            "vitest" | "jest" | "mocha" | "ava" | "jasmine" | "qunit" | "uvu" | "tape" | "tsd"
         ) {
             let mut call = vec![name.to_owned()];
             call.extend_from_slice(&argv[1..]);
@@ -753,6 +779,10 @@ pub fn contained_runner_invocation(
                 "qunit"
             } else if local_uvu_entry(&entry) {
                 "uvu"
+            } else if local_tape_entry(&entry) {
+                "tape"
+            } else if local_tsd_entry(&entry) {
+                "tsd"
             } else {
                 return invalid_vitest();
             };
@@ -991,7 +1021,17 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let vitest = !command.is_empty()
         && (matches!(
             name,
-            "bunx" | "npx" | "vitest" | "jest" | "mocha" | "ava" | "jasmine" | "qunit" | "uvu"
+            "bunx"
+                | "npx"
+                | "vitest"
+                | "jest"
+                | "mocha"
+                | "ava"
+                | "jasmine"
+                | "qunit"
+                | "uvu"
+                | "tape"
+                | "tsd"
         ) || manager_exec_runner(command).is_some()
             || bun.is_some()
             || bun_runner_entry_launch(command)
@@ -1006,6 +1046,8 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                         || local_jasmine_entry(&entry)
                         || local_qunit_entry(&entry)
                         || local_uvu_entry(&entry)
+                        || local_tape_entry(&entry)
+                        || local_tsd_entry(&entry)
                 })));
     let node_tool = bun.is_none()
         && !bun_test
