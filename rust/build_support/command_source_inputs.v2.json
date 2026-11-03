@@ -586,6 +586,7 @@
       "src/pretool/sink_peel.rs",
       "src/pretool/source_reads.rs",
       "src/pretool/stderr_merge.rs",
+      "src/pretool/stdin_filter_options.rs",
       "src/pretool/stdin_filters.rs",
       "src/pretool/symlink_writes.rs",
       "src/pretool/test_predicates.rs",
