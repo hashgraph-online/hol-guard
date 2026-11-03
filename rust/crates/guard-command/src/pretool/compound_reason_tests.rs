@@ -127,8 +127,10 @@ fn a_chain_whose_only_proven_steps_are_filters_is_not_told_to_split() {
         );
     }
 
-    // A leading `cd` is proven but is not work of its own either.
-    let (_, _, reason) = decision("cd src && npm install | head -5");
+    // A leading `cd` is proven but is not work of its own either. The target
+    // is spelled `./src` because a bare relative target is proved only when
+    // the request declares an environment with no CDPATH.
+    let (_, _, reason) = decision("cd ./src && npm install | head -5");
     assert!(reason.contains("not proven read-only"), "{reason}");
     assert!(
         reason.contains("splitting the command would not avoid the review"),
