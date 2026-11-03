@@ -202,6 +202,51 @@ jq -c '.cases[]' docs/guard/extension-builder/examples/cloud-binding-rejected.js
 `compile-stream` reports the same location as `/records/N/bindings/M`, where
 `N` counts command, MCP and then binding records.
 
+### When to add a binding
+
+Most contributions need none. Without a binding a command source or MCP server
+stays local-only: it validates, compiles, applies and hands off exactly as
+before, and the generated review kit does not mention hosted actions. Add a
+binding only when a hosted service should recognize a specific action of an
+extension you already contribute. Command sources and locally launched MCP
+servers can only reach `portable-policy`; the compiler rejects
+`cloud-executable` for them with `cloud_binding_local_only_target`.
+
+### What `compile` produces
+
+The `cloud_bindings` artifact records, for each action, the target it
+exercises (the command permission, or the MCP tool and, for a remote server,
+its endpoint),
+its effect, resource, required capabilities and support label, plus a
+`binding_digest` over that meaning. The artifact as a whole carries the
+`program_digest` of the program compiled in the same request, the
+`compiler_version` and an `artifact_digest`. Changing the source or the binding
+changes these digests, so a reviewed binding cannot quietly follow a later
+version of the source.
+
+### Review a binding
+
+Reviewers check that:
+
+- every action names a permission or tool declared by the source in the same
+  request;
+- the effect is not understated: an action that deletes or overwrites data is
+  `destructive`, not `write`;
+- the resource argument is the one that names the affected resource;
+- `cloud-executable` appears only on a reviewed remote MCP server and keeps
+  `egress-pinned` and `bounded-output`;
+- examples and fixtures use synthetic names only, with no real accounts,
+  workspaces, hostnames or credentials;
+- every case in the rejected example still fails with its expected code.
+
+### What a merged binding changes today
+
+Nothing in local protection: decisions and the compiled program are the same
+with or without it. Release builds do not yet package binding artifacts, so
+merging a binding does not make any action available in Guard Cloud. Making a
+hosted action available is a separate, reviewed step; a contribution never
+turns one on.
+
 ## Run portable fixtures
 
 Portable fixtures contain command text and synthetic control layers. They use
