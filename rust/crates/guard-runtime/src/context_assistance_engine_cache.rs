@@ -24,6 +24,9 @@ impl Engine {
         withdrawn: Option<&str>,
     ) -> Result<Value, RuntimeError> {
         let mut scope = self.scopes.remove(id).ok_or(RuntimeError::ScopeDenied)?;
+        let withdrawn_file = withdrawn
+            .and_then(|source| scope.sources.get(source))
+            .map(|source| source.relative_path.clone());
         let mut changed = false;
         let result = (|| {
             policy_current(&self.home, &mut scope, runtime)?;
@@ -77,7 +80,16 @@ impl Engine {
             let _ = scope.graph.close(runtime);
         }
         self.scopes.insert(id.into(), scope);
-        result
+        // A withdrawn file leaves the record before anything else is saved,
+        // also when the withdrawal failed part way.
+        let forgotten = match withdrawn_file.filter(|_| changed) {
+            Some(file) => self.forget_source(id, &file),
+            None => Ok(()),
+        };
+        if result.is_ok() {
+            self.remember_pick(id, None);
+        }
+        result.and_then(|value| forgotten.map(|_| value))
     }
     pub(super) fn sweep_saved(&self) -> Result<(), RuntimeError> {
         if let Some(cache) = &self.cache {

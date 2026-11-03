@@ -1,5 +1,6 @@
-//! Actor-owned, memory-only workspace grants. Optional saved evidence never
-//! restores a grant. Operator choices select sources;
+//! Actor-owned workspace grants. Only folders picked in the dashboard come
+//! back after a restart, picked again by path; saved evidence never restores
+//! a grant. Operator choices select sources;
 //! agent-facing consumers must bind a native caller to an existing app grant.
 use crate::context_assistance_notifications::{Epoch, Notifications, ReceiptFact};
 use backend::{Backend, Context, NotesAccess};
@@ -45,6 +46,8 @@ pub(crate) use prompt::PickedExcerpt;
 mod execution;
 #[path = "context_assistance_engine_history.rs"]
 mod history;
+#[path = "context_assistance_engine_picked.rs"]
+mod picked;
 #[path = "context_assistance_engine_receipts.rs"]
 mod receipts;
 #[cfg(target_os = "macos")]
@@ -187,6 +190,8 @@ pub(crate) struct Engine {
     #[cfg(target_os = "macos")]
     execution_lane: Option<execution::Lane>,
     cache: Option<guard_context_assistance::EvidenceCache>,
+    /// Dashboard picks to keep; `None` until this worker restored them.
+    picked: Option<picked::Picks>,
     producer: Option<guard_context_assistance::EvidenceUpgradeProducer>,
     data_generation: Option<Arc<guard_context_assistance::PreparedEvidenceGeneration>>,
 }
@@ -227,6 +232,7 @@ impl Engine {
         engine: &mut Self,
     ) -> Result<(), RuntimeError> {
         engine.expire_notes(runtime)?;
+        engine.restore_picked(runtime);
         #[cfg(target_os = "macos")]
         engine.maintain_execution_lane(runtime)?;
         Ok(())
@@ -252,6 +258,7 @@ impl Engine {
             #[cfg(target_os = "macos")]
             execution_lane: None,
             cache: None,
+            picked: None,
             producer: None,
             data_generation: None,
         }
@@ -263,6 +270,7 @@ impl Engine {
         request: Request,
     ) -> Result<Value, RuntimeError> {
         if !matches!(&request, Request::Clear | Request::ForgetSaved) {
+            self.restore_picked(runtime);
             self.expire_notes(runtime)?;
         }
         let reads = matches!(
@@ -321,6 +329,7 @@ impl Engine {
                 self.close_execution_lane(runtime)?;
                 self.scopes.clear();
                 self.forget_saved(removal)?;
+                self.forget_picks();
                 self.agents = Default::default();
                 if let Some(notifications) = &self.notifications {
                     notifications.clear()?;
@@ -336,6 +345,8 @@ impl Engine {
                 Ok(json!({"session_id":session_id,"revoked":true}))
             }
             Request::Revoke { scope_id } => {
+                // The live folder closes even when its record cannot be updated.
+                let forgotten = self.forget_pick(&scope_id);
                 let scope = self
                     .scopes
                     .get_mut(&scope_id)
@@ -343,7 +354,7 @@ impl Engine {
                 scope.clear_contexts();
                 close_graph(runtime, &mut scope.graph)?;
                 self.scopes.remove(&scope_id);
-                Ok(json!({"revoked":true, "scope_id":scope_id}))
+                forgotten.map(|_| json!({"revoked":true, "scope_id":scope_id}))
             }
             other => self.scoped(runtime, other),
         }?;
