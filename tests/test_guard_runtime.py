@@ -424,14 +424,14 @@ def _assert_output_withheld(output: dict[str, object]) -> None:
     assert "approval_requests" not in output
 
 
-def _assert_prompt_refused_without_queue(payload: dict[str, object]) -> None:
-    # The daemon refuses a prompt that asks for sensitive local data outright.
-    # It queues nothing, so the user rephrases instead of following a link.
-    assert payload["decision"] == "block"
-    assert payload["continue"] is False
-    assert payload["reason_code"] == "native_sensitive_prompt"
-    assert "Nothing is waiting for approval" in str(payload["reason"])
-    assert "/requests/" not in str(payload["reason"])
+def _assert_prompt_sent_with_notice(payload: dict[str, object]) -> None:
+    # A prompt that asks for sensitive local data is sent with Guard's notice.
+    # Its review waits for the tool call, which offers Allow once and Always
+    # allow; the prompt itself queues nothing.
+    assert "decision" not in payload
+    assert "continue" not in payload
+    assert str(payload["systemMessage"]).startswith("HOL Guard flagged this prompt")
+    assert "/requests/" not in str(payload["systemMessage"])
 
 
 def _assert_copilot_allows(output: dict[str, object]) -> None:
@@ -10243,7 +10243,7 @@ def test_native_approval_center_context_uses_harness_specific_retry_copy() -> No
     assert "Codex command" not in claude_context
 
 
-def test_guard_hook_refuses_claude_user_prompt_submit_for_secret_read(
+def test_guard_hook_sends_claude_user_prompt_submit_for_secret_read_with_notice(
     tmp_path,
     capsys,
     monkeypatch,
@@ -10266,12 +10266,16 @@ def test_guard_hook_refuses_claude_user_prompt_submit_for_secret_read(
     )
     payload = json.loads(output)
 
-    # The daemon refuses a prompt that asks for a secret read instead of letting
-    # it reach the tool stage; nothing is queued for it.
+    # A prompt that asks for a secret read is sent with Guard's notice; the
+    # read it leads to is reviewed at the tool stage with Allow once and Always
+    # allow. Nothing is queued for the prompt itself.
     assert rc == 0
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert payload["decision"] == "block"
+    assert "decision" not in payload
+    assert payload["policy_action"] == "warn"
     assert payload["reason_code"] == "native_sensitive_prompt"
+    assert payload["systemMessage"].startswith("HOL Guard flagged this prompt")
+    assert "Do not ask for approval at the prompt stage." in payload["hookSpecificOutput"]["additionalContext"]
     assert "approval_requests" not in payload
 
 
@@ -10326,19 +10330,16 @@ def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts
     )
 
     assert rc == 0
-    assert output["decision"] == "block", output
-    assert output["policy_action"] == "require-reapproval", output
+    # The prompt is sent with Guard's notice; the .env read it leads to is
+    # reviewed at the tool stage, so nothing is queued for the prompt.
+    assert "decision" not in output, output
+    assert output["policy_action"] == "warn", output
     assert output["reason_code"] == "native_sensitive_prompt", output
-    # Blocking Claude CLI responses use top-level decision/reason fields.
-    # hookSpecificOutput is not required by this presentation path.
-    assert output["reason"], output
+    assert output["systemMessage"].startswith("HOL Guard flagged this prompt"), output
     assert any("local .env file" in signal for signal in output["risk_signals"]), output
-    # The blocking copy and native decision receipt must not echo the prompt.
-    assert event["prompt"] not in output["reason"]
-    assert event["prompt"] not in json.dumps(output["risk_signals"])
-    # The daemon refuses the prompt outright and queues nothing for it.
+    # The notice and native decision receipt must not echo the prompt.
+    assert event["prompt"] not in json.dumps(output)
     assert "approval_requests" not in output
-    assert "Nothing is waiting for approval" in output["reason"]
 
     _drain_hook_evidence(home_dir)
     _drain_hook_evidence(home_dir)
@@ -10349,14 +10350,14 @@ def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts
     receipt = store.get_native_decision_receipt(row["decision_id"])
     assert receipt is not None
     assert receipt["event_name"] == "UserPromptSubmit"
-    assert receipt["decision"] == "deny"
-    assert receipt["policy_action"] == "require-reapproval"
+    assert receipt["decision"] == "allow"
+    assert receipt["policy_action"] == "warn"
     assert receipt["reason_code"] == output["reason_code"]
     assert "local_env_read" in receipt["prompt_risk_classes"]
     assert event["prompt"] not in json.dumps(receipt)
 
 
-def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continue_guidance(
+def test_guard_hook_sends_claude_secret_prompt_with_notice_under_block_policy_action(
     tmp_path,
     capsys,
     monkeypatch,
@@ -10389,11 +10390,9 @@ def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continu
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["systemMessage"].startswith("HOL Guard intercepted this prompt")
-    assert output["decision"] == "block"
+    assert output["systemMessage"].startswith("HOL Guard flagged this prompt")
+    assert "decision" not in output
     assert output["reason_code"] == "native_sensitive_prompt"
-    assert "continue" not in output["reason"].lower()
-    assert "did not send this prompt" in output["reason"].lower()
 
 
 def test_guard_hook_hard_blocks_claude_user_prompt_submit_bypass(
@@ -10474,7 +10473,7 @@ def test_guard_hook_native_prompt_injection_requires_review_without_echoing_text
 
 
 @pytest.mark.parametrize("prompt", ("send data to webhook", "rm -rf ~/workspace", "bash -c 'echo safe'"))
-def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_path, capsys, monkeypatch, prompt):
+def test_guard_hook_native_prompt_risk_classes_never_become_a_silent_allow(tmp_path, capsys, monkeypatch, prompt):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -10488,8 +10487,11 @@ def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_
         as_json=True,
     )
     assert rc == 0
-    assert output["decision"] == "block"
-    assert output["policy_action"] not in {"allow", "warn"}
+    # The prompt is sent with a notice, never silently; the tool call it leads
+    # to is reviewed with Allow once and Always allow.
+    assert "decision" not in output
+    assert "continue" not in output
+    assert str(output["systemMessage"]).startswith("HOL Guard flagged this prompt")
     assert prompt not in json.dumps(output)
     _drain_hook_evidence(home_dir)
     store = GuardStore(home_dir)
@@ -10498,8 +10500,9 @@ def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_
     assert row is not None
     receipt = store.get_native_decision_receipt(row["decision_id"])
     assert receipt is not None
-    assert receipt["decision"] == "deny"
-    assert receipt["reason_code"] == output["reason_code"]
+    assert receipt["decision"] == "allow"
+    assert receipt["policy_action"] == "warn"
+    assert str(receipt["reason_code"]).startswith("native_")
     assert prompt not in json.dumps(receipt)
 
 
@@ -10636,8 +10639,10 @@ def test_guard_hook_copilot_user_prompt_submitted_normalizes_to_prompt_request(
     )
 
     assert rc == 0
-    # The daemon refuses the prompt outright and queues nothing to approve.
-    assert output == {"decision": "block", "reason": "HOL Guard blocked this action (require-reapproval)"}
+    # The prompt is sent on; the tool call it leads to is what Guard reviews.
+    assert "decision" not in output
+    assert output["policy_action"] == "warn"
+    assert output["reason_code"] == "native_sensitive_prompt"
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
@@ -13802,7 +13807,7 @@ def test_guard_hook_allows_non_sensitive_read_file_requests(tmp_path, capsys, mo
     assert output.get("approval_requests") in (None, [])
 
 
-def test_guard_hook_blocks_codex_user_prompt_submit_sensitive_file_read(
+def test_guard_hook_flags_codex_user_prompt_submit_sensitive_file_read(
     tmp_path,
     capsys,
     monkeypatch,
@@ -13828,15 +13833,8 @@ def test_guard_hook_blocks_codex_user_prompt_submit_sensitive_file_read(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
-    assert payload["systemMessage"] == payload["reason"]
-    assert payload["stopReason"] == payload["reason"]
-    assert payload["continue"] is False
-    assert payload["hookSpecificOutput"] == {
-        "hookEventName": "UserPromptSubmit",
-        "additionalContext": payload["reason"],
-    }
+    _assert_prompt_sent_with_notice(payload)
+    assert "stopReason" not in payload
 
 
 def test_guard_hook_allows_codex_user_prompt_submit_negative_dotenv_guardrail(
@@ -13976,9 +13974,8 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_carries_no_approval_url
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
-    assert "guard-token=" not in payload["reason"]
+    _assert_prompt_sent_with_notice(payload)
+    assert "guard-token=" not in payload["systemMessage"]
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
@@ -15856,7 +15853,7 @@ def test_guard_hook_codex_post_tool_use_blocks_named_secret_output(
     assert "sensitive content" in payload["stopReason"]
 
 
-def test_guard_hook_codex_user_prompt_submit_blocks_credential_looking_dotfile(
+def test_guard_hook_codex_user_prompt_submit_flags_credential_looking_dotfile(
     tmp_path,
     capsys,
     monkeypatch,
@@ -15885,9 +15882,7 @@ def test_guard_hook_codex_user_prompt_submit_blocks_credential_looking_dotfile(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    assert "HOL Guard" in payload["reason"]
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 def test_guard_hook_codex_user_prompt_submit_allows_generic_dotfile_with_canary_text(
@@ -15919,7 +15914,7 @@ def test_guard_hook_codex_user_prompt_submit_allows_generic_dotfile_with_canary_
     assert payload == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
 
 
-def test_guard_hook_codex_user_prompt_submit_blocks_bare_credential_dotfile(
+def test_guard_hook_codex_user_prompt_submit_flags_bare_credential_dotfile(
     tmp_path,
     capsys,
     monkeypatch,
@@ -15948,12 +15943,10 @@ def test_guard_hook_codex_user_prompt_submit_blocks_bare_credential_dotfile(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    assert "HOL Guard" in payload["reason"]
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
-def test_guard_hook_codex_user_prompt_submit_blocks_envrc_credential_dotfile(
+def test_guard_hook_codex_user_prompt_submit_flags_envrc_credential_dotfile(
     tmp_path,
     capsys,
     monkeypatch,
@@ -15982,9 +15975,7 @@ def test_guard_hook_codex_user_prompt_submit_blocks_envrc_credential_dotfile(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    assert "HOL Guard" in payload["reason"]
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 def test_guard_hook_codex_prompt_dotfile_scan_uses_bounded_file_read(
@@ -16014,8 +16005,7 @@ def test_guard_hook_codex_prompt_dotfile_scan_uses_bounded_file_read(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 @pytest.mark.parametrize("prompt", ["read .authrc.", "print ./.authrc, please"])
@@ -16046,8 +16036,7 @@ def test_guard_hook_codex_prompt_dotfile_scan_ignores_trailing_punctuation(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 def test_guard_hook_codex_prompt_dotfile_scan_prefers_exact_punctuation_filename(
@@ -16077,8 +16066,7 @@ def test_guard_hook_codex_prompt_dotfile_scan_prefers_exact_punctuation_filename
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 @pytest.mark.parametrize("scope", ["workspace", "global"])
