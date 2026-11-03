@@ -8,8 +8,14 @@
 //! changes a decision. Python ships each queued item as its `request_id`,
 //! `artifact_id`, `approval_url` and `str(harness or "")`, with `null` for an
 //! item that is not a mapping, so returned indexes match the caller's list.
+//!
+//! In `primary` mode a `browser_url` key (a string or `null`) adds
+//! `"browser_url"` to the answer: the link the approval surface opens.
 
 use serde_json::{json, Map, Value};
+
+#[path = "approval_link_browser.rs"]
+mod browser;
 
 use crate::daemon_lifecycle_text::py_strip;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
@@ -41,10 +47,20 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
                 request_id: non_empty(text("request_id")),
                 artifact_id: non_empty(text("artifact_id")),
             };
-            Ok(json!({
-                "index": select(queued, binding),
-                "url": primary_url(queued, binding, center),
-            }))
+            let url = primary_url(queued, binding, center);
+            let mut answer = json!({ "index": select(queued, binding), "url": url.clone() });
+            match args.get("browser_url") {
+                None => {}
+                Some(Value::Null) => answer["browser_url"] = json!(url),
+                Some(Value::String(browser)) => {
+                    answer["browser_url"] = json!(browser::browser_url_for_review(
+                        Some(browser),
+                        url.as_deref()
+                    ));
+                }
+                Some(_) => return Err(ERR_INVALID),
+            }
+            Ok(answer)
         }
         Some("attach") => {
             let Some(queued) = queued else {
