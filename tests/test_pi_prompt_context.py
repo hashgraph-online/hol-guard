@@ -20,9 +20,9 @@ const GUARD_TIMEOUT_MS = TIMEOUT_VALUE, GUARD_DEADLINE_RESERVE_MS = 10;
 let inputApprovalResumeGeneration = 0, setupDelayMs = 0, idle = true;
 const pi = {
   on(name, callback) { callbacks[name] = callback; },
-  sendUserMessage(text) { resumed.push(text); },
+  sendUserMessage(text, options) { resumed.push(text); sent.push(options); },
 };
-const resumed = [];
+const resumed = [], sent = [];
 function loadGuardDaemonConnection() { return {stateId: 'fixture'}; }
 function invalidateInputApprovalResumes() { inputApprovalResumeGeneration++; }
 function invalidateToolApprovalResumes() {}
@@ -131,28 +131,40 @@ console.log(JSON.stringify({matched, again, empty, blocked, skill, template, oth
     assert reviewed and all(payload["guard_prompt_context"] is True for payload in reviewed)
 
 
-@pytest.mark.parametrize("harness", ["pi", "omp"])
-@node_required
-def test_prompt_resumed_after_workspace_setup_keeps_its_context(tmp_path: Path, harness: str) -> None:
-    result = run_handlers(
-        tmp_path,
-        harness,
-        """
+RESUME_STEPS = """
 setupDelayMs = 80;
+idle = RESUME_IDLE;
 const input = await callbacks.input({text: 'fix the cart total', source: 'interactive'}, ctx);
 const early = await start('fix the cart total');
 for (let waited = 0; resumed.length === 0 && waited < 2000; waited += 10) {
   await new Promise(resolve => setTimeout(resolve, 10));
 }
-// Pi runs the queued prompt as a new turn from the extension.
+idle = true;
+// Pi runs the resumed prompt as a new turn from the extension.
 const resumedTurn = await turn(resumed[0], 'extension');
 const again = await start(resumed[0]);
-console.log(JSON.stringify({input, early, resumed, resumedTurn, again}));
-""",
-        timeout_ms=40,
-    )
+console.log(JSON.stringify({input, early, resumed, sent, resumedTurn, again}));
+"""
+
+
+@pytest.mark.parametrize("harness", ["pi", "omp"])
+@node_required
+def test_prompt_resumed_after_workspace_setup_keeps_its_context(tmp_path: Path, harness: str) -> None:
+    result = run_handlers(tmp_path, harness, RESUME_STEPS.replace("RESUME_IDLE", "true"), timeout_ms=40)
     assert result["input"] == {"action": "handled", "handled": True}
     assert "early" not in result, "nothing is handed on before the review finishes"
     assert result["resumed"] == ["fix the cart total"]
+    # Starting the turn directly lets Pi expand a skill command or prompt template.
+    assert result["sent"] == [{"expandPromptTemplates": True}]
     assert result["resumedTurn"] == {"input": {"action": "continue"}, "start": context_message("fix the cart total")}
     assert "again" not in result
+
+
+@pytest.mark.parametrize("harness", ["pi", "omp"])
+@node_required
+def test_prompt_resumed_while_the_agent_is_busy_is_queued_without_context(tmp_path: Path, harness: str) -> None:
+    result = run_handlers(tmp_path, harness, RESUME_STEPS.replace("RESUME_IDLE", "false"), timeout_ms=40)
+    assert result["resumed"] == ["fix the cart total"]
+    # A queued follow-up starts no turn of its own, so its files are not kept.
+    assert result["sent"] == [{"deliverAs": "followUp"}]
+    assert result["resumedTurn"] == {"input": {"action": "continue"}}
