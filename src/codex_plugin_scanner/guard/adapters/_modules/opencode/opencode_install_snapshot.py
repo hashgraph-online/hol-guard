@@ -12,13 +12,7 @@ from pathlib import Path
 from .....ecosystems.opencode import _load_json_or_jsonc, _load_json_or_jsonc_text
 from ....models import HarnessDetection
 from ...base import HarnessContext
-from ...mcp_servers import (
-    GUARD_MCP_COMPANION_PREFIX,
-    ManagedMcpServer,
-    is_guard_proxy_command,
-    stable_mcp_server_identifier,
-)
-from ...opencode_artifacts import _command_parts, config_paths, native_artifacts
+from ...opencode_artifacts import config_paths, native_artifacts
 
 
 class OpenCodeInstallSnapshotError(RuntimeError):
@@ -53,18 +47,6 @@ class OpenCodeInstallSnapshot:
                 continue
             names.update(name for name, entry in mcp.items() if isinstance(name, str) and isinstance(entry, dict))
         return names
-
-
-@dataclass(frozen=True, slots=True)
-class _ProxyBinding:
-    native_name: str
-    source_scope: str
-    config_path: str
-    transport: str
-    command: str
-    args: tuple[str, ...]
-    env_keys: tuple[str, ...]
-    enabled: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,188 +142,34 @@ def _normalized_config_payload(
     scope: str,
     config_path: Path,
 ) -> dict[str, object]:
-    normalized = _copy_object(payload)
-    mcp = payload.get("mcp")
-    if not isinstance(mcp, dict):
-        return normalized
-    entries = {
-        name: _copy_object(entry) for name, entry in mcp.items() if isinstance(name, str) and isinstance(entry, dict)
-    }
-    trusted_companions: dict[str, _ProxyBinding] = {}
-    for name, entry in entries.items():
-        binding = _verified_proxy_binding(
-            name,
-            entry,
-            context=context,
-            scope=scope,
-            expected_config_path=config_path,
-        )
-        if binding is None:
-            continue
-        native_entry = entries.get(binding.native_name)
-        if native_entry is not None and not _binding_matches_native(binding, native_entry):
-            continue
-        trusted_companions[name] = binding
+    """Return the config with Guard's MCP wrappers taken off.
 
-    reconstructed: dict[str, object] = {}
-    for name, entry in entries.items():
-        binding = trusted_companions.get(name)
-        if binding is not None:
-            native_entry = entries.get(binding.native_name)
-            reconstructed[binding.native_name] = _native_entry_from_binding(binding, native_entry, entry)
-            continue
-        if name in {binding.native_name for binding in trusted_companions.values()}:
-            if name not in reconstructed:
-                reconstructed[name] = _copy_object(entry)
-            continue
-        restored = _restore_legacy_proxy(entry)
-        reconstructed[name] = restored if restored is not None else _copy_object(entry)
-    normalized["mcp"] = reconstructed
+    The native ``opencode_config_normalize`` kind folds each verified
+    ``hol-guard::`` companion back into the server it wraps and restores any
+    in-place proxy wrapper; the install derives Guard's entries again from it.
+    """
+
+    from ....native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        cwd = os.getcwd()
+    except OSError:
+        cwd = ""
+    request = {
+        "config": json.dumps(payload),
+        "scope": scope,
+        "config_path": str(config_path),
+        "guard_home": str(context.guard_home),
+        "cwd": cwd,
+    }
+    try:
+        answer = native_runner_authority("opencode_config_normalize", request)
+        normalized: object = json.loads(answer["config"]) if answer.keys() == {"config"} else None
+    except (NativeRunnerAuthorityError, TypeError, ValueError) as error:
+        raise OpenCodeInstallSnapshotError(f"Could not read the OpenCode config at {config_path}.") from error
+    if not isinstance(normalized, dict):
+        raise OpenCodeInstallSnapshotError(f"Could not read the OpenCode config at {config_path}.")
     return normalized
-
-
-def _verified_proxy_binding(
-    name: str,
-    entry: dict[str, object],
-    *,
-    context: HarnessContext,
-    scope: str,
-    expected_config_path: Path,
-) -> _ProxyBinding | None:
-    if not name.startswith(GUARD_MCP_COMPANION_PREFIX):
-        return None
-    native_name = name.removeprefix(GUARD_MCP_COMPANION_PREFIX)
-    if not native_name or native_name.startswith(GUARD_MCP_COMPANION_PREFIX):
-        return None
-    proxy_command, proxy_args = _command_parts(entry)
-    if not is_guard_proxy_command(proxy_command, proxy_args) or "opencode-mcp-proxy" not in proxy_args:
-        return None
-    options = _proxy_options(proxy_args)
-    required = {
-        "--guard-home",
-        "--server-name",
-        "--server-id",
-        "--source-scope",
-        "--config-path",
-        "--transport",
-        "--command",
-    }
-    if not required.issubset(options) or any(len(options[key]) != 1 for key in required):
-        return None
-    if options["--server-name"][0] != native_name or options["--source-scope"][0] != scope:
-        return None
-    try:
-        guard_home_matches = Path(options["--guard-home"][0]).resolve() == context.guard_home.resolve()
-    except OSError:
-        return None
-    if not guard_home_matches:
-        return None
-    transport = options["--transport"][0]
-    if transport not in {"local", "stdio"}:
-        return None
-    config_path = options["--config-path"][0]
-    try:
-        config_path_matches = Path(config_path).resolve() == expected_config_path.resolve()
-    except OSError:
-        return None
-    if not Path(config_path).is_absolute() or not config_path_matches:
-        return None
-    command = options["--command"][0]
-    args = tuple(options.get("--arg", ()))
-    env_keys = tuple(options.get("--server-env-key", ()))
-    enabled_value = entry.get("enabled", True)
-    enabled = enabled_value if isinstance(enabled_value, bool) else True
-    binding = _ProxyBinding(
-        native_name=native_name,
-        source_scope=scope,
-        config_path=config_path,
-        transport=transport,
-        command=command,
-        args=args,
-        env_keys=env_keys,
-        enabled=enabled,
-    )
-    environment = _selected_environment(entry, env_keys)
-    server = ManagedMcpServer(
-        harness="opencode",
-        name=native_name,
-        source_scope=scope,
-        config_path=config_path,
-        command=command,
-        args=args,
-        transport=transport,
-        env=environment,
-        enabled=enabled,
-    )
-    return binding if options["--server-id"][0] == stable_mcp_server_identifier(server) else None
-
-
-def _proxy_options(args: tuple[str, ...]) -> dict[str, list[str]]:
-    options: dict[str, list[str]] = {}
-    index = 0
-    while index < len(args):
-        token = args[index]
-        if token.startswith("--arg="):
-            options.setdefault("--arg", []).append(token.split("=", 1)[1])
-        elif token.startswith("--server-env-key="):
-            options.setdefault("--server-env-key", []).append(token.split("=", 1)[1])
-        elif token.startswith("--") and index + 1 < len(args):
-            options.setdefault(token, []).append(args[index + 1])
-            index += 1
-        index += 1
-    return options
-
-
-def _binding_matches_native(binding: _ProxyBinding, entry: dict[str, object]) -> bool:
-    restored = _restore_legacy_proxy(entry) or entry
-    command, args = _command_parts(restored)
-    return command == binding.command and args == binding.args
-
-
-def _native_entry_from_binding(
-    binding: _ProxyBinding,
-    native_entry: dict[str, object] | None,
-    companion_entry: dict[str, object],
-) -> dict[str, object]:
-    restored: dict[str, object]
-    if native_entry is not None:
-        restored = _restore_legacy_proxy(native_entry) or _copy_object(native_entry)
-    else:
-        restored = {
-            "type": binding.transport,
-            "command": [binding.command, *binding.args],
-        }
-        environment = _selected_environment(companion_entry, binding.env_keys)
-        if environment:
-            restored["environment"] = environment
-    restored["enabled"] = binding.enabled
-    return restored
-
-
-def _restore_legacy_proxy(entry: dict[str, object]) -> dict[str, object] | None:
-    command, args = _command_parts(entry)
-    if not is_guard_proxy_command(command, args) or "opencode-mcp-proxy" not in args:
-        return None
-    options = _proxy_options(args)
-    commands = options.get("--command", ())
-    if len(commands) != 1:
-        return None
-    restored: dict[str, object] = {
-        "type": entry.get("type", "local"),
-        "command": [commands[0], *options.get("--arg", ())],
-        "enabled": entry.get("enabled", True),
-    }
-    environment = entry.get("environment")
-    if isinstance(environment, dict):
-        restored["environment"] = _copy_object(environment)
-    return restored
-
-
-def _selected_environment(entry: dict[str, object], keys: tuple[str, ...]) -> dict[str, str]:
-    raw = entry.get("environment")
-    if not isinstance(raw, dict):
-        return {}
-    return {key: value for key in keys if isinstance(key, str) and isinstance((value := raw.get(key)), str)}
 
 
 def _scope_for(context: HarnessContext, path: Path) -> str:
