@@ -106,6 +106,27 @@ fn lone_surrogates_round_trip_through_the_answer() {
 }
 
 #[test]
+fn private_use_characters_without_a_lone_surrogate_are_kept() {
+    assert_eq!(
+        safe_json_text(r#"{"\udb80\udc00":"x\udb80\udc00"}"#, "", false),
+        "{\"\u{f0000}\":\"x\u{f0000}\"}"
+    );
+    assert!(payload_safe(r#"{"\udb80\udc00": 1, "a": "\udb80\udc00"}"#));
+    assert!(!payload_safe(r#"{"\udb80\udc00": "x /Users/someone"}"#));
+    // A genuine character beside a lone surrogate cannot be told apart.
+    let colliding = r#"{"a\ud800":"\udb80\udc00"}"#;
+    let safe = json!({
+        "op": "safe_json",
+        "value": colliding,
+        "parent_key": "",
+        "parent_sensitive": false,
+    });
+    assert_eq!(dispatch(&safe), Err(ERR_INVALID));
+    let check = json!({"op": "assert_payload_safe", "payload": colliding});
+    assert_eq!(dispatch(&check), Err(ERR_INVALID));
+}
+
+#[test]
 fn the_safety_check_reads_the_sorted_spaced_ascii_text() {
     // `json.dumps` escapes the no-break space, so the text the check scans
     // holds `\u00a0` and the assignment never reaches its `=`.

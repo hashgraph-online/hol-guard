@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 from . import native_inventory_url_redaction as _native_url
@@ -237,12 +238,49 @@ def _redact_command_value(value: str, home_dir: Path, workspace_dir: Path | None
 
 def _assert_serialized_inventory_payload_safe(payload: object) -> None:
     """Reject serialized inventory that still violates the export safety contract."""
-    answer = _native_export_redaction({"op": "assert_payload_safe", "payload": _json_text(payload)})
-    safe = answer.get("safe")
-    if not isinstance(safe, bool):
-        raise _native_url.NativeInventoryUrlRedactionError("native_inventory_url_redaction_unavailable")
-    if not safe:
-        raise ValueError("Inventory snapshot serialization produced unsafe payload.")
+    for part in _payload_parts(payload):
+        answer = _native_export_redaction({"op": "assert_payload_safe", "payload": part})
+        safe = answer.get("safe")
+        if not isinstance(safe, bool):
+            raise _native_url.NativeInventoryUrlRedactionError("native_inventory_url_redaction_unavailable")
+        if not safe:
+            raise ValueError("Inventory snapshot serialization produced unsafe payload.")
+
+
+def _payload_parts(value: object) -> Iterator[str]:
+    """JSON texts within the request budget that, checked together, check the value.
+
+    Every match the safety patterns can make starts inside one encoded string
+    and needs nothing past its closing quote: the text between strings holds
+    only brackets, separators, numbers and literals, none of which a pattern
+    can start in or run through. An oversized container is therefore checked
+    as runs of its members, each key alone, and each part finds exactly the
+    matches the whole text holds.
+    """
+    text = _json_text(value)
+    if len(text) <= _NATIVE_VALUE_BUDGET or not isinstance(value, (dict, list, tuple)):
+        yield text
+        return
+    members: list[object] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            members.extend(({key: None}, item))
+    else:
+        members.extend(value)
+    batch: list[object] = []
+    size = 0
+    for member in members:
+        member_size = len(_json_text(member)) + 2
+        if member_size > _NATIVE_VALUE_BUDGET:
+            yield from _payload_parts(member)
+            continue
+        if batch and size + member_size > _NATIVE_VALUE_BUDGET:
+            yield _json_text(batch)
+            batch, size = [], 0
+        batch.append(member)
+        size += member_size
+    if batch:
+        yield _json_text(batch)
 
 
 def _safe_json(
