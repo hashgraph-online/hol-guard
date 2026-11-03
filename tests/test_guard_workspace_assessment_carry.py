@@ -1,20 +1,24 @@
 from __future__ import annotations
 
 import hashlib
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority
 from codex_plugin_scanner.guard import workspace_assessment_carry as carry
 from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard.native_package_audit_projection import NativePackageAuditProjectionError
-from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_workspace_assessment_schema import MAX_FINDINGS
 from codex_plugin_scanner.guard.workspace_assessment_carry import carry_unchecked_findings
 from tests.workspace_fix_support import admit_worktree, native_binary  # noqa: F401
+
+# A partial run asks the resident which earlier findings it keeps listed.
+pytestmark = pytest.mark.usefixtures("native_binary")
 
 DETECTORS = "d" * 64
 T0 = 1_000_000_000
@@ -155,7 +159,6 @@ def test_a_completed_run_or_a_first_run_carries_nothing() -> None:
     assert carry_unchecked_findings(unshaped, previous) is unshaped
 
 
-@pytest.mark.usefixtures("native_binary")
 def test_carried_findings_stay_within_the_finding_bound(tmp_path: Path) -> None:
     store = admitted(tmp_path)
     earlier = [finding(f"{index:032x}") for index in range(MAX_FINDINGS)]
@@ -186,7 +189,7 @@ def test_carried_findings_stay_within_the_finding_bound(tmp_path: Path) -> None:
         "verification_run_id": None,
     }
     verifiable = {"run_id": "r", "snapshot_digest": "after", "started_at_ms": T0 + 1, "coverage": coverage}
-    answer = native_runner_authority(
+    answer = native_runner_authority.native_runner_authority(
         "workspace_fix_verify", {"run": {**verifiable, "findings": []}, "proposals": [proposal]}
     )
     assert answer["updates"] == [{"proposal_id": "p", "state": "verified_fixed"}]
@@ -269,6 +272,29 @@ def test_a_run_the_resident_cannot_name_packages_for_is_not_recorded(
     assert latest is not None and latest["run_id"] == first["run_id"]
 
 
+def test_a_run_the_resident_cannot_carry_findings_for_is_not_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = admitted(tmp_path)
+    first = assess(store, outcome("completed", [finding("a" * 32)], ci_workflow_v1="complete"), at=T0)
+
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        raise native_runner_authority.NativeRunnerAuthorityError("resident unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+    assessments.enqueue(store, KEYS, trigger_kind="manual", detector_set_digest=DETECTORS, now_ms=T0 + 10)
+    claimed = assessments.claim_next(store, owner="w", now_ms=T0 + 10)
+    assert claimed is not None
+
+    # The runner records this as a failed supply chain run instead of a
+    # partial run that quietly lost the earlier finding.
+    with pytest.raises(NativePackageAuditProjectionError):
+        assessments.finish(store, claimed, outcome("partial", [], ci_workflow_v1="not_run"), now_ms=T0 + 11)
+
+    latest = assessments.latest_assessed_run(store, KEYS)
+    assert latest is not None and latest["run_id"] == first["run_id"]
+
+
 def test_runs_finished_in_the_same_millisecond_carry_from_the_one_queued_last(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -276,7 +302,10 @@ def test_runs_finished_in_the_same_millisecond_carry_from_the_one_queued_last(
     # pick the later run.
     store = admitted(tmp_path)
     ids = iter(["f" * 32, "e" * 32, "0" * 32])
-    monkeypatch.setattr(assessments.uuid, "uuid4", lambda: SimpleNamespace(hex=next(ids)))
+    fresh = uuid.uuid4
+    # Native requests draw their ids from the same function once the run ids
+    # are spent.
+    monkeypatch.setattr(assessments.uuid, "uuid4", lambda: SimpleNamespace(hex=next(ids, None) or fresh().hex))
     assess(store, outcome("completed", [finding("a" * 32)], ci_workflow_v1="complete"), at=T0)
     second = assess(store, outcome("completed", [finding("b" * 32)], ci_workflow_v1="complete"), at=T0)
 
