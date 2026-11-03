@@ -1207,21 +1207,19 @@
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/adapters/claude_code.py",
         "symbols": [
-          "_guard_command_handler",
           "_handler_identity",
           "_is_guard_hook_command",
           "_is_guard_hook_url",
           "_manifest_notes",
           "ClaudeCodeHarnessAdapter._hook_command",
           "ClaudeCodeHarnessAdapter._hook_command_parts",
-          "ClaudeCodeHarnessAdapter._session_start_command_parts",
           "ClaudeCodeHarnessAdapter.prepare_install",
           "ClaudeCodeHarnessAdapter.install",
           "ClaudeCodeHarnessAdapter.uninstall"
         ],
         "entry_points": [],
         "reason": "Claude Code settings install and uninstall (shim notes, settings I/O) and the helpers only they use; the hook entry prune and merge, handler identity and Guard-handler checks run in the native claude_hook_config runner-authority kind.",
-        "evidence": "install, prepare_install and uninstall are invoked only from the excluded install, uninstall and repair dispatchers; the remaining helpers have no reference outside this excluded set. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "install, prepare_install and uninstall are invoked only from the excluded install, uninstall and repair dispatchers; the remaining helpers have no reference outside this excluded set. The SessionStart command builder and handler factory stay in scope because the retained runtime refresh rewrites the SessionStart entry after an upgrade. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "adapter-codex-setup",
