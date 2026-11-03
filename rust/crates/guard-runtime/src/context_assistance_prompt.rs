@@ -156,12 +156,15 @@ fn attach(
     let until = deadline + HOOK_MARGIN / 2;
     let home = store.guard_home();
     // CIGAR still starting, as on a session's first prompt: Guard reads the
-    // matched files CIGAR would accept and shows their best parts itself.
+    // matched files CIGAR would accept and shows their best parts itself,
+    // naming only files that passed the same checks. Project context is
+    // checked again after the read, so a stop meanwhile sends nothing.
     let read = || {
         service
             .prompt_context_chosen()
-            .then(|| quick_excerpts(home, &root, harness, &found, &words, until))
-            .and_then(|picked| render(&picked, &found, &words))
+            .then(|| quick_excerpts(home, &root, harness, &found, &words, MAX_OTHER_FILES, until))
+            .and_then(|(picked, names)| render(&picked, &names, &words))
+            .filter(|_| service.prompt_context_chosen())
     };
     // CIGAR busy with another prompt, or late: the matched files it would
     // accept still save the agent a search, as long as project context is

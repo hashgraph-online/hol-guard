@@ -32,6 +32,10 @@ impl Fixture {
     }
 
     fn read(&self, found: &[&str], words: &[&str]) -> Vec<PickedExcerpt> {
+        self.read_named(found, words).0
+    }
+
+    fn read_named(&self, found: &[&str], words: &[&str]) -> (Vec<PickedExcerpt>, Vec<String>) {
         let found: Vec<String> = found.iter().map(|path| (*path).to_owned()).collect();
         let words: Vec<String> = words.iter().map(|word| (*word).to_owned()).collect();
         let until = Instant::now() + Duration::from_secs(5);
@@ -41,6 +45,7 @@ impl Fixture {
             "claude-code",
             &found,
             &words,
+            8,
             until,
         )
     }
@@ -111,12 +116,30 @@ fn a_starting_cigar_still_gives_the_prompt_the_matched_code() {
 #[test]
 fn a_file_that_looks_like_it_holds_a_key_is_never_read_into_a_prompt() {
     let f = fixture(ON);
+    // Built at run time so the fixture is not itself a key-shaped line.
+    let armour = |edge: &str| format!("-----{edge} RSA {}-----", "PRIVATE KEY");
     f.write(
         "src/cart.ts",
-        "// cart signing key\n-----BEGIN RSA PRIVATE KEY-----\n\
-         MIIEowIBAAKCAQEA1c7b0q2xQ0cartcartcartcartcart\n-----END RSA PRIVATE KEY-----\n",
+        &format!(
+            "// cart signing key\n{}\nMIIEowIBAAKCAQEA1c7b0q2xQ0cartcartcartcartcart\n{}\n",
+            armour("BEGIN"),
+            armour("END")
+        ),
     );
-    assert!(f.read(&["src/cart.ts"], &["cart"]).is_empty());
+    f.write("src/cart-total.ts", "export const cartTotal = 0;\n");
+    let (parts, names) = f.read_named(&["src/cart.ts", "src/cart-total.ts"], &["cart"]);
+    assert_eq!(
+        parts
+            .iter()
+            .map(|part| part.path.as_str())
+            .collect::<Vec<_>>(),
+        ["src/cart-total.ts"]
+    );
+    assert_eq!(
+        names,
+        ["src/cart-total.ts"],
+        "a refused file is not even named"
+    );
 }
 
 #[test]
@@ -156,9 +179,17 @@ fn a_name_that_is_not_an_app_id_reads_nothing() {
     let until = Instant::now() + Duration::from_secs(5);
     let found = vec!["src/cart.ts".to_owned()];
     let words = vec!["cart".to_owned()];
-    assert!(
-        quick_excerpts(f.home.path(), &f.root, "Claude Code", &found, &words, until).is_empty()
-    );
+    assert!(quick_excerpts(
+        f.home.path(),
+        &f.root,
+        "Claude Code",
+        &found,
+        &words,
+        8,
+        until
+    )
+    .0
+    .is_empty());
     assert_eq!(f.read(&["src/cart.ts"], &["cart"]).len(), 1);
 }
 
@@ -169,5 +200,14 @@ fn reading_stops_at_the_deadline() {
     let found = vec!["src/cart.ts".to_owned()];
     let words = vec!["cart".to_owned()];
     let past = Instant::now();
-    assert!(quick_excerpts(f.home.path(), &f.root, "claude-code", &found, &words, past).is_empty());
+    let (parts, names) = quick_excerpts(
+        f.home.path(),
+        &f.root,
+        "claude-code",
+        &found,
+        &words,
+        8,
+        past,
+    );
+    assert!(parts.is_empty() && names.is_empty());
 }

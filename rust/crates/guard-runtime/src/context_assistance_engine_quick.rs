@@ -53,30 +53,42 @@ pub(super) fn best_part(file: &AdmittedFile, words: &[String]) -> Option<(usize,
     ))
 }
 
-/// The best part of each of the first few matched files, best file first.
-/// A file the source screen refuses (a secret, a key, binary text) is left
-/// out, and reading stops at `until`.
+/// The best part of each of the first few matched files, best file first,
+/// and the names of the matched files that passed the same checks, enough
+/// to name `others` files beyond the ones shown. A file the source screen
+/// refuses (a secret, a key, binary text) is neither shown nor named, and
+/// reading stops at `until`.
 pub(crate) fn quick_excerpts(
     home: &Path,
     workspace: &Path,
     app: &str,
     found: &[String],
     words: &[String],
+    others: usize,
     until: Instant,
-) -> Vec<PickedExcerpt> {
+) -> (Vec<PickedExcerpt>, Vec<String>) {
+    let mut parts = Vec::new();
+    let mut names = Vec::new();
     let Some(root) = screened(home, workspace, app) else {
-        return Vec::new();
+        return (parts, names);
     };
     let chosen = picked_files(home, root.path());
-    found
+    let allowed = found
         .iter()
-        .filter(|relative| chosen.as_ref().is_none_or(|files| files.contains(relative)))
-        .take_while(|_| Instant::now() < until)
-        .filter(|relative| stamp(&root, relative).is_some())
-        .filter_map(|relative| root.read(relative).ok())
-        .filter_map(|file| best_part(&file, words).map(|(_, part)| part))
-        .take(MAX_FILES)
-        .collect()
+        .filter(|relative| chosen.as_ref().is_none_or(|files| files.contains(relative)));
+    for relative in allowed {
+        if Instant::now() >= until || names.len() >= MAX_FILES + others {
+            break;
+        }
+        let Some(file) = stamp(&root, relative).and_then(|_| root.read(relative).ok()) else {
+            continue;
+        };
+        names.push(relative.clone());
+        if parts.len() < MAX_FILES {
+            parts.extend(best_part(&file, words).map(|(_, part)| part));
+        }
+    }
+    (parts, names)
 }
 
 /// The files picked in the dashboard for `root`, which CIGAR uses for every
