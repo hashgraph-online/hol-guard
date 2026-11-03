@@ -551,7 +551,8 @@ fn a_pattern_in_a_setting_value_is_the_text_the_program_reads() {
         ("DEBUG=app:{a,b} npm test", "npm test"),
         ("DEBUG=app:[ab] npm test", "npm test"),
         ("DEBUG=app:? npm test", "npm test"),
-        ("env DEBUG=app:* npm test", "npm test"),
+        ("env DEBUG='app:*' npm test", "npm test"),
+        ("env DEBUG=\"app:*\" npm test", "npm test"),
         // A heap prefix beside the pattern used to leave the whole prefix
         // unprojected, which stops the command extensions evaluating at all.
         (
@@ -575,6 +576,23 @@ fn a_setting_value_the_shell_would_expand_is_still_not_projected() {
         // A pattern does not make a steering name ordinary.
         "PATH=/tmp/* npm test",
         "NODE_OPTIONS=--require=./*.js npm test",
+    ] {
+        assert_eq!(project(command), None, "{command}");
+    }
+}
+
+#[test]
+fn an_env_argument_carries_its_pattern_only_inside_quotes() {
+    // `env`'s arguments are ordinary words, so the shell expands braces and
+    // globs there before `env` starts. `env A={x,y} prog` hands `env` two
+    // settings, not the five characters the prefix spelling would hand it.
+    for command in [
+        "env DEBUG=app:* npm test",
+        "env DEBUG=app:{a,b} npm test",
+        "env DEBUG=app:[ab] npm test",
+        "env DEBUG=app:? npm test",
+        // One quote has to cover the whole value, not part of it.
+        "env DEBUG=app:'*' npm test",
     ] {
         assert_eq!(project(command), None, "{command}");
     }

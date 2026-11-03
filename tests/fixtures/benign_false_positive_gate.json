@@ -35307,7 +35307,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "env DEBUG=app:* npx vitest run"
+        "command": "env DEBUG='app:*' npx vitest run"
       },
       "cwd": "worktree",
       "expect": "allow"

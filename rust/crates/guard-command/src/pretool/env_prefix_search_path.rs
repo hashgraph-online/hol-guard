@@ -59,7 +59,7 @@ pub(super) fn review(
     context: super::PathContext<'_>,
 ) -> Option<()> {
     let reviewed = setting?;
-    let search_path = !super::reviewable_assignment(name, value, context);
+    let search_path = !super::settings::reviewable_assignment(name, value, context);
     if search_path {
         required.push(programs(name, value)?);
     }
