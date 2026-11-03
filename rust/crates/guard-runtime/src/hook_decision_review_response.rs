@@ -65,7 +65,12 @@ fn signed_review_reason(
 ) -> Option<String> {
     let auth_token =
         crate::daemon_policy_authority::load_guard_daemon_auth_token(Path::new(guard_home));
-    native_review_reason(harness, reason, url, auth_token.as_deref(), now_micros()?)
+    let linked = native_review_reason(harness, reason, url, auth_token.as_deref(), now_micros()?)?;
+    Some(crate::desktop_review_link::with_desktop_link(
+        linked,
+        Path::new(guard_home),
+        url,
+    ))
 }
 
 /// The paused review for `inputs`; `link` is `native_review_reason` with the

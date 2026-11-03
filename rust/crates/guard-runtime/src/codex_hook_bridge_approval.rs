@@ -239,12 +239,22 @@ fn guard_home(state_path: &Path) -> &Path {
 }
 
 /// `_open_pending_approval(approval_url, state_path=...)`. A link this port
-/// cannot sign byte for byte is reported as unavailable, never opened.
+/// cannot sign byte for byte is reported as unavailable, never opened. A user
+/// whose HOL Guard Desktop opens request links gets the request there, in a
+/// window that is already signed in.
 fn open_pending(approval_url: Option<&str>, state_path: &Path) {
     let Some(url) = approval_url else {
         return;
     };
     let home = guard_home(state_path);
+    if let Some(desktop_url) = crate::desktop_review_link::desktop_review_url(home, url) {
+        notify(
+            &mut std::io::stderr(),
+            &format!("HOL Guard is waiting for approval in HOL Guard Desktop: {desktop_url}"),
+        );
+        crate::browser_open::open_browser_url(&desktop_url);
+        return;
+    }
     let browser_url = now_micros().and_then(|now| {
         crate::native_review_link::approval_browser_url(
             url,

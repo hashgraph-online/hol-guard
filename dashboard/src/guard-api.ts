@@ -1169,6 +1169,10 @@ async function refreshGuardDashboardSession(guardToken: string, signal?: AbortSi
 }
 
 export function guardAwareHref(href: string): string {
+  // An app link such as hol-guard-desktop:// opens outside this browser and never carries the session token.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href) && !/^https?:/i.test(href)) {
+    return href;
+  }
   const guardToken = readGuardToken();
   if (!guardToken) {
     return href;

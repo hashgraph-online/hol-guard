@@ -3,20 +3,26 @@ import { ActionButton, Surface } from "./approval-center-primitives";
 import {
   QUEUE_CONNECTION_ERROR_HEADLINE,
   QUEUE_CONNECTION_ERROR_INSTRUCTION,
+  QUEUE_SESSION_COMMAND_INSTRUCTION,
   QUEUE_SESSION_ERROR_DETAIL,
   QUEUE_SESSION_ERROR_HEADLINE,
   QUEUE_SESSION_ERROR_INSTRUCTION,
+  approvalsOpenCommand,
+  desktopRequestUrl,
   queueErrorIsUnauthorizedSession,
 } from "./queue-connection-copy";
 
 export function QueueConnectionError(props: {
   message: string;
   approvalUrl: string | null;
+  requestId?: string | null;
   onRetry?: () => void;
   onRepair?: () => Promise<void>;
 }) {
   const [repairing, setRepairing] = useState(false);
   const sessionMissing = queueErrorIsUnauthorizedSession(props.message);
+  const desktopUrl = sessionMissing ? desktopRequestUrl(props.requestId ?? null) : null;
+  const openCommand = sessionMissing ? approvalsOpenCommand(props.requestId ?? null) : null;
 
   const handleRepair = useCallback(async () => {
     if (props.onRepair === undefined) {
@@ -51,9 +57,12 @@ export function QueueConnectionError(props: {
         <p className="mt-1 text-sm text-brand-purple/80">{detail}</p>
         <p className="mt-2 text-sm text-brand-purple/70">{instruction}</p>
         <div className="mt-4 flex flex-wrap gap-3">
+          {desktopUrl !== null && <ActionButton href={desktopUrl}>Open in HOL Guard Desktop</ActionButton>}
           {sessionMissing ? (
             props.onRetry !== undefined && (
-              <ActionButton onClick={props.onRetry}>Retry</ActionButton>
+              <ActionButton onClick={props.onRetry} variant={desktopUrl === null ? undefined : "outline"}>
+                Retry
+              </ActionButton>
             )
           ) : (
             <ActionButton onClick={handleOpenDaemon}>Repair</ActionButton>
@@ -85,6 +94,14 @@ export function QueueConnectionError(props: {
                 </ActionButton>
               )}
         </div>
+        {openCommand !== null && (
+          <div className="mt-4 space-y-2">
+            <p className="text-sm text-brand-purple/70">{QUEUE_SESSION_COMMAND_INSTRUCTION}</p>
+            <code className="block overflow-x-auto rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all">
+              {openCommand}
+            </code>
+          </div>
+        )}
       </Surface>
     </div>
   );

@@ -360,6 +360,7 @@ mod desktop_core_onedir;
 mod desktop_foreign_installs;
 mod desktop_foreign_remove;
 mod desktop_notification;
+mod desktop_review_link;
 mod developer_inspection_authority_op;
 mod developer_inspection_host;
 mod device_key_helper;

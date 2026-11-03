@@ -159,6 +159,11 @@ pub(super) fn answer(
             auth_token.as_deref(),
             now_micros()?,
         )?;
+        let linked = crate::desktop_review_link::with_desktop_link(
+            linked,
+            Path::new(context.guard_home),
+            approval_url,
+        );
         respond(
             context.harness,
             &shown,

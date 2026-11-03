@@ -161,7 +161,11 @@ fn reason(response: &OMap, guard_home: &Path) -> Option<String> {
     // link; signing its raw prefix again would stack a second token fragment.
     let signed_prefix = format!("{review_url}#guard-token=");
     if let Some(reason) = reason.filter(|reason| reason.contains(&signed_prefix)) {
-        return Some(reason.to_owned());
+        return Some(crate::desktop_review_link::with_desktop_link(
+            reason.to_owned(),
+            guard_home,
+            review_url,
+        ));
     }
     let token = load_guard_daemon_auth_token(guard_home);
     let live_url = match now_micros() {
@@ -169,14 +173,17 @@ fn reason(response: &OMap, guard_home: &Path) -> Option<String> {
         None => review_url.to_owned(),
     };
     let suffix = format!("{OPEN_GUARD} {live_url}.");
-    Some(match reason {
+    let linked = match reason {
         None => format!("{NEEDS_APPROVAL} {suffix}"),
         Some(reason) if live_url != review_url && reason.contains(review_url) => {
             reason.replacen(review_url, &live_url, 1)
         }
         Some(reason) if reason.contains(&live_url) => reason.to_owned(),
         Some(reason) => format!("{reason} {suffix}"),
-    })
+    };
+    Some(crate::desktop_review_link::with_desktop_link(
+        linked, guard_home, review_url,
+    ))
 }
 
 /// `print(json.dumps(response))` for the client's string-valued answer,
