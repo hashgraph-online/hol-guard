@@ -45,6 +45,19 @@ fn a_filter_reading_a_proven_file_needs_no_review() {
         "sort -t$'\\t' -k2 -n Cargo.toml",
         "sort --field-separator=$'\\t' --key=2 Cargo.toml",
         "cut -d$'\\t' -f1 Cargo.toml",
+        // `paste`, `join` and `column` lay out the columns of what they read.
+        // Their value-taking options carry a delimiter, a field number or a
+        // width, so none of them names a file to write.
+        "paste Cargo.toml Cargo.toml",
+        "paste -d$'\\t' Cargo.toml Cargo.toml",
+        "paste -s -d, Cargo.toml",
+        "paste --delimiters=$'\\t' Cargo.toml",
+        "join Cargo.toml Cargo.toml",
+        "join -t$'\\t' -1 2 -2 2 Cargo.toml Cargo.toml",
+        "join -a 1 -o auto Cargo.toml Cargo.toml",
+        "column -t Cargo.toml",
+        "column -t -s$'\\t' Cargo.toml",
+        "column -t -s, -o ' | ' Cargo.toml",
     ] {
         assert!(allowed(command), "{command}");
     }
@@ -78,7 +91,38 @@ fn a_filter_that_could_write_or_reach_further_still_takes_review() {
         "sort -t$SEPARATOR -k2 Cargo.toml",
         "cut -d$'\\t\\t' -f1 Cargo.toml",
         "cut -d$DELIMITER -f1 Cargo.toml",
+        // The new filters reach no further than the operands they are proven
+        // for: `join` pairs exactly two inputs, and an option none of these
+        // screens has read keeps the command under review.
+        "paste -d$'\\t' /nonexistent-guard-fixture/secret.key Cargo.toml",
+        "join Cargo.toml Cargo.toml Cargo.toml",
+        "join -t$SEPARATOR Cargo.toml Cargo.toml",
+        "column -t -s$'\\t' --json Cargo.toml",
+        "paste --output-delimiter=x Cargo.toml",
     ] {
         assert!(!allowed(command), "{command}");
+    }
+}
+
+fn allowed_without_context(command: &str) -> bool {
+    evaluate_pre_tool_with_context(&request(command), None, None)
+        .is_ok_and(|decision| decision.minimum_action == "allow")
+}
+
+/// A file operand is opened, so it takes `cat`'s read proof, and that proof
+/// only holds against a verified home and working directory. With neither,
+/// the screen reads the spelling alone, which cannot tell a plain name from a
+/// link to a secret. The stdin forms carry no operand and stay proven.
+#[test]
+fn a_filter_reading_a_file_without_a_verified_context_takes_review() {
+    for command in [
+        "sort Cargo.toml",
+        "uniq Cargo.toml",
+        "cut -d= -f1 Cargo.toml",
+        "paste Cargo.toml Cargo.toml",
+        "join Cargo.toml Cargo.toml",
+        "column -t Cargo.toml",
+    ] {
+        assert!(!allowed_without_context(command), "{command}");
     }
 }

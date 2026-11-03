@@ -129,6 +129,16 @@ pub(crate) fn benign_command_segments(
                         | "npm"
                         | "jq"
                         | "pkill"
+                        // A filter given a file operand opens that file, so
+                        // its coverage takes the same session proof `cat`
+                        // takes. The stdin forms are path-free above.
+                        | "sort"
+                        | "uniq"
+                        | "cut"
+                        | "tr"
+                        | "paste"
+                        | "join"
+                        | "column"
                 ))
                 // A file operand prints a source line on a syntax error, so it
                 // gets the same session proof as `cat`.
@@ -514,7 +524,7 @@ pub(super) fn exact_safe_segment_with_context(
                 context,
             )
         }
-        "sort" | "uniq" | "cut" | "tr" => {
+        "sort" | "uniq" | "cut" | "tr" | "paste" | "join" | "column" => {
             (segment.pipeline_index > 0
                 && super::stdin_filters::safe_arguments(basename, &segment.arguments))
                 || super::stdin_filters::safe_file_arguments(basename, &segment.arguments, context)

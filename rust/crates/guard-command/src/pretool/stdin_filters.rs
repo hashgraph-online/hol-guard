@@ -6,6 +6,10 @@
 //! read proof. `tr` never opens a file: every operand is a character set.
 //! `uniq` is the exception that writes — `uniq INPUT OUTPUT` truncates the
 //! second operand — so only a single operand is proven for it.
+//!
+//! `paste`, `join` and `column` belong here for the same reason: each one
+//! joins or lays out the columns of what it reads and has no option that
+//! names a file to write.
 
 /// Enough operands for an ordinary command line, not a fan-out.
 const MAX_INPUTS: usize = 16;
@@ -22,8 +26,24 @@ pub(super) fn safe_arguments(tool: &str, arguments: &[String]) -> bool {
         "cut" => safe_cut_arguments(arguments),
         "tr" => safe_tr_arguments(arguments),
         "base64" => safe_base64_arguments(arguments),
+        "paste" => {
+            let mut operands: Vec<&str> = Vec::new();
+            super::stdin_filter_options::safe_paste_arguments(arguments, &mut operands)
+                && stdin_operands(&operands)
+        }
+        "column" => {
+            let mut operands: Vec<&str> = Vec::new();
+            super::stdin_filter_options::safe_column_arguments(arguments, &mut operands)
+                && operands.is_empty()
+        }
         _ => false,
     }
+}
+
+/// `paste - -` reads standard input twice to pair its lines, so a dash is the
+/// one operand a piped `paste` may carry.
+fn stdin_operands(operands: &[&str]) -> bool {
+    operands.iter().all(|operand| *operand == "-")
 }
 
 fn short_flags(value: &str, allowed: &str) -> bool {
@@ -190,10 +210,23 @@ pub(super) fn safe_file_arguments(
         "sort" => safe_sort_arguments(arguments, &mut operands),
         "uniq" => partition_short_flags(arguments, "cdui", &mut operands),
         "cut" => cut_arguments(arguments, &mut operands),
+        "paste" => super::stdin_filter_options::safe_paste_arguments(arguments, &mut operands),
+        "join" => super::stdin_filter_options::safe_join_arguments(arguments, &mut operands),
+        "column" => super::stdin_filter_options::safe_column_arguments(arguments, &mut operands),
         _ => false,
     };
-    let maximum = if tool == "uniq" { 1 } else { MAX_INPUTS };
-    options_proven
+    let maximum = match tool {
+        "uniq" => 1,
+        // `join` pairs exactly two sorted inputs.
+        "join" => 2,
+        _ => MAX_INPUTS,
+    };
+    // A file operand is opened, so it takes the read proof `cat` takes, and
+    // that proof only holds against a verified home and working directory.
+    // Without them the screen reads the spelling alone, which cannot tell a
+    // plain name from a link to a secret. The stdin forms above are unaffected.
+    super::safe_reads::verified_path_context(context.home_dir, context.cwd)
+        && options_proven
         && !operands.is_empty()
         && operands.len() <= maximum
         && operands
@@ -219,18 +252,6 @@ fn single_delimiter(value: &str) -> bool {
 /// screen names the reading options instead of allowing every leading dash.
 const SORT_READING_FLAGS: &str = "bCcdfghiMmnrsuVz";
 
-/// The value a `sort` key, separator, buffer size or worker count carries.
-/// It describes how to order the input rather than naming anything to open,
-/// so a short literal is admitted and an expansion is not.
-fn safe_sort_value(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 32
-        && !value.contains(['$', '`', '\\', '\'', '"'])
-        && value
-            .chars()
-            .all(|character| character == '\t' || !character.is_control())
-}
-
 /// `sort` reshapes what it reads and writes only to standard output. `-k`,
 /// `-t`, `-S` and the long `--key`, `--field-separator`, `--buffer-size` and
 /// `--parallel` take a value, attached or as the next word, so a key
@@ -241,7 +262,7 @@ fn safe_sort_arguments<'a>(arguments: &'a [String], operands: &mut Vec<&'a str>)
     for argument in arguments {
         let value = argument.as_str();
         if expecting_value {
-            if !safe_sort_value(value) {
+            if !super::stdin_filter_options::safe_filter_value(value) {
                 return false;
             }
             expecting_value = false;
@@ -276,7 +297,7 @@ fn safe_sort_long_option(long: &str, expecting_value: &mut bool) -> bool {
     };
     match name {
         "key" | "field-separator" | "buffer-size" | "parallel" => match attached {
-            Some(attached) => safe_sort_value(attached),
+            Some(attached) => super::stdin_filter_options::safe_filter_value(attached),
             None => {
                 *expecting_value = true;
                 true
@@ -284,7 +305,7 @@ fn safe_sort_long_option(long: &str, expecting_value: &mut bool) -> bool {
         },
         // `--check` reports on its own; `--sort` always carries its word.
         "check" => true,
-        "sort" => attached.is_some_and(safe_sort_value),
+        "sort" => attached.is_some_and(super::stdin_filter_options::safe_filter_value),
         "ignore-leading-blanks"
         | "dictionary-order"
         | "ignore-case"
@@ -304,28 +325,15 @@ fn safe_sort_long_option(long: &str, expecting_value: &mut bool) -> bool {
     }
 }
 
-/// One short `sort` cluster. A value-taking flag ends the cluster: the rest of
-/// the word is its value, or the next word is when nothing follows it.
+/// One short `sort` cluster, with `-k`, `-t` and `-S` as its value-taking
+/// flags.
 fn safe_sort_short_flags(cluster: &str, expecting_value: &mut bool) -> bool {
-    if cluster.is_empty() {
-        return false;
-    }
-    let mut characters = cluster.chars();
-    while let Some(flag) = characters.next() {
-        if SORT_READING_FLAGS.contains(flag) {
-            continue;
-        }
-        if !matches!(flag, 'k' | 't' | 'S') {
-            return false;
-        }
-        let attached = characters.as_str();
-        if attached.is_empty() {
-            *expecting_value = true;
-            return true;
-        }
-        return safe_sort_value(attached);
-    }
-    true
+    super::stdin_filter_options::screen_short_flags(
+        cluster,
+        SORT_READING_FLAGS,
+        "ktS",
+        expecting_value,
+    )
 }
 
 /// Split a short-flag command line into its flags and its file operands.
