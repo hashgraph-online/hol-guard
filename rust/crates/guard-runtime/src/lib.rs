@@ -278,6 +278,11 @@ mod copilot_vectors_tests;
 mod critical_floor_op;
 #[path = "adapters/detection/cursor_detect.rs"]
 mod cursor_detect;
+#[path = "adapters/cursor_editor_plan.rs"]
+mod cursor_editor_plan;
+#[cfg(test)]
+#[path = "adapters/cursor_editor_plan_tests.rs"]
+mod cursor_editor_plan_tests;
 mod cursor_hook_bridge;
 mod cursor_hook_bridge_response;
 mod cursor_hook_bridge_script;

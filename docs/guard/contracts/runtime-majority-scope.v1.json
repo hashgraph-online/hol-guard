@@ -1412,10 +1412,16 @@
           "CursorHarnessAdapter._cli_install_manifest",
           "CursorHarnessAdapter._uninstall_cli",
           "CursorHarnessAdapter._proxy_server_entry",
-          "CursorHarnessAdapter._backup_path"
+          "CursorHarnessAdapter._backup_path",
+          "CursorHarnessAdapter._editor_manifest",
+          "CursorHarnessAdapter._editor_state",
+          "CursorHarnessAdapter._backup_document",
+          "CursorHarnessAdapter._editor_payload",
+          "CursorHarnessAdapter._editor_plan",
+          "CursorHarnessAdapter._apply_editor_servers"
         ],
         "entry_points": [],
-        "reason": "Cursor adapter editor and CLI install, uninstall and manifest rendering, plus the helpers only they use.",
+        "reason": "Cursor adapter editor and CLI install, uninstall and manifest rendering, plus the helpers only they use. The editor install's origin merge, Guard proxy selection and notes are planned by the native cursor_editor_plan runner-authority kind.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
