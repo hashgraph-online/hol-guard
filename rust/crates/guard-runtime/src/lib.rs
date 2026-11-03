@@ -990,6 +990,7 @@ mod restricted_linux_launch;
 mod restricted_process_ceiling;
 mod restricted_pytest_op;
 mod retry_lineage_capture_op;
+mod review_event_decode;
 mod reviewed_invocation_bindings_op;
 mod rich_command_model_op;
 mod risk_action;
