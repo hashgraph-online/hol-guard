@@ -152,7 +152,7 @@ pub(crate) fn parse(text: &str) -> Result<Parsed, &'static str> {
     parse_with(text, parse_marking_lone_surrogates)
 }
 
-fn parse_with(
+pub(crate) fn parse_with(
     text: &str,
     parser: impl Fn(&str) -> Result<PyVal, JsonFailure>,
 ) -> Result<Parsed, &'static str> {
