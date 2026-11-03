@@ -44,6 +44,17 @@ fn a_copy_published_after_this_one_answers_for_it() {
 }
 
 #[test]
+fn a_copy_relinked_to_the_live_copy_still_hands_off() {
+    let base = state_base();
+    let own = publish(base.path(), OLD, Duration::from_secs(3600));
+    let newer = publish(base.path(), NEW, Duration::from_secs(60));
+    fs::remove_file(&own).unwrap();
+    fs::hard_link(&newer, &own).unwrap();
+
+    assert_eq!(successor_copy(&own, base.path(), NEW), Some(newer));
+}
+
+#[test]
 fn a_copy_published_before_this_one_never_answers_for_it() {
     let base = state_base();
     let own = publish(base.path(), NEW, Duration::from_secs(60));
@@ -146,6 +157,39 @@ fn a_successor_past_the_deadline_is_stopped_and_fails() {
 
     assert_eq!(answer, Some(HandOff::Failed));
     assert!(started.elapsed() < Duration::from_secs(10));
+}
+
+#[test]
+fn an_answer_longer_than_the_bound_fails_rather_than_arrive_cut_off() {
+    let bound = MAX_OUTPUT_BYTES.to_string();
+    let arguments = [
+        "-c".to_owned(),
+        r#"head -c "$1" /dev/zero; head -c 1 /dev/zero; exit 0"#.to_owned(),
+        "sh".to_owned(),
+        bound,
+    ];
+    let deadline = Instant::now() + Duration::from_secs(30);
+
+    let answer = hand_off(Path::new("/bin/sh"), &arguments, b"{}", deadline);
+
+    assert_eq!(answer, Some(HandOff::Failed));
+}
+
+#[test]
+fn an_answer_of_exactly_the_bound_still_counts() {
+    let bound = MAX_OUTPUT_BYTES.to_string();
+    let arguments = [
+        "-c".to_owned(),
+        r#"head -c "$1" /dev/zero; exit 0"#.to_owned(),
+        "sh".to_owned(),
+        bound,
+    ];
+    let deadline = Instant::now() + Duration::from_secs(30);
+
+    let answer = hand_off(Path::new("/bin/sh"), &arguments, b"{}", deadline);
+
+    let expected = usize::try_from(MAX_OUTPUT_BYTES).unwrap();
+    assert!(matches!(answer, Some(HandOff::Answered(output, 0)) if output.len() == expected));
 }
 
 #[test]

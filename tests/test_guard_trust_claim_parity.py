@@ -8,21 +8,20 @@ name, so a gate that admitted one claim more on one route, or a parser that
 read one capture time differently, would hand the verifier a name for
 something nobody had attested.
 
-The fixture records Python's own verdicts. Both sides replay it, so a change
-to either runtime has to move both copies or fail.
+The fixture records Python's own verdicts. The claim gate now runs in the
+native runtime, which replays the timestamps itself; this side replays the
+claims through the shim so the recorded names still hold end to end.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
-    _parse_attestation_timestamp,
     trust_claim_hash,
 )
 from tests.trust_attestation_verify_support import (
@@ -30,7 +29,6 @@ from tests.trust_attestation_verify_support import (
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "guard-trust-claim.v1.json"
-EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 def _document() -> dict[str, object]:
@@ -41,21 +39,6 @@ def _document() -> dict[str, object]:
 
 def _section(name: str) -> list[dict[str, object]]:
     return _document()[name]
-
-
-def _epoch_microseconds(moment: datetime) -> int:
-    delta = moment - EPOCH
-    return delta.days * 86_400_000_000 + delta.seconds * 1_000_000 + delta.microseconds
-
-
-@pytest.mark.parametrize("case", _section("timestamps"), ids=lambda case: case["input"])
-def test_recorded_timestamps_parse_to_their_recorded_instant(case: dict[str, object]) -> None:
-    parsed = _parse_attestation_timestamp(case["input"])
-    if case["epochMicroseconds"] is None:
-        assert parsed is None
-    else:
-        assert parsed is not None
-        assert _epoch_microseconds(parsed) == case["epochMicroseconds"]
 
 
 @pytest.mark.parametrize("case", _section("claims"), ids=lambda case: case["name"])

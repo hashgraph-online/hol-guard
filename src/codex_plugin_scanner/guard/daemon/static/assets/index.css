@@ -69,6 +69,9 @@
       --tw-backdrop-sepia: initial;
       --tw-duration: initial;
       --tw-ease: initial;
+      --tw-scale-x: 1;
+      --tw-scale-y: 1;
+      --tw-scale-z: 1;
       --tw-divide-x-reverse: 0;
     }
   }
@@ -535,6 +538,10 @@
     inset: 0;
   }
 
+  .inset-0\.5 {
+    inset: calc(var(--spacing) * .5);
+  }
+
   .inset-x-0 {
     inset-inline: 0;
   }
@@ -569,6 +576,10 @@
 
   .top-2 {
     top: calc(var(--spacing) * 2);
+  }
+
+  .top-2\.5 {
+    top: calc(var(--spacing) * 2.5);
   }
 
   .top-3 {
@@ -1070,6 +1081,11 @@
     height: calc(var(--spacing) * 2.5);
   }
 
+  .size-3 {
+    width: calc(var(--spacing) * 3);
+    height: calc(var(--spacing) * 3);
+  }
+
   .size-3\.5 {
     width: calc(var(--spacing) * 3.5);
     height: calc(var(--spacing) * 3.5);
@@ -1113,6 +1129,11 @@
   .size-11 {
     width: calc(var(--spacing) * 11);
     height: calc(var(--spacing) * 11);
+  }
+
+  .size-12 {
+    width: calc(var(--spacing) * 12);
+    height: calc(var(--spacing) * 12);
   }
 
   .h-0\.5 {
@@ -1233,6 +1254,10 @@
 
   .h-\[96px\] {
     height: 96px;
+  }
+
+  .h-\[min\(92dvh\,40rem\)\] {
+    height: min(92dvh, 40rem);
   }
 
   .h-auto {
@@ -1563,6 +1588,10 @@
     width: 150px;
   }
 
+  .w-auto {
+    width: auto;
+  }
+
   .w-fit {
     width: fit-content;
   }
@@ -1615,6 +1644,10 @@
     max-width: 3.25rem;
   }
 
+  .max-w-\[12rem\] {
+    max-width: 12rem;
+  }
+
   .max-w-\[16rem\] {
     max-width: 16rem;
   }
@@ -1641,6 +1674,10 @@
 
   .max-w-\[68ch\] {
     max-width: 68ch;
+  }
+
+  .max-w-\[70ch\] {
+    max-width: 70ch;
   }
 
   .max-w-\[70vw\] {
@@ -1759,6 +1796,10 @@
     flex: 16rem;
   }
 
+  .flex-\[1_1_18rem\] {
+    flex: 18rem;
+  }
+
   .flex-\[1_1_20rem\] {
     flex: 20rem;
   }
@@ -1871,6 +1912,10 @@
 
   .scroll-mt-24 {
     scroll-margin-top: calc(var(--spacing) * 24);
+  }
+
+  .\[scrollbar-width\:none\] {
+    scrollbar-width: none;
   }
 
   .\[scrollbar-gutter\:stable\] {
@@ -2196,6 +2241,26 @@
     }
   }
 
+  :where(.divide-brand-dark\/\[0\.07\] > :not(:last-child)) {
+    border-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    :where(.divide-brand-dark\/\[0\.07\] > :not(:last-child)) {
+      border-color: color-mix(in oklab, var(--brand-dark) 7.0%, transparent);
+    }
+  }
+
+  :where(.divide-red-200\/70 > :not(:last-child)) {
+    border-color: #ffcacab3;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    :where(.divide-red-200\/70 > :not(:last-child)) {
+      border-color: color-mix(in oklab, var(--color-red-200) 70%, transparent);
+    }
+  }
+
   :where(.divide-slate-100 > :not(:last-child)) {
     border-color: var(--color-slate-100);
   }
@@ -2324,6 +2389,11 @@
     border-top-right-radius: var(--radius-2xl);
   }
 
+  .rounded-t-3xl {
+    border-top-left-radius: var(--radius-3xl);
+    border-top-right-radius: var(--radius-3xl);
+  }
+
   .rounded-t-lg {
     border-top-left-radius: var(--radius-lg);
     border-top-right-radius: var(--radius-lg);
@@ -2332,6 +2402,11 @@
   .rounded-t-sm {
     border-top-left-radius: var(--radius-sm);
     border-top-right-radius: var(--radius-sm);
+  }
+
+  .rounded-l-xl {
+    border-top-left-radius: var(--radius-xl);
+    border-bottom-left-radius: var(--radius-xl);
   }
 
   .rounded-r-lg {
@@ -2485,6 +2560,16 @@
     }
   }
 
+  .border-amber-300\/70 {
+    border-color: #ffd236b3;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-amber-300\/70 {
+      border-color: color-mix(in oklab, var(--color-amber-300) 70%, transparent);
+    }
+  }
+
   .border-blue-200 {
     border-color: var(--color-blue-200);
   }
@@ -2613,6 +2698,16 @@
     }
   }
 
+  .border-brand-blue\/35 {
+    border-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-brand-blue\/35 {
+      border-color: color-mix(in oklab, var(--brand-blue) 35%, transparent);
+    }
+  }
+
   .border-brand-blue\/40 {
     border-color: var(--brand-blue);
   }
@@ -2720,6 +2815,26 @@
   @supports (color: color-mix(in lab, red, red)) {
     .border-brand-dark\/40 {
       border-color: color-mix(in oklab, var(--brand-dark) 40%, transparent);
+    }
+  }
+
+  .border-brand-dark\/\[0\.07\] {
+    border-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-brand-dark\/\[0\.07\] {
+      border-color: color-mix(in oklab, var(--brand-dark) 7.0%, transparent);
+    }
+  }
+
+  .border-brand-dark\/\[0\.08\] {
+    border-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-brand-dark\/\[0\.08\] {
+      border-color: color-mix(in oklab, var(--brand-dark) 8%, transparent);
     }
   }
 
@@ -3143,6 +3258,26 @@
     }
   }
 
+  .bg-amber-50\/40 {
+    background-color: #fffbeb66;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-amber-50\/40 {
+      background-color: color-mix(in oklab, var(--color-amber-50) 40%, transparent);
+    }
+  }
+
+  .bg-amber-50\/50 {
+    background-color: #fffbeb80;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-amber-50\/50 {
+      background-color: color-mix(in oklab, var(--color-amber-50) 50%, transparent);
+    }
+  }
+
   .bg-amber-50\/60 {
     background-color: #fffbeb99;
   }
@@ -3498,6 +3633,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-brand-blue\/\[0\.08\] {
       background-color: color-mix(in oklab, var(--brand-blue) 8%, transparent);
+    }
+  }
+
+  .bg-brand-blue\/\[0\.025\] {
+    background-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-blue\/\[0\.025\] {
+      background-color: color-mix(in oklab, var(--brand-blue) 2.5%, transparent);
     }
   }
 
@@ -3927,6 +4072,16 @@
     background-color: var(--color-red-50);
   }
 
+  .bg-red-50\/30 {
+    background-color: #fef2f24d;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-red-50\/30 {
+      background-color: color-mix(in oklab, var(--color-red-50) 30%, transparent);
+    }
+  }
+
   .bg-red-50\/40 {
     background-color: #fef2f266;
   }
@@ -4135,13 +4290,33 @@
     }
   }
 
-  .bg-surface-1, .bg-surface-1\/60 {
+  .bg-surface-1, .bg-surface-1\/50 {
+    background-color: var(--surface-1);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-surface-1\/50 {
+      background-color: color-mix(in oklab, var(--surface-1) 50%, transparent);
+    }
+  }
+
+  .bg-surface-1\/60 {
     background-color: var(--surface-1);
   }
 
   @supports (color: color-mix(in lab, red, red)) {
     .bg-surface-1\/60 {
       background-color: color-mix(in oklab, var(--surface-1) 60%, transparent);
+    }
+  }
+
+  .bg-surface-1\/70 {
+    background-color: var(--surface-1);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-surface-1\/70 {
+      background-color: color-mix(in oklab, var(--surface-1) 70%, transparent);
     }
   }
 
@@ -4656,6 +4831,10 @@
     padding-block: calc(var(--spacing) * 8);
   }
 
+  .py-10 {
+    padding-block: calc(var(--spacing) * 10);
+  }
+
   .py-12 {
     padding-block: calc(var(--spacing) * 12);
   }
@@ -4684,6 +4863,10 @@
     padding-top: calc(var(--spacing) * 2);
   }
 
+  .pt-2\.5 {
+    padding-top: calc(var(--spacing) * 2.5);
+  }
+
   .pt-3 {
     padding-top: calc(var(--spacing) * 3);
   }
@@ -4702,6 +4885,10 @@
 
   .pt-8 {
     padding-top: calc(var(--spacing) * 8);
+  }
+
+  .pr-1 {
+    padding-right: var(--spacing);
   }
 
   .pr-2 {
@@ -4726,6 +4913,10 @@
 
   .pr-8 {
     padding-right: calc(var(--spacing) * 8);
+  }
+
+  .pr-9 {
+    padding-right: calc(var(--spacing) * 9);
   }
 
   .pr-10 {
@@ -5218,7 +5409,27 @@
     }
   }
 
-  .text-brand-dark, .text-brand-dark\/35 {
+  .text-brand-dark, .text-brand-dark\/25 {
+    color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-brand-dark\/25 {
+      color: color-mix(in oklab, var(--brand-dark) 25%, transparent);
+    }
+  }
+
+  .text-brand-dark\/30 {
+    color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-brand-dark\/30 {
+      color: color-mix(in oklab, var(--brand-dark) 30%, transparent);
+    }
+  }
+
+  .text-brand-dark\/35 {
     color: var(--brand-dark);
   }
 
@@ -5751,6 +5962,11 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
+  .shadow-\[0_1px_0_rgba\(15\,23\,42\,0\.04\)\] {
+    --tw-shadow: 0 1px 0 var(--tw-shadow-color, #0f172a0a);
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+
   .shadow-\[0_1px_2px_rgba\(15\,23\,42\,0\.04\)\,0_8px_20px_rgba\(15\,23\,42\,0\.04\)\] {
     --tw-shadow: 0 1px 2px var(--tw-shadow-color, #0f172a0a), 0 8px 20px var(--tw-shadow-color, #0f172a0a);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
@@ -5773,6 +5989,16 @@
 
   .shadow-\[0_12px_32px_rgba\(63\,65\,116\,0\.16\)\] {
     --tw-shadow: 0 12px 32px var(--tw-shadow-color, #3f417429);
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+
+  .shadow-\[0_18px_40px_-16px_rgba\(15\,23\,42\,0\.35\)\] {
+    --tw-shadow: 0 18px 40px -16px var(--tw-shadow-color, #0f172a59);
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+
+  .shadow-\[0_24px_60px_-12px_rgb\(15_23_42\/0\.35\)\] {
+    --tw-shadow: 0 24px 60px -12px var(--tw-shadow-color, #0f172a59);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
@@ -5838,6 +6064,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .shadow-brand-blue\/20 {
       --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--brand-blue) 20%, transparent) var(--tw-shadow-alpha), transparent);
+    }
+  }
+
+  .shadow-brand-blue\/30 {
+    --tw-shadow-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .shadow-brand-blue\/30 {
+      --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--brand-blue) 30%, transparent) var(--tw-shadow-alpha), transparent);
     }
   }
 
@@ -6037,6 +6273,11 @@
     transition-duration: .2s;
   }
 
+  .duration-300 {
+    --tw-duration: .3s;
+    transition-duration: .3s;
+  }
+
   .duration-700 {
     --tw-duration: .7s;
     transition-duration: .7s;
@@ -6092,10 +6333,21 @@
     rotate: 180deg;
   }
 
+  .group-open\/import\:rotate-90:is(:where(.group\/import):is([open], :popover-open, :open) *), .group-open\/prev\:rotate-90:is(:where(.group\/prev):is([open], :popover-open, :open) *) {
+    rotate: 90deg;
+  }
+
   @media (hover: hover) {
     .group-hover\:translate-x-0\.5:is(:where(.group):hover *) {
       --tw-translate-x: calc(var(--spacing) * .5);
       translate: var(--tw-translate-x) var(--tw-translate-y);
+    }
+
+    .group-hover\:scale-105:is(:where(.group):hover *) {
+      --tw-scale-x: 105%;
+      --tw-scale-y: 105%;
+      --tw-scale-z: 105%;
+      scale: var(--tw-scale-x) var(--tw-scale-y);
     }
 
     .group-hover\:bg-\[color-mix\(in_srgb\,var\(--brand-blue\)_85\%\,var\(--brand-dark\)\)\]:is(:where(.group):hover *) {
@@ -6118,6 +6370,10 @@
       }
     }
 
+    .group-hover\:text-brand-blue:is(:where(.group):hover *) {
+      color: var(--brand-blue);
+    }
+
     .group-hover\:text-brand-dark:is(:where(.group):hover *) {
       color: var(--brand-dark);
     }
@@ -6135,6 +6391,10 @@
     .group-aria-pressed\:text-brand-dark\/65:is(:where(.group)[aria-pressed="true"] *) {
       color: color-mix(in oklab, var(--brand-dark) 65%, transparent);
     }
+  }
+
+  .peer-checked\:opacity-100:is(:where(.peer):checked ~ *) {
+    opacity: 1;
   }
 
   .marker\:hidden ::marker {
@@ -6195,6 +6455,16 @@
 
   .placeholder\:font-sans::placeholder {
     font-family: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+  }
+
+  .placeholder\:text-brand-dark\/45::placeholder {
+    color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .placeholder\:text-brand-dark\/45::placeholder {
+      color: color-mix(in oklab, var(--brand-dark) 45%, transparent);
+    }
   }
 
   .placeholder\:text-brand-dark\/50::placeholder {
@@ -6264,6 +6534,14 @@
 
   .open\:bg-white:is([open], :popover-open, :open) {
     background-color: var(--color-white);
+  }
+
+  .checked\:border-brand-blue:checked {
+    border-color: var(--brand-blue);
+  }
+
+  .checked\:bg-brand-blue:checked {
+    background-color: var(--brand-blue);
   }
 
   .focus-within\:border-brand-blue:focus-within, .focus-within\:border-brand-blue\/40:focus-within {
@@ -6392,6 +6670,10 @@
       border-color: var(--color-emerald-300);
     }
 
+    .hover\:border-red-300:hover {
+      border-color: var(--color-red-300);
+    }
+
     .hover\:border-rose-300:hover {
       border-color: var(--color-rose-300);
     }
@@ -6486,6 +6768,16 @@
       }
     }
 
+    .hover\:bg-brand-blue\/10:hover {
+      background-color: var(--brand-blue);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-brand-blue\/10:hover {
+        background-color: color-mix(in oklab, var(--brand-blue) 10%, transparent);
+      }
+    }
+
     .hover\:bg-brand-blue\/15:hover {
       background-color: var(--brand-blue);
     }
@@ -6536,6 +6828,16 @@
       }
     }
 
+    .hover\:bg-brand-blue\/\[0\.05\]:hover {
+      background-color: var(--brand-blue);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-brand-blue\/\[0\.05\]:hover {
+        background-color: color-mix(in oklab, var(--brand-blue) 5%, transparent);
+      }
+    }
+
     .hover\:bg-brand-blue\/\[0\.06\]:hover {
       background-color: var(--brand-blue);
     }
@@ -6563,6 +6865,26 @@
     @supports (color: color-mix(in lab, red, red)) {
       .hover\:bg-brand-dark\/90:hover {
         background-color: color-mix(in oklab, var(--brand-dark) 90%, transparent);
+      }
+    }
+
+    .hover\:bg-brand-dark\/\[0\.04\]:hover {
+      background-color: var(--brand-dark);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-brand-dark\/\[0\.04\]:hover {
+        background-color: color-mix(in oklab, var(--brand-dark) 4%, transparent);
+      }
+    }
+
+    .hover\:bg-brand-dark\/\[0\.05\]:hover {
+      background-color: var(--brand-dark);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-brand-dark\/\[0\.05\]:hover {
+        background-color: color-mix(in oklab, var(--brand-dark) 5%, transparent);
       }
     }
 
@@ -6594,6 +6916,10 @@
       .hover\:bg-brand-purple\/90:hover {
         background-color: color-mix(in oklab, var(--brand-purple) 90%, transparent);
       }
+    }
+
+    .hover\:bg-red-50:hover {
+      background-color: var(--color-red-50);
     }
 
     .hover\:bg-rose-700:hover {
@@ -6732,6 +7058,10 @@
 
     .hover\:text-brand-dark:hover {
       color: var(--brand-dark);
+    }
+
+    .hover\:text-red-800:hover {
+      color: var(--color-red-800);
     }
 
     .hover\:text-rose-700:hover {
@@ -6884,6 +7214,10 @@
     }
   }
 
+  .focus\:bg-white:focus {
+    background-color: var(--color-white);
+  }
+
   .focus\:px-4:focus {
     padding-inline: calc(var(--spacing) * 4);
   }
@@ -6934,6 +7268,16 @@
     }
   }
 
+  .focus\:ring-brand-blue\/25:focus {
+    --tw-ring-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus\:ring-brand-blue\/25:focus {
+      --tw-ring-color: color-mix(in oklab, var(--brand-blue) 25%, transparent);
+    }
+  }
+
   .focus\:ring-brand-blue\/30:focus {
     --tw-ring-color: var(--brand-blue);
   }
@@ -6981,6 +7325,16 @@
     border-color: var(--brand-blue);
   }
 
+  .focus-visible\:bg-brand-blue\/\[0\.08\]:focus-visible {
+    background-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus-visible\:bg-brand-blue\/\[0\.08\]:focus-visible {
+      background-color: color-mix(in oklab, var(--brand-blue) 8%, transparent);
+    }
+  }
+
   .focus-visible\:opacity-100:focus-visible {
     opacity: 1;
   }
@@ -6990,7 +7344,17 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
-  .focus-visible\:ring-brand-blue:focus-visible, .focus-visible\:ring-brand-blue\/30:focus-visible {
+  .focus-visible\:ring-brand-blue:focus-visible, .focus-visible\:ring-brand-blue\/25:focus-visible {
+    --tw-ring-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus-visible\:ring-brand-blue\/25:focus-visible {
+      --tw-ring-color: color-mix(in oklab, var(--brand-blue) 25%, transparent);
+    }
+  }
+
+  .focus-visible\:ring-brand-blue\/30:focus-visible {
     --tw-ring-color: var(--brand-blue);
   }
 
@@ -7027,6 +7391,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .focus-visible\:ring-brand-blue\/60:focus-visible {
       --tw-ring-color: color-mix(in oklab, var(--brand-blue) 60%, transparent);
+    }
+  }
+
+  .focus-visible\:ring-red-400\/40:focus-visible {
+    --tw-ring-color: #ff656866;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus-visible\:ring-red-400\/40:focus-visible {
+      --tw-ring-color: color-mix(in oklab, var(--color-red-400) 40%, transparent);
     }
   }
 
@@ -7158,6 +7532,10 @@
     opacity: .3;
   }
 
+  .disabled\:opacity-35:disabled {
+    opacity: .35;
+  }
+
   .disabled\:opacity-40:disabled {
     opacity: .4;
   }
@@ -7184,6 +7562,49 @@
     }
   }
 
+  .has-\[\:checked\]\:border-brand-blue\/50:has(:checked) {
+    border-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .has-\[\:checked\]\:border-brand-blue\/50:has(:checked) {
+      border-color: color-mix(in oklab, var(--brand-blue) 50%, transparent);
+    }
+  }
+
+  .has-\[\:checked\]\:bg-brand-blue\/\[0\.04\]:has(:checked) {
+    background-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .has-\[\:checked\]\:bg-brand-blue\/\[0\.04\]:has(:checked) {
+      background-color: color-mix(in oklab, var(--brand-blue) 4%, transparent);
+    }
+  }
+
+  .has-\[\:disabled\]\:cursor-not-allowed:has(:disabled) {
+    cursor: not-allowed;
+  }
+
+  .has-\[\:disabled\]\:opacity-50:has(:disabled) {
+    opacity: .5;
+  }
+
+  .has-\[\:focus-visible\]\:ring-2:has(:focus-visible) {
+    --tw-ring-shadow: var(--tw-ring-inset, ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+
+  .has-\[\:focus-visible\]\:ring-brand-blue\/40:has(:focus-visible) {
+    --tw-ring-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .has-\[\:focus-visible\]\:ring-brand-blue\/40:has(:focus-visible) {
+      --tw-ring-color: color-mix(in oklab, var(--brand-blue) 40%, transparent);
+    }
+  }
+
   .aria-disabled\:opacity-50[aria-disabled="true"] {
     opacity: .5;
   }
@@ -7194,6 +7615,21 @@
 
   .aria-expanded\:text-brand-blue[aria-expanded="true"] {
     color: var(--brand-blue);
+  }
+
+  .aria-expanded\:ring-2[aria-expanded="true"] {
+    --tw-ring-shadow: var(--tw-ring-inset, ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+
+  .aria-expanded\:ring-brand-blue\/20[aria-expanded="true"] {
+    --tw-ring-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .aria-expanded\:ring-brand-blue\/20[aria-expanded="true"] {
+      --tw-ring-color: color-mix(in oklab, var(--brand-blue) 20%, transparent);
+    }
   }
 
   .aria-pressed\:border-brand-blue[aria-pressed="true"], .aria-pressed\:border-brand-blue\/55[aria-pressed="true"] {
@@ -7216,6 +7652,10 @@
     }
   }
 
+  .aria-pressed\:text-brand-blue[aria-pressed="true"] {
+    color: var(--brand-blue);
+  }
+
   .aria-pressed\:text-brand-dark[aria-pressed="true"] {
     color: var(--brand-dark);
   }
@@ -7234,11 +7674,47 @@
     }
   }
 
+  .aria-\[current\=location\]\:font-semibold[aria-current="location"] {
+    --tw-font-weight: var(--font-weight-semibold);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .aria-\[current\=location\]\:text-brand-dark[aria-current="location"] {
+    color: var(--brand-dark);
+  }
+
   .aria-\[invalid\=true\]\:border-red-600[aria-invalid="true"] {
     border-color: var(--color-red-600);
   }
 
+  .data-\[current\=true\]\:bg-brand-blue\/10[data-current="true"] {
+    background-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .data-\[current\=true\]\:bg-brand-blue\/10[data-current="true"] {
+      background-color: color-mix(in oklab, var(--brand-blue) 10%, transparent);
+    }
+  }
+
+  .data-\[current\=true\]\:font-semibold[data-current="true"] {
+    --tw-font-weight: var(--font-weight-semibold);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .data-\[current\=true\]\:text-brand-blue[data-current="true"] {
+    color: var(--brand-blue);
+  }
+
   @media (prefers-reduced-motion: no-preference) {
+    .motion-safe\:animate-pulse {
+      animation: var(--animate-pulse);
+    }
+
+    .motion-safe\:animate-spin {
+      animation: var(--animate-spin);
+    }
+
     .motion-safe\:transition-\[height\] {
       transition-property: height;
       transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
@@ -7373,12 +7849,24 @@
       min-height: calc(var(--spacing) * 9);
     }
 
+    .sm\:w-48 {
+      width: calc(var(--spacing) * 48);
+    }
+
     .sm\:w-56 {
       width: calc(var(--spacing) * 56);
     }
 
+    .sm\:w-72 {
+      width: calc(var(--spacing) * 72);
+    }
+
     .sm\:w-auto {
       width: auto;
+    }
+
+    .sm\:w-full {
+      width: 100%;
     }
 
     .sm\:max-w-\[9rem\] {
@@ -7417,6 +7905,14 @@
       min-width: 200px;
     }
 
+    .sm\:flex-none {
+      flex: none;
+    }
+
+    .sm\:shrink-0 {
+      flex-shrink: 0;
+    }
+
     .sm\:scroll-mt-4 {
       scroll-margin-top: calc(var(--spacing) * 4);
     }
@@ -7443,6 +7939,10 @@
 
     .sm\:grid-cols-\[minmax\(0\,1fr\)_auto\] {
       grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .sm\:flex-col {
+      flex-direction: column;
     }
 
     .sm\:flex-row {
@@ -7548,12 +8048,44 @@
       overflow: hidden;
     }
 
+    .sm\:overflow-y-auto {
+      overflow-y: auto;
+    }
+
     .sm\:rounded-2xl {
       border-radius: var(--radius-2xl);
     }
 
+    .sm\:rounded-3xl {
+      border-radius: var(--radius-3xl);
+    }
+
     .sm\:rounded-none {
       border-radius: 0;
+    }
+
+    .sm\:border-r {
+      border-right-style: var(--tw-border-style);
+      border-right-width: 1px;
+    }
+
+    .sm\:border-b-0 {
+      border-bottom-style: var(--tw-border-style);
+      border-bottom-width: 0;
+    }
+
+    .sm\:bg-surface-1\/60 {
+      background-color: var(--surface-1);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .sm\:bg-surface-1\/60 {
+        background-color: color-mix(in oklab, var(--surface-1) 60%, transparent);
+      }
+    }
+
+    .sm\:p-3 {
+      padding: calc(var(--spacing) * 3);
     }
 
     .sm\:p-3\.5 {
@@ -7843,6 +8375,10 @@
 
     .md\:grid-cols-\[minmax\(0\,1fr\)_200px\] {
       grid-template-columns: minmax(0, 1fr) 200px;
+    }
+
+    .md\:grid-cols-\[minmax\(0\,1fr\)_240px\] {
+      grid-template-columns: minmax(0, 1fr) 240px;
     }
 
     .md\:grid-cols-\[minmax\(0\,9rem\)_minmax\(0\,1fr\)_auto\] {
@@ -9656,6 +10192,24 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   inherits: false
 }
 
+@property --tw-scale-x {
+  syntax: "*";
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --tw-scale-y {
+  syntax: "*";
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --tw-scale-z {
+  syntax: "*";
+  inherits: false;
+  initial-value: 1;
+}
+
 @property --tw-divide-x-reverse {
   syntax: "*";
   inherits: false;
@@ -9855,6 +10409,13 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   font-size: 0.625rem;
   font-weight: 800;
   line-height: 1;
+}
+
+/* Status flag (e.g. a pre-release marker): same geometry as the count
+ * badge, in the attention-indigo pre-release tone. */
+.guard-shell-navigation-link__flag {
+  background: rgb(124 140 253 / 0.16);
+  color: #4f5bd5;
 }
 
 .guard-shell-navigation-update-dot {
@@ -11649,134 +12210,132 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   }
 }
 .cigar-workspace { display: grid; gap: 1.5rem; min-width: 0; color: var(--brand-dark); }
-.cigar-heading, .cigar-heading-actions, .cigar-hero-actions, .cigar-section-heading, .cigar-runtime-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .cigar-heading h1 { display: flex; align-items: center; gap: .6rem; margin: .25rem 0; font-size: 1.8rem; font-weight: 700; letter-spacing: -.04em; }
 .cigar-heading h1 svg { width: 1.65rem; height: 1.65rem; color: #477ed1; }
 .cigar-heading p, .cigar-card p, .cigar-section-intro > p { font-size: .875rem; line-height: 1.65; color: #64748b; }
 .cigar-eyebrow { font-size: .65rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #64748b; }
 .cigar-button { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 2.75rem; border: 1px solid #dce2ed; border-radius: .65rem; padding: .6rem .95rem; background: #fff; color: var(--brand-dark); font-size: .8rem; font-weight: 600; cursor: pointer; }
-.cigar-button svg, .cigar-text-button svg, .cigar-hero-link svg { width: 1rem; height: 1rem; flex-shrink: 0; }
+.cigar-button svg, .cigar-text-button svg { width: 1rem; height: 1rem; flex-shrink: 0; }
 .cigar-button:hover { background: #f4f7fc; }
 .cigar-button:disabled { opacity: .5; cursor: not-allowed; }
-.cigar-workspace button:focus-visible, .cigar-workspace summary:focus-visible { outline: 2px solid #3972c8; outline-offset: 4px; }
-.cigar-hero { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(16rem, 1fr); gap: 2rem; border-radius: 1.25rem; padding: clamp(1.5rem, 3vw, 2.6rem); background: radial-gradient(ellipse at 15% 0%, #53538c 0%, transparent 65%), linear-gradient(120deg, #34345d, #303955); color: #fff; overflow: hidden; }
-.cigar-hero-copy { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
-.cigar-hero-kicker { display: flex; align-items: center; gap: .5rem; font-size: .7rem; color: #d8e0fa; }
-.cigar-hero-kicker > span { height: .4rem; width: .4rem; border-radius: 50%; background: #87c6fe; }
-.cigar-hero h2 { margin: .9rem 0; font-size: clamp(1.7rem, 2.7vw, 2.45rem); line-height: 1.18; letter-spacing: -.045em; font-weight: 600; }
-.cigar-hero-copy > p { max-width: 32rem; color: #d4daf1; font-size: .875rem; line-height: 1.8; }
-.cigar-hero-actions { justify-content: flex-start; gap: 1.25rem; margin-top: 1.5rem; }
 .cigar-button-primary { background: #fff; color: #303955; border-color: #fff; }
-.cigar-hero-link { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .5rem; font-size: .8rem; font-weight: 600; color: #eef2ff; cursor: pointer; }
-.cigar-hero button:focus-visible { outline-color: #bfdbfe; }
-.cigar-runtime-card { align-self: center; border: 1px solid #ffffff26; border-radius: .95rem; padding: 1.3rem; background: #ffffff0b; box-shadow: 0 8px 32px #10152a1a; min-width: 0; }
-.cigar-runtime-card .cigar-eyebrow { color: #c8d1ec; font-size: .6rem; }
-.cigar-runtime-symbol { height: 2.3rem; width: 2.3rem; color: #b6cdfb; margin: 1.25rem 0 .65rem; }
-.cigar-runtime-card h3 { font-size: 1.1rem; font-weight: 600; letter-spacing: -.02em; }
-.cigar-runtime-card > p { font-size: .75rem; line-height: 1.6; color: #c8d1ec; margin-top: .3rem; }
-.cigar-runtime-note { margin-top: 1rem; border-top: 1px solid #ffffff26; padding-top: .85rem; font-size: .72rem; line-height: 1.65; color: #d6ddf3; }
-.cigar-status { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid #ffffff35; border-radius: 2rem; padding: .25rem .55rem; color: #e2e8f0; font-size: .65rem; font-weight: 600; }
-.cigar-status > span { height: .3rem; width: .3rem; border-radius: 50%; background: currentColor; }
-.cigar-status[data-ready="true"] { color: #b1f4c9; border-color: #b1f4c94d; background: #b1f4c90b; }
-.cigar-tabs { display: flex; gap: 1.5rem; border-bottom: 1px solid #e2e8f0; overflow-x: auto; scrollbar-width: thin; }
-.cigar-tabs [role="tab"] { flex-shrink: 0; min-height: 3rem; border-bottom: 2px solid transparent; padding: .5rem .1rem .85rem; color: #64748b; font-size: .8rem; font-weight: 600; cursor: pointer; }
-.cigar-tabs [aria-selected="true"] { color: #3f4174; border-bottom-color: #578be0; }
+.cigar-button-solid { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.cigar-button-solid:hover { background: #1e40af; }
+.cigar-workspace button:focus-visible, .cigar-workspace summary:focus-visible, .cigar-workspace a:focus-visible { outline: 2px solid #3972c8; outline-offset: 4px; }
+.cigar-home { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1.75rem 3rem; border: 1px solid #e3e7f0; border-radius: 1.25rem; padding: clamp(1.5rem, 3vw, 2.5rem); background: #fff; }
+.cigar-home-main { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.cigar-home-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; align-self: stretch; margin: -.35rem -.5rem .5rem 0; }
+.cigar-home h2 { margin-top: .25rem; font-size: clamp(1.6rem, 2.6vw, 2.15rem); font-weight: 600; line-height: 1.2; letter-spacing: -.035em; }
+.cigar-home-detail { max-width: 34rem; margin-top: .75rem; font-size: 1rem; line-height: 1.65; color: #475569; }
+.cigar-home .cigar-text-button { margin-top: .25rem; }
+.cigar-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: .65rem; color: #64748b; cursor: pointer; }
+.cigar-icon-button:hover { background: #f4f7fc; color: var(--brand-dark); }
+.cigar-icon-button:disabled { opacity: .5; cursor: not-allowed; }
+.cigar-icon-button svg { width: 1.1rem; height: 1.1rem; }
+.cigar-status { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid #dce2ed; border-radius: 2rem; padding: .25rem .65rem; background: #f8fafc; color: #475569; font-size: .72rem; font-weight: 600; }
+.cigar-status > span { height: .4rem; width: .4rem; border-radius: 50%; background: currentColor; }
+.cigar-status[data-ready="true"] { color: #187543; border-color: #c9ebd7; background: #ecfdf3; }
+.cigar-facts { display: grid; align-content: center; gap: 1rem; border-left: 1px solid #e8edf3; padding-left: 3rem; }
+.cigar-facts li { display: flex; align-items: flex-start; gap: .65rem; font-size: .875rem; line-height: 1.6; color: #475569; }
+.cigar-facts svg { width: 1.15rem; height: 1.15rem; flex-shrink: 0; margin-top: .15rem; color: #4d77bb; }
+.cigar-setup-action { display: grid; justify-items: start; gap: .65rem; margin-top: 1.5rem; max-width: 32rem; }
+.cigar-setup-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.cigar-setup-action .cigar-button-primary { min-height: 3rem; padding: .75rem 1.4rem; font-size: .875rem; }
+.cigar-setup-caption { font-size: .75rem; line-height: 1.6; color: #64748b; }
+.cigar-setup-block { border-top: 1px solid #cbdcf5; padding-top: .65rem; font-size: .78rem; line-height: 1.65; color: #475569; }
+.cigar-setup-block strong { display: block; color: #3f4174; font-weight: 600; }
+.cigar-setup-block p { margin: .2rem 0 0; }
+.cigar-setup-block .cigar-text-button { margin-top: .2rem; }
+.cigar-setup-progress { width: 100%; max-width: 32rem; margin-top: 1rem; }
+.cigar-setup-body { font-size: .8rem; line-height: 1.65; color: #475569; }
+.cigar-setup-track { display: flex; gap: .35rem; margin-top: .75rem; }
+.cigar-setup-track > li { position: relative; flex: 1; height: .375rem; overflow: hidden; border-radius: 999px; background: #e2e8f0; transition: background-color .4s cubic-bezier(.16, 1, .3, 1); }
+.cigar-setup-track > li[data-state="done"] { background: #2f9e6b; }
+.cigar-setup-track > li[data-state="failed"] { background: #dc2626; }
+.cigar-setup-track > li[data-state="active"] { background: #cfdcf3; }
+.cigar-setup-track > li[data-state="active"]::after { content: ""; position: absolute; inset: 0; width: 45%; border-radius: inherit; background: #3972c8; animation: cigar-setup-sweep 1.4s cubic-bezier(.65, 0, .35, 1) infinite; }
+@keyframes cigar-setup-sweep { from { transform: translateX(-100%); } to { transform: translateX(225%); } }
+@media (prefers-reduced-motion: reduce) { .cigar-setup-track > li[data-state="active"]::after { animation: none; width: 100%; opacity: .7; } }
+.cigar-advanced-toggle { display: flex; align-items: center; gap: .85rem; width: 100%; min-height: 3.5rem; border: 1px solid #e3e7f0; border-radius: 1rem; padding: .75rem 1.25rem; background: #fff; text-align: left; cursor: pointer; }
+.cigar-advanced-toggle:hover { background: #f8fafc; }
+.cigar-advanced-toggle svg { width: 1rem; height: 1rem; flex-shrink: 0; color: #64748b; transition: transform .15s ease-out; }
+.cigar-advanced-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.cigar-advanced-toggle strong { display: block; font-size: .9rem; font-weight: 600; color: var(--brand-dark); }
+.cigar-advanced-toggle small { display: block; margin-top: .1rem; font-size: .75rem; color: #64748b; }
+.cigar-advanced-body { display: grid; gap: 1.25rem; margin-top: 1rem; min-width: 0; }
+.cigar-tabs { display: flex; gap: .25rem; border-bottom: 1px solid #e2e8f0; overflow-x: auto; scrollbar-width: thin; }
+.cigar-tabs [role="tab"] { flex-shrink: 0; min-height: 3rem; margin-bottom: -1px; border-bottom: 2px solid transparent; padding: .5rem .8rem .8rem; color: #64748b; font-size: .875rem; font-weight: 500; cursor: pointer; transition: color .15s ease-out, border-color .15s ease-out; }
+.cigar-tabs [role="tab"]:hover { color: #3f4174; border-bottom-color: #cbd5e1; }
+.cigar-tabs [aria-selected="true"], .cigar-tabs [aria-selected="true"]:hover { color: #3f4174; font-weight: 600; border-bottom-color: #578be0; }
 .cigar-tabs button:focus-visible { outline-offset: -4px; border-radius: .25rem; }
 .cigar-panel { min-width: 0; }
 .cigar-panel:focus { outline: none; }
-.cigar-overview, .cigar-guide { display: grid; gap: 1.25rem; }
-.cigar-benefits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.cigar-guide { display: grid; gap: 1.25rem; }
+.cigar-benefits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .cigar-card { border: 1px solid #e3e7f0; border-radius: .95rem; background: #fff; padding: 1.5rem; min-width: 0; }
 .cigar-card h2, .cigar-section-intro h2 { font-weight: 600; font-size: 1.05rem; letter-spacing: -.025em; margin-top: .35rem; }
 .cigar-card h3 { font-weight: 600; font-size: .875rem; letter-spacing: -.015em; }
 .cigar-card p { margin-top: .5rem; }
-.cigar-icon { display: inline-flex; align-items: center; justify-content: center; height: 2.3rem; width: 2.3rem; border-radius: .7rem; background: #f0f4ff; color: #4d77bb; }
-.cigar-icon svg { height: 1.15rem; width: 1.15rem; }
 .cigar-benefit { display: flex; flex-direction: column; align-items: flex-start; }
 .cigar-benefit h3 { margin-top: 1rem; }
 .cigar-benefit > p { flex: 1; font-size: .8rem; }
 .cigar-text-button { display: inline-flex; align-items: center; gap: .4rem; min-height: 2.75rem; margin-top: .6rem; color: #416aa7; font-size: .75rem; font-weight: 600; cursor: pointer; text-align: left; }
 .cigar-text-button:hover { color: #264c83; }
-.cigar-overview-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 1.25rem; }
-.cigar-count { border-radius: 1rem; background: #f1f5f9; color: #64748b; padding: .35rem .65rem; font-size: .65rem; font-weight: 600; }
-.cigar-steps { margin-top: 1.4rem; }
-.cigar-steps > li { display: flex; gap: .9rem; padding: 0 0 1.15rem; position: relative; }
-.cigar-steps > li:not(:last-child)::before { content: ""; position: absolute; left: .91rem; top: 2.1rem; bottom: .25rem; width: 1px; background: #e2e8f0; }
-.cigar-step-number { display: flex; align-items: center; justify-content: center; height: 1.9rem; width: 1.9rem; flex-shrink: 0; border: 1px solid #dce2ec; border-radius: 50%; font-size: .75rem; font-weight: 600; color: #64748b; }
-.cigar-step-number svg { height: .95rem; width: .95rem; }
-.cigar-steps [data-complete="true"] .cigar-step-number { background: #ecfdf3; border-color: #c9ebd7; color: #187543; }
-.cigar-steps [aria-current="step"] .cigar-step-number { background: #eff5ff; border-color: #b4cdf3; color: #3e6db1; }
-.cigar-steps h3 { padding-top: .3rem; }
-.cigar-steps p { margin-top: .3rem; font-size: .8rem; }
-.cigar-steps .cigar-text-button { margin-top: .1rem; }
-.cigar-next-step { display: flex; gap: .9rem; border-top: 1px solid #e8edf3; padding-top: 1.2rem; }
-.cigar-next-step > svg { height: 1.25rem; width: 1.25rem; flex-shrink: 0; color: #6386bc; margin: .1rem .3rem; }
-.cigar-next-step p { font-size: .8rem; }
-.cigar-boundaries { background: linear-gradient(155deg, #f9faff, #f8fafc); }
-.cigar-boundaries h2 { font-size: 1.2rem; margin-top: 1.3rem; }
-.cigar-boundaries > p { font-size: .8rem; }
-.cigar-boundaries ul { display: grid; gap: .9rem; padding: 1.25rem 0 .7rem; }
-.cigar-boundaries li { display: flex; align-items: flex-start; gap: .6rem; font-size: .8rem; line-height: 1.65; }
-.cigar-boundaries li svg { height: 1.1rem; width: 1.1rem; flex-shrink: 0; color: #6281b0; margin-top: .15rem; }
 .cigar-section-intro { margin-bottom: 1.4rem; max-width: 52rem; }
 .cigar-section-intro h2 { font-size: 1.25rem; margin-bottom: .5rem; }
 .cigar-note { margin-bottom: 1rem; padding: 1rem 1.2rem; border: 1px solid #cbdcf5; border-radius: .75rem; background: #f4f8ff; font-size: .8rem; line-height: 1.7; color: #475569; }
 .cigar-note strong { color: #3f4174; font-weight: 600; }
 .cigar-note p { margin: .4rem 0 0; }
-.cigar-section-description { max-width: 48rem; }
-.cigar-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.25rem; margin-top: 1.5rem; }
-.cigar-flow > li { border-top: 1px solid #e2e8f0; padding-top: 1.25rem; }
-.cigar-flow .cigar-eyebrow { display: block; margin: 1rem 0 .5rem; }
-.cigar-flow p { font-size: .8rem; }
-.cigar-guide .cigar-overview-grid > .cigar-card > p { font-size: .8rem; margin-top: .85rem; }
-.cigar-guide .cigar-note { margin-top: 1rem; }
 .cigar-simple-list { display: grid; gap: .9rem; margin-top: 1.2rem; padding-left: 1.2rem; list-style: decimal; font-size: .8rem; color: #64748b; line-height: 1.8; }
 .cigar-caption { display: flex; align-items: flex-start; gap: .5rem; padding-top: .75rem; }
-.cigar-caption svg { width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; }
 .cigar-faq details { border-top: 1px solid #e2e8f0; margin-top: 1rem; padding-top: .5rem; }
 .cigar-faq summary { cursor: pointer; min-height: 2.75rem; padding: .7rem 0; font-size: .875rem; font-weight: 600; }
 .cigar-faq details p { max-width: 54rem; padding-bottom: .5rem; font-size: .8rem; }
-.cigar-footer { display: flex; align-items: flex-start; gap: .6rem; border-top: 1px solid #e8edf3; padding-top: 1.1rem; color: #64748b; font-size: .7rem; line-height: 1.75; }
+.cigar-footer { display: flex; align-items: flex-start; gap: .6rem; border-top: 1px solid #e8edf3; padding-top: 1.1rem; color: #64748b; font-size: .75rem; line-height: 1.75; }
 .cigar-footer > svg { width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .15rem; }
+.cigar-footer a { color: #416aa7; font-weight: 600; text-underline-offset: 3px; }
 .cigar-footer strong { margin-left: auto; flex-shrink: 0; font-weight: 600; color: #684eb0; }
+.cigar-note .cigar-setup-action { margin-top: .9rem; }
 @media (max-width: 64rem) {
-  .cigar-hero { grid-template-columns: minmax(0, 1.1fr) minmax(15rem, 1fr); gap: 1.25rem; }
-  .cigar-overview-grid { grid-template-columns: minmax(0, 1fr); }
-  .cigar-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cigar-home { grid-template-columns: minmax(0, 1fr); }
+  .cigar-facts { border-left: 0; border-top: 1px solid #e8edf3; padding: 1.5rem 0 0; }
+  .cigar-benefits { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 42rem) {
-  .cigar-hero { grid-template-columns: minmax(0, 1fr); padding: 1.35rem; }
-  .cigar-hero h2 { font-size: 1.85rem; }
-  .cigar-runtime-symbol { float: right; margin: 1rem 0 0 .5rem; }
-  .cigar-runtime-card { padding: 1rem; }
-  .cigar-runtime-card h3 { margin-top: 1rem; }
-  .cigar-runtime-note { margin-top: .75rem; }
-  .cigar-benefits, .cigar-flow { grid-template-columns: minmax(0, 1fr); }
-  .cigar-heading-actions { gap: .5rem; }
-  .cigar-heading-actions .cigar-button { font-size: .75rem; }
+  .cigar-home { padding: 1.35rem; }
+  .cigar-setup-action, .cigar-setup-buttons, .cigar-setup-action .cigar-button { width: 100%; }
   .cigar-card { padding: 1.15rem; }
-  .cigar-tabs { gap: 1.15rem; }
+  .cigar-tabs [role="tab"] { padding-inline: .6rem; }
   .cigar-footer { flex-wrap: wrap; }
   .cigar-footer > span { flex: 1; }
   .cigar-footer strong { margin-left: 1.6rem; }
 }
+@media (prefers-reduced-motion: reduce) { .cigar-tabs [role="tab"], .cigar-advanced-toggle svg { transition: none; } }
 @media (forced-colors: active) {
-  .cigar-hero, .cigar-runtime-card, .cigar-card, .cigar-note, .cigar-icon { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
-  .cigar-hero :is(p, h2, h3, span, button, svg, .cigar-runtime-note) { color: CanvasText; }
+  .cigar-home, .cigar-advanced-toggle, .cigar-card, .cigar-note { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
+  .cigar-facts { border-color: CanvasText; }
   .cigar-tabs [aria-selected="true"] { border-bottom-color: Highlight; color: Highlight; }
+  .cigar-setup-block { border-color: CanvasText; color: CanvasText; background: Canvas; }
+  .cigar-setup-track > li { border: 1px solid CanvasText; background: Canvas; }
+  .cigar-setup-track > li[data-state="done"], .cigar-setup-track > li[data-state="active"]::after { background: Highlight; }
+  .cigar-button-solid, .cigar-button-primary { background: ButtonFace; color: ButtonText; border-color: ButtonText; }
 }
+.cigar-picker { animation: cigar-picker-in .32s cubic-bezier(.16, 1, .3, 1); }
+.cigar-picker-list { animation: cigar-list-jump .22s cubic-bezier(.16, 1, .3, 1); }
+.cigar-picker-list[data-direction="in"] { animation-name: cigar-list-in; }
+.cigar-picker-list[data-direction="out"] { animation-name: cigar-list-out; }
+@keyframes cigar-picker-in { from { opacity: 0; transform: translateY(12px) scale(.985); } }
+@keyframes cigar-list-jump { from { opacity: 0; } }
+@keyframes cigar-list-in { from { opacity: 0; transform: translateX(14px); } }
+@keyframes cigar-list-out { from { opacity: 0; transform: translateX(-14px); } }
+@media (prefers-reduced-motion: reduce) { .cigar-picker, .cigar-picker-list { animation: none; } }
 .cigar-learning-layout { display: grid; gap: 1.25rem; min-width: 0; }
 .cigar-walkthrough-anchor { min-width: 0; scroll-margin-top: 1rem; }
 .cigar-walkthrough-anchor:focus { outline: none; }
-.cigar-learning-intro { display: flex; align-items: flex-start; gap: 1rem; }
-.cigar-learning-intro > .cigar-icon { flex-shrink: 0; }
-.cigar-learning-intro strong { color: var(--brand-dark); font-weight: 600; }
 .cigar-card .cigar-learning-caption, .cigar-learning-caption { display: block; color: #64748b; font-size: .72rem; line-height: 1.75; }
 .cigar-lesson-outcome { margin-top: 1rem; padding: .85rem 1rem; border-radius: .65rem; background: #f5f8fd; font-size: .78rem; line-height: 1.7; }
 .cigar-lesson-outcome strong, .cigar-example-question strong { font-weight: 600; color: #3f4174; }
 .cigar-card .cigar-lesson-outcome p { font-size: .78rem; margin-top: .25rem; }
-.cigar-effective-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; margin: 1.5rem 0; }
-.cigar-effective-grid p { font-size: .8rem; }
 .cigar-walkthrough { border-color: #bbd0ee; background: #fcfdff; }
 .cigar-walkthrough .cigar-section-heading { gap: .5rem; }
 .cigar-walkthrough h2 { margin-top: .1rem; }
@@ -11800,30 +12359,15 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 .cigar-lesson-navigation { display: flex; justify-content: space-between; gap: .5rem; margin: 1rem 0; padding-top: 1rem; border-top: 1px solid #e2e8f0; }
 .cigar-lesson-navigation .cigar-button { font-size: .75rem; padding: .5rem .75rem; }
 .cigar-lesson-navigation .cigar-button:last-child { background: #edf3ff; border-color: #b8cfee; }
-.cigar-concept-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-top: 1.4rem; }
-.cigar-concept-flow button { min-height: 7rem; width: 100%; text-align: left; padding: 1rem; border: 1px solid #e2e8f0; border-radius: .75rem; cursor: pointer; }
-.cigar-concept-flow button[aria-expanded="true"] { border-color: #b3cbed; background: #f1f6ff; }
-.cigar-concept-flow .cigar-eyebrow { display: block; margin: .75rem 0 .35rem; }
-.cigar-concept-flow strong { display: block; font-weight: 600; font-size: .8rem; }
-.cigar-concept-detail { margin-top: 1rem; padding: 1.25rem; border: 1px solid #dce6f5; border-radius: .75rem; background: #f8faff; }
-.cigar-concept-detail > p { font-size: .8rem; }
-.cigar-concept-detail .cigar-simple-list { font-size: .8rem; margin-top: .75rem; }
 @media (min-width: 80rem) {
   .has-walkthrough { grid-template-columns: minmax(0, 1fr) 21rem; align-items: start; }
   .has-walkthrough > .cigar-panel { grid-column: 1; grid-row: 1; }
   .has-walkthrough > .cigar-walkthrough-anchor { grid-column: 2; grid-row: 1; position: sticky; top: 1rem; max-height: calc(100dvh - 2rem); overflow-y: auto; border-radius: .95rem; }
-  .has-walkthrough .cigar-benefits, .has-walkthrough .cigar-effective-grid { grid-template-columns: minmax(0, 1fr); }
-  .has-walkthrough .cigar-concept-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 42rem) {
-  .cigar-learning-intro { flex-direction: column; }
-  .cigar-effective-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
-  .cigar-concept-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .cigar-concept-flow button { padding: .8rem; }
+  .has-walkthrough .cigar-benefits { grid-template-columns: minmax(0, 1fr); }
 }
 @media (forced-colors: active) {
-  .cigar-walkthrough, .cigar-lesson-outcome, .cigar-example-question, .cigar-concept-detail { background: Canvas; color: CanvasText; border-color: CanvasText; }
-  .cigar-concept-flow button[aria-expanded="true"], .cigar-lesson-steps [aria-current="step"] { background: Canvas; color: Highlight; border-color: Highlight; }
+  .cigar-walkthrough, .cigar-lesson-outcome, .cigar-example-question { background: Canvas; color: CanvasText; border-color: CanvasText; }
+  .cigar-lesson-steps [aria-current="step"] { background: Canvas; color: Highlight; border-color: Highlight; }
 }
 /*
  * Responsive corrections inside Guard workspaces.

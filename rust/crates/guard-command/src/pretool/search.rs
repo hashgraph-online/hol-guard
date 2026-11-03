@@ -38,10 +38,7 @@ pub(super) use walk_memo::with_walk_memo;
 /// peers; a whole-command answer serves the readers that prove one operand
 /// at a time.
 pub(super) fn command_creates_nothing(model: &crate::CanonicalCommandV1) -> bool {
-    model
-        .segments
-        .iter()
-        .all(|segment| grep::creates_nothing(segment, false))
+    model.segments.iter().all(grep::creates_nothing)
 }
 
 /// A names-only walk (`find`) rooted at a project-metadata directory such as
@@ -428,17 +425,12 @@ fn short_search_option(
     Ok((None, false))
 }
 
-pub(super) fn safe_search_arguments_with_context(
-    executable: &str,
-    arguments: &[String],
+pub(super) fn safe_fd_segment(
+    model: &crate::CanonicalCommandV1,
+    segment: &crate::CommandSegmentV1,
     context: ReadContext<'_>,
 ) -> bool {
-    match executable {
-        "rg" => rg::safe_rg_arguments(arguments, context),
-        "fd" => fd::safe_fd_arguments(arguments, context),
-        "grep" => grep::safe_grep_arguments(arguments, context),
-        _ => false,
-    }
+    fd::safe_fd_segment(model, segment, context)
 }
 
 pub(super) fn safe_rg_segment(

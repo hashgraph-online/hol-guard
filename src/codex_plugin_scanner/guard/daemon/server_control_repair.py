@@ -158,7 +158,10 @@ class _RepairSettingsRoutes:
                         containment_repaired,
                         containment_failed,
                         containment_reasons,
-                    ) = containment_repair_outcome(lambda: self._containment_health_payload(force_refresh=True))
+                    ) = containment_repair_outcome(
+                        lambda: self._containment_health_payload(force_refresh=True),
+                        guard_home=store.guard_home,
+                    )
                     repaired_check_ids.extend(containment_repaired)
                     failed_check_ids.extend(containment_failed)
                     for failed_check_id in containment_failed:

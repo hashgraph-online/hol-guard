@@ -31,7 +31,6 @@ impl Service {
         if !permitted {
             return Err("native_context_assistance_workspace_input_invalid".into());
         }
-        #[cfg(unix)]
         if matches!(
             &request,
             WorkspaceRequest::ClearNotes { .. }
@@ -48,6 +47,16 @@ impl Service {
         if let Some(result) = self.offline_data(home, &request)? {
             return Ok(result);
         }
+        let uses = !matches!(
+            request,
+            WorkspaceRequest::ListAgents
+                | WorkspaceRequest::Data
+                | WorkspaceRequest::History { .. }
+                | WorkspaceRequest::Proposals { .. }
+        );
+        if uses {
+            self.wake_and_wait(home, |_| true);
+        }
         let (actor, generation) = {
             let mut state = lock(&self.state)?;
             if !state.settings.requested.enabled
@@ -63,13 +72,7 @@ impl Service {
                 .filter(|actor| actor.status().active)
                 .cloned()
                 .ok_or("native_context_assistance_runtime_not_verified")?;
-            if !matches!(
-                request,
-                WorkspaceRequest::ListAgents
-                    | WorkspaceRequest::Data
-                    | WorkspaceRequest::History { .. }
-                    | WorkspaceRequest::Proposals { .. }
-            ) {
+            if uses {
                 state.last_used = Instant::now();
             }
             (actor, state.generation)

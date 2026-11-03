@@ -88,10 +88,13 @@ separately reviewed trust map, and the compiler's packaged baseline:
 
 ```sh
 rust/target/release/guard-command-source export-trust > contracts/extensions/build-trust-class-map.v1.json
+rust/target/release/guard-command-source export-built > packaged-build.json
 jq -n \
   --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
   --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
-  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
+  --slurpfile built packaged-build.json \
+  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",
+    validation_base:{catalog:$built[0].catalog,programs:[]}}' \
   > source-build.json
 
 rust/target/release/guard-command-source schema > source-schema.json
@@ -133,6 +136,14 @@ there is no packaged compiler manifest; add `.exe` to its value on Windows.
 A native wheel supplies its own platform compiler and manifest. The installed
 builder verifies package, source, binary, and embedded-program identities and
 does not discover Cargo or fall back to Python matcher semantics.
+
+## Bind a hosted action
+
+A command source or MCP server contribution stays local-only unless a sibling
+`guard.cloud-action-binding-contribution.v1` document names hosted actions it
+covers. Most contributions need none. [Bind a hosted action](HOSTED-ACTIONS.md)
+explains when to add a binding, how to validate and compile it offline, what
+reviewers check and what a merged binding changes today.
 
 ## Run portable fixtures
 

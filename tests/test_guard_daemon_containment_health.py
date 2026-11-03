@@ -15,7 +15,10 @@ from codex_plugin_scanner.guard.daemon.manager import (
     load_guard_daemon_auth_token,
 )
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-from codex_plugin_scanner.guard.runtime.containment_health import ContainmentHealthEvidence
+from codex_plugin_scanner.guard.runtime.containment_health import (
+    ContainmentHealthEvidence,
+    containment_health_signals,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -42,10 +45,8 @@ def test_authenticated_daemon_returns_fresh_execution_owned_health(tmp_path: Pat
         daemon.stop()
 
     evidence = ContainmentHealthEvidence.from_mapping(payload)
-    compatibility_errors = evidence.compatibility_errors(
-        now=_parsed_probe_time(evidence),
-        runtime_fingerprint=current_guard_daemon_runtime_fingerprint(),
-    )
+    assert evidence.daemon_fingerprint == current_guard_daemon_runtime_fingerprint()
+    expected = containment_health_signals(payload, now=_parsed_probe_time(evidence), guard_home=guard_home)
     serialized = json.dumps(payload, sort_keys=True)
     assert str(tmp_path) not in serialized
     assert "command" not in serialized
@@ -63,11 +64,11 @@ def test_authenticated_daemon_returns_fresh_execution_owned_health(tmp_path: Pat
         check_id = item.get("check_id")
         assert isinstance(check_id, str)
         checks[check_id] = item
-    expected_status = "fail" if compatibility_errors else "pass"
-    assert checks["containment_compatibility"]["status"] == expected_status
-    assert checks["sandbox"]["status"] == expected_status
+    for check_id in ("containment_compatibility", "sandbox"):
+        assert checks[check_id]["status"] == expected[check_id].status.value
+        assert checks[check_id]["reason_code"] == expected[check_id].reason_code
     if not evidence.probe_enforced:
-        assert "containment_probe_failed" in compatibility_errors
+        assert checks["sandbox"]["status"] == "fail"
 
 
 def test_containment_health_endpoint_rejects_missing_token(tmp_path: Path) -> None:

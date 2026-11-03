@@ -212,6 +212,14 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-goflags-mod-mod-prefix-go-test",
         "neg-rustflags-linker-prefix-cargo-test",
         "neg-pytest-addopts-plugin-prefix-venv-pytest",
+        # An npm configuration key the display reading does not accept: a shell
+        # for the script body to run under, a cache directory outside the
+        # workspace, or a key npm does not define. The command keeps its
+        # review, and a contained run reaches neither that shell nor that
+        # directory.
+        "neg-npm-config-script-shell-prefix-npm-test",
+        "neg-npm-config-cache-prefix-npm-test",
+        "neg-npm-config-unknown-key-prefix-npm-test",
         # A Guard launcher spelled against the working directory, which a clone,
         # an unpacked archive or a generated shim directory can fill: the
         # command keeps its review, and a contained run reaches only the
@@ -430,15 +438,28 @@ _RECEIPT = {
 
 
 def test_omp_containment_receipt_is_quiet_where_omp_routes_it(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("tests.gauntlet_replay.sys.platform", "darwin")
-    assert judge(_case("quiet", "omp"), _RECEIPT, []) is None
-    assert judge(_case("always", "omp"), _RECEIPT, []) is None
+    # The read-only profiles run through the resident runtime's own sink, which both
+    # hosts drive, so a Linux run is as quiet as a macOS one.
+    for platform in ("darwin", "linux"):
+        monkeypatch.setattr("tests.gauntlet_replay.sys.platform", platform)
+        assert judge(_case("quiet", "omp"), _RECEIPT, []) is None
+        assert judge(_case("always", "omp"), _RECEIPT, []) is None
 
 
 @pytest.mark.parametrize(
     ("harness", "platform", "receipt"),
     [
-        ("omp", "linux", _RECEIPT),
+        # The bound Bash owner's route needs the host process that owns the shell, so
+        # off macOS the denial stays the review it already is.
+        (
+            "omp",
+            "linux",
+            {
+                **_RECEIPT,
+                "reason_code": "native_bash_owner_required",
+                "required_execution_profile": "native-bash-owner-v1",
+            },
+        ),
         ("codex", "darwin", _RECEIPT),
         ("omp", "darwin", {**_RECEIPT, "required_execution_profile": "vitest-readonly-v1"}),
         ("omp", "darwin", {**_RECEIPT, "observe_mode": True}),

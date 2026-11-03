@@ -98,7 +98,7 @@ def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_co
         proxy_launcher_entry(proxy_command="cursor-mcp-proxy", context=context, server=server)["command"],
         CursorHarnessAdapter()._proxy_server_entry(context, server)["command"],  # pyright: ignore[reportPrivateUsage]
         CursorHarnessAdapter._refresh_guard_proxy_entry(stale)["command"],  # pyright: ignore[reportPrivateUsage]
-        copilot._refresh_guard_proxy_entry(stale, launcher_env={})["command"],  # pyright: ignore[reportPrivateUsage]
+        copilot._refresh_guard_proxy_entry(stale, list(python_args), launcher_env={})["command"],  # pyright: ignore[reportPrivateUsage]
         cline_mcp._proxy_entry(context, server)["command"],  # pyright: ignore[reportPrivateUsage]
         hermes._overlay_servers(context=context, source_configs={"fixture": {"command": "node"}})["fixture"]["command"],  # pyright: ignore[reportPrivateUsage]
     ]

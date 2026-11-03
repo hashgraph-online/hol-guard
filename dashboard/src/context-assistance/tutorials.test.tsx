@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CIGAR_FULL_NAME, cigarTutorial } from "./tutorial-content";
+import { cigarTutorial } from "./tutorial-content";
 import { parseTutorialProgress } from "./tutorial-progress";
 import { CigarTutorials, CigarWalkthrough } from "./tutorials";
 import { parseContextAssistanceStatus } from "./status";
@@ -14,9 +14,9 @@ for (const invalid of [null, {}, { ...progress, schema: 2 }, { ...progress, tuto
     "stale or malformed browser progress must not break the CIGAR workspace");
 }
 const hub = renderToStaticMarkup(<CigarTutorials progress={progress} onBegin={() => {}} />);
-assert.match(hub, new RegExp(CIGAR_FULL_NAME));
+assert.match(hub, /Guided walkthroughs/);
 assert.match(hub, /Resume walkthrough/);
-assert.match(hub, /you choose every setting, start, and access grant/);
+assert.match(hub, /you choose every setting, start and access grant/);
 const receipt = JSON.parse(readFileSync(new URL("./fixtures/intent-state.json", import.meta.url), "utf8"));
 const ready = parseContextAssistanceStatus(receipt.native_test.ready_observation);
 const tutorial = cigarTutorial("first-brief");

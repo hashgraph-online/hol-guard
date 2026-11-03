@@ -145,6 +145,9 @@ pub(crate) fn build(query: &ReviewRequestQueryV1) -> Result<Built, Failure> {
         "action_envelope_json": envelope,
         "raw_command_text": command,
         "queue_group_id": queue_group_id,
+        "guard_version": crate::PACKAGE_VERSION,
+        "first_seen_guard_version": crate::PACKAGE_VERSION,
+        "last_seen_guard_version": crate::PACKAGE_VERSION,
     });
     let Value::Object(request) = request else {
         return Err(invalid());

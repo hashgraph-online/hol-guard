@@ -13,9 +13,10 @@
 //!   why the receipt stands.
 //!
 //! The host table is explicit: macOS runs every contained profile, Linux the
-//! workspace sandbox, Windows installed Python and Node scripts, a project's
-//! own pytest, Vite builds and local tool checks, and only for Claude Code and
-//! Codex. Any other host has no sink and says so; nothing here allows a call.
+//! workspace sandbox and every read-only profile, Windows installed Python and
+//! Node scripts, a project's own pytest, Vite builds and local tool checks, and
+//! only for Claude Code and Codex. Any other host has no sink and says so;
+//! nothing here allows a call.
 //!
 //! The approval invariant holds: a review that is not routed keeps its card
 //! with Allow once and Always allow, and a review an allowed CLI lifts runs
@@ -42,12 +43,27 @@ const SHELL_TOOLS: [&str; 5] = [
 /// only by its bridge, which first confirms the running Codex applies it,
 /// and Cursor only by its silent `preToolUse` probe for `Shell`, whose
 /// `updated_input` Cursor applies before `beforeShellExecution` runs.
-const ROUTED_HARNESSES: [&str; 2] = ["zcode", "claude-code"];
+const ROUTED_HARNESSES: [&str; 3] = ["zcode", "claude-code", "grok"];
 const BRIDGE_HARNESSES: [&str; 2] = ["codex", "cursor"];
 /// The sink command is quoted for Git Bash, or PowerShell for Codex; any
 /// other harness on Windows keeps its single review.
 const WINDOWS_SINK_HARNESSES: [&str; 2] = ["claude-code", "codex"];
-const LINUX_PROFILES: [&str; 1] = ["workspace-contained-v1"];
+/// Linux runs the workspace sandbox and every read-only profile, each under a
+/// bubblewrap mount. `package-test-readonly-v1` is here although the launch
+/// never sees it: a package test re-plans as the runner its script spells, so
+/// the string is only the one the receipt names for this gate to match.
+pub(crate) const LINUX_PROFILES: [&str; 10] = [
+    "workspace-contained-v1",
+    "python-eval-readonly-v1",
+    "node-eval-readonly-v1",
+    "node-build-output-v1",
+    "node-tool-readonly-v1",
+    "node-test-readonly-v1",
+    "vitest-readonly-v1",
+    "git-readonly-v1",
+    "pytest-readonly-v2",
+    "package-test-readonly-v1",
+];
 const WINDOWS_PROFILES: [&str; 5] = [
     "python-eval-readonly-v1",
     "node-eval-readonly-v1",

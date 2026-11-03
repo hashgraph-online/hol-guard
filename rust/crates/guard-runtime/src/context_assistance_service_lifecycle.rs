@@ -29,7 +29,6 @@ pub(super) fn configure(
                 settings.effective.enabled = false;
             }
         }
-        #[cfg(unix)]
         if !state.stopping
             && state
                 .cutover
@@ -48,10 +47,7 @@ pub(super) fn configure(
             .generation
             .checked_add(1)
             .ok_or("native_context_assistance_generation_exhausted")?;
-        #[cfg(unix)]
-        {
-            state.cutover = None;
-        }
+        state.cutover = None;
         state.settings = settings;
         state.error = None;
         state.last_check = None;
@@ -67,6 +63,13 @@ pub(super) fn await_cleanup(actor: Option<Arc<RuntimeActor<Engine>>>) -> bool {
         .is_none_or(|actor| actor.close_and_wait(Duration::from_millis(500)))
 }
 
+fn idle_elapsed(state: &State) -> bool {
+    state.last_used.elapsed()
+        >= Duration::from_secs(u64::from(
+            state.settings.effective.limits.idle_shutdown_seconds,
+        ))
+}
+
 pub(super) fn start_watcher(
     weak: Weak<Mutex<State>>,
     generation: u64,
@@ -79,38 +82,66 @@ pub(super) fn start_watcher(
             let Some(shared) = weak.upgrade() else {
                 break;
             };
-            let old = {
+            let (old, idle) = {
                 let Ok(mut state) = lock(&shared) else {
                     break;
                 };
                 if state.generation != generation || state.runtime.is_none() {
                     break;
                 }
-                if state.last_used.elapsed()
-                    >= Duration::from_secs(u64::from(
-                        state.settings.effective.limits.idle_shutdown_seconds,
-                    ))
-                {
-                    state.error = Some("runtime_idle".into());
-                    revoke_runtime(&mut state)
-                } else if !state
-                    .runtime
-                    .as_ref()
-                    .expect("runtime checked above")
-                    .status()
-                    .active
-                {
+                let runtime = state.runtime.as_ref().expect("runtime checked above");
+                if !runtime.status().active {
                     // The actor owns heartbeats/SDK calls. Only atomic liveness is
                     // read while holding the settings state.
-                    state.error = Some("runtime_closed".into());
-                    revoke_runtime(&mut state)
+                    state.error = Some(wake::closed(&state).into());
+                    (revoke_runtime(&mut state), None)
+                } else if idle_elapsed(&state) {
+                    (None, Some(Arc::clone(runtime)))
                 } else {
-                    None
+                    (None, None)
                 }
             };
             if old.is_some() {
                 await_cleanup(old);
                 break;
+            }
+            if let Some(actor) = idle {
+                // A granted project is the user's standing choice and lives only
+                // in this worker, so only an empty worker rests. It wakes on the
+                // next request without asking again.
+                let holds = actor
+                    .call_until(Instant::now() + Duration::from_secs(2), |_, engine| {
+                        Ok(engine.holds_scopes())
+                    })
+                    .ok();
+                let old = {
+                    let Ok(mut state) = lock(&shared) else {
+                        break;
+                    };
+                    if state.generation != generation
+                        || !state
+                            .runtime
+                            .as_ref()
+                            .is_some_and(|r| Arc::ptr_eq(r, &actor))
+                    {
+                        break;
+                    }
+                    // A check that could not answer proves nothing: keep the
+                    // worker and the idle clock, and ask again next pass.
+                    if holds == Some(true) {
+                        state.last_used = Instant::now();
+                        None
+                    } else if holds == Some(false) && idle_elapsed(&state) {
+                        state.error = Some("runtime_idle".into());
+                        revoke_runtime(&mut state)
+                    } else {
+                        None
+                    }
+                };
+                if old.is_some() {
+                    await_cleanup(old);
+                    break;
+                }
             }
             let current = crate::guard_config_load::context_assistance_config(&home)
                 .unwrap_or_else(|_| AssistanceSettings::unavailable("configuration_unavailable"));
@@ -161,7 +192,6 @@ impl Service {
             revoke_runtime(&mut state)
         };
         self.updates.shutdown();
-        #[cfg(unix)]
         self.switches.shutdown();
         await_cleanup(old);
     }

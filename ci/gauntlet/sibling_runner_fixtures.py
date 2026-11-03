@@ -14,6 +14,12 @@ from pathlib import Path
 SIBLING_HEAP_CASE = "omp-native-sibling-node-heap-jest"
 # The same installed runner, launched by Bun rather than Node.
 SIBLING_BUN_ENTRY_CASE = "omp-native-sibling-bun-jest-entry"
+# The runner launched from the sibling's own root, its output trimmed by a
+# filter the sink has no peel grammar for.
+SIBLING_CD_FILTER_CASE = "omp-native-sibling-cd-jest-cut"
+# The same root-anchored run, its diagnostics dropped before a filter the sink
+# does peel, which is why the rejoin rather than the peel has to carry it.
+SIBLING_CD_QUIET_CASE = "omp-native-sibling-cd-jest-quiet"
 # Cases that link the installed tree into the sibling's linked worktree rather
 # than install a second copy there.
 SIBLING_LINK_CASES = (
@@ -35,7 +41,13 @@ _FILES = {
 def add_sibling_test_runner(home: Path, scenario_id: str | None) -> None:
     """Install the runner, untracked as ``npm install`` leaves it, for its case only."""
     if (
-        scenario_id not in (SIBLING_HEAP_CASE, SIBLING_BUN_ENTRY_CASE)
+        scenario_id
+        not in (
+            SIBLING_HEAP_CASE,
+            SIBLING_BUN_ENTRY_CASE,
+            SIBLING_CD_FILTER_CASE,
+            SIBLING_CD_QUIET_CASE,
+        )
         and scenario_id not in SIBLING_LINK_CASES
     ):
         return

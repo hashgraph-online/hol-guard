@@ -48,10 +48,13 @@ impl Service {
                 None
             }
         });
-        #[cfg(unix)]
+        // Resting is still on: the next request wakes it without a click.
+        let diagnostic = if wake::resting(&state) {
+            Some("runtime_resting")
+        } else {
+            diagnostic
+        };
         let upgrade = state.upgrade.as_ref().map(|signal| signal.describe());
-        #[cfg(not(unix))]
-        let upgrade: Option<Value> = None;
         Ok(
             json!({"schema":"guard-context-assistance-status.v2", "availability":availability,
             "requested_enabled":state.settings.requested.enabled, "effective_enabled":effective, "preferences":state.settings.requested,

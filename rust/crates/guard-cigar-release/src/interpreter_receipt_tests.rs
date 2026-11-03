@@ -104,7 +104,7 @@ fn receipt_tampering_with_python_tree_and_explicit_withdrawal_are_refused() {
     );
 }
 #[test]
-fn qualification_refresh_is_metadata_but_unqualified_python_cannot_mint_receipts() {
+fn qualification_refresh_is_metadata_and_upstream_python_mints_receipts() {
     let metadata = metadata();
     let sealed = seal_interpreter_receipt(&metadata, &[41; 32]).unwrap();
     let verified =
@@ -121,14 +121,12 @@ fn qualification_refresh_is_metadata_but_unqualified_python_cannot_mint_receipts
         changed.binding().unwrap(),
         metadata.build.binding().unwrap()
     );
-    assert_eq!(
-        seal_interpreter_receipt(
-            &InstalledInterpreterReceipt {
-                build: changed,
-                ..metadata
-            },
-            &[41; 32]
-        ),
-        Err(ReleaseError::QualificationRequired)
-    );
+    assert!(seal_interpreter_receipt(
+        &InstalledInterpreterReceipt {
+            build: changed,
+            ..metadata
+        },
+        &[41; 32]
+    )
+    .is_ok());
 }

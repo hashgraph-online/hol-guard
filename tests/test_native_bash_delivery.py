@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_bound_bash_source import _ENVIRONMENT_NAMES
 from codex_plugin_scanner.guard.config import update_guard_settings
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import (
@@ -18,6 +17,7 @@ from codex_plugin_scanner.guard.hook_execution_environment import (
 )
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.pi_extension_template import ENVIRONMENT_NAMES
 from tests.test_native_bash_sink_integration import _Secrets
 
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="native Bash owner is macOS-only")
@@ -74,7 +74,7 @@ def test_native_hook_routes_only_supported_bound_owners(native_context_digest, t
                 "schema": "guard-native-bash-host-delivery.v3",
                 "owner_pid": os.getpid(),
                 "host": "omp-input-rewrite-v1" if harness == "omp" else "pi-input-mutation-v1",
-                "environment": {name: os.environ[name] for name in _ENVIRONMENT_NAMES if os.environ.get(name)},
+                "environment": {name: os.environ[name] for name in ENVIRONMENT_NAMES if os.environ.get(name)},
                 "file_creation_mask": 0o022,
             },
         }

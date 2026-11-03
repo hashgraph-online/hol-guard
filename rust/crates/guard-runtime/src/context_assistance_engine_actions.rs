@@ -14,6 +14,7 @@ impl Engine {
         policy: Option<Policy>,
     ) -> Result<Value, RuntimeError> {
         if !matches!(&request, Request::Clear | Request::ForgetSaved) {
+            self.restore_picked(runtime);
             self.expire_notes(runtime)?;
         }
         match request {

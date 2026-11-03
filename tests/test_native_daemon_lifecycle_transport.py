@@ -341,7 +341,7 @@ def test_a_transient_capability_probe_miss_is_waited_out_before_the_resident_is_
         lambda **_kwargs: seen.append("asked") or {"schema": transport._RESULT_SCHEMA},
     )
 
-    transport._await_native_runtime(20.0)
+    transport.await_native_runtime(20.0)
 
     assert statuses == [statuses[0]]
     assert seen == []  # waiting never decides anything; the resident is asked afterwards
@@ -353,7 +353,7 @@ def test_a_host_with_no_runtime_is_not_waited_on(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(transport, "native_runtime_probe_missed", lambda: False)
     monkeypatch.setattr(transport.time, "sleep", lambda _seconds: calls.append("sleep"))
 
-    transport._await_native_runtime(20.0)
+    transport.await_native_runtime(20.0)
 
     assert calls == ["status"]
 

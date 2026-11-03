@@ -2,7 +2,10 @@
 #[cfg(test)]
 #[path = "contained_argv_tests.rs"]
 mod tests;
-use crate::contained_node_tool::local_package_entry;
+#[cfg(test)]
+#[path = "contained_argv_tsx_tests.rs"]
+mod tsx_tests;
+use crate::contained_node_tool::{entry_tool, local_bin_entry, local_package_entry};
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
 use crate::sfrs_shlex::{split_with, PLAIN_LEXER, STRICT_LEXER};
 use regex::Regex;
@@ -14,11 +17,13 @@ const NODE_INVALID: &str = "node_test_restricted_invalid_command";
 const VITEST_INVALID: &str = "vitest_restricted_invalid_command";
 
 /// Vitest's installed entry points. `vitest.mjs` is the package's declared
-/// `bin` shim and `dist/cli.js` is the module that shim imports, so both
-/// spellings start the project's own installed runner.
+/// `bin` shim, `dist/cli.js` is the module that shim imports, and
+/// `node_modules/.bin/vitest` is the link the installer writes to the first
+/// of them, so every spelling starts the project's own installed runner.
 pub(crate) fn local_vitest_entry(argument: &str) -> bool {
     local_package_entry(argument, "vitest/vitest.mjs")
         || local_package_entry(argument, "vitest/dist/cli.js")
+        || local_bin_entry(argument, "vitest")
 }
 
 /// Mocha's installed entry points. `bin/mocha.js` is the package's declared
@@ -26,19 +31,27 @@ pub(crate) fn local_vitest_entry(argument: &str) -> bool {
 /// the extension. Both name the installed package's own entry, and the sink
 /// runs whichever of them this workspace holds, so reading only the newer
 /// spelling would send a working `node node_modules/mocha/bin/mocha` to
-/// review while the `npx mocha` beside it runs.
+/// review while the `npx mocha` beside it runs. The installer's link to that
+/// shim names the same run.
 pub(crate) fn local_mocha_entry(argument: &str) -> bool {
     local_package_entry(argument, "mocha/bin/mocha.js")
         || local_package_entry(argument, "mocha/bin/mocha")
+        || local_bin_entry(argument, "mocha")
+}
+
+/// Jest's installed entry point, and the link its installer writes beside it.
+/// `jest-cli` publishes the executable Jest's own `bin` field points at, and
+/// `node_modules/.bin/jest` is the link to it, so a call that hands either to
+/// a runtime starts this workspace's installed Jest.
+pub(crate) fn local_jest_entry(argument: &str) -> bool {
+    local_package_entry(argument, "jest/bin/jest.js") || local_bin_entry(argument, "jest")
 }
 
 /// Whether a word names one of those installed entry points. A runtime handed
 /// this path starts the workspace's own runner, whichever of the three it is.
 pub(crate) fn local_runner_entry(argument: &str) -> bool {
     let entry = argument.replace('\\', "/");
-    local_vitest_entry(&entry)
-        || local_package_entry(&entry, "jest/bin/jest.js")
-        || local_mocha_entry(&entry)
+    local_vitest_entry(&entry) || local_jest_entry(&entry) || local_mocha_entry(&entry)
 }
 
 /// Whether a call hands Bun one of those entry points as the file to run.
@@ -166,9 +179,17 @@ pub fn node_script_index(command: &[String], start: usize) -> Option<usize> {
         .map(|_| index)
 }
 
-pub fn tsx_test_invocation(
-    command: &[String],
-) -> Result<Option<(String, Vec<String>)>, RestrictedPytestError> {
+/// A tsx test run split at its script.
+struct TsxTestParts<'a> {
+    /// The Node test-runner flags ahead of the script.
+    flags: &'a [String],
+    /// The script the run names.
+    script: &'a String,
+    /// The arguments the script is passed.
+    arguments: &'a [String],
+}
+
+fn tsx_test_parts(command: &[String]) -> Result<Option<TsxTestParts<'_>>, RestrictedPytestError> {
     let name = basename(command);
     let Some(mut args) = command.get(1..) else {
         return Ok(None);
@@ -191,10 +212,32 @@ pub fn tsx_test_invocation(
     } else if name != "tsx" {
         return Ok(None);
     }
-    Ok(args
+    let (flags, rest) = args.split_at(tsx_runner_flag_count(args));
+    if tsx_runner_test_mode(flags) && !rest.iter().all(|value| named_test_script(value, true)) {
+        return Ok(None);
+    }
+    Ok(rest
         .first()
         .filter(|value| named_test_script(value, true))
-        .map(|script| (script.clone(), args[1..].to_vec())))
+        .map(|script| TsxTestParts {
+            flags,
+            script,
+            arguments: &rest[1..],
+        }))
+}
+
+/// The test script a tsx run names, and the arguments the script is passed.
+pub fn tsx_test_invocation(
+    command: &[String],
+) -> Result<Option<(String, Vec<String>)>, RestrictedPytestError> {
+    Ok(tsx_test_parts(command)?.map(|parts| (parts.script.clone(), parts.arguments.to_vec())))
+}
+
+/// The Node test-runner flags a tsx run carries, which the sink re-emits in
+/// front of the script. Node reads them nowhere else: behind the script they
+/// are the script's own arguments, and the run is no longer a test run.
+pub fn tsx_test_runner_flags(command: &[String]) -> Result<Vec<String>, RestrictedPytestError> {
+    Ok(tsx_test_parts(command)?.map_or_else(Vec::new, |parts| parts.flags.to_vec()))
 }
 
 pub fn python_runtime_args(command: &[String]) -> Option<Vec<String>> {
@@ -301,8 +344,9 @@ fn bun_runner_invocation(
 #[path = "contained_argv_runner_calls.rs"]
 mod runner_calls;
 pub(crate) use runner_calls::{
-    bun_test_runs_once, contained_runner_call, jest_contained_call, jest_runs_once,
-    mocha_contained_call, mocha_runs_once, vitest_runs_once,
+    bun_test_runs_once, bun_test_script_once, contained_runner_call, jest_contained_call,
+    jest_runs_once, mocha_contained_call, mocha_runs_once, tsx_runner_flag_count,
+    tsx_runner_test_mode, vitest_runs_once, workspace_test_script,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
@@ -315,6 +359,18 @@ pub fn bun_test_invocation(command: &[String]) -> bool {
     basename(command) == "bun"
         && command.get(1).is_some_and(|word| word == "test")
         && bun_test_runs_once(&command[2..])
+}
+
+/// True when a command is Bun running one of the workspace's own test files.
+///
+/// `bun math.test.ts` runs that file as a script. Bun does not start its test
+/// runner for it, so the pass is not the runner's; it is that `bun test`
+/// already loads this very file, under this very profile, as one of the test
+/// files it discovers. Naming it reaches nothing the discovered run does not.
+/// The Node test profile carries it for the same reason it carries `bun
+/// test`: the runner reaches nothing outside the workspace.
+pub fn bun_test_script_invocation(command: &[String]) -> bool {
+    !command.is_empty() && basename(command) == "bun" && bun_test_script_once(&command[1..])
 }
 
 /// The runner a contained call names, with the arguments the sink hands it.
@@ -412,6 +468,11 @@ const NPM_REPORTING_FLAGS: &[&str] = &[
 /// npm's one reporting option that takes a value.
 const NPM_REPORTING_VALUES: &[&str] = &["--loglevel"];
 
+/// Bun's one output option. `--bun` chooses the runtime the script runs on,
+/// `--watch` and `--hot` keep the run alive, and `--filter` fans it out, so
+/// none of them is peeled here.
+const BUN_REPORTING_FLAGS: &[&str] = &["--silent"];
+
 /// yarn's output options. yarn classic chooses packages with a `workspace`
 /// verb rather than an option, so there is no fan-out spelling to exclude.
 const YARN_REPORTING_FLAGS: &[&str] = &[
@@ -424,9 +485,10 @@ const YARN_REPORTING_FLAGS: &[&str] = &[
 ];
 
 /// `arguments` with the leading npm, pnpm or yarn options that only change
-/// what the run prints removed, so the `exec` behind them is read as the verb it
-/// is. A reporting option names no package and moves no directory, so
-/// `pnpm --silent exec tsc` runs the same local bin `pnpm exec tsc` does.
+/// what the run prints removed, so the verb or script behind them is read as
+/// the one it is. A reporting option names no package and moves no directory,
+/// so `pnpm --silent exec tsc` runs the same local bin `pnpm exec tsc` does,
+/// and `npm --silent test` runs the same script `npm test` does.
 ///
 /// A value option whose value is written separately eats the next word, so
 /// `pnpm --reporter exec tsc` consumes `exec` and leaves `tsc`, which is not
@@ -440,6 +502,7 @@ pub(crate) fn manager_reporting_options_peeled<'a>(
         "npm" => (NPM_REPORTING_FLAGS, NPM_REPORTING_VALUES),
         "pnpm" => (PNPM_REPORTING_FLAGS, PNPM_REPORTING_VALUES),
         "yarn" => (YARN_REPORTING_FLAGS, &[]),
+        "bun" => (BUN_REPORTING_FLAGS, &[]),
         _ => return arguments,
     };
     while let [option, tail @ ..] = arguments {
@@ -463,41 +526,49 @@ pub(crate) fn manager_reporting_options_peeled<'a>(
     arguments
 }
 
-/// The arguments from the tool on, when `command` is a manager's bare `exec`
-/// spelling of a local-bin run: `npm exec`, `npm x`, `pnpm exec` or
-/// `yarn exec`, each with an optional `--`. The sink runs the project's own
-/// tool, never the manager, so a manager option before the tool (`-c` runs a
-/// shell, `-r`/`--filter` fan out) is not a local-bin run. The options that
-/// only choose how much the manager prints are the exception, peeled by
-/// [`manager_reporting_options_peeled`] before the verb is read.
+/// Whether `word` is the verb that runs a package script. npm and pnpm both
+/// list `run-script` as an alias of `run`, and npm's table carries the two
+/// transposed spellings `rum` and `urn` as well, so every one of them starts
+/// the same script the same way. yarn and bun spell it `run` alone.
+///
+/// An alias runs exactly what the canonical spelling runs, so the containment
+/// routes read them as one verb. Reading only `run` would send
+/// `npm run-script lint` to review while the `npm run lint` beside it stays
+/// quiet.
+pub(crate) fn names_script_run_verb(manager: &str, word: &str) -> bool {
+    let manager = program_name(manager);
+    word == "run"
+        || (matches!(manager, "npm" | "pnpm") && word == "run-script")
+        || (manager == "npm" && matches!(word, "rum" | "urn"))
+}
+
+/// The script a bare verb names when the manager reads it as its own `test`
+/// command. `t` and `tst` are documented aliases of `test` for npm and pnpm,
+/// and both run the manifest's `test` entry, so the name this returns is the
+/// key the sink looks up rather than the word the line spells.
+///
+/// Both managers resolve these in their command table, before any lookup
+/// against the manifest's scripts, so a project that declares a script named
+/// `t` cannot reach it this way either. yarn and bun have no such alias, and
+/// pass a bare word straight to the manifest, so reading `t` as `test` for
+/// them would run an entry the line never named.
+pub(crate) fn aliased_test_script_name(manager: &str, word: &str) -> Option<&'static str> {
+    (matches!(program_name(manager), "npm" | "pnpm") && matches!(word, "t" | "tst"))
+        .then_some("test")
+}
+
+/// The arguments from the tool on, when `command` is a manager's spelling of
+/// a local-bin run.
+///
+/// This is the reading the admission takes, not a second one beside it. The
+/// sink plans the run the classifier read, and the classifier reads the kind
+/// out of this answer, so a spelling the admission lets through as a
+/// local-bin run has to reach the sink as that same run. Two readings of one
+/// spelling diverge the moment either is widened: the admission answers with
+/// a runner's reason while the classifier still answers with the manager's
+/// kind, and the sink refuses the mismatch rather than running the command.
 fn manager_exec_tool(command: &[String]) -> Option<&[String]> {
-    let manager = basename(command);
-    let arguments = manager_reporting_options_peeled(manager, command.get(1..)?);
-    let (npm, mut rest) = match (manager, arguments) {
-        ("npm", [verb, rest @ ..]) if verb == "exec" || verb == "x" => (true, rest),
-        ("pnpm" | "yarn", [verb, rest @ ..]) if verb == "exec" => (false, rest),
-        _ => return None,
-    };
-    // `npm exec` answers the install prompt and chooses between the cache and
-    // the registry before the tool, the way `npx` does. None of those options
-    // names a package, so the tool behind them is still the workspace's own
-    // one, and the route that admits the run has to read the same argv the
-    // sink will. The pnpm and yarn options left after the reporting peel
-    // choose which packages the run reaches, so they are not peeled here.
-    if npm {
-        while let [option, tail @ ..] = rest {
-            if !npm_exec_inert_option(option) {
-                break;
-            }
-            rest = tail;
-        }
-    }
-    let rest = match rest {
-        [separator, rest @ ..] if separator == "--" => rest,
-        rest => rest,
-    };
-    rest.first().filter(|tool| !tool.starts_with('-'))?;
-    Some(rest)
+    crate::pretool::manager_local_bin_arguments(basename(command), command.get(1..)?)
 }
 
 /// Whether an `npm exec` option names no package. The answer is read from the
@@ -553,7 +624,7 @@ pub fn contained_runner_invocation(
                 .unwrap_or_default();
             let tool = if local_vitest_entry(&entry) {
                 "vitest"
-            } else if local_package_entry(&entry, "jest/bin/jest.js") {
+            } else if local_jest_entry(&entry) {
                 "jest"
             } else if local_mocha_entry(&entry) {
                 "mocha"
@@ -790,7 +861,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let node_test_argv =
         command.get(index).is_some_and(|v| v == "--test") && matches!(name, "node" | "nodejs");
     let bun = bun_vitest_invocation(command);
-    let bun_test = bun_test_invocation(command);
+    let bun_test = bun_test_invocation(command) || bun_test_script_invocation(command);
     let entries = command.iter().skip(1).take(2);
     let vitest = !command.is_empty()
         && (matches!(name, "bunx" | "npx" | "vitest" | "jest" | "mocha")
@@ -802,7 +873,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                 && entries.clone().any(|v| {
                     let entry = v.replace('\\', "/");
                     local_vitest_entry(&entry)
-                        || local_package_entry(&entry, "jest/bin/jest.js")
+                        || local_jest_entry(&entry)
                         || local_mocha_entry(&entry)
                 })));
     let node_tool = bun.is_none()
@@ -817,18 +888,13 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
             && entries
                 .clone()
                 .any(|v| matches!(v.as_str(), "eslint" | "tsc" | "vite" | "prettier")))
+            // The entry a `node` command names is read back to its tool
+            // through the same table the route and the sink read, so a
+            // spelling one of them admits cannot be a kind the others miss.
             || (matches!(name, "node" | "nodejs")
-                && entries.clone().any(|v| {
-                    [
-                        "eslint/bin/eslint.js",
-                        "typescript/bin/tsc",
-                        "vite/bin/vite.js",
-                        "prettier/bin/prettier.cjs",
-                        "prettier/bin-prettier.js",
-                    ]
-                    .iter()
-                    .any(|entry| local_package_entry(v, entry))
-                })));
+                && entries
+                    .clone()
+                    .any(|v| !entry_tool(&v.replace('\\', "/")).is_empty())));
     // The package-test alias travels with the other kinds so the sink reads
     // every route a command can take in one answer, and an ordinary contained
     // run never pays for a second reading to learn it is not an alias.

@@ -5,11 +5,9 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .base import HarnessContext, _ensure_path_within_root
-from .grok_config import GUARD_MANAGED_BEGIN, remove_managed_block, restore_compat_hooks
-from .grok_state import _prior_compat_hooks_from_state
 from .grok_user_config import remove_user_config_settings
 
 if TYPE_CHECKING:
@@ -23,14 +21,20 @@ def parse_install_state(raw: bytes | None) -> dict[str, object]:
     return payload
 
 
-def remove_legacy_settings(raw: bytes | None, state_path: Path, state: dict[str, object]) -> bytes | None:
+def remove_legacy_settings(raw: bytes | None, state: Mapping[str, object]) -> bytes | None:
+    """Strip Guard's block from the legacy managed config and restore the compat hooks it replaced."""
     if raw is None:
         return None
-    text = raw.decode("utf-8")
-    if GUARD_MANAGED_BEGIN not in text:
-        return raw
-    prior = _prior_compat_hooks_from_state(state_path, payload=state)
-    return restore_compat_hooks(remove_managed_block(text), prior).encode("utf-8")
+    from ..native_runner_authority import native_runner_authority
+
+    prior = state.get("prior_compat_hooks")
+    # Pairs keep the recorded vendor order, which the restoration follows.
+    pairs = [[key, value] for key, value in cast(dict[str, object], prior).items()] if isinstance(prior, dict) else []
+    answer = native_runner_authority("grok_legacy_settings", {"text": raw.decode("utf-8"), "prior_compat_hooks": pairs})
+    text = answer.get("text") if isinstance(answer, dict) and len(answer) == 1 else None
+    if not isinstance(text, str):
+        raise ValueError("Grok legacy settings answer is malformed")
+    return text.encode("utf-8")
 
 
 def uninstall_settings(adapter: GrokHarnessAdapter, context: HarnessContext) -> list[str]:
@@ -52,7 +56,7 @@ def uninstall_settings(adapter: GrokHarnessAdapter, context: HarnessContext) -> 
     if legacy.is_file():
         _ensure_path_within_root(adapter._grok_home_dir(context), legacy, label="Grok")
         before = legacy.read_bytes()
-        after = remove_legacy_settings(before, state_path, state)
+        after = remove_legacy_settings(before, state)
         if after is not None and after != before:
             changes.append((legacy, after))
     for path, content in changes:

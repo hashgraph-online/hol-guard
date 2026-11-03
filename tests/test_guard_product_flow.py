@@ -254,6 +254,57 @@ args = ["workspace-skill.js", "--changed"]
         assert output["bootstrap_install"]["reason"] == "skipped_by_flag"
         assert GuardStore(guard_home).get_cloud_sync_profile() is None
 
+    @pytest.mark.parametrize("reply", [None, "malformed"], ids=["refused", "malformed"])
+    def test_guard_bootstrap_keeps_the_repair_step_without_native_copy(self, tmp_path, capsys, monkeypatch, reply):
+        from codex_plugin_scanner.guard import native_runner_authority as authority_module
+        from codex_plugin_scanner.guard.cli.render import _next_action_label
+
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.cli.bootstrap.ensure_guard_daemon",
+            lambda _guard_home: "http://127.0.0.1:5474",
+        )
+        original = authority_module.native_runner_authority
+
+        def refuse_product_copy(kind, args, **kwargs):
+            if kind != "guard_product_copy":
+                return original(kind, args, **kwargs)
+            if reply is None:
+                raise authority_module.NativeRunnerAuthorityError("native_runtime_unavailable")
+            # Right length, but none of the fields the payload reads.
+            return {"harnesses": [{} for _ in args["harnesses"]]}
+
+        monkeypatch.setattr(authority_module, "native_runner_authority", refuse_product_copy)
+
+        rc = main(
+            [
+                "guard",
+                "bootstrap",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--workspace",
+                str(workspace_dir),
+                "--skip-install",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["runtime_status"] == "unavailable"
+        assert output["next_steps"][0]["command"] == "hol-guard doctor"
+        assert len(output["next_steps"]) > 1
+        assert output["harnesses"]
+        for harness in output["harnesses"]:
+            assert harness["next_action"] == "unavailable"
+            assert harness["review_command"] == "hol-guard doctor"
+            assert _next_action_label(harness) == "Run hol-guard doctor"
+
     def test_guard_start_recommends_copilot_when_it_is_the_only_detected_harness(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -1001,3 +1052,25 @@ args = ["workspace-skill.js", "--changed"]
         )
         assert args_file.read_text(encoding="utf-8").strip() == "--help"
         assert env_file.read_text(encoding="utf-8") == os.pathsep.join((str(runtime_pythonpath), str(source_root)))
+
+
+def test_harness_summary_survives_an_unavailable_registration_check(tmp_path: Path, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard.cli import product as product_module
+    from codex_plugin_scanner.guard.models import HarnessDetection
+    from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+
+    def unavailable(_artifacts: object) -> bool:
+        raise NativeRunnerAuthorityError("resident unavailable")
+
+    monkeypatch.setattr(product_module, "artifacts_use_guard", unavailable)
+    monkeypatch.setattr(product_module, "count_review_artifacts", lambda *_args: 0)
+    monkeypatch.setattr(product_module, "get_adapter", lambda _h: SimpleNamespace(approval_flow=lambda **_k: {}))
+    detection = HarnessDetection(
+        harness="cursor", installed=True, command_available=False, config_paths=(), artifacts=()
+    )
+
+    summary = product_module._summarize_harness(detection, GuardStore(tmp_path / "guard-home"), tmp_path)
+
+    assert summary["guard_registered"] is False

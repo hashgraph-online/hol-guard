@@ -503,20 +503,22 @@ fn a_redirected_pytest_run_routes_to_the_workspace_sandbox() {
         }
     }
     // A lone trailing `2>&1` names no file: the narrower read-only sink peels
-    // it from the core itself (`contained_core`), so on macOS the run keeps
-    // that sandboxed profile, as `python3 -m pytest -q 2>&1 | tail -20` does.
-    // Where no narrower profile claims pytest, its projection `pytest -q`
-    // reaches the workspace sandbox the way the plain run does.
+    // it from the core itself (`contained_core`), so the run keeps that
+    // sandboxed profile, as `python3 -m pytest -q 2>&1 | tail -20` does. Every
+    // host whose sandbox can start a contained run takes it -- macOS under
+    // Seatbelt, Linux under a bubblewrap mount -- so the profile is asked of
+    // `host()` rather than of one operating system. Where no sandbox is
+    // available the run keeps the admission it had.
     for harness in ["codex", "claude-code", "omp"] {
         let (reason, action) = outcome(harness, "pytest -q 2>&1", &ws);
-        if cfg!(target_os = "macos") {
+        if host() {
             assert_eq!(
                 reason, "native_pytest_readonly_containment_required",
                 "{harness}"
             );
             assert_eq!(action, "sandbox-required", "{harness}");
         } else {
-            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}");
+            assert_ne!(reason, CONTAINED, "{reason} {harness}");
         }
     }
     // A redirect the sandbox cannot confine keeps its review.

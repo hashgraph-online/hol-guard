@@ -44,6 +44,13 @@ _REQUIRED_TARGET_KEYS = frozenset(_TARGET_KEYS[:4])
 _ADVISORY_KEYS = frozenset({"cache_key", "updated_at", "payload_json"})
 _ACTIONS = frozenset({"allow", "review", "block"})
 _INVALID = "native_protect_request_invalid_result"
+_MERGE_OPERATION = "protect_advisory_merge"
+_MERGE_FEATURE = "protect-advisory-merge-v1"
+_MERGE_REQUEST_SCHEMA = "guard-protect-advisory-merge-request.v1"
+_MERGE_RESULT_SCHEMA = "guard-protect-advisory-merge-result.v1"
+_MERGE_MAX_REQUEST_BYTES = 2 * 1024 * 1024 + 4096
+_MERGE_RESULT_KEYS = frozenset({"schema", "request_id", "request_sha256", "status", "code", "merged"})
+_MERGE_INVALID = "native_protect_advisory_merge_invalid_result"
 
 
 class NativeProtectRequestError(RuntimeError):
@@ -78,29 +85,16 @@ def native_protect_request(
         # null: their request, and the digest the reply is bound to, stay the
         # bytes a caller that never knew about `cwd` would send.
         request["cwd"] = str(Path(cwd).absolute())
-    try:
-        home = _resolve_digest_home(guard_home)
-        request["guard_home"] = str(home)
-        if not ensure_resident_prerequisite(home):
-            raise NativeProtectRequestError("native_protect_request_unavailable")
-        request_sha256 = "sha256:" + _canonical_request_sha256(request)
-        decoded = native_execution._resident_request(
-            operation=_OPERATION,
-            request=request,
-            guard_home=home,
-            timeout_seconds=_TIMEOUT_SECONDS,
-            required_feature=_FEATURE,
-            response_schema=_RESULT_SCHEMA,
-            max_request_bytes=_MAX_REQUEST_BYTES,
-        )
-    except (OSError, TypeError, ValueError) as error:
-        raise NativeProtectRequestError("native_protect_request_unavailable") from error
-    if decoded is None:
-        raise NativeProtectRequestError("native_protect_request_unavailable")
-    if not set(decoded) <= _RESULT_KEYS:
-        raise NativeProtectRequestError(_INVALID)
-    if decoded.get("request_id") != request["request_id"] or decoded.get("request_sha256") != request_sha256:
-        raise NativeProtectRequestError("native_protect_request_request_mismatch")
+    decoded = _bound_reply(
+        request,
+        guard_home=guard_home,
+        operation=_OPERATION,
+        feature=_FEATURE,
+        result_schema=_RESULT_SCHEMA,
+        result_keys=_RESULT_KEYS,
+        max_request_bytes=_MAX_REQUEST_BYTES,
+        prefix="native_protect_request",
+    )
     code = decoded.get("code")
     if decoded.get("status") == "error":
         detail = decoded.get("detail")
@@ -183,3 +177,110 @@ def _advisory(value: object) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise NativeProtectRequestError(_INVALID)
     return {"cache_key": value["cache_key"], "updated_at": value["updated_at"], **payload}
+
+
+def native_protect_advisory_merge(
+    payload: dict[str, object],
+    *,
+    cached: dict[str, object],
+    requested_dry_run: bool,
+    exit_code: int,
+    guard_home: Path | None,
+) -> tuple[dict[str, Any], int, tuple[str, str] | None, tuple[str, dict[str, Any]] | None] | None:
+    """Return the native cached-advisory merge, or ``None`` when nothing changes."""
+
+    request: dict[str, object] = {
+        "schema": _MERGE_REQUEST_SCHEMA,
+        "request_id": native_execution._request_id(_MERGE_OPERATION),
+        "payload": payload,
+        "cached": cached,
+        "requested_dry_run": requested_dry_run,
+        "exit_code": exit_code,
+    }
+    decoded = _bound_reply(
+        request,
+        guard_home=guard_home,
+        operation=_MERGE_OPERATION,
+        feature=_MERGE_FEATURE,
+        result_schema=_MERGE_RESULT_SCHEMA,
+        result_keys=_MERGE_RESULT_KEYS,
+        max_request_bytes=_MERGE_MAX_REQUEST_BYTES,
+        prefix="native_protect_advisory_merge",
+    )
+    code = decoded.get("code")
+    if decoded.get("status") == "error":
+        raise NativeProtectRequestError(code if isinstance(code, str) else _MERGE_INVALID)
+    if decoded.get("status") != "ok" or code != "ok":
+        raise NativeProtectRequestError(_MERGE_INVALID)
+    merged = decoded.get("merged")
+    if merged is None:
+        return None
+    if not isinstance(merged, dict) or set(merged) != {"payload", "exit_code", "receipt_policy_update", "event"}:
+        raise NativeProtectRequestError(_MERGE_INVALID)
+    updated, merged_exit_code = merged["payload"], merged["exit_code"]
+    if not isinstance(updated, dict) or type(merged_exit_code) is not int:
+        raise NativeProtectRequestError(_MERGE_INVALID)
+    return updated, merged_exit_code, _receipt_update(merged["receipt_policy_update"]), _event(merged["event"])
+
+
+def _receipt_update(value: object) -> tuple[str, str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"receipt_id", "action"}:
+        raise NativeProtectRequestError(_MERGE_INVALID)
+    if not all(isinstance(item, str) for item in value.values()):
+        raise NativeProtectRequestError(_MERGE_INVALID)
+    return value["receipt_id"], value["action"]
+
+
+def _event(value: object) -> tuple[str, dict[str, Any]] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"name", "fields"} or not isinstance(value["name"], str):
+        raise NativeProtectRequestError(_MERGE_INVALID)
+    fields = value["fields"]
+    if not isinstance(fields, list) or not all(
+        isinstance(field, list) and len(field) == 2 and isinstance(field[0], str) for field in fields
+    ):
+        raise NativeProtectRequestError(_MERGE_INVALID)
+    return value["name"], {field[0]: field[1] for field in fields}
+
+
+def _bound_reply(
+    request: dict[str, object],
+    *,
+    guard_home: Path | None,
+    operation: str,
+    feature: str,
+    result_schema: str,
+    result_keys: frozenset[str],
+    max_request_bytes: int,
+    prefix: str,
+) -> dict[str, Any]:
+    """Send ``request`` and return the reply bound to it by id and digest."""
+
+    try:
+        home = _resolve_digest_home(guard_home)
+        if "guard_home" in request:
+            request["guard_home"] = str(home)
+        if not ensure_resident_prerequisite(home):
+            raise NativeProtectRequestError(f"{prefix}_unavailable")
+        request_sha256 = "sha256:" + _canonical_request_sha256(request)
+        decoded = native_execution._resident_request(
+            operation=operation,
+            request=request,
+            guard_home=home,
+            timeout_seconds=_TIMEOUT_SECONDS,
+            required_feature=feature,
+            response_schema=result_schema,
+            max_request_bytes=max_request_bytes,
+        )
+    except (OSError, TypeError, ValueError) as error:
+        raise NativeProtectRequestError(f"{prefix}_unavailable") from error
+    if decoded is None:
+        raise NativeProtectRequestError(f"{prefix}_unavailable")
+    if not set(decoded) <= result_keys:
+        raise NativeProtectRequestError(f"{prefix}_invalid_result")
+    if decoded.get("request_id") != request["request_id"] or decoded.get("request_sha256") != request_sha256:
+        raise NativeProtectRequestError(f"{prefix}_request_mismatch")
+    return decoded

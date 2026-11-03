@@ -64,6 +64,10 @@ for (const scriptLike of [{ ...raw, kind: "script" }, { ...raw, name: "approve-m
   assert.doesNotMatch(script, /Full path to /);
   assert.doesNotMatch(script, /<input/);
   assert.match(script, /load commands only for scripts you trust/);
+  // A script is read before anything runs it, and run only when it handles --help.
+  assert.match(script, /reads it first, without running it/);
+  assert.match(script, /only when\s+that code handles --help/);
+  assert.doesNotMatch(script, /then the same for each command it lists/);
   assert.match(script, /<button[^>]*>Load commands</);
   assert.doesNotMatch(script, /<button[^>]*disabled=""[^>]*>Load commands</);
   assert.doesNotMatch(script, /disabled:cursor-wait/);

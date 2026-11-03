@@ -40,12 +40,23 @@ fn filter_chain(model: &CanonicalCommandV1, segments: &[CommandSegmentV1]) -> Op
     Some(filters.len())
 }
 
+/// The text one segment occupies in the command, as the sink lexes it.
+pub(super) fn segment_source(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+) -> Option<String> {
+    text(model, segment.span.start, segment.span.end)
+}
+
 /// A final `; echo "exit=$?"`: the sink prints the label and status itself.
 ///
 /// The shell prints a single-quoted or backslash-escaped `$?` literally, and
 /// the Python sink cannot peel those forms. Accept only the source syntax the
 /// sink peels, so those commands stay on the normal review path.
-fn status_echo(model: &CanonicalCommandV1, segment: &CommandSegmentV1) -> bool {
+pub(in crate::pretool) fn status_echo(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+) -> bool {
     segment.environment_names.is_empty()
         && segment.wrapper_chain.is_empty()
         && !segment.path_overridden

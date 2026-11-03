@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { addContextProject } from "./context-project";
 import { resolve } from "node:path";
 import type { Page } from "@playwright/test";
 import { contextStatus } from "./context-status";
@@ -41,7 +42,7 @@ test("execution opt-in and browser approvals reach the installed native executor
       const toggle = page.getByRole("switch", { name: label, exact: true });
       if (await toggle.getAttribute("aria-checked") === "true") await toggle.click();
     }
-    await page.getByText("Sources, limits and runtime details", { exact: true }).click();
+    await page.getByText("Sources, limits, storage and runtime details", { exact: true }).click();
     const execution = page.getByRole("switch", { name: "Associate native context with execution", exact: true });
     await expect(execution).toHaveAttribute("aria-checked", "false");
     await execution.focus();
@@ -58,17 +59,15 @@ test("execution opt-in and browser approvals reach the installed native executor
     const panel = page.getByRole("region", { name: "Native execution context observations", exact: true });
     await expect(panel.getByText(/Preparation is ready for Pi and Oh My Pi/)).toBeVisible();
     await expect(panel.getByText("No recent execution-context observations.", { exact: true })).toBeVisible();
-    await page.getByRole("tab", { name: "Sources & AI apps", exact: true }).click();
-    const consumer = page.getByRole("combobox", { name: "Context consumer", exact: true });
-    expect(await consumer.locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value)))
-      .toEqual(["dashboard", "pi", "omp"]);
-    await consumer.selectOption("omp");
-    await page.getByLabel("Workspace folder", { exact: true }).fill(state.workspace);
-    await page.getByRole("button", { name: "Grant review source access", exact: true }).click();
-    const grantProof = page.getByRole("dialog");
+    await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
+    await addContextProject(page, state.workspace, { app: "Oh My Pi", files: [] });
+    const apps = page.getByRole("group", { name: "Which app can use it?", exact: true }).getByRole("radio");
+    expect(await apps.evaluateAll((items) => items.map((item) => (item as HTMLInputElement).value))).toEqual(["dashboard", "pi", "omp"]);
+    await page.getByRole("button", { name: "Give CIGAR access", exact: true }).click();
+    const grantProof = page.getByRole("dialog", { name: "Confirm CIGAR access", exact: true });
     await expect(grantProof).toContainText("Oh My Pi");
     await grantProof.getByLabel("Approval password").fill(state.approvalPassword);
-    await grantProof.getByRole("button", { name: "Grant source access", exact: true }).click();
+    await grantProof.getByRole("button", { name: "Give access", exact: true }).click();
     await expect(grantProof).toHaveCount(0);
     for (const choice of ["allow-once", "always-allow"]) {
       const queued = sink(choice, "prepare");

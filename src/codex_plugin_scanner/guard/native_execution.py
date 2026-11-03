@@ -206,6 +206,7 @@ def _resident_request(
             "extension_control_authority",
             "hook_render",
             "protect_request",
+            "protect_advisory_merge",
             "hook_artifact_compose",
             "consumer_artifact_compose",
             "mcp_tool_call_identity",

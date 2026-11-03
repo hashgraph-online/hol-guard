@@ -28,12 +28,13 @@ It finds every site where a `GuardAction` literal is produced in package source,
 including inside the generated hook clients. It does not follow a verdict that
 arrives as data — a string read from JSON, a value threaded through a `dict`
 that never names it — and it cannot read a template that is not parseable
-Python. One template is in that state today: Cline's hook script is a format
-string with `{event_name!r}` interpolations and escaped braces. Its action
-strings were read by hand and are all membership tests, not productions.
-`docs/guard/audits/python-verdict-sites.json` records that template under
-`unparsed_templates`, and `--check` fails if the set of unreadable templates
-changes, so a second one cannot appear silently.
+Python. The scan only treats a string literal as embedded source when it
+defines a function (a line starting `def `), so a script template without one
+is not read at all. Among the templates it does select, none is unreadable
+today; Cline's hook worker, the last one, now runs in the native runtime.
+`docs/guard/audits/python-verdict-sites.json` records unreadable templates
+under `unparsed_templates`, and `--check` fails if that set changes, so a
+selected template cannot turn unreadable silently.
 
 A site that composes a verdict out of data rather than literals would be missed.
 That is the limit worth stating plainly: this scan narrows the search to a set
@@ -100,12 +101,10 @@ read. Thirty-four hold no authority of their own, in these readings:
   which opens the request owner-only, checks its digest and re-authorizes the
   command there.
 
-`grok_hook_response_from_guard`, recorded here in an earlier pass as a latent
-allow-shaped fallthrough, now normalizes an action it does not recognise to the
-review tier before rendering. An enforcement event then denies like the other
-two renderings of its kind, a prompt blocks, an observe-only event renders
-nothing, and a recording-only session renders allow because it records rather
-than enforces. Nothing is left to tighten there.
+The Python `grok_hook_response_from_guard`, recorded here in an earlier pass as a
+latent allow-shaped fallthrough, had no production caller once the native hook
+renderer took over and has been removed. Grok's envelopes come from
+`rust/crates/guard-command/src/hook_responses/mod.rs`.
 
 ## The findings
 

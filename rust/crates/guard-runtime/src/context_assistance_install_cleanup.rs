@@ -27,6 +27,9 @@ fn owned(home: &Path, path: &Path, job: &store::Job) -> Result<bool, String> {
         && marker["request_sha256"] == job.request_sha256
         && marker["slot"] == job.slot)
 }
+/// Checking and deleting a full Python tree takes seconds on Windows, where
+/// each file's owner and link count are read through a handle.
+pub(super) const CLEANUP_TIME: Duration = Duration::from_secs(10);
 pub(super) fn collect(
     path: &Path,
     items: &mut Vec<(PathBuf, bool)>,
@@ -61,6 +64,10 @@ pub(super) fn collect(
                 return Err(error("install_cleanup_unsafe"));
             }
         }
+        #[cfg(windows)]
+        if !guard_cigar_artifacts::host::private_file(path, &metadata) {
+            return Err(error("install_cleanup_unsafe"));
+        }
         *bytes = bytes
             .checked_add(metadata.len())
             .ok_or_else(|| error("install_cleanup_limit"))?;
@@ -72,6 +79,20 @@ pub(super) fn collect(
         return Err(error("install_cleanup_unsafe"));
     }
     Ok(())
+}
+/// Unix unlinks a file whatever its mode. Windows refuses to delete a file
+/// with the read-only attribute, which published Python files carry, so the
+/// attribute is dropped first.
+fn remove_file(path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        let mut permissions = fs::symlink_metadata(path)?.permissions();
+        if permissions.readonly() {
+            permissions.set_readonly(false);
+            fs::set_permissions(path, permissions)?;
+        }
+    }
+    fs::remove_file(path)
 }
 pub(super) fn remove_collected(
     root: &Path,
@@ -89,7 +110,7 @@ pub(super) fn remove_collected(
         if directory {
             fs::remove_dir(path)
         } else {
-            fs::remove_file(path)
+            remove_file(&path)
         }
         .map_err(|_| error("install_cleanup_failed"))?;
     }
@@ -97,7 +118,7 @@ pub(super) fn remove_collected(
         return Err(error("install_cleanup_limit"));
     }
     if marker.exists() {
-        fs::remove_file(marker).map_err(|_| error("install_cleanup_failed"))?;
+        remove_file(&marker).map_err(|_| error("install_cleanup_failed"))?;
     }
     fs::remove_dir(root).map_err(|_| error("install_cleanup_failed"))
 }
@@ -126,7 +147,7 @@ fn roots(home: &Path, job: &store::Job, paths: &[(&str, &str)]) -> Result<(), St
             record.selection.work_dir,
         ]);
     }
-    let deadline = Instant::now() + Duration::from_millis(500);
+    let deadline = Instant::now() + CLEANUP_TIME;
     for &(parent, slot) in paths {
         let parent = home.join("context-assistance").join(parent);
         match fs::symlink_metadata(&parent) {

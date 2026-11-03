@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react";
-import { HiMiniAcademicCap, HiMiniArrowLeft, HiMiniArrowRight, HiMiniClipboardDocument, HiMiniXMark } from "react-icons/hi2";
+import { HiMiniArrowLeft, HiMiniArrowRight, HiMiniClipboardDocument, HiMiniXMark } from "react-icons/hi2";
 import { contextStatusCopy } from "./status";
-import { CIGAR_FULL_NAME, CIGAR_TUTORIALS, type CigarTutorial, type CigarTutorialId } from "./tutorial-content";
+import { CIGAR_TUTORIALS, type CigarTutorial, type CigarTutorialId } from "./tutorial-content";
 import type { CigarTutorialProgress } from "./tutorial-progress";
 import type { ContextAssistanceStatus } from "./types";
 
@@ -9,14 +9,9 @@ export function CigarTutorials(props: {
   progress: CigarTutorialProgress;
   onBegin: (id: CigarTutorialId, resume?: boolean) => void;
 }) {
-  return <div className="cigar-guide">
-    <section className="cigar-card cigar-learning-intro" aria-labelledby="cigar-tutorials-heading">
-      <span className="cigar-icon"><HiMiniAcademicCap aria-hidden="true" /></span>
-      <div><span className="cigar-eyebrow">Learn by doing</span><h2 id="cigar-tutorials-heading">Make CIGAR useful for your next task</h2>
-        <p><strong>CIGAR</strong> stands for <strong>{CIGAR_FULL_NAME}</strong>. Start with one question and one workspace, then add app access or execution context when you need it.</p>
-        <p className="cigar-learning-caption">Guidance stays with your chosen step as you move between sections. It explains the steps; you choose every setting, start, and access grant.</p>
-      </div>
-    </section>
+  return <section className="cigar-walkthroughs" aria-labelledby="cigar-tutorials-heading">
+    <div className="cigar-section-intro"><h2 id="cigar-tutorials-heading">Guided walkthroughs</h2>
+      <p>Short step-by-step lessons. They only explain; you choose every setting, start and access grant.</p></div>
     <div className="cigar-benefits">
       {CIGAR_TUTORIALS.map((tutorial) => <article className="cigar-card cigar-benefit" key={tutorial.id}>
         <span className="cigar-eyebrow">{tutorial.level}</span><h3>{tutorial.title}</h3><p>{tutorial.description}</p>
@@ -28,16 +23,7 @@ export function CigarTutorials(props: {
         </button>
       </article>)}
     </div>
-    <section className="cigar-card" aria-labelledby="cigar-effective-heading">
-      <span className="cigar-eyebrow">Use context effectively</span><h2 id="cigar-effective-heading">A useful brief starts with a focused question</h2>
-      <div className="cigar-effective-grid">
-        <article><h3>Name the decision</h3><p>Ask which release rules apply to a change, which documented steps to follow, or which native policy facts affect a workspace.</p></article>
-        <article><h3>Choose evidence that can answer it</h3><p>Start with one or two relevant documents and the native facts you need. Add sources when a specific gap appears.</p></article>
-        <article><h3>Use citations as your check</h3><p>Inspect source names, line ranges, and revisions. Refresh after edits and ask the app to identify missing evidence.</p></article>
-      </div>
-      <div className="cigar-note"><strong>Try a specific task instead of a broad request</strong><p>For selected release docs: “Which release steps and approval rules are documented for this project?” For native facts only: “Which Guard policy facts apply to this workspace?”</p></div>
-    </section>
-  </div>;
+  </section>;
 }
 
 export function CigarWalkthrough(props: {
@@ -68,7 +54,7 @@ export function CigarWalkthrough(props: {
   }
 
   return <aside className="cigar-card cigar-walkthrough" aria-labelledby={id + "-title"}>
-    <div className="cigar-section-heading"><span className="cigar-eyebrow">Guided walkthrough</span>
+    <div className="flex justify-end">
       <button type="button" className="cigar-walkthrough-close" onClick={props.onExit} aria-label="Exit walkthrough"><HiMiniXMark aria-hidden="true" /></button>
     </div>
     <h2 id={id + "-title"}>{props.tutorial.title}</h2>

@@ -36,7 +36,7 @@ from tests.benign_fp_gate_connectors import allow_ready_cli, assert_connector_se
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, replay
 from tests.benign_fp_gate_projects import host_tool_path
-from tests.gauntlet_replay import OMP_CONTAINED, cursor_hook_fields, cursor_route_probe, source_ref_payload
+from tests.gauntlet_replay import cursor_hook_fields, cursor_route_probe, omp_routes_profile, source_ref_payload
 from tests.native_gate_retry import BUDGET_MISS_REASONS, review_with_unavailable_retry
 from tests.outbound_network_guard import outbound_network_attempts
 
@@ -55,6 +55,7 @@ _SHELL_TOOL = {
     "omp": "bash",
     "cursor": "Shell",
     "muse": "bash",
+    "grok": "run_terminal_command",
 }
 _READ_TOOL = {"zcode": "Read", "claude-code": "Read", "omp": "read", "cursor": "Read"}
 _GLOB_TOOL = {"claude-code": "Glob", "omp": "glob"}
@@ -113,6 +114,10 @@ class GateCase:
     source_ref: bool = False
     # Variables the agent shell inherits, such as a user's RIPGREP_CONFIG_PATH.
     environment: tuple[tuple[str, str], ...] = ()
+    # The allow this case was written for is the contained one: the command may
+    # run only inside the workspace sandbox. Kept so the assertion can say so,
+    # rather than accepting any quiet allow.
+    requires_sandbox: bool = False
 
 
 def _expand() -> list[GateCase]:
@@ -138,6 +143,7 @@ def _expand() -> list[GateCase]:
                     tool_response=entry.get("tool_response"),
                     source_ref=bool(entry.get("source_ref", False)),
                     environment=tuple(sorted(entry.get("environment", {}).items())),
+                    requires_sandbox=bool(entry.get("requires_sandbox", False)),
                 )
             )
     return expanded
@@ -289,8 +295,8 @@ def _harness_route(
 
     ``review_http_payload`` already routes Z Code and Claude Code, and admits the
     sink command Cursor's probe wrote. Codex routes
-    in its hook bridge and Oh My Pi in its TypeScript extension (every profile
-    on macOS, the workspace profile on Linux). Without this the gate
+    in its hook bridge and Oh My Pi in its TypeScript extension (see
+    ``omp_routes_profile`` for the profiles each host takes). Without this the gate
     counts their contained runs as reviews although the user sees nothing.
     """
     if case.harness == "codex":
@@ -306,8 +312,7 @@ def _omp_routes(result: dict[str, object]) -> bool:
         result.get("decision") == "deny"
         and result.get("policy_action") == "sandbox-required"
         and result.get("observe_mode") is not True
-        and (profile, _reason(result)) in OMP_CONTAINED
-        and (sys.platform == "darwin" or (sys.platform == "linux" and profile == "workspace-contained-v1"))
+        and omp_routes_profile(profile, _reason(result))
     )
 
 
@@ -439,6 +444,11 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
         _assert_pending(case.case_id, _PENDING_FIX[case.case_id], result, approvals, description)
     else:
         assert _quiet_allow(result, approvals), f"benign work was reviewed: {description}"
+        # An allow that only the sandbox route can give has to arrive that way.
+        # A plain uncontained allow would pass the quiet check while losing the
+        # containment the case exists to pin.
+        if case.requires_sandbox:
+            assert _contained(result), f"benign work was allowed uncontained: {description}"
     if case.case_id in _PENDING_ALWAYS:
         if gap:
             pytest.xfail(f"{_PENDING_ALWAYS[case.case_id]}: review row without Always: {description}")

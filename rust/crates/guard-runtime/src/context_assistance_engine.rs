@@ -1,5 +1,6 @@
-//! Actor-owned, memory-only workspace grants. Optional saved evidence never
-//! restores a grant. Operator choices select sources;
+//! Actor-owned workspace grants. Only folders picked in the dashboard come
+//! back after a restart, picked again by path; saved evidence never restores
+//! a grant. Operator choices select sources;
 //! agent-facing consumers must bind a native caller to an existing app grant.
 use crate::context_assistance_notifications::{Epoch, Notifications, ReceiptFact};
 use backend::{Backend, Context, NotesAccess};
@@ -20,10 +21,8 @@ mod backend;
 mod grants;
 #[path = "context_assistance_engine_proposals.rs"]
 mod proposals;
-#[cfg(unix)]
 #[path = "context_assistance_engine_upgrade.rs"]
 mod upgrade;
-#[cfg(unix)]
 pub(crate) use upgrade::UpgradeBoundary;
 #[cfg(all(test, target_os = "macos"))]
 pub(crate) use upgrade::{
@@ -38,12 +37,17 @@ mod agents;
 mod cache;
 #[path = "context_assistance_engine_policy.rs"]
 mod policy;
+#[path = "context_assistance_engine_prompt.rs"]
+mod prompt;
 use policy::{allowed, current_sources, effective, policy_current, policy_document, revision};
+pub(crate) use prompt::{admissible_paths, PickedExcerpt};
 #[cfg(target_os = "macos")]
 #[path = "context_assistance_engine_execution.rs"]
 mod execution;
 #[path = "context_assistance_engine_history.rs"]
 mod history;
+#[path = "context_assistance_engine_picked.rs"]
+mod picked;
 #[path = "context_assistance_engine_receipts.rs"]
 mod receipts;
 #[cfg(target_os = "macos")]
@@ -179,22 +183,21 @@ pub(crate) struct Engine {
     retention_hours: u32,
     limits: guard_context_assistance::Limits,
     scopes: BTreeMap<String, Scope>,
+    auto: prompt::AutoScopes,
     notifications: Option<Arc<Notifications>>,
     receipt_epoch: Epoch,
     agents: crate::context_assistance_agents::Sessions,
     #[cfg(target_os = "macos")]
     execution_lane: Option<execution::Lane>,
-    #[cfg(unix)]
     cache: Option<guard_context_assistance::EvidenceCache>,
-    #[cfg(unix)]
+    /// Dashboard picks to keep; `None` until this worker restored them.
+    picked: Option<picked::Picks>,
     producer: Option<guard_context_assistance::EvidenceUpgradeProducer>,
-    #[cfg(unix)]
     data_generation: Option<Arc<guard_context_assistance::PreparedEvidenceGeneration>>,
 }
 
 impl Engine {
     fn expire_notes(&mut self, runtime: &mut VerifiedRuntime) -> Result<(), RuntimeError> {
-        #[cfg(unix)]
         crate::policy_store::context_assistance_registry::switching::DataRemoval::check_clear(
             &self.home,
         )?;
@@ -219,11 +222,17 @@ impl Engine {
         self.sweep_saved()?;
         Ok(())
     }
+    /// True while a hand-picked project grant would be lost if this worker
+    /// retired. Automatic prompt scopes are rebuilt on the next prompt.
+    pub(crate) fn holds_scopes(&self) -> bool {
+        (self.scopes.iter()).any(|(id, scope)| !scope.revoked && !self.auto.contains(id))
+    }
     pub(crate) fn maintenance(
         runtime: &mut VerifiedRuntime,
         engine: &mut Self,
     ) -> Result<(), RuntimeError> {
         engine.expire_notes(runtime)?;
+        engine.restore_picked(runtime);
         #[cfg(target_os = "macos")]
         engine.maintain_execution_lane(runtime)?;
         Ok(())
@@ -242,16 +251,15 @@ impl Engine {
             retention_hours: config.storage.retention_hours,
             limits: config.limits.clone(),
             scopes: BTreeMap::new(),
+            auto: Default::default(),
             notifications,
             receipt_epoch: Epoch::default(),
             agents: Default::default(),
             #[cfg(target_os = "macos")]
             execution_lane: None,
-            #[cfg(unix)]
             cache: None,
-            #[cfg(unix)]
+            picked: None,
             producer: None,
-            #[cfg(unix)]
             data_generation: None,
         }
     }
@@ -262,6 +270,7 @@ impl Engine {
         request: Request,
     ) -> Result<Value, RuntimeError> {
         if !matches!(&request, Request::Clear | Request::ForgetSaved) {
+            self.restore_picked(runtime);
             self.expire_notes(runtime)?;
         }
         let reads = matches!(
@@ -309,7 +318,6 @@ impl Engine {
                 shared_notes,
             } => self.grant(runtime, workspace, app, sources, shared_notes),
             Request::Clear | Request::ForgetSaved => {
-                #[cfg(unix)]
                 let removal = crate::policy_store::context_assistance_registry::switching::DataRemoval::acquire(&self.home)?;
                 // A failed close leaves this generation unavailable, never a
                 // partially cleared graph eligible for later compilation.
@@ -320,10 +328,8 @@ impl Engine {
                 #[cfg(target_os = "macos")]
                 self.close_execution_lane(runtime)?;
                 self.scopes.clear();
-                #[cfg(unix)]
                 self.forget_saved(removal)?;
-                #[cfg(not(unix))]
-                self.forget_saved()?;
+                self.forget_picks();
                 self.agents = Default::default();
                 if let Some(notifications) = &self.notifications {
                     notifications.clear()?;
@@ -339,6 +345,8 @@ impl Engine {
                 Ok(json!({"session_id":session_id,"revoked":true}))
             }
             Request::Revoke { scope_id } => {
+                // The live folder closes even when its record cannot be updated.
+                let forgotten = self.forget_pick(&scope_id);
                 let scope = self
                     .scopes
                     .get_mut(&scope_id)
@@ -346,7 +354,7 @@ impl Engine {
                 scope.clear_contexts();
                 close_graph(runtime, &mut scope.graph)?;
                 self.scopes.remove(&scope_id);
-                Ok(json!({"revoked":true, "scope_id":scope_id}))
+                forgotten.map(|_| json!({"revoked":true, "scope_id":scope_id}))
             }
             other => self.scoped(runtime, other),
         }?;

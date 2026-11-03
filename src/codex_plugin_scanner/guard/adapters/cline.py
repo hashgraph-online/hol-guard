@@ -8,11 +8,18 @@ from pathlib import Path
 
 from ..frozen_runtime_commands import is_frozen_guard_runtime
 from ..models import GuardArtifact, HarnessDetection
+from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 from .base import HarnessAdapter, HarnessContext
 from .cline_contract import register_cline_contract
-from .cline_detection import ClineHostDetection, detect_cline_hosts
+from .cline_detection import (
+    ClineHostDetection,
+    cline_hosts,
+    detect_cline_hosts,
+    native_cline_inventory,
+    resolve_cline_cli,
+)
 from .cline_hooks import cline_native_hook_state
-from .cline_mcp import cline_mcp_proxy_state, detect_cline_mcp
+from .cline_mcp import cline_mcp_proxy_state, cline_mcp_settings_candidates
 from .cline_plugin import cline_plugin_state
 
 register_cline_contract()
@@ -40,46 +47,21 @@ def _load_adapter_state(context: HarnessContext) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _host_artifacts(hosts: ClineHostDetection, context: HarnessContext) -> tuple[GuardArtifact, ...]:
-    artifacts: list[GuardArtifact] = []
-    if hosts.cli_executable:
-        artifacts.append(
-            GuardArtifact(
-                artifact_id="cline:host:cli",
-                name="Cline CLI",
-                harness="cline",
-                artifact_type="harness_host",
-                source_scope="global",
-                config_path=str(Path(hosts.cli_executable).parent),
-                command=hosts.cli_executable,
-                metadata={"version": hosts.cli_version or "unknown", "surface": "cli"},
-            )
-        )
-    for version in hosts.vscode_versions:
-        artifacts.append(
-            GuardArtifact(
-                artifact_id=f"cline:host:vscode:{version}",
-                name="Cline VS Code",
-                harness="cline",
-                artifact_type="harness_host",
-                source_scope="global",
-                config_path=str(context.home_dir / ".vscode" / "extensions"),
-                metadata={"version": version, "surface": "vscode"},
-            )
-        )
-    for index, path in enumerate(hosts.jetbrains_paths):
-        artifacts.append(
-            GuardArtifact(
-                artifact_id=f"cline:host:jetbrains:{index}",
-                name="Cline JetBrains",
-                harness="cline",
-                artifact_type="harness_host",
-                source_scope="global",
-                config_path=path,
-                metadata={"surface": "jetbrains", "protection_status": "unverified"},
-            )
-        )
-    return tuple(artifacts)
+def _cli_host_artifact(hosts: ClineHostDetection) -> tuple[GuardArtifact, ...]:
+    if not hosts.cli_executable:
+        return ()
+    return (
+        GuardArtifact(
+            artifact_id="cline:host:cli",
+            name="Cline CLI",
+            harness="cline",
+            artifact_type="harness_host",
+            source_scope="global",
+            config_path=str(Path(hosts.cli_executable).parent),
+            command=hosts.cli_executable,
+            metadata={"version": hosts.cli_version or "unknown", "surface": "cli"},
+        ),
+    )
 
 
 def _surface(value: str | None, *, default: str) -> str:
@@ -108,17 +90,12 @@ class ClineHarnessAdapter(HarnessAdapter):
     approval_auto_open_browser = True
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
-        hosts = detect_cline_hosts(context)
-        mcp = detect_cline_mcp(context)
-        config_paths: list[str] = list(mcp.config_paths)
-        for path in (
-            context.home_dir / ".cline" / "hooks",
-            context.home_dir / ".cline" / "plugins",
-            context.home_dir / "Documents" / "Cline" / "Hooks",
-            context.home_dir / "Documents" / "Cline" / "Plugins",
-        ):
-            if path.exists():
-                config_paths.append(str(path))
+        executable, version = resolve_cline_cli(context)
+        native_artifacts, config_paths, native_warnings = native_cline_inventory(
+            context, cline_mcp_settings_candidates(context)
+        )
+        hosts = cline_hosts(executable, version, native_artifacts)
+        artifacts = tuple(enrich_artifact_with_mcp_skill_firewall(artifact) for artifact in native_artifacts)
         hook_state = cline_native_hook_state(context)
         plugin_state = cline_plugin_state(context)
         warnings: list[str] = []
@@ -127,22 +104,18 @@ class ClineHarnessAdapter(HarnessAdapter):
                 "Guard found both managed Cline enforcement transports. "
                 "Run `hol-guard apps repair cline` to restore one transport."
             )
-        if hosts.jetbrains_paths:
-            warnings.append(
-                "Cline JetBrains was detected, but Guard does not mark that IDE protected until a live pre-tool "
-                "deny proof is observed."
-            )
+        warnings.extend(native_warnings)
         return HarnessDetection(
             harness=self.harness,
             installed=bool(hosts.hosts or config_paths or hook_state.get("installed") or plugin_state.get("installed")),
             command_available=hosts.cli_executable is not None,
-            config_paths=tuple(dict.fromkeys(config_paths)),
-            artifacts=(*_host_artifacts(hosts, context), *mcp.artifacts),
+            config_paths=config_paths,
+            artifacts=(*_cli_host_artifact(hosts), *artifacts),
             warnings=tuple(warnings),
         )
 
     def resolved_executable(self, context: HarnessContext) -> str | None:
-        return detect_cline_hosts(context).cli_executable
+        return resolve_cline_cli(context)[0]
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
         return [self.resolved_executable(context) or self.executable, *passthrough_args]

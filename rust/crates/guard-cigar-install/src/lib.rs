@@ -105,8 +105,21 @@ impl BundlePlan {
                 }))
                 .map_err(|_| InstallError::WriteFailed)?;
             }
+            #[cfg(windows)]
+            {
+                let mut permissions = file
+                    .metadata()
+                    .map_err(|_| InstallError::WriteFailed)?
+                    .permissions();
+                permissions.set_readonly(true);
+                file.set_permissions(permissions)
+                    .map_err(|_| InstallError::WriteFailed)?;
+            }
             file.sync_all().map_err(|_| InstallError::WriteFailed)?;
         }
+        // NTFS journals directory entries itself, and a directory cannot be
+        // opened for flushing through `File::open` there.
+        #[cfg(unix)]
         for directory in directories.iter().rev() {
             control.checkpoint()?;
             fs::File::open(directory)

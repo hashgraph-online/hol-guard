@@ -203,13 +203,16 @@ def test_authority_edge_returns_routed_response_or_original(monkeypatch, tmp_pat
 
 
 @pytest.mark.parametrize(
-    ("reason", "profile", "routed"),
+    ("reason", "profile"),
     [
-        ("native_workspace_containment_required", "workspace-contained-v1", True),
-        ("native_vitest_readonly_containment_required", "vitest-readonly-v1", False),
+        ("native_workspace_containment_required", "workspace-contained-v1"),
+        ("native_vitest_readonly_containment_required", "vitest-readonly-v1"),
     ],
 )
-def test_linux_routes_only_the_workspace_sandbox(containment_resident, tmp_path, monkeypatch, reason, profile, routed):
+def test_linux_routes_every_profile_its_sink_runs(containment_resident, tmp_path, monkeypatch, reason, profile):
+    """A read-only profile runs under the same bubblewrap mount as the workspace
+    sandbox, so Linux routes both rather than leaving the narrower one as a
+    review the user has to answer."""
     monkeypatch.setattr(sys, "platform", "linux")
     receipt = {
         "decision": "deny",
@@ -224,9 +227,9 @@ def test_linux_routes_only_the_workspace_sandbox(containment_resident, tmp_path,
         "toolInput": {"command": "python3 todo.py list > out.txt"},
     }
     result = _route(receipt, payload, tmp_path)
-    assert (result is not receipt) is routed
-    if routed:
-        _discard(_argv(result))
+    assert result is not receipt
+    assert result["reason_code"] == "native_contained_execution_routed"
+    _discard(_argv(result))
 
 
 def test_windows_sink_bootstrap_has_no_escaped_backslashes(tmp_path, monkeypatch):

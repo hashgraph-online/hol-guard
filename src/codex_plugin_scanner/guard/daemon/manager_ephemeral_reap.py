@@ -220,12 +220,7 @@ def _ephemeral_guard_home_is_inactive(
 
 
 def _running_ephemeral_guard_daemon_processes() -> list[tuple[int, Path, float]]:
-    if m.os.name == "nt":
-        return []
-    ps_path = m._trusted_posix_ps_path()
-    if ps_path is None:
-        return []
-    output = m._bounded_process_query_stdout([ps_path, "-axo", "pid=,etime=,command="])
+    output = m.posix_processes.posix_process_elapsed_listing()
     if output is None:
         return []
     verdict = m._lifecycle("ephemeral_processes", {"ps_output": output})

@@ -24,32 +24,6 @@ const QUEUE_METADATA_KEYS: [&str; 4] = [
     "command_rule_matches",
     "extension_allow_hint",
 ];
-/// `TEMPORARY_MCP_GRANT_TARGETS`.
-const GRANT_TARGETS: [&str; 3] = ["exact", "category", "server"];
-/// `["once", *TEMPORARY_MCP_GRANT_DURATIONS]`.
-const GRANT_DURATIONS: [&str; 4] = ["once", "15m", "1h", "5h"];
-/// `_HARD_RISK_EXCLUSIONS`.
-const HARD_RISK_EXCLUSIONS: [&str; 10] = [
-    "browser_transfer",
-    "browser_privileged",
-    "browser_sensitive_surface",
-    "browser_shared_profile",
-    "secret_access",
-    "filesystem_access",
-    "command_execution",
-    "destructive_mutation",
-    "privileged_system_mutation",
-    "tool_schema_mismatch",
-];
-/// `_INTENT_CATEGORIES`.
-const INTENT_CATEGORIES: [(&str, &str); 3] = [
-    ("browser.navigation", "browser_navigation"),
-    ("browser.inspect", "browser_inspection"),
-    ("browser.interact", "browser_interaction"),
-];
-/// The one `_INFORMATIONAL_CATEGORIES` entry.
-const INFORMATIONAL_CATEGORY: &str = "browser_external_domain";
-
 const ASK_PROJECTION: &str = "mcp_relay_ask_projection";
 
 /// The `McpCallProjection` fields the queued item reads.
@@ -273,43 +247,7 @@ fn wire_artifact(artifact: &McpToolCallArtifactV1) -> Value {
 /// `temporary_mcp_approval_payload`: the bounded-grant choices a routine
 /// browser capability offers in the approval center.
 pub(super) fn temporary_mcp_approval(row: &Map<String, Value>) -> Option<Value> {
-    let intent = row.get("browser_intent")?.as_object()?;
-    let identity_hash = nonempty(intent.get("mcp_server_identity_hash"))?;
-    let server_name = nonempty(intent.get("mcp_server_name"))?;
-    let named = nonempty(intent.get("intent"))?;
-    let category = INTENT_CATEGORIES
-        .iter()
-        .find(|(name, _)| *name == named)
-        .map(|(_, category)| *category)?;
-    let risk_categories: Vec<&str> = intent
-        .get("risk_categories")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect();
-    if !risk_categories.contains(&category) {
-        return None;
-    }
-    if !risk_categories
-        .iter()
-        .all(|item| *item == category || *item == INFORMATIONAL_CATEGORY)
-    {
-        return None;
-    }
-    let target_label =
-        nonempty(intent.get("target_domain")).or_else(|| nonempty(intent.get("target_origin")));
-    Some(json!({
-        "version": 1,
-        "eligible": true,
-        "server_name": server_name,
-        "server_identity_hash": identity_hash,
-        "category": category,
-        "target_label": target_label,
-        "allowed_targets": GRANT_TARGETS,
-        "allowed_durations": GRANT_DURATIONS,
-        "hard_risk_exclusions": HARD_RISK_EXCLUSIONS,
-    }))
+    crate::temporary_mcp_grant::approval(row.get("browser_intent"))
 }
 
 /// `_nonempty_string`.

@@ -265,6 +265,45 @@ fn a_list_after_cd_into_a_sibling_root_runs_contained_there() {
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
 
+/// A run that reports its own status: agents end a sibling-root command with
+/// `; echo "<label>$?"` so the status survives the filter that bounds the
+/// output. The sink peels that tail before it lexes the text, and the
+/// classifier reads the same suffix, so the list is the one the root runs.
+#[test]
+fn a_status_echo_after_a_sibling_cd_stays_contained() {
+    let (home, main, tree) = fixture();
+    for command in [
+        format!("cd {} && npm run build; echo \"build=$?\"", tree.display()),
+        format!(
+            "cd {} && node scripts/report.mjs 2>&1 | tail -3; echo \"rc=$?\"",
+            tree.display()
+        ),
+        format!("cd {}; npm run build; echo rc=$?", tree.display()),
+    ] {
+        assert_eq!(
+            contained(&reason("omp", &home, &main, &command)),
+            host(),
+            "{command}"
+        );
+    }
+    for command in [
+        // Not the tail the sink peels: no status to print, a quoting the sink
+        // cannot read, or work after the echo that the `cd` would still join.
+        format!("cd {} && npm run build; echo done", tree.display()),
+        format!("cd {} && npm run build; echo 'rc=$?'", tree.display()),
+        format!(
+            "cd {} && npm run build; echo \"rc=$?\" && ls dist",
+            tree.display()
+        ),
+    ] {
+        assert!(
+            !contained(&reason("omp", &home, &main, &command)),
+            "{command}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}
+
 #[test]
 fn a_sibling_cd_the_sink_would_not_rebase_keeps_its_review() {
     let (home, main, _tree) = fixture();
@@ -517,8 +556,9 @@ fn a_command_below_a_sibling_root_reaching_outside_it_keeps_its_review() {
         &main,
         &format!("cd {}/scripts && ./report.sh", tree.display())
     )));
-    // macOS holds a Vite build to its own read-only output profile instead.
-    if !cfg!(target_os = "macos") {
+    // A host with a sandbox holds a Vite build to its own read-only output
+    // profile instead, which `contained` reads as contained.
+    if !host() {
         let command = format!(
             "cd {}/web && ./node_modules/.bin/vite build --config {}",
             tree.display(),
@@ -714,4 +754,48 @@ fn a_temporary_or_enclosing_repository_is_no_sibling_root() {
         host()
     );
     let _ = std::fs::remove_dir_all(root);
+}
+
+/// A stage whose words carry an operator inside quotes keeps its review.
+///
+/// The classifier reads the stage the way a shell does, where `'|'` is an
+/// ordinary character. The sink rejoins a `tr` stage from its lexed words, where
+/// that character is an operator again, and refuses it. Admitting the shape
+/// here promised a containment the sink would not build, so the command
+/// failed instead of running in the sibling root.
+#[test]
+fn a_quoted_operator_in_a_rejoined_stage_keeps_its_review() {
+    let (home, main, _tree) = fixture();
+    let projects = main.parent().unwrap();
+    let command = format!(
+        "cd {}/other && npm run build | tr '|' x",
+        projects.display()
+    );
+    assert!(
+        !contained(&reason("omp", &home, &main, &command)),
+        "{command}"
+    );
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}
+
+/// The same quoted operator is safe once the stage is peeled instead of rejoined.
+///
+/// A `cut` stage is one the peel runs itself: the sink hands the runtime the
+/// stage's lexed words and the runtime execs `cut` with them, so `-d|` arrives
+/// as one argument and no shell ever reads that character again. `tr` has no
+/// peel of its own and still reaches the sink as rejoined text, which is why
+/// the two spellings part company here.
+#[test]
+fn a_quoted_delimiter_in_a_peeled_stage_stays_contained() {
+    let (home, main, _tree) = fixture();
+    let projects = main.parent().unwrap();
+    let command = format!(
+        "cd {}/other && npm run build | cut -d'|' -f2",
+        projects.display()
+    );
+    assert!(
+        contained(&reason("omp", &home, &main, &command)),
+        "{command}"
+    );
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }

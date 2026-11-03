@@ -19,12 +19,16 @@ function buttonDisabled(html: string, label: string): boolean {
   return /\sdisabled(?:=|\s|$)/.test(attributes);
 }
 
-assert.match(render(), /Requires a verified final CPython 3\.14 runtime/);
+assert.match(render(), /CIGAR uses its own copy of Python 3\.14\. Guard sets it up for you/);
 assert.match(render(), /Ready\./);
 assert.equal(buttonDisabled(render(), "Turn off now"), false);
 assert.equal(buttonDisabled(render({ locked: true }), "Turn off now"), false,
   "managed preferences never remove immediate opt-out");
 assert.match(render({ locked: true }), /organization manages these preferences/);
+const everyday = render();
+assert.ok(everyday.indexOf("Allow selected workspace documents") < everyday.indexOf(">More settings<"),
+  "the switch that lets prompts get project files sits with the everyday choices, not behind More settings");
+assert.doesNotMatch(everyday, />Advanced</, "Advanced is one area on the CIGAR page; the expert options here are More settings");
 
 const pending = { ...ready, effective_enabled: false, availability: "checking" as const,
   runtime: null, job: { id: "4", operation: "activate" as const, phase: "verifying" as const } };

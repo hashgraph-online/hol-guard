@@ -28,6 +28,7 @@ from .codex_install_transaction import record_codex_mutation
 from .durable_io import fsync_directory as _fsync_directory
 from .local_authority_integrity import (
     LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM,
+    LOCAL_AUTHORITY_INTEGRITY_UNAVAILABLE,
     sign_local_authority_payload,
     verify_local_authority_payload,
 )
@@ -242,6 +243,14 @@ def authenticate_hook_manifest_text(
         key_id=secret.key_id,
         purpose=_HOOK_MANIFEST_INTEGRITY_PURPOSE,
     )
+    if verification.message == LOCAL_AUTHORITY_INTEGRITY_UNAVAILABLE:
+        # No runtime answered, so no key was compared: report the deadline or
+        # the missing verifier, never another installation's manifest.
+        check_hook_validation_deadline()
+        raise CodexHookIntegrityError(
+            "codex_hook_manifest_verification_unavailable",
+            "Guard could not verify the Codex hook installation; run repair and retry.",
+        )
     if verification.status == "missing_integrity":
         raise CodexHookIntegrityError(
             "codex_hook_manifest_authentication_invalid",

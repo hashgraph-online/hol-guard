@@ -1,13 +1,14 @@
 //! The output filters a peeled wrapper runs over its core's captured output,
 //! as Guard's own sink runs them.
 //!
-//! Native authority chose the chain: at most three `head`, `tail`, `grep` or
-//! `rg` stages, each reading only standard input. Head and tail cut the text
-//! in process, by lines or by bytes. A matcher runs as the installed binary,
-//! located by ownership rather than by the caller's `PATH`, with an
-//! environment built here, on the text the core already produced. The text
-//! stays bytes throughout, so a cut in the middle of a character reaches the
-//! next stage, and the output, exactly as the pipeline would have left it.
+//! Native authority chose the chain: at most three `head`, `tail`, `grep`,
+//! `rg` or `cut` stages, each reading only standard input. Head and tail
+//! shorten the text in process, by lines or by bytes. Every other stage runs
+//! as the installed binary, located by ownership rather than by the caller's
+//! `PATH`, with an environment built here, on the text the core already
+//! produced. The text stays bytes throughout, so a cut in the middle of a
+//! character reaches the next stage, and the output, exactly as the pipeline
+//! would have left it.
 
 use std::io::{Read, Write};
 use std::os::unix::fs::MetadataExt;
@@ -23,6 +24,7 @@ use super::output::Shaping;
 use super::{Failure, Outcome};
 
 const GREP_BINARIES: [&str; 2] = ["/usr/bin/grep", "/bin/grep"];
+const CUT_BINARIES: [&str; 2] = ["/usr/bin/cut", "/bin/cut"];
 /// ripgrep ships from a package manager rather than the system image, so it
 /// is looked for in the ordinary install directories.
 const RG_DIRECTORIES: [&str; 6] = [
@@ -133,12 +135,28 @@ pub(super) fn lines(text: &[u8]) -> Vec<&[u8]> {
 
 /// One matcher stage over `text`. A matcher this host does not have exits
 /// as a shell's missing program does: the core has already run.
-fn matched(text: &[u8], program: &str, arguments: &[String]) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
+pub(crate) fn matched(
+    text: &[u8],
+    program: &str,
+    arguments: &[String],
+) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
+    matched_within(text, program, arguments, u64::MAX)
+}
+
+/// `matched`, failing once the matcher writes more than `stdout_limit`
+/// bytes: the reader stops there, so the matcher's next write fails.
+pub(crate) fn matched_within(
+    text: &[u8],
+    program: &str,
+    arguments: &[String],
+    stdout_limit: u64,
+) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
     let located = match program {
         "rg" => trusted_ripgrep().map(|binary| (binary, None)),
         "grep" => trusted_grep().map(|binary| (binary, None)),
         "egrep" => trusted_grep().map(|binary| (binary, Some("-E"))),
         "fgrep" => trusted_grep().map(|binary| (binary, Some("-F"))),
+        "cut" => trusted_cut().map(|binary| (binary, None)),
         _ => return Err(unsupported()),
     };
     let Some((binary, switch)) = located else {
@@ -159,7 +177,7 @@ fn matched(text: &[u8], program: &str, arguments: &[String]) -> Outcome<(Vec<u8>
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let (stdout, stderr, code) = run(command, text)?;
+    let (stdout, stderr, code) = run(command, text, stdout_limit)?;
     let stderr = String::from_utf8_lossy(&stderr).into_owned().into_bytes();
     Ok((stdout, stderr, code))
 }
@@ -167,7 +185,7 @@ fn matched(text: &[u8], program: &str, arguments: &[String]) -> Outcome<(Vec<u8>
 /// Run `command` with `input` on its standard input, within the filter's
 /// deadline: its output, its error output and its status, negative for a
 /// signal.
-fn run(mut command: Command, input: &[u8]) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
+fn run(mut command: Command, input: &[u8], stdout_limit: u64) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
     let mut child = command.spawn().map_err(|_| failed())?;
     let (Some(mut stdin), Some(mut stdout), Some(mut stderr)) =
         (child.stdin.take(), child.stdout.take(), child.stderr.take())
@@ -182,7 +200,9 @@ fn run(mut command: Command, input: &[u8]) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
     });
     let reader = std::thread::spawn(move || {
         let mut bytes = Vec::new();
-        let _ = stdout.read_to_end(&mut bytes);
+        let _ = (&mut stdout)
+            .take(stdout_limit.saturating_add(1))
+            .read_to_end(&mut bytes);
         bytes
     });
     let errors = std::thread::spawn(move || {
@@ -207,6 +227,9 @@ fn run(mut command: Command, input: &[u8]) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
     let _ = writer.join();
     let stdout = reader.join().map_err(|_| failed())?;
     let stderr = errors.join().map_err(|_| failed())?;
+    if stdout.len() as u64 > stdout_limit {
+        return Err(failed());
+    }
     let code = status
         .code()
         .or_else(|| status.signal().map(|signal| -signal))
@@ -216,7 +239,18 @@ fn run(mut command: Command, input: &[u8]) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
 
 /// The system grep: a root-owned regular file nobody else can rewrite.
 fn trusted_grep() -> Option<PathBuf> {
-    GREP_BINARIES.iter().map(PathBuf::from).find(|candidate| {
+    trusted_system_binary(&GREP_BINARIES.map(Path::new))
+}
+
+/// The system `cut`, held to the same test as the system `grep`: both ship in
+/// the system image, so neither is looked for in a package manager's
+/// directories.
+fn trusted_cut() -> Option<PathBuf> {
+    trusted_system_binary(&CUT_BINARIES.map(Path::new))
+}
+
+fn trusted_system_binary(candidates: &[&Path]) -> Option<PathBuf> {
+    candidates.iter().map(PathBuf::from).find(|candidate| {
         std::fs::metadata(candidate)
             .is_ok_and(|info| info.is_file() && info.uid() == 0 && info.mode() & 0o022 == 0)
     })
@@ -225,9 +259,15 @@ fn trusted_grep() -> Option<PathBuf> {
 /// The installed ripgrep: an executable regular file that only root or
 /// this user owns and nobody else can rewrite, searched for in turn.
 fn trusted_ripgrep() -> Option<PathBuf> {
+    trusted_ripgrep_in(&RG_DIRECTORIES.map(Path::new))
+}
+
+/// A name that cannot be executed is not the install, so the search goes
+/// on to the next directory rather than failing on it.
+fn trusted_ripgrep_in(directories: &[&Path]) -> Option<PathBuf> {
     let owners = [0, getuid().as_raw()];
-    RG_DIRECTORIES.iter().find_map(|directory| {
-        let resolved = std::fs::canonicalize(Path::new(directory).join("rg")).ok()?;
+    directories.iter().find_map(|directory| {
+        let resolved = std::fs::canonicalize(directory.join("rg")).ok()?;
         let info = std::fs::metadata(&resolved).ok()?;
         (info.is_file()
             && owners.contains(&info.uid())

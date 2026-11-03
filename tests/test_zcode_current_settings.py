@@ -13,8 +13,8 @@ import json
 import pytest
 
 from codex_plugin_scanner.guard.adapters.zcode import ZCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.zcode_config import GUARD_MANAGED_MARKER, is_guard_managed_hook_command
-from tests.test_zcode_adapter import _ctx, _write_cli_config
+from codex_plugin_scanner.guard.adapters.zcode_config import GUARD_MANAGED_MARKER
+from tests.test_zcode_adapter import _ctx, _write_cli_config, is_guard_managed_hook_command
 
 
 def _file_config(home):

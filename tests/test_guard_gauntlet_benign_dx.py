@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -21,7 +22,12 @@ from ci.gauntlet.clone_fixtures import (
     long_lived_clone_checks,
     long_lived_clone_config,
 )
-from ci.gauntlet.command_outputs import BUN_ENTRY_CASE, TOKEN_SHELL_CASES, command_outputs_match
+from ci.gauntlet.command_outputs import (
+    BUN_ENTRY_CASE,
+    STATUS_TAIL_BUILD_CASE,
+    TOKEN_SHELL_CASES,
+    command_outputs_match,
+)
 from ci.gauntlet.fast_forward_fixtures import (
     FAST_FORWARD_CASE,
     FAST_FORWARD_HOOK_CASE,
@@ -30,6 +36,8 @@ from ci.gauntlet.fast_forward_fixtures import (
 )
 from ci.gauntlet.fixtures import (
     ALIAS_ESCAPES_CASE,
+    BUN_TEST_FILE_CASE,
+    BUN_TEST_SCRIPT_MARKER,
     INSTEAD_OF_CASE,
     LARGE_GITCONFIG_CASE,
     LARGE_GITCONFIG_MIN_BYTES,
@@ -46,7 +54,11 @@ from ci.gauntlet.native_tools import native_tools_scope_error
 from ci.gauntlet.parent_fixtures import PARENT_WORKSPACE_CASE
 from ci.gauntlet.realism_fixtures import DASHBOARD, REVIEW_NOTES_MARKER, VITE_BUILD_MARKER
 from ci.gauntlet.source_output_fixtures import HELPER_MARKER, ROUTE_MARKER, SOURCES, WORKER_MARKER
-from ci.gauntlet.workspace_runner_fixtures import HOME_BUN_ENTRY_CASE
+from ci.gauntlet.workspace_runner_fixtures import (
+    HOME_BUN_ENTRY_CASE,
+    WORKSPACE_QUIET_PACKAGE_TEST_CASE,
+    runner_marker,
+)
 
 NEW_IDS = {
     ALIAS_ESCAPES_CASE,
@@ -134,6 +146,24 @@ def test_parent_directory_scenario_starts_in_a_plain_parent_of_a_repository(tmp_
     search = _shell(fixture, commands[0].replace("{{home}}", str(fixture.home)))
     assert search.stdout.split() == [str(repository / "src/report.ts")]
     assert _shell(fixture, commands[1].replace("{{home}}", str(fixture.home))).stdout.strip()
+
+
+def test_the_quiet_package_test_case_installs_the_entry_its_command_names(tmp_path: Path) -> None:
+    """`npm test` runs the manifest's `test` script, which the shared install does not declare.
+
+    The shared workspace install names its suite `test:unit`, so a case that asks for
+    `npm test` against it measures a missing script rather than the quiet spelling.
+    """
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=WORKSPACE_QUIET_PACKAGE_TEST_CASE)
+    manifest = json.loads((fixture.workspace / "package.json").read_text(encoding="utf-8"))
+    assert manifest["scripts"]["test"] == "jest --ci"
+    launcher = fixture.workspace / "node_modules/.bin/jest"
+    assert launcher.is_symlink() and launcher.resolve().is_file()
+    marker = runner_marker(WORKSPACE_QUIET_PACKAGE_TEST_CASE)
+    assert marker in (fixture.workspace / "node_modules/jest-cli/bin/jest.js").read_text(encoding="utf-8")
+    # The case's own line, so it cannot pass for the plain runner case's reason.
+    assert marker != runner_marker("omp-native-workspace-npx-jest")
+    assert commands_for(WORKSPACE_QUIET_PACKAGE_TEST_CASE) == ("npm test --silent",)
 
 
 REALISM_IDS = {
@@ -452,3 +482,44 @@ def test_the_bun_entry_case_needs_the_build_line_tail_cannot_supply() -> None:
         assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
     assert not command_outputs_match(scenario, [])
     assert not command_outputs_match(scenario, [finished, finished])
+
+
+def test_the_status_tail_build_case_needs_the_build_line_and_its_status() -> None:
+    """`| tail -15; echo "build=$?"` reports `tail`'s status, never the build's.
+
+    The case keeps that shape, because it is the shape an agent writes when it reads the
+    status of the step before it, so its oracle asks for the line the finished build
+    prints and for the status the run itself printed.
+    """
+    scenario = {case.id: case for case in load_catalog()}[STATUS_TAIL_BUILD_CASE]
+    command = scenario.commands[0]
+    assert command.endswith('| tail -15; echo "build=$?"')
+    finished = _tool_call("bash", {"command": command}, f"dist/index.html  0.40 kB\n{VITE_BUILD_MARKER}\nbuild=0\n")
+    assert command_outputs_match(scenario, [finished])
+    for text in (
+        "",
+        "build=0\n",
+        f"{VITE_BUILD_MARKER}\n",
+        f'error: Cannot find module "vite"\nbuild=0\n',
+        f"{VITE_BUILD_MARKER}\nbuild=0\nbuild=1\n",
+        f"{VITE_BUILD_MARKER}\nbuild=1\n",
+    ):
+        assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
+    assert not command_outputs_match(scenario, [])
+    assert not command_outputs_match(scenario, [finished, finished])
+
+
+def test_the_bun_test_file_case_needs_the_line_only_that_file_prints() -> None:
+    """A clean exit status cannot stand in for the spec Bun was asked to run.
+
+    `bun <file>` reports success for a file it loaded and for one whose assertions
+    never ran, so the oracle asks for the line the file itself prints.
+    """
+    scenario = {case.id: case for case in load_catalog()}[BUN_TEST_FILE_CASE]
+    command = scenario.commands[0]
+    ran = _tool_call("bash", {"command": command}, f"{BUN_TEST_SCRIPT_MARKER}\n")
+    assert command_outputs_match(scenario, [ran])
+    for text in ("", "bun test v1.1.0\n", "error: Module not found\n"):
+        assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
+    assert not command_outputs_match(scenario, [])
+    assert not command_outputs_match(scenario, [ran, ran])

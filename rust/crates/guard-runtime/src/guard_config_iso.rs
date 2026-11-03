@@ -31,70 +31,105 @@ fn valid_date(year: u32, month: u32, day: u32) -> bool {
     year >= 1 && (1..=days).contains(&day)
 }
 
-/// `.fff` or `.ffffff` after the seconds field.
-fn valid_fraction(text: &str) -> bool {
-    matches!(text.len(), 3 | 6) && digits(text).is_some()
+/// The microseconds of a `.fff` or `.ffffff` fraction after the seconds
+/// field.
+fn fraction_micros(text: &str) -> Option<i64> {
+    let value = i64::from(digits(text)?);
+    match text.len() {
+        3 => Some(value * 1_000),
+        6 => Some(value),
+        _ => None,
+    }
 }
 
-/// `HH:MM[:SS[.f]]` with every field two digits and in range.
-fn valid_clock(text: &str, limits: [u32; 3]) -> bool {
+/// The microseconds `HH:MM[:SS[.f]]` spans, with every field two digits and
+/// in range.
+fn clock_micros(text: &str) -> Option<i64> {
     let (body, fraction) = match text.split_once('.') {
         Some((body, fraction)) => (body, Some(fraction)),
         None => (text, None),
     };
     let fields: Vec<&str> = body.split(':').collect();
     if !(2..=3).contains(&fields.len()) || fields.iter().any(|field| field.len() != 2) {
-        return false;
+        return None;
     }
     if fraction.is_some() && fields.len() != 3 {
-        return false;
+        return None;
     }
-    if fraction.is_some_and(|fraction| !valid_fraction(fraction)) {
-        return false;
+    let fraction = match fraction {
+        Some(fraction) => fraction_micros(fraction)?,
+        None => 0,
+    };
+    let mut seconds = 0;
+    for (field, limit) in fields.iter().zip([24, 60, 60]) {
+        let value = digits(field).filter(|value| *value < limit)?;
+        seconds = seconds * 60 + i64::from(value);
     }
-    fields
-        .iter()
-        .zip(limits)
-        .all(|(field, limit)| digits(field).is_some_and(|value| value < limit))
+    if fields.len() == 2 {
+        seconds *= 60;
+    }
+    Some(seconds * 1_000_000 + fraction)
 }
 
-pub(crate) fn is_valid_iso_datetime(value: &str) -> bool {
+/// Days from 1970-01-01 to a valid proleptic Gregorian date.
+fn days_from_civil(year: u32, month: u32, day: u32) -> i64 {
+    let year = i64::from(year) - i64::from(month <= 2);
+    let era = year.div_euclid(400);
+    let year_of_era = year - era * 400;
+    let month_index = i64::from((month + 9) % 12);
+    let day_of_year = (153 * month_index + 2) / 5 + i64::from(day) - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+/// The instant a stored stamp names, in microseconds since the Unix epoch.
+/// A stamp without an offset is read as UTC.
+pub(crate) fn iso_epoch_micros(value: &str) -> Option<i64> {
     let text = value.replace('Z', "+00:00");
     if !text.is_ascii() || text.len() < 10 {
-        return false;
+        return None;
     }
     let bytes = text.as_bytes();
     if bytes[4] != b'-' || bytes[7] != b'-' {
-        return false;
+        return None;
     }
-    let (Some(year), Some(month), Some(day)) = (
-        digits(&text[..4]),
-        digits(&text[5..7]),
-        digits(&text[8..10]),
-    ) else {
-        return false;
-    };
+    let (year, month, day) = (
+        digits(&text[..4])?,
+        digits(&text[5..7])?,
+        digits(&text[8..10])?,
+    );
     if !valid_date(year, month, day) {
-        return false;
+        return None;
     }
+    let date = days_from_civil(year, month, day) * 86_400 * 1_000_000;
     let rest = &text[10..];
     if rest.is_empty() {
-        return true;
+        return Some(date);
     }
     let time_text = &rest[1..];
     let (clock, offset) = match time_text.find(['+', '-']) {
-        Some(at) => (&time_text[..at], Some(&time_text[at + 1..])),
+        Some(at) => (&time_text[..at], Some(&time_text[at..])),
         None => (time_text, None),
     };
-    if !valid_clock(clock, [24, 60, 60]) {
-        return false;
-    }
-    offset.is_none_or(|zone| valid_clock(zone, [24, 60, 60]))
+    let local = date + clock_micros(clock)?;
+    let Some(zone) = offset else {
+        return Some(local);
+    };
+    let shift = clock_micros(&zone[1..])?;
+    Some(if zone.starts_with('-') {
+        local + shift
+    } else {
+        local - shift
+    })
+}
+
+pub(crate) fn is_valid_iso_datetime(value: &str) -> bool {
+    iso_epoch_micros(value).is_some()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::is_valid_iso_datetime;
+    use super::{is_valid_iso_datetime, iso_epoch_micros};
 
     #[test]
     fn accepts_forms_every_supported_cpython_parses() {
@@ -127,5 +162,30 @@ mod tests {
         ] {
             assert!(!is_valid_iso_datetime(stamp), "{stamp}");
         }
+    }
+
+    #[test]
+    fn stamps_resolve_to_the_instant_they_name() {
+        const HOUR: i64 = 3_600_000_000;
+        let midnight = 1_767_225_600_000_000;
+        for (stamp, micros) in [
+            ("1970-01-01", 0),
+            ("1969-12-31T23:59:59.999999", -1),
+            ("2026-01-01", midnight),
+            ("2026-01-01T00:00", midnight),
+            ("2026-01-01T00:00:00Z", midnight),
+            ("2026-01-01T05:30:00+05:30", midnight),
+            ("2025-12-31T19:00:00-05:00", midnight),
+            ("2026-01-01T00:00:00.500", midnight + 500_000),
+            ("2026-01-01T01:00:00.000001+01:00", midnight + 1),
+            ("2026-01-01T00:00:00-00:00:30.500", midnight + 30_500_000),
+            ("2024-03-01", 1_709_251_200_000_000),
+            ("2000-02-29T12:00", 951_782_400_000_000 + 12 * HOUR),
+            ("0001-01-01", -62_135_596_800_000_000),
+        ] {
+            assert_eq!(iso_epoch_micros(stamp), Some(micros), "{stamp}");
+        }
+        assert_eq!(iso_epoch_micros("not-a-timestamp"), None);
+        assert_eq!(iso_epoch_micros("2026-01-01T24:00"), None);
     }
 }

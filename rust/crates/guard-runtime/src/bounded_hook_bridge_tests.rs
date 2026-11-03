@@ -15,7 +15,7 @@ use super::config::{daemon_start_command, MANAGED_MARKER};
 use super::*;
 use crate::bounded_hook_bridge_render::Rendered;
 use crate::bounded_hook_bridge_render::NATIVE_HARNESSES;
-use crate::bounded_hook_bridge_render::{failure_output_for, failure_payload};
+use crate::bounded_hook_bridge_render::{failure_output, failure_output_for, failure_payload};
 use crate::claude_hook_bridge_fixture::{
     read_request, write_private, write_response, GuardHome, Request,
 };

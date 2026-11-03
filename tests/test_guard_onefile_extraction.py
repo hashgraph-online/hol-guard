@@ -1,448 +1,173 @@
-"""Onefile extraction-dir owner markers and orphan reclamation."""
+"""The onefile extraction reclaim shim over the native runtime."""
 
 from __future__ import annotations
 
-import json
-import os
-import subprocess
-import sys
-from datetime import datetime, timezone
+import threading
+from collections.abc import Mapping
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard import onefile_extraction
+from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.onefile_extraction import (
-    OWNER_MARKER_NAME,
     ExtractionReclaimResult,
+    ExtractionReclaimUnavailableError,
     reclaim_orphaned_extraction_dirs,
 )
 
-_SENTINEL_PARTS = ("codex_plugin_scanner", "guard", "daemon", "static", "index.html")
 _NOW = datetime(2026, 2, 1, tzinfo=timezone.utc)
-_OLD_AGE_SECONDS = 20 * 60
+
+_Call = tuple[str, str, Mapping[str, object], dict[str, object]]
+
+_ANSWER: dict[str, object] = {
+    "reclaimed_count": 3,
+    "reclaimed_bytes": 300,
+    "killed_launches": 1,
+    "unmarked_count": 4,
+    "unmarked_bytes_estimate": 400,
+    "unmarked_reclaimed_count": 2,
+    "unmarked_reclaimed_bytes": 200,
+    "partial_reclaimed_count": 1,
+    "unmarked_scan": "ok",
+    "unmarked_budget_exhausted": True,
+    "errors": ["rmtree:PermissionError"],
+}
 
 
-def _extraction_dir(temp_root: Path, name: str = "_MEIabc123") -> Path:
-    directory = temp_root / name
-    directory.mkdir(parents=True)
-    return directory
+def _answer(monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None) -> list[_Call]:
+    calls: list[_Call] = []
+
+    def fake(feature: str, command: str, request: Mapping[str, object], **kwargs: object) -> dict[str, object] | None:
+        calls.append((feature, command, request, kwargs))
+        return answer
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", fake)
+    return calls
 
 
-def _age_directory(directory: Path) -> None:
-    """Backdate dir mtime after contents are written; file writes bump it."""
-
-    stamp = _NOW.timestamp() - _OLD_AGE_SECONDS
-    os.utime(directory, (stamp, stamp))
-
-
-def _write_marker(directory: Path, *, pid: int = 4242, parent_pid: int = 4241) -> Path:
-    marker = directory / OWNER_MARKER_NAME
-    marker.write_text(
-        json.dumps(
-            {
-                "schema": "guard.onefile-extraction-owner.v1",
-                "pid": pid,
-                "parent_pid": parent_pid,
-                "started_at": _NOW.isoformat(),
-                "guard_version": "0.0.0-test",
-            }
-        ),
-        encoding="utf-8",
-    )
-    return marker
-
-
-def _no_live_pids(pid: int) -> bool:
-    return False
-
-
-def _all_live_pids(pid: int) -> bool:
-    return True
-
-
-def test_reclaim_deletes_dead_owner_dir_and_counts_bytes(tmp_path: Path) -> None:
-    extraction = _extraction_dir(tmp_path)
-    (extraction / "blob.bin").write_bytes(b"x" * 100)
-    _write_marker(extraction, pid=4242, parent_pid=4241)
-    _age_directory(extraction)
+def test_reclaim_asks_the_native_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _answer(monkeypatch, _ANSWER)
 
     result = reclaim_orphaned_extraction_dirs(
         temp_root=tmp_path,
-        current_meipass=None,
+        current_meipass="/tmp/_MEIcurrent",
         now=_NOW,
-        pid_alive=_no_live_pids,
+        scan_open_paths=True,
+        unmarked_time_budget=timedelta(minutes=3),
+        max_unmarked_reclaims=5000,
+        dry_run=True,
     )
 
-    assert result.reclaimed_count == 1
-    assert result.killed_launches == 1
-    assert result.reclaimed_bytes >= 100
-    assert not extraction.exists()
-    assert result.errors == []
+    assert result == ExtractionReclaimResult(
+        reclaimed_count=3,
+        reclaimed_bytes=300,
+        killed_launches=1,
+        unmarked_count=4,
+        unmarked_bytes_estimate=400,
+        unmarked_reclaimed_count=2,
+        unmarked_reclaimed_bytes=200,
+        partial_reclaimed_count=1,
+        unmarked_scan="ok",
+        unmarked_budget_exhausted=True,
+        errors=["rmtree:PermissionError"],
+    )
+    [(feature, command, request, kwargs)] = calls
+    assert (feature, command) == ("native-onefile-extraction-reclaim-v1", "onefile-extraction-reclaim")
+    assert request == {
+        "schema": "onefile-extraction-reclaim.v1",
+        "temp_root": str(tmp_path),
+        "current_meipass": "/tmp/_MEIcurrent",
+        "now": _NOW.timestamp(),
+        "min_age_seconds": 600.0,
+        "unmarked_min_age_seconds": 7200.0,
+        "max_unmarked_reclaims": 5000,
+        "unmarked_time_budget_seconds": 180.0,
+        "scan_open_paths": True,
+        "dry_run": True,
+    }
+    # Long enough for the lsof scan plus the whole unmarked budget.
+    timeout = kwargs["timeout_seconds"]
+    assert isinstance(timeout, float) and timeout > 90.0 + 180.0
 
 
-def test_reclaim_keeps_dirs_whose_owner_or_parent_is_alive(tmp_path: Path) -> None:
-    pid_alive_dir = _extraction_dir(tmp_path, "_MEIalive00")
-    _write_marker(pid_alive_dir, pid=1, parent_pid=2)
-    parent_alive_dir = _extraction_dir(tmp_path, "_MEIparent0")
-    _write_marker(parent_alive_dir, pid=3, parent_pid=4)
-    _age_directory(pid_alive_dir)
-    _age_directory(parent_alive_dir)
+def test_an_unbounded_sweep_still_has_a_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _answer(monkeypatch, _ANSWER)
 
-    live = {1, 4}
-    result = reclaim_orphaned_extraction_dirs(
+    _ = reclaim_orphaned_extraction_dirs(
         temp_root=tmp_path,
         current_meipass=None,
         now=_NOW,
-        pid_alive=lambda pid: pid in live,
+        unmarked_time_budget=None,
     )
 
-    assert result.reclaimed_count == 0
-    assert pid_alive_dir.exists()
-    assert parent_alive_dir.exists()
+    [(_feature, _command, request, kwargs)] = calls
+    assert request["unmarked_time_budget_seconds"] is None
+    assert request["scan_open_paths"] is False
+    assert isinstance(kwargs["timeout_seconds"], float)
 
 
-def test_reclaim_skips_young_and_current_extraction_dirs(tmp_path: Path) -> None:
-    young = _extraction_dir(tmp_path, "_MEIyoung00")
-    _write_marker(young, pid=5, parent_pid=6)
-    current = _extraction_dir(tmp_path, "_MEIcurrent")
-    _write_marker(current, pid=7, parent_pid=8)
-    _age_directory(current)
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        {**_ANSWER, "reclaimed_count": -1},
+        {**_ANSWER, "reclaimed_bytes": True},
+        {**_ANSWER, "unmarked_scan": "maybe"},
+        {**_ANSWER, "unmarked_budget_exhausted": 1},
+        {**_ANSWER, "errors": [1]},
+        {key: value for key, value in _ANSWER.items() if key != "killed_launches"},
+    ],
+)
+def test_reclaim_fails_without_a_clean_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None
+) -> None:
+    _ = _answer(monkeypatch, answer)
 
-    result = reclaim_orphaned_extraction_dirs(
-        temp_root=tmp_path,
-        current_meipass=str(current),
-        now=_NOW,
-        pid_alive=_no_live_pids,
+    with pytest.raises(ExtractionReclaimUnavailableError):
+        _ = reclaim_orphaned_extraction_dirs(temp_root=tmp_path, current_meipass=None, now=_NOW)
+
+
+def test_marker_constants_are_the_launch_contract() -> None:
+    assert onefile_extraction.OWNER_MARKER_NAME == ".hol-guard-extraction-owner.json"
+    assert onefile_extraction._OWNER_MARKER_SCHEMA == "guard.onefile-extraction-owner.v1"  # pyright: ignore[reportPrivateUsage]
+
+
+def test_a_stop_event_reaches_the_runtime_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _answer(monkeypatch, _ANSWER)
+    stop = threading.Event()
+
+    reclaim_orphaned_extraction_dirs(temp_root=tmp_path, current_meipass=None, now=_NOW, stop_event=stop)
+
+    assert calls[0][3]["stop_event"] is stop
+
+
+def test_runtime_answer_hands_the_stop_event_to_the_native_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=Path("/opt/guard/hol-guard-runtime")),
+        capabilities=SimpleNamespace(features=("native-test-v1",)),
     )
+    seen: list[object] = []
 
-    assert result.reclaimed_count == 0
-    assert young.exists()
-    assert current.exists()
+    def run(path: Path, args: tuple[str, ...], **kwargs: object) -> str | None:
+        seen.append(kwargs.get("stop_event"))
+        return None
 
+    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_kwargs: status)
+    monkeypatch.setattr(native_runtime, "_run_native_process", run)
+    stop = threading.Event()
 
-def test_reclaim_counts_unmarked_guard_dirs_without_deleting(tmp_path: Path) -> None:
-    legacy = _extraction_dir(tmp_path, "_MEIlegacy0")
-    sentinel = legacy.joinpath(*_SENTINEL_PARTS)
-    sentinel.parent.mkdir(parents=True)
-    sentinel.write_bytes(b"<html></html>")
-    non_guard = _extraction_dir(tmp_path, "_MEIother00")
-    (non_guard / "unrelated.bin").write_bytes(b"y" * 10)
-    _age_directory(legacy)
-    _age_directory(non_guard)
-
-    result = reclaim_orphaned_extraction_dirs(
-        temp_root=tmp_path,
-        current_meipass=None,
-        now=_NOW,
-        pid_alive=_no_live_pids,
+    assert runtime_request.runtime_answer("native-test-v1", "test", "{}", output_limit=64, timeout_seconds=1.0) is None
+    assert (
+        runtime_request.runtime_answer(
+            "native-test-v1", "test", "{}", output_limit=64, timeout_seconds=1.0, stop_event=stop
+        )
+        is None
     )
-
-    assert result.unmarked_count == 1
-    assert result.unmarked_bytes_estimate >= len(b"<html></html>")
-    assert result.reclaimed_count == 0
-    assert legacy.exists()
-    assert non_guard.exists()
-
-
-def test_reclaim_unmarked_byte_sampling_is_bounded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    for index in range(15):
-        legacy = _extraction_dir(tmp_path, f"_MEIlegacy{index}")
-        sentinel = legacy.joinpath(*_SENTINEL_PARTS)
-        sentinel.parent.mkdir(parents=True)
-        sentinel.write_bytes(b"<html></html>")
-        _age_directory(legacy)
-
-    walks: list[Path] = []
-    original = onefile_extraction._dir_bytes
-
-    def counting_walk(root: Path) -> int:
-        walks.append(root)
-        return original(root)
-
-    monkeypatch.setattr(onefile_extraction, "_dir_bytes", counting_walk)
-    result = reclaim_orphaned_extraction_dirs(
-        temp_root=tmp_path,
-        current_meipass=None,
-        now=_NOW,
-        pid_alive=_no_live_pids,
-    )
-
-    assert result.unmarked_count == 15
-    assert len(walks) == 10
-    assert result.unmarked_bytes_estimate == round(sum(original(path) for path in walks) / 10 * 15)
-
-
-def test_reclaim_ignores_symlinked_extraction_dirs(tmp_path: Path) -> None:
-    nested_root = tmp_path / "real"
-    target = _extraction_dir(nested_root, "_MEItarget0")
-    _write_marker(target, pid=9, parent_pid=10)
-    link = tmp_path / "_MEIlink000"
-    try:
-        link.symlink_to(target, target_is_directory=True)
-    except OSError:
-        pytest.skip("symlink creation unavailable")
-
-    result = reclaim_orphaned_extraction_dirs(
-        temp_root=tmp_path,
-        current_meipass=None,
-        now=_NOW,
-        pid_alive=_no_live_pids,
-    )
-
-    assert link.is_symlink()
-    assert result.reclaimed_count == 0
-    assert result.unmarked_count == 0
-    assert target.exists()
-
-
-def test_reclaim_stops_when_should_stop_flips(tmp_path: Path) -> None:
-    dirs = [_extraction_dir(tmp_path, f"_MEIdead{index:03d}") for index in range(5)]
-    for directory in dirs:
-        _write_marker(directory, pid=20, parent_pid=21)
-        _age_directory(directory)
-
-    checks = 0
-
-    def stop_after_two() -> bool:
-        nonlocal checks
-        checks += 1
-        return checks > 2
-
-    result = reclaim_orphaned_extraction_dirs(
-        temp_root=tmp_path,
-        current_meipass=None,
-        now=_NOW,
-        pid_alive=_no_live_pids,
-        should_stop=stop_after_two,
-    )
-
-    assert result.reclaimed_count == 2
-    assert sum(directory.exists() for directory in dirs) == 3
-
-
-def test_pid_alive_fails_closed_on_malformed_pid() -> None:
-    assert onefile_extraction._pid_alive(0)  # pyright: ignore[reportPrivateUsage]
-    assert onefile_extraction._pid_alive(-42)  # pyright: ignore[reportPrivateUsage]
-
-
-def test_reclaim_rechecks_marker_before_deleting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    extraction = _extraction_dir(tmp_path)
-    _write_marker(extraction, pid=11, parent_pid=12)
-    _age_directory(extraction)
-
-    original = onefile_extraction._read_owner_marker
-    calls: list[Path] = []
-
-    def flaky_marker(marker_path: Path) -> dict[str, int] | None:
-        calls.append(marker_path)
-        if len(calls) > 1:
-            return None
-        return original(marker_path)
-
-    monkeypatch.setattr(onefile_extraction, "_read_owner_marker", flaky_marker)
-    result = reclaim_orphaned_extraction_dirs(
-        temp_root=tmp_path,
-        current_meipass=None,
-        now=_NOW,
-        pid_alive=_no_live_pids,
-    )
-
-    assert result.reclaimed_count == 0
-    assert extraction.exists()
-    assert len(calls) == 2
-
-
-def test_pid_alive_with_real_processes() -> None:
-    assert onefile_extraction._pid_alive(os.getpid())  # pyright: ignore[reportPrivateUsage]
-    exited = subprocess.Popen([sys.executable, "-c", "pass"])
-    exited.wait()
-    assert not onefile_extraction._pid_alive(exited.pid)  # pyright: ignore[reportPrivateUsage]
-
-
-def test_pid_alive_fail_closed_branches(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        onefile_extraction.os,
-        "kill",
-        lambda pid, sig: (_ for _ in ()).throw(PermissionError("denied")),
-    )
-    assert onefile_extraction._pid_alive(12345)  # pyright: ignore[reportPrivateUsage]
-
-    # Any error other than "definitely dead" fails closed to alive.
-    monkeypatch.setattr(
-        onefile_extraction.os,
-        "kill",
-        lambda pid, sig: (_ for _ in ()).throw(OSError("weird")),
-    )
-    assert onefile_extraction._pid_alive(12345)  # pyright: ignore[reportPrivateUsage]
-
-
-def test_pid_alive_windows_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import windows_paths
-
-    monkeypatch.setattr(onefile_extraction.os, "name", "nt")
-    monkeypatch.setattr(windows_paths, "windows_process_is_running", lambda pid: False)
-    assert not onefile_extraction._pid_alive(12345)  # pyright: ignore[reportPrivateUsage]
-
-    def boom(pid: int) -> bool:
-        raise RuntimeError("win32 api unavailable")
-
-    monkeypatch.setattr(windows_paths, "windows_process_is_running", boom)
-    assert onefile_extraction._pid_alive(12345)  # pyright: ignore[reportPrivateUsage]
-
-
-def test_read_owner_marker_rejects_bad_records(tmp_path: Path) -> None:
-    read = onefile_extraction._read_owner_marker  # pyright: ignore[reportPrivateUsage]
-    marker = tmp_path / "marker.json"
-
-    assert read(tmp_path / "missing.json") is None
-
-    marker.mkdir()
-    assert read(marker) is None
-    marker.rmdir()
-
-    marker.write_bytes(b"x" * 5000)
-    assert read(marker) is None
-
-    marker.write_text("not json", encoding="utf-8")
-    assert read(marker) is None
-
-    marker.write_text(json.dumps([1, 2]), encoding="utf-8")
-    assert read(marker) is None
-
-    marker.write_text(json.dumps({"schema": "other-schema", "pid": 1, "parent_pid": 2}), encoding="utf-8")
-    assert read(marker) is None
-
-    marker.write_text(
-        json.dumps({"schema": "guard.onefile-extraction-owner.v1", "pid": "x", "parent_pid": 2}),
-        encoding="utf-8",
-    )
-    assert read(marker) is None
-
-    marker.write_text(
-        json.dumps({"schema": "guard.onefile-extraction-owner.v1", "pid": 1, "parent_pid": 2}),
-        encoding="utf-8",
-    )
-    assert read(marker) == {"pid": 1, "parent_pid": 2}
-
-
-def test_dir_bytes_tolerates_lstat_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    directory = tmp_path / "walk"
-    directory.mkdir()
-    (directory / "f.bin").write_bytes(b"x" * 8)
-    monkeypatch.setattr(
-        onefile_extraction.os,
-        "lstat",
-        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("gone")),
-    )
-    assert onefile_extraction._dir_bytes(directory) == 0  # pyright: ignore[reportPrivateUsage]
-
-
-def test_reclaim_temp_root_errors(tmp_path: Path) -> None:
-    missing = reclaim_orphaned_extraction_dirs(
-        temp_root=tmp_path / "missing",
-        current_meipass=None,
-        now=_NOW,
-        pid_alive=_no_live_pids,
-    )
-    assert missing.errors == ["temp_root_unavailable"]
-
-    not_a_dir = tmp_path / "afile"
-    not_a_dir.write_text("x", encoding="utf-8")
-    listing = reclaim_orphaned_extraction_dirs(
-        temp_root=not_a_dir,
-        current_meipass=None,
-        now=_NOW,
-        pid_alive=_no_live_pids,
-    )
-    assert listing.errors == ["temp_root_listing_failed"]
-
-
-def test_reclaim_tolerates_unresolvable_current_meipass(tmp_path: Path) -> None:
-    extraction = _extraction_dir(tmp_path)
-    _write_marker(extraction, pid=30, parent_pid=31)
-    _age_directory(extraction)
-
-    result = reclaim_orphaned_extraction_dirs(
-        temp_root=tmp_path,
-        current_meipass=str(tmp_path / "no-such-dir"),
-        now=_NOW,
-        pid_alive=_no_live_pids,
-    )
-    assert result.reclaimed_count == 1
-
-
-def test_reclaim_skips_dirs_with_stat_failures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    broken = _extraction_dir(tmp_path, "_MEIbroken0")
-    _write_marker(broken, pid=40, parent_pid=41)
-    _age_directory(broken)
-
-    original_lstat = Path.lstat
-
-    def flaky_lstat(self: Path, *args: object, **kwargs: object) -> os.stat_result:
-        if self == broken:
-            raise OSError("lstat failed")
-        return original_lstat(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "lstat", flaky_lstat)
-    result = reclaim_orphaned_extraction_dirs(
-        temp_root=tmp_path,
-        current_meipass=None,
-        now=_NOW,
-        pid_alive=_no_live_pids,
-    )
-    assert result.reclaimed_count == 0
-    assert broken.exists()
-
-
-def test_reclaim_skips_dirs_with_resolve_failures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    broken = _extraction_dir(tmp_path, "_MEIbroken0")
-    elsewhere = _extraction_dir(tmp_path, "_MEIother00")
-
-    original_resolve = Path.resolve
-
-    def flaky_resolve(self: Path, *args: object, **kwargs: object) -> Path:
-        if self == broken:
-            raise OSError("resolve failed")
-        if self == elsewhere:
-            return Path("/not-the-temp-root") / self.name
-        return original_resolve(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "resolve", flaky_resolve)
-    result = reclaim_orphaned_extraction_dirs(
-        temp_root=tmp_path,
-        current_meipass=None,
-        now=_NOW,
-        pid_alive=_no_live_pids,
-    )
-    assert result.reclaimed_count == 0
-    assert broken.exists()
-    assert elsewhere.exists()
-
-
-def test_reclaim_records_rmtree_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    extraction = _extraction_dir(tmp_path)
-    _write_marker(extraction, pid=50, parent_pid=51)
-    _age_directory(extraction)
-
-    monkeypatch.setattr(
-        onefile_extraction.shutil,
-        "rmtree",
-        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("device busy")),
-    )
-    result = reclaim_orphaned_extraction_dirs(
-        temp_root=tmp_path,
-        current_meipass=None,
-        now=_NOW,
-        pid_alive=_no_live_pids,
-    )
-    assert result.reclaimed_count == 0
-    assert result.errors == ["rmtree:OSError"]
-    assert extraction.exists()
-
-
-def test_remember_error_list_is_bounded() -> None:
-    result = ExtractionReclaimResult()
-    for index in range(12):
-        onefile_extraction._remember_error(result, f"e{index}")  # pyright: ignore[reportPrivateUsage]
-    assert result.errors == [f"e{index}" for index in range(8)]
+    assert seen == [None, stop]

@@ -6,8 +6,11 @@ import type { ContextAssistanceStatus, ContextControlAction, ContextInstallation
 import { ContextWorkspacesPanel } from "./workspaces-panel";
 import { CigarWorkspace } from "./workspace";
 import { CigarVersionsPanel } from "./versions-panel";
+import { CigarSetupProof } from "./one-click-setup";
+import { useCigarOneClick } from "./use-one-click";
 import { commitDashboardLocation } from "../dashboard-location";
 import { sameCigarPreferences } from "./selection-settings";
+import { cigarWaking } from "./workspace-model";
 
 type Props = {
   workspace?: boolean;
@@ -61,7 +64,8 @@ export function ContextAssistanceSettings(props: Props) {
     request.current = controller;
     try {
       // Opening the CIGAR workspace lists registered metadata. It never scans
-      // PATH, probes Python, imports CIGAR, or activates an optional runtime.
+      // PATH, probes Python or imports CIGAR. Only a runtime the user already
+      // turned on is woken, below.
       const result = await (workspace ? fetchContextInstallations(controller.signal) : fetchContextAssistance(controller.signal));
       if (current !== revision.current) return;
       setStatus(result);
@@ -108,7 +112,38 @@ export function ContextAssistanceSettings(props: Props) {
     };
   }, [onBusyChange]);
 
+  const value = props.value ?? status?.preferences ?? null;
+  const saved = props.savedValue ?? status?.preferences ?? null;
+  const dirty = value && saved ? !sameCigarPreferences(value, saved) : value !== saved;
+  const setup = useCigarOneClick({
+    active: workspace, status, dirty, locked: props.locked, disabled: props.disabled || busy, gate: props.gate ?? null,
+    publish: (state) => captureVersionStatus()(state),
+    onSaved: (config, previous) => props.onSelectionChanged?.(config, previous),
+    onTurnOff: () => void perform("stop"),
+  });
+  useEffect(() => {
+    if (!setup.busy) return;
+    onBusyChange(true);
+    return () => onBusyChange(false);
+  }, [setup.busy, onBusyChange]);
+
+  // A saved opt-in that went to rest wakes when someone opens CIGAR, once per
+  // resting spell, so the page never asks the user to turn it on again. The
+  // latch clears only after CIGAR is running, so a start that fails is not retried.
+  const woke = useRef(false);
+  const resting = status?.diagnostic === "runtime_resting" && !status.job;
+  useEffect(() => {
+    if (status?.effective_enabled) woke.current = false;
+    if (!resting || dirty || busy || setup.busy || props.disabled || woke.current) return;
+    woke.current = true;
+    void perform("activate");
+    // perform reads the latest props and status itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resting, status?.effective_enabled, dirty, busy, setup.busy, props.disabled]);
+
   async function perform(action: ContextControlAction | "installations") {
+    // Stop always wins over a one-click setup that is still running.
+    if (action === "stop") setup.stop();
     if (pending.current || props.disabled) return;
     pending.current = true;
     const current = ++revision.current;
@@ -144,9 +179,6 @@ export function ContextAssistanceSettings(props: Props) {
     }
   }
 
-  const value = props.value ?? status?.preferences ?? null;
-  const saved = props.savedValue ?? status?.preferences ?? null;
-  const dirty = value && saved ? !sameCigarPreferences(value, saved) : value !== saved;
   const controls = <ContextSettingsControls value={value} status={status} installations={installations}
     loading={loading} busy={busy} disabled={props.disabled} locked={props.locked}
     dirty={dirty} error={workspace ? null : error}
@@ -156,19 +188,19 @@ export function ContextAssistanceSettings(props: Props) {
       const url = new URL(window.location.href); url.searchParams.set("section", "versions");
       commitDashboardLocation(url.pathname + url.search + url.hash);
     } : undefined} />;
-  const access = <ContextWorkspacesPanel ready={status?.effective_enabled === true} generation={status?.generation ?? null}
+  const access = <ContextWorkspacesPanel ready={status?.effective_enabled === true} waking={cigarWaking(status)} generation={status?.generation ?? null}
       dirty={dirty} documentsAllowed={status?.effective_preferences.sources.workspace_documents === true}
       agentsAllowed={status?.effective_preferences.features.agent_context === true}
       executionAllowed={status?.effective_preferences.features.execution_context === true
         && status?.capabilities?.execution_context === true}
       sharingAllowed={status?.effective_preferences.features.shared_agents === true && status?.runtime?.shared_compile_verified === true}
       gate={props.gate ?? null} />;
-  return workspace ? <CigarWorkspace status={status} installations={installations} loading={loading}
-    busy={busy} disabled={props.disabled} dirty={dirty} error={error}
+  return workspace ? <><CigarWorkspace status={status} installations={installations} loading={loading}
+    busy={busy} disabled={props.disabled} dirty={dirty} error={error} setup={setup}
     stopAvailable={Boolean(value?.enabled || saved?.enabled || status?.job || status?.effective_enabled || error)}
     controls={controls} access={access} data={props.data}
     versions={<CigarVersionsPanel status={status} disabled={props.disabled || busy} locked={props.locked}
       dirty={dirty} gate={props.gate ?? null} captureStatus={captureVersionStatus} />}
-    onRefresh={() => void refresh()} onStart={() => void perform("activate")}
-    onStop={() => void perform("stop")} /> : <>{controls}{access}</>;
+    onRefresh={() => { void refresh(); void setup.refresh(); }}
+    onStop={() => void perform("stop")} /><CigarSetupProof setup={setup} gate={props.gate ?? null} /></> : <>{controls}{access}</>;
 }

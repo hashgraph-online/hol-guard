@@ -455,11 +455,16 @@ fn extensions_contain(
 
 /// Whether this host runs the workspace sandbox for this harness hook: macOS
 /// Seatbelt, or a Linux bubblewrap that passed the overlay probe.
+///
+/// Grok applies a `PreToolUse` `updatedInput` on an allow, so its hook reaches
+/// the sink the same way Claude Code and ZCode do. Muse is absent on purpose:
+/// it applies `updatedInput` only from an `onFailure` correction, so a
+/// requirement it cannot route would record a contained run it ran uncontained.
 pub(super) fn host_eligible(harness: &str, event: &str, payload: &Value) -> bool {
     event == "PreToolUse"
         && (matches!(
             harness,
-            "omp" | "oh-my-pi" | "pi" | "zcode" | "claude-code" | "codex"
+            "omp" | "oh-my-pi" | "pi" | "zcode" | "claude-code" | "codex" | "grok"
         ) || cursor_shell_route(harness, payload))
         && sandbox_available()
 }

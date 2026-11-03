@@ -19,6 +19,10 @@ ring.workspace = true
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["user"] }
 
+[target.'cfg(windows)'.dependencies]
+fs2.workspace = true
+guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
+
 [dev-dependencies]
 ring.workspace = true
 

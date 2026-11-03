@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Literal, overload
 
 from ...ecosystems.opencode import _load_json_or_jsonc
 from ..aibom_detection import extend_detection_with_workspace_aibom
-from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
+from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
 from ._modules.opencode.opencode_config_lock import opencode_config_lock
 from ._modules.opencode.opencode_install_snapshot import (
@@ -21,26 +21,15 @@ from ._modules.opencode.opencode_install_snapshot import (
     write_json_transaction,
 )
 from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _command_available, _run_command_probe
-from .hook_python import guard_cli_command
-from .mcp_relay_native import mcp_proxy_command
-from .mcp_servers import (
-    GUARD_MCP_COMPANION_PREFIX,
-    ManagedMcpServer,
-    is_guard_proxy_command,
-    managed_stdio_servers,
-    proxy_cli_args,
-    proxy_process_env,
-    skipped_stdio_server_names,
-)
+from .mcp_servers import managed_stdio_servers, skipped_stdio_server_names
 from .opencode_artifacts import (
     CONFIG_FILENAMES,
-    _command_parts,
     config_paths,
     configured_config_path,
     native_artifacts,
     runtime_config_path,
-    runtime_overlay,
 )
+from .opencode_install_plan import plan_opencode_install
 from .opencode_pretool import (
     global_plugin_path,
     install_pretool_plugin,
@@ -49,26 +38,9 @@ from .opencode_pretool import (
     remove_pretool_plugin,
 )
 from .state_files import load_backup_payload, load_string_state_payload
-from .workspace_overrides import should_skip_workspace_override
-
-_OPENCODE_SCHEMA = "https://opencode.ai/config.json"
 
 if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
-_GUARD_MCP_COMPANION_PREFIX = GUARD_MCP_COMPANION_PREFIX
-_DEFAULT_BASH_PERMISSION: dict[str, object] = {
-    "*": "allow",
-    "git checkout *": "deny",
-    "git checkout": "deny",
-    "git revert *": "deny",
-    "git revert": "deny",
-    "git restore *": "deny",
-    "git restore": "deny",
-    "git reset *": "deny",
-    "git reset": "deny",
-    "rm -rf *": "deny",
-    "rm -r *": "deny",
-}
 
 
 class OpenCodeInstallConfigError(RuntimeError):
@@ -91,54 +63,6 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
     )
     approval_prompt_channel = "native"
     approval_auto_open_browser = False
-
-    _SUBCOMMANDS = frozenset(
-        {
-            "completion",
-            "acp",
-            "mcp",
-            "attach",
-            "run",
-            "auth",
-            "agent",
-            "upgrade",
-            "uninstall",
-            "serve",
-            "web",
-            "models",
-            "stats",
-            "export",
-            "import",
-            "github",
-            "pr",
-            "session",
-            "db",
-        }
-    )
-    _REQUIRED_VALUE_OPTIONS = frozenset(
-        {
-            "--hostname",
-            "--mdns-domain",
-            "--cors",
-            "--model",
-            "-m",
-            "--session",
-            "-s",
-            "--prompt",
-            "--agent",
-            "--variant",
-            "--log-level",
-            "--command",
-            "--format",
-            "--file",
-            "-f",
-            "--attach",
-            "--password",
-            "-p",
-            "--dir",
-        }
-    )
-    _OPTIONAL_VALUE_OPTIONS = frozenset({"--port", "--title"})
 
     @staticmethod
     def _scope_for(context: HarnessContext, path: Path) -> str:
@@ -210,16 +134,6 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             home_dir=context.home_dir,
             workspace_dir=context.workspace_dir,
         )
-        detected_managed_servers = managed_stdio_servers(detection)
-        managed_servers = tuple(
-            server for server in detected_managed_servers if not server.name.startswith(_GUARD_MCP_COMPANION_PREFIX)
-        )
-        prefix_artifacts = {
-            artifact.name
-            for artifact in detection.artifacts
-            if artifact.artifact_type == "mcp_server" and artifact.name.startswith(_GUARD_MCP_COMPANION_PREFIX)
-        }
-        skipped_servers = tuple(dict.fromkeys((*skipped_stdio_server_names(detection), *sorted(prefix_artifacts))))
         target_config_path = self._managed_install_config_path(context)
         target_payload = snapshot.payload_for(target_config_path)
         original_text = None
@@ -236,33 +150,27 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             "scope": "workspace" if context.workspace_dir is not None else "global",
             "workspace_dir": str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None,
         }
-        existing_workspace_server_names = snapshot.workspace_server_names()
-        _apply_install_baseline(target_payload)
-        target_payload["permission"] = self._managed_permission_payload(
-            target_payload.get("permission"),
-            context=context,
-            servers=managed_servers,
-            existing_workspace_server_names=existing_workspace_server_names,
-        )
-        target_payload["mcp"] = _persisted_mcp_with_guard_companions(
-            target_payload.get("mcp"),
-            context=context,
-            servers=managed_servers,
-            existing_workspace_server_names=existing_workspace_server_names,
-        )
+        try:
+            plan = plan_opencode_install(
+                context,
+                servers=managed_stdio_servers(detection),
+                skipped=skipped_stdio_server_names(detection),
+                artifacts=tuple(
+                    artifact.name for artifact in detection.artifacts if artifact.artifact_type == "mcp_server"
+                ),
+                workspace_servers=snapshot.workspace_server_names(),
+                permission=target_payload.get("permission"),
+                mcp=target_payload.get("mcp"),
+            )
+        except ValueError as error:
+            raise OpenCodeInstallConfigError(str(error)) from error
+        managed_servers = plan.managed
+        skipped_servers = plan.skipped
+        target_payload.setdefault("$schema", "https://opencode.ai/config.json")
+        target_payload["permission"] = plan.permission
+        target_payload["mcp"] = plan.mcp
         overlay_path = runtime_config_path(context)
-        overlay_payload = runtime_overlay(
-            permission_rules=self._proxy_permission_rules(
-                context,
-                managed_servers,
-                existing_workspace_server_names,
-            ),
-            mcp_servers=self._proxy_mcp_overrides(
-                context,
-                managed_servers,
-                existing_workspace_server_names,
-            ),
-        )
+        overlay_payload = plan.overlay
         writes: list[tuple[Path, dict[str, object]]] = []
         if not backup_path.exists():
             writes.append((backup_path, {"existed": original_text is not None, "content": original_text}))
@@ -415,23 +323,18 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         }
 
     def launch_environment(self, context: HarnessContext) -> dict[str, str]:
-        overlay_path = runtime_config_path(context)
-        if not overlay_path.exists():
-            return {}
-        try:
-            runtime_config = json.loads(overlay_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return {}
-        existing_config = _inline_config(os.getenv("OPENCODE_CONFIG_CONTENT"))
-        merged_config = _merge_configs(existing_config, runtime_config)
-        return {"OPENCODE_CONFIG_CONTENT": json.dumps(merged_config)}
+        request = {"op": "environment", "inline": os.getenv("OPENCODE_CONFIG_CONTENT")}
+        content = native_runner_authority("opencode_launch", request, guard_home=context.guard_home).get("content")
+        return {"OPENCODE_CONFIG_CONTENT": content} if isinstance(content, str) else {}
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
-        if not passthrough_args:
-            return self._interactive_command(context)
-        if passthrough_args[0] in self._SUBCOMMANDS:
-            return [self.executable, *self._subcommand_args(context, passthrough_args)]
-        return [*self._interactive_command(context), *self._interactive_args(passthrough_args)]
+        workspace = str(context.workspace_dir) if context.workspace_dir is not None else None
+        request = {"op": "argv", "args": "\0".join(passthrough_args), "count": len(passthrough_args)}
+        answer = native_runner_authority("opencode_launch", request | {"workspace": workspace}, context.guard_home)
+        argv, count = answer.get("argv"), answer.get("count")
+        if not isinstance(argv, str) or not isinstance(count, int) or len(command := argv.split("\0")) != count:
+            raise NativeRunnerAuthorityError("native_opencode_launch_invalid")
+        return command
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         if shutil.which(self.executable) is None:
@@ -440,72 +343,6 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             "paths": _run_command_probe([self.executable, "debug", "paths"]),
             "config": _run_command_probe([self.executable, "debug", "config"]),
         }
-
-    def _proxy_mcp_overrides(
-        self,
-        context: HarnessContext,
-        servers: tuple[ManagedMcpServer, ...],
-        existing_workspace_server_names: set[str],
-    ) -> dict[str, object]:
-        overrides: dict[str, object] = {}
-        for server in servers:
-            if self._should_skip_workspace_override(
-                context=context,
-                server=server,
-                existing_workspace_server_names=existing_workspace_server_names,
-            ):
-                continue
-            entry: dict[str, object] = {
-                "type": "local",
-                "command": mcp_proxy_command(
-                    guard_cli_command(
-                        context,
-                        proxy_cli_args(
-                            proxy_command="opencode-mcp-proxy",
-                            guard_home=str(context.guard_home),
-                            server=server,
-                            home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
-                            workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
-                        ),
-                    ),
-                ),
-                "enabled": server.enabled,
-            }
-            environment = merge_guard_launcher_env(proxy_process_env(getattr(server, "env", {})))
-            if environment:
-                entry["environment"] = environment
-            overrides[server.name] = entry
-        return overrides
-
-    @staticmethod
-    def _proxy_permission_rules(
-        context: HarnessContext,
-        servers: tuple[ManagedMcpServer, ...],
-        existing_workspace_server_names: set[str],
-    ) -> dict[str, object]:
-        rules: dict[str, object] = {}
-        for server in servers:
-            shadowed = OpenCodeHarnessAdapter._should_skip_workspace_override(
-                context=context,
-                server=server,
-                existing_workspace_server_names=existing_workspace_server_names,
-            )
-            if shadowed:
-                if server.enabled and server.source_scope != "project":
-                    rules[f"{_guard_mcp_companion_name(server.name)}_*"] = "ask"
-                continue
-            if not server.enabled:
-                continue
-            rules[f"{server.name}_*"] = "ask"
-            if server.source_scope != "project":
-                rules[f"{_guard_mcp_companion_name(server.name)}_*"] = "ask"
-        return rules
-
-    @staticmethod
-    def _skip_global_managed_server(server: ManagedMcpServer) -> bool:
-        return server.source_scope == "project"
-
-    _should_skip_workspace_override = staticmethod(should_skip_workspace_override)
 
     @staticmethod
     def _target_config_path(context: HarnessContext) -> Path:
@@ -600,294 +437,5 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
 
     _backup_payload = staticmethod(load_backup_payload)
 
-    def _interactive_command(self, context: HarnessContext) -> list[str]:
-        command = [self.executable]
-        if context.workspace_dir is not None:
-            command.append(str(context.workspace_dir))
-        return command
-
-    def _subcommand_args(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
-        del context
-        return list(passthrough_args)
-
-    def _interactive_args(self, passthrough_args: list[str]) -> list[str]:
-        if any(value == "--prompt" or value.startswith("--prompt=") for value in passthrough_args):
-            return list(passthrough_args)
-        normalized: list[str] = []
-        prompt_tokens: list[str] = []
-        index = 0
-        while index < len(passthrough_args):
-            value = passthrough_args[index]
-            if value == "--":
-                prompt_tokens.extend(passthrough_args[index + 1 :])
-                break
-            if value.startswith("-"):
-                normalized.append(value)
-                if self._consumes_next_value(value, passthrough_args, index):
-                    index += 1
-                    normalized.append(passthrough_args[index])
-                index += 1
-                continue
-            prompt_tokens.extend(passthrough_args[index:])
-            break
-        if prompt_tokens:
-            normalized.extend(["--prompt", " ".join(prompt_tokens)])
-        return normalized
-
-    def _consumes_next_value(self, value: str, passthrough_args: list[str], index: int) -> bool:
-        if index + 1 >= len(passthrough_args) or "=" in value:
-            return False
-        if value in self._REQUIRED_VALUE_OPTIONS:
-            return True
-        next_value = passthrough_args[index + 1]
-        if value == "--port":
-            return next_value.isdigit()
-        if value == "--title":
-            return not next_value.startswith("-")
-        return False
-
-    def _managed_permission_payload(
-        self,
-        current_permission: object,
-        *,
-        context: HarnessContext,
-        servers: tuple[ManagedMcpServer, ...],
-        existing_workspace_server_names: set[str],
-    ) -> dict[str, object]:
-        permission = self._coerce_permission_payload(current_permission)
-        permission.update(
-            self._proxy_permission_rules(
-                context=context,
-                servers=servers,
-                existing_workspace_server_names=existing_workspace_server_names,
-            )
-        )
-        return _merge_default_bash_permission(permission)
-
-    @staticmethod
-    def _coerce_permission_payload(current_permission: object) -> dict[str, object]:
-        payload = _object_dict(current_permission)
-        if payload is not None:
-            return payload
-        if isinstance(current_permission, str):
-            return {"*": current_permission}
-        return {}
-
 
 __all__ = ["OpenCodeHarnessAdapter", "OpenCodeInstallConfigError"]
-
-
-def _apply_install_baseline(payload: dict[str, object]) -> None:
-    payload.setdefault("$schema", _OPENCODE_SCHEMA)
-
-
-def _merge_default_bash_permission(permission: dict[str, object]) -> dict[str, object]:
-    bash = permission.get("bash")
-    if isinstance(bash, str):
-        merged_bash = dict(_DEFAULT_BASH_PERMISSION)
-        merged_bash["*"] = bash
-        permission["bash"] = merged_bash
-        return permission
-    if isinstance(bash, dict):
-        merged_bash = dict(_DEFAULT_BASH_PERMISSION)
-        for key, value in bash.items():
-            if isinstance(key, str):
-                merged_bash[key] = value
-        permission["bash"] = merged_bash
-        return permission
-    wildcard = permission.get("*")
-    if isinstance(wildcard, str):
-        merged_bash = dict(_DEFAULT_BASH_PERMISSION)
-        merged_bash["*"] = wildcard
-        permission["bash"] = merged_bash
-        return permission
-    permission["bash"] = dict(_DEFAULT_BASH_PERMISSION)
-    return permission
-
-
-def _guard_mcp_companion_name(server_name: str) -> str:
-    return f"{_GUARD_MCP_COMPANION_PREFIX}{server_name}"
-
-
-def _source_mcp_server_config(server: ManagedMcpServer) -> dict[str, object] | None:
-    from ...ecosystems.opencode import _load_json_or_jsonc
-
-    payload, parse_error, _ = _load_json_or_jsonc(Path(server.config_path))
-    if parse_error or not isinstance(payload, dict):
-        return None
-    mcp = payload.get("mcp")
-    if not isinstance(mcp, dict):
-        return None
-    entry = mcp.get(server.name)
-    return entry if isinstance(entry, dict) else None
-
-
-def _ensure_native_mcp_entries(
-    persisted: dict[str, object],
-    *,
-    servers: tuple[ManagedMcpServer, ...],
-    existing_workspace_server_names: set[str],
-    context: HarnessContext,
-) -> None:
-    for server in servers:
-        if OpenCodeHarnessAdapter._skip_global_managed_server(server):
-            continue
-        if OpenCodeHarnessAdapter._should_skip_workspace_override(
-            context=context,
-            server=server,
-            existing_workspace_server_names=existing_workspace_server_names,
-        ):
-            continue
-        if server.name in persisted or not server.command:
-            continue
-        source_entry = _source_mcp_server_config(server) or {}
-        entry: dict[str, object] = dict(source_entry)
-        entry["type"] = entry.get("type", "local")
-        entry["command"] = [server.command, *server.args]
-        entry["enabled"] = server.enabled
-        if server.env:
-            entry["environment"] = dict(server.env)
-        persisted[server.name] = entry
-
-
-def _persisted_mcp_with_guard_companions(
-    current_mcp: object,
-    *,
-    context: HarnessContext,
-    servers: tuple[ManagedMcpServer, ...],
-    existing_workspace_server_names: set[str],
-) -> dict[str, object]:
-    persisted = _persisted_mcp_payload(current_mcp)
-    _ensure_native_mcp_entries(
-        persisted,
-        servers=servers,
-        existing_workspace_server_names=existing_workspace_server_names,
-        context=context,
-    )
-    for server in servers:
-        if OpenCodeHarnessAdapter._skip_global_managed_server(server):
-            continue
-        if OpenCodeHarnessAdapter._should_skip_workspace_override(
-            context=context,
-            server=server,
-            existing_workspace_server_names=existing_workspace_server_names,
-            for_companion=True,
-        ):
-            continue
-        companion_name = _guard_mcp_companion_name(server.name)
-        entry: dict[str, object] = {
-            "type": "local",
-            "command": mcp_proxy_command(
-                guard_cli_command(
-                    context,
-                    proxy_cli_args(
-                        proxy_command="opencode-mcp-proxy",
-                        guard_home=str(context.guard_home),
-                        server=server,
-                        home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
-                        workspace=None,
-                    ),
-                ),
-            ),
-            "enabled": server.enabled,
-        }
-        environment = merge_guard_launcher_env(proxy_process_env(getattr(server, "env", {})))
-        if environment:
-            entry["environment"] = environment
-        persisted[companion_name] = entry
-        native_entry = persisted.get(server.name)
-        if isinstance(native_entry, dict):
-            disabled_native = dict(native_entry)
-            disabled_native["enabled"] = False
-            persisted[server.name] = disabled_native
-    return persisted
-
-
-def _restore_local_server_from_guard_proxy(server_config: dict[str, object]) -> dict[str, object] | None:
-    """Rebuild the original local MCP entry from a persisted Guard proxy wrapper."""
-
-    command_value = server_config.get("command")
-    if not isinstance(command_value, list):
-        return None
-    tokens = [token for token in command_value if isinstance(token, str)]
-    if "opencode-mcp-proxy" not in tokens:
-        return None
-    underlying_command: str | None = None
-    underlying_args: list[str] = []
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "--command" and index + 1 < len(tokens):
-            underlying_command = tokens[index + 1]
-            index += 2
-            continue
-        if token.startswith("--arg="):
-            underlying_args.append(token.split("=", 1)[1])
-        index += 1
-    if underlying_command is None:
-        return None
-    restored: dict[str, object] = {
-        "type": server_config.get("type", "local"),
-        "command": [underlying_command, *underlying_args],
-        "enabled": server_config.get("enabled", True),
-    }
-    environment = server_config.get("environment")
-    if isinstance(environment, dict):
-        restored["environment"] = environment
-    return restored
-
-
-def _persisted_mcp_payload(current_mcp: object) -> dict[str, object]:
-    """Keep native MCP servers on disk; strip legacy in-place proxy wrappers."""
-
-    payload = _object_dict(current_mcp) or {}
-    persisted: dict[str, object] = {}
-    for name, entry in payload.items():
-        if not isinstance(name, str) or not isinstance(entry, dict):
-            continue
-        if name.startswith(_GUARD_MCP_COMPANION_PREFIX):
-            persisted[name] = dict(entry)
-            continue
-        restored = _restore_local_server_from_guard_proxy(entry)
-        if restored is not None:
-            persisted[name] = restored
-            continue
-        command, args = _command_parts(entry)
-        if is_guard_proxy_command(command, args):
-            continue
-        persisted[name] = dict(entry)
-    return persisted
-
-
-def _inline_config(raw_content: str | None) -> dict[str, object]:
-    if not raw_content:
-        return {}
-    try:
-        payload = json.loads(raw_content)
-    except json.JSONDecodeError:
-        return {}
-    parsed = _object_dict(payload)
-    return parsed if parsed is not None else {}
-
-
-def _merge_configs(base: dict[str, object], overlay: dict[str, object]) -> dict[str, object]:
-    merged = dict(base)
-    for key, value in overlay.items():
-        existing_value = merged.get(key)
-        nested_overlay = _object_dict(value)
-        nested_existing = _object_dict(existing_value)
-        if nested_overlay is not None and nested_existing is not None:
-            merged[key] = _merge_configs(nested_existing, nested_overlay)
-            continue
-        merged[key] = value
-    return merged
-
-
-def _object_dict(value: object) -> dict[str, object] | None:
-    if not isinstance(value, dict):
-        return None
-    result: dict[str, object] = {}
-    for key, item in value.items():
-        if isinstance(key, str):
-            result[key] = item
-    return result

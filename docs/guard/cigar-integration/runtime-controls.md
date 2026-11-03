@@ -16,7 +16,7 @@ In **Runtime & preferences**, choose an enrolled runtime, select preferences and
 
 Opening CIGAR reads native status and registered runtime metadata only. It never scans PATH, probes Python, installs packages, or starts a runtime. An empty runtime list means this Guard profile has no registered CIGAR bundle; it does not mean Python 3.14 is absent or incompatible. Final CPython 3.14.7 qualifies, including in a separate selected environment while Guard uses another supported Python.
 
-Home also shows native context readiness, a link to its Protection settings and **Turn off context assistance** when an enabled preference or pending job is known. Opening Home reads status only; it does not start or probe a runtime. Context status failures are separate from Guard protection and approval controls.
+Home also shows a CIGAR card with the same headline and sentence as the CIGAR page, **Open CIGAR**, and **Turn off CIGAR** when an enabled preference or pending job is known. **Try again** appears only when the status read fails. Opening Home reads status only; it does not start or probe a runtime. Context status failures are separate from Guard protection and approval controls.
 
 These CLI commands reach the same resident-owned service:
 
@@ -38,7 +38,7 @@ Keep Guard's desktop app or daemon running for `check`, `start` and context tool
 
 The actual selected executable must be a verified final CPython 3.14 process with the supported build/ABI, approved CIGAR 0.14.1 package and matching bundled worker. Python 3.13, 3.15, prereleases, PyPy, debug and free-threaded builds do not qualify. Guard retains its broader base Python support; a separate verified Python 3.14 environment is valid. The dashboard reports the Guard host's state, including when viewed from another device.
 
-Current installed development evidence covers darwin-arm64 only. Windows activation explicitly refuses until persistent Job Object transport is implemented and qualified. The existence of an eligibility predicate for another platform is not platform qualification.
+The bundled catalog lists builds for darwin-arm64, darwin-x64, linux-x64 and linux-arm64 (glibc and musl each) and win32-x64. On Linux, Guard picks the glibc or musl build from the C library the system shell loads, because Guard's own Linux runtime is a static musl binary and says nothing about the host. Windows activation still refuses until persistent Job Object transport is implemented, so Windows hosts see the install as not available yet.
 
 ## Local candidate enrollment
 

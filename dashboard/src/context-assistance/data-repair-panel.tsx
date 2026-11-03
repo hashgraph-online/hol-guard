@@ -1,18 +1,39 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ConfirmDialog } from "../confirm-dialog";
 import { guardAwareHref } from "../guard-api";
 import { downloadBlob } from "../history-export";
-import { SettingsFormSection } from "../settings/settings-row-primitives";
+import { HiMiniArrowDownTray, HiMiniArrowPath, HiMiniLockClosed } from "react-icons/hi2";
+import { versionButton, versionHeading, versionLead, versionList, versionQuiet } from "./versions-view";
 import type { GuardContextAssistanceConfig } from "../guard-types";
 import { controlContextAssistance, fetchContextAssistance } from "./api";
 import { fetchContextData, forgetContextHistory, forgetSavedEvidence, type ContextDataSummary } from "./history-api";
 import { manageContextWorkspace } from "./workspaces-api";
+import { clearRecentProjects } from "./recent-projects";
 import { contextStatusCopy } from "./status";
 import type { ContextAssistanceStatus } from "./types";
 import { savedEvidenceCopy } from "./saved-evidence";
 
-const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
+const caption = "text-xs leading-5 text-brand-dark/60";
+const danger = "inline-flex min-h-11 items-center justify-center rounded-lg border border-red-200 bg-white px-3.5 py-2 text-sm font-semibold text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none";
+function Stat({ term, value }: { term: string; value: ReactNode }) {
+  return <div className="rounded-xl border border-brand-dark/[0.08] bg-white px-3.5 py-3"><dt className="text-xs text-brand-dark/60">{term}</dt><dd className="mt-1 text-lg font-semibold tabular-nums text-brand-dark">{value}</dd></div>;
+}
+function Row({ title, body, action }: { title: string; body: string; action: ReactNode }) {
+  return <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4 sm:px-5">
+    <div className="min-w-0 flex-[1_1_16rem]"><p className="text-sm font-semibold text-brand-dark">{title}</p><p className="mt-0.5 text-xs leading-5 text-brand-dark/65">{body}</p></div>
+    <div className="shrink-0">{action}</div></li>;
+}
 type Action = "history" | "data" | "saved" | "recheck";
+const CONFIRM: Record<Action, { title: string; description: string; label: string }> = {
+  history: { title: "Clear past answers?", label: "Clear past answers",
+    description: "Deletes the answers CIGAR kept. Your projects keep their access. Guard's approvals and records are not touched." },
+  saved: { title: "Remove saved notes?", label: "Remove saved notes",
+    description: "Deletes everything CIGAR saved on this computer, including old projects, and ends current access. Turn CIGAR on and add your projects again to keep going. Guard's approvals and records are not touched." },
+  data: { title: "Delete everything CIGAR knows?", label: "Delete everything",
+    description: "Deletes past answers, saved notes, project access, app connections and the recent projects this page remembers. You can set it up again anytime. Guard's approvals and records are not touched." },
+  recheck: { title: "Start CIGAR fresh?", label: "Start fresh",
+    description: "Ends current access and checks CIGAR again. If it is turned on, it starts fresh. Add your projects again afterward." },
+};
 type Props = { savedEnabled: boolean; disabled: boolean; onStopped: (value: GuardContextAssistanceConfig) => void; onBusyChange: (busy: boolean) => void };
 
 export function contextDiagnostics(status: ContextAssistanceStatus, data: ContextDataSummary | null) {
@@ -61,14 +82,14 @@ export function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBu
     if (changes) onBusyChange(true);
     try { await operation(controller.signal); }
     catch (cause) { if (revision.current === current && !controller.signal.aborted) {
-      setStatus(null); setData(null); setMessage(cause instanceof Error ? cause.message : "Context data is unavailable. Refresh its status.");
+      setStatus(null); setData(null); setMessage(cause instanceof Error ? cause.message : "CIGAR did not answer. Try Refresh.");
     } }
     finally { if (changes) onBusyChange(false); if (revision.current === current) setBusy(false); }
   }
   useEffect(() => {
     const controller = new AbortController();
     request.current = controller;
-    void refresh(controller.signal).catch(() => { if (!controller.signal.aborted) setMessage("Context status is unavailable. Refresh or turn off the feature to check it."); });
+    void refresh(controller.signal).catch(() => { if (!controller.signal.aborted) setMessage("CIGAR did not answer. Try Refresh, or turn it off."); });
     return () => { revision.current += 1; controller.abort(); request.current?.abort(); onBusyChange(false); };
   }, []);
 
@@ -77,77 +98,106 @@ export function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBu
     void perform(async (signal) => {
       if (action === "history") {
         const value = await forgetContextHistory(signal);
-        if (!signal.aborted) { setData(value); setMessage("Prepared context history cleared. Current context and source access remain available."); }
+        if (!signal.aborted) { setData(value); setMessage("Past answers cleared. Your projects keep their access."); }
       } else if (action === "saved") {
         await forgetSavedEvidence(signal);
         await refresh(signal);
-        if (!signal.aborted) setMessage("Saved evidence removed and current context access ended. Check and start the runtime, then grant sources again to continue.");
+        if (!signal.aborted) setMessage("Saved notes removed. Turn CIGAR on and add your projects again to keep going.");
       } else if (action === "data") {
         await manageContextWorkspace("clear", undefined, undefined, signal);
+        clearRecentProjects();
         await refresh(signal);
-        if (!signal.aborted) setMessage("Context data cleared. Grant workspace and app access again before preparing more context.");
+        if (!signal.aborted) setMessage("Everything CIGAR knew is deleted. Add a project to start again.");
       } else {
         const value = await controlContextAssistance("recheck", signal);
-        if (!signal.aborted) { setStatus(value); setData(null); setMessage("Runtime check scheduled. Refresh status to see the result; earlier context access has ended."); }
+        if (!signal.aborted) { setStatus(value); setData(null); setMessage("Checking CIGAR again. Refresh in a moment to see how it went."); }
       }
     }, true);
   }
   function stop() {
     void perform(async (signal) => {
       const value = await controlContextAssistance("stop", signal);
-      if (!signal.aborted) { setStatus(value); setData(null); onStopped(value.preferences); setMessage("Context assistance is off. Guard approvals and evidence remain available."); }
+      if (!signal.aborted) { setStatus(value); setData(null); onStopped(value.preferences); setMessage("CIGAR is off. Guard keeps protecting you as usual."); }
     }, true);
   }
   const ready = Boolean(status?.effective_enabled);
   const copy = status ? contextStatusCopy(status) : { label: "Status unavailable", detail: "Refresh context status to inspect this optional feature." };
-  return <SettingsFormSection title="Context data and repair" description="Inspect or clear optional context separately from Guard approvals and evidence.">
-    <div role="region" aria-label="Context data and repair controls" className="space-y-3 py-4" aria-busy={busy}>
-      <p role="status" className="text-sm font-semibold text-brand-dark">{copy.label}</p>
-      <p className="text-sm text-slate-600">{copy.detail}</p>
-      <p className="text-sm text-slate-600">Prepared contexts and history use local memory. {status?.capabilities?.private_persistence
-        ? "Optional saved evidence uses private local files, with no Guard encryption. It remains after the runtime stops until expiry cleanup or removal. Guard removes expired evidence while running or before reuse after launch. Permissions must be granted again after restart."
-        : "This build cannot activate saved evidence. Existing saved evidence can still be inspected and removed below."}</p>
-      {data ? <dl className="grid grid-cols-2 gap-2 text-sm text-slate-600">
-        <dt>Active workspace/app grants</dt><dd>{data.active_scopes}</dd>
-        <dt>Selected files</dt><dd>{data.selected_files}</dd>
-        <dt>Current contexts</dt><dd>{data.current_contexts}</dd>
-        <dt>Prepared history entries</dt><dd>{data.history_entries}</dd>
-        <dt>Encoded history payload</dt><dd>{data.history_encoded_bytes.toLocaleString()} bytes</dd>
-        <dt>App connections</dt><dd>{data.agent_sessions}</dd>
-      </dl> : <p className="text-sm text-slate-600">Live context counts are available while a verified runtime is ready.</p>}
-      {data?.saved_evidence ? <div className="space-y-2 text-sm text-slate-600" role="region" aria-label="Saved context evidence">
-        <p role="status">{savedEvidenceCopy(data.saved_evidence)}</p>
-        {data.saved_evidence.slots !== null ? <dl className="grid grid-cols-2 gap-2">
-          <dt>Saved workspace/app stores</dt><dd>{data.saved_evidence.slots}</dd>
-          <dt>Saved file bytes</dt><dd>{data.saved_evidence.bytes?.toLocaleString() ?? "Unavailable"}</dd>
-          <dt>Note writes to reconcile</dt><dd>{data.saved_evidence.unresolved_writes ?? "Unavailable"}</dd>
-          <dt>Expired stores awaiting cleanup</dt><dd>{data.saved_evidence.expired_slots ?? "Unavailable"}</dd>
+  const offAvailable = Boolean(savedEnabled || status?.requested_enabled || status?.effective_enabled || status?.job);
+  const removable = Boolean(data?.saved_evidence && data.saved_evidence.status !== "empty" && data.saved_evidence.status !== "unsupported");
+  return <div className="space-y-8">
+    <div role="region" aria-label="Context data and repair controls" className="space-y-8" aria-busy={busy}>
+      <section className="guard-surface-in rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-5" aria-label="Context data status">
+        <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+          <div className="flex min-w-0 flex-[1_1_20rem] items-start gap-3.5">
+            <span aria-hidden="true" className={"flex size-10 shrink-0 items-center justify-center rounded-full " + (ready ? "bg-brand-green-bg text-brand-green-text" : "bg-brand-dark/[0.06] text-brand-dark/55")}>
+              <HiMiniLockClosed className="size-5" /></span>
+            <div className="min-w-0 space-y-1.5">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-dark/55">Privacy and repair</h3>
+              <p role="status" className="text-lg font-semibold tracking-[-0.01em] text-brand-dark">{copy.label}</p>
+              <p className="max-w-[62ch] text-sm leading-6 text-brand-dark/75">{copy.detail}</p>
+              <p className={caption + " max-w-[70ch]"}>What CIGAR prepares stays in this computer's memory. {status?.capabilities?.private_persistence
+                ? "If you turn on saved notes, they are kept in private files here, not encrypted by Guard, until they expire or you remove them. After Guard restarts, add your projects again."
+                : "This version cannot save notes. Anything saved earlier can still be checked and removed below."}</p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <button className={versionQuiet} type="button" disabled={busy || disabled} onClick={() => void perform(refresh)}><HiMiniArrowPath aria-hidden="true" className="size-4" />Refresh</button>
+            <button className={versionQuiet} type="button" disabled={busy || !status} onClick={() => {
+              if (status) downloadBlob(new Blob([JSON.stringify(contextDiagnostics(status, data), null, 2)], { type: "application/json" }), "guard-context-diagnostics.json");
+            }}><HiMiniArrowDownTray aria-hidden="true" className="size-4" />Download diagnostics</button>
+          </div>
+        </div>
+      </section>
+      {message ? <p role="status" className="rounded-xl border border-brand-dark/10 bg-surface-1 px-4 py-3 text-sm leading-6 text-brand-dark/75">{message}</p> : null}
+      <section className="space-y-3" aria-labelledby="cigar-data-held">
+        <div><h3 id="cigar-data-held" className={versionHeading}>What CIGAR is holding</h3>
+          <p className={versionLead}>Just counts. Your files, questions and folder names are never shown here.</p></div>
+        {data ? <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <Stat term="Projects with access (per app)" value={data.active_scopes} />
+          <Stat term="Files it can read" value={data.selected_files} />
+          <Stat term="Answers ready" value={data.current_contexts} />
+          <Stat term="Past answers kept" value={data.history_entries} />
+          <Stat term="Space used by past answers" value={data.history_encoded_bytes.toLocaleString() + " bytes"} />
+          <Stat term="Connected apps" value={data.agent_sessions} />
+        </dl> : <p className="rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70">Counts show up while CIGAR is on.</p>}
+        <p className={caption}>CIGAR keeps at most 8 past answers (512 KiB) for each project and app, and clears them after the time you chose in Settings.</p>
+      </section>
+      {data?.saved_evidence ? <section className="space-y-3 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-5" role="region" aria-label="Saved context evidence">
+        <h4 className="text-sm font-semibold text-brand-dark">Saved notes</h4>
+        <p role="status" className="text-sm text-brand-dark/75">{savedEvidenceCopy(data.saved_evidence)}</p>
+        {data.saved_evidence.slots !== null ? <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Stat term="Projects with saved notes (per app)" value={data.saved_evidence.slots} />
+          <Stat term="Space used (bytes)" value={data.saved_evidence.bytes?.toLocaleString() ?? "Unavailable"} />
+          <Stat term="Notes still saving" value={data.saved_evidence.unresolved_writes ?? "Unavailable"} />
+          <Stat term="Expired, waiting to clear" value={data.saved_evidence.expired_slots ?? "Unavailable"} />
         </dl> : null}
-        <p>Saved evidence is limited to eight stores and 528 MiB of logical file bytes, including database journals. This does not measure process memory.</p>
-      </div> : null}
-      <p className="text-sm text-slate-600">History is limited to eight entries and 512 KiB of encoded payload per workspace/app grant, with the configured retention period. These counts do not measure process memory or execution safety.</p>
-      {message ? <p role="status" className="text-sm text-slate-600">{message}</p> : null}
-      <div className="flex flex-wrap gap-2">
-        <button className={button} type="button" disabled={busy || disabled} onClick={() => void perform(refresh)}>Refresh context data</button>
-        <button className={button} type="button" disabled={busy || disabled || !ready || !data?.history_entries} onClick={() => setConfirm("history")}>Clear context history</button>
-        <button className={button} type="button" disabled={busy || disabled || (!ready && !data?.saved_evidence)} onClick={() => setConfirm("data")}>Clear all context data</button>
-        {data?.saved_evidence && data.saved_evidence.status !== "empty" && data.saved_evidence.status !== "unsupported"
-          ? <button className={button} type="button" disabled={busy || disabled} onClick={() => setConfirm("saved")}>Remove saved evidence</button> : null}
-        <button className={button} type="button" disabled={busy || disabled || !status?.verification_permitted || !status?.preferences.runtime_id || Boolean(status.job)} onClick={() => setConfirm("recheck")}>Recheck context runtime</button>
-        <button className={button} type="button" disabled={busy || !status} onClick={() => {
-          if (status) downloadBlob(new Blob([JSON.stringify(contextDiagnostics(status, data), null, 2)], { type: "application/json" }), "guard-context-diagnostics.json");
-        }}>Export context diagnostics</button>
-        {(savedEnabled || status?.requested_enabled || status?.effective_enabled || status?.job) ? <button className={button} type="button" disabled={busy || disabled} onClick={stop}>Turn off context assistance</button> : null}
-        <a className={`${button} inline-flex items-center`} href={guardAwareHref("/cigar?section=runtime")}>Manage context setup</a>
-      </div>
-      {!ready ? <p className="text-sm text-slate-600">If a runtime is unavailable, turn off assistance to release its context. Rechecking requires an enrolled Python 3.14 runtime.</p> : null}
+        <p className={caption}>Saved notes cover at most 8 projects (each app counts separately) and use about 550 MB of disk.</p>
+      </section> : null}
+      <section className="space-y-3" aria-labelledby="cigar-data-fix">
+        <h3 id="cigar-data-fix" className={versionHeading}>Fix a problem</h3>
+        <ul className={versionList}>
+          <Row title="Start CIGAR fresh" body={!ready ? "If CIGAR seems stuck, turn it off to free everything it holds. Starting fresh needs Python 3.14, which Settings can set up." : "Ends current access and starts CIGAR again. Add your projects again afterward."}
+            action={<button className={versionButton} type="button" disabled={busy || disabled || !status?.verification_permitted || !status?.preferences.runtime_id || Boolean(status.job)} onClick={() => setConfirm("recheck")}>Start fresh</button>} />
+          <Row title="Change setup" body="Choose what CIGAR may read and how long it keeps things."
+            action={<a className={versionButton} href={guardAwareHref("/cigar?section=runtime")}>Open Settings</a>} />
+        </ul>
+      </section>
+      <section className="space-y-3" aria-labelledby="cigar-data-danger">
+        <div><h3 id="cigar-data-danger" className={versionHeading}>Delete or turn off</h3>
+          <p className={versionLead}>Each one asks you first. Guard's approvals and records are never touched.</p></div>
+        <ul className="divide-y divide-red-200/70 overflow-hidden rounded-2xl border border-red-200 bg-red-50/30">
+          <Row title="Past answers" body="Deletes the answers CIGAR kept. Projects keep their access."
+            action={<button className={danger} type="button" disabled={busy || disabled || !ready || !data?.history_entries} onClick={() => setConfirm("history")}>Clear past answers</button>} />
+          {removable ? <Row title="Saved notes" body="Deletes what CIGAR saved on this computer, including old projects."
+            action={<button className={danger} type="button" disabled={busy || disabled} onClick={() => setConfirm("saved")}>Remove saved notes</button>} /> : null}
+          <Row title="Everything CIGAR knows" body="Deletes past answers, saved notes, project access, app connections and recent projects. You can set it up again anytime."
+            action={<button className={danger} type="button" disabled={busy || disabled || (!ready && !data?.saved_evidence)} onClick={() => setConfirm("data")}>Delete everything</button>} />
+          {offAvailable ? <Row title="Turn CIGAR off" body="Stops CIGAR now. Projects lose access until you turn it back on."
+            action={<button className={danger} type="button" disabled={busy || disabled} onClick={stop}>Turn CIGAR off</button>} /> : null}
+        </ul>
+      </section>
     </div>
-    {confirm ? <ConfirmDialog title={confirm === "history" ? "Clear prepared context history?" : confirm === "saved" ? "Remove saved evidence?" : confirm === "data" ? "Clear all context data?" : "Recheck context runtime?"}
-      description={confirm === "history" ? "Deletes retained historical briefs. Current contexts and source permissions stay available. Guard approvals and evidence are unchanged."
-        : confirm === "saved" ? "Ends current context access and removes saved source evidence and reviewed notes, including inactive stores. Check and start the runtime and grant access again to continue. Guard approvals and evidence are unchanged."
-        : confirm === "data" ? "Closes context graphs and deletes retained briefs, saved evidence, native context origins, source grants and app connections. Grant access again to continue. Guard approvals and evidence are unchanged."
-        : "Ends current context access and checks the selected runtime again. An enabled preference may start a fresh runtime. Grant source and app access again afterward."}
-      confirmLabel={confirm === "history" ? "Clear history" : confirm === "saved" ? "Remove saved evidence" : confirm === "data" ? "Clear context data" : "Recheck runtime"}
+    {confirm ? <ConfirmDialog title={CONFIRM[confirm].title} description={CONFIRM[confirm].description} confirmLabel={CONFIRM[confirm].label}
       tone={confirm === "recheck" ? "default" : "destructive"} onCancel={() => setConfirm(null)} onConfirm={() => execute(confirm)} /> : null}
-  </SettingsFormSection>;
+  </div>;
 }

@@ -46,7 +46,7 @@ export function ContextReviewPanel({ item }: { item: GuardApprovalRequest }) {
         if (!authorized) {
           revision.current += 1; request.current?.abort();
           setContext(null); setPrevious(null); setBusy(false); setWatching(false);
-          setError("Context access changed. Check Sources & AI apps in CIGAR before preparing more context.");
+          setError("Context access changed. Check Projects & AI apps in CIGAR before preparing more context.");
         }
       }).catch(() => {
         if (!controller.signal.aborted) {
@@ -69,13 +69,13 @@ export function ContextReviewPanel({ item }: { item: GuardApprovalRequest }) {
       const status = await fetchContextAssistance(controller.signal);
       if (controller.signal.aborted) return;
       if (!status.effective_enabled || !status.effective_preferences.features.review_briefs) {
-        throw new Error("Enable review context and start a verified Python 3.14 runtime in CIGAR → Runtime & preferences.");
+        throw new Error("Enable review context and start a verified Python 3.14 runtime in CIGAR → Settings.");
       }
       generation.current = status.generation;
       const scopes = await listContextWorkspaces(controller.signal);
       const scope = scopes.find((scope) => scope.app === "dashboard" && scope.workspace === item.workspace
         && !scope.revoked && scope.native_policy_facts);
-      if (!scope) throw new Error("Grant this workspace dashboard access with native Guard policy facts in CIGAR → Sources & AI apps.");
+      if (!scope) throw new Error("Grant this workspace dashboard access with native Guard policy facts in CIGAR → Projects & AI apps.");
       const value = await prepareNativeDecisionContext(scope, decisionId, item.harness, controller.signal,
         explain ? context?.brief.snapshot_id : undefined);
       if (revision.current !== current || controller.signal.aborted) return;

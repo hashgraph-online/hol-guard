@@ -35,7 +35,7 @@ fn under(base: &Path, parts: &[&str]) -> PathBuf {
 }
 
 /// `is_guard_managed_hook_command` for Muse.
-fn guard_managed(command: &str) -> bool {
+pub(crate) fn guard_managed(command: &str) -> bool {
     let normalized = command.replace("\\\"", "\"");
     command.contains("HOL_GUARD_MANAGED_MUSE")
         || (command.contains("codex_plugin_scanner.cli")
@@ -362,6 +362,7 @@ pub(crate) fn detect(args: &Value) -> KindResult {
             },
             &skill_root,
             &identity_root,
+            "skills",
         )?;
     }
     inventory.finish()

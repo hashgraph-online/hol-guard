@@ -13,6 +13,10 @@ mod baseline;
 mod capabilities;
 #[path = "native_command_source_catalog.rs"]
 mod catalog;
+#[path = "native_command_source_cloud_binding.rs"]
+mod cloud_binding;
+#[path = "native_command_source_cloud_binding_artifact.rs"]
+mod cloud_binding_artifact;
 #[path = "native_command_source_contract.rs"]
 mod contract;
 #[path = "native_command_source_evaluation_batch.rs"]
@@ -45,6 +49,15 @@ pub use catalog::{
     compile_addition, compile_addition_with_mcp, compile_catalog, compile_catalog_with_mcp,
     CompiledSourceCatalog,
 };
+pub use cloud_binding::{
+    admit_binding_contribution, parse_binding_contribution, BindingResourceInput,
+    CloudBindingContribution, CloudBindingInput, CloudSupport,
+};
+pub use cloud_binding_artifact::{
+    binding_artifact_compatibility, read_binding_artifact, ArtifactAction, ArtifactResource,
+    ArtifactTarget, BindingArtifact, BindingArtifactCompatibility, BindingArtifactMetadata,
+    MAX_ARTIFACT_BYTES, SUPPORTED_ARTIFACT_COMPILER_VERSIONS,
+};
 pub use contract::{descriptor_schema, source_schema};
 pub use evaluation_batch::evaluate_batch;
 pub use fixtures::run_fixtures;
@@ -69,6 +82,9 @@ struct BuildRequest {
     sources: Vec<Value>,
     #[serde(default)]
     mcp_sources: Vec<Value>,
+    /// Optional sibling cloud action bindings for sources in this request.
+    #[serde(default)]
+    cloud_bindings: Vec<Value>,
     trust: Value,
     base: Option<BaseProgram>,
     validation_base: Option<baseline::ValidationBase>,
@@ -83,21 +99,29 @@ enum BaseProgram {
 /// Decode an owned build envelope. Sources cannot contain file/remote includes;
 /// callers supply the separately reviewed trust input outside each source.
 pub fn compile_build_request(bytes: &[u8]) -> Result<CompiledSourceCatalog, &'static str> {
+    compile_owned_request(bytes, false).map_err(|error| error.code)
+}
+
+/// [`compile_build_request`], keeping which cloud binding was rejected:
+/// `error.pointer("/cloud_bindings")` names it in the request.
+pub fn compile_build_request_located(
+    bytes: &[u8],
+) -> Result<CompiledSourceCatalog, SourceStreamError> {
     compile_owned_request(bytes, false)
 }
 
 fn compile_fixture_build_request(bytes: &[u8]) -> Result<CompiledSourceCatalog, &'static str> {
-    compile_owned_request(bytes, true)
+    compile_owned_request(bytes, true).map_err(|error| error.code)
 }
 
 fn compile_owned_request(
     bytes: &[u8],
     fixture: bool,
-) -> Result<CompiledSourceCatalog, &'static str> {
+) -> Result<CompiledSourceCatalog, SourceStreamError> {
     let request: BuildRequest = serde_json::from_value(json::decode(bytes)?)
         .map_err(|_| "command_source_build_contract_invalid")?;
     if request.schema != "guard.command-extension-build.v1" {
-        return Err("command_source_build_version_unsupported");
+        return Err("command_source_build_version_unsupported".into());
     }
     let sources: Vec<Vec<u8>> = request
         .sources
@@ -125,7 +149,7 @@ fn compile_owned_request(
     } else {
         None
     };
-    match request.base {
+    let mut output = match request.base {
         Some(BaseProgram::Packaged) if fixture => {
             fixture_catalog::compile_fixture_with_base(&borrowed, &mcp_borrowed, &trust, baseline)
         }
@@ -133,7 +157,28 @@ fn compile_owned_request(
             catalog::addition::compile_with_base(&borrowed, &mcp_borrowed, &trust, baseline)
         }
         None => compile_catalog_with_mcp(&borrowed, &mcp_borrowed, &trust),
+    }?;
+    // Sources are admitted first, so a binding never masks a source error.
+    let bindings = request
+        .cloud_bindings
+        .iter()
+        .enumerate()
+        .map(|(record, binding)| {
+            serde_json::to_vec(binding)
+                .map_err(|_| "command_source_encoding_failed".into())
+                .and_then(|bytes| cloud_binding::parse_contribution(&bytes))
+                .map(|parsed| (record, parsed))
+                .map_err(|rejection| SourceStreamError::rejected(record, rejection))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let resolved = stream::resolve_bindings(&bindings, &sources, &mcp_sources)?;
+    if !resolved.is_empty() {
+        let program_digest = output.program["program_digest"]
+            .as_str()
+            .ok_or("command_source_encoding_failed")?;
+        output.cloud_bindings = Some(cloud_binding::compile_artifact(&resolved, program_digest)?);
     }
+    Ok(output)
 }
 #[cfg(test)]
 #[path = "native_command_source_tests.rs"]

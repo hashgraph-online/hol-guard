@@ -1,23 +1,17 @@
-import type { ContextAssistanceStatus, ContextInstallation } from "./types";
+import type { ContextAssistanceStatus } from "./types";
 
+/** The calm home screen has no tabs. These sections live behind the Advanced disclosure. */
 export const CIGAR_TABS = [
-  { value: "overview", label: "Overview" },
-  { value: "runtime", label: "Runtime & preferences" },
-  { value: "versions", label: "Versions & updates" },
-  { value: "access", label: "Sources & AI apps" },
-  { value: "data", label: "Data & privacy" },
-  { value: "tutorials", label: "Tutorials" },
-  { value: "guide", label: "How it works" },
+  { value: "runtime", label: "Settings" },
+  { value: "access", label: "Projects & AI apps" },
+  { value: "versions", label: "Updates" },
+  { value: "data", label: "Privacy" },
+  { value: "guide", label: "Guides" },
 ] as const;
 
-export type CigarTab = typeof CIGAR_TABS[number]["value"];
-export type CigarSetupStep = {
-  title: string;
-  description: string;
-  complete: boolean;
-  action: string;
-  tab: CigarTab;
-};
+export type CigarAdvancedTab = typeof CIGAR_TABS[number]["value"];
+/** "overview" is the home screen: Advanced stays closed. */
+export type CigarTab = CigarAdvancedTab | "overview";
 
 /** A saved on preference permits a start attempt, not a claim of readiness. */
 export function canStartCigar(status: ContextAssistanceStatus | null, dirty: boolean): boolean {
@@ -28,65 +22,57 @@ export function canStartCigar(status: ContextAssistanceStatus | null, dirty: boo
 
 export function cigarTabFromSearch(search: string): CigarTab {
   const value = new URLSearchParams(search).get("section");
+  if (value === "tutorials") return "guide";
   return CIGAR_TABS.find((tab) => tab.value === value)?.value ?? "overview";
 }
 
-/** Registration is metadata. Only the native effective state proves readiness. */
-export function cigarSetupSteps(
-  status: ContextAssistanceStatus | null,
-  installations: ContextInstallation[] | null,
-): CigarSetupStep[] {
-  const registered = (installations?.length ?? 0) > 0 || status?.runtime !== null && status?.runtime !== undefined;
-  const selected = Boolean(status?.preferences.runtime_id) && (
-    installations?.some((item) => item.runtime_id === status?.preferences.runtime_id) === true
-    || status?.runtime !== null && status?.runtime !== undefined
-  );
-  return [
-    {
-      title: "Connect a local runtime",
-      description: registered
-        ? "A registered CIGAR bundle with Python 3.14 is available on this machine."
-        : "Register an approved CIGAR bundle that uses final CPython 3.14, then refresh the runtime list.",
-      complete: registered,
-      action: registered ? "View runtimes" : "Set up runtime",
-      tab: "runtime",
-    },
-    {
-      title: "Choose your preferences",
-      description: "Select the runtime, turn on CIGAR, choose the features you want, and save your preferences.",
-      complete: selected && status?.requested_enabled === true,
-      action: "Choose preferences",
-      tab: "runtime",
-    },
-    {
-      title: "Start context assistance",
-      description: "Start the saved runtime. Guard verifies Python, the CIGAR package, and its worker before reporting Ready.",
-      complete: status?.effective_enabled === true,
-      action: status?.effective_enabled ? "Manage runtime" : "Check & start",
-      tab: "runtime",
-    },
-  ];
+/** Turned on and verified before, now resting or waking. It needs no click to come back. */
+export function cigarWaking(status: ContextAssistanceStatus | null): boolean {
+  if (!status || status.effective_enabled) return false;
+  return status.diagnostic === "runtime_resting" || (status.requested_enabled && status.job?.operation === "activate");
 }
 
-export function cigarRuntimeSummary(
-  status: ContextAssistanceStatus | null,
-  installations: ContextInstallation[] | null,
-): { label: string; detail: string } {
-  if (status?.runtime && status.effective_enabled) return {
-    label: "Python " + status.runtime.interpreter.version.join("."),
-    detail: "CIGAR " + status.runtime.package_version + " · running locally",
-  };
-  const selected = installations?.find((item) => item.runtime_id === status?.preferences.runtime_id);
-  if (selected) return {
-    label: "Python " + selected.python_version.join("."),
-    detail: "Selected · activation verifies this bundle again",
-  };
-  if (installations?.length) return {
-    label: "Python " + installations[0].python_version.join("."),
-    detail: installations.length === 1 ? "Registered · choose it to get started" : String(installations.length) + " registered runtimes · choose one",
-  };
-  return {
-    label: installations === null ? "Runtime status pending" : "Runtime setup needed",
-    detail: "Requires a registered CIGAR bundle with CPython 3.14",
-  };
+/** Prompts only get project files when both switches are on. */
+export function cigarHelpsPrompts(status: ContextAssistanceStatus | null): boolean {
+  const effective = status?.effective_preferences;
+  return effective?.features.agent_context === true && effective.sources.workspace_documents === true;
+}
+
+/** Turning CIGAR on switches project files on for an untouched install and keeps any earlier choice. */
+export function cigarWillHelpPrompts(status: ContextAssistanceStatus | null): boolean {
+  if (!status) return false;
+  if (cigarHelpsPrompts(status)) return true;
+  const { sources } = status.preferences;
+  return !sources.workspace_documents && !sources.source_set_id;
+}
+
+export type CigarHomeCopy = { headline: string; detail: string; setupHint: boolean };
+
+const PROMPT_PROMISE = "Every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it.";
+const NO_FILES_YET = "Prompts get no project files until Context for AI apps and workspace documents are on in Settings.";
+
+/** One headline and one sentence for the home screen. Only native state proves CIGAR is on. */
+export function cigarHomeCopy(status: ContextAssistanceStatus | null, loading: boolean, running: boolean): CigarHomeCopy {
+  if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. You can keep browsing.", setupHint: false };
+  if (!status) {
+    if (loading) return { headline: "Checking CIGAR", detail: "One moment.", setupHint: false };
+    return { headline: "CIGAR status unavailable", detail: "Guard did not answer. Try refreshing the status.", setupHint: false };
+  }
+  if (status.effective_enabled) {
+    if (cigarHelpsPrompts(status)) return { headline: "CIGAR is on", detail: PROMPT_PROMISE, setupHint: false };
+    return { headline: "CIGAR is on", detail: NO_FILES_YET, setupHint: true };
+  }
+  if (cigarWaking(status)) {
+    return { headline: "CIGAR is on", detail: "It rests when nothing needs it and wakes up by itself. You do not need to turn it on again.", setupHint: false };
+  }
+  if (status.restriction && !status.effective_preferences.enabled) {
+    return { headline: "CIGAR is off", detail: "Your organization manages CIGAR on this computer.", setupHint: false };
+  }
+  if (status.requested_enabled) {
+    return { headline: "CIGAR is not running", detail: "It is saved as on but has not started. Turn it on to start it.", setupHint: false };
+  }
+  if (cigarWillHelpPrompts(status)) {
+    return { headline: "CIGAR is off", detail: "Turn it on and " + PROMPT_PROMISE.charAt(0).toLowerCase() + PROMPT_PROMISE.slice(1), setupHint: false };
+  }
+  return { headline: "CIGAR is off", detail: "Turn it on to start CIGAR. " + NO_FILES_YET, setupHint: true };
 }

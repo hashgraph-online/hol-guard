@@ -26,6 +26,7 @@ from ..native_daemon_handler import (
     native_headless_action_state,
     native_headless_cursor_surface_error,
 )
+from ..native_runner_authority import NativeRunnerAuthorityError
 from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..receipts.manager import build_receipt
 from ..shims import (
@@ -223,7 +224,11 @@ class _HeadlessRoutes:
             return
         entitlement = self._supply_chain_entitlement()
         if not bool(entitlement["allowed"]):
-            current_status = package_shim_status(self._supply_chain_context(payload))
+            try:
+                current_status = package_shim_status(self._supply_chain_context(payload))
+            except NativeRunnerAuthorityError:
+                self._write_supply_chain_workspace_unavailable(action)
+                return
             access = self._package_firewall_access(
                 entitlement,
                 operation=None,
@@ -244,7 +249,11 @@ class _HeadlessRoutes:
                 status=status,
             )
             return
-        context = self._supply_chain_context(payload)
+        try:
+            context = self._supply_chain_context(payload)
+        except NativeRunnerAuthorityError:
+            self._write_supply_chain_workspace_unavailable(action)
+            return
         try:
             require_high_risk(
                 self.server.store.guard_home,  # type: ignore[attr-defined]

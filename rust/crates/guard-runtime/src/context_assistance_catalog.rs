@@ -6,7 +6,6 @@ use guard_cigar_release::{CatalogTrust, TrustedCatalog, TrustedKey};
 use std::collections::BTreeSet;
 #[path = "context_assistance_catalog_feed.rs"]
 pub(crate) mod feed;
-#[cfg(unix)]
 #[path = "context_assistance_catalog_native.rs"]
 mod native;
 #[cfg(all(test, unix))]
@@ -114,27 +113,7 @@ impl Snapshot {
     }
 }
 pub(crate) fn installed(home: &Path) -> Result<Snapshot, String> {
-    #[cfg(unix)]
-    {
-        native::load(home)
-    }
-    #[cfg(not(unix))]
-    {
-        for name in [
-            "cigar-catalog.json",
-            "cigar-catalog.key",
-            "cigar-catalog-trust.json",
-            "cigar-catalog-feed.json",
-            "cigar-catalog-state",
-        ] {
-            match fs::symlink_metadata(home.join(name)) {
-                Ok(_) => return Err(error("cigar_catalog_platform_unqualified")),
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(_) => return Err(error("cigar_catalog_storage_invalid_or_changed")),
-            }
-        }
-        Snapshot::bundled()
-    }
+    native::load(home)
 }
 pub(crate) fn fresh(home: &Path) -> Result<Snapshot, String> {
     let s = installed(home)?;
@@ -154,24 +133,8 @@ pub(crate) fn status(home: &Path) -> Result<Value, String> {
 }
 pub(crate) fn configure(home: &Path, value: Authority) -> Result<Value, String> {
     value.resolve()?;
-    #[cfg(unix)]
-    {
-        native::configure(home, value)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (home, value);
-        Err(error("cigar_catalog_platform_unqualified"))
-    }
+    native::configure(home, value)
 }
 pub(crate) fn import(home: &Path, raw: &[u8]) -> Result<Value, String> {
-    #[cfg(unix)]
-    {
-        native::import(home, raw)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (home, raw);
-        Err(error("cigar_catalog_platform_unqualified"))
-    }
+    native::import(home, raw)
 }

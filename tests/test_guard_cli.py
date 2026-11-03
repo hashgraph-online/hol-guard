@@ -2234,6 +2234,25 @@ args = ["workspace-skill.js", "--changed"]
         assert output["install_target"]["intended_harness"] == "codex"
         assert output["threat_intelligence"]["verdict_source"] == "local-scan"
 
+    def test_guard_preflight_enforce_refuses_a_scan_without_a_verdict(self, tmp_path, capsys, monkeypatch):
+        target = tmp_path / "incoming-plugin"
+        target.mkdir(parents=True)
+        payload = {
+            "schema_version": "guard-consumer.v2",
+            "install_target": {"path": str(target), "intended_harness": "codex"},
+        }
+        monkeypatch.setattr(
+            guard_commands_module,
+            "run_consumer_scan",
+            lambda path, intended_harness=None, options=None: payload,
+        )
+
+        rc = main(["guard", "preflight", str(target), "--harness", "codex", "--enforce", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 2
+        assert "install_verdict" not in output
+
     def test_guard_preflight_human_output_stays_summary_first(self, tmp_path, capsys, monkeypatch):
         target = tmp_path / "incoming-plugin"
         target.mkdir(parents=True)
@@ -2968,7 +2987,8 @@ args = ["workspace-skill.js", "--changed"]
         assert guard_pretool_entry["hooks"][0]["type"] == "command"
         assert _command_handler_argv(guard_pretool_entry["hooks"][0]) == expected_hook_argv
         assert "url" not in guard_pretool_entry["hooks"][0]
-        assert install_settings_payload["hooks"].get("UserPromptSubmit", []) == []
+        prompt_handler = install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+        assert _command_handler_argv(prompt_handler) == expected_hook_argv
         assert install_settings_payload["hooks"]["Notification"][0]["matcher"] == "permission_prompt"
         notification_handler = install_settings_payload["hooks"]["Notification"][0]["hooks"][0]
         assert notification_handler["type"] == "command"
@@ -3228,7 +3248,7 @@ args = ["workspace-skill.js", "--changed"]
         assert len(payload["hooks"]["SessionStart"]) == 4
         assert len(payload["hooks"]["PreToolUse"]) == 1
         assert len(payload["hooks"]["PostToolUse"]) == 1
-        assert payload["hooks"].get("UserPromptSubmit", []) == []
+        assert len(payload["hooks"]["UserPromptSubmit"]) == 1
         assert len(payload["hooks"]["Notification"]) == 1
         assert len(payload["hooks"]["Stop"]) == 1
         pretool_hook_commands = [

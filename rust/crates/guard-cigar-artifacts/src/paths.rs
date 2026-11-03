@@ -11,7 +11,7 @@ pub fn private_directory(path: &Path) -> Result<(), InstallError> {
         || path
             .components()
             .any(|c| matches!(c, Component::CurDir | Component::ParentDir))
-        || fs::canonicalize(path).map_err(|_| InstallError::DestinationUnsafe)? != path
+        || !crate::host::is_canonical(path).map_err(|_| InstallError::DestinationUnsafe)?
     {
         return Err(InstallError::DestinationUnsafe);
     }
@@ -23,9 +23,12 @@ pub fn private_directory(path: &Path) -> Result<(), InstallError> {
         }
         Ok(())
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        Err(InstallError::PlatformUnsupported)
+        if !crate::host::private_directory(path, &metadata) {
+            return Err(InstallError::DestinationUnsafe);
+        }
+        Ok(())
     }
 }
 pub fn private_child(path: &Path) -> Result<(), InstallError> {
@@ -39,10 +42,15 @@ pub fn private_child(path: &Path) -> Result<(), InstallError> {
         }
         private_directory(path)
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        let _ = path;
-        Err(InstallError::PlatformUnsupported)
+        // The new directory inherits the private Guard home's access list.
+        match fs::create_dir(path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(_) => return Err(InstallError::WriteFailed),
+        }
+        private_directory(path)
     }
 }
 
@@ -53,6 +61,31 @@ pub fn admit_name(
     raw: &[u8],
     directory: bool,
     namespace: &mut BTreeMap<String, (String, bool)>,
+) -> Result<String, InstallError> {
+    admit_name_folding(raw, directory, namespace, true)
+}
+
+/// Interpreter trees are only unpacked on the host they were built for.
+/// Linux CPython ships names that differ only by case (terminfo), so case
+/// aliases are refused only where the host filesystem folds case.
+pub fn admit_interpreter_name(
+    raw: &[u8],
+    directory: bool,
+    namespace: &mut BTreeMap<String, (String, bool)>,
+) -> Result<String, InstallError> {
+    admit_name_folding(
+        raw,
+        directory,
+        namespace,
+        cfg!(any(target_os = "macos", windows)),
+    )
+}
+
+fn admit_name_folding(
+    raw: &[u8],
+    directory: bool,
+    namespace: &mut BTreeMap<String, (String, bool)>,
+    fold_case: bool,
 ) -> Result<String, InstallError> {
     let raw = std::str::from_utf8(raw).map_err(|_| InstallError::EntryUnsafe)?;
     let name = if directory {
@@ -91,7 +124,11 @@ pub fn admit_name(
         }
         prefix.push_str(part);
         let is_directory = index + 1 < parts.len() || directory;
-        let key = prefix.to_ascii_lowercase();
+        let key = if fold_case {
+            prefix.to_ascii_lowercase()
+        } else {
+            prefix.clone()
+        };
         if let Some((previous, previous_directory)) = namespace.get(&key) {
             if previous != &prefix || !previous_directory || !is_directory {
                 return Err(InstallError::EntryUnsafe);
@@ -101,4 +138,21 @@ pub fn admit_name(
         }
     }
     Ok(name.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn case_aliases_are_refused_only_where_the_host_folds_case() {
+        let mut namespace = BTreeMap::new();
+        admit_name(b"share/terminfo/e/eterm", false, &mut namespace).unwrap();
+        assert!(admit_name(b"share/terminfo/E/Eterm", false, &mut namespace).is_err());
+        let mut namespace = BTreeMap::new();
+        admit_interpreter_name(b"share/terminfo/e/eterm", false, &mut namespace).unwrap();
+        let alias = admit_interpreter_name(b"share/terminfo/E/Eterm", false, &mut namespace);
+        assert_eq!(alias.is_err(), cfg!(any(target_os = "macos", windows)));
+        assert!(admit_interpreter_name(b"share/terminfo/e/eterm", false, &mut namespace).is_err());
+    }
 }

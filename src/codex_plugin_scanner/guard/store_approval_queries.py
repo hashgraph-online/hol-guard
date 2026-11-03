@@ -10,7 +10,7 @@ from .store_approvals import InvalidApprovalCursorError, _decode_page_cursor
 # pyright: reportAttributeAccessIssue=false, reportUndefinedVariable=false
 # ruff: noqa: F403,F405
 from .store_base import *
-from .temporary_mcp_approvals import temporary_mcp_approval_payload
+from .temporary_mcp_approvals import temporary_mcp_approval_payloads
 from .trusted_local_tools import local_tool_approval_payload
 
 _NO_ANSWER = "native_guard_store_unavailable"
@@ -28,16 +28,18 @@ _RETRYABLE_READS = frozenset(
 )
 
 
-def _with_approval_hints(payload: dict[str, object]) -> dict[str, object]:
+def _with_approval_hints(payloads: list[dict[str, object]], guard_home: Path) -> list[dict[str, object]]:
     """Attach the queue hints the resident leaves to Python, as the scope payload did."""
 
-    temporary_mcp_approval = temporary_mcp_approval_payload(payload)
-    if temporary_mcp_approval is not None:
-        payload["temporary_mcp_approval"] = temporary_mcp_approval
-    local_tool_approval = local_tool_approval_payload(payload)
-    if local_tool_approval is not None:
-        payload["local_tool_approval"] = local_tool_approval
-    return payload
+    for payload, temporary_mcp_approval in zip(
+        payloads, temporary_mcp_approval_payloads(payloads, guard_home=guard_home), strict=True
+    ):
+        if temporary_mcp_approval is not None:
+            payload["temporary_mcp_approval"] = temporary_mcp_approval
+        local_tool_approval = local_tool_approval_payload(payload)
+        if local_tool_approval is not None:
+            payload["local_tool_approval"] = local_tool_approval
+    return payloads
 
 
 def _cursor_marker(cursor: str | None) -> list[str] | None:
@@ -71,7 +73,7 @@ class StoreApprovalQueriesMixin:
                 "search": search,
             },
         )["items"]
-        return [_with_approval_hints(item) for item in items]
+        return _with_approval_hints(items, self.guard_home)
 
     def list_pending_approval_summaries(
         self,
@@ -121,7 +123,9 @@ class StoreApprovalQueriesMixin:
         payload = self._native_approval_read(
             "get_approval_request", {"request_id": request_id, "derive_scope": derive_scope}
         )
-        return _with_approval_hints(payload) if payload is not None and derive_scope else payload
+        if payload is None or not derive_scope:
+            return payload
+        return _with_approval_hints([payload], self.guard_home)[0]
 
     def _native_approval_pages(self, method: str, args: dict[str, object]) -> dict[str, Any]:
         """Every chunk of one native queue page.

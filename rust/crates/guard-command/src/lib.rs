@@ -42,6 +42,13 @@ mod catalog_read_model_tests;
 mod catalog_read_projection;
 mod catalog_read_query;
 pub mod ci_workflow_risk;
+pub mod cloud_action;
+pub mod cloud_action_activation;
+pub mod cloud_action_binding;
+pub mod cloud_action_canonical;
+pub mod cloud_action_policy;
+#[cfg(test)]
+mod cloud_action_tests;
 pub mod cloud_catalog;
 pub mod cloud_scrub;
 mod cloud_scrub_shell;
@@ -203,12 +210,19 @@ mod powershell_parser;
 mod powershell_reads;
 pub mod protect_request;
 pub mod protection_health;
+pub mod protection_health_facts;
+#[cfg(test)]
+mod protection_health_facts_containment_tests;
+#[cfg(test)]
+mod protection_health_facts_tests;
 #[cfg(test)]
 mod protection_health_tests;
 pub mod pytest_argv;
 #[cfg(test)]
 mod pytest_argv_tests;
 mod read_only_fanout;
+mod remote_mcp_origin;
+pub use remote_mcp_origin::remote_mcp_origin;
 pub mod reviewed_invocation_bindings;
 pub mod rich_command_model_api;
 use parser_executables::*;
@@ -388,6 +402,8 @@ mod shell_secret_read_glob;
 mod shell_secret_read_glob_tests;
 #[cfg(test)]
 mod shell_secret_read_script_operand_tests;
+#[cfg(test)]
+mod shell_secret_read_search_reader_tests;
 mod shell_secret_read_support;
 pub mod shell_secret_reads;
 mod shell_structure;
@@ -398,6 +414,7 @@ mod tool_action_identity_tests;
 pub mod trust_claim;
 #[cfg(test)]
 mod trust_claim_tests;
+mod tsc_project;
 pub mod typescript_launch_evidence;
 #[cfg(test)]
 #[path = "../../../test_support/unique_nanos.rs"]
@@ -484,6 +501,7 @@ mod contained_prefix;
 mod contained_run_prefix;
 #[cfg(unix)]
 pub mod contained_runner;
+mod containment_compatibility;
 pub mod credential_patterns;
 pub mod data_flow_request_artifact;
 pub mod data_flow_rules;

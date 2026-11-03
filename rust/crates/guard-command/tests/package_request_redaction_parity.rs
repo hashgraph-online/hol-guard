@@ -2,7 +2,7 @@
 //! copy of the routine.
 //!
 //! `redact_package_request_token` here and
-//! `package_intent_common.redact_package_request_token` in Python each strip
+//! `package_intent_common._sanitize_url` in Python each strip
 //! credentials out of a package argv token on the route that side owns, and
 //! Guard persists whichever text came back. The two implementations read the
 //! same fixture, so a branch that drifts in either copy fails on both sides.

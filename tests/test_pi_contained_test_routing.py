@@ -12,11 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_tests_source import (
-    CONTAINED_TEST_HELPERS_SOURCE,
-)
 from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import previous_managed_extension_source
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+from tests.pi_extension_template import CONTAINED_TEST_HELPERS_SOURCE
 
 
 def test_routing_is_active_for_pi_and_omp_and_does_not_change_frozen_previous(tmp_path: Path) -> None:

@@ -9,6 +9,8 @@ impl Engine {
         paths: Vec<String>,
         shared_notes: NotesAccess,
     ) -> Result<Value, RuntimeError> {
+        // A project picked by hand replaces CIGAR's automatic one for it.
+        self.make_room(runtime, &workspace, &app)?;
         if self.scopes.len() >= self.limits.max_active_workspaces as usize || paths.len() > 32 {
             return Err(RuntimeError::ResourceLimit);
         }
@@ -51,6 +53,21 @@ impl Engine {
                 return Err(RuntimeError::RequestInvalid);
             }
         }
+        let id = self.admit_scope(runtime, root, app, policy, sources, shared_notes)?;
+        self.remember_pick(&id, Some(shared_notes));
+        Ok(metadata(&id, &self.scopes[&id]))
+    }
+
+    /// Opens a graph over already-read sources and keeps it as a live scope.
+    pub(super) fn admit_scope(
+        &mut self,
+        runtime: &mut VerifiedRuntime,
+        root: SourceRoot,
+        app: String,
+        policy: ContextAssistanceConfig,
+        sources: BTreeMap<String, AdmittedFile>,
+        shared_notes: NotesAccess,
+    ) -> Result<String, RuntimeError> {
         let revision = revision(&policy)?;
         let mut nonce = [0_u8; 16];
         getrandom::fill(&mut nonce).map_err(|_| RuntimeError::ResourceLimit)?;
@@ -83,8 +100,7 @@ impl Engine {
             receipts: VecDeque::new(),
             receipts_dropped: 0,
         };
-        let data = metadata(&id, &scope);
-        self.scopes.insert(id, scope);
-        Ok(data)
+        self.scopes.insert(id.clone(), scope);
+        Ok(id)
     }
 }

@@ -365,7 +365,7 @@ def test_request_shares_only_variables_a_launch_could_read(tmp_path: Path, monke
         *,
         environment: dict[str, str],
         candidate_limit: int,
-        known_instances: object = None,
+        instance_home: object = None,
     ) -> RuntimeProbe:
         seen.update(specs=specs, environment=environment, limit=candidate_limit)
         return RuntimeProbe(

@@ -309,6 +309,7 @@ impl PolicySnapshotStore {
             .ok()
             .and_then(|root| root.canonicalize().ok())
         {
+            context_assistance.restore(&home);
             context_assistance.startup_housekeeping(&home);
         }
         Ok(Self {

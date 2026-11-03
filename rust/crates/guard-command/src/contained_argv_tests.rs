@@ -175,6 +175,44 @@ fn npm_exec_reads_the_runner_behind_its_own_options() {
     }
 }
 
+/// The admission and the classifier read one spelling, so the kind the sink
+/// plans is always the kind the admitting reason names. `manager_exec_tool`
+/// takes that one reading rather than keeping a second copy of it beside the
+/// admission's: if the two answered differently, a widening on either side
+/// would admit a run on one route and leave the sink refusing it on another.
+#[test]
+fn the_classifier_reads_the_local_bin_spelling_the_admission_reads() {
+    for (command, tool) in [
+        (json!(["pnpm", "exec", "vitest", "run"]), "vitest"),
+        (json!(["npm", "exec", "--", "jest", "--ci"]), "jest"),
+        (
+            json!(["npm", "x", "--yes", "mocha", "--reporter", "spec"]),
+            "mocha",
+        ),
+        (json!(["yarn", "exec", "tsc", "--noEmit"]), "tsc"),
+    ] {
+        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+        let expected = tool == "tsc";
+        assert_eq!(kind["value"]["node_tool"], expected, "{command} {kind}");
+        assert_eq!(kind["value"]["vitest"], !expected, "{command} {kind}");
+    }
+    // pnpm resolves a bare word against the manifest before it falls back to
+    // `pnpm exec`, and since pnpm 7 the words behind that word go to the
+    // script, so the shorthand cannot be read as the local-bin run without the
+    // manifest neither side here sees. Both readings leave it alone together.
+    for command in [
+        json!(["pnpm", "vitest", "run"]),
+        json!(["pnpm", "jest", "--ci"]),
+        json!(["pnpm", "tsc", "--noEmit"]),
+        json!(["pnpm", "test"]),
+        json!(["pnpm", "run", "test"]),
+        json!(["pnpm", "-r", "vitest", "run"]),
+    ] {
+        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+        assert_eq!(kind["value"]["vitest"], false, "{command} {kind}");
+    }
+}
+
 /// The sink plans the call again from its own snapshot, so it has to be able
 /// to ask for the same reading the pre-tool pass made of an activation or a
 /// trailing group.
@@ -266,338 +304,7 @@ fn contained_target_answers_the_sink() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-#[test]
-fn launcher_program_reports_where_the_parser_reads_the_program() {
-    let offset = |command: &[&str]| {
-        let command: Vec<String> = command.iter().map(|word| (*word).to_owned()).collect();
-        crate::parser_wrappers::launcher_program(&command, 0)
-    };
-    assert_eq!(offset(&["nice", "-n", "10", "pytest", "-q"]), Some(3));
-    assert_eq!(offset(&["nice", "pytest", "-q"]), Some(1));
-    assert_eq!(offset(&["stdbuf", "-oL", "pytest", "-q"]), Some(2));
-    // The shell's `exec` is read here too. The sink keeps no list of launcher
-    // names of its own, so every name this answers for is one it peels.
-    assert_eq!(offset(&["exec", "pytest", "-q"]), Some(1));
-    // The sink refuses every shape the native parser leaves in place.
-    for command in [
-        &["./nice", "-n", "10", "pytest"][..],
-        &["C:\\tools\\nice", "pytest"],
-        &["stdbuf", "pytest", "-q"],
-        &["nohup", "pytest", "-q"],
-        &["nice", "-n", "10", "python3", "deploy.py"],
-        &["pytest", "-q"],
-        &["exec"],
-        &["exec", "-a", "name", "pytest"],
-        &["exec", "./deploy.sh"],
-    ] {
-        assert_eq!(offset(command), None, "{command:?}");
-    }
-}
-
-#[test]
-fn transparent_prefix_reports_where_the_parser_reads_the_program() {
-    let offset = |command: &[&str]| {
-        let command: Vec<String> = command.iter().map(|word| (*word).to_owned()).collect();
-        crate::parser_wrappers::transparent_prefix(&command, 0).map(|(index, _)| index)
-    };
-    assert_eq!(offset(&["command", "pytest", "-q"]), Some(1));
-    assert_eq!(offset(&["time", "pytest", "-q"]), Some(1));
-    assert_eq!(offset(&["env", "CI=1", "pytest", "-q"]), Some(2));
-    // The parser reads the two system paths as the `env` they name, so the
-    // sink peels them too rather than planning `/usr/bin/env` as the program.
-    assert_eq!(offset(&["/usr/bin/env", "CI=1", "pytest", "-q"]), Some(2));
-    assert_eq!(offset(&["/bin/env", "CI=1", "pytest"]), Some(2));
-    assert_eq!(offset(&["env", "CI=1", "TZ=UTC", "pytest"]), Some(3));
-    for command in [
-        // An `env` carrying no assignment only bypasses shell functions, and
-        // extension floors key on that spelling, so it stays the executable.
-        &["env", "pytest", "-q"][..],
-        &["env", "-i", "pytest"],
-        &["env", "CI=1"],
-        // A word that is no assignment and no program leaves the prefix whole.
-        &["env", "FOO=1", "A-B=1", "rm"],
-        &["command", "-v", "pytest"],
-        &["time", "-p", "pytest"],
-        &["nice", "pytest"],
-        &["pytest", "-q"],
-    ] {
-        assert_eq!(offset(command), None, "{command:?}");
-    }
-}
-
-#[test]
-fn a_relative_vitest_entry_names_the_same_runner_as_the_absolute_one() {
-    for argument in [
-        "node_modules/vitest/vitest.mjs",
-        "./node_modules/vitest/vitest.mjs",
-        "dashboard/node_modules/vitest/vitest.mjs",
-        "/work/app/node_modules/vitest/vitest.mjs",
-        "node_modules/vitest/dist/cli.js",
-        "./node_modules/vitest/dist/cli.js",
-        "/work/app/node_modules/vitest/dist/cli.js",
-    ] {
-        let command = json!(["node", argument, "run", "src"]);
-        let kind = evaluate("contained_kind", &json!({ "command": command.clone() })).unwrap();
-        assert_eq!(kind["value"]["vitest"], true, "{argument} {kind}");
-        let arguments = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
-        assert_eq!(arguments["value"], json!(["run", "src"]), "{argument}");
-    }
-}
-
-#[test]
-fn bun_launching_a_runner_entry_names_the_runner_node_names() {
-    for (argument, tail, arguments) in [
-        (
-            "node_modules/vitest/vitest.mjs",
-            json!(["run", "src"]),
-            json!(["run", "src"]),
-        ),
-        (
-            "./node_modules/vitest/dist/cli.js",
-            json!(["run"]),
-            json!(["run"]),
-        ),
-        (
-            "node_modules/jest/bin/jest.js",
-            json!(["src"]),
-            json!(["src"]),
-        ),
-        (
-            "node_modules/mocha/bin/mocha.js",
-            json!(["test/unit"]),
-            json!(["test/unit"]),
-        ),
-    ] {
-        let mut command = vec![json!("bun"), json!(argument)];
-        command.extend(tail.as_array().unwrap().iter().cloned());
-        let command = json!(command);
-        let kind = evaluate("contained_kind", &json!({ "command": command.clone() })).unwrap();
-        assert_eq!(kind["value"]["vitest"], true, "{argument} {kind}");
-        // The node-tool sink reads a manifest script, not an entry launch, so
-        // a runner entry has to leave that route alone.
-        assert_eq!(kind["value"]["node_tool"], false, "{argument} {kind}");
-        let found = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
-        assert_eq!(found["value"], arguments, "{argument}");
-    }
-}
-
-#[test]
-fn bun_naming_no_runner_entry_still_names_no_runner() {
-    for command in [
-        // `--cwd` sits where the entry would be, so the call names no file
-        // this route may run.
-        json!([
-            "bun",
-            "--cwd",
-            "app",
-            "node_modules/vitest/vitest.mjs",
-            "run"
-        ]),
-        json!(["bun", "xnode_modules/vitest/vitest.mjs", "run"]),
-        json!(["bun", "node_modules/vite/dist/cli.js", "run"]),
-    ] {
-        let kind = evaluate("contained_kind", &json!({ "command": command.clone() })).unwrap();
-        assert_eq!(kind["value"]["vitest"], false, "{command} {kind}");
-    }
-}
-
-#[test]
-fn a_relative_jest_entry_names_the_same_runner_as_the_absolute_one() {
-    for argument in [
-        "node_modules/jest/bin/jest.js",
-        "./node_modules/jest/bin/jest.js",
-        "/work/app/node_modules/jest/bin/jest.js",
-    ] {
-        let command = json!(["node", argument, "src"]);
-        let arguments = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
-        assert_eq!(arguments["value"], json!(["src"]), "{argument}");
-    }
-}
-
-#[test]
-fn a_relative_mocha_entry_names_the_same_runner_as_the_absolute_one() {
-    for argument in [
-        "node_modules/mocha/bin/mocha.js",
-        "./node_modules/mocha/bin/mocha.js",
-        "/work/app/node_modules/mocha/bin/mocha.js",
-        // Mocha 8 and 9 publish the shim without the extension.
-        "node_modules/mocha/bin/mocha",
-        "./node_modules/mocha/bin/mocha",
-    ] {
-        let command = json!(["node", argument, "test/unit"]);
-        let kind = evaluate("contained_kind", &json!({ "command": command.clone() })).unwrap();
-        assert_eq!(kind["value"]["vitest"], true, "{argument} {kind}");
-        let arguments = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
-        assert_eq!(arguments["value"], json!(["test/unit"]), "{argument}");
-    }
-}
-
-#[test]
-fn a_lookalike_entry_still_names_no_runner() {
-    for argument in [
-        "xnode_modules/vitest/vitest.mjs",
-        "node_modules_evil/vitest/vitest.mjs",
-        "vitest/vitest.mjs",
-        "node_modules/vitest/dist/vitest.mjs",
-        "node_modules/jest/bin/jest.js.bak",
-        "node_modules/mocha/bin/mocha.sh",
-        "node_modules/mocha/bin/_mocha.js",
-        "node_modules/xmocha/bin/mocha",
-        "node_modules/vite/dist/cli.js",
-        "node_modules/xvitest/dist/cli.js",
-        "node_modules/vitest/dist/cli.mjs",
-    ] {
-        let command = json!(["node", argument, "run"]);
-        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
-        assert_eq!(kind["value"]["vitest"], false, "{argument} {kind}");
-    }
-}
-
-#[test]
-fn a_manifest_script_reads_the_way_the_route_that_admits_it_reads_it() {
-    // `package_script_route` reads a named script's words with this lexer, so
-    // the sink that runs the script asks for that reading rather than making
-    // its own.
-    assert_eq!(
-        evaluate(
-            "script_words",
-            &json!({ "script": "eslint src --max-warnings 0" })
-        )
-        .unwrap()["value"],
-        json!(["eslint", "src", "--max-warnings", "0"])
-    );
-    // This lexer leaves a backslash alone where the platform spells paths with
-    // it; Python's `shlex`, which the sink used to split the script with,
-    // escapes on every platform.
-    assert_eq!(
-        evaluate("script_words", &json!({ "script": "eslint .\\src" })).unwrap()["value"],
-        if cfg!(windows) {
-            json!(["eslint", ".\\src"])
-        } else {
-            json!(["eslint", ".src"])
-        }
-    );
-    // An unterminated quote is not a reading of the script, so the run is
-    // refused rather than started on whatever a partial parse leaves.
-    assert_eq!(
-        evaluate("script_words", &json!({ "script": "eslint 'src" })).unwrap()["reason_code"],
-        json!("node_tool_invalid_command")
-    );
-    // A manifest entry that is not text names nothing to run.
-    assert_eq!(
-        evaluate("script_words", &json!({ "script": 7 })).unwrap()["reason_code"],
-        json!("node_tool_invalid_command")
-    );
-}
-
-#[test]
-fn the_grant_a_workspace_plan_carries_is_read_against_the_words_the_command_spells() {
-    // A script outside the workspace earns a read root only when the command
-    // names it, and `;` ends the word that names it even with no space in
-    // front.
-    assert_eq!(
-        evaluate(
-            "command_absolute_words",
-            &json!({ "command_text": "python3 /tmp/run/good.py;echo ok" })
-        )
-        .unwrap()["value"],
-        json!(["/tmp/run/good.py"])
-    );
-    // `>` and `|` end a word the same way, and the file a redirect writes is
-    // relative, so it names no grant.
-    assert_eq!(
-        evaluate(
-            "command_absolute_words",
-            &json!({ "command_text": "python3 /tmp/run/good.py>out.log|head" })
-        )
-        .unwrap()["value"],
-        json!(["/tmp/run/good.py"])
-    );
-    // `#` is an ordinary character here, so a directory spelled with one is
-    // read whole and a command that writes one onto a path names a different
-    // file than the plan's grant.
-    assert_eq!(
-        evaluate(
-            "command_absolute_words",
-            &json!({ "command_text": "python3 /tmp/run#2/good.py" })
-        )
-        .unwrap()["value"],
-        json!(["/tmp/run#2/good.py"])
-    );
-    assert_eq!(
-        evaluate(
-            "command_absolute_words",
-            &json!({ "command_text": "python3 /tmp/run/good.py#x" })
-        )
-        .unwrap()["value"],
-        json!(["/tmp/run/good.py#x"])
-    );
-    // A relative word names no file the plan could have granted.
-    assert_eq!(
-        evaluate(
-            "command_absolute_words",
-            &json!({ "command_text": "python3 run/good.py" })
-        )
-        .unwrap()["value"],
-        json!([])
-    );
-    // An unterminated quote is not a reading of the command, so no grant is
-    // admitted against a partial parse.
-    assert_eq!(
-        evaluate(
-            "command_absolute_words",
-            &json!({ "command_text": "python3 '/tmp/run" })
-        )
-        .unwrap()["reason_code"],
-        json!("pytest_restricted_invalid_command")
-    );
-    // A request without the text names nothing to read.
-    assert_eq!(
-        evaluate("command_absolute_words", &json!({ "command": ["python3"] })).unwrap()
-            ["reason_code"],
-        json!("pytest_restricted_invalid_command")
-    );
-}
-
-#[test]
-fn a_hook_command_reads_the_way_the_screen_that_admitted_it_read_it() {
-    // `pretool` lexes the hook's command text with this lexer when it decides
-    // the run is contained, so the sink asks for that same reading rather than
-    // splitting the text again on its way to a receipt.
-    assert_eq!(
-        evaluate(
-            "command_words",
-            &json!({ "command_text": "CI=1 pytest -q tests/test_a.py" })
-        )
-        .unwrap()["value"],
-        json!(["CI=1", "pytest", "-q", "tests/test_a.py"])
-    );
-    // The two readings part on a backslash: this lexer leaves it alone where
-    // the platform spells paths with it, and Python's `shlex`, which the sink
-    // used, escapes on every platform. A receipt drawn over the escaped words
-    // would not name the run that executes.
-    assert_eq!(
-        evaluate(
-            "command_words",
-            &json!({ "command_text": "pytest tests\\a.py" })
-        )
-        .unwrap()["value"],
-        if cfg!(windows) {
-            json!(["pytest", "tests\\a.py"])
-        } else {
-            json!(["pytest", "testsa.py"])
-        }
-    );
-    // An unterminated quote is not a reading of the command, so no receipt is
-    // drawn over a partial parse.
-    assert_eq!(
-        evaluate("command_words", &json!({ "command_text": "pytest 'tests" })).unwrap()
-            ["reason_code"],
-        json!("pytest_restricted_invalid_command")
-    );
-    // A request without the text names nothing to run.
-    assert_eq!(
-        evaluate("command_words", &json!({ "command": ["pytest"] })).unwrap()["reason_code"],
-        json!("pytest_restricted_invalid_command")
-    );
-}
+#[path = "contained_argv_program_tests.rs"]
+mod program;
+#[path = "contained_argv_script_tests.rs"]
+mod script;

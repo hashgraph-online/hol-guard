@@ -96,20 +96,40 @@ def repair_daemon(guard_home: Path, *, home_dir: Path, dry_run: bool) -> dict[st
 
 
 def repair_native_runtime(guard_home: Path, *, dry_run: bool) -> dict[str, object]:
-    try:
-        from .resident_state_prune import prune_native_runtime
+    step = _prune_native_runtime(guard_home, dry_run=dry_run)
+    if dry_run:
+        return step
+    from .durable_runtime_collapse import with_durable_runtime_collapse
 
-        report = prune_native_runtime(
+    return with_durable_runtime_collapse(step, guard_home)
+
+
+def _prune_native_runtime(guard_home: Path, *, dry_run: bool) -> dict[str, object]:
+    try:
+        from .resident_state_prune import prune_native_runtime, prune_runtime_offered
+
+        detail = prune_native_runtime(
             guard_home,
             dry_run=dry_run,
-            socket_roots=None if owns_system_scope(guard_home) else (),
+            include_system_sockets=owns_system_scope(guard_home),
         )
+        offered = detail is None and prune_runtime_offered()
     except Exception as error:
         return _error_step("native_runtime", error)
-    detail = report.to_dict()
-    dirs, sockets = len(report.removed_dirs), len(report.removed_sockets)
-    if report.status in {"unsupported", "unavailable"}:
-        return _step("native_runtime", "skipped", f"Not checked ({report.status}).", **detail)
+    if offered:
+        # The runtime offers the prune but gave no usable report; it may
+        # already have removed entries, so this is not "unavailable".
+        return _step(
+            "native_runtime",
+            "error",
+            "Could not complete: the runtime gave no usable report.",
+            outcome="failed",
+        )
+    if detail is None:
+        return _step("native_runtime", "skipped", "Not checked (runtime unavailable).", outcome="unavailable")
+    dirs, sockets = detail["stale_dirs"], detail["dead_sockets"]
+    if detail["outcome"] in {"unsupported", "unavailable"}:
+        return _step("native_runtime", "skipped", f"Not checked ({detail['outcome']}).", **detail)
     if not dirs and not sockets:
         return _step("native_runtime", "ok", "No stale native runtime state.", **detail)
     verb = "Would remove" if dry_run else "Removed"
@@ -163,19 +183,17 @@ def repair_onefile_leaks(
     guard_home: Path | None = None,
     temp_root: Path | None = None,
     now: datetime | None = None,
-    scanner: Callable[[Path], frozenset[str] | None] | None = None,
 ) -> dict[str, object]:
     if temp_root is None and guard_home is not None and not owns_system_scope(guard_home):
         return _step("onefile_leaks", "skipped", "Shared temp folders are only reclaimed for the default Guard home.")
     try:
         from .onefile_extraction import reclaim_orphaned_extraction_dirs
-        from .onefile_open_paths import scan_open_extraction_dirs
 
         result = reclaim_orphaned_extraction_dirs(
             temp_root=temp_root if temp_root is not None else Path(tempfile.gettempdir()),
             current_meipass=getattr(sys, "_MEIPASS", None),
             now=now if now is not None else datetime.now(timezone.utc),
-            open_path_scanner=scanner if scanner is not None else scan_open_extraction_dirs,
+            scan_open_paths=True,
             max_unmarked_reclaims=_REPAIR_UNMARKED_BUDGET,
             unmarked_time_budget=_REPAIR_TIME_BUDGET,
             dry_run=dry_run,

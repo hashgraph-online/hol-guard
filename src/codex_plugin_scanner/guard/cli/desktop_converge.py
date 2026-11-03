@@ -23,6 +23,7 @@ from ..adapters.base import HarnessContext
 from ..desktop_foreign_installs import (
     DESKTOP_PATH_SHIM_MARKER,
     ForeignInventory,
+    foreign_removal_available,
     inventory_foreign_installs,
     remove_foreign_installs,
 )
@@ -63,6 +64,17 @@ def converge_on_desktop_core(
     payload: dict[str, object] = {"launcher": str(launcher), "found": _describe(inventory)}
     if dry_run:
         payload["status"] = "planned"
+        return payload
+    if not inventory.empty and not foreign_removal_available():
+        # Stop nothing when the runtime cannot remove what it would retire.
+        payload.update(
+            {
+                "status": "partial",
+                "removed": [],
+                "daemon_restart_required": False,
+                "notes": ["Kept every superseded install: Guard's native runtime is unavailable."],
+            }
+        )
         return payload
     if not inventory.empty:
         try:

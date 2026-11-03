@@ -15,6 +15,7 @@ const PACKAGE_TEST: &str = "native_package_test_readonly_containment_required";
 const NODE_TOOL: &str = "native_node_tool_readonly_containment_required";
 const NODE_BUILD: &str = "native_node_build_output_containment_required";
 const WORKSPACE: &str = "native_workspace_containment_required";
+const NODE_TEST: &str = "native_node_test_readonly_containment_required";
 const HARNESSES: [&str; 3] = ["omp", "claude-code", "codex"];
 
 fn root() -> PathBuf {
@@ -100,13 +101,19 @@ fn package_script_receipts_match_the_sinks() {
             assert_ne!(result.decision, "allow", "{harness}: {name}");
             assert_ne!(result.minimum_action, "allow", "{harness}: {name}");
             match expected {
-                Some(reason) if cfg!(target_os = "macos") => assert_eq!(
-                    (result.minimum_action.as_str(), result.reason_code.as_str()),
-                    ("sandbox-required", reason),
-                    "{harness}: {name}"
-                ),
+                Some(reason) if guard_command::pretool::workspace_sandbox_available() => {
+                    assert_eq!(
+                        (result.minimum_action.as_str(), result.reason_code.as_str()),
+                        ("sandbox-required", reason),
+                        "{harness}: {name}"
+                    )
+                }
                 Some(_) => {}
                 None => {
+                    // This route declines the case, but another sink may still
+                    // claim the command -- `bun test` has a read-only profile
+                    // of its own -- so what the receipt must not carry is one
+                    // of this route's own reasons.
                     assert!(
                         ![PACKAGE_TEST, NODE_TOOL, NODE_BUILD]
                             .contains(&result.reason_code.as_str()),
@@ -114,7 +121,20 @@ fn package_script_receipts_match_the_sinks() {
                         result.reason_code
                     );
                     if result.minimum_action == "sandbox-required" {
-                        assert_eq!(result.reason_code, WORKSPACE, "{harness}: {name}");
+                        // `bun test` is Bun's own runner rather than a package
+                        // script, so its read-only profile claims the command
+                        // where a host runs that sink. Every other declined
+                        // case reaches the general workspace sandbox.
+                        let expected: &[&str] = if command == "bun test" {
+                            &[WORKSPACE, NODE_TEST]
+                        } else {
+                            &[WORKSPACE]
+                        };
+                        assert!(
+                            expected.contains(&result.reason_code.as_str()),
+                            "{harness}: {name}: {}",
+                            result.reason_code
+                        );
                     }
                 }
             }

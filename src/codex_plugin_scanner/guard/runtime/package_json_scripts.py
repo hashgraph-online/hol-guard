@@ -22,7 +22,6 @@ from .local_cli_commands import LocalCliCommand, merge_discovered_commands
 from .local_cli_identity import UnlistedCliIdentity
 
 _MANAGERS = ("npm", "pnpm", "yarn", "bun")
-_MAX_WALK = 8
 _RESULT_KEYS = frozenset(
     {
         "manifest_path",
@@ -87,22 +86,6 @@ def recognize_package_json_scripts(
         runner=runner,
         focused_script=found.focused_script,
     )
-
-
-def find_nearest_package_json(start: Path, *, home_dir: Path | None = None) -> Path | None:
-    current = start.resolve()
-    home = home_dir.resolve() if home_dir is not None else None
-    for _ in range(_MAX_WALK):
-        candidate = current / "package.json"
-        if candidate.is_file():
-            return candidate
-        if home is not None and current == home:
-            return None
-        parent = current.parent
-        if parent == current:
-            return None
-        current = parent
-    return None
 
 
 def looks_like_package_script_paste(command_text: str) -> bool:

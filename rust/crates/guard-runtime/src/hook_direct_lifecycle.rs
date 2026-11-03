@@ -182,7 +182,33 @@ pub(super) fn answer(
     if harness == CLAUDE_CODE && event == STOP {
         claude_turn_stop_answer(guard_home, payload, policy_store)?;
     }
+    // A finished turn wakes it too: the person reads the answer and types the
+    // next prompt while CIGAR starts, instead of that prompt paying for it.
+    if matches!(compact.as_str(), "sessionstart" | "stop") && !records_only(harness, policy_store) {
+        crate::context_assistance_prompt::wake(harness, policy_store);
+    }
     Ok(json!({ "harness_response": constant_response(harness, event) }))
+}
+
+/// Whether `harness` only records, read as `hook_direct::answer` reads it:
+/// its own posture first, then the snapshot mode. Watch leaves CIGAR resting
+/// for a new session as it does for a prompt, and so does a binding whose
+/// lease has lapsed.
+pub(super) fn records_only(harness: &str, policy_store: &PolicySnapshotStore) -> bool {
+    let Ok(binding) = policy_store.admit_direct_binding() else {
+        return true;
+    };
+    match binding
+        .harness_postures
+        .as_ref()
+        .and_then(|postures| postures.get(harness))
+    {
+        Some(posture) => posture == "watch",
+        None => match policy_store.current_admitted_snapshot() {
+            Ok(snapshot) => snapshot.mode == "observe",
+            Err(_) => true,
+        },
+    }
 }
 
 /// `claude_permission_request_response`. Without a session the daemon looks

@@ -1,7 +1,7 @@
 //! Bounded Guard-owned saved evidence. There are no saved file locators,
 //! principals, grants, credentials, prepared contexts or execution approvals.
 use crate::{BrokerStorage, ContextDocument, RuntimeError};
-use nix::fcntl::{Flock, FlockArg, OFlag};
+use access::{Access, Locked};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -9,9 +9,12 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+#[path = "evidence_cache_access.rs"]
+mod access;
 #[path = "evidence_cold_export.rs"]
 mod cold_export;
-#[path = "evidence_cache_fs.rs"]
+#[cfg_attr(unix, path = "evidence_cache_fs.rs")]
+#[cfg_attr(windows, path = "evidence_cache_fs_windows.rs")]
 mod fs;
 #[path = "evidence_cache_records.rs"]
 pub(crate) mod records;
@@ -44,7 +47,7 @@ const JOURNAL_BYTES: u64 = 33 * 1024 * 1024;
 
 struct Root {
     directory: Directory,
-    lock: Flock<File>,
+    lock: Locked,
     active: Mutex<BTreeSet<String>>,
     operation: Mutex<()>,
 }
@@ -116,7 +119,7 @@ fn sdk_files(directory: &Directory) -> Result<BTreeMap<String, u64>, RuntimeErro
             "broker.sqlite3-journal" => JOURNAL_BYTES,
             _ => return Err(RuntimeError::ScopeDenied),
         };
-        let file = directory.open_file(&name, OFlag::O_RDONLY, limit)?;
+        let file = directory.open_file(&name, Access::Read, limit)?;
         files.insert(
             name,
             file.metadata()
@@ -136,7 +139,7 @@ fn slot_files(directory: &Directory) -> Result<u64, RuntimeError> {
                     .sum::<u64>();
             }
             "state.json" | "state.next" => {
-                let file = directory.open_file(&name, OFlag::O_RDONLY, STATE_BYTES)?;
+                let file = directory.open_file(&name, Access::Read, STATE_BYTES)?;
                 total += file
                     .metadata()
                     .map_err(|_| RuntimeError::ArtifactUnreadable)?
@@ -189,9 +192,8 @@ impl EvidenceCache {
         Self::from_directory(assistance.child("saved-evidence", false)?).map(Some)
     }
     fn from_directory(directory: Directory) -> Result<Self, RuntimeError> {
-        let file = directory.open_file("cache.lock", OFlag::O_RDWR | OFlag::O_CREAT, 0)?;
-        let lock =
-            Flock::lock(file, FlockArg::LockExclusiveNonblock).map_err(|_| RuntimeError::Busy)?;
+        let file = directory.open_file("cache.lock", Access::WriteOrCreate, 0)?;
+        let lock = access::lock(file)?;
         let result = Self {
             root: Arc::new(Root {
                 directory,
@@ -328,7 +330,7 @@ impl EvidenceCache {
         state.observe(retention_hours, now)?;
         directory
             .write_state(&serde_json::to_vec(&state).map_err(|_| RuntimeError::RequestInvalid)?)?;
-        directory.child("sdk", true)?;
+        directory.storage_child("sdk")?;
         self.summary_inner()?;
         Ok(EvidenceSlot {
             lease,
@@ -397,7 +399,7 @@ impl EvidenceCache {
             let sdk = directory.child("sdk", false)?;
             let files = sdk_files(&sdk)?;
             let owner = if files.contains_key("broker.sqlite3") {
-                let file = sdk.open_file("broker.sqlite3", OFlag::O_RDWR, DATABASE_BYTES)?;
+                let file = sdk.open_file("broker.sqlite3", Access::Write, DATABASE_BYTES)?;
                 fs::storage_owner(&file)?;
                 Some(file)
             } else {
@@ -435,10 +437,10 @@ impl EvidenceCache {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "evidence_cache_tests.rs"]
 mod tests;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "evidence_cache_actual_tests.rs"]
 mod actual_tests;

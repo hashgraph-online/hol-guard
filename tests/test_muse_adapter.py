@@ -12,14 +12,20 @@ import pytest
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters, muse_hook_render
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.muse import MuseHarnessAdapter
-from codex_plugin_scanner.guard.adapters.muse_config import MUSE_GUARD_EVENTS, is_guard_managed_hook_command
 from codex_plugin_scanner.guard.adapters.muse_hook_render import (
     apply_muse_pretool_approval_wait,
     muse_bridge_response,
 )
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
+from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
 FIXTURES = Path(__file__).parent / "fixtures" / "muse"
+MUSE_GUARD_EVENT_COUNT = 6
+
+
+def is_guard_managed_hook_command(command: object) -> bool:
+    request = {"op": "managed", "harness": "muse", "commands": [command]}
+    return native_runner_authority("harness_hook_settings", request) == {"managed": [True]}
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
@@ -300,7 +306,7 @@ class TestMuseInstallUninstall:
         adapter.install(ctx)
         second = _settings_path(ctx).read_text(encoding="utf-8")
         assert json.loads(first) == json.loads(second)
-        assert len(_managed_commands(json.loads(second))) == len(MUSE_GUARD_EVENTS)
+        assert len(_managed_commands(json.loads(second))) == MUSE_GUARD_EVENT_COUNT
 
     def test_install_creates_backup_and_state(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         ctx = _ctx(tmp_path)

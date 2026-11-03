@@ -166,17 +166,20 @@ fn validate(metadata: &InstalledReleaseReceipt) -> Result<(), ReleaseError> {
     crate::check_shipped_adapter(&metadata.profile)?;
     crate::catalog::validate(&document(metadata))?;
     let platform = &metadata.release.platforms[0];
-    if metadata.release.withdrawn
-        || metadata.release.channel == crate::Channel::LocalCandidate
-        || platform.qualification != crate::Qualification::GuardQualified
-        || platform.package_tree_sha256.is_none()
+    if metadata.release.withdrawn {
+        return Err(ReleaseError::BuildWithdrawn);
+    }
+    if metadata.release.channel == crate::Channel::LocalCandidate {
+        return Err(ReleaseError::CandidateRequiresEnrollment);
+    }
+    if platform.package_tree_sha256.is_none()
         || platform.wheel.is_none()
         || !platform
             .dependencies
             .iter()
             .any(|wheel| wheel.distribution == "protobuf")
     {
-        return Err(ReleaseError::QualificationRequired);
+        return Err(ReleaseError::DependencyLockMissing);
     }
     Ok(())
 }

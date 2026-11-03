@@ -22,7 +22,7 @@ from codex_plugin_scanner.guard.runtime.local_cli_commands import (
     LocalCliCommand,
     is_local_cli_command_id,
     merge_discovered_commands,
-    slug_local_cli_command_id,
+    slug_local_cli_command_ids,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_help import (
     _HELP_OUTPUT_LIMIT,
@@ -110,6 +110,10 @@ def recorded_resident(monkeypatch: pytest.MonkeyPatch) -> None:
         "codex_plugin_scanner.guard.native_local_cli_help_parse.native_local_cli_help_commands",
         _answer,
     )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_local_cli_help_parse.resident_reads_sources_first",
+        lambda: False,
+    )
 
 
 def _command(command_id: str, description: str = "", parent_id: str | None = None) -> LocalCliCommand:
@@ -166,6 +170,13 @@ def _stand_in_resident(monkeypatch: pytest.MonkeyPatch, answer) -> list[dict[str
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.native_local_cli_help_parse.native_local_cli_help_commands",
         _answer,
+    )
+    # These cover a resident without the source-first read, which runs --help
+    # before it reads anything; tests/test_guard_local_cli_source_first.py
+    # covers one that reads first.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_local_cli_help_parse.resident_reads_sources_first",
+        lambda: False,
     )
     return calls
 
@@ -550,7 +561,7 @@ def test_option_ids_are_catalog_ids_but_never_tool_slugs() -> None:
         assert is_local_cli_command_id(option)
     for bad in ("-", "--", "-xy", "---x", "--a.b"):
         assert not is_local_cli_command_id(bad)
-    assert not slug_local_cli_command_id("--dry-run").startswith("-")
+    assert not slug_local_cli_command_ids(("--dry-run",))[0].startswith("-")
 
 
 def test_a_catalog_without_options_keeps_its_root_wording() -> None:

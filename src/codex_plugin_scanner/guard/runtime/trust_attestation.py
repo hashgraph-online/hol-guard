@@ -3,20 +3,24 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
-import re
 import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
-from .evidence_hash import canonical_guard_evidence_payload, guard_evidence_hash
+from ..native_runner_authority import (
+    NativeRunnerAuthorityError,
+    NativeRunnerAuthorityRefusalError,
+    native_runner_authority,
+)
+from .evidence_hash import canonical_guard_evidence_payload
 
 GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3 = "guard-aibom-trust-attestation.v3"
 GUARD_TRUST_ATTESTATION_DOMAIN = "hol-guard:aibom-trust-attestation:v3"
@@ -210,6 +214,56 @@ def _resolve_headless_short_lived_trust_attestation_signing_config(
     )
 
 
+_SIGNED_PAYLOAD_RULES = {"require_signed_at": True, "require_nonce": True, "require_subject_bindings": True}
+_REQUIRED_PAYLOAD_FIELDS = (
+    ("agent_id", "agentId"),
+    ("item_id", "itemId"),
+    ("item_kind", "itemKind"),
+    ("content_hash", "contentHash"),
+    ("captured_at", "capturedAt"),
+    ("evidence_hash", "evidenceHash"),
+    ("scope", "scope"),
+)
+_OPTIONAL_PAYLOAD_FIELDS = (
+    ("analyzer_id", "analyzerId"),
+    ("analyzer_version", "analyzerVersion"),
+    ("analyzer_spec_version", "analyzerSpecVersion"),
+    ("evidence_schema_version", "evidenceSchemaVersion"),
+    ("policy_version", "policyVersion"),
+    ("workspace_id", "workspaceId"),
+    ("device_id", "deviceId"),
+    ("installation_id", "installationId"),
+    ("upload_id", "uploadId"),
+    ("challenge_id", "challengeId"),
+    ("nonce", "nonce"),
+    ("sequence", "sequence"),
+    ("expires_at", "expiresAt"),
+    ("layer_id", "layerId"),
+    ("layer_type", "layerType"),
+    ("adapter_id", "adapterId"),
+    ("adapter_version", "adapterVersion"),
+    ("config_path_hash", "configPathHash"),
+    ("repository_id", "repositoryId"),
+    ("claim_hash", "claimHash"),
+)
+
+
+def _trust_attestation_payload(fields: Mapping[str, object]) -> dict[str, object]:
+    """Spell builder keyword fields as the unvalidated payload the verifier reads."""
+
+    payload: dict[str, object] = {
+        "payloadVersion": GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3,
+        "domainSeparator": GUARD_TRUST_ATTESTATION_DOMAIN,
+    }
+    for name, key in _REQUIRED_PAYLOAD_FIELDS:
+        payload[key] = fields[name]
+    for name, key in _OPTIONAL_PAYLOAD_FIELDS:
+        value = fields.get(name)
+        if value is not None:
+            payload[key] = value
+    return payload
+
+
 def build_trust_attestation_payload(
     *,
     agent_id: str,
@@ -240,58 +294,36 @@ def build_trust_attestation_payload(
     repository_id: str | None = None,
     claim_hash: str | None = None,
 ) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "payloadVersion": GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3,
-        "domainSeparator": GUARD_TRUST_ATTESTATION_DOMAIN,
-        "agentId": agent_id,
-        "itemId": item_id,
-        "itemKind": item_kind,
-        "contentHash": content_hash,
-        "capturedAt": captured_at,
-        "evidenceHash": evidence_hash,
+    fields: dict[str, object] = {
+        "agent_id": agent_id,
+        "analyzer_id": analyzer_id,
+        "analyzer_spec_version": analyzer_spec_version,
+        "analyzer_version": analyzer_version,
+        "item_id": item_id,
+        "item_kind": item_kind,
+        "content_hash": content_hash,
+        "captured_at": captured_at,
+        "evidence_hash": evidence_hash,
+        "evidence_schema_version": evidence_schema_version,
         "scope": scope,
+        "challenge_id": challenge_id,
+        "expires_at": expires_at,
+        "installation_id": installation_id,
+        "nonce": nonce,
+        "sequence": sequence,
+        "upload_id": upload_id,
+        "policy_version": policy_version,
+        "workspace_id": workspace_id,
+        "device_id": device_id,
+        "layer_id": layer_id,
+        "layer_type": layer_type,
+        "adapter_id": adapter_id,
+        "adapter_version": adapter_version,
+        "config_path_hash": config_path_hash,
+        "repository_id": repository_id,
+        "claim_hash": claim_hash,
     }
-    if analyzer_id is not None:
-        payload["analyzerId"] = analyzer_id
-    if analyzer_version is not None:
-        payload["analyzerVersion"] = analyzer_version
-    if analyzer_spec_version is not None:
-        payload["analyzerSpecVersion"] = analyzer_spec_version
-    if evidence_schema_version is not None:
-        payload["evidenceSchemaVersion"] = evidence_schema_version
-    if policy_version is not None:
-        payload["policyVersion"] = policy_version
-    if workspace_id is not None:
-        payload["workspaceId"] = workspace_id
-    if device_id is not None:
-        payload["deviceId"] = device_id
-    if installation_id is not None:
-        payload["installationId"] = installation_id
-    if upload_id is not None:
-        payload["uploadId"] = upload_id
-    if challenge_id is not None:
-        payload["challengeId"] = challenge_id
-    if nonce is not None:
-        payload["nonce"] = nonce
-    if sequence is not None:
-        payload["sequence"] = sequence
-    if expires_at is not None:
-        payload["expiresAt"] = expires_at
-    if layer_id is not None:
-        payload["layerId"] = layer_id
-    if layer_type is not None:
-        payload["layerType"] = layer_type
-    if adapter_id is not None:
-        payload["adapterId"] = adapter_id
-    if adapter_version is not None:
-        payload["adapterVersion"] = adapter_version
-    if config_path_hash is not None:
-        payload["configPathHash"] = config_path_hash
-    if repository_id is not None:
-        payload["repositoryId"] = repository_id
-    if claim_hash is not None:
-        payload["claimHash"] = claim_hash
-    return _validate_attestation_payload(payload, require_signed_at=False)
+    return _validate_attestation_payload(_trust_attestation_payload(fields), require_signed_at=False)
 
 
 def apply_trust_attestation_metadata(
@@ -320,23 +352,21 @@ def apply_trust_attestation_metadata(
     signing_config: GuardTrustAttestationSigningConfig | None = None,
 ) -> dict[str, object]:
     enriched = dict(metadata)
-    raw_trust_resolution = enriched.get("trustResolution")
-    trust_resolution = _validated_local_trust_claim(raw_trust_resolution, require_layer_identity=False)
+    admitted = _admitted_trust_claims(enriched.get("trustResolution"), enriched.get("trustLayers"))
+    admitted_resolution = admitted.get("resolution")
+    trust_resolution: dict[str, object] | None = None
+    resolution_claim_hash = ""
+    if isinstance(admitted_resolution, dict):
+        trust_resolution = admitted_resolution["claim"]
+        resolution_claim_hash = admitted_resolution["claim_hash"]
     if trust_resolution is None:
         enriched.pop("trustResolution", None)
     else:
         enriched["trustResolution"] = trust_resolution
 
-    raw_trust_layers = enriched.get("trustLayers")
-    trust_layers = (
-        [
-            layer
-            for raw_layer in raw_trust_layers
-            if (layer := _validated_local_trust_claim(raw_layer, require_layer_identity=True)) is not None
-        ]
-        if isinstance(raw_trust_layers, list)
-        else []
-    )
+    admitted_layers = [layer for layer in admitted.get("layers", []) if isinstance(layer, dict)]
+    trust_layers: list[dict[str, object]] = [layer["claim"] for layer in admitted_layers]
+    layer_claim_hashes: list[str] = [layer["claim_hash"] for layer in admitted_layers]
     if trust_layers:
         enriched["trustLayers"] = trust_layers
     else:
@@ -373,279 +403,135 @@ def apply_trust_attestation_metadata(
         if value is not None
     }
 
+    payload_fields: dict[str, object] = {
+        "agent_id": agent_id,
+        "analyzer_id": analyzer_id if include_v2_bindings else None,
+        "analyzer_spec_version": analyzer_spec_version if include_v2_bindings else None,
+        "analyzer_version": analyzer_version if include_v2_bindings else None,
+        "item_id": item_id,
+        "item_kind": item_kind,
+        "content_hash": content_hash,
+        "challenge_id": challenge_id,
+        "expires_at": expires_at,
+        "installation_id": installation_id,
+        "nonce": effective_nonce,
+        "policy_version": effective_policy_version,
+        "sequence": sequence,
+        "upload_id": upload_id,
+        "workspace_id": workspace_id,
+        "device_id": device_id,
+        "adapter_id": adapter_id,
+        "adapter_version": adapter_version,
+        "config_path_hash": config_path_hash,
+        "repository_id": repository_id,
+    }
+    claims: list[tuple[dict[str, object], str, str]] = []
     if trust_resolution is not None:
-        raw_resolution_metadata = trust_resolution.get("metadata")
-        resolution_metadata = dict(raw_resolution_metadata) if isinstance(raw_resolution_metadata, dict) else {}
-        evidence_hash = resolution_metadata.get("evidenceHash")
-        evidence_schema_version = resolution_metadata.get("evidenceSchemaVersion")
-        captured_at = trust_resolution.get("capturedAt")
-        claim_hash = trust_claim_hash(trust_resolution, require_layer_identity=False)
-        if (
-            isinstance(evidence_hash, str)
-            and evidence_hash
-            and isinstance(evidence_schema_version, str)
-            and evidence_schema_version
-            and isinstance(captured_at, str)
-            and captured_at
+        claims.append((trust_resolution, resolution_claim_hash, "trust_resolution"))
+    claims.extend(
+        (layer, claim_hash, "trust_layer") for layer, claim_hash in zip(trust_layers, layer_claim_hashes, strict=True)
+    )
+
+    pending: list[tuple[dict[str, object], dict[str, object], str, str, str]] = []
+    payloads: list[dict[str, object]] = []
+    for claim, claim_hash, scope in claims:
+        raw_claim_metadata = claim.get("metadata")
+        claim_metadata = dict(raw_claim_metadata) if isinstance(raw_claim_metadata, dict) else {}
+        evidence_hash = claim_metadata.get("evidenceHash")
+        evidence_schema_version = claim_metadata.get("evidenceSchemaVersion")
+        captured_at = claim.get("capturedAt")
+        layer_fields: dict[str, object] = {}
+        if scope == "trust_layer":
+            layer_fields = {"layer_id": claim.get("layerId"), "layer_type": claim.get("layerType")}
+        if not all(
+            isinstance(value, str) and value
+            for value in (evidence_hash, evidence_schema_version, captured_at, *layer_fields.values())
         ):
-            resolution_metadata["attestation"] = sign_trust_attestation(
-                payload=build_trust_attestation_payload(
-                    agent_id=agent_id,
-                    analyzer_id=analyzer_id if include_v2_bindings else None,
-                    analyzer_spec_version=analyzer_spec_version if include_v2_bindings else None,
-                    analyzer_version=analyzer_version if include_v2_bindings else None,
-                    item_id=item_id,
-                    item_kind=item_kind,
-                    content_hash=content_hash,
-                    captured_at=captured_at,
-                    challenge_id=challenge_id,
-                    expires_at=expires_at,
-                    evidence_hash=evidence_hash,
-                    evidence_schema_version=evidence_schema_version,
-                    installation_id=installation_id,
-                    nonce=effective_nonce,
-                    policy_version=effective_policy_version,
-                    sequence=sequence,
-                    scope="trust_resolution",
-                    upload_id=upload_id,
-                    workspace_id=workspace_id,
-                    device_id=device_id,
-                    adapter_id=adapter_id,
-                    adapter_version=adapter_version,
-                    config_path_hash=config_path_hash,
-                    repository_id=repository_id,
-                    claim_hash=claim_hash,
-                ),
-                config=config,
-                signed_at=captured_at,
-            )
-            resolution_metadata["attestationStatus"] = "signed"
-            resolution_metadata["attestationBindings"] = {
-                **common_attestation_bindings,
-                "evidenceSchemaVersion": evidence_schema_version,
-                "claimHash": claim_hash,
+            continue
+        signed_at, schema_version = str(captured_at), str(evidence_schema_version)
+        payload = _trust_attestation_payload(
+            {
+                **payload_fields,
+                **layer_fields,
+                "captured_at": captured_at,
+                "evidence_hash": evidence_hash,
+                "evidence_schema_version": evidence_schema_version,
+                "scope": scope,
+                "claim_hash": claim_hash,
             }
-            trust_resolution["metadata"] = resolution_metadata
-            enriched["trustResolution"] = trust_resolution
+        )
+        payloads.append(_payload_with_signed_at(payload, signed_at))
+        pending.append((claim, claim_metadata, signed_at, schema_version, claim_hash))
+    if not pending:
+        return enriched
 
-    if trust_layers:
-        signed_layers: list[dict[str, object]] = []
-        for layer in trust_layers:
-            raw_layer_metadata = layer.get("metadata")
-            layer_metadata = dict(raw_layer_metadata) if isinstance(raw_layer_metadata, dict) else {}
-            evidence_hash = layer_metadata.get("evidenceHash")
-            evidence_schema_version = layer_metadata.get("evidenceSchemaVersion")
-            captured_at = layer.get("capturedAt")
-            layer_id = layer.get("layerId")
-            layer_type = layer.get("layerType")
-            claim_hash = trust_claim_hash(layer, require_layer_identity=True)
-            if (
-                isinstance(evidence_hash, str)
-                and evidence_hash
-                and isinstance(evidence_schema_version, str)
-                and evidence_schema_version
-                and isinstance(captured_at, str)
-                and captured_at
-                and isinstance(layer_id, str)
-                and layer_id
-                and isinstance(layer_type, str)
-                and layer_type
-            ):
-                layer_metadata["attestation"] = sign_trust_attestation(
-                    payload=build_trust_attestation_payload(
-                        agent_id=agent_id,
-                        analyzer_id=analyzer_id if include_v2_bindings else None,
-                        analyzer_spec_version=analyzer_spec_version if include_v2_bindings else None,
-                        analyzer_version=analyzer_version if include_v2_bindings else None,
-                        item_id=item_id,
-                        item_kind=item_kind,
-                        content_hash=content_hash,
-                        captured_at=captured_at,
-                        challenge_id=challenge_id,
-                        expires_at=expires_at,
-                        evidence_hash=evidence_hash,
-                        evidence_schema_version=evidence_schema_version,
-                        installation_id=installation_id,
-                        nonce=effective_nonce,
-                        policy_version=effective_policy_version,
-                        sequence=sequence,
-                        scope="trust_layer",
-                        upload_id=upload_id,
-                        workspace_id=workspace_id,
-                        device_id=device_id,
-                        layer_id=layer_id,
-                        layer_type=layer_type,
-                        adapter_id=adapter_id,
-                        adapter_version=adapter_version,
-                        config_path_hash=config_path_hash,
-                        repository_id=repository_id,
-                        claim_hash=claim_hash,
-                    ),
-                    config=config,
-                    signed_at=captured_at,
-                )
-                layer_metadata["attestationStatus"] = "signed"
-                layer_metadata["attestationBindings"] = {
-                    **common_attestation_bindings,
-                    "evidenceSchemaVersion": evidence_schema_version,
-                    "claimHash": claim_hash,
-                }
-                layer["metadata"] = layer_metadata
-            signed_layers.append(layer)
-        enriched["trustLayers"] = signed_layers
-
+    # Every signed payload of the item is checked in one native call; the
+    # first refusal fails the item exactly as signing it alone would.
+    private_key = _load_private_key(config.private_key_pem)
+    validated_payloads = _validate_attestation_payloads(payloads, **_SIGNED_PAYLOAD_RULES)
+    for (claim, claim_metadata, signed_at, evidence_schema_version, claim_hash), validated in zip(
+        pending, validated_payloads, strict=True
+    ):
+        claim_metadata["attestation"] = _sign_validated_payload(
+            validated, private_key=private_key, config=config, signed_at=signed_at
+        )
+        claim_metadata["attestationStatus"] = "signed"
+        claim_metadata["attestationBindings"] = {
+            **common_attestation_bindings,
+            "evidenceSchemaVersion": evidence_schema_version,
+            "claimHash": claim_hash,
+        }
+        claim["metadata"] = claim_metadata
     return enriched
 
 
-_PRIOR_ATTESTATION_METADATA_KEYS = frozenset(
-    {
-        "attestation",
-        "attestationBindings",
-        "attestationRef",
-        "attestationVerification",
-    }
-)
+def _admitted_trust_claims(raw_resolution: object, raw_layers: object) -> dict[str, Any]:
+    """Return the locally derived claims the native gate admits, with their names.
+
+    Each admitted claim comes back as ``{"claim", "claim_hash"}`` with its prior
+    proof stripped and its metadata marked unsigned.
+    """
+
+    if not isinstance(raw_resolution, dict) and not (isinstance(raw_layers, list) and raw_layers):
+        return {"resolution": None, "layers": []}
+    try:
+        return native_runner_authority(
+            "trust_attestation_shape",
+            {"op": "claims", "resolution": raw_resolution, "layers": raw_layers},
+        )
+    except NativeRunnerAuthorityRefusalError:
+        pass
+    # A claim the bounded encoder refuses (unencodable or oversized) drops
+    # alone; the item keeps every other claim instead of losing all of them.
+    resolution = (
+        _admitted_alone({"resolution": raw_resolution}).get("resolution") if isinstance(raw_resolution, dict) else None
+    )
+    layers: list[object] = []
+    if isinstance(raw_layers, list):
+        for raw_layer in raw_layers:
+            if isinstance(raw_layer, dict):
+                layers.extend(_admitted_alone({"layers": [raw_layer]}).get("layers", []))
+    return {"resolution": resolution, "layers": layers}
 
 
-def _validated_local_trust_claim(
-    raw_claim: object,
-    *,
-    require_layer_identity: bool,
-) -> dict[str, object] | None:
-    """Return a proof-free locally derived claim or reject it fail-closed."""
-
-    if not isinstance(raw_claim, dict):
-        return None
-    provenance = raw_claim.get("provenance")
-    if not isinstance(provenance, dict):
-        return None
-    if provenance.get("origin") != "hol-guard-local" or provenance.get("verificationStatus") != "locally_derived":
-        return None
-    derivation = provenance.get("derivation")
-    if not isinstance(derivation, str) or not derivation:
-        return None
-    if raw_claim.get("evidenceAuthority") != "device_claim" or raw_claim.get("affectsV4Score") is not False:
-        return None
-    captured_at = raw_claim.get("capturedAt")
-    if _parse_attestation_timestamp(captured_at) is None:
-        return None
-    if require_layer_identity:
-        if not isinstance(raw_claim.get("layerId"), str) or not raw_claim.get("layerId"):
-            return None
-        if not isinstance(raw_claim.get("layerType"), str) or not raw_claim.get("layerType"):
-            return None
-    elif raw_claim.get("resolutionSource") != "local":
-        return None
-    raw_metadata = raw_claim.get("metadata")
-    if not isinstance(raw_metadata, dict):
-        return None
-    evidence = raw_metadata.get("evidence")
-    evidence_hash = raw_metadata.get("evidenceHash")
-    evidence_schema_version = raw_metadata.get("evidenceSchemaVersion")
-    if not isinstance(evidence, dict):
-        return None
-    if not isinstance(evidence_hash, str) or evidence_hash != guard_evidence_hash(evidence):
-        return None
-    if not isinstance(evidence_schema_version, str) or not evidence_schema_version.startswith("guard-aibom-"):
-        return None
-    claim = dict(raw_claim)
-    metadata = {key: value for key, value in raw_metadata.items() if key not in _PRIOR_ATTESTATION_METADATA_KEYS}
-    metadata["attestationStatus"] = "unsigned"
-    claim["metadata"] = metadata
-    return claim
+def _admitted_alone(request: dict[str, object]) -> dict[str, Any]:
+    try:
+        return native_runner_authority("trust_attestation_shape", {"op": "claims", **request})
+    except NativeRunnerAuthorityRefusalError:
+        return {}
 
 
 def trust_claim_hash(claim: Mapping[str, object], *, require_layer_identity: bool) -> str:
     """Hash the complete proof-free local claim shown to attestation consumers."""
 
-    normalized = _validated_local_trust_claim(dict(claim), require_layer_identity=require_layer_identity)
-    if normalized is None:
+    answer = native_runner_authority(
+        "trust_attestation_shape",
+        {"op": "claim_hash", "claim": dict(claim), "require_layer_identity": require_layer_identity},
+    )
+    claim_hash = answer.get("claim_hash")
+    if not isinstance(claim_hash, str):
         raise ValueError("Trust claim is not locally derived or has invalid evidence")
-    return guard_evidence_hash(normalized)
-
-
-_ATTESTATION_PAYLOAD_REQUIRED_FIELDS = frozenset(
-    {
-        "payloadVersion",
-        "domainSeparator",
-        "agentId",
-        "itemId",
-        "itemKind",
-        "contentHash",
-        "capturedAt",
-        "claimHash",
-        "evidenceHash",
-        "scope",
-    }
-)
-_ATTESTATION_PAYLOAD_OPTIONAL_STRING_FIELDS = frozenset(
-    {
-        "adapterId",
-        "adapterVersion",
-        "analyzerId",
-        "analyzerSpecVersion",
-        "analyzerVersion",
-        "challengeId",
-        "configPathHash",
-        "deviceId",
-        "evidenceSchemaVersion",
-        "expiresAt",
-        "installationId",
-        "layerId",
-        "layerType",
-        "nonce",
-        "policyVersion",
-        "repositoryId",
-        "signedAt",
-        "uploadId",
-        "workspaceId",
-    }
-)
-_ATTESTATION_PAYLOAD_ALLOWED_FIELDS = (
-    _ATTESTATION_PAYLOAD_REQUIRED_FIELDS | _ATTESTATION_PAYLOAD_OPTIONAL_STRING_FIELDS | {"sequence"}
-)
-_ATTESTATION_SUBJECT_BINDING_FIELDS = frozenset(
-    {"adapterId", "adapterVersion", "configPathHash", "policyVersion", "repositoryId"}
-)
-
-
-# The one timestamp spelling an attestation may carry, after a trailing ``Z``
-# becomes ``+00:00``. ``datetime.fromisoformat`` reads far more than this, and
-# what else it reads changes between the interpreters this project supports:
-# 3.10 refuses week dates and basic formats that 3.11 accepts, and only 3.14
-# reads ``24:00`` as the next midnight. The Rust port in
-# ``rust/crates/guard-command/src/attestation_timestamp.rs`` holds the same
-# shape, so every interpreter and the native runtime give one answer.
-#
-# A UTC offset carries no fraction here. Interpreters disagree about what one
-# means: the reader behind ``fromisoformat`` used to ask only whether the
-# offset's whole seconds were zero, so it read ``+00:00:00.999999`` as UTC
-# itself, and newer ones read it as a microsecond east. Neither RFC 3339 nor
-# ISO 8601 admits the spelling, so an attestation carrying one is no longer an
-# instant on either side rather than a different instant per interpreter.
-_ATTESTATION_TIMESTAMP_SHAPE = re.compile(
-    r"\d{4}-\d{2}-\d{2}[Tt ]"
-    r"(?:[01]\d|2[0-3]):\d{2}(?::\d{2}(?:\.(?:\d{6}|\d{3}))?)?"
-    r"[+-]\d{2}:\d{2}(?::\d{2})?",
-    re.ASCII,
-)
-
-
-def _parse_attestation_timestamp(value: object) -> datetime | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    normalized = value.strip()
-    if normalized.endswith(("Z", "z")):
-        normalized = f"{normalized[:-1]}+00:00"
-    if _ATTESTATION_TIMESTAMP_SHAPE.fullmatch(normalized) is None:
-        return None
-    try:
-        parsed = datetime.fromisoformat(normalized)
-        # The shift to UTC can leave ``datetime``'s year range, which raises
-        # ``OverflowError`` rather than ``ValueError``.
-        return parsed.astimezone(timezone.utc) if parsed.tzinfo is not None else None
-    except (ValueError, OverflowError):
-        return None
+    return claim_hash
 
 
 def _validate_attestation_payload(
@@ -655,51 +541,51 @@ def _validate_attestation_payload(
     require_nonce: bool = False,
     require_subject_bindings: bool = False,
 ) -> dict[str, object]:
-    normalized = {str(key): value for key, value in payload.items()}
-    unknown = set(normalized) - _ATTESTATION_PAYLOAD_ALLOWED_FIELDS
-    if unknown:
-        raise ValueError(f"Unknown trust attestation payload fields: {', '.join(sorted(unknown))}")
-    missing = _ATTESTATION_PAYLOAD_REQUIRED_FIELDS - set(normalized)
-    if missing:
-        raise ValueError(f"Missing trust attestation payload fields: {', '.join(sorted(missing))}")
-    for field in _ATTESTATION_PAYLOAD_REQUIRED_FIELDS | _ATTESTATION_PAYLOAD_OPTIONAL_STRING_FIELDS:
-        if field not in normalized:
-            continue
-        value = normalized[field]
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f"Trust attestation payload field {field} must be a non-empty string")
-        normalized[field] = value.strip()
-    if normalized.get("payloadVersion") != GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3:
-        raise ValueError("Unsupported trust attestation payload version")
-    if normalized.get("domainSeparator") != GUARD_TRUST_ATTESTATION_DOMAIN:
-        raise ValueError("Trust attestation domain separator mismatch")
-    if normalized.get("scope") not in {"trust_resolution", "trust_layer"}:
-        raise ValueError("Unsupported trust attestation scope")
-    if _parse_attestation_timestamp(normalized.get("capturedAt")) is None:
-        raise ValueError("Trust attestation capturedAt is invalid")
-    if "expiresAt" in normalized and _parse_attestation_timestamp(normalized["expiresAt"]) is None:
-        raise ValueError("Trust attestation expiresAt is invalid")
-    if require_signed_at and _parse_attestation_timestamp(normalized.get("signedAt")) is None:
-        raise ValueError("Trust attestation signedAt is invalid")
-    if not require_signed_at and "signedAt" in normalized:
-        raise ValueError("Trust attestation builder cannot accept signedAt")
-    if require_nonce and "nonce" not in normalized:
-        raise ValueError("Trust attestation nonce is required")
-    if require_subject_bindings:
-        missing_bindings = _ATTESTATION_SUBJECT_BINDING_FIELDS - set(normalized)
-        if missing_bindings:
-            raise ValueError(f"Missing trust attestation subject bindings: {', '.join(sorted(missing_bindings))}")
-    if "sequence" in normalized and (
-        not isinstance(normalized["sequence"], int)
-        or isinstance(normalized["sequence"], bool)
-        or int(normalized["sequence"]) < 0
-    ):
-        raise ValueError("Trust attestation sequence must be a non-negative integer")
-    if normalized.get("scope") == "trust_layer":
-        if "layerId" not in normalized or "layerType" not in normalized:
-            raise ValueError("Trust layer attestation requires layer identity")
-    elif "layerId" in normalized or "layerType" in normalized:
-        raise ValueError("Trust resolution attestation cannot contain layer identity")
+    answer = native_runner_authority(
+        "trust_attestation_shape",
+        {
+            "op": "payload",
+            "payload": {str(key): value for key, value in payload.items()},
+            "require_signed_at": require_signed_at,
+            "require_nonce": require_nonce,
+            "require_subject_bindings": require_subject_bindings,
+        },
+    )
+    return _admitted_payload(answer)
+
+
+def _validate_attestation_payloads(
+    payloads: list[dict[str, object]],
+    *,
+    require_signed_at: bool,
+    require_nonce: bool,
+    require_subject_bindings: bool,
+) -> list[dict[str, object]]:
+    answer = native_runner_authority(
+        "trust_attestation_shape",
+        {
+            "op": "payloads",
+            "payloads": [{str(key): value for key, value in payload.items()} for payload in payloads],
+            "require_signed_at": require_signed_at,
+            "require_nonce": require_nonce,
+            "require_subject_bindings": require_subject_bindings,
+        },
+    )
+    results = answer.get("results")
+    if not isinstance(results, list) or len(results) != len(payloads):
+        raise NativeRunnerAuthorityError("native_runner_authority_invalid")
+    return [_admitted_payload(result) for result in results]
+
+
+def _admitted_payload(answer: object) -> dict[str, object]:
+    if not isinstance(answer, dict):
+        raise NativeRunnerAuthorityError("native_runner_authority_invalid")
+    refused = answer.get("refused")
+    if isinstance(refused, str):
+        raise ValueError(refused)
+    normalized = answer.get("payload")
+    if not isinstance(normalized, dict):
+        raise NativeRunnerAuthorityError("native_runner_authority_invalid")
     return normalized
 
 
@@ -711,11 +597,18 @@ def sign_trust_attestation(
 ) -> dict[str, object]:
     private_key = _load_private_key(config.private_key_pem)
     validated_payload = _validate_attestation_payload(
-        _payload_with_signed_at(payload, signed_at),
-        require_signed_at=True,
-        require_nonce=True,
-        require_subject_bindings=True,
+        _payload_with_signed_at(payload, signed_at), **_SIGNED_PAYLOAD_RULES
     )
+    return _sign_validated_payload(validated_payload, private_key=private_key, config=config, signed_at=signed_at)
+
+
+def _sign_validated_payload(
+    validated_payload: Mapping[str, object],
+    *,
+    private_key: RSAPrivateKey | EllipticCurvePrivateKey,
+    config: GuardTrustAttestationSigningConfig,
+    signed_at: str,
+) -> dict[str, object]:
     canonical_payload = canonical_trust_attestation_payload(validated_payload)
     signature = _sign_payload(
         private_key=private_key,

@@ -16,10 +16,12 @@
 use std::collections::BTreeMap;
 
 use guard_command::protection_health::{
-    evaluate_protection_health, ProtectionCheckStatus, ProtectionSignal,
+    evaluate_protection_health, ProtectionCheckStatus, ProtectionHealthReport, ProtectionSignal,
 };
+use guard_command::protection_health_facts::signals_from_facts;
 use guard_contracts::{
-    ProtectionHealthReportRequestV1, ProtectionHealthReportResultV1, ProtectionSignalV1,
+    ProtectionHealthFactsRequestV1, ProtectionHealthReportRequestV1,
+    ProtectionHealthReportResultV1, ProtectionSignalV1, PROTECTION_HEALTH_FACTS_REQUEST_SCHEMA,
     PROTECTION_HEALTH_REPORT_MAX_REQUEST_BYTES, PROTECTION_HEALTH_REPORT_REQUEST_SCHEMA,
     PROTECTION_HEALTH_REPORT_RESULT_SCHEMA,
 };
@@ -72,15 +74,48 @@ pub(crate) fn evaluate_protection_health_report(
         &signals(&request.harness_signals)?,
     )
     .map_err(|_| invalid())?;
-    let payload = serde_json::to_value(&report).map_err(|_| invalid())?;
+    encode_report(&report, &request.request_id, request_sha256)
+}
+
+fn encode_report(
+    report: &ProtectionHealthReport,
+    request_id: &str,
+    request_sha256: String,
+) -> Result<Vec<u8>, String> {
+    let payload = serde_json::to_value(report).map_err(|_| invalid())?;
     crate::encode_response(&ProtectionHealthReportResultV1 {
         schema: PROTECTION_HEALTH_REPORT_RESULT_SCHEMA.to_owned(),
-        request_id: request.request_id.clone(),
+        request_id: request_id.to_owned(),
         request_sha256,
         status: "ok".to_owned(),
         code: "ok".to_owned(),
         payload: Some(payload),
     })
+}
+
+/// `ProtectionHealthFacts`: the same report, from the facts the signals come
+/// from rather than from signals the caller already decided.
+///
+/// The caller sends what it read — managed installs, hook verification, the
+/// daemon's runtime row, trust status and the decision stream's counters —
+/// and `signals_from_facts` decides what each proves. A fact of the wrong
+/// shape proves nothing; only a `now` that is not an aware instant refuses the
+/// request, because every age is measured from it.
+pub(crate) fn evaluate_protection_health_facts(
+    request: &ProtectionHealthFactsRequestV1,
+) -> Result<Vec<u8>, String> {
+    let request_sha256 =
+        request_digest_with_limit(request, PROTECTION_HEALTH_REPORT_MAX_REQUEST_BYTES)?;
+    if request.schema != PROTECTION_HEALTH_FACTS_REQUEST_SCHEMA {
+        return Err("native_protection_health_report_schema_mismatch".to_owned());
+    }
+    if request.request_id.is_empty() {
+        return Err(invalid());
+    }
+    let produced = signals_from_facts(request).map_err(|_| invalid())?;
+    let report = evaluate_protection_health(&produced.signals, &produced.harness_signals)
+        .map_err(|_| invalid())?;
+    encode_report(&report, &request.request_id, request_sha256)
 }
 
 #[cfg(test)]

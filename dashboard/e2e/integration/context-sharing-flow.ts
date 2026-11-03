@@ -1,10 +1,12 @@
 import { daemonApi, expect, expectNoErrorBoundary, type IntegrationState } from "./fixtures";
+import { addContextProject, confirmContextProject } from "./context-project";
 import type { Page } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ContextAgentProbe } from "./context-agent-probe";
 import { contextStatus } from "./context-status";
 import { contextPairingCapacityFlow } from "./context-pairing-capacity-flow";
+import { chooseMenuOption } from "../select-menu";
 
 export async function contextSharingFlow(page: Page, state: IntegrationState, save: (page: Page, state: IntegrationState) => Promise<void>) {
   const seed = state.seeded.context_assistance;
@@ -18,7 +20,7 @@ export async function contextSharingFlow(page: Page, state: IntegrationState, sa
   await save(page, state);
   await page.getByRole("button", { name: "Start context assistance", exact: true }).click();
   await expect.poll(async () => (await status()).runtime?.shared_compile_verified, { timeout: 30_000 }).toBe(true);
-  await page.getByRole("tab", { name: "Sources & AI apps", exact: true }).click();
+  await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
   writeFileSync(resolve(state.workspace, "README.md"), "Shared deployment workspace uses a reviewed release process.\n");
   const probes = [new ContextAgentProbe(String(seed.pythonExecutable), state.guardHome), new ContextAgentProbe(String(seed.pythonExecutable), state.guardHome)];
   try {
@@ -27,20 +29,14 @@ export async function contextSharingFlow(page: Page, state: IntegrationState, sa
       expect((await probe.request("list")).tools).not.toContain("propose_guard_context_note");
       pending.push((await probe.request("get_context_status")).data);
     }
-    await page.getByRole("combobox", { name: "Context consumer", exact: true }).selectOption("codex");
-    await page.getByLabel("Workspace folder", { exact: true }).fill(state.workspace);
-    await page.getByLabel("Files relative to the workspace, one per line").fill("README.md");
-    await page.getByRole("checkbox", { name: "Allow reviewed shared notes in this app's context", exact: true }).check();
-    await page.getByRole("checkbox", { name: "Allow paired connections to propose shared notes", exact: true }).check();
-    await page.getByRole("button", { name: "Grant review source access", exact: true }).click();
-    const sourceProof = page.getByRole("dialog");
-    await sourceProof.getByLabel("Approval password").fill(state.approvalPassword);
-    await sourceProof.getByRole("button", { name: "Grant source access", exact: true }).click();
-    await expect(sourceProof).toHaveCount(0);
+    await addContextProject(page, state.workspace, { app: "Codex" });
+    await page.getByRole("checkbox", { name: "Let it read shared notes you approved", exact: true }).check();
+    await page.getByRole("checkbox", { name: "Let it suggest new notes for you to review", exact: true }).check();
+    await confirmContextProject(page, state.approvalPassword);
     for (const connection of pending) {
       await page.getByRole("button", { name: "Refresh app connections", exact: true }).click();
       const region = page.getByRole("region", { name: `Context connection ${connection.session_id}`, exact: true });
-      await region.getByRole("combobox", { name: "Workspace and app grant", exact: true }).selectOption({ index: 1 });
+      await chooseMenuOption(region.getByRole("combobox", { name: "Workspace and app grant", exact: true }), { index: 0 });
       await region.getByRole("button", { name: "Authorize context connection", exact: true }).click();
       const proof = page.getByRole("dialog");
       await proof.getByLabel("Approval password").fill(state.approvalPassword);

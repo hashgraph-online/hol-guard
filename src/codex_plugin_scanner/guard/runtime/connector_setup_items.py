@@ -48,7 +48,7 @@ def listed_public_items(store: GuardStore) -> list[dict[str, object]]:
 
     # Package script memory loads the command catalog; importing it here keeps
     # `hol-guard --help` from paying for it.
-    from .package_json_script_memory import _package_item_available, public_local_cli_item
+    from .package_json_script_memory import package_items_available, public_local_cli_item
 
     stored = store.list_local_cli_items()
     configured = {
@@ -56,10 +56,11 @@ def listed_public_items(store: GuardStore) -> list[dict[str, object]]:
         for item in stored
         if item.get("surface") == "mcp" and item.get("identity_hash") != item.get("server_identity_hash")
     }
+    shown = package_items_available(stored)
     return [
         public_local_cli_item(item)
-        for item in stored
-        if _package_item_available(item)
+        for item, keep in zip(stored, shown, strict=True)
+        if keep
         and not (
             item.get("surface") == "mcp"
             and isinstance(item.get("server_identity_hash"), str)

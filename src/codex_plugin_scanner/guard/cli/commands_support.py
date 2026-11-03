@@ -39,6 +39,7 @@ from . import commands_dispatch_trust as _commands_dispatch_trust
 from . import commands_dispatch_admin as _commands_dispatch_admin
 from . import commands_dispatch_cloud as _commands_dispatch_cloud
 from . import commands_dispatch_cloud_review as _commands_dispatch_cloud_review
+from . import commands_dispatch_cloud_actions as _commands_dispatch_cloud_actions
 from . import commands_hook as _commands_hook
 from . import commands_remove_hooks as _commands_remove_hooks
 from . import commands_repair as _commands_repair
@@ -74,6 +75,7 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     _commands_dispatch_admin,
     _commands_dispatch_cloud,
     _commands_dispatch_cloud_review,
+    _commands_dispatch_cloud_actions,
     _commands_hook,
     _commands_remove_hooks,
     _commands_repair,

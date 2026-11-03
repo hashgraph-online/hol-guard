@@ -18,7 +18,6 @@ from codex_plugin_scanner.guard.adapters import (
     bounded_cli_hook_recovery,
     cline_hooks,
     copilot,
-    devin_config,
     hermes_runtime_hooks,
 )
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -29,6 +28,7 @@ from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import (
     daemon_start_command,
 )
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
+from tests.cline_worker_config import worker_config
 
 _NATIVE_HARNESSES = ("copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline")
 _POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="asserts POSIX hook command syntax")
@@ -146,8 +146,9 @@ def test_native_copilot_devin_and_hermes_commands_stay_managed(tmp_path: Path, m
     devin_command = shlex.join(_command(tmp_path, "devin"))
 
     assert NATIVE_BOUNDED_HOOK_COMMAND in copilot_command
-    assert copilot._is_managed_hook_command(copilot_command)
-    assert devin_config.is_guard_managed_hook_command(devin_command)
+    # The Devin install recognizes its own native command by this verb and harness field.
+    assert NATIVE_BOUNDED_HOOK_COMMAND in devin_command
+    assert '"harness":"devin"' in devin_command
     hermes_command = hermes_runtime_hooks.hermes_hook_command_string(_command(tmp_path, "hermes"))
     assert hermes_runtime_hooks._legacy_guard_pretool_command(hermes_command)
 
@@ -160,15 +161,14 @@ def test_cline_worker_runs_the_native_bridge_once_per_payload(tmp_path: Path, mo
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
     argv = cline_hooks._bounded_hook_argv(context, sys.executable)
-    source = cline_hooks._hook_source(context, event_name="PreToolUse", guard_cli=list(argv))
+    worker = json.loads(worker_config(context, event_name="PreToolUse", guard_cli=list(argv)))
 
     assert argv[:2] == (str(runtime), NATIVE_BOUNDED_HOOK_COMMAND)
     config = json.loads(argv[-1])
     assert config["harness"] == "cline"
     assert config["cli_args"][:2] == ["guard", "hook"]
     assert config["timeout_seconds"] < cline_hooks._TIMEOUT
-    assert f"GUARD={list(argv)!r}" in source
-    assert "[*GUARD" not in source
+    assert worker["guard"] == list(argv)
 
 
 def _config(tmp_path: Path) -> dict[str, object]:

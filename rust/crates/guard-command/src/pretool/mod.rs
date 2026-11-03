@@ -57,8 +57,22 @@ pub use contained_wrapper_plan::{
     contained_wrapper_plan, ContainedOutput, ContainedWorktreeAdd, ContainedWrapperCore,
     ContainedWrapperPlan, CONTAINED_WORKTREE_ADD_REASON, CONTAINED_WRAPPER_PLAN_UNSUPPORTED,
 };
+
+/// Whether `program <arguments>` is a matcher stage the contained sink may
+/// run: it reads only standard input and names no file, pattern file or
+/// other output.
+pub fn contained_matcher_stage(program: &str, arguments: &[String]) -> bool {
+    contained_wrapper::output_filters::matcher_stage(program, arguments)
+}
 pub(crate) mod curl_reads;
 pub use curl_reads::bound_curl_read_destinations;
+
+/// Whether this host runs Guard's contained execution sink for a read-only
+/// profile. macOS always does; a Linux host only where the bubblewrap probe
+/// answers, so a host with no usable sandbox keeps the review it had.
+pub fn workspace_sandbox_available() -> bool {
+    workspace_contained::sandbox_available()
+}
 #[cfg(unix)]
 mod contained_exact_shape;
 pub(crate) mod dd_reads;
@@ -132,6 +146,7 @@ mod git_history_reads;
 mod git_hook_files;
 pub(crate) mod git_listing_reads;
 mod git_local_writes;
+mod git_ls_remote;
 mod git_probe;
 mod git_push;
 mod git_read_after_allow;
@@ -217,6 +232,15 @@ mod tool_inventory_reads;
 mod tree_reads;
 pub(crate) mod version_probes;
 pub(crate) mod wget_reads;
+#[cfg(test)]
+#[path = "workspace_contained_effects_tests.rs"]
+mod workspace_contained_effects_tests;
+#[cfg(test)]
+#[path = "workspace_contained_git_tests.rs"]
+mod workspace_contained_git_tests;
+#[cfg(test)]
+#[path = "workspace_contained_package_tests.rs"]
+mod workspace_contained_package_tests;
 #[cfg(test)]
 #[path = "workspace_contained_runner_tests.rs"]
 mod workspace_contained_runner_tests;

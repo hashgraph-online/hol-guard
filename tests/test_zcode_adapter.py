@@ -8,14 +8,17 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.zcode import ZCodeHarnessAdapter, _merge_hook_entry
+from codex_plugin_scanner.guard.adapters.zcode import ZCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.zcode_config import (
     GUARD_MANAGED_MARKER,
     ZCODE_PRETOOL_MATCHERS,
-    is_guard_managed_hook_command,
 )
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
 from codex_plugin_scanner.guard.models import HarnessDetection
+
+
+def is_guard_managed_hook_command(command: object) -> bool:
+    return isinstance(command, str) and GUARD_MANAGED_MARKER in command
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
@@ -561,50 +564,6 @@ class TestZCodeManagedHelpers:
 
     def test_is_guard_managed_hook_command_rejects_user_command(self) -> None:
         assert not is_guard_managed_hook_command("echo user-start")
-
-    def test_hook_event_groups_reads_both_schema_generations(self) -> None:
-        from codex_plugin_scanner.guard.adapters.zcode_config import hook_event_groups
-
-        groups = hook_event_groups(
-            {
-                "enabled": True,
-                "events": {"PreToolUse": [{"matcher": "Bash", "hooks": []}]},
-                "Stop": [{"hooks": []}],
-            }
-        )
-        assert set(groups.keys()) == {"PreToolUse", "Stop"}
-        # Settings keys are never mistaken for event groups.
-        assert hook_event_groups({"enabled": True, "timeoutMs": 1000}) == {}
-        assert hook_event_groups(None) == {}
-
-    def test_merge_hook_entry_preserves_user_handlers(self) -> None:
-        handler = {"type": "command", "command": f"x # {GUARD_MANAGED_MARKER}"}
-        user_handler = {"type": "command", "command": "echo user"}
-        entries: list[object] = [{"matcher": "Bash", "hooks": [user_handler]}]
-        result = _merge_hook_entry(entries, "Bash", handler)
-        bash_entry = next(e for e in result if isinstance(e, dict) and e.get("matcher") == "Bash")
-        commands = [h["command"] for h in bash_entry["hooks"]]
-        assert "echo user" in commands
-        assert f"x # {GUARD_MANAGED_MARKER}" in commands
-
-    def test_merge_hook_entry_refreshes_existing_managed_handler(self) -> None:
-        old = {"type": "command", "command": f"old # {GUARD_MANAGED_MARKER}"}
-        new = {"type": "command", "command": f"new # {GUARD_MANAGED_MARKER}"}
-        entries: list[object] = [{"matcher": "Read", "hooks": [old]}]
-        result = _merge_hook_entry(entries, "Read", new)
-        read_entry = next(e for e in result if isinstance(e, dict) and e.get("matcher") == "Read")
-        commands = [h["command"] for h in read_entry["hooks"]]
-        assert commands == [f"new # {GUARD_MANAGED_MARKER}"]
-
-    def test_merge_hook_entry_preserves_non_dict_entries(self) -> None:
-        # Non-dict entries (defensively kept by _prune_managed_entries) must
-        # survive the merge so user data is never silently dropped on install.
-        handler = {"type": "command", "command": f"x # {GUARD_MANAGED_MARKER}"}
-        entries: list[object] = ["raw-user-string", 42, {"matcher": "Bash", "hooks": []}]
-        result = _merge_hook_entry(entries, "Bash", handler)
-        assert "raw-user-string" in result
-        assert 42 in result
-        assert any(isinstance(e, dict) and e.get("matcher") == "Bash" for e in result)
 
 
 class TestZCodeFixturesAreRedacted:

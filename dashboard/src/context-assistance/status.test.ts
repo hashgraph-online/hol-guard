@@ -23,10 +23,13 @@ const waiting = parseContextAssistanceStatus({ ...off, availability: "unavailabl
   preferences: { ...ready.preferences, enabled: true }, effective_preferences: { ...ready.effective_preferences, enabled: true },
   diagnostic: "runtime_not_verified" });
 assert.equal(contextStatusCopy(waiting).label, "Not started", "saved consent must not be presented as a failed runtime check");
-assert.match(contextStatusCopy(waiting).detail, /Click Start CIGAR/);
+assert.match(contextStatusCopy(waiting).detail, /Click Turn on CIGAR/);
 assert.equal(contextStatusCopy({ ...waiting, last_check: ready.runtime }).label, "Not started",
   "a historical check never claims that a runtime is currently Ready");
 assert.equal(contextStatusCopy({ ...waiting, diagnostic: "runtime_idle" }).label, "Paused");
+const resting = contextStatusCopy(parseContextAssistanceStatus({ ...waiting, diagnostic: "runtime_resting" }));
+assert.equal(resting.label, "Resting", "a saved opt-in without a worker is still on, never Off or Paused");
+assert.doesNotMatch(resting.detail, /turn on|token|faster|smarter/i);
 assert.equal(contextStatusCopy({ ...waiting, diagnostic: "python_version_unsupported" }).label, "Unavailable");
 assert.equal(contextStatusCopy({ ...waiting, verification_permitted: false }).label, "Unavailable");
 

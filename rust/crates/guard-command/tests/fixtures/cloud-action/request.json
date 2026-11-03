@@ -1,0 +1,24 @@
+{
+  "schema": "guard.cloud-action-evaluation.v1",
+  "request_id": "req-0001",
+  "evaluated_at": "2026-11-01T12:00:00Z",
+  "binding_set_digest": "replaced-by-the-test",
+  "principal": {
+    "workspace_id": "ws-synthetic-1",
+    "subject_id": "subject-synthetic-1",
+    "client_grant_id": "grant-synthetic-1"
+  },
+  "connection": {
+    "connection_id": "conn-synthetic-1",
+    "provider": "slack",
+    "account_digest": "1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "action": {
+    "action_id": "slack.chat.post_message",
+    "arguments": {"channel": "C0SYNTH01", "text": "hello"}
+  },
+  "target_capabilities": ["egress-pinned", "bounded-output", "resource-allowlist", "no-filesystem", "no-subprocess"],
+  "policy": {"snapshot_id": "snapshot-1", "rules": []},
+  "saved_consents": [],
+  "activation": null
+}

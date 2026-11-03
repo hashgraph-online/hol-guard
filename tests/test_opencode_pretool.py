@@ -10,7 +10,9 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import guard_cli_attestation
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.hook_python import attest_guard_hook_python
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode_pretool import (
     global_plugin_path,
@@ -792,3 +794,35 @@ def test_opencode_verification_reports_missing_plugin(tmp_path: Path) -> None:
     assert verification["pretool_plugin_installed"] is False
     assert verification["ready"] is False
     assert verification["warnings"]
+
+
+# The installed evaluator wheel ships without the native runtime, so the
+# plugin-rendering checks of the attested hook interpreter live here.
+def _hook_ctx(tmp_path: Path) -> HarnessContext:
+    return HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+
+
+def test_pretool_plugin_source_uses_parent_attested_import_roots(tmp_path: Path) -> None:
+    context = _hook_ctx(tmp_path)
+    attestation = attest_guard_hook_python(context)
+
+    source = pretool_plugin_source(context)
+
+    assert str(attestation.package_root) in source
+    assert str(attestation.cryptography_distribution_root) in source
+    assert str(attestation.identity.target_path) in source
+    assert attestation.identity.target_sha256 in source
+
+
+def test_frozen_opencode_hook_runs_signed_executable_directly(tmp_path: Path, monkeypatch) -> None:
+    executable = tmp_path / "HOL Guard"
+    executable.write_bytes(b"signed-frozen-core")
+    executable.chmod(0o755)
+    monkeypatch.setattr(guard_cli_attestation.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(guard_cli_attestation.sys, "executable", str(executable))
+
+    source = pretool_plugin_source(_hook_ctx(tmp_path))
+
+    assert "const GUARD_FROZEN = true;" in source
+    assert "args: GUARD_FROZEN ? guardArgv" in source
+    assert str(executable) in source

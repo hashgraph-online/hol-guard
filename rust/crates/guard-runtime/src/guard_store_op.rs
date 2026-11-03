@@ -54,6 +54,7 @@ use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreR
 use crate::guard_store_devices as devices;
 use crate::guard_store_evidence as evidence;
 use crate::guard_store_inventory as inventory;
+use crate::guard_store_legacy_probe as legacy_probe;
 use crate::guard_store_local_cli as local_cli;
 use crate::guard_store_local_cli_catalog as local_cli_catalog;
 use crate::guard_store_local_cli_grants as local_cli_grants;
@@ -417,7 +418,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "find_artifact_inventory_item"
         | "get_artifact_capability"
         | "list_receipts"
-        | "observed_mcp_history"
+        | "observed_mcp_discovery"
         | "list_receipts_since_rowid"
         | "latest_receipt_rowid"
         | "get_receipt"
@@ -471,6 +472,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_approval_extension_allow_hint"
         | "approval_desktop_notified_at"
         | "oldest_approval_request_created_at" => Kind::Snapshot,
+        // Admission evidence only: a deferred read that never finalizes the
+        // outbox, so it cannot wait on the write lock.
+        "read_legacy_codex_probe_receipt" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "settle_native_review_reuse"
@@ -671,7 +675,9 @@ fn dispatch(
         "read_local_mcp_provider_actions" => mcp_provider_reads::provider_actions(connection, args),
         "read_local_mcp_workflows" => mcp_workflow_reads::workflow_proposals(connection, args),
         "read_local_mcp_skills" => mcp_workflow_reads::mcp_skill_page(connection, args),
-        "observed_mcp_history" => observed_mcp::observed_mcp_history(connection, args),
+        "observed_mcp_discovery" => {
+            observed_mcp::discovery::observed_mcp_discovery(connection, args)
+        }
         "read_local_cli_grant" => local_cli_grants::read_grant(connection, args),
         "read_local_cli_command_catalog" => {
             local_cli_grants::read_command_catalog(connection, args)
@@ -777,6 +783,9 @@ fn dispatch(
         }
         "latest_receipt_rowid" => receipt_reads::latest_rowid(connection, args),
         "get_receipt" => receipt_reads::get_receipt(connection, args),
+        "read_legacy_codex_probe_receipt" => {
+            legacy_probe::read_legacy_codex_probe_receipt(connection, args)
+        }
         "get_approval_request" => {
             approval_reads::get_approval_request(connection, guard_home, args, owner)
         }

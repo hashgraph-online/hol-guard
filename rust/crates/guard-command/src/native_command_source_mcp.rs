@@ -176,7 +176,7 @@ pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
 
 /// Canonical endpoint identity for collision detection, after existing native
 /// public-HTTPS admission. Queries are not part of endpoint identity.
-fn canonical_endpoint(value: &str) -> Result<String, &'static str> {
+pub(super) fn canonical_endpoint(value: &str) -> Result<String, &'static str> {
     if !super::super::admission::valid_remote_mcp_url(value) {
         return Err("command_source_mcp_endpoint_invalid");
     }

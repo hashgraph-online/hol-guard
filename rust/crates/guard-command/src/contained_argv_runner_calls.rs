@@ -26,17 +26,18 @@ pub(crate) fn contained_runner_call(arguments: &[String]) -> bool {
 /// does.
 ///
 /// Three readings keep that narrow. Vitest's parser stops at `--`, so only
-/// the words before it name options. The first operand selects the command
-/// whatever options precede it, so a word naming a command this reading does
-/// not model leaves the call at review even with `--run` on the line. And the
-/// last watch spelling wins, so an option that turns the watch back on keeps
-/// the review wherever it stands.
+/// the words before it name options. CAC takes the command from the first
+/// operand and hands every other spelling to the default command, whose
+/// operands are test filters, so a word naming a command this reading does
+/// not model leaves the call at review wherever it stands, while a filter
+/// beside `--run` runs once the way `run` does. And the last watch spelling
+/// wins, so an option that turns the watch back on keeps the review wherever
+/// it stands.
 pub(crate) fn vitest_runs_once(arguments: &[String]) -> bool {
     let arguments = before_terminator(arguments);
     let rest = match arguments.split_first() {
         Some((verb, _)) if verb == "run" => return true,
         Some((verb, rest)) if matches!(verb.as_str(), "related" | "bench") => rest,
-        Some((verb, _)) if !verb.starts_with('-') => return false,
         _ => arguments,
     };
     !names_another_command(rest) && vitest_asked_not_to_watch(rest)
@@ -51,7 +52,9 @@ const UNMODELED_VITEST_COMMANDS: &[&str] = &["dev", "init", "list", "typecheck",
 ///
 /// Vitest takes the command from the first operand, and the reading cannot
 /// tell an operand from the value of an option it does not model, so a value
-/// spelled like one of these names keeps its call at review.
+/// spelled like one of these names keeps its call at review. That is the one
+/// screen the command needs: every other first operand is a filter the
+/// default command reads, which is the pass `run` names.
 fn names_another_command(arguments: &[String]) -> bool {
     arguments
         .iter()
@@ -66,7 +69,10 @@ fn names_another_command(arguments: &[String]) -> bool {
 /// the word as a test filter; only the `=` spelling carries a value. A bare
 /// `--watch`, a `--watch=true` and the short `-w` all turn the watch back on,
 /// and mri keeps the last spelling, so an option that turns it on anywhere on
-/// the line keeps the review.
+/// the line keeps the review. mri also reads a `--no-` prefix as the option
+/// set to false, so `--no-run` undoes a `--run` earlier on the line and leaves
+/// Vitest watching; it is read here as an option that turns the watch back
+/// on.
 fn vitest_asked_not_to_watch(arguments: &[String]) -> bool {
     let turns_watch_off = |argument: &String| {
         argument == "--run"
@@ -75,6 +81,7 @@ fn vitest_asked_not_to_watch(arguments: &[String]) -> bool {
     };
     let turns_watch_on = |argument: &String| {
         short_options_carry_watch(argument)
+            || option_name(argument) == "norun"
             || (option_name(argument) == "watch" && joined_boolean(argument) != Some(false))
     };
     arguments.iter().any(turns_watch_off) && !arguments.iter().any(turns_watch_on)
@@ -332,4 +339,86 @@ pub(crate) fn bun_test_runs_once(arguments: &[String]) -> bool {
             .iter()
             .any(|(option, takes_value)| *option == name && (*takes_value || !joined))
     })
+}
+
+/// True when a word is a Node test-runner flag that names nothing.
+///
+/// `tsx` hands its arguments to Node, so a test file run through it can carry
+/// the runner's own flags ahead of the script. These five say that this is a
+/// test run, which test to keep, and how long it may take; none of them names
+/// a module, a path or a program, so none widens what the run can reach.
+/// `--test-reporter` and `--test-reporter-destination` name a module and a
+/// file, so they stay out and keep their review.
+fn tsx_runner_flag(argument: &str) -> bool {
+    match argument.split_once('=') {
+        None => matches!(argument, "--test" | "--test-only" | "--test-force-exit"),
+        Some((name, value)) => {
+            matches!(name, "--test-concurrency" | "--test-timeout")
+                && !value.is_empty()
+                && value.len() <= 9
+                && value.bytes().all(|byte| byte.is_ascii_digit())
+        }
+    }
+}
+
+/// How many of those flags a tsx call carries ahead of its test script.
+///
+/// The count is the split point: Node reads these before the script it runs,
+/// so both the admission and the sink have to look past them to find the
+/// script, and the sink has to put them back in front of it.
+pub(crate) fn tsx_runner_flag_count(arguments: &[String]) -> usize {
+    arguments
+        .iter()
+        .take_while(|argument| tsx_runner_flag(argument))
+        .count()
+}
+
+/// Whether those flags put Node in test-runner mode.
+///
+/// There Node reads every remaining word as a test file it runs, not as the
+/// first script's own arguments, so a trailing word is another file to load.
+pub(crate) fn tsx_runner_test_mode(flags: &[String]) -> bool {
+    flags.iter().any(|flag| flag.starts_with("--test"))
+}
+
+/// A test-named file the workspace holds: `math.test.ts`, `api.spec.mjs` or
+/// `src/test_calc.js`. The path stays inside the tree it was admitted for and
+/// the leaf is one of the names a project gives a test file, so neither an
+/// option, an expansion nor a program outside the workspace is read as one.
+pub(crate) fn workspace_test_script(script: &str) -> bool {
+    if script.is_empty()
+        || script.starts_with(['-', '/', '~', '$'])
+        || script.contains(['\\', '$', '`'])
+        || script
+            .trim_end_matches('/')
+            .split('/')
+            .any(|part| part.is_empty() || part == "..")
+    {
+        return false;
+    }
+    let name = script.rsplit('/').next().unwrap_or(script);
+    let Some((stem, extension)) = name.rsplit_once('.') else {
+        return false;
+    };
+    matches!(
+        extension,
+        "js" | "mjs" | "cjs" | "jsx" | "ts" | "mts" | "cts" | "tsx"
+    ) && stem
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+        && (stem.ends_with(".test")
+            || stem.ends_with(".spec")
+            || stem.starts_with("test_")
+            || stem.ends_with("_test")
+            || matches!(stem, "test" | "tests"))
+}
+
+/// True when a `bun` call runs one of the workspace's own test files.
+///
+/// Bun runs the named file as a script rather than through its test runner,
+/// so the pass is the one `bun test` takes over that file. One file and
+/// nothing else: an option would name something this reading does not model,
+/// and a second operand is an argument the file reads rather than a test.
+pub(crate) fn bun_test_script_once(arguments: &[String]) -> bool {
+    matches!(arguments, [script] if workspace_test_script(script))
 }

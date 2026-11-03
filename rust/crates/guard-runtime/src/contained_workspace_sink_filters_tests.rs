@@ -94,6 +94,25 @@ fn a_matcher_reads_the_captured_text() {
 }
 
 #[test]
+fn a_cut_stage_reshapes_the_captured_text() {
+    if trusted_cut().is_none() {
+        return;
+    }
+    let (kept, diagnostics, status) =
+        apply(b"a:1\nb:2\n", &[stage(&["cut", "-d", ":", "-f1"])]).unwrap();
+    assert_eq!(
+        (kept.as_slice(), diagnostics.is_empty(), status),
+        (&b"a\nb\n"[..], true, 0)
+    );
+    let (kept, _, status) = apply(
+        b"error TS2345: long\nerror TS1005: short\n",
+        &[stage(&["cut", "-c1-5"]), stage(&["head", "1"])],
+    )
+    .unwrap();
+    assert_eq!((kept.as_slice(), status), (&b"error\n"[..], 0));
+}
+
+#[test]
 fn a_missing_ripgrep_exits_as_a_missing_program() {
     if trusted_ripgrep().is_some() {
         return;
@@ -102,4 +121,60 @@ fn a_missing_ripgrep_exits_as_a_missing_program() {
     assert!(kept.is_empty());
     assert_eq!(diagnostics, b"hol-guard: rg: not found\n");
     assert_eq!(status, 127);
+}
+
+#[test]
+fn a_ripgrep_others_could_rewrite_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().expect("tempdir");
+    let planted = directory.path().join("rg");
+    std::fs::write(&planted, "#!/bin/sh\n").expect("plant");
+    std::fs::set_permissions(&planted, std::fs::Permissions::from_mode(0o777)).expect("chmod");
+    assert_eq!(trusted_ripgrep_in(&[directory.path()]), None);
+}
+
+#[test]
+fn a_ripgrep_that_cannot_run_leaves_the_search_to_the_next_directory() {
+    use std::os::unix::fs::PermissionsExt;
+    let first = tempfile::tempdir().expect("tempdir");
+    std::fs::write(first.path().join("rg"), "not the install\n").expect("plant");
+    let second = tempfile::tempdir().expect("tempdir");
+    let installed = second.path().join("rg");
+    std::fs::write(&installed, "#!/bin/sh\ncat\n").expect("install");
+    std::fs::set_permissions(&installed, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    assert_eq!(
+        trusted_ripgrep_in(&[first.path(), second.path()]),
+        Some(std::fs::canonicalize(&installed).expect("canonical"))
+    );
+}
+
+#[test]
+fn a_grep_root_does_not_own_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    if getuid().is_root() {
+        return;
+    }
+    let directory = tempfile::tempdir().expect("tempdir");
+    let planted = directory.path().join("grep");
+    std::fs::write(&planted, "#!/bin/sh\n").expect("plant");
+    std::fs::set_permissions(&planted, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let missing = directory.path().join("missing");
+    assert_eq!(
+        trusted_system_binary(&[planted.as_path(), missing.as_path()]),
+        None
+    );
+}
+
+#[test]
+fn a_matcher_past_its_output_budget_fails() {
+    if trusted_grep().is_none() {
+        return;
+    }
+    let text = b"a\n".repeat(64 * 1024);
+    let arguments = stage(&["-n", "a"]);
+    let (stdout, _, status) =
+        matched_within(&text, "grep", &arguments, 1024 * 1024).expect("within budget");
+    assert_eq!(status, 0);
+    assert!(stdout.len() > text.len());
+    assert!(matched_within(&text, "grep", &arguments, text.len() as u64).is_err());
 }

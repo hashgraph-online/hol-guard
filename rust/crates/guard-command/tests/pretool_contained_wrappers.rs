@@ -4,7 +4,7 @@ use guard_command::contained_execution::read_verified_output;
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use serde_json::json;
 
-fn fixture() -> std::path::PathBuf {
+pub(crate) fn fixture() -> std::path::PathBuf {
     let nonce = crate::unique_nanos::unique_nanos();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/contained-wrapper-fixtures")
@@ -16,7 +16,7 @@ fn fixture() -> std::path::PathBuf {
 }
 
 /// The script bodies the narrow node sinks run, and their local entrypoints.
-fn package(directory: &std::path::Path) {
+pub(crate) fn package(directory: &std::path::Path) {
     let scripts =
         r#"{"scripts":{"build":"vite build","test":"node --test","typecheck":"tsc --noEmit"}}"#;
     std::fs::write(directory.join("package.json"), scripts).unwrap();
@@ -27,7 +27,7 @@ fn package(directory: &std::path::Path) {
     }
 }
 
-fn classify(
+pub(crate) fn classify(
     root: &std::path::Path,
     harness: &str,
     command: &str,

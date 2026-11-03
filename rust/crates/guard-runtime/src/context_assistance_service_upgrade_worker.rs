@@ -372,8 +372,9 @@ pub(super) fn run(
                 .as_ref()
                 .is_some_and(|a| Arc::ptr_eq(a, &source.actor) && !a.is_active())
             {
+                let closed = super::super::wake::closed(&state);
                 revoke_runtime(&mut state);
-                state.error = Some("runtime_closed".into());
+                state.error = Some(closed.into());
             }
             if state
                 .upgrade
