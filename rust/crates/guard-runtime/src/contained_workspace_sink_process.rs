@@ -22,9 +22,9 @@ use std::time::Duration;
 use nix::sys::signal::{kill, killpg, SigSet, Signal};
 use nix::unistd::Pid;
 
-use super::denial::{denial_note, loopback_denied};
 use super::output::Shaping;
 use super::{envelope, Failure, Outcome, LAUNCH_COMMAND, SANDBOX_UNAVAILABLE};
+use crate::contained_workspace_sink_denial::{denial_note, loopback_denied};
 
 const CEILING_BUDGET: Duration = Duration::from_secs(5);
 /// The launcher's `CEILING` for a host step, which runs without limits.
