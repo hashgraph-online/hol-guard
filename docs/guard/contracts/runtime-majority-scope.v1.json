@@ -792,6 +792,7 @@
           "src/codex_plugin_scanner/guard/adapters/devin.py",
           "src/codex_plugin_scanner/guard/adapters/devin_config.py",
           "src/codex_plugin_scanner/guard/adapters/gemini.py",
+          "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py",
           "src/codex_plugin_scanner/guard/adapters/hermes.py",
           "src/codex_plugin_scanner/guard/adapters/hermes_state_paths.py",
           "src/codex_plugin_scanner/guard/adapters/kimi.py",
@@ -1388,7 +1389,7 @@
           "CopilotHarnessAdapter._state_entries"
         ],
         "entry_points": [],
-        "reason": "Copilot adapter install, uninstall and rendering of the managed config, plus the helpers only they use.",
+        "reason": "Copilot adapter install, uninstall and rendering of the managed config (file I/O, backups, shim, MCP proxies), plus the helpers only they use; which hook entries are Guard's, the bash and PowerShell spellings of Guard's hook command and the workspace hook file normalization are decided by the native copilot_hook_config runner-authority kind.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
@@ -1424,8 +1425,7 @@
           "DevinHarnessAdapter.prepare_install",
           "DevinHarnessAdapter.install",
           "DevinHarnessAdapter.uninstall",
-          "DevinHarnessAdapter._hook_command_parts",
-          "DevinHarnessAdapter._sync_managed_hook_groups"
+          "DevinHarnessAdapter._hook_command_parts"
         ],
         "entry_points": [],
         "reason": "Devin adapter hook install and uninstall and the hook command builder used only to write the install.",
@@ -1456,13 +1456,12 @@
           "MuseHarnessAdapter.uninstall",
           "MuseHarnessAdapter._hook_command_parts",
           "MuseHarnessAdapter._managed_state_paths",
-          "MuseHarnessAdapter._sync_managed_hook_groups",
           "_adapter_result",
           "_write_json_atomic"
         ],
         "entry_points": [],
-        "reason": "Muse adapter hook install and uninstall, the managed hook group writer they share, and the settings helpers used only to write or remove that install.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_command_parts, _managed_state_paths, _sync_managed_hook_groups, _adapter_result and _write_json_atomic are called only from those three methods. _bridge_timeout_seconds and the approval wait it reads stay in scope: the bounded hook refresh recomputes that timeout on every update. detect and policy_path stay in scope with the helpers they call. The report validates that no retained symbol or in-scope module references the excluded names."
+        "reason": "Muse adapter hook install and uninstall and the settings helpers used only to write or remove that install.",
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_command_parts, _managed_state_paths, _adapter_result and _write_json_atomic are called only from those three methods. _bridge_timeout_seconds and the approval wait it reads stay in scope: the bounded hook refresh recomputes that timeout on every update. detect and policy_path stay in scope with the helpers they call. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "approval-continuation-replay",
@@ -1873,17 +1872,14 @@
         "symbols": [
           "install_cline_hooks",
           "_bounded_hook_argv",
-          "_slot_for_event",
+          "_render_hook_files",
+          "_claim_slot",
           "_worker_path",
-          "_worker_config",
-          "_write",
-          "_posix_wrapper",
-          "_ps_quote",
-          "_powershell_wrapper"
+          "_write"
         ],
         "entry_points": [],
-        "reason": "Cline native-hook install: worker configuration and launcher file writes plus the POSIX and PowerShell launcher templates.",
-        "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. The hook worker itself runs in the native runtime (cline-hook-worker); _worker_config only writes its configuration at install."
+        "reason": "Cline native-hook install: the worker configuration and launcher file writes. The native cline_hook_files kind renders both files and their digests.",
+        "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. The hook worker itself runs in the native runtime (cline-hook-worker); install only writes the configuration and launchers the native cline_hook_files kind renders."
       },
       {
         "id": "adapter-cline-plugin-setup",

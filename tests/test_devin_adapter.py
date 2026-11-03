@@ -11,16 +11,20 @@ import pytest
 from codex_plugin_scanner.guard.adapters import devin_config, get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.devin import DevinHarnessAdapter
-from codex_plugin_scanner.guard.adapters.devin_config import (
-    DEVIN_GUARD_TOOL_MATCHER,
-    GUARD_MANAGED_MARKER,
-    is_guard_managed_hook_command,
-    load_devin_jsonc,
-)
+from codex_plugin_scanner.guard.adapters.devin_config import load_devin_jsonc
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
-from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
 FIXTURES = Path(__file__).parent / "fixtures" / "devin"
+GUARD_MANAGED_MARKER = "HOL_GUARD_MANAGED_DEVIN"
+DEVIN_GUARD_TOOL_MATCHER = (
+    "^(exec|read|write|edit|apply_patch|notebook_read|notebook_edit|grep|glob|webfetch|mcp_call_tool|mcp__.*)$"
+)
+
+
+def is_guard_managed_hook_command(command: object) -> bool:
+    request = {"op": "managed", "harness": "devin", "commands": [command]}
+    return native_runner_authority("harness_hook_settings", request) == {"managed": [True]}
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:

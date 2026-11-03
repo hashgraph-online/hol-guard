@@ -21,10 +21,12 @@ use super::antigravity_detect;
 use super::claude_code_detect;
 use super::claude_hook_config;
 use super::cline_detect;
+use super::cline_hook_files;
 use super::cline_plugin_render;
 use super::codex_detect;
 use super::context_digest_json::write_canonical_json_with_limit;
 use super::copilot_detect;
+use super::copilot_hook_config;
 use super::cursor_detect;
 use super::cursor_hook_config;
 use super::devin_detect;
@@ -32,6 +34,7 @@ use super::devin_jsonc;
 use super::gemini_detect;
 use super::grok_detect;
 use super::grok_user_config_op;
+use super::harness_hook_settings;
 use super::hermes_detect;
 use super::kimi_detect;
 use super::muse_detect;
@@ -164,9 +167,11 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "hermes_detect" => hermes_detect::detect(args),
         "pi_detect" => pi_detect::detect(args),
         "cline_plugin_render" => cline_plugin_render::render(args),
+        "cline_hook_files" => cline_hook_files::dispatch(args),
         "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
         "copilot_detect" => copilot_detect::detect(args),
+        "copilot_hook_config" => copilot_hook_config::dispatch(args),
         "claude_code_detect" => claude_code_detect::detect(args),
         "claude_hook_config" => claude_hook_config::dispatch(args),
         "cline_detect" => cline_detect::detect(args),
@@ -174,6 +179,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "antigravity_detect" => antigravity_detect::detect(args),
         "devin_detect" => devin_detect::detect(args),
         "devin_jsonc" => devin_jsonc::document(args),
+        "harness_hook_settings" => harness_hook_settings::dispatch(args),
         "grok_detect" => grok_detect::detect(args),
         "grok_user_config" => grok_user_config_op::dispatch(args),
         "kimi_detect" => kimi_detect::detect(args),

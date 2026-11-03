@@ -39,11 +39,10 @@ from .base import (
     detection_request,
 )
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
-from .hook_group_merge import merge_hook_entry, prune_managed_hook_entries
-from .muse_config import MUSE_GUARD_EVENTS, MUSE_SETTINGS_FILE, is_guard_managed_hook_command
+from .harness_hook_settings import HookSettingsRefusedError, plan_guard_hooks, prune_guard_hooks
+from .muse_config import MUSE_SETTINGS_FILE
 
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
-_MUSE_MANAGED_HOOK_TIMEOUT_SECONDS = 30
 _MUSE_MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 
 if TYPE_CHECKING:
@@ -225,16 +224,17 @@ class MuseHarnessAdapter(HarnessAdapter):
             if not isinstance(parsed, dict):
                 raise ValueError("Muse settings must be a JSON object before installation.")
             payload = parsed
-            existing_hooks = payload.get("hooks")
-            if existing_hooks is not None and not isinstance(existing_hooks, dict):
-                raise ValueError("Muse settings have a non-object hooks value; Guard will not rewrite it.")
-            if isinstance(existing_hooks, dict):
-                for event_name, entries in existing_hooks.items():
-                    if entries is not None and not isinstance(entries, list):
-                        raise ValueError(
-                            f"Muse settings have a non-list hooks.{event_name} value; Guard will not rewrite it. "
-                            "Fix the file, then rerun hol-guard install muse."
-                        )
+        try:
+            # Every managed timeout stays above the bridge's own deadline so Muse
+            # waits for Guard's answer instead of killing the bridge mid-review.
+            hooks_plan = plan_guard_hooks("muse", payload.get("hooks"), self._bridge_timeout_seconds(context))
+        except HookSettingsRefusedError as refusal:
+            if refusal.event is None:
+                raise ValueError("Muse settings have a non-object hooks value; Guard will not rewrite it.") from refusal
+            raise ValueError(
+                f"Muse settings have a non-list hooks.{refusal.event} value; Guard will not rewrite it. "
+                "Fix the file, then rerun hol-guard install muse."
+            ) from refusal
         prepared_shim = prepare_guard_shim(
             self.harness,
             context,
@@ -250,11 +250,8 @@ class MuseHarnessAdapter(HarnessAdapter):
         # Muse refuses a settings file without schema_version; a file
         # Guard creates (or repairs) must carry it.
         payload.setdefault("schema_version", 1)
-        hooks_value = payload.get("hooks")
-        hooks: dict[str, object] = hooks_value if isinstance(hooks_value, dict) else {}
-        payload["hooks"] = hooks
-
-        self._sync_managed_hook_groups(context, hooks, hook_command)
+        # No matcher is set: Muse reads an omitted matcher as every tool.
+        payload["hooks"] = hooks_plan.apply(hook_command)
         settings_mode = settings_path.stat().st_mode & 0o777 if settings_before is not None else 0o600
         backup_mode = backup_path.stat().st_mode & 0o777 if backup_before is not None else settings_mode
         state_mode = state_path.stat().st_mode & 0o777 if state_before is not None else 0o600
@@ -303,13 +300,8 @@ class MuseHarnessAdapter(HarnessAdapter):
         return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = remove_guard_shim(
-            self.harness,
-            context,
-            launcher_name=self.launcher_name,
-            display_name="muse",
-        )
         settings_path = self._user_settings_path(context)
+        payload_to_write: dict[str, object] | None = None
         settings_unreadable = False
         if settings_path.is_file():
             _ensure_path_within_root(self._muse_config_dir(context).parent, settings_path, label="Muse")
@@ -321,23 +313,23 @@ class MuseHarnessAdapter(HarnessAdapter):
             if isinstance(payload, dict):
                 hooks = payload.get("hooks")
                 if isinstance(hooks, dict):
-                    for event_name in list(hooks):
-                        entries = hooks.get(event_name)
-                        if not isinstance(entries, list):
-                            continue
-                        remaining = prune_managed_hook_entries(
-                            entries,
-                            is_managed=is_guard_managed_hook_command,
-                        )
-                        if remaining:
-                            hooks[event_name] = remaining
-                        else:
-                            hooks.pop(event_name, None)
-                    if not hooks:
-                        payload.pop("hooks", None)
+                    remaining = prune_guard_hooks("muse", hooks)
+                    if remaining:
+                        payload["hooks"] = remaining
                     else:
-                        payload["hooks"] = hooks
-                    _write_json_atomic(settings_path, payload)
+                        payload.pop("hooks", None)
+                    payload_to_write = payload
+
+        # The prune asks the native runtime first, so a refusal leaves the
+        # launcher, the settings and the install state as they were.
+        shim_manifest = remove_guard_shim(
+            self.harness,
+            context,
+            launcher_name=self.launcher_name,
+            display_name="muse",
+        )
+        if payload_to_write is not None:
+            _write_json_atomic(settings_path, payload_to_write)
 
         _state_dir, _backup_path, state_path = self._managed_state_paths(context)
         if state_path.is_file():
@@ -358,66 +350,5 @@ class MuseHarnessAdapter(HarnessAdapter):
             notes=hook_notes,
         )
 
-    def _sync_managed_hook_groups(
-        self,
-        context: HarnessContext,
-        hooks: dict[str, object],
-        managed_command: str,
-    ) -> None:
-        """Reconcile Guard-managed hook groups inside ``hooks``.
 
-        User entries are preserved; stale Guard-managed handlers are pruned
-        before the current managed handler is merged back in so repeated
-        installs stay idempotent. No matcher is set: Muse reads an omitted
-        matcher as every tool, so shell, file, search, web, and MCP calls
-        all reach Guard.
-        """
-
-        for event_name in list(hooks):
-            entries = hooks.get(event_name)
-            if not isinstance(entries, list):
-                continue
-            remaining = prune_managed_hook_entries(
-                entries,
-                is_managed=is_guard_managed_hook_command,
-            )
-            if remaining:
-                hooks[event_name] = remaining
-            else:
-                hooks.pop(event_name, None)
-
-        # Every managed timeout stays above the bridge's own deadline so Muse
-        # waits for Guard's answer instead of killing the bridge mid-review.
-        bridge_timeout = self._bridge_timeout_seconds(context)
-        long_timeout = bridge_timeout + _MUSE_MANAGED_HOOK_TIMEOUT_GRACE_SECONDS
-        # Events that never wait for an approval only have to outlast the
-        # client's own floor.
-        short_timeout = max(
-            _MUSE_MANAGED_HOOK_TIMEOUT_SECONDS,
-            _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS + _MUSE_MANAGED_HOOK_TIMEOUT_GRACE_SECONDS,
-        )
-        managed_groups: list[tuple[str, int]] = [
-            ("PreToolUse", long_timeout),
-            ("PermissionRequest", short_timeout),
-            ("UserPromptSubmit", short_timeout),
-            ("PostToolUse", long_timeout),
-            ("SessionStart", short_timeout),
-            ("Stop", short_timeout),
-        ]
-        for event_name, timeout in managed_groups:
-            handler: dict[str, object] = {
-                "type": "command",
-                "command": managed_command,
-                "timeout": timeout,
-                "statusMessage": "HOL Guard is checking this action",
-            }
-            entries = hooks.get(event_name)
-            hooks[event_name] = merge_hook_entry(
-                entries if isinstance(entries, list) else [],
-                None,
-                handler,
-                is_managed=is_guard_managed_hook_command,
-            )
-
-
-__all__ = ["MUSE_GUARD_EVENTS", "MuseHarnessAdapter"]
+__all__ = ["MuseHarnessAdapter"]

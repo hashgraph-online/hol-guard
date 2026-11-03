@@ -142,6 +142,11 @@ mod cline_detect;
 #[cfg(all(test, unix))]
 #[path = "adapters/detection/cline_detect_tests.rs"]
 mod cline_detect_tests;
+#[path = "adapters/cline_hook_files.rs"]
+mod cline_hook_files;
+#[cfg(test)]
+#[path = "adapters/cline_hook_files_tests.rs"]
+mod cline_hook_files_tests;
 mod cline_hook_worker;
 #[path = "adapters/cline_plugin_render.rs"]
 mod cline_plugin_render;
@@ -263,6 +268,11 @@ mod contributed_mcp_decision_op;
 #[path = "adapters/detection/copilot_detect.rs"]
 mod copilot_detect;
 mod copilot_hook_commands;
+#[path = "adapters/copilot_hook_config.rs"]
+mod copilot_hook_config;
+#[cfg(test)]
+#[path = "adapters/copilot_hook_config_tests.rs"]
+mod copilot_hook_config_tests;
 #[cfg(all(test, unix))]
 mod copilot_vectors_tests;
 mod critical_floor_op;
@@ -556,6 +566,11 @@ mod guard_store_write_cache;
 mod hardening;
 mod harness_coverage;
 mod harness_coverage_command;
+#[path = "adapters/harness_hook_settings.rs"]
+mod harness_hook_settings;
+#[cfg(test)]
+#[path = "adapters/harness_hook_settings_tests.rs"]
+mod harness_hook_settings_tests;
 mod harness_version_compat;
 mod health_lease_contract;
 mod health_lease_state;

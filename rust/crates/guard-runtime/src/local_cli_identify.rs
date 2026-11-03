@@ -590,7 +590,7 @@ fn python_suffix(path: &str) -> String {
 }
 
 /// `shlex.quote`.
-fn shlex_quote(value: &str) -> String {
+pub(crate) fn shlex_quote(value: &str) -> String {
     if value.is_empty() {
         return "''".to_owned();
     }

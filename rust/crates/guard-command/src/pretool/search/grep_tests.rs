@@ -71,6 +71,10 @@ fn a_missing_operand_is_not_proven_beside_a_step_that_could_create_it() {
             format!("cat {r}/src/index.ts && grep -n x {r}/cfg/app.json"),
             true,
         ),
+        // The recursive walk asks the same question of the same peer, so it
+        // takes the same answer. It read `cat` as a step that might put the
+        // missing root there while the search beside it did not.
+        (format!("cat {r}/src/index.ts && grep -rn x {r}/cfg"), true),
         (
             format!("ln -s {r}/src {r}/cfg && grep -rn . {r}/cfg/"),
             false,
@@ -82,7 +86,6 @@ fn a_missing_operand_is_not_proven_beside_a_step_that_could_create_it() {
         (format!("mkdir -p {r}/cfg && grep -rn x {r}/cfg"), false),
         (format!("touch {r}/cfg && grep -n x {r}/cfg"), false),
         (format!("echo x > {r}/cfg; grep -n x {r}/cfg"), false),
-        (format!("cat {r}/src/index.ts && grep -rn x {r}/cfg"), false),
         (format!("grep -rln x {r}/cfg"), true),
         (format!("mkdir -p {r}/cfg; grep -rln x {r}/cfg"), false),
         (format!("grep -rln x {r}/cfg; mkdir -p {r}/cfg"), false),
