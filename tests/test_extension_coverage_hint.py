@@ -306,6 +306,30 @@ def test_the_shape_check_keeps_its_own_deadline_once_the_resident_is_warm(
     assert started < deadlines[0] <= time.monotonic() + module._SHAPE_BUDGET_SECONDS
 
 
+def test_a_caller_deadline_only_shortens_the_warm_shape_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard.runtime import extension_coverage_hint as module
+
+    deadlines: list[float | None] = []
+
+    def fake(
+        kind: str, args: object, *_: object, deadline_monotonic: float | None = None, **__: object
+    ) -> dict[str, Any]:
+        deadlines.append(deadline_monotonic)
+        return {}
+
+    monkeypatch.setattr(authority, "native_runner_authority", fake)
+    monkeypatch.setattr(module, "_resident_warm", lambda: True)
+    started = time.monotonic()
+    late = started + 60.0
+    early = started + 1.0
+    assert module.shaped_hint({"late-deadline": started}, "coverage", deadline_monotonic=late) is None
+    assert module.shaped_hint({"early-deadline": started}, "coverage", deadline_monotonic=early) is None
+    assert deadlines[0] is not None
+    assert deadlines[0] <= time.monotonic() + module._SHAPE_BUDGET_SECONDS
+    assert deadlines[1] == early
+
+
 def test_strict_checks_raise_a_refusal_instead_of_reading_it_as_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import native_runner_authority as authority
     from codex_plugin_scanner.guard.runtime import extension_coverage_hint as module

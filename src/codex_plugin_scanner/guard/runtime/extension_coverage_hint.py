@@ -57,8 +57,12 @@ def _shape_answer(canonical: str, deadline_monotonic: float | None) -> str:
         return cached
     from ..native_runner_authority import native_runner_authority
 
-    if deadline_monotonic is None and _resident_warm():
-        deadline_monotonic = time.monotonic() + _SHAPE_BUDGET_SECONDS
+    # A caller's deadline can only shorten the warm-resident budget: a later
+    # one would let the runner's own cap end the call and count against the
+    # shared circuit.
+    if _resident_warm():
+        own = time.monotonic() + _SHAPE_BUDGET_SECONDS
+        deadline_monotonic = own if deadline_monotonic is None else min(deadline_monotonic, own)
     answer = json.dumps(
         native_runner_authority(_KIND, {"hint": json.loads(canonical)}, deadline_monotonic=deadline_monotonic)
     )
