@@ -1858,10 +1858,11 @@
           "ClineHarnessAdapter.install",
           "ClineHarnessAdapter.uninstall",
           "ClineHarnessAdapter._install_transport",
-          "ClineHarnessAdapter._reconcile_transport"
+          "ClineHarnessAdapter._reconcile_transport",
+          "_install_plan"
         ],
         "entry_points": [],
-        "reason": "Cline adapter install and uninstall, including transport selection and inactive-transport cleanup used only by them.",
+        "reason": "Cline adapter install and uninstall and the native request helper used only by install; transport selection, inactive-transport cleanup, coverage and blind spots are decided by the native cline_install_plan runner-authority kind, and Python keeps the transport installs, probes and file I/O.",
         "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. Install-only imports live inside these methods so the retained module imports only state and detection helpers."
       },
       {
