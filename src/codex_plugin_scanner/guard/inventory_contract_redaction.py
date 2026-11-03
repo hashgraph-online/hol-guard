@@ -254,8 +254,9 @@ def _payload_parts(value: object) -> Iterator[str]:
     and needs nothing past its closing quote: the text between strings holds
     only brackets, separators, numbers and literals, none of which a pattern
     can start in or run through. An oversized container is therefore checked
-    as runs of its members, each key alone, and each part finds exactly the
-    matches the whole text holds.
+    as runs of its members, each key alone as the string JSON writes for it,
+    and each part finds exactly the matches the whole text holds. A string
+    over the budget goes alone, so the split always makes progress.
     """
     text = _json_text(value)
     if len(text) <= _NATIVE_VALUE_BUDGET or not isinstance(value, (dict, list, tuple)):
@@ -264,7 +265,8 @@ def _payload_parts(value: object) -> Iterator[str]:
     members: list[object] = []
     if isinstance(value, dict):
         for key, item in value.items():
-            members.extend(({key: None}, item))
+            (key_text,) = json.loads(_json_text({key: None}))
+            members.extend((key_text, item))
     else:
         members.extend(value)
     batch: list[object] = []

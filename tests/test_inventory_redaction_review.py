@@ -164,3 +164,19 @@ def test_an_oversized_payload_is_checked_in_parts_that_keep_every_match(monkeypa
         tainted["items"][37]["notes"].append(unsafe)
         with pytest.raises(ValueError, match="unsafe payload"):
             redaction._assert_serialized_inventory_payload_safe(tainted)
+
+
+def test_an_oversized_key_is_checked_alone(monkeypatch) -> None:
+    from codex_plugin_scanner.guard import inventory_contract_redaction as redaction
+
+    monkeypatch.setattr(redaction, "_NATIVE_VALUE_BUDGET", 256)
+    long_key = "k" * 600
+    payload = {"meta": {long_key: 1, 2: None, True: "plain"}}
+    parts = list(redaction._payload_parts(payload))
+    assert json.dumps(long_key) in parts
+    assert '"2"' in "".join(parts)
+    redaction._assert_serialized_inventory_payload_safe(payload)
+
+    tainted = {"meta": {long_key + " /Users/someone/x": 1}}
+    with pytest.raises(ValueError, match="unsafe payload"):
+        redaction._assert_serialized_inventory_payload_safe(tainted)
