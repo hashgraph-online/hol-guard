@@ -277,23 +277,33 @@
               "default_mode": "review",
               "safe_variants": [],
               "matcher": {
-                "op": "any.v1",
-                "config": {},
-                "matchers": [
-                  {
-                    "op": "arguments.v1",
-                    "config": {
-                      "executables": [
-                        "mcp-cross-exam",
-                        "mcp-cross-exam.cmd",
-                        "mcp-cross-exam.exe"
-                      ],
-                      "required_arguments": [
-                        "--"
-                      ]
-                    }
-                  }
-                ]
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                    "mcp-cross-exam",
+                    "mcp-cross-exam.cmd",
+                    "mcp-cross-exam.exe"
+                  ],
+                  "fail_secure_unknown_options": false,
+                  "forbidden_flags": [
+                    "--help",
+                    "--version"
+                  ],
+                  "interspersed_flags": [],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [],
+                  "options_with_values": [],
+                  "paths": [
+                    [
+                      "--"
+                    ]
+                  ],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": []
+                }
               }
             },
             {
@@ -785,6 +795,21 @@
         0
       ],
       "rule_id": "command.cross-exam.network"
+    },
+    {
+      "id": "stdio-permission-disabled",
+      "command": "mcp-cross-exam -- python server.py",
+      "enabled_extensions": [
+        "command.cross-exam"
+      ],
+      "disabled_permissions": [
+        "command.cross-exam.permission.stdio"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.cross-exam.stdio"
     }
   ]
 }
