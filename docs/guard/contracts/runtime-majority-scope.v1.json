@@ -1550,7 +1550,7 @@
           "OpenCodeHarnessAdapter._backup_path_from_state"
         ],
         "entry_points": [],
-        "reason": "OpenCode adapter install and uninstall and the backup path helpers used only by them.",
+        "reason": "OpenCode adapter install and uninstall and the backup path helpers used only by them; which servers Guard manages, the root config's permission and mcp values and the runtime overlay are decided by the native opencode_install_plan runner-authority kind, and Python keeps the source config read, Guard's proxy argv and file I/O.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {

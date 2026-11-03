@@ -52,7 +52,7 @@ fn string_args(server: &HookVal) -> Option<Vec<String>> {
 }
 
 /// `_GUARD_PROXY_COMMANDS`: every proxy subcommand a Guard adapter installs.
-const PROXY_COMMANDS: [&str; 7] = [
+pub(crate) const PROXY_COMMANDS: [&str; 7] = [
     "cline-mcp-proxy",
     "codex-mcp-proxy",
     "opencode-mcp-proxy",
@@ -64,7 +64,7 @@ const PROXY_COMMANDS: [&str; 7] = [
 
 /// `_hol_guard_command_name`: the final path component, lowered, without one
 /// launcher suffix.
-fn is_guard_launcher(command: &str) -> bool {
+pub(crate) fn is_guard_launcher(command: &str) -> bool {
     let normalized = command.replace('\\', "/");
     let name = normalized
         .split('/')
