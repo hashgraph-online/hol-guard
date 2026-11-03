@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from functools import lru_cache
 from typing import cast
 
 EXTENSION_COVERAGE_HINT_SCHEMA = "guard.extension-coverage-hint.v1"
@@ -32,19 +31,33 @@ MAX_SEGMENT_TOTAL = 256
 _KIND = "extension_hint_shape"
 
 
-@lru_cache(maxsize=256)
-def _shape_answer(canonical: str) -> str:
+# Checked answers by canonical hint text. A queue listing reads each row's
+# hint, so repeats cost nothing; the bound only stops the map growing.
+_SHAPES: dict[str, str] = {}
+_MAX_SHAPES = 256
+
+
+def _shape_answer(canonical: str, deadline_monotonic: float | None) -> str:
+    cached = _SHAPES.get(canonical)
+    if cached is not None:
+        return cached
     from ..native_runner_authority import native_runner_authority
 
-    return json.dumps(native_runner_authority(_KIND, {"hint": json.loads(canonical)}))
+    answer = json.dumps(
+        native_runner_authority(_KIND, {"hint": json.loads(canonical)}, deadline_monotonic=deadline_monotonic)
+    )
+    if len(_SHAPES) >= _MAX_SHAPES:
+        _SHAPES.clear()
+    _SHAPES[canonical] = answer
+    return answer
 
 
-def shaped_hint(value: object, key: str) -> dict[str, object] | None:
+def shaped_hint(value: object, key: str, *, deadline_monotonic: float | None = None) -> dict[str, object] | None:
     """The runtime's checked copy of one kind of stored hint, or None.
 
     ``key`` is ``allow``, ``coverage`` or ``connector``. A hint only ever offers
     a choice, so a value the runtime cannot check is dropped like a bad one.
-    Repeated values (a queue listing reads each row's hint) cost one call.
+    ``deadline_monotonic`` keeps the check inside a caller's own budget.
     """
 
     if not isinstance(value, Mapping):
@@ -53,21 +66,23 @@ def shaped_hint(value: object, key: str) -> dict[str, object] | None:
 
     try:
         canonical = json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False)
-        answer = json.loads(_shape_answer(canonical))
+        answer = json.loads(_shape_answer(canonical, deadline_monotonic))
     except (NativeRunnerAuthorityError, TypeError, ValueError):
         return None
     shaped = answer.get(key) if isinstance(answer, dict) else None
     return cast("dict[str, object]", shaped) if isinstance(shaped, dict) else None
 
 
-def validated_extension_coverage_hint(value: object) -> dict[str, object] | None:
+def validated_extension_coverage_hint(
+    value: object, *, deadline_monotonic: float | None = None
+) -> dict[str, object] | None:
     """Return a shape-checked copy of a stored coverage hint, or None.
 
     Accepts both carriers: a standalone coverage hint, and the ``coverage`` key
     an allow hint carries when the command also earned a settling recommendation.
     """
 
-    return shaped_hint(value, "coverage")
+    return shaped_hint(value, "coverage", deadline_monotonic=deadline_monotonic)
 
 
 def with_extension_coverage(

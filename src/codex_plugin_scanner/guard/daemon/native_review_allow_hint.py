@@ -147,6 +147,8 @@ def _ask_review_hint(
         "home_dir": str(home_dir) if home_dir is not None else "",
         "budget_ms": budget_ms,
     }
+    # The shape check runs after the review answers and shares its budget.
+    deadline = time.monotonic() + budget_ms / 1000
     parsed: list[dict[str, object] | None] = []
 
     def validate(answer: dict[str, Any]) -> None:
@@ -154,7 +156,10 @@ def _ask_review_hint(
         if hint is None:
             parsed.append(None)
             return
-        checked = with_extension_coverage(validated_extension_allow_hint(hint), validated_extension_coverage_hint(hint))
+        checked = with_extension_coverage(
+            validated_extension_allow_hint(hint, deadline_monotonic=deadline),
+            validated_extension_coverage_hint(hint, deadline_monotonic=deadline),
+        )
         if checked is None:
             raise _OPERATION.fail(_OPERATION.invalid)
         parsed.append(checked)

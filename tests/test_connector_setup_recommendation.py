@@ -34,21 +34,26 @@ _CLI_ID = "local-cli.lanectl-0123abcd"
 _GROUP = f"connector:{_HASH}:0123456789abcdef"
 
 
+# A literal hint, so collecting the parametrized cases below never needs the
+# native runtime; the first test proves it passes the shape check.
+_RAW_HINT: dict[str, object] = {
+    "schema": CONNECTOR_SETUP_HINT_SCHEMA,
+    "identity_hash": _HASH,
+    "cli_id": _CLI_ID,
+    "surface": "cli",
+    "display_name": "lanectl",
+    "deep_link": connector_setup_deep_link(_CLI_ID),
+    "card_recommendation": {"state": "allowed", "capabilities": []},
+    "risk_classes": [],
+}
+
+
 def _hint(**overrides: object) -> dict[str, object]:
-    hint = validated_connector_setup_hint(
-        {
-            "schema": CONNECTOR_SETUP_HINT_SCHEMA,
-            "identity_hash": _HASH,
-            "cli_id": _CLI_ID,
-            "surface": "cli",
-            "display_name": "lanectl",
-            "deep_link": connector_setup_deep_link(_CLI_ID),
-            "card_recommendation": {"state": "allowed", "capabilities": []},
-            "risk_classes": [],
-        }
-    )
-    assert hint is not None
-    return {**hint, **overrides}
+    return {**_RAW_HINT, **overrides}
+
+
+def test_the_fixture_hint_passes_the_shape_check() -> None:
+    assert validated_connector_setup_hint(_RAW_HINT) == _RAW_HINT
 
 
 def _snapshot(health: AuthorityHealth = AuthorityHealth.PROTECTED) -> ExtensionControlRuntimeSnapshot:

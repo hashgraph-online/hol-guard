@@ -31,10 +31,12 @@ def hint_authority_admitted(snapshot: ExtensionControlRuntimeSnapshot) -> bool:
     return snapshot.authority_failure is None or snapshot.awaiting_enrollment
 
 
-def validated_extension_allow_hint(value: object) -> dict[str, object] | None:
+def validated_extension_allow_hint(
+    value: object, *, deadline_monotonic: float | None = None
+) -> dict[str, object] | None:
     """Return a shape-checked copy of a stored hint, or None."""
 
-    return shaped_hint(value, "allow")
+    return shaped_hint(value, "allow", deadline_monotonic=deadline_monotonic)
 
 
 CONNECTOR_SETUP_HINT_SCHEMA = "guard.connector-setup-hint.v1"
