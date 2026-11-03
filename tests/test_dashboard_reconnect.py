@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import stat
@@ -16,9 +18,7 @@ import pytest
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.dashboard_reconnect import (
     DASHBOARD_RECONNECT_CHALLENGE_TTL_SECONDS,
-    DashboardReconnectChallenge,
     consume_dashboard_reconnect_challenge,
-    dashboard_reconnect_proof,
     issue_dashboard_reconnect_challenge,
     prepare_dashboard_reconnect_authorization,
 )
@@ -103,31 +103,17 @@ def _challenge(
     )
 
 
-def _challenge_without_proof(payload: dict[str, object]) -> DashboardReconnectChallenge:
-    return cast(DashboardReconnectChallenge, {key: value for key, value in payload.items() if key != "proof"})
+def _challenge_without_proof(payload: dict[str, object]) -> dict[str, object]:
+    return {key: value for key, value in payload.items() if key != "proof"}
 
 
-def test_dashboard_reconnect_proof_has_cross_language_canonical_fixture() -> None:
-    challenge: DashboardReconnectChallenge = {
-        "protocol_version": 1,
-        "reconnect_id": "11" * 32,
-        "client_nonce": "66" * 32,
-        "server_nonce": "55" * 32,
-        "state_id": "state",
-        "candidate_origin": "http://127.0.0.1:4781",
-        "installation_id": "33" * 32,
-        "guard_home_id": "44" * 32,
-        "surface": "dashboard",
-        "issued_at_ms": 1_000,
-        "expires_at_ms": 2_000,
-    }
-
-    assert dashboard_reconnect_proof("22" * 32, "server", challenge) == (
-        "40dc0312c6c1e1ddcf80f94216b2a18e01a0e77c4233e904012b8491187c3ceb"
+def dashboard_reconnect_proof(verifier: str, proof_context: str, challenge: dict[str, object]) -> str:
+    # The proof the browser computes; the native runtime's cross-language
+    # fixture pins the same bytes.
+    payload = json.dumps(
+        {"proof_context": proof_context, **challenge}, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     )
-    assert dashboard_reconnect_proof("22" * 32, "client", challenge) == (
-        "1c5d2ef201d59244f432353caefdff67849c4a0fae0fd9201f185f4e4e04240e"
-    )
+    return hmac.new(bytes.fromhex(verifier), payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def test_dashboard_reconnect_survives_restart_and_consumes_each_proof_once(tmp_path: Path) -> None:
@@ -381,3 +367,16 @@ def test_dashboard_reconnect_authorization_file_is_private_and_contains_no_verif
     assert cast(str, authorization["verifier"]) not in contents
     if os.name != "nt":
         assert stat.S_IMODE(state_path.stat().st_mode) == 0o600
+
+
+def test_dashboard_reconnect_identity_reports_a_native_outage_as_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard.daemon.dashboard_reconnect import dashboard_reconnect_challenge_identity
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    assert dashboard_reconnect_challenge_identity(tmp_path, {}) == (None, "dashboard_reconnect_identity_unavailable")
