@@ -8,8 +8,19 @@ const SCRIPT: &str = include_str!("../../../../../tests/fixtures/script_approval
 const HELPER: &str =
     include_str!("../../../../../tests/fixtures/script_approvals/fixture-registry");
 
-fn fixture() -> (tempfile::TempDir, NativeBashCaptureV1) {
-    let root = tempfile::tempdir().unwrap();
+#[path = "bash_review_descriptor_tests.rs"]
+mod review_descriptor_tests;
+
+pub(super) fn admitted(default: &str) -> crate::policy_enforcement::AdmittedPolicySnapshot {
+    use crate::policy_enforcement::tests::{policy, snapshot};
+    crate::policy_enforcement::AdmittedPolicySnapshot::new(snapshot(policy(default))).unwrap()
+}
+
+pub(super) fn fixture() -> (tempfile::TempDir, NativeBashCaptureV1) {
+    let root = tempfile::Builder::new()
+        .prefix("guard-bash-fixture-")
+        .tempdir()
+        .unwrap();
     let project = root.path().canonicalize().unwrap();
     let home = project.join("home");
     let guard_home = project.join("guard");
@@ -36,9 +47,89 @@ fn fixture() -> (tempfile::TempDir, NativeBashCaptureV1) {
         },
         environment: BTreeMap::new(),
         file_creation_mask: Some(0o022),
-        budget_ms: 1000,
+        budget_ms: super::super::ANALYSIS_BUDGET_CAP_MS,
     };
     (root, request)
+}
+
+#[test]
+fn bash_launch_capture_holds_native_inputs_without_touching_the_report() {
+    let (_root, request) = fixture();
+    let report_path = Path::new(&request.home_dir).join("maintenance-report.tsv");
+    std::fs::write(&report_path, "existing report").unwrap();
+    let inspected = inspect(&request).unwrap();
+    let captured = capture_for_launch(&request, &admitted("allow")).unwrap();
+    assert_eq!(
+        inspected.identity_sha256().unwrap(),
+        captured.subject.identity_sha256().unwrap()
+    );
+    assert!(captured.graph.source_for_launch().unwrap().contains(">&7"));
+    assert_eq!(
+        captured.policy.as_ref().unwrap().decisions.len(),
+        1 + captured.graph.invocations.len() + captured.graph.writes.len()
+    );
+    assert!(captured.interpreter.has_readonly_system_image().unwrap());
+    assert_eq!(captured.environment.get("HOME"), Some(&request.home_dir));
+    let target = captured.report.unwrap();
+    target.directory.verify().unwrap();
+    assert_eq!(target.leaf, "maintenance-report.tsv");
+    assert!(!target.append);
+    assert_eq!(
+        std::fs::read_to_string(report_path).unwrap(),
+        "existing report"
+    );
+}
+
+#[test]
+fn bash_launch_capture_rejects_late_report_preparation() {
+    let (_root, request) = fixture();
+    std::fs::write(
+        Path::new(&request.cwd).join("maintenance.sh"),
+        "set -euo pipefail; false; : > \"$HOME/report.tsv\"",
+    )
+    .unwrap();
+    assert!(inspect(&request).is_ok());
+    assert!(matches!(
+        capture_for_launch(&request, &admitted("allow")),
+        Err(reason) if reason == "bash_output_timing_unproven"
+    ));
+    assert!(!Path::new(&request.home_dir).join("report.tsv").exists());
+}
+
+#[test]
+fn bash_launch_capture_rechecks_policy_without_mutating_outputs() {
+    let (_root, request) = fixture();
+    let initial = capture_for_launch(&request, &admitted("allow")).unwrap();
+    assert!(initial
+        .policy
+        .as_ref()
+        .unwrap()
+        .decisions
+        .iter()
+        .all(|decision| decision.minimum_action == "allow"));
+    assert!(
+        matches!(capture_for_launch(&request, &admitted("block")), Err(reason) if reason == "bash_current_policy_denied")
+    );
+    let graph = &initial.graph;
+    let blocked = super::super::super::bash_policy::assess(
+        graph,
+        &request,
+        &admitted("block"),
+        Instant::now() + Duration::from_secs(2),
+    )
+    .unwrap();
+    assert!(blocked.has_hard_deny());
+    assert_eq!(
+        blocked.decisions.len(),
+        1 + graph.invocations.len() + graph.writes.len()
+    );
+    assert!(blocked
+        .decisions
+        .iter()
+        .all(|decision| decision.minimum_action == "block"));
+    assert!(!Path::new(&request.home_dir)
+        .join("maintenance-report.tsv")
+        .exists());
 }
 
 #[test]
@@ -55,8 +146,10 @@ fn bash_resident_inspection_preserves_helper_execution_spelling() {
         names: &[],
         deadline: Instant::now() + Duration::from_secs(1),
         captured: RefCell::new(BTreeMap::new()),
+        brokered_commands: RefCell::new(Vec::new()),
         source_snapshots: RefCell::new(BTreeMap::new()),
         source_contents: RefCell::new(BTreeMap::new()),
+        network_destinations: RefCell::new(BTreeSet::new()),
     };
     let graph::Executable::Bash(helper) = graph::Resolver::resolve(
         &resolver,
@@ -324,8 +417,10 @@ fn bash_resident_inspection_shares_alias_bytes_and_obeys_effective_execute_acces
         names: &[],
         deadline: Instant::now() + Duration::from_secs(1),
         captured: RefCell::new(BTreeMap::new()),
+        brokered_commands: RefCell::new(Vec::new()),
         source_snapshots: RefCell::new(BTreeMap::new()),
         source_contents: RefCell::new(BTreeMap::new()),
+        network_destinations: RefCell::new(BTreeSet::new()),
     };
     let original = graph::Resolver::resolve_source(&resolver, "./settings.sh").unwrap();
     let alias = graph::Resolver::resolve_source(&resolver, "./settings-alias.sh").unwrap();

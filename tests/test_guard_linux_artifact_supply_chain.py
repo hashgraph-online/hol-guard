@@ -5,7 +5,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from typing_extensions import override
 
-from codex_plugin_scanner.guard.runtime.linux_artifact_supply_chain import (
+from tests.linux_artifact_supply_chain import (
     LinuxArtifactSupplyChainError,
     LinuxArtifactSupplyChainManifest,
     create_linux_artifact_supply_chain_manifest,

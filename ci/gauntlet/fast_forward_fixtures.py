@@ -1,5 +1,9 @@
 """A clone whose origin branch is one commit ahead of the checked-out branch.
 
+The same origin serves the listing case: ``git ls-remote --heads origin main``
+reads the remote the URL names and writes nothing, so it needs the remote and
+none of the rest of the shape.
+
 Agents often bring a branch up to date in two steps, ``git fetch origin``
 then ``git merge --ff-only origin/main``, instead of ``git pull --ff-only``.
 The merge alone touches no network, so once the work tree proof that admits
@@ -16,10 +20,14 @@ from pathlib import Path
 FAST_FORWARD_CASE = "omp-native-git-fast-forward-merge-origin"
 FAST_FORWARD_HOOK_CASE = "git-fast-forward-merge-post-merge-hook"
 FAST_FORWARD_CASES = frozenset({FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE})
+# Listing what the same origin advertises needs the remote URL and nothing
+# else: no commit ahead to merge, and no effect on the checkout to check.
+LS_REMOTE_CASE = "omp-native-git-ls-remote-origin-heads"
 ORIGIN_URL = "https://github.com/acme/app.git"
 UPSTREAM_FILE = "UPSTREAM.md"
 UPSTREAM_TEXT = "Synthetic upstream change.\n"
 HOOK_FLAG = "output/post-merge-ran"
+HOOKS_GITCONFIG = "[core]\n\thooksPath = ~/.config/git/hooks\n"
 _IDENTITY = {
     "GIT_AUTHOR_NAME": "Gauntlet Fixture",
     "GIT_AUTHOR_EMAIL": "gauntlet@example.invalid",
@@ -68,11 +76,34 @@ def add_post_merge_hook(home: Path, worktree: Path) -> None:
 def add_fast_forward_shape(
     main: Path, worktree: Path, home: Path, environment: dict[str, str], scenario_id: str | None
 ) -> None:
-    if scenario_id not in FAST_FORWARD_CASES:
+    if scenario_id not in FAST_FORWARD_CASES and scenario_id != LS_REMOTE_CASE:
         return
     add_fast_forward_origin(main, worktree, environment)
     if scenario_id == FAST_FORWARD_HOOK_CASE:
         add_post_merge_hook(home, worktree)
+
+
+def add_plain_fast_forward_shape(
+    workspace: Path, home: Path, environment: dict[str, str], scenario_id: str | None
+) -> None:
+    """Build the hook case's shape in a fixture that has no realistic shapes.
+
+    The allow twin is a `native-tools` scenario, so it is built with the
+    realistic shapes and reaches `add_fast_forward_shape` through their builder,
+    which also writes the global gitconfig that points `core.hooksPath` at the
+    home hooks directory. The hook case is a protection scenario and gets the
+    plain fixture instead, which that builder never touches: without this it has
+    no `origin/main` to merge and no hook to stop, the agent's merge fails on a
+    missing ref, and Guard is asked about a merge that would run nothing. The
+    plain fixture's workspace is its own main checkout, so it stands in for both
+    sides of the shape.
+    """
+    if scenario_id != FAST_FORWARD_HOOK_CASE:
+        return
+    (home / ".config/git/hooks").mkdir(mode=0o700, parents=True, exist_ok=True)
+    (home / ".gitconfig").write_text(HOOKS_GITCONFIG, encoding="utf-8", newline="\n")
+    add_fast_forward_origin(workspace, workspace, environment)
+    add_post_merge_hook(home, workspace)
 
 
 def _heads(worktree: Path) -> tuple[str, str] | None:

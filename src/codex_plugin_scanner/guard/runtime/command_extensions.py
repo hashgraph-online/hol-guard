@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Literal
 
-from .command_action_risk_metadata import COMMAND_ACTION_RISK_CLASSES
 from .generated_command_catalog import (
     GeneratedCommandCatalog,
     GeneratedCommandExtension,
@@ -29,12 +28,6 @@ CommandPermissionSpec = GeneratedCommandPermission
 CommandSafetyRule = GeneratedCommandRule
 
 
-def risk_classes_for_command_action(action_class: str) -> tuple[str, ...]:
-    """Return the stable runtime risk classes for an action-class label."""
-
-    return COMMAND_ACTION_RISK_CLASSES.get(action_class.strip().lower(), ())
-
-
 BUILT_IN_COMMAND_EXTENSION_REGISTRY = load_generated_command_catalog()
 
 __all__ = [
@@ -46,5 +39,4 @@ __all__ = [
     "CommandSafetyExtension",
     "CommandSafetyExtensionRegistry",
     "CommandSafetyRule",
-    "risk_classes_for_command_action",
 ]

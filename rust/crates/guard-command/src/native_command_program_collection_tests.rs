@@ -1,8 +1,13 @@
 use super::*;
 use serde_json::json;
 
+#[path = "native_command_program_collection_scale_tests.rs"]
+mod scale_tests;
+
 fn source() -> Value {
-    serde_json::from_slice(packaged_command_program_bytes()).unwrap()
+    crate::native_command_program::authored_test_support::bounded_catalog()
+        .program
+        .clone()
 }
 
 fn interfaces(source: &Value) -> (BTreeSet<String>, BTreeSet<String>) {
@@ -29,7 +34,7 @@ fn child_ids(value: &Value, pending: &mut Vec<String>) {
     }
 }
 
-// Split the packaged oracle for composition tests only. Production admission
+// Split the authored oracle for composition tests only. Production admission
 // will consume per-pack bytes from the authenticated activation snapshot.
 fn pack_value(source: &Value, id: &str) -> Value {
     let mut value = source.clone();
@@ -154,7 +159,7 @@ fn default_collection_excludes_unselected_payload_and_preserves_observations() {
     let source = source();
     let ids = defaults(&source);
     let oracle =
-        NativeCommandProgram::from_packaged_bytes(packaged_command_program_bytes()).unwrap();
+        NativeCommandProgram::from_packaged_bytes(&serde_json::to_vec(&source).unwrap()).unwrap();
     let collection = NativeCommandProgram::combine_admitted_packs(selected(&source, &ids)).unwrap();
     assert!(collection.extensions.len() < oracle.extensions.len());
     assert!(collection.nodes.len() < oracle.nodes.len());

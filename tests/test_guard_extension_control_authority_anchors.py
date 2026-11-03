@@ -228,12 +228,16 @@ def test_explicit_macos_extension_authority_spends_one_interactive_read(
     assert bounded_reads == [legacy_store._anchor_ref()]
 
 
-def test_failed_anchor_write_leaves_recoverable_prepared_transition(tmp_path: Path) -> None:
+def test_failed_anchor_write_leaves_recoverable_prepared_transition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     secrets.fail_anchor_set_number = secrets.anchor_set_count + 1
-    with pytest.raises(ExtensionControlAuthorityError, match="anchor"):
+    # A process that dies after preparing cannot take its row back.
+    with monkeypatch.context() as patch, pytest.raises(ExtensionControlAuthorityError, match="anchor"):
+        patch.setattr(store, "_roll_back_abandoned_transition", lambda *_args, **_kwargs: False)
         _commit(store)
 
     with store._connect() as connection:
@@ -284,7 +288,7 @@ def test_idempotent_retry_after_prepared_transition_commits_once(tmp_path: Path)
     assert count == 1
 
 
-def test_recovery_finalizes_database_commit_when_final_anchor_write_failed(tmp_path: Path) -> None:
+def test_read_finalizes_database_commit_when_final_anchor_write_failed(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
@@ -297,10 +301,19 @@ def test_recovery_finalizes_database_commit_when_final_anchor_write_failed(tmp_p
         ).fetchone()[0]
     assert premature_events == 0
 
-    interrupted = store.read_extension_control_authority(
+    # The commit sealed the anchor and died before the row said so. Nothing
+    # here is left for a person to decide, so the next ordinary read finishes
+    # the revision that was already authorised rather than blocking every
+    # command until someone runs the recovery verb.
+    resumed = store.read_extension_control_authority(
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     )
-    assert interrupted.health is AuthorityHealth.RECOVERY_REQUIRED
+    assert resumed.health is AuthorityHealth.PROTECTED
+    assert resumed.revision == 1
+    assert resumed.layers == (_disabled_layer(),)
+
+    # The explicit verb stays available and changes nothing once the read has
+    # settled it, including the single change event.
     recovered = store.recover_extension_control_authority(
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     )

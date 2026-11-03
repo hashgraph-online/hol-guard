@@ -63,6 +63,26 @@ pub(crate) fn evaluate_prompt_analyze(request: &PromptAnalyzeRequestV1) -> Resul
                 guard_run_launch::prompt_requests_to_artifacts(harness, config_path, &requests);
             Value::Array(artifacts.iter().map(|a| a.to_dict()).collect())
         }
+        "merge_artifacts" => {
+            let harness = request
+                .harness
+                .as_deref()
+                .ok_or_else(|| "missing_harness".to_owned())?;
+            let values = request
+                .artifacts
+                .as_ref()
+                .ok_or_else(|| "missing_artifacts".to_owned())?;
+            let artifacts = values
+                .iter()
+                .map(|value| {
+                    guard_run_launch::GuardRunPromptArtifact::from_dict(value)
+                        .ok_or_else(|| "invalid_prompt_artifact_payload".to_owned())
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            guard_run_launch::merge_prompt_artifacts(harness, &artifacts)
+                .ok_or_else(|| "missing_artifacts".to_owned())?
+                .to_dict()
+        }
         "should_force_reapproval" => {
             let requests = decode_requests(request.requests.as_ref())?;
             let prior_policy_present = request.prior_policy_present.unwrap_or(false);
@@ -131,6 +151,7 @@ mod tests {
             harness: None,
             config_path: None,
             requests: None,
+            artifacts: None,
             prior_policy_present: None,
             approved_classes: None,
             guard_home: "/tmp/gh".to_owned(),
@@ -160,6 +181,138 @@ mod tests {
         assert_eq!(
             decoded.result.unwrap().as_str().unwrap(),
             "a5849f67d43968d85bf4794eb7731678e4919da1ca78c5329f92015163c585f0"
+        );
+    }
+
+    fn part(artifact_id: &str, class: &str, matched: &str, display: &str) -> serde_json::Value {
+        serde_json::json!({
+            "artifact_id": artifact_id,
+            "name": format!("prompt {class} request"),
+            "harness": "codex",
+            "artifact_type": "prompt_request",
+            "source_scope": "project",
+            "config_path": "/work/project/.codex/config.toml",
+            "metadata": {
+                "prompt_signals": [class, "  "],
+                "prompt_request_class": class,
+                "prompt_matched_text": format!("  {matched} "),
+                "prompt_display_text": display,
+            },
+        })
+    }
+
+    #[test]
+    fn merge_subop_folds_the_parts_into_one_review() {
+        let mut r = base("merge_artifacts");
+        r.harness = Some("codex".to_owned());
+        r.artifacts = Some(vec![
+            part("codex:session:prompt:b", "secret_read", ".env", "Read .env"),
+            part(
+                "codex:session:prompt:a",
+                "exfiltration",
+                "curl",
+                "Send it out",
+            ),
+        ]);
+        let bytes = evaluate_prompt_analyze(&r).unwrap();
+        let decoded: PromptAnalyzeResultV1 = serde_json::from_slice(&bytes).unwrap();
+        let merged = decoded.result.unwrap();
+        assert_eq!(merged["artifact_type"], "prompt_request");
+        assert_eq!(merged["name"], "prompt multi-signal request");
+        assert_eq!(merged["source_scope"], "project");
+        assert_eq!(merged["config_path"], "/work/project/.codex/config.toml");
+        assert_eq!(
+            merged["metadata"]["prompt_request_classes"],
+            serde_json::json!(["secret_read", "exfiltration"])
+        );
+        assert_eq!(
+            merged["metadata"]["prompt_matched_texts"],
+            serde_json::json!([".env", "curl"])
+        );
+        assert_eq!(
+            merged["metadata"]["prompt_signals"],
+            serde_json::json!(["secret_read", "exfiltration"])
+        );
+        assert_eq!(
+            merged["metadata"]["request_summary"],
+            "Prompt matches multiple guarded request classes."
+        );
+    }
+
+    #[test]
+    fn merge_subop_keys_the_review_by_the_sorted_part_ids() {
+        let forward = vec![
+            part(
+                "codex:session:prompt:a",
+                "exfiltration",
+                "curl",
+                "Send it out",
+            ),
+            part("codex:session:prompt:b", "secret_read", ".env", "Read .env"),
+        ];
+        let mut reversed = forward.clone();
+        reversed.reverse();
+        let id_for = |artifacts: Vec<serde_json::Value>| {
+            let mut r = base("merge_artifacts");
+            r.harness = Some("codex".to_owned());
+            r.artifacts = Some(artifacts);
+            let bytes = evaluate_prompt_analyze(&r).unwrap();
+            let decoded: PromptAnalyzeResultV1 = serde_json::from_slice(&bytes).unwrap();
+            decoded.result.unwrap()["artifact_id"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        };
+        let id = id_for(forward);
+        assert_eq!(id, id_for(reversed));
+        assert!(id.starts_with("codex:session:prompt:multi:"));
+        assert_eq!(id.rsplit(':').next().unwrap().len(), 24);
+    }
+
+    #[test]
+    fn merge_subop_keeps_a_single_agreed_display_text() {
+        let mut r = base("merge_artifacts");
+        r.harness = Some("codex".to_owned());
+        r.artifacts = Some(vec![
+            part("codex:session:prompt:a", "secret_read", ".env", "Read .env"),
+            part(
+                "codex:session:prompt:b",
+                "secret_read",
+                ".netrc",
+                "Read .env",
+            ),
+        ]);
+        let bytes = evaluate_prompt_analyze(&r).unwrap();
+        let decoded: PromptAnalyzeResultV1 = serde_json::from_slice(&bytes).unwrap();
+        let metadata = decoded.result.unwrap()["metadata"].clone();
+        assert_eq!(metadata["prompt_display_text"], "Read .env");
+        assert_eq!(metadata["request_summary"], "Read .env");
+        assert_eq!(metadata["runtime_request_summary"], "Read .env");
+        assert_eq!(
+            metadata["prompt_summary"],
+            "Prompt matches multiple guarded request classes."
+        );
+    }
+
+    #[test]
+    fn merge_subop_refuses_an_unreadable_part() {
+        let mut r = base("merge_artifacts");
+        r.harness = Some("codex".to_owned());
+        r.artifacts = Some(vec![serde_json::json!({"artifact_id": "codex:x"})]);
+        assert_eq!(
+            evaluate_prompt_analyze(&r).unwrap_err(),
+            "invalid_prompt_artifact_payload"
+        );
+    }
+
+    #[test]
+    fn merge_subop_refuses_an_empty_part_list() {
+        let mut r = base("merge_artifacts");
+        r.harness = Some("codex".to_owned());
+        r.artifacts = Some(Vec::new());
+        assert_eq!(
+            evaluate_prompt_analyze(&r).unwrap_err(),
+            "missing_artifacts"
         );
     }
 

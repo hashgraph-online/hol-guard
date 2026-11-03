@@ -22,80 +22,71 @@ _PAYLOAD = {
 }
 
 
-def _edge(action: str) -> dict[str, object]:
-    return {
-        "result": {"policy_action": action, "reason_code": f"native_{action}_fixture"},
-        "receipt": None,
-        "event_name": "PreToolUse",
-        "harness": "codex",
-    }
-
-
 def _worker(tmp_path: Any, monkeypatch: Any, action: str) -> HookWorker:
     worker = HookWorker(
         store=GuardStore(tmp_path / "guard-home"),
         wait_for_native_policy=False,
         publish_native_policy=False,
     )
-    monkeypatch.setattr(
-        worker,
-        "_native_policy_snapshot",
-        lambda *_a, **_k: {"generation": 1, "command_extensions_bound": True},
-    )
 
-    def slow_review(**kwargs: object) -> dict[str, object]:
+    def slow_review(**kwargs: object) -> tuple[dict[str, object], bool]:
         deadline = kwargs.get("deadline")
         if isinstance(deadline, float):
             time.sleep(max(0.0, deadline - time.monotonic()) + 0.05)
-        return _edge(action)
+        return ({"policy_action": action, "reason_code": f"native_{action}_fixture"}, True)
 
-    monkeypatch.setattr(worker, "_review_raw_hook_native", slow_review)
+    monkeypatch.setattr(worker, "_review_native_edge_with_snapshot", slow_review)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker_native._record_unavailable_native",
+        lambda _host, _payload, *, reason_code, **_k: {"unavailable": reason_code},
+    )
+    monkeypatch.setattr(worker, "_apply_structured_unavailable_overlay", lambda response, **_k: response)
     return worker
 
 
-def _review(worker: HookWorker, tmp_path: Any) -> dict[str, object]:
-    return worker.review_native_edge_decision(
+def _review(worker: HookWorker, tmp_path: Any, budget_seconds: float) -> dict[str, object]:
+    return worker._review_native_edge(
         payload=dict(_PAYLOAD),
         harness="codex",
+        event_name="PreToolUse",
         default_harness="codex",
         home_dir=tmp_path / "home",
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
-        edge_budget_seconds=0.2,
+        deadline=time.monotonic() + budget_seconds,
+        policy_snapshot={"generation": 1, "command_extensions_bound": True},
     )
 
 
 def test_an_allow_reached_after_the_deadline_is_still_delivered(tmp_path, monkeypatch):
     worker = _worker(tmp_path, monkeypatch, "allow")
     try:
-        edge = _review(worker, tmp_path)
+        response = _review(worker, tmp_path, 0.2)
     finally:
         worker.close()
-    assert edge["failure_reason_code"] is None
-    result = edge["result"]
-    assert isinstance(result, dict)
-    assert result["policy_action"] == "allow"
+    assert response["policy_action"] == "allow"
 
 
 def test_a_deny_reached_after_the_deadline_is_not_downgraded(tmp_path, monkeypatch):
     worker = _worker(tmp_path, monkeypatch, "deny")
     try:
-        edge = _review(worker, tmp_path)
+        response = _review(worker, tmp_path, 0.2)
     finally:
         worker.close()
-    assert edge["failure_reason_code"] is None
-    result = edge["result"]
-    assert isinstance(result, dict)
-    assert result["policy_action"] == "deny"
+    assert response["policy_action"] == "deny"
 
 
 def _unleased_worker(tmp_path: Any, monkeypatch: Any, tokens: list[object]) -> HookWorker:
     """A worker whose review runs without the lease, over the given bindings."""
 
     worker = _worker(tmp_path, monkeypatch, "allow")
-    monkeypatch.setattr(worker, "_review_raw_hook_native", lambda **_k: _edge("allow"))
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker_native.published_binding_token",
+        worker,
+        "_review_native_edge_with_snapshot",
+        lambda **_k: ({"policy_action": "allow", "reason_code": "native_allow_fixture"}, True),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker_native_review.published_binding_token",
         lambda _publisher: tokens.pop(0),
     )
     return worker
@@ -118,15 +109,7 @@ def _review_behind_a_held_mutation(worker: HookWorker, tmp_path: Any) -> dict[st
     writer.start()
     try:
         assert held.wait(5.0)
-        return worker.review_native_edge_decision(
-            payload=dict(_PAYLOAD),
-            harness="codex",
-            default_harness="codex",
-            home_dir=tmp_path / "home",
-            guard_home=tmp_path / "guard-home",
-            workspace=tmp_path / "workspace",
-            edge_budget_seconds=4.0,
-        )
+        return _review(worker, tmp_path, 4.0)
     finally:
         release.set()
         writer.join(10.0)
@@ -135,13 +118,10 @@ def _review_behind_a_held_mutation(worker: HookWorker, tmp_path: Any) -> dict[st
 def test_an_unleased_allow_on_an_unchanged_binding_is_delivered(tmp_path, monkeypatch):
     worker = _unleased_worker(tmp_path, monkeypatch, [("gen-1", "digest-1"), ("gen-1", "digest-1")])
     try:
-        edge = _review_behind_a_held_mutation(worker, tmp_path)
+        response = _review_behind_a_held_mutation(worker, tmp_path)
     finally:
         worker.close()
-    assert edge["failure_reason_code"] is None
-    result = edge["result"]
-    assert isinstance(result, dict)
-    assert result["policy_action"] == "allow"
+    assert response["policy_action"] == "allow"
 
 
 def test_durable_control_token_changes_without_a_publisher_generation_change() -> None:
@@ -242,18 +222,16 @@ def test_a_home_without_control_authority_still_has_a_token() -> None:
 def test_unleased_review_without_durable_authority_cannot_allow(tmp_path, monkeypatch):
     worker = _unleased_worker(tmp_path, monkeypatch, [None, None])
     try:
-        edge = _review_behind_a_held_mutation(worker, tmp_path)
+        response = _review_behind_a_held_mutation(worker, tmp_path)
     finally:
         worker.close()
-    assert edge["failure_reason_code"] == "native_command_control_fence_unavailable"
-    assert edge["result"] is None
+    assert response == {"unavailable": "native_command_control_fence_unavailable"}
 
 
 def test_an_unleased_allow_is_dropped_when_the_policy_is_replaced(tmp_path, monkeypatch):
     worker = _unleased_worker(tmp_path, monkeypatch, [("gen-1", "digest-1"), ("gen-2", "digest-2")])
     try:
-        edge = _review_behind_a_held_mutation(worker, tmp_path)
+        response = _review_behind_a_held_mutation(worker, tmp_path)
     finally:
         worker.close()
-    assert edge["failure_reason_code"] == "native_command_control_fence_unavailable"
-    assert edge["result"] is None
+    assert response == {"unavailable": "native_command_control_fence_unavailable"}

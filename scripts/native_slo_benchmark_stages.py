@@ -13,6 +13,7 @@ from contextlib import nullcontext
 from pathlib import Path
 
 from scripts.bench_guard_native_installed_slo_runtime import _require
+from scripts.native_slo_activity import SloActivity
 from scripts.native_slo_adapter import Observation, payload
 from scripts.native_slo_contract import SAFE_ROUTE_NAMES
 from scripts.native_slo_preflight import preflight_operation
@@ -82,6 +83,7 @@ def _run_cold(
     iterations: int,
     *,
     progress: SloProgress | None = None,
+    activity: SloActivity | None = None,
 ) -> list[float]:
     values: list[float] = []
     environment = {
@@ -91,6 +93,9 @@ def _run_cold(
     }
     request = _wire_request(session.workspace, session.guard_home, "native-slo-cold")
     for _ in range(iterations):
+        if activity is not None:
+            with activity.background("cold_precondition", session.guard_home, session.workspace):
+                pass
         if progress is not None:
             progress.activate("cold", size_class="1k")
             progress.submit("cold")
@@ -124,6 +129,8 @@ def _run_cold(
             if progress is not None:
                 progress.record_timing("cold", None, elapsed_ms)
                 progress.complete("cold")
+        if activity is not None:
+            activity.after_restart("cold", session.guard_home, session.workspace)
     return values
 
 
@@ -134,6 +141,7 @@ def _run_recovery(
     progress: SloProgress | None = None,
     adapter_values: list[float] | None = None,
     enclosing_values: list[float] | None = None,
+    activity: SloActivity | None = None,
 ) -> list[float]:
     values: list[float] = []
     for index in range(iterations):
@@ -143,19 +151,24 @@ def _run_recovery(
         observation_returned = False
         failure_stage = "recovery_precondition"
         try:
-            warm = (
-                session.observe("claude-code", "PostToolUse", "1k")
-                if progress is None
-                else _observe_with_progress(
-                    progress,
-                    session,
-                    "claude-code",
-                    "PostToolUse",
-                    "1k",
-                    "recovery_precondition",
-                    complete=False,
+            with (
+                activity.background("recovery_precondition", session.guard_home, session.workspace)
+                if activity is not None
+                else nullcontext()
+            ):
+                warm = (
+                    session.observe("claude-code", "PostToolUse", "1k")
+                    if progress is None
+                    else _observe_with_progress(
+                        progress,
+                        session,
+                        "claude-code",
+                        "PostToolUse",
+                        "1k",
+                        "recovery_precondition",
+                        complete=False,
+                    )
                 )
-            )
             precondition_returned = True
             _require(
                 warm.allowed and warm.route == "native_resident",
@@ -222,6 +235,8 @@ def _run_recovery(
                     progress.fail_request("recovery")
                 progress.record_failure(error, stage=failure_stage)
             raise
+        if activity is not None:
+            activity.after_restart("recovery", session.guard_home, session.workspace)
     return values
 
 

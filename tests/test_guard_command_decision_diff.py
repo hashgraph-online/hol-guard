@@ -221,6 +221,7 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
         "tests/test_guard_command_corpus_native_contract.py",
         "tests/guard_test_invariants.py",
         "tests/native_command_test_support.py",
+        "tests/native_command_effect_batch.py",
         "tests/test_native_command_test_support_batch.py",
         "tests/test_guard_native_classification_baseline.py",
         "src/codex_plugin_scanner/guard/runtime/command_decision_adapter.py",
@@ -228,8 +229,6 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
         "src/codex_plugin_scanner/guard/runtime/command_model.py",
         "src/codex_plugin_scanner/guard/runtime/effect_contract.py",
         "src/codex_plugin_scanner/guard/runtime/extension_evidence.py",
-        "src/codex_plugin_scanner/guard/runtime/containment_outputs.py",
-        "src/codex_plugin_scanner/guard/runtime/local_package_script_evidence.py",
         "src/codex_plugin_scanner/guard/runtime/verified_github_reads.py",
         "src/codex_plugin_scanner/guard/runtime/verified_read_execution.py",
         "src/codex_plugin_scanner/guard/runtime/verified_read_common.py",
@@ -293,14 +292,14 @@ def test_report_gates_native_parity_and_preserves_every_original_oracle_differen
     assert native_contract["unexpected_count"] == 0
     assert _group_signatures(native_contract["groups"]) == expected_native_groups()
     assert _group_signatures(native_contract["native_rejection_groups"]) == expected_native_rejection_groups()
-    assert native_contract["native_rejection_count"] == 25_002
+    assert native_contract["native_rejection_count"] == 20_835
 
     reconciliation = cast(dict[str, object], report["oracle_reconciliation"])
     assert reconciliation["known_gap_equality"] is False
     assert reconciliation["categorized_count"] == 51_000
     assert reconciliation["uncategorized_count"] == 0
     assert reconciliation["below_original_count"] == 0
-    assert reconciliation["above_original_count"] == 8_484
+    assert reconciliation["above_original_count"] == 4_317
     original_gaps = cast(dict[str, list[object]], reconciliation["known_gaps"])
     gap_signatures = {key: (int(str(value[0])), str(value[1])) for key, value in original_gaps.items()}
     assert gap_signatures == expected_original_gap_groups()

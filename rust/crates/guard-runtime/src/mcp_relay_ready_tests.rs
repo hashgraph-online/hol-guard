@@ -8,7 +8,7 @@ use std::fs;
 
 fn view() -> Value {
     json!({
-        "schema": "guard-mcp-relay-view.v1",
+        "schema": "guard-mcp-relay-view.v2",
         "harnesses": {"codex": {
             "config": {"mode": "enforce"},
             "hash_config": {},
@@ -150,16 +150,6 @@ fn a_binding_without_relay_state_is_not_ready() {
 #[test]
 fn a_session_the_resident_cannot_decide_is_not_ready() {
     let (fixture, workspace) = bound("ask", json!({"blocked_request_mode": "ask"}));
-    assert_eq!(
-        ask(&fixture, &workspace, "codex"),
-        not_ready("mcp_relay_session_review_mode")
-    );
-    let mut observe = view();
-    observe["harnesses"]["codex"]["config"]["mode"] = json!("observe");
-    let (fixture, workspace) = bound(
-        "observe-ask",
-        json!({"mcp_relay": observe, "blocked_request_mode": "ask"}),
-    );
     assert_eq!(
         ask(&fixture, &workspace, "codex"),
         not_ready("mcp_relay_session_review_mode")

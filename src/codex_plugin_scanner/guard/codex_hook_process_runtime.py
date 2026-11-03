@@ -29,16 +29,20 @@ def _drain_hook_stream(
     output_count: list[int],
     output_lock: threading.Lock,
     output_limit_exceeded: threading.Event,
+    capture_error: threading.Event,
 ) -> None:
-    while chunk := stream.read(64 * 1024):
-        with output_lock:
-            remaining = max(0, output_limit - output_count[0])
-            accepted = chunk[:remaining]
-            output_count[0] += len(chunk)
-            if accepted:
-                target.extend(accepted)
-            if output_count[0] > output_limit:
-                output_limit_exceeded.set()
+    try:
+        while chunk := stream.read(64 * 1024):
+            with output_lock:
+                remaining = max(0, output_limit - output_count[0])
+                accepted = chunk[:remaining]
+                output_count[0] += len(chunk)
+                if accepted:
+                    target.extend(accepted)
+                if output_count[0] > output_limit:
+                    output_limit_exceeded.set()
+    except (OSError, ValueError):
+        capture_error.set()
 
 
 def _write_hook_input(stream: BinaryIO | None, input_text: str) -> None:
@@ -58,17 +62,23 @@ def start_hook_io(
     *,
     input_text: str,
     output_limit: int,
-) -> tuple[bytearray, bytearray, threading.Event, threading.Lock, list[threading.Thread]]:
-    """Start bounded readers and the input writer for one child process."""
+) -> tuple[bytearray, bytearray, threading.Event, threading.Event, threading.Lock, list[threading.Thread]]:
+    """Start bounded readers and the input writer for one child process.
+
+    The second event is set when a reader stops on a read error, so a caller
+    can tell partial output from a complete capture.
+    """
     stdout_bytes, stderr_bytes = bytearray(), bytearray()
     output_count = [0]
     output_lock = threading.Lock()
     output_limit_exceeded = threading.Event()
+    capture_error = threading.Event()
     reader_kwargs = {
         "output_limit": output_limit,
         "output_count": output_count,
         "output_lock": output_lock,
         "output_limit_exceeded": output_limit_exceeded,
+        "capture_error": capture_error,
     }
     readers = [
         threading.Thread(
@@ -88,7 +98,7 @@ def start_hook_io(
     for thread in readers:
         thread.start()
     writer.start()
-    return stdout_bytes, stderr_bytes, output_limit_exceeded, output_lock, [writer, *readers]
+    return stdout_bytes, stderr_bytes, output_limit_exceeded, capture_error, output_lock, [writer, *readers]
 
 
 def wait_for_hook_process(

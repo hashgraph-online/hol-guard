@@ -16,7 +16,7 @@ use serde_json::Value;
 
 use super::{evaluate_current, Flow};
 use crate::mcp_tool_policy_decision::Current;
-use crate::mcp_tool_policy_extension::extension_decision;
+use crate::mcp_tool_policy_extension::extension_decision_with_catalog;
 
 /// The memo of one call's passes over `subject`.
 pub(crate) struct PassMemo<'s> {
@@ -24,6 +24,7 @@ pub(crate) struct PassMemo<'s> {
     current: OnceLock<Current>,
     /// `extension_decision` answers, by the action each refined.
     extension: Mutex<Vec<(String, Value)>>,
+    catalog: Option<&'s crate::contributed_mcp_decision_op::Catalog<'s>>,
 }
 
 impl<'s> PassMemo<'s> {
@@ -32,7 +33,17 @@ impl<'s> PassMemo<'s> {
             subject,
             current: OnceLock::new(),
             extension: Mutex::new(Vec::new()),
+            catalog: None,
         }
+    }
+
+    pub(crate) fn with_catalog(
+        subject: &'s McpToolPolicySubjectV1,
+        catalog: &'s crate::contributed_mcp_decision_op::Catalog<'s>,
+    ) -> Self {
+        let mut memo = Self::new(subject);
+        memo.catalog = Some(catalog);
+        memo
     }
 
     /// Whether this memo was made for `subject` itself. An equal copy does
@@ -64,20 +75,28 @@ pub(super) fn extension(
     subject: &McpToolPolicySubjectV1,
     extension: &McpExtensionInputV1,
     action: &str,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
 ) -> Value {
     let own = subject
         .extension
         .as_ref()
         .is_some_and(|own| std::ptr::eq(own, extension));
-    let Some(memo) = memo.filter(|memo| own && memo.covers(subject)) else {
-        return extension_decision(extension, action);
+    let Some(memo) = memo.filter(|memo| {
+        own && memo.covers(subject)
+            && match (memo.catalog, catalog) {
+                (None, None) => true,
+                (Some(left), Some(right)) => std::ptr::eq(left, right),
+                _ => false,
+            }
+    }) else {
+        return extension_decision_with_catalog(extension, action, catalog);
     };
     if let Ok(answers) = memo.extension.lock() {
         if let Some((_, answer)) = answers.iter().find(|(seen, _)| seen == action) {
             return answer.clone();
         }
     }
-    let answer = extension_decision(extension, action);
+    let answer = extension_decision_with_catalog(extension, action, catalog);
     if let Ok(mut answers) = memo.extension.lock() {
         answers.push((action.to_owned(), answer.clone()));
     }

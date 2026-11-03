@@ -17,7 +17,7 @@ import types
 from dataclasses import dataclass
 from pathlib import Path
 
-_MODULE = "codex_plugin_scanner.guard.native_github_cli"
+_MODULE = "tests.native_github_cli"
 
 
 @dataclass(frozen=True, slots=True)

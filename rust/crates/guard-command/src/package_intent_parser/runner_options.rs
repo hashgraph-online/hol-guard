@@ -10,7 +10,7 @@ pub(super) static LOCAL_EXECUTION_COMMANDS: LazyLock<HashSet<&'static str>> =
     LazyLock::new(|| ["bunx", "npx"].into_iter().collect());
 
 // package_intent_parser.py :98-103  `_LOCAL_EXECUTION_FLAGS_BY_COMMAND`
-pub(super) fn local_execution_flags(command: &str) -> &'static [&'static str] {
+pub(crate) fn local_execution_flags(command: &str) -> &'static [&'static str] {
     match command {
         "bunx" => &["--bun", "--no-install", "--"],
         // The options past the first two name no package: they answer the

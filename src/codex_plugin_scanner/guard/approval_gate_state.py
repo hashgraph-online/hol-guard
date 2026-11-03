@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 APPROVAL_GATE_STATE_FILE = "approval-gate.json"
 
@@ -54,10 +54,6 @@ def epoch(value: str | None) -> float:
         return datetime.fromisoformat(normalized).timestamp()
     except ValueError:
         return 0.0
-
-
-def iso_from_epoch(value: float) -> str:
-    return datetime.fromtimestamp(value, timezone.utc).isoformat()
 
 
 def optional_string(value: object) -> str | None:

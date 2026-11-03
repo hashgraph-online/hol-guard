@@ -70,7 +70,7 @@ const ACTION_TYPES: [&str; 10] = [
 const ORDERED_SERVER_FIELDS: [&str; 3] = ["mcp_servers", "mcpServers", "servers"];
 /// Tool-input keys that carry nothing but the shell command
 /// (`_COMMAND_ONLY_INPUT_KEYS`).
-const COMMAND_ONLY_INPUT_KEYS: [&str; 12] = [
+const COMMAND_ONLY_INPUT_KEYS: [&str; 14] = [
     "command",
     "cmd",
     "shell_command",
@@ -83,6 +83,8 @@ const COMMAND_ONLY_INPUT_KEYS: [&str; 12] = [
     "runInBackground",
     "workdir",
     "cwd",
+    "working_directory",
+    "workingDirectory",
 ];
 /// Far under the adapter's 1 MiB string slot and 4 MiB request cap, so the
 /// daemon's adapter call cannot fail on a size the resident accepted.
@@ -112,6 +114,7 @@ pub(super) struct RequestInput<'a> {
     pub(super) approval_center_url: &'a str,
     pub(super) review_binding: Option<&'a str>,
     pub(super) exact: ExactKeys<'a>,
+    pub(super) hint: Option<&'a super::HintScope<'a>>,
 }
 
 /// The daemon's `action_envelope` adapter query for this review.
@@ -168,7 +171,7 @@ pub(super) fn envelope_query<'a>(input: &RequestInput<'a>) -> Option<EnvelopeQue
 /// `HOME` it reads the password database, which that environment cannot
 /// answer.
 #[cfg(unix)]
-fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
+pub(crate) fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
     let trimmed = environment.get("HOME")?.trim_end_matches('/');
     Some(if trimmed.is_empty() { "/" } else { trimmed }.to_owned())
 }
@@ -177,7 +180,7 @@ fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
 /// `ntpath.join(HOMEDRIVE, HOMEPATH)`. `os.environ` spells Windows names in
 /// upper case, as published.
 #[cfg(windows)]
-fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
+pub(crate) fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
     if let Some(profile) = environment.get("USERPROFILE") {
         return Some(profile.clone());
     }
@@ -200,7 +203,7 @@ fn join_home_drive(drive: &str, path: &str) -> Option<String> {
 }
 
 #[cfg(not(any(unix, windows)))]
-fn expanded_home(_environment: &BTreeMap<String, String>) -> Option<String> {
+pub(crate) fn expanded_home(_environment: &BTreeMap<String, String>) -> Option<String> {
     None
 }
 
@@ -254,7 +257,7 @@ fn adapter_envelope(input: &RequestInput<'_>, query: &EnvelopeQuery<'_>) -> Opti
 }
 
 /// The plain JSON `value` in the adapter's tagged wire form.
-fn tagged(value: &Value) -> Value {
+pub(crate) fn tagged(value: &Value) -> Value {
     match value {
         Value::Array(items) => {
             let mut wire = vec![Value::String("l".to_owned())];
@@ -280,9 +283,10 @@ pub(super) fn finish(
     receipt: Option<&Value>,
     envelope: Value,
 ) -> Option<Value> {
+    let candidate = allow_hint_candidate(input.payload, result)?;
     if input.workspace.is_empty()
         || !policy_binding_valid(result, receipt)
-        || allow_hint_candidate(input.payload, result)?
+        || (candidate && input.hint.is_none())
     {
         return None;
     }
@@ -296,6 +300,11 @@ pub(super) fn finish(
         Some(_) => return None,
     };
     let mut envelope = review_envelope(envelope)?;
+    if matches!(envelope.get("command_category"), None | Some(Value::Null)) {
+        if let Some(category) = result_command_category(result) {
+            envelope.insert("command_category".to_owned(), Value::String(category));
+        }
+    }
     if let Some(receipt) = receipt
         .and_then(Value::as_object)
         .filter(|receipt| receipt.contains_key("origin_authentication"))
@@ -357,17 +366,17 @@ pub(super) fn finish(
         "scanner_evidence": [],
         "browser_intent": null,
         "raw_command_text": command,
-        "guard_version": null,
-        "first_seen_guard_version": null,
-        "last_seen_guard_version": null,
+        "guard_version": crate::PACKAGE_VERSION,
+        "first_seen_guard_version": crate::PACKAGE_VERSION,
+        "last_seen_guard_version": crate::PACKAGE_VERSION,
         "continuation_snapshot": null,
-        "extension_allow_hint": null,
+        "extension_allow_hint": super::review_hint::coverage_hint(result),
     }))
 }
 
 /// `_envelope_from_native(...).with_pre_execution_result("review").to_dict()`,
 /// for an answer whose fields already have their typed shapes.
-fn review_envelope(envelope: Value) -> Option<Map<String, Value>> {
+pub(crate) fn review_envelope(envelope: Value) -> Option<Map<String, Value>> {
     let Value::Object(mut envelope) = envelope else {
         return None;
     };
@@ -394,6 +403,55 @@ fn review_envelope(envelope: Value) -> Option<Map<String, Value>> {
     }
     envelope.insert("pre_execution_result".to_owned(), json!("review"));
     Some(envelope)
+}
+
+pub(crate) fn result_command_category(result: &Object) -> Option<String> {
+    let evidence = result.get("command_extensions")?.as_object()?;
+    ["observations", "permission_observations"]
+        .into_iter()
+        .filter_map(|key| Some((key, evidence.get(key)?.as_array()?)))
+        .flat_map(|(key, items)| items.iter().map(move |item| (key, item)))
+        .filter_map(|(key, item)| {
+            let obj = item.as_object()?;
+            let empty_segments = key == "observations"
+                && obj
+                    .get("effective_segment_indexes")
+                    .and_then(Value::as_array)
+                    .is_some_and(Vec::is_empty);
+            (!empty_segments)
+                .then(|| obj.get("extension_id")?.as_str())
+                .flatten()
+                .filter(|id| id.starts_with("command."))
+                .map(str::to_owned)
+        })
+        .next()
+}
+
+fn only_rule_uncertainties(evidence: &Object, count: u64) -> bool {
+    let permission_uncertain = evidence
+        .get("permission_observations")
+        .and_then(Value::as_array)
+        .is_some_and(|items| {
+            items.iter().any(|item| {
+                item.as_object()
+                    .and_then(|obj| obj.get("uncertainty_reasons"))
+                    .is_some_and(truthy)
+            })
+        });
+    count > 0
+        && !permission_uncertain
+        && evidence
+            .get("observations")
+            .and_then(Value::as_array)
+            .is_some_and(|items| {
+                let mut matched = 0u64;
+                for obj in items.iter().filter_map(Value::as_object) {
+                    if obj.get("uncertainty_reasons").is_some_and(truthy) {
+                        matched += 1;
+                    }
+                }
+                matched == count
+            })
 }
 
 /// `native_review_policy_binding` for the edge's own receipt, which matches
@@ -441,10 +499,20 @@ fn launch_target(
 }
 
 /// Whether `native_review_extension_allow_hint` could store a hint: a
-/// definite extension review of a command-only shell call. The resident does
-/// not run that re-review, so these defer.
+/// definite extension review of a command-only shell call. The resident runs
+/// that re-review itself when the hook handed it the admitted store.
 pub(super) fn allow_hint_candidate(payload: &Map<String, Value>, result: &Object) -> Option<bool> {
-    if result.get("minimum_action").and_then(Value::as_str) != Some("review") {
+    if !matches!(
+        result.get("minimum_action").and_then(Value::as_str),
+        Some("review" | "require-reapproval")
+    ) {
+        return Some(false);
+    }
+    // The hint promises an extension Allow settles the pause, which is only
+    // ever true when the pause is the extension review itself. A fixed
+    // PreTool floor (sensitive access, Guard self-protection, ...) carries
+    // its own reason and reviews whatever the extensions say.
+    if result.get("reason_code").and_then(Value::as_str) != Some("native_command_review_required") {
         return Some(false);
     }
     let Some(evidence) = result.get("command_extensions").and_then(Value::as_object) else {
@@ -462,7 +530,12 @@ pub(super) fn allow_hint_candidate(payload: &Map<String, Value>, result: &Object
         Some(Value::Number(count)) => count.as_f64() == Some(0.0),
         _ => false,
     };
-    if !certain
+    let settleable_rule_uncertainty = !certain
+        && binding
+            .get("uncertainty_count")
+            .and_then(Value::as_u64)
+            .is_some_and(|count| only_rule_uncertainties(evidence, count));
+    if !(certain || settleable_rule_uncertainty)
         || !binding
             .get("observations_digest")
             .is_some_and(Value::is_string)

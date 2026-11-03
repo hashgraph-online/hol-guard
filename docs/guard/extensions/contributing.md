@@ -53,7 +53,9 @@ Here, `<slug>` is the extension ID without the `command.` prefix. For example,
 Use `--check` with the preparation command to verify an already prepared change. Optional public
 credit, upstream, and explicit authority overrides belong in
 `contributions/extension-listings/command.<name>.json`; it is documented in
-[publisher metadata](publisher-metadata.md). Contributor credit never grants claim authority.
+[publisher metadata](publisher-metadata.md). A credit may also carry a public profile: a short
+description, an organization name, and website, LinkedIn, and X links. Contributor credit and that
+profile never grant claim authority.
 
 Required CI verifies public descriptors against the committed source before generating runtime
 files, so a missing or stale record fails the original contribution PR. After merges, the existing

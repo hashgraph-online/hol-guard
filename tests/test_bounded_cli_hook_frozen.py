@@ -11,7 +11,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters import (
     bounded_cli_hook_bridge,
     bounded_cli_hook_daemon,
-    bounded_cli_hook_frozen_recovery,
+    bounded_cli_hook_recovery,
     desktop_hook_proxy,
 )
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult, isolated_hook_environment
@@ -298,7 +298,7 @@ def test_frozen_fallback_rejects_forged_executable_and_arguments(
         del args, kwargs
         raise AssertionError("forged hook arguments must not execute")
 
-    monkeypatch.setattr(bounded_cli_hook_bridge, "run_isolated_hook_process", forbidden_runner)
+    monkeypatch.setattr(bounded_cli_hook_recovery, "run_isolated_hook_process", forbidden_runner)
     output = io.StringIO()
     with redirect_stdout(output):
         returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(config, input_text="{}")
@@ -320,7 +320,7 @@ def test_non_frozen_runtime_rejects_forged_frozen_config(
         del args, kwargs
         raise AssertionError("config must not force frozen dispatch")
 
-    monkeypatch.setattr(bounded_cli_hook_bridge, "run_isolated_hook_process", forbidden_runner)
+    monkeypatch.setattr(bounded_cli_hook_recovery, "run_isolated_hook_process", forbidden_runner)
     output = io.StringIO()
     with redirect_stdout(output):
         returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(config, input_text="{}")
@@ -354,10 +354,6 @@ def test_frozen_runtime_without_a_daemon_answer_fails_closed(
     def no_daemon(**kwargs: object) -> None:
         asked.append(str(kwargs["harness"]))
 
-    def forbidden_runner(*args: object, **kwargs: object) -> BoundedHookProcessResult:
-        del args, kwargs
-        raise AssertionError("a frozen Guard must not start a cold evaluator")
-
     recoveries: list[tuple[str, ...]] = []
 
     def failed_recovery(command: tuple[str, ...], **kwargs: object) -> BoundedHookProcessResult:
@@ -368,8 +364,7 @@ def test_frozen_runtime_without_a_daemon_answer_fails_closed(
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "executable", "/app/hol-guard")
     monkeypatch.setattr(bounded_cli_hook_daemon, "try_daemon_hook", no_daemon)
-    monkeypatch.setattr(bounded_cli_hook_bridge, "run_isolated_hook_process", forbidden_runner)
-    monkeypatch.setattr(bounded_cli_hook_frozen_recovery, "run_isolated_hook_process", failed_recovery)
+    monkeypatch.setattr(bounded_cli_hook_recovery, "run_isolated_hook_process", failed_recovery)
     output = io.StringIO()
     with redirect_stdout(output):
         returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(config, input_text="{}")
@@ -396,7 +391,9 @@ def test_frozen_runtime_asks_the_recovered_daemon_once_more(monkeypatch: pytest.
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "executable", "/app/hol-guard")
     monkeypatch.setattr(bounded_cli_hook_daemon, "try_daemon_hook", daemon)
-    monkeypatch.setattr(bounded_cli_hook_frozen_recovery, "run_isolated_hook_process", recovered)
+    monkeypatch.setattr(bounded_cli_hook_recovery, "run_isolated_hook_process", recovered)
+    identities = iter([("failed", "token"), ("recovered", "token")])
+    monkeypatch.setattr(bounded_cli_hook_recovery, "daemon_identity", lambda _home: next(identities))
     output = io.StringIO()
     with redirect_stdout(output):
         returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(config, input_text="{}")

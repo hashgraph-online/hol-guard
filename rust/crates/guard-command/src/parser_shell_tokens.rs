@@ -1,8 +1,8 @@
 //! The shell's word splitting, read one character at a time.
 //!
 //! A word ends where the shell ends it: on unquoted whitespace. Quoting,
-//! escapes, `$'…'` and `$$` are read here so the tokens hold the text the
-//! shell would hand the command, not the spelling it was typed with.
+//! escapes, `$'…'`, `$$` and arithmetic are read here so the tokens hold the
+//! text the shell would hand the command, not the spelling it was typed with.
 
 use super::*;
 
@@ -73,6 +73,32 @@ fn shell_tokens_mode(
                         characters.next();
                     }
                 }
+                // `$(( … ))` hands the command a number, so the word holds
+                // one rather than the arithmetic it was typed with. The word
+                // that names the program is left alone: a number read into it
+                // would name a program the shell never runs, and the command
+                // has to stay as unreadable as it was typed.
+                '$' if !tokens.is_empty()
+                    && chars.get(index + 1) == Some(&'(')
+                    && chars.get(index + 2) == Some(&'(') =>
+                {
+                    match super::arithmetic_close(&chars, index) {
+                        Some(close) => {
+                            token.push_str(super::ARITHMETIC_VALUE);
+                            token_started = true;
+                            for _ in index..close {
+                                characters.next();
+                            }
+                        }
+                        // A command substitution around a subshell. The
+                        // segment parser refuses it, so the word only has to
+                        // keep the spelling it was typed with.
+                        None => {
+                            token.push(current);
+                            token_started = true;
+                        }
+                    }
+                }
                 '$' if chars.get(index + 1) == Some(&'$') => {
                     token.push_str("$$");
                     token_started = true;
@@ -95,7 +121,14 @@ fn shell_tokens_mode(
                     token_started = true;
                 }
                 '\\' if preserve_backslash => {
-                    token.push('\\');
+                    // An escaped operator that ends the command is part of
+                    // the word it ends, the way `find … -exec cat {} \;`
+                    // ends its body.
+                    if crate::command_tokens::backslash_escapes_operator(&chars, index) {
+                        escaped = true;
+                    } else {
+                        token.push('\\');
+                    }
                     token_started = true;
                 }
                 '\\' => {

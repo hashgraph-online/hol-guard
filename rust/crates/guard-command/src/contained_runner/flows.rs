@@ -61,11 +61,11 @@ fn resolve_tool(name: &str, path_value: &str, shim_directory: &Path) -> Result<S
     String::from_utf8(canonical.as_os_str().as_bytes().to_vec()).map_err(|error| error.to_string())
 }
 
-fn lowered(manager: &str) -> String {
+pub(super) fn lowered(manager: &str) -> String {
     manager.trim().to_lowercase()
 }
 
-fn workspace_for(launch: &Launch) -> Result<PathBuf, String> {
+pub(super) fn workspace_for(launch: &Launch) -> Result<PathBuf, String> {
     let canonical = canonical_workspace(launch.workspace)?;
     // The OS backends expose system runtime roots read-only; a project beneath
     // one of them would bypass omission through an absolute path.

@@ -31,12 +31,6 @@ def test_native_error_requires_a_bounded_known_error_envelope() -> None:
     assert _native_error({"error": "unknown", "retryable": True}) is None
 
 
-def test_command_model_reuses_the_canonical_native_error_parser() -> None:
-    source = (ROOT / "src" / "codex_plugin_scanner" / "guard" / "native_command_model.py").read_text(encoding="utf-8")
-    assert '_native_error(resident_payload) == "native_overloaded"' in source
-    assert 'resident_payload == {"error": "native_overloaded"' not in source
-
-
 def test_native_runtime_fixtures_use_the_platform_temp_directory() -> None:
     for relative in (
         "ci/native_runtime/test_guard_native_runtime_mutation_differential.py",

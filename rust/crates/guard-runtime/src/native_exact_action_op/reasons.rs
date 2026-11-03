@@ -11,6 +11,7 @@ pub(super) const SENSITIVE_PATH: &str = "sensitive_path";
 pub(super) const BROAD_SCOPE: &str = "broad_scope";
 pub(super) const DESTRUCTIVE_COMMAND: &str = "destructive_command";
 pub(super) const GIT_HELPER_CONFIG: &str = "git_helper_config";
+pub(super) const SCRIPT_DELIVERY: &str = "script_execution_binding_unavailable";
 
 /// Native action types for changes to Guard itself.
 pub(super) const GUARD_CONTROL_ACTION_TYPES: [&str; 4] = [
@@ -20,5 +21,6 @@ pub(super) const GUARD_CONTROL_ACTION_TYPES: [&str; 4] = [
     "guard-control-operation",
 ];
 
-/// A proof that failed: the action may only be a one-time allow, for this reason.
+/// A failed proof is not permission. The scope contract determines whether
+/// any supported execution or recovery route exists for this reason.
 pub(super) type Proof<T> = Result<T, &'static str>;

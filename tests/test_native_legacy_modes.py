@@ -94,3 +94,36 @@ def test_legacy_values_fail_closed_without_a_native_runtime(
     output = response.get("hookSpecificOutput")
     assert isinstance(output, dict)
     assert output.get("permissionDecision") == "deny"
+
+
+def test_auto_mode_never_reads_the_native_binary_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`HOL_GUARD_NATIVE_BINARY` is a `force` affordance, not a general override.
+
+    It names a runtime a developer built for validation. Under `auto` the only
+    runtime Guard will select is the one bundled beside the imported package, so
+    the variable is read by nothing and clearing it changes no outcome.
+    """
+    override = tmp_path / "hol-guard-runtime"
+    override.write_bytes(b"")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(override))
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
+    assert override not in native_runtime_module._discover_runtime_candidates()
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    assert override in native_runtime_module._discover_runtime_candidates()
+
+
+def test_no_vector_recorder_clears_an_override_auto_never_reads() -> None:
+    """The recorders record the pre-native Python result, not Guard's.
+
+    What keeps native out of a recorder run is the checkout they run against and
+    the absence of a bundled runtime beside it, never an environment variable:
+    no value of `HOL_GUARD_NATIVE` disables the runtime any more. A recorder that
+    cleared `HOL_GUARD_NATIVE_BINARY` read as a third lever that still worked.
+    """
+    root = Path(__file__).resolve().parents[1] / "rust" / "crates" / "guard-runtime" / "testdata"
+    clearing = sorted(
+        str(path.relative_to(root))
+        for path in root.rglob("record_*.py")
+        if 'os.environ.pop("HOL_GUARD_NATIVE_BINARY"' in path.read_text(encoding="utf-8")
+    )
+    assert clearing == []

@@ -99,6 +99,8 @@ pub struct Resources {
     pub directories: Vec<PathBuf>,
     pub bindings: Vec<SourceBinding>,
     pub python_version: Option<String>,
+    pub standard_library: Option<PathBuf>,
+    pub configuration: Vec<(PathBuf, String)>,
     pub total_bytes: usize,
 }
 impl Resources {
@@ -439,7 +441,7 @@ impl Capture<'_> {
 
 #[path = "runtime_resources/python.rs"]
 mod python_capture;
-pub use python_capture::python;
+pub use python_capture::{python, python_identity};
 
 #[cfg(test)]
 #[path = "runtime_resources/resource_tests.rs"]

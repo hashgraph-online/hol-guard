@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO, cast
@@ -19,6 +21,7 @@ from ..approval_gate import ApprovalGateError
 from ..business_policy_document_import import has_business_rules
 from ..native_command_policy_decision import TOO_LARGE as COMMAND_TOO_LARGE
 from ..native_command_policy_decision import CommandPolicyDecisionUnavailableError
+from ..native_context import _resolve_digest_home, bind_context_digest_home, reset_context_digest_home
 from ..native_policy_document import NativePolicyDocumentError
 from ..native_policy_document_decision import TOO_LARGE, PolicyDocumentDecisionUnavailableError
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
@@ -346,18 +349,42 @@ def run_policy_file_command(
 ) -> int:
     command = str(args.policy_command)
     try:
-        if command == "init":
-            return _run_init(args, output_stream)
-        if command == "validate":
-            return _run_validate(args, output_stream)
-        if command == "test":
-            return _run_test(args, output_stream)
-        if command == "check":
-            return _run_check(args, output_stream, input_text)
+        with _file_command_home():
+            return _dispatch_policy_file_command(command, args, output_stream, input_text)
     except _COMMAND_ERRORS as error:
         code = str(getattr(error, "code", error.__class__.__name__))
         _emit(output_stream, {"error": code, "message": str(error)}, as_json=wants_json(args))
         return 4
+
+
+@contextmanager
+def _file_command_home() -> Iterator[None]:
+    """Give the resident a home to answer for without creating the user's Guard home.
+
+    The resident answers only for a home that holds its verifier key, and provisioning one writes a store. A machine
+    with a Guard home keeps using it; anywhere else (CI, a fresh machine) a private scratch home is removed afterward.
+    """
+
+    if _resolve_digest_home(None).is_dir():
+        yield
+        return
+    with tempfile.TemporaryDirectory(prefix="hol-guard-policy-") as scratch:
+        token = bind_context_digest_home(Path(scratch), remember=False)
+        try:
+            yield
+        finally:
+            reset_context_digest_home(token)
+
+
+def _dispatch_policy_file_command(command: str, args: Any, output_stream: TextIO | None, input_text: str | None) -> int:
+    if command == "init":
+        return _run_init(args, output_stream)
+    if command == "validate":
+        return _run_validate(args, output_stream)
+    if command == "test":
+        return _run_test(args, output_stream)
+    if command == "check":
+        return _run_check(args, output_stream, input_text)
     raise ValueError("unknown_policy_file_command")
 
 

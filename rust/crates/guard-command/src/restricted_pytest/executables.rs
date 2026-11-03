@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::HashSet;
 
 pub(super) fn allowed_executables(
     executable: &Path,
@@ -42,7 +43,7 @@ pub(super) fn allowed_executables(
     let venv_root = venv_root.as_deref();
     if allowed.iter().any(|path| {
         !allowed_executable_path(path, workspace, workspace_launcher || venv_root.is_some())
-            && !venv_root.is_some_and(|root| venv::in_bin(path, root))
+            && !venv_root.is_some_and(|root| venv::in_launcher(path, root, executable))
     }) {
         return Err(RestrictedPytestError::new(
             PYTEST_INVALID_COMMAND_REASON_CODE,
@@ -51,7 +52,7 @@ pub(super) fn allowed_executables(
     }
     if allowed
         .iter()
-        .any(|path| !executable_symlink_chain_is_approved(path, workspace, venv_root))
+        .any(|path| !executable_symlink_chain_is_approved(path, workspace, venv_root, executable))
     {
         return Err(RestrictedPytestError::new(
             PYTEST_INVALID_COMMAND_REASON_CODE,
@@ -136,6 +137,10 @@ pub(super) fn allowed_executable_path(
 ) -> bool {
     if path_is_within_lexically(path, workspace)
         || path_is_within_any(path, &TRUSTED_EXECUTABLE_ROOTS)
+        // A `/usr/bin` shim resolves into the developer directory, which is
+        // not a fixed prefix and so is not one of the trusted roots. It is
+        // accepted only while it is root-owned and sealed.
+        || super::developer_shim::is_developer_tool(path)
     {
         return true;
     }
@@ -190,10 +195,16 @@ pub(super) fn approved_user_python_runtime(path: &Path) -> bool {
 
 /// `_executable_symlink_chain_is_approved` (:370-385).
 /// Links inside an approved external venv's `bin` are part of its launcher.
+/// A venv made from a `/usr/bin` shim links to the tool the shim forwards to,
+/// so a hop spelled inside the sealed developer directory is accepted only once
+/// `venv::external_root` has approved that venv and its image. Without that
+/// approval the link is refused here: the path check alone would accept it,
+/// because the launcher canonicalizes into the developer directory.
 pub(super) fn executable_symlink_chain_is_approved(
     path: &Path,
     workspace: &Path,
     venv_root: Option<&Path>,
+    executable: &Path,
 ) -> bool {
     let mut current = path_absolute(path);
     for _depth in 0..16 {
@@ -205,7 +216,10 @@ pub(super) fn executable_symlink_chain_is_approved(
         if !path_is_within_lexically(&current, workspace)
             && !path_is_within_any_lexically(&current, &TRUSTED_EXECUTABLE_ROOTS)
             && !approved_user_python_runtime(&current)
-            && !venv_root.is_some_and(|root| venv::in_bin(&current, root))
+            && !venv_root.is_some_and(|root| {
+                venv::in_launcher(&current, root, executable)
+                    || super::developer_shim::is_in_developer_dir_lexically(&current)
+            })
         {
             return false;
         }

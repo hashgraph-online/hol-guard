@@ -51,7 +51,7 @@
 //!   defers. The decision lookup never selects one, since the relay gives it
 //!   no bundle identities, so this only guards the claim itself.
 
-use super::store::{self, STORE_UNREADABLE};
+use super::store::{self, STORE_NEWER, STORE_UNREADABLE};
 use super::{
     admit, ask, encode, package, package_spend, queue, resolve, settle, Answer, ClaimContext,
     Claimed, HeldClaim, Resolved, Routed, ASK_MODE, IDENTITY_FAILED,
@@ -117,6 +117,9 @@ fn spend(
     // republished snapshot or binding (config, integrity state or key) defers
     // before anything is claimed.
     let admitted = admit(&context.request, policy_store)?;
+    let _command_lease = policy_store
+        .command_authority_lease(&admitted.snapshot)
+        .map_err(|_| CLAIM_AUTHORITY_CHANGED)?;
     let held = &context.admitted;
     if !unchanged(
         (&held.workspace, &held.snapshot, &held.binding),
@@ -243,7 +246,8 @@ pub(super) fn open_for_claim(guard_home: &str) -> Result<Connection, &'static st
         .map_err(|_| STORE_UNREADABLE)?;
     match schema_version(&connection).map_err(|_| STORE_UNREADABLE)? {
         Some(version) if version <= SUPPORTED_SCHEMA_VERSION => Ok(connection),
-        _ => Err(STORE_UNREADABLE),
+        Some(_) => Err(STORE_NEWER),
+        None => Err(STORE_UNREADABLE),
     }
 }
 
@@ -265,7 +269,13 @@ fn after_claim(
     connection
         .execute_batch("PRAGMA query_only = ON")
         .map_err(|_| STORE_UNREADABLE)?;
-    let fresh = resolve(&context.request, &context.admitted, Some(connection), None);
+    let fresh = resolve(
+        &context.request,
+        &context.admitted,
+        Some(connection),
+        None,
+        policy_store,
+    );
     connection
         .execute_batch("PRAGMA query_only = OFF")
         .map_err(|_| STORE_UNREADABLE)?;

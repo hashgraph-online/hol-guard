@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shlex
 from collections.abc import Sequence
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
-
-from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots, resolves_within_root
 
 from . import local_supply_chain as _lsc
 from . import supply_chain_cloud_audit as _cloud_audit
@@ -22,7 +22,12 @@ from .native_package_audit_projection import (
     native_empty_audit_outcome,
     native_normalize_cloud_audit_response,
 )
-from .native_workspace_inventory import NativeWorkspaceInventoryError, native_workspace_inventory
+from .native_runner_authority import native_runner_authority
+from .native_workspace_inventory import (
+    NativeWorkspaceInventoryError,
+    check_audit_deadline,
+    native_workspace_inventory,
+)
 from .runtime.package_intent_common import (
     PackageIntent,
     PackageIntentTarget,
@@ -32,6 +37,15 @@ from .runtime.package_protect_projection import (
     LOCAL_SUPPLY_CHAIN_HARNESS as _LOCAL_SUPPLY_CHAIN_HARNESS,
 )
 
+# The resident's artifact reply carries the intent's targets in its metadata,
+# so a workspace with a few thousand packages outgrows the reply limit and the
+# whole audit fails. Targets beyond this many serialized bytes are evaluated
+# in further intents that each fit.
+_TARGET_CHUNK_BYTES = 512 * 1024
+# The resident's own ranking (``decision_rank``); an unknown decision ranks as
+# ``monitor`` there too.
+_DECISION_RANK = {"allow": 0, "monitor": 1, "warn": 2, "ask": 3, "block": 4}
+
 
 def resolve_supply_chain_audit_workspace_dir(
     *,
@@ -40,45 +54,46 @@ def resolve_supply_chain_audit_workspace_dir(
     allowed_roots: tuple[Path, ...],
     managed_workspace_dirs: Sequence[str] | None = None,
     reject_invalid_explicit: bool = False,
+    guard_home: Path | None = None,
 ) -> Path | None:
-    for candidate in (workspace_dir_value, workspace_value):
-        if not isinstance(candidate, str) or not candidate.strip():
-            continue
-        resolved = resolve_path_within_allowed_roots(
-            candidate,
-            allowed_roots,
-            require_exists=True,
-        )
-        if resolved is not None:
-            return resolved
-        if reject_invalid_explicit:
-            raise ValueError("workspace_dir_invalid")
-    cursor_project = os.environ.get("CURSOR_PROJECT_DIR", "").strip()
-    if cursor_project:
-        resolved = resolve_path_within_allowed_roots(
-            cursor_project,
-            allowed_roots,
-            require_exists=True,
-        )
-        if resolved is not None and _lsc._workspace_has_project_markers(resolved):
-            return resolved
+    """The workspace an audit runs against; the native runtime resolves it.
+
+    The request carries this process's working directory, home and
+    ``CURSOR_PROJECT_DIR`` so the answer never depends on the resident's own.
+    """
+
     try:
-        cwd = Path.cwd().resolve()
+        cwd: str | None = os.getcwd()
     except OSError:
         cwd = None
-    if cwd is not None and _lsc._workspace_has_project_markers(cwd):
-        for root in allowed_roots:
-            if resolves_within_root(root, cwd, require_exists=True):
-                return cwd
-    for managed_workspace in managed_workspace_dirs or ():
-        resolved = resolve_path_within_allowed_roots(
-            managed_workspace,
-            allowed_roots,
-            require_exists=True,
-        )
-        if resolved is not None and _lsc._workspace_has_project_markers(resolved):
-            return resolved
-    return None
+    user_home = os.path.expanduser("~")
+    cursor_project_dir = os.environ.get("CURSOR_PROJECT_DIR")
+    answer = native_runner_authority(
+        "supply_chain_audit_workspace_dir",
+        {
+            "explicit": [
+                _home_expanded(value) for value in (workspace_dir_value, workspace_value) if isinstance(value, str)
+            ],
+            "allowed_roots": [str(root) for root in allowed_roots],
+            "managed_workspace_dirs": [_home_expanded(value) for value in managed_workspace_dirs or ()],
+            "cursor_project_dir": None if cursor_project_dir is None else _home_expanded(cursor_project_dir),
+            "cwd": cwd,
+            "user_home": None if user_home == "~" else user_home,
+            "reject_invalid_explicit": reject_invalid_explicit,
+        },
+        guard_home=guard_home,
+    )
+    if answer.get("invalid_explicit") is True:
+        raise ValueError("workspace_dir_invalid")
+    workspace_dir = answer.get("workspace_dir")
+    return Path(workspace_dir) if isinstance(workspace_dir, str) else None
+
+
+def _home_expanded(value: str) -> str:
+    """Expand a ``~user`` path here; the native runtime does not look up accounts."""
+
+    stripped = value.strip()
+    return os.path.expanduser(stripped) if stripped.startswith("~") else value
 
 
 def audit_receipt_metadata(
@@ -135,6 +150,8 @@ def build_workspace_audit_payload(
     fail_on: str = "high",
     before_workspace_dir: Path | None = None,
     after_workspace_dir: Path | None = None,
+    allow_cloud_audit: bool = True,
+    record_evidence: bool = True,
 ) -> tuple[dict[str, object], int]:
     runner = _lsc._runtime_runner_module()
 
@@ -180,7 +197,9 @@ def build_workspace_audit_payload(
     evaluation: dict[str, object]
     source = "local"
     fallback_reason: dict[str, object] | None = None
-    if _cloud_audit._should_use_cloud_workspace_audit(store=store, posture=posture):
+    # Background assessments pass ``allow_cloud_audit=False``: nothing leaves
+    # the device unless the user asked for this audit.
+    if allow_cloud_audit and _cloud_audit._should_use_cloud_workspace_audit(store=store, posture=posture):
         try:
             auth_context = _lsc._resolve_guard_sync_auth_context(store)
             workspace_id = store.get_cloud_workspace_id()
@@ -214,6 +233,7 @@ def build_workspace_audit_payload(
                     command_name=command_name,
                     inventory_digest=workspace_inventory.inventory_digest,
                     now=now,
+                    record_evidence=record_evidence,
                 )
         except (runner.GuardSyncAuthorizationExpiredError, runner.GuardSyncNotConfiguredError, RuntimeError) as error:
             fallback_reason = (
@@ -237,6 +257,7 @@ def build_workspace_audit_payload(
                 command_name=command_name,
                 inventory_digest=workspace_inventory.inventory_digest,
                 now=now,
+                record_evidence=record_evidence,
             )
     else:
         evaluation = _workspace_local_evaluation(
@@ -249,6 +270,7 @@ def build_workspace_audit_payload(
             command_name=command_name,
             inventory_digest=workspace_inventory.inventory_digest,
             now=now,
+            record_evidence=record_evidence,
         )
     evaluation = _enrich_evaluation_packages_with_advisory_aliases(evaluation, store)
     payload: dict[str, object] = {
@@ -289,6 +311,7 @@ def _workspace_local_evaluation(
     command_name: str,
     inventory_digest: str,
     now: str,
+    record_evidence: bool,
 ) -> dict[str, object]:
     # The targets walk repeats the audit's inventory options so its snapshot
     # digest is comparable; a workspace that changed in between is rejected
@@ -303,27 +326,90 @@ def _workspace_local_evaluation(
     )
     if scanned.inventory_digest != inventory_digest:
         raise NativeWorkspaceInventoryError("Native workspace_inventory snapshot changed during audit")
-    targets = scanned.scan_targets
-    intent = _workspace_scan_intent(
-        command_name=command_name,
-        targets=targets,
-        manifest_paths=manifest_paths,
-        lockfile_paths=lockfile_paths,
-    )
-    assert intent is not None
-    artifact = build_package_request_artifact(
-        _LOCAL_SUPPLY_CHAIN_HARNESS,
-        intent,
-        config_path="hol-guard.toml",
-        source_scope="project",
-    )
-    evaluation = _lsc.evaluate_package_request_artifact(
-        artifact=artifact,
-        store=store,
-        workspace_dir=workspace_dir,
-        now=now,
-    )
-    return evaluation.to_dict()
+    evaluations: list[dict[str, object]] = []
+    for targets in _target_chunks(scanned.scan_targets):
+        check_audit_deadline()
+        intent = _workspace_scan_intent(
+            command_name=command_name,
+            targets=targets,
+            manifest_paths=manifest_paths,
+            lockfile_paths=lockfile_paths,
+        )
+        assert intent is not None
+        artifact = build_package_request_artifact(
+            _LOCAL_SUPPLY_CHAIN_HARNESS,
+            intent,
+            config_path="hol-guard.toml",
+            source_scope="project",
+            guard_home=store.guard_home,
+        )
+        evaluation = _lsc.evaluate_package_request_artifact(
+            artifact=artifact,
+            store=store,
+            workspace_dir=workspace_dir,
+            now=now,
+            record_evidence=record_evidence,
+        )
+        evaluations.append(evaluation.to_dict())
+    return evaluations[0] if len(evaluations) == 1 else _merged_evaluation(evaluations)
+
+
+def _target_chunks(targets: tuple[PackageIntentTarget, ...]) -> list[tuple[PackageIntentTarget, ...]]:
+    """``targets`` in order, split so each part stays within ``_TARGET_CHUNK_BYTES``.
+
+    A workspace under the bound keeps its single intent, and with it the
+    artifact id any saved decision for it was recorded under.
+    """
+
+    chunks: list[tuple[PackageIntentTarget, ...]] = []
+    current: list[PackageIntentTarget] = []
+    used = 0
+    for target in targets:
+        size = len(json.dumps(asdict(target), default=str, separators=(",", ":")).encode("utf-8"))
+        if size > _TARGET_CHUNK_BYTES:
+            # No chunk can carry it, and sending it alone would outgrow the
+            # resident's reply; the audit fails closed instead.
+            raise NativeWorkspaceInventoryError("Native workspace_inventory target exceeds the request bound")
+        if current and used + size > _TARGET_CHUNK_BYTES:
+            chunks.append(tuple(current))
+            current, used = [], 0
+        current.append(target)
+        used += size
+    chunks.append(tuple(current))
+    return chunks
+
+
+def _merged_evaluation(evaluations: list[dict[str, object]]) -> dict[str, object]:
+    """One audit evaluation from the evaluations of its target chunks.
+
+    The strictest chunk supplies the verdict and its explanation; every chunk's
+    packages are kept, list fields are joined without repeats, and a flag set
+    by any chunk stays set.
+    """
+
+    merged = dict(max(evaluations, key=lambda item: _DECISION_RANK.get(str(item.get("decision")), 1)))
+    for key, value in merged.items():
+        if isinstance(value, bool):
+            merged[key] = any(item.get(key) is True for item in evaluations)
+        elif isinstance(value, list):
+            joined = [entry for item in evaluations for entry in _list(item.get(key))]
+            merged[key] = joined if key == "packages" else _without_repeats(joined)
+    return merged
+
+
+def _list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
+def _without_repeats(items: list[object]) -> list[object]:
+    seen: set[str] = set()
+    kept: list[object] = []
+    for item in items:
+        key = json.dumps(item, sort_keys=True, default=str)
+        if key not in seen:
+            seen.add(key)
+            kept.append(item)
+    return kept
 
 
 def build_supply_chain_explain_payload(
@@ -356,6 +442,7 @@ def build_supply_chain_explain_payload(
         intent,
         config_path="hol-guard.toml",
         source_scope="project",
+        guard_home=store.guard_home,
     )
     evaluation = _lsc.evaluate_package_request_artifact(
         artifact=artifact,

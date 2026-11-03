@@ -2,21 +2,15 @@
 
 from __future__ import annotations
 
-import argparse
-import io
 import json
-import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.grok_approval_resume import (
-    GROK_APPROVAL_WAIT_MAX_SECONDS,
-    grok_live_approval_wait_seconds,
-    wait_for_grok_live_approval,
-)
+from codex_plugin_scanner.guard.adapters.grok_approval_resume import wait_for_grok_live_approval
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -47,11 +41,6 @@ def _request(tmp_path: Path, request_id: str) -> GuardApprovalRequest:
         review_command=f"hol-guard approvals approve {request_id}",
         approval_url=f"http://127.0.0.1/pending/{request_id}",
     )
-
-
-def test_grok_wait_timeout_is_capped_below_hook_deadline() -> None:
-    assert grok_live_approval_wait_seconds(120) == GROK_APPROVAL_WAIT_MAX_SECONDS
-    assert grok_live_approval_wait_seconds(0) == 0
 
 
 def test_grok_live_wait_allows_after_approval(tmp_path: Path) -> None:
@@ -259,46 +248,6 @@ def test_grok_live_wait_skips_observe_events_and_zero_timeout(tmp_path: Path) ->
     )
 
 
-def test_grok_emit_allows_after_live_approval(tmp_path: Path, monkeypatch) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    store.add_approval_request(_request(tmp_path, "req-grok-emit"), "2026-05-08T10:00:00+00:00")
-    (store.guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 4\n", encoding="utf-8")
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["hol-guard", "hook", "--guard-home", str(store.guard_home), "--harness", "grok"],
-    )
-
-    def approve() -> None:
-        time.sleep(0.15)
-        apply_approval_resolution(
-            store=store,
-            request_id="req-grok-emit",
-            action="allow",
-            scope="artifact",
-            workspace=str(tmp_path),
-            reason="reviewed",
-            now="2026-05-08T10:00:01+00:00",
-        )
-
-    thread = threading.Thread(target=approve)
-    thread.start()
-    stream = io.StringIO()
-    from codex_plugin_scanner.guard.adapters.grok_hooks import emit_grok_hook_response, grok_hook_process_exit
-
-    emit_grok_hook_response(
-        policy_action="require-reapproval",
-        reason="Review in HOL Guard.",
-        event_name="PreToolUse",
-        approval_payload={"approval_requests": [{"request_id": "req-grok-emit"}]},
-        output_stream=stream,
-    )
-    thread.join(timeout=5)
-
-    assert json.loads(stream.getvalue()) == {"decision": "allow"}
-    assert grok_hook_process_exit("require-reapproval") == 0
-
-
 def test_grok_live_wait_ignores_unrelated_pending_requests(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request(tmp_path, "req-grok-stale"), "2026-05-08T10:00:00+00:00")
@@ -419,7 +368,7 @@ def test_grok_live_wait_runs_in_json_mode(tmp_path: Path) -> None:
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_grok_isolated_hook_resumes_after_approval(tmp_path: Path) -> None:
+def test_grok_isolated_hook_honors_approval_on_retry(tmp_path: Path) -> None:
     import sys as runtime_sys
 
     import codex_plugin_scanner
@@ -458,66 +407,85 @@ def test_grok_isolated_hook_resumes_after_approval(tmp_path: Path) -> None:
         ],
     )
     store = GuardStore(guard_home)
-
-    def approve_pending() -> None:
-        for _ in range(400):
-            pending = store.list_approval_requests(status="pending", harness="grok", limit=5)
-            if pending:
-                request_id = pending[0]["request_id"]
-                assert isinstance(request_id, str)
-                apply_approval_resolution(
-                    store=store,
-                    request_id=request_id,
-                    action="allow",
-                    scope="artifact",
-                    workspace=str(workspace),
-                    reason="reviewed",
-                    now="2026-05-08T10:00:01+00:00",
-                )
-                return
-            time.sleep(0.05)
-
-    thread = threading.Thread(target=approve_pending)
-    thread.start()
-    result = run_isolated_hook_process(
-        command,
-        input_text=json.dumps(
-            {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "run_terminal_command",
-                "toolInput": {"command": "cat .env"},
-                "cwd": str(workspace),
-                "session_id": "sess-isolated-grok",
-            }
-        ),
-        cwd=guard_home,
-        environment=isolated_hook_environment(),
-        timeout_seconds=20,
+    hook_input = json.dumps(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "run_terminal_command",
+            "toolInput": {"command": "cat .env"},
+            "cwd": str(workspace),
+            "session_id": "sess-isolated-grok",
+        }
     )
-    thread.join(timeout=21)
+
+    def run_hook():
+        return run_isolated_hook_process(
+            command,
+            input_text=hook_input,
+            cwd=guard_home,
+            environment=isolated_hook_environment(),
+            timeout_seconds=20,
+        )
+
+    # The daemon path answers without waiting in the hook: the read stops with a
+    # queued request, and the retry after approval runs.
+    first = run_hook()
+    assert first.returncode == 2
+    first_output = json.loads(first.stdout)
+    assert first_output["decision"] == "deny"
+    assert first_output["policy_action"] == "review"
+    assert "SECRET=1" not in first.stdout
+    pending = store.list_approval_requests(status="pending", harness="grok", limit=5)
+    assert len(pending) == 1
+    request_id = pending[0]["request_id"]
+    assert isinstance(request_id, str)
+    apply_approval_resolution(
+        store=store,
+        request_id=request_id,
+        action="allow",
+        scope="artifact",
+        workspace=str(workspace),
+        reason="reviewed",
+    )
+    result = run_hook()
 
     assert result.timed_out is False
     assert result.returncode == 0
     stdout_line = next(line for line in reversed(result.stdout.splitlines()) if line.strip())
-    assert json.loads(stdout_line)["decision"] == "allow"
+    output = json.loads(stdout_line)
+    assert output["decision"] == "allow"
+    assert output["approval_reuse_status"] == "accepted"
+
+
+def _recorded_artifact_directive(harness: str, *, json_mode: bool, event: str, action: str) -> dict[str, object]:
+    """The artifact hook's routing the resident must reproduce for these facts."""
+
+    import gzip
+
+    fixture = Path(__file__).resolve().parents[1] / (
+        "rust/crates/guard-runtime/tests/fixtures/artifact_directive_vectors.json.gz"
+    )
+    wanted = {
+        "harness": harness,
+        "json": json_mode,
+        "event": event,
+        "policy_action": action,
+        "output_stream_present": False,
+        "replayed": False,
+        "approval_context_present": False,
+    }
+    return next(
+        vector["directive"]
+        for vector in json.loads(gzip.decompress(fixture.read_bytes()))
+        if all(vector["facts"][key] == value for key, value in wanted.items()) and not any(vector["extra"].values())
+    )
 
 
 def test_grok_json_mode_uses_native_hook_response() -> None:
-    from codex_plugin_scanner.guard.cli.commands_support_interaction import (
-        _should_emit_native_hook_json_response,
-        _should_emit_native_hook_response,
-    )
-
-    args = argparse.Namespace(harness="grok", json=True)
-    assert _should_emit_native_hook_response(args) is False
-    assert (
-        _should_emit_native_hook_json_response(
-            args,
-            event_name="PreToolUse",
-            output_stream=None,
-        )
-        is True
-    )
+    directive = _recorded_artifact_directive("grok", json_mode=True, event="PreToolUse", action="allow")
+    assert directive["route"] == "render"
+    assert directive["try_json_document"] is True
+    assert directive["emitter"] == "grok"
+    assert directive["exit_code"] is None  # grok's adapter decides it from its emit state
 
 
 def test_apply_grok_pretool_wait_rewrites_hook_specific_output(
@@ -532,6 +500,7 @@ def test_apply_grok_pretool_wait_rewrites_hook_specific_output(
         "decision": "deny",
         "policy_action": "review",
         "reason": "needs review",
+        "approval_requests": [{"request_id": "req-grok-apply"}],
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
@@ -539,7 +508,10 @@ def test_apply_grok_pretool_wait_rewrites_hook_specific_output(
         },
     }
 
-    monkeypatch.setattr(grok_approval_resume, "wait_for_grok_live_approval", lambda **_kwargs: "allow")
+    def resolved_as(action: str) -> Callable[..., dict[str, object]]:
+        return lambda **_kwargs: {"resolved": True, "pending_request_ids": [], "items": [{"resolution_action": action}]}
+
+    monkeypatch.setattr(grok_approval_resume, "wait_for_approval_requests", resolved_as("allow"))
     allowed = apply_grok_pretool_approval_wait(
         dict(response),
         event_name="PreToolUse",
@@ -554,7 +526,7 @@ def test_apply_grok_pretool_wait_rewrites_hook_specific_output(
     assert hook_specific["permissionDecision"] == "allow"
     assert "permissionDecisionReason" not in hook_specific
 
-    monkeypatch.setattr(grok_approval_resume, "wait_for_grok_live_approval", lambda **_kwargs: "block")
+    monkeypatch.setattr(grok_approval_resume, "wait_for_approval_requests", resolved_as("deny"))
     blocked = apply_grok_pretool_approval_wait(
         dict(response),
         event_name="PreToolUse",

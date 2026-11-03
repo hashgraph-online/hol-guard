@@ -95,6 +95,9 @@ pub(super) fn spend_package(
     // The lane admission must be the one the decision was made under: any
     // republished snapshot or binding defers before anything is claimed.
     let admitted = admit(&context.request, policy_store)?;
+    let _command_lease = policy_store
+        .command_authority_lease(&admitted.snapshot)
+        .map_err(|_| super::BINDING_INCOMPLETE)?;
     let held = &context.admitted;
     if !unchanged(
         (&held.workspace, &held.snapshot, &held.binding),
@@ -200,7 +203,7 @@ fn after_claim(
     connection
         .execute_batch("PRAGMA query_only = ON")
         .map_err(|_| STORE_UNREADABLE)?;
-    let reread = resolve_claimed(connection, context, &intent, evaluation);
+    let reread = resolve_claimed(connection, context, &intent, evaluation, policy_store);
     connection
         .execute_batch("PRAGMA query_only = OFF")
         .map_err(|_| STORE_UNREADABLE)?;
@@ -297,12 +300,14 @@ fn resolve_claimed(
     context: &PackageClaimContext,
     intent: &PackageIntent,
     evaluation: &Map<String, Value>,
+    policy_store: &PolicySnapshotStore,
 ) -> Result<(Resolved, package_leg::Reresolved), &'static str> {
     let (fresh, legged) = super::resolve(
         &context.request,
         &context.admitted,
         Some(connection),
         Some(PackageLeg::Claimed(intent, evaluation)),
+        policy_store,
     )?;
     let reresolved = legged
         .and_then(Legged::reresolved)

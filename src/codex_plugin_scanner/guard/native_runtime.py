@@ -9,22 +9,17 @@ from __future__ import annotations
 import functools
 import importlib.metadata
 import json
-import math
 import os
 import stat
 import sys
 import threading
 import time
-from collections.abc import Mapping
 from pathlib import Path
 
-from .codex_hook_launch_runtime import run_isolated_hook_process
+from .codex_hook_launch_runtime import BoundedHookProcessResult, run_isolated_hook_process
 from .group_write_trust import trusted_owner_and_mode as _trusted_owner_and_mode
 from .native_binary_identity import validate_native_binary as _validate_binary
-from .native_resident_client import native_resident_client_request
-from .native_response_decoder import native_error as _native_error
-from .native_response_decoder import response_from_payload as _response_from_payload
-from .native_route_receipt import record_native_hook_result
+from .native_response_decoder import native_error as _native_error  # noqa: F401
 from .native_runtime_process_cache import (
     forget_process_status,
     process_snapshot,
@@ -33,20 +28,17 @@ from .native_runtime_process_cache import (
 )
 from .native_runtime_request_scope import (
     _resolved_candidate_path,
+    primary_candidates,
     remember_scoped_status,
     scoped_candidates,
     scoped_status,
 )
 from .native_runtime_resilience import (
     NativeRuntimeHealthSnapshot,
-    native_record_integrity_failure,
-    native_record_overload,
-    native_record_resident_failure,
-    native_record_resident_success,
     native_runtime_health_snapshot,
 )
 from .native_runtime_values import (
-    _INTEGRITY_FAILURE_REASONS,
+    _INTEGRITY_FAILURE_REASONS,  # noqa: F401
     NativeMode,
     NativeRuntimeCapabilities,
     NativeRuntimeIdentity,
@@ -58,12 +50,9 @@ from .native_runtime_values import (
     _python_package_version,
     _resolve_native_mode,
     decode_runtime_manifest,
-    native_output_sha256,  # noqa: F401
-    parity_signature,  # noqa: F401
     warn_legacy_hook_fast_path_once,
 )
 from .native_runtime_values import _NATIVE_RUNTIME_EXPORTS as __all__  # noqa: F401, N811
-from .runtime.hook_review_types import HookReviewRequest, HookReviewResponse
 
 _NATIVE_PROTOCOL_VERSION = 1
 _NATIVE_BINARY_ENV = "HOL_GUARD_NATIVE_BINARY"
@@ -72,9 +61,7 @@ _DEFAULT_NATIVE_MODE: NativeMode = "auto"
 _NATIVE_MANIFEST_NAME = "runtime-manifest.json"
 _NATIVE_MANIFEST_SCHEMA = "hol-guard-native-runtime.v1"
 _MAX_MANIFEST_BYTES = 16 * 1024
-_MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
-_RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 
 
 def native_mode() -> NativeMode:
@@ -101,14 +88,7 @@ def _runtime_candidates() -> tuple[Path, ...]:
 
 def _discover_runtime_candidates() -> tuple[Path, ...]:
     mode = native_mode()
-    candidates: list[Path] = []
-    override = os.environ.get(_NATIVE_BINARY_ENV)
-    if override and mode == "force":
-        candidate = Path(override).expanduser()
-        if candidate.is_absolute():
-            candidates.append(candidate)
-
-    candidates.append(_bundled_runtime_candidate())
+    candidates = list(primary_candidates(mode, os.environ.get(_NATIVE_BINARY_ENV), _bundled_runtime_candidate()))
 
     # Developer compatibility: a separately installed runtime distribution is
     # validation-only. Automatic production selection must use the runtime
@@ -247,14 +227,45 @@ def _isolated_environment() -> dict[str, str]:
         "USERPROFILE",
         "WINDIR",
     }
-    environment = {
-        key: value for key, value in os.environ.items() if key.upper() in allowed or key.upper().startswith("LC_")
-    }
+    environment = {}
+    for key in os.environ:
+        upper = key.upper()
+        if upper in allowed or upper.startswith("LC_"):
+            environment[key] = os.environ[key]
     if os.name == "nt":
         dll_path = os.pathsep.join(_windows_native_dll_directories())
         if dll_path:
             environment["PATH"] = dll_path
     return environment
+
+
+def _run_native_process_result(
+    path: Path,
+    args: tuple[str, ...],
+    *,
+    input_text: str,
+    timeout_seconds: float,
+    output_limit: int = _MAX_RESPONSE_BYTES,
+    stop_event: threading.Event | None = None,
+) -> BoundedHookProcessResult:
+    """Run one bounded native invocation and keep its whole result.
+
+    Callers that only need the answer use :func:`_run_native_process`. This
+    form is for the one-shot arms whose failure code is the answer: the
+    runtime prints the code on stderr and exits non-zero, so collapsing the
+    result to ``None`` would lose the distinction between, say, a mismatched
+    key and a directory it could not create.
+    """
+
+    return run_isolated_hook_process(
+        (str(path), *args),
+        input_text=input_text,
+        cwd=path.parent,
+        environment=_isolated_environment(),
+        timeout_seconds=timeout_seconds,
+        output_limit=output_limit,
+        stop_event=stop_event,
+    )
 
 
 def _run_native_process(
@@ -264,14 +275,15 @@ def _run_native_process(
     input_text: str,
     timeout_seconds: float,
     output_limit: int = _MAX_RESPONSE_BYTES,
+    stop_event: threading.Event | None = None,
 ) -> str | None:
-    result = run_isolated_hook_process(
-        (str(path), *args),
+    result = _run_native_process_result(
+        path,
+        args,
         input_text=input_text,
-        cwd=path.parent,
-        environment=_isolated_environment(),
         timeout_seconds=timeout_seconds,
         output_limit=output_limit,
+        stop_event=stop_event,
     )
     if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
         return None
@@ -375,6 +387,30 @@ def _status_request_key(candidates: tuple[Path, ...]) -> tuple[str, tuple[str, .
 
 
 def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeRuntimeStatus:
+    preferred = preferred_key = None
+    if native_mode() == "force":
+        preferred = primary_candidates("force", os.environ.get(_NATIVE_BINARY_ENV), _bundled_runtime_candidate())
+        preferred_key = _status_request_key(preferred)
+        expired = deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
+        # A publisher can seed this request before capability lookup. Preserve
+        # the ordinary scoped binary/manifest checks without unused discovery.
+        if (
+            not expired
+            and (shared := scoped_status(preferred_key)) is not None
+            and shared.available
+            and shared.compatible
+            and shared.mode == preferred_key[0]
+            and shared.identity is not None
+            and shared.identity.path == _resolved_candidate_path(preferred[0])
+            and _scoped_manifest_still_valid(shared)
+        ):
+            return shared
+        # A fully witnessed first choice cannot be displaced by a later,
+        # lower-priority distribution. The existing cache still checks the
+        # complete binary/manifest identities and refuses fresh or moved files.
+        if not expired and (cached := process_status(preferred_key, preferred)) is not None:
+            remember_scoped_status(preferred_key, cached)
+            return cached
     candidates = _runtime_candidates()
     key = _status_request_key(candidates)
     if (cached := scoped_status(key)) is not None:
@@ -393,6 +429,14 @@ def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeR
     status = _compute_runtime_status(candidates, deadline_monotonic=deadline_monotonic)
     remember_scoped_status(key, status)
     remember_process_status(key, status, before)
+    if (
+        preferred is not None
+        and preferred_key is not None
+        and preferred_key != key
+        and candidates[: len(preferred)] == preferred
+        and status.mode == preferred_key[0]
+    ):
+        remember_process_status(preferred_key, status, before)
     return status
 
 
@@ -490,108 +534,6 @@ def _compute_runtime_status(
     )
 
 
-def _capture_native_deadline(request: HookReviewRequest) -> tuple[float, int]:
-    """Capture one absolute native deadline and its bounded envelope budget."""
-    now = time.monotonic()
-    requested = request.deadline_monotonic
-    deadline = requested if requested is not None and math.isfinite(requested) else now + 0.75
-    budget_ms = max(1, min(9_000, int((deadline - now) * 1_000)))
-    return deadline, budget_ms
-
-
 def native_runtime_health(guard_home: Path) -> NativeRuntimeHealthSnapshot:
     status = native_runtime_status()
     return native_runtime_health_snapshot(_identity_key(status), guard_home)
-
-
-def review_post_tool_native(
-    request: HookReviewRequest,
-    *,
-    observe_mode: bool,
-    policy_snapshot: Mapping[str, object] | None,
-) -> HookReviewResponse | None:
-    """Review PostToolUse through the native Rust client and resident.
-
-    Native failure returns ``None`` so the caller fails closed without Python
-    re-evaluation or a semantic one-shot fallback.
-    """
-    del observe_mode
-    status = native_runtime_status()
-    identity_key = _identity_key(status)
-    if not status.available or not status.compatible or status.identity is None:
-        if status.reason in _INTEGRITY_FAILURE_REASONS:
-            native_record_integrity_failure(
-                identity_key,
-                request.guard_home,
-                reason=status.reason,
-            )
-        return record_native_hook_result("native_fail_safe", None)
-
-    deadline_monotonic, deadline_budget_ms = _capture_native_deadline(request)
-    if policy_snapshot is None:
-        return record_native_hook_result("native_fail_safe", None)
-    generation = policy_snapshot.get("generation")
-    if isinstance(generation, bool) or not isinstance(generation, int) or generation <= 0:
-        return record_native_hook_result("native_fail_safe", None)
-    envelope = {
-        "schema": "guard-hook-envelope.v2",
-        "request_id": request.request_id,
-        "harness": request.harness,
-        "event": request.event_name,
-        "raw_payload": request.payload,
-        "deadline_budget_ms": deadline_budget_ms,
-        "policy_generation": generation,
-        # The resident already authenticated and cached the full snapshot at
-        # push/startup. Bind each request to that snapshot without copying
-        # policy rules or re-running their integrity checks on the hot path.
-        "policy_snapshot": {
-            "generation": generation,
-            "policy_digest": policy_snapshot.get("policy_digest"),
-            "runtime_identity": policy_snapshot.get("runtime_identity"),
-        },
-        "source": {
-            "cwd": str(request.cwd) if request.cwd is not None else None,
-            "home_dir": str(request.home_dir),
-            "guard_home": str(request.guard_home),
-            "source_ref_external_allowed": request.source_ref_external_allowed,
-        },
-    }
-    input_text = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False)
-    if len(encoded := input_text.encode("utf-8")) > _MAX_REQUEST_BYTES:
-        return record_native_hook_result("native_fail_safe", None)
-    resident_output = None
-    if status.capabilities is not None and _RESIDENT_PROTOCOL_FEATURE in status.capabilities.features:
-        resident_output = native_resident_client_request(
-            executable=status.identity.path,
-            guard_home=request.guard_home,
-            environment=_isolated_environment(),
-            payload=encoded,
-            deadline_monotonic=deadline_monotonic,
-        )
-    if resident_output is not None:
-        try:
-            resident_payload = json.loads(resident_output)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            resident_payload = None
-        resident_error = _native_error(resident_payload)
-        if resident_error == "native_overloaded":
-            native_record_overload(status.identity.sha256, request.guard_home)
-            return record_native_hook_result("native_fail_safe", None)
-        response = _response_from_payload(resident_payload)
-        if response is not None:
-            native_record_resident_success(status.identity.sha256, request.guard_home)
-            return record_native_hook_result("native_resident", response)
-        failure_reason = resident_error or "native_resident_invalid_response"
-    else:
-        failure_reason = (
-            "native_resident_unavailable"
-            if status.capabilities is not None and _RESIDENT_PROTOCOL_FEATURE in status.capabilities.features
-            else "native_resident_protocol_unsupported"
-        )
-
-    native_record_resident_failure(
-        status.identity.sha256,
-        request.guard_home,
-        reason=failure_reason,
-    )
-    return record_native_hook_result("native_fail_safe", None)

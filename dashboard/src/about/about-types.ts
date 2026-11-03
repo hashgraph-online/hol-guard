@@ -82,6 +82,8 @@ export type AboutRuntimeSummary = {
   cloudState: "local_only" | "paired_waiting" | "paired_active" | "unknown";
   cloudStateLabel: string;
   syncConfigured: boolean;
+  /** Current upload health; a pairing alone does not prove data is crossing. */
+  syncHealth: "healthy" | "pending" | "failed" | "degraded" | "disabled" | "stale" | null;
   pendingCount: number;
   receiptCount: number;
   protectedAppCount: number;

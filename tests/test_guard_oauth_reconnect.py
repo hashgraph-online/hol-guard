@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+from base64 import urlsafe_b64encode
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -16,6 +17,11 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.support.network import stub_authenticated_urlopen
+
+
+def _encode_jwt_segment(payload: dict[str, object]) -> str:
+    encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return urlsafe_b64encode(encoded).decode("ascii").rstrip("=")
 
 
 def _store_with_oauth_credentials(
@@ -302,8 +308,8 @@ def test_storage_repair_recovers_missing_oauth_binding_and_claims_unowned_reques
     dpop_key_material = generate_dpop_key_pair()
     access_token = ".".join(
         (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment(
+            _encode_jwt_segment({"alg": "ES256"}),
+            _encode_jwt_segment(
                 {
                     "iss": PRODUCTION_GUARD_ISSUER,
                     "grant": {"grantId": "grant-1"},
@@ -495,8 +501,8 @@ def test_refresh_guard_oauth_access_token_prefers_jwt_expiry_claim(monkeypatch) 
     expiry = datetime(2099, 1, 1, tzinfo=timezone.utc)
     access_token = ".".join(
         (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment({"exp": int(expiry.timestamp())}),
+            _encode_jwt_segment({"alg": "ES256"}),
+            _encode_jwt_segment({"exp": int(expiry.timestamp())}),
             "signature",
         )
     )
@@ -592,8 +598,8 @@ def test_refresh_guard_oauth_access_token_extracts_cloud_user_profile(monkeypatc
     """Token refresh should extract cloud_user_profile from guard_local_entitlement in the response."""
     access_token = ".".join(
         (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment({"exp": 9999999999}),
+            _encode_jwt_segment({"alg": "ES256"}),
+            _encode_jwt_segment({"exp": 9999999999}),
             "signature",
         )
     )
@@ -643,8 +649,8 @@ def test_refresh_guard_oauth_access_token_returns_none_cloud_user_profile_when_a
     """Token refresh should return None for cloud_user_profile when entitlement lacks user_profile."""
     access_token = ".".join(
         (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment({"exp": 9999999999}),
+            _encode_jwt_segment({"alg": "ES256"}),
+            _encode_jwt_segment({"exp": 9999999999}),
             "signature",
         )
     )
@@ -683,8 +689,8 @@ def test_prepare_guard_cloud_connect_authorization_persists_refreshed_cloud_user
 
     access_token = ".".join(
         (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment({"exp": 9999999999}),
+            _encode_jwt_segment({"alg": "ES256"}),
+            _encode_jwt_segment({"exp": 9999999999}),
             "signature",
         )
     )
@@ -750,8 +756,8 @@ def test_prepare_guard_cloud_connect_authorization_clears_stale_cloud_user_profi
 
     access_token = ".".join(
         (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment({"exp": 9999999999}),
+            _encode_jwt_segment({"alg": "ES256"}),
+            _encode_jwt_segment({"exp": 9999999999}),
             "signature",
         )
     )

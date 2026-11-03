@@ -4,12 +4,7 @@ import os
 import stat
 import uuid
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from device_support import response_error_code
-from lab_common import atomic, decode_json_object, json_bytes
-
-from codex_plugin_scanner.guard.mdm.cloud_control import (
+from cloud_control import (
     ACK_SCHEMA,
     HEALTH_SCHEMA,
     ContractError,
@@ -17,6 +12,11 @@ from codex_plugin_scanner.guard.mdm.cloud_control import (
     policy_hash,
     verify_config,
 )
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from device_support import response_error_code
+from lab_common import atomic, decode_json_object, json_bytes
+
 from codex_plugin_scanner.guard.mdm.policy import parse_managed_policy
 
 

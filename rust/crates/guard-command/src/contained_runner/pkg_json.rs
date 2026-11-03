@@ -305,3 +305,28 @@ pub(crate) fn canonical_registry_resolution(
     let tarball = package.rsplit('/').next().unwrap_or(package);
     text == format!("https://registry.npmjs.org/{package}/-/{tarball}-{version}.tgz")
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::canonical_registry_resolution;
+
+    #[test]
+    fn scoped_registry_tarball_omits_scope_from_filename() {
+        let resolved = json!("https://registry.npmjs.org/@scope/tool/-/tool-1.2.3.tgz");
+        assert!(canonical_registry_resolution(
+            "@scope/tool",
+            "1.2.3",
+            Some(&resolved)
+        ));
+        let scoped_filename =
+            json!("https://registry.npmjs.org/@scope/tool/-/@scope/tool-1.2.3.tgz");
+        assert!(!canonical_registry_resolution(
+            "@scope/tool",
+            "1.2.3",
+            Some(&scoped_filename)
+        ));
+        assert!(!canonical_registry_resolution("@scope/tool", "1.2.3", None));
+    }
+}

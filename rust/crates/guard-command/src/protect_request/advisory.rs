@@ -1,5 +1,7 @@
 //! Cached-advisory matching for `evaluate_protect_request`.
 
+use std::path::Path;
+
 use super::*;
 
 pub(super) fn severity_rank(advisory: &Map<String, Value>) -> u8 {
@@ -36,7 +38,59 @@ pub(super) fn advisory_headline(advisory: &Map<String, Value>) -> String {
     format!("{artifact} matched a Guard advisory.")
 }
 
-pub(super) fn request_risk_signals(request: &ProtectRequest) -> Vec<String> {
+/// A launched script that names a credential store and uses the network.
+const SCRIPT_EXFILTRATES: &str = "runs a script that reads a credential store and uses the network";
+/// An argument to a launched script that names a secret file.
+const SCRIPT_SECRET_ARGUMENT: &str = "passes a secret file to a script";
+
+/// For a custom command that launches a readable script, the signals of what
+/// that script does: the arguments after it are its data, so prose that
+/// merely mentions a secret is not one. `None` keeps the command-line scan:
+/// any other command, or a script that cannot be read whole.
+fn launched_script_signals(request: &ProtectRequest, cwd: Option<&Path>) -> Option<Vec<String>> {
+    if request.install_kind != "custom" {
+        return None;
+    }
+    let crate::pretool::ArgvScript::Read {
+        exfiltrates,
+        arguments,
+    } = crate::pretool::argv_script(&request.command, cwd)
+    else {
+        return None;
+    };
+    let mut signals = Vec::new();
+    if exfiltrates {
+        signals.push(SCRIPT_EXFILTRATES.to_owned());
+    }
+    if arguments
+        .iter()
+        .any(|argument| names_secret_path(argument, cwd))
+    {
+        signals.push(SCRIPT_SECRET_ARGUMENT.to_owned());
+    }
+    Some(signals)
+}
+
+/// Whether `argument` is a secret path, or a command string (a script may
+/// hand one to a shell) with a path token under a credential store. Only a
+/// token that spells a path counts: a bare word in prose is data.
+fn names_secret_path(argument: &str, cwd: Option<&Path>) -> bool {
+    let secret = |text: &str| crate::secret_path_probe::is_request_secret_path(text, cwd, None);
+    secret(argument)
+        || argument
+            .split_whitespace()
+            .map(|token| {
+                token.trim_matches(|c| {
+                    matches!(c, '"' | '\'' | ';' | '|' | '&' | '(' | ')' | '<' | '>')
+                })
+            })
+            .any(|token| (token.contains('/') || token.starts_with('~')) && secret(token))
+}
+
+pub(super) fn request_risk_signals(request: &ProtectRequest, cwd: Option<&Path>) -> Vec<String> {
+    if let Some(signals) = launched_script_signals(request, cwd) {
+        return signals;
+    }
     let joined = request.command.join(" ").to_lowercase();
     let mentions = |needles: &[&str]| needles.iter().any(|needle| joined.contains(needle));
     let mut signals: Vec<&str> = Vec::new();
@@ -100,9 +154,19 @@ pub(super) fn request_risk_signals(request: &ProtectRequest) -> Vec<String> {
 }
 
 /// `evaluate_protect_request` over the cached advisory rows (each the
-/// `list_cached_advisories` dict).
+/// `list_cached_advisories` dict), without a working directory.
 pub fn evaluate_protect_request(request: &ProtectRequest, advisories: &[Value]) -> ProtectVerdict {
-    let risk_signals = request_risk_signals(request);
+    evaluate_protect_request_in(request, advisories, None)
+}
+
+/// `evaluate_protect_request` for a command that runs in `cwd`, where a
+/// custom command's relative script can be read.
+pub fn evaluate_protect_request_in(
+    request: &ProtectRequest,
+    advisories: &[Value],
+    cwd: Option<&Path>,
+) -> ProtectVerdict {
+    let risk_signals = request_risk_signals(request, cwd);
     let identities: Vec<Value> = request
         .targets
         .iter()
@@ -137,6 +201,20 @@ pub fn evaluate_protect_request(request: &ProtectRequest, advisories: &[Value]) 
                 "{} Guard blocked the install before the artifact landed locally.",
                 advisory_headline(row(index))
             ),
+            risk_signals,
+            matched,
+        };
+    }
+    // The same rule the hooks apply to a launched script.
+    if risk_signals
+        .iter()
+        .any(|signal| signal == SCRIPT_EXFILTRATES)
+    {
+        return ProtectVerdict {
+            action: "block",
+            reason:
+                "HOL Guard blocked a script that reads a credential store and uses the network."
+                    .to_owned(),
             risk_signals,
             matched,
         };

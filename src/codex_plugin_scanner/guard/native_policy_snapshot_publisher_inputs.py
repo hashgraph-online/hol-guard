@@ -20,7 +20,10 @@ from .native_policy_snapshot_constants import (
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_direct_lane import NativePolicySnapshotDirectLaneAck
-from .native_policy_snapshot_policy import _stricter_action
+
+RESIDENT_SCOPE_PREFIX = "resident-v3-"
+# Stands in for the mtime and size of a scope that belongs to another runtime.
+FOREIGN_SCOPE_METADATA = -1
 
 if TYPE_CHECKING:
     from .runtime.extension_control_runtime import ExtensionControlRuntime
@@ -105,19 +108,44 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
     ) -> tuple[tuple[tuple[str, tuple[int, int, int, int] | None], ...], tuple[tuple[str, int, int], ...]]:
         return self._current_policy_input_stats(), self._current_resident_fingerprint()
 
-    def _current_resident_fingerprint(self) -> tuple[tuple[str, int, int], ...]:
-        """Observe resident generation metadata without policy/config reads."""
+    def _live_resident_scope(self) -> str | None:
+        """The resident scope of the runtime this publisher pushes to.
 
+        The resident names its state directory after the first 16 hex digits
+        of its executable digest, and every snapshot is bound to that digest.
+        ``None`` until a runtime status has been observed.
+        """
+
+        identity = getattr(getattr(self, "_last_runtime_status", None), "identity", None)
+        digest = getattr(identity, "sha256", None)
+        if not isinstance(digest, str) or len(digest) != 64:
+            return None
+        return f"{RESIDENT_SCOPE_PREFIX}{digest[:16]}"
+
+    def _current_resident_fingerprint(self) -> tuple[tuple[str, int, int], ...]:
+        """Observe resident generation metadata without policy/config reads.
+
+        Another runtime's scope (a Desktop bundle beside the PyPI wheel, or a
+        runtime left behind by an upgrade) is recorded by name only. Its
+        residents cannot answer for a snapshot bound to this runtime, so their
+        restarts and hook traffic must not withdraw this ACK, and their
+        generation numbers must not outrank the resident that acknowledged.
+        """
+
+        live_scope = self._live_resident_scope()
         resident_values: list[tuple[str, int, int]] = []
         state_dir = self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY
         try:
             resident_directories = sorted(
-                (entry for entry in state_dir.iterdir() if entry.name.startswith("resident-v3-")),
+                (entry for entry in state_dir.iterdir() if entry.name.startswith(RESIDENT_SCOPE_PREFIX)),
                 key=lambda entry: entry.name,
             )
         except OSError:
             resident_directories = []
         for directory in resident_directories:
+            if live_scope is not None and directory.name != live_scope:
+                resident_values.append((directory.name, FOREIGN_SCOPE_METADATA, FOREIGN_SCOPE_METADATA))
+                continue
             try:
                 metadata = directory.stat()
             except OSError:
@@ -158,6 +186,10 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
                 metadata = (state_dir / path_key).lstat()
             except OSError:
                 return False
+            if mtime_ns == FOREIGN_SCOPE_METADATA and size == FOREIGN_SCOPE_METADATA:
+                if not stat.S_ISDIR(metadata.st_mode):
+                    return False
+                continue
             if not stat.S_ISREG(metadata.st_mode) and not stat.S_ISDIR(metadata.st_mode):
                 return False
             if metadata.st_mtime_ns != mtime_ns or metadata.st_size != size:
@@ -182,7 +214,7 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
             before_roots = {path for path, _mtime, _size in before}
             observed_roots = {path for path, _mtime, _size in observed if "/" not in path}
             started_in_empty_roots = (
-                all(path.startswith("resident-v3-") and "/" not in path for path in before_roots)
+                all(path.startswith(RESIDENT_SCOPE_PREFIX) and "/" not in path for path in before_roots)
                 and before_roots == observed_roots
                 and any("/generation-" in path and path.endswith(".json") for path, _mtime, _size in observed)
             )
@@ -248,7 +280,6 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
         from .native_policy_snapshot_direct_lane_mcp_relay import uniform_harness_views
         from .native_policy_snapshot_direct_lane_review import uniform_blocked_request_mode
         from .native_policy_snapshot_direct_lane_structured import uniform_structured_output_view
-        from .runtime.observed_mcp_tools import bound_native_mcp_tool_actions, native_observed_mcp_tool_actions
 
         with self._condition:
             selected = self._workspace_paths if workspaces is None else self._workspace_paths & workspaces
@@ -260,45 +291,24 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
         self._compiled_mcp_relay_harnesses = None
         configs = [load_guard_config(self.guard_home)]
         configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in selected_workspaces)
-        policy = compose_effective_native_policies(tuple(configs))
-        self._compiled_blocked_request_mode = uniform_blocked_request_mode(configs)
-        self._compiled_structured_output_view = uniform_structured_output_view(configs)
-        self._compiled_mcp_relay_harnesses = uniform_harness_views(configs)
+        # The composer lays the operator's MCP choices over the configured
+        # policy; this side only reads them from the store.
         try:
-            mcp_actions = native_observed_mcp_tool_actions(self.store)
+            observed: dict[str, object] = {"mcp_tool_actions": self.store.read_observed_mcp_tool_actions()}
+            provider_reader = getattr(self.store, "read_mcp_provider_choices", None)
+            if callable(provider_reader):
+                observed["mcp_provider_actions"] = provider_reader()
         except sqlite3.Error as error:
             raise NativePolicySnapshotError("native_policy_snapshot_policy_unavailable") from error
-        if mcp_actions:
-            existing = cast(dict[str, str], policy.get("mcp_tool_actions", {}))
-            merged = dict(existing)
-            required_blocks = frozenset(key for key, action in existing.items() if action == "block")
-            namespace_blocks = tuple(key[:-1] for key in required_blocks if key.endswith("*"))
-            for key, action in mcp_actions.items():
-                # An exact local allow cannot create an exception to a configured
-                # namespace block. Existing configured restrictions remain floors.
-                if action == "allow" and key.startswith(namespace_blocks):
-                    continue
-                merged[key] = _stricter_action(merged.get(key, "allow"), action)
-            policy["mcp_tool_actions"] = bound_native_mcp_tool_actions(merged, required_blocks=required_blocks)
-        from .native_policy_snapshot_policy import _provider_action_map
-
-        provider_reader = getattr(self.store, "read_mcp_provider_choices", None)
-        if callable(provider_reader):
-            try:
-                provider_choices = _provider_action_map(provider_reader())
-            except sqlite3.Error as error:
-                raise NativePolicySnapshotError("native_policy_snapshot_policy_unavailable") from error
-            if provider_choices:
-                existing_provider = cast(dict[str, str], policy.get("mcp_provider_actions", {}))
-                merged_provider = dict(existing_provider)
-                for key, action in provider_choices.items():
-                    merged_provider[key] = _stricter_action(merged_provider.get(key, "review"), action)
-                policy["mcp_provider_actions"] = _provider_action_map(merged_provider)
         provider_authority_reader = getattr(self.store, "read_mcp_provider_authority_hash", None)
         if callable(provider_authority_reader):
             provider_hash = provider_authority_reader()
             if provider_hash is not None:
-                policy["mcp_provider_catalog_hash"] = provider_hash
+                observed["mcp_provider_catalog_hash"] = provider_hash
+        policy = compose_effective_native_policies(tuple(configs), observed=observed)
+        self._compiled_blocked_request_mode = uniform_blocked_request_mode(configs)
+        self._compiled_structured_output_view = uniform_structured_output_view(configs)
+        self._compiled_mcp_relay_harnesses = uniform_harness_views(configs)
         return policy
 
     def _compiled_command_extensions(self) -> dict[str, object]:

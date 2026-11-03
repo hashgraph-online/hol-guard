@@ -33,7 +33,7 @@ def verify(expected_source: str) -> dict[str, object]:
     require(status.identity is not None and status.capabilities is not None, "native_identity_missing")
     assert status.identity is not None and status.capabilities is not None
     require(status.capabilities.build_sha == expected_source, "source_mismatch")
-    require("prompt-analyze-v1" in status.capabilities.features, "prompt_capability_missing")
+    require("prompt-analyze-v2" in status.capabilities.features, "prompt_capability_missing")
     for name in (
         "_extract_prompt_requests_python",
         "_prompt_requests_to_artifacts_python",

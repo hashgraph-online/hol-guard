@@ -1,3 +1,5 @@
+#[path = "checkout_destination_floor.rs"]
+mod checkout_floor;
 #[path = "safe_copies.rs"]
 mod copies;
 #[path = "hooks_path_writes.rs"]
@@ -9,13 +11,15 @@ mod screens;
 use super::read_paths::{
     existing_regular_read_target, expand_home_read_path, resolved_location_allowed,
 };
+pub(crate) use checkout_floor::protected_checkout_destination;
 pub(super) use copies::{safe_copy_arguments, safe_copy_arguments_into};
 pub(crate) use plan_notes::plan_note_write_sources;
 pub(super) use plan_notes::plan_note_write_target;
 pub(super) use screens::autostart_write_target;
+use screens::home_execution_control_target;
+pub(super) use screens::home_spelling_matches_target;
 #[cfg(windows)]
 use screens::shared_library_part;
-use screens::{home_execution_control_target, home_spelling_matches_target};
 
 pub(super) fn bounded_file_write_target(
     value: &str,
@@ -70,11 +74,15 @@ pub(super) fn bounded_native_temporary_write_target(
             cwd,
             cdpath_unset: false,
             rustup_override_absent: false,
+            cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
+            gem_config_absent: false,
+            http_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
     )
 }
@@ -166,13 +174,25 @@ fn bounded_write_target(
     {
         return false;
     }
-    (canonical.starts_with(&workspace)
-        || super::worktree_writes::same_repository_worktree(&workspace, &canonical)
-        || verified_home.is_some())
-        && resolved_location_allowed(&canonical, home_dir, workspace.to_str(), false)
+    let inside = canonical.starts_with(&workspace);
+    let linked =
+        !inside && super::worktree_writes::same_repository_worktree(&workspace, &canonical);
+    // `git worktree add "$TMPDIR/<name>"` puts a checkout of this repository
+    // in the user's private temporary directory below `/private/var`. That
+    // checkout is the user's own work, not system state; every other location
+    // screen still runs on the path.
+    let temporary_checkout =
+        linked && super::read_paths::inside_private_temporary_directory(&canonical, home_dir);
+    (inside || linked || verified_home.is_some())
+        && resolved_location_allowed(&canonical, home_dir, workspace.to_str(), temporary_checkout)
         && (plan_note
             || guard_secure_fs::hidden_read_parts_allowed(&canonical)
-            || screens::plain_dot_scratch_target(&canonical, home_dir))
+            || screens::plain_dot_scratch_target(&canonical, home_dir)
+            || super::read_paths::hidden_listing::repository_plugin_manifest(
+                &canonical,
+                home_dir,
+                workspace.to_str(),
+            ))
         // A safe pathname can alias a protected inode through a hard link.
         && ((directory && canonical.is_dir()) || single_link_write_target(&canonical))
         && !autostart_write_target(&canonical)
@@ -376,11 +396,13 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
 }
 
 /// Windows `mktemp -d` (Git Bash `/tmp`) creates its directory in the user's
-/// profile temp folder. Only a directory strictly below the exact
-/// `<home>\AppData\Local\Temp` is admitted, located from the canonical home
-/// rather than the caller-controlled `TEMP`/`TMP`. The profile ACL keeps other
-/// non-administrator users out of that tree, and the exact-spelling checks
-/// reject junctions, short names and case aliases on the way there.
+/// profile temp folder. A file in the exact `<home>\AppData\Local\Temp`, or
+/// in a directory below it, is admitted, located from the canonical home
+/// rather than the caller-controlled `TEMP`/`TMP`. A file directly in that
+/// folder is what Git Bash writes for `/tmp/name`, which the POSIX spelling
+/// already admits. The profile ACL keeps other non-administrator users out of
+/// that tree, and the exact-spelling checks reject junctions, short names and
+/// case aliases on the way there.
 #[cfg(windows)]
 fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
     use super::directory_targets::exact_drive_spelling;
@@ -420,7 +442,6 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
         return false;
     };
     if !exact_drive_spelling(parent_text, &parent)
-        || parent == temp_root
         || !parent.starts_with(&temp_root)
         || !parent.is_dir()
         || shared_library_part(&name.to_ascii_lowercase())

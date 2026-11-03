@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.native_policy_integrity_rows import (
     PolicyRowVerifyItem,
     discard_row_signing_verifier_key,
     native_prepare_policy_integrity_generation,
+    native_reconcile_policy_integrity_generation,
     native_sign_policy_rows,
     native_verify_policy_rows,
 )
@@ -47,7 +48,11 @@ class _Resident:
         assert kwargs["operation"] == "policy_integrity_rows"
         request = kwargs["request"]
         assert isinstance(request, dict)
-        expected_feature = "policy-integrity-generation-v1" if "generation" in request else "policy-integrity-rows-v1"
+        expected_feature = "policy-integrity-rows-v1"
+        if "generation" in request:
+            expected_feature = "policy-integrity-generation-v1"
+        elif "reconcile" in request:
+            expected_feature = "policy-integrity-reconcile-v1"
         assert kwargs["required_feature"] == expected_feature
         self.requests.append(request)
         verify = request["verify"]
@@ -323,3 +328,152 @@ def test_verify_reply_with_a_generation_section_fails_closed(monkeypatch: pytest
 
     with pytest.raises(NativePolicyIntegrityUnavailableError):
         native_verify_policy_rows(guard_home=tmp_path, items=_verify(1), key=_KEY, key_id=_KEY_ID)
+
+
+_PENDING = dict(_STATE, pending_generation=4)
+_ROWS = [{"decision_id": "d1", "source": "local", "integrity_generation": 3, "updated_at": 1.5, "created_at": "x"}]
+
+
+def _section_resident(section: str, outcome: object) -> Callable[..., dict[str, object] | None]:
+    honest = _Resident()
+
+    def answer(**kwargs: object) -> dict[str, object] | None:
+        response = honest(**kwargs)
+        assert response is not None
+        response["payload"][section] = outcome  # type: ignore[index]
+        return response
+
+    answer.requests = honest.requests  # type: ignore[attr-defined]
+    return answer
+
+
+def test_reconcile_returns_the_resident_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    decided = {"cutover_complete": True, "generation": 4, "pending_generation": None, "version": 1}
+    fake = _section_resident("reconcile", {"next_state": decided})
+    monkeypatch.setattr(bridge, "_resident_request", fake)
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda: SimpleNamespace(identity=None))
+
+    result = native_reconcile_policy_integrity_generation(
+        guard_home=tmp_path, key=_KEY, key_id=_KEY_ID, trusted_state=_PENDING, rows=_ROWS
+    )
+
+    assert result == decided
+    request = fake.requests[0]  # type: ignore[attr-defined]
+    assert request["verify"] == [] and request["sign"] == []
+    # Columns the resident does not read are dropped, and a real travels as null.
+    assert request["reconcile"] == {
+        "trusted_state": _PENDING,
+        "rows": [{"decision_id": "d1", "integrity_generation": 3, "source": "local", "updated_at": None}],
+        "decide": True,
+    }
+    assert (tmp_path / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_VERIFIER_KEY_NAME).is_file()
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [None, {}, {"next_state": []}, {"next_state": _STATE, "extra": 1}],
+)
+def test_malformed_reconcile_replies_fail_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, outcome: object
+) -> None:
+    monkeypatch.setattr(bridge, "_resident_request", _section_resident("reconcile", outcome))
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda: SimpleNamespace(identity=None))
+
+    with pytest.raises(NativePolicyIntegrityUnavailableError):
+        native_reconcile_policy_integrity_generation(
+            guard_home=tmp_path, key=_KEY, key_id=_KEY_ID, trusted_state=_PENDING, rows=_ROWS
+        )
+
+
+def test_verify_reply_with_a_reconcile_section_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(bridge, "_resident_request", _section_resident("reconcile", {"next_state": _STATE}))
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda: SimpleNamespace(identity=None))
+
+    with pytest.raises(NativePolicyIntegrityUnavailableError):
+        native_verify_policy_rows(guard_home=tmp_path, items=_verify(1), key=_KEY, key_id=_KEY_ID)
+
+
+_TALLY = {"rows": 1, "has_legacy": False, "pending_candidates": 1, "pending_valid": 1, "current_valid": 0}
+
+
+def test_reconcile_carries_counters_across_chunks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A store too large for one request settles from the last chunk's decision."""
+
+    decided = {"cutover_complete": True, "generation": 4, "pending_generation": None, "version": 1}
+    honest = _Resident()
+
+    def answer(**kwargs: object) -> dict[str, object] | None:
+        response = honest(**kwargs)
+        assert response is not None
+        request = kwargs["request"]
+        assert isinstance(request, dict)
+        section = request["reconcile"]
+        assert isinstance(section, dict)
+        outcome = {"next_state": decided} if section["decide"] else {"tally": _TALLY}
+        response["payload"]["reconcile"] = outcome  # type: ignore[index]
+        return response
+
+    answer.requests = honest.requests  # type: ignore[attr-defined]
+    monkeypatch.setattr(bridge, "_resident_request", answer)
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda: SimpleNamespace(identity=None))
+    monkeypatch.setattr(bridge, "_MAX_ITEMS", 1)
+
+    rows = [dict(_ROWS[0], decision_id=f"d{index}") for index in range(3)]
+    result = native_reconcile_policy_integrity_generation(
+        guard_home=tmp_path, key=_KEY, key_id=_KEY_ID, trusted_state=_PENDING, rows=rows
+    )
+
+    assert result == decided
+    sections = [request["reconcile"] for request in answer.requests]  # type: ignore[attr-defined]
+    assert [section["decide"] for section in sections] == [False, False, True]
+    assert [len(section["rows"]) for section in sections] == [1, 1, 1]
+    assert "carried" not in sections[0]
+    assert [section["carried"] for section in sections[1:]] == [_TALLY, _TALLY]
+
+
+@pytest.mark.parametrize(
+    "tally",
+    [
+        [],
+        dict(_TALLY, rows=-1),
+        dict(_TALLY, rows=True),
+        dict(_TALLY, has_legacy=1),
+        {name: value for name, value in _TALLY.items() if name != "current_valid"},
+        dict(_TALLY, extra=1),
+    ],
+)
+def test_malformed_chunk_tallies_fail_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tally: object) -> None:
+    monkeypatch.setattr(bridge, "_resident_request", _section_resident("reconcile", {"tally": tally}))
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda: SimpleNamespace(identity=None))
+    monkeypatch.setattr(bridge, "_MAX_ITEMS", 1)
+
+    rows = [dict(_ROWS[0], decision_id=f"d{index}") for index in range(2)]
+    with pytest.raises(NativePolicyIntegrityUnavailableError):
+        native_reconcile_policy_integrity_generation(
+            guard_home=tmp_path, key=_KEY, key_id=_KEY_ID, trusted_state=_PENDING, rows=rows
+        )
+
+
+def test_reconcile_reply_with_a_generation_section_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A reply carrying a section the request never asked for is not read."""
+
+    honest = _Resident()
+
+    def answer(**kwargs: object) -> dict[str, object] | None:
+        response = honest(**kwargs)
+        assert response is not None
+        payload = response["payload"]
+        assert isinstance(payload, dict)
+        payload["reconcile"] = {"next_state": _STATE}
+        payload["generation"] = {"prepared_state": _STATE, "still_matches": True}
+        return response
+
+    monkeypatch.setattr(bridge, "_resident_request", answer)
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda: SimpleNamespace(identity=None))
+
+    with pytest.raises(NativePolicyIntegrityUnavailableError):
+        native_reconcile_policy_integrity_generation(
+            guard_home=tmp_path, key=_KEY, key_id=_KEY_ID, trusted_state=_PENDING, rows=_ROWS
+        )

@@ -214,6 +214,39 @@ fn resident_refuses_operations_for_another_guard_home() {
     let _ = fs::remove_dir_all(&root);
 }
 
+#[test]
+fn resident_refuses_cloud_catalog_writes_for_another_guard_home() {
+    let root = root();
+    install_key(&root);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let foreign = root.join("foreign");
+    for action in [
+        "begin",
+        "completion_begin",
+        "completion_accept",
+        "observe",
+        "acquire",
+        "release",
+    ] {
+        let request = serde_json::json!({
+            "operation": "cloud_catalog",
+            "request": {
+                "action": action,
+                "guard_home": foreign,
+                "observation": {"guard_home": foreign},
+            },
+        });
+        let bytes = serde_json::to_vec(&request).unwrap();
+        assert_eq!(
+            crate::resident_protocol::evaluate_resident_bytes(&bytes, Some(&store)).unwrap_err(),
+            "native_guard_home_mismatch",
+            "{action} must be fenced before touching the requested home",
+        );
+        assert!(!foreign.exists());
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
 fn hook_authority_state_for(guard_home: &Path, store_path: &Path) -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({
         "operation": "hook_authority_state",

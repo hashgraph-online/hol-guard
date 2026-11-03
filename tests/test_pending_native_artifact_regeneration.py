@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -54,6 +55,45 @@ def test_clean_checkout_catalog_awaits_generation(detector, monkeypatch, tmp_pat
     """A missing generated catalog must remain distinguishable from a malformed file."""
     monkeypatch.setattr(detector, "CATALOG", tmp_path / "command-catalog.v1.json")
     assert detector.catalog_ids() == set()
+
+
+def test_staged_optional_inventory_does_not_remain_permanently_pending(detector, monkeypatch, tmp_path):
+    monkeypatch.setattr(detector, "ROOT", tmp_path)
+    catalog = tmp_path / "command-catalog.v1.json"
+    catalog.write_text(json.dumps({"catalog": [{"extension_id": "command.git"}]}))
+    monkeypatch.setattr(detector, "CATALOG", catalog)
+    directory = tmp_path / "docs/guard/extensions/catalog.v2.json"
+    directory.parent.mkdir(parents=True)
+    directory.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "guard.extension-directory.v2",
+                "entries": [{"runtimeExtensionId": "command.optional"}],
+            }
+        )
+    )
+    assert detector.catalog_ids() == {"command.git", "command.optional"}
+    canonical = {"command.git", "command.optional", "command.pending"}
+    assert canonical - detector.catalog_ids() == {"command.pending"}
+
+
+def test_malformed_optional_inventory_never_establishes_freshness(detector, monkeypatch, tmp_path):
+    monkeypatch.setattr(detector, "ROOT", tmp_path)
+    catalog = tmp_path / "command-catalog.v1.json"
+    catalog.write_text(json.dumps({"catalog": [{"extension_id": "command.git"}]}))
+    monkeypatch.setattr(detector, "CATALOG", catalog)
+    directory = tmp_path / "docs/guard/extensions/catalog.v2.json"
+    directory.parent.mkdir(parents=True)
+    directory.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "guard.extension-directory.v2",
+                "entries": [{"runtimeExtensionId": "../not-an-extension"}],
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="directory identity"):
+        detector.catalog_ids()
 
 
 def test_malformed_staged_catalog_is_not_treated_as_missing(detector, monkeypatch, tmp_path):

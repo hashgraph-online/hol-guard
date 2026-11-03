@@ -12,16 +12,13 @@ impl Drop for Fixture {
 }
 
 #[test]
-fn zcode_reads_markdown_only_in_supported_skill_locations() {
+fn zcode_reads_skill_documents_and_helpers_in_supported_locations() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/pretool-skill-roots")
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let _fixture = Fixture(root.clone());
     let roots = [
@@ -39,6 +36,7 @@ fn zcode_reads_markdown_only_in_supported_skill_locations() {
             "credentials.md",
             ".hidden.md",
             "run.py",
+            "inventory.db",
         ] {
             let path = root.join(skill).join(leaf);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -77,7 +75,8 @@ fn zcode_reads_markdown_only_in_supported_skill_locations() {
             ("reference/operate.md", true),
             ("credentials.md", false),
             (".hidden.md", false),
-            ("run.py", false),
+            ("run.py", true),
+            ("inventory.db", false),
         ] {
             let path = format!("~/{skill}/{leaf}");
             assert_eq!(

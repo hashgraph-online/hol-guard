@@ -14,6 +14,7 @@ pub(super) fn control_snapshot(
 ) -> PolicySnapshotV3 {
     let program = guard_command::native_command_program::packaged_command_program().unwrap();
     let mut binding = NativeCommandControlBindingV1 {
+        active_security_digest: None,
         schema: NATIVE_COMMAND_CONTROL_BINDING_SCHEMA.into(),
         authority: Some(guard_contracts::NativeCommandControlAuthorityV1 {
             epoch: 1,
@@ -35,7 +36,9 @@ pub(super) fn control_snapshot(
             global_lockdown: false,
             controls: vec![NativeExtensionControlV1 {
                 target_kind: "extension".into(),
-                target_id: "command.ollama".into(),
+                // Authority-floor fixtures use an entry resident in the core.
+                // Optional pack preparation has its own admission fixtures.
+                target_id: "command.git".into(),
                 state: state.into(),
             }],
         }],
@@ -196,5 +199,34 @@ fn protected_authority_never_reverts_to_first_install_defaults_even_after_restar
     assert!(push(&restarted, forged_fresh)
         .unwrap_err()
         .contains("authority_downgrade"));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn protected_floor_refuses_a_snapshot_that_drops_the_command_binding() {
+    // A publisher cannot recover from a rejected command binding by retrying
+    // the same snapshot without it. Once a home has been protected the floor
+    // outlives the process, so the binding-less retry is refused too, and
+    // dropping the binding would also silently drop managed layers, global
+    // lockdown and per-target controls. Recovery belongs in the activation
+    // record the binding is built from, not in the publisher.
+    let root = test_root("command-floor-binding-removed");
+    let key = install_test_key(&root, 66);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    push(&store, control_snapshot(1, 7, 3, "enabled", &key, &root)).unwrap();
+    let mut unbound = control_snapshot(2, 7, 3, "enabled", &key, &root);
+    unbound.command_extensions = None;
+    resign(&mut unbound, &key);
+    assert!(push(&store, unbound)
+        .unwrap_err()
+        .contains("command_control_binding_removed"));
+    drop(store);
+    let restarted = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let mut after_restart = control_snapshot(2, 7, 3, "enabled", &key, &root);
+    after_restart.command_extensions = None;
+    resign(&mut after_restart, &key);
+    assert!(push(&restarted, after_restart)
+        .unwrap_err()
+        .contains("command_control_binding_removed"));
     fs::remove_dir_all(root).unwrap();
 }

@@ -1,5 +1,5 @@
-//! Argument parsers for the read-only viewers (`cat`, `head`, `tail`, `nl`,
-//! `wc`, `yq`, `sed`) and `git grep`, as used by the Codex tool-output review.
+//! Argument parsers for the read-only pipe filters (`cat`, `head`, `tail`,
+//! `nl`, `wc`, `sed`).
 
 use std::sync::OnceLock;
 
@@ -7,11 +7,7 @@ use regex::Regex;
 
 use crate::codex_output_py::py_strip;
 
-pub(crate) const READ_ONLY_SEARCH_COMMANDS: &[&str] = &["fd", "rg", "grep", "egrep", "fgrep"];
-pub(crate) const READ_ONLY_VIEW_COMMANDS: &[&str] =
-    &["cat", "head", "nl", "tail", "sed", "wc", "yq"];
 pub(crate) const READ_ONLY_PIPE_FILTERS: &[&str] = &["cat", "head", "nl", "tail", "sed", "wc"];
-pub(crate) const READ_ONLY_SEARCH_WRAPPERS: &[&str] = &["bash", "sh", "zsh"];
 
 const NL_VALUE_OPTIONS: &[&str] = &[
     "-b",
@@ -47,43 +43,6 @@ const WC_BOOLEAN_OPTIONS: &[&str] = &[
     "--max-line-length",
     "-w",
     "--words",
-];
-
-const YQ_BOOLEAN_OPTIONS: &[&str] = &[
-    "-C",
-    "--colors",
-    "-e",
-    "--exit-status",
-    "-M",
-    "--no-colors",
-    "-N",
-    "--no-doc",
-    "-n",
-    "--null-input",
-    "-P",
-    "--prettyPrint",
-    "-r",
-    "--unwrapScalar",
-];
-
-const YQ_VALUE_OPTIONS: &[&str] = &["-I", "--indent", "-o", "--output-format"];
-
-pub(crate) const GIT_GLOBAL_VALUE_FLAGS: &[&str] = &[
-    "-c",
-    "--config-env",
-    "--exec-path",
-    "--git-dir",
-    "--work-tree",
-    "--namespace",
-];
-
-pub(crate) const SAFE_GIT_GLOBAL_BOOLEAN_FLAGS: &[&str] = &[
-    "--bare",
-    "--glob-pathspecs",
-    "--literal-pathspecs",
-    "--no-literal-pathspecs",
-    "--no-pager",
-    "--noglob-pathspecs",
 ];
 
 fn regex(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
@@ -187,70 +146,6 @@ pub(crate) fn wc_targets(args: &[String]) -> Option<Vec<String>> {
         targets.push(arg.clone());
     }
     Some(targets)
-}
-
-/// `_codex_yq_expression_and_targets`.
-pub(crate) fn yq_expression_and_targets(args: &[String]) -> Option<(String, Vec<String>)> {
-    static OPTION: OnceLock<Regex> = OnceLock::new();
-    static EXTERNAL: OnceLock<Regex> = OnceLock::new();
-    let mut positional = Vec::new();
-    let mut skip_value = false;
-    let mut after_options = false;
-    for arg in args {
-        if skip_value {
-            skip_value = false;
-            continue;
-        }
-        if after_options {
-            positional.push(arg.clone());
-            continue;
-        }
-        if arg == "--" {
-            after_options = true;
-            continue;
-        }
-        if YQ_BOOLEAN_OPTIONS.contains(&arg.as_str()) {
-            continue;
-        }
-        if YQ_VALUE_OPTIONS.contains(&arg.as_str()) {
-            skip_value = true;
-            continue;
-        }
-        if YQ_VALUE_OPTIONS
-            .iter()
-            .any(|option| option.starts_with("--") && arg.starts_with(&format!("{option}=")))
-        {
-            continue;
-        }
-        if full(&OPTION, r"-(?:I\d+|o(?:json|props|xml|yaml))", arg) {
-            continue;
-        }
-        if arg.starts_with('-') {
-            return None;
-        }
-        positional.push(arg.clone());
-    }
-    if skip_value || positional.len() < 2 {
-        return None;
-    }
-    let expression = positional[0].clone();
-    let targets: Vec<String> = positional[1..].to_vec();
-    let external = regex(
-        &EXTERNAL,
-        r"(?i)(?:\$ENV(?:\.|\b)|(?:^|[^A-Za-z0-9_])(?:env|strenv|envsubst|eval|load(?:_[A-Za-z0-9_]+)?)[\s\x1c-\x1f]*\()",
-    );
-    if !expression.starts_with('.')
-        || ["#", "\n", "\r"]
-            .iter()
-            .any(|marker| expression.contains(marker))
-        || external.is_match(&expression)
-    {
-        return None;
-    }
-    if targets.iter().any(|target| target == "-") {
-        return None;
-    }
-    Some((expression, targets))
 }
 
 /// `_parse_codex_head_tail_args`: `(targets, valid, skip_next)`.
@@ -386,42 +281,87 @@ fn sed_print_command_is_bounded(command: &str) -> bool {
     if body.is_empty() {
         return true;
     }
-    let parts: Vec<&str> = body.split(',').collect();
+    let Some(parts) = sed_addresses_split(body) else {
+        return false;
+    };
     parts.len() <= 2 && parts.iter().all(|part| sed_address_is_bounded(part))
+}
+
+/// The addresses a print command carries, split on the comma that separates a
+/// range's two ends.
+///
+/// Only a comma outside a `/regex/` separates addresses. A pattern may hold
+/// one of its own -- `/^  }),/` closes a block in ordinary source -- and
+/// splitting there would leave two halves that spell nothing and refuse a read
+/// this reading can otherwise follow. A delimiter left open at the end is a
+/// script this reading never finished, so it comes back unread.
+fn sed_addresses_split(body: &str) -> Option<Vec<&str>> {
+    let mut parts: Vec<&str> = Vec::new();
+    let mut start = 0usize;
+    let mut in_pattern = false;
+    let mut escaped = false;
+    for (index, character) in body.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match character {
+            '\\' if in_pattern => escaped = true,
+            '/' => in_pattern = !in_pattern,
+            ',' if !in_pattern => {
+                parts.push(&body[start..index]);
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    if in_pattern || escaped {
+        return None;
+    }
+    parts.push(&body[start..]);
+    Some(parts)
 }
 
 fn sed_address_is_bounded(value: &str) -> bool {
     static CELL: OnceLock<Regex> = OnceLock::new();
     let address = py_strip(value);
-    address == "$" || full(&CELL, r"\d{1,6}", address)
+    address == "$" || full(&CELL, r"\d{1,6}", address) || sed_context_address_is_bounded(address)
 }
 
-/// `_git_grep_search_args`.
-pub(crate) fn git_grep_search_args(args: &[String]) -> Option<Vec<String>> {
-    let mut index = 0;
-    while index < args.len() {
-        let arg = &args[index];
-        if arg == "grep" {
-            return Some(args[index + 1..].to_vec());
-        }
-        if GIT_GLOBAL_VALUE_FLAGS.contains(&arg.as_str()) {
-            index += 2;
-            continue;
-        }
-        if GIT_GLOBAL_VALUE_FLAGS
-            .iter()
-            .any(|flag| arg.starts_with(&format!("{flag}=")))
-        {
-            index += 1;
-            continue;
-        }
-        if SAFE_GIT_GLOBAL_BOOLEAN_FLAGS.contains(&arg.as_str()) {
-            index += 1;
-            continue;
-        }
-        return None;
+/// A `/regex/` address: the spelling a reader uses to print the region around
+/// a line it can name but has not counted, as in `sed -n '/fn main/,/^}/p'`.
+///
+/// Only the slash pair is read. An alternative `\%...%` delimiter, a negated
+/// address, a second unescaped slash (which would end the address and leave
+/// the rest a command of its own) and an empty pattern (sed's "reuse the last
+/// regex", which this reading never saw) all stay unread, so a script that
+/// spells one keeps its review.
+fn sed_context_address_is_bounded(address: &str) -> bool {
+    let Some(body) = address.strip_prefix('/') else {
+        return false;
+    };
+    let body = body.strip_suffix(['I', 'M']).unwrap_or(body);
+    let Some(pattern) = body.strip_suffix('/') else {
+        return false;
+    };
+    if pattern.is_empty() {
+        return false;
     }
-    None
+    let mut escaped = false;
+    for character in pattern.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match character {
+            '\\' => escaped = true,
+            '/' => return false,
+            _ => {}
+        }
+    }
+    // A trailing backslash escaped the closing delimiter, so the address the
+    // line spells is not the one read here.
+    !escaped
 }
 
 #[cfg(test)]
@@ -439,14 +379,6 @@ mod tests {
         assert_eq!(nl_targets(&v(&["-x", "a.py"])), None);
         assert_eq!(wc_targets(&v(&["-lw", "a.py"])), Some(v(&["a.py"])));
         assert_eq!(
-            yq_expression_and_targets(&v(&[".a", "x.yaml"])),
-            Some((".a".to_owned(), v(&["x.yaml"])))
-        );
-        assert_eq!(
-            yq_expression_and_targets(&v(&[".a | env(X)", "x.yaml"])),
-            None
-        );
-        assert_eq!(
             parse_head_tail_args(&v(&["-n", "5", "a"])),
             (v(&["a"]), true, false)
         );
@@ -461,10 +393,50 @@ mod tests {
         assert_eq!(sed.scripts, v(&["1,5p"]));
         assert!(sed.saw_print_suppression);
         assert!(parse_sed_args(&v(&["-i", "s/a/b/", "a"])).is_none());
-        assert_eq!(
-            git_grep_search_args(&v(&["--no-pager", "grep", "x"])),
-            Some(v(&["x"]))
-        );
-        assert_eq!(git_grep_search_args(&v(&["log"])), None);
+    }
+
+    #[test]
+    fn a_slash_delimited_address_prints_a_named_region() {
+        // The region a reader names rather than counts: both ends of the range
+        // may be regexes, and either end may be a line number instead.
+        assert!(sed_script_is_bounded_print("/fn main/,/^}/p"));
+        assert!(sed_script_is_bounded_print("/needle/p"));
+        assert!(sed_script_is_bounded_print("0,/needle/p"));
+        assert!(sed_script_is_bounded_print("/needle/,$p"));
+        assert!(sed_script_is_bounded_print("/needle/,20p"));
+        // A pattern may hold an escaped delimiter, and may carry sed's own
+        // case-insensitive and multiline flags.
+        assert!(sed_script_is_bounded_print(r"/guard\/plugins/p"));
+        assert!(sed_script_is_bounded_print("/needle/Ip"));
+        assert!(sed_script_is_bounded_print("/needle/Mp"));
+        // A comma inside a pattern belongs to that pattern. `/^  }),/` is how
+        // a reader names the end of a block in ordinary source, and the range
+        // it closes still has two ends, not three.
+        assert!(sed_script_is_bounded_print("/path:/,/^  }),/p"));
+        assert!(sed_script_is_bounded_print("/a,b/p"));
+        assert!(sed_script_is_bounded_print("/a,b/,/c,d/p"));
+    }
+
+    #[test]
+    fn an_address_that_leaves_a_command_unread_keeps_its_review() {
+        // A second unescaped slash ends the address, so `d` here is a delete
+        // this reading never saw.
+        assert!(!sed_script_is_bounded_print("/a/d/p"));
+        // A trailing backslash escapes the closing delimiter, so the address
+        // runs on past the text read above.
+        assert!(!sed_script_is_bounded_print(r"/a\/p"));
+        // An empty pattern reuses sed's last regex, which this reading never
+        // saw either.
+        assert!(!sed_script_is_bounded_print("//p"));
+        // A negated address and an alternative delimiter are both unread.
+        assert!(!sed_script_is_bounded_print("/a/!p"));
+        assert!(!sed_script_is_bounded_print(r"\%a%p"));
+        // A comma outside every pattern still separates addresses, so a third
+        // one is as unread as it ever was.
+        assert!(!sed_script_is_bounded_print("/a,b/,/c/,/d/p"));
+        // A substitution still ends in `p` but is not an address at all.
+        assert!(!sed_script_is_bounded_print("s/a/b/p"));
+        // Three addresses are not a range.
+        assert!(!sed_script_is_bounded_print("/a/,/b/,/c/p"));
     }
 }

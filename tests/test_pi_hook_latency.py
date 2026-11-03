@@ -16,6 +16,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.runtime_hook_scheduler_support import set_active_limit
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -88,7 +89,7 @@ def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     monkeypatch.setattr(_daemon_internals(daemon).hook_worker, "review_http_payload", fake_review)
     daemon.start()
-    _daemon_internals(daemon).runtime_hook_scheduler.set_active_limit(2)
+    set_active_limit(_daemon_internals(daemon).runtime_hook_scheduler, 2)
     first_result: list[dict[str, object]] = []
 
     def run_first() -> None:
@@ -114,29 +115,24 @@ def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(
 def test_pi_hook_deadline_stays_inside_host_timeout() -> None:
     pi_hook_host_timeout_ms = 4_500
 
-    from codex_plugin_scanner.guard.adapters.pi_extension_source import (
-        GUARD_CLI_HOOK_TIMEOUT_MS,
-        GUARD_DAEMON_HOOK_TIMEOUT_MS,
-        GUARD_DAEMON_RECOVERY_TIMEOUT_MS,
-        GUARD_DAEMON_RETRY_TIMEOUT_MS,
-        GUARD_HOOK_DEADLINE_RESERVE_MS,
-        GUARD_HOOK_TIMEOUT_MS,
-    )
+    from tests.pi_extension_template import constant
 
-    assert pi_hook_host_timeout_ms > GUARD_HOOK_TIMEOUT_MS
-    assert (
-        GUARD_DAEMON_HOOK_TIMEOUT_MS
-        + GUARD_DAEMON_RECOVERY_TIMEOUT_MS
-        + GUARD_DAEMON_RETRY_TIMEOUT_MS
-        + GUARD_CLI_HOOK_TIMEOUT_MS
-        + GUARD_HOOK_DEADLINE_RESERVE_MS
-        < GUARD_HOOK_TIMEOUT_MS
-    )
+    for variant in ("active", "previous"):
+        hook_timeout_ms = constant("GUARD_TIMEOUT_MS", variant=variant)
+        assert pi_hook_host_timeout_ms > hook_timeout_ms
+        assert (
+            constant("GUARD_DAEMON_TIMEOUT_MS", variant=variant)
+            + constant("GUARD_DAEMON_RECOVERY_TIMEOUT_MS", variant=variant)
+            + constant("GUARD_DAEMON_RETRY_TIMEOUT_MS", variant=variant)
+            + constant("GUARD_CLI_TIMEOUT_MS", variant=variant)
+            + constant("GUARD_DEADLINE_RESERVE_MS", variant=variant)
+            < hook_timeout_ms
+        )
 
 
 @pytest.mark.skipif(_bun_executable() is None, reason="Bun is required to execute Pi cleanup helpers")
 def test_pi_cli_cleanup_failure_settles_and_latches(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
+    from tests.pi_extension_template import CLI_RUNTIME_HELPERS_SOURCE
 
     bun = _bun_executable()
     assert bun is not None
@@ -188,7 +184,7 @@ console.log(JSON.stringify({
 
 @pytest.mark.skipif(_bun_executable() is None, reason="Bun is required to execute Pi cleanup helpers")
 def test_pi_exited_windows_parent_without_job_proof_latches(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
+    from tests.pi_extension_template import CLI_RUNTIME_HELPERS_SOURCE
 
     bun = _bun_executable()
     assert bun is not None
@@ -250,7 +246,7 @@ console.log(JSON.stringify({
     reason="Bun and POSIX process groups are required for fallback termination testing",
 )
 def test_pi_cleanup_kills_descendants_after_direct_parent_exits(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
+    from tests.pi_extension_template import CLI_RUNTIME_HELPERS_SOURCE
 
     bun = _bun_executable()
     assert bun is not None

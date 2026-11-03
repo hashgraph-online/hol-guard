@@ -17,6 +17,22 @@ def _distribution(samples: list[float]) -> dict[str, Any]:
     return result
 
 
+def summarize_process_latency(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Registered-hook process round trips, including failed and timed-out runs."""
+    samples = [
+        float(run["elapsed_ms"])
+        for run in runs
+        if type(run.get("elapsed_ms")) in {int, float} and math.isfinite(run["elapsed_ms"]) and run["elapsed_ms"] >= 0
+    ]
+    return {
+        "method": "nearest-rank",
+        "scope": "registered-hook-process-round-trip",
+        **_distribution(samples),
+        "missing_samples": len(runs) - len(samples),
+        "timeouts": sum(run.get("decision") == "timeout" for run in runs),
+    }
+
+
 def summarize_hook_latency(observations: list[dict[str, Any]]) -> dict[str, Any]:
     """Use nearest-rank percentiles; missing timing is never treated as zero.
 

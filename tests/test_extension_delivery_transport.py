@@ -8,56 +8,7 @@ import urllib.error
 
 import pytest
 
-from codex_plugin_scanner.guard.catalog_delivery import transport
-
-
-def test_source_ancestry_is_bounded_and_skips_identical_sources(monkeypatch):
-    calls = []
-
-    def download(url, maximum):
-        calls.append((url, maximum))
-        return json.dumps(
-            {
-                "status": "ahead",
-                "base_commit": {"sha": "1" * 40},
-                "merge_base_commit": {"sha": "1" * 40},
-                "ahead_by": 2,
-                "behind_by": 0,
-            }
-        ).encode()
-
-    monkeypatch.setattr(transport, "download", download)
-    transport.require_source_ancestor("1" * 40, "1" * 40)
-    assert calls == []
-    transport.require_source_ancestor("1" * 40, "2" * 40)
-    assert len(calls) == 1
-    assert calls[0][1] == 64 * 1024
-    assert calls[0][0].endswith("?per_page=1&page=2")
-
-
-@pytest.mark.parametrize(
-    "change",
-    [
-        {"status": "behind"},
-        {"base_commit": None},
-        {"merge_base_commit": []},
-        {"merge_base_commit": {"sha": "3" * 40}},
-        {"behind_by": True},
-        {"ahead_by": 0},
-    ],
-)
-def test_source_ancestry_rejects_regression_divergence_or_malformed_responses(monkeypatch, change):
-    value = {
-        "status": "ahead",
-        "base_commit": {"sha": "1" * 40},
-        "merge_base_commit": {"sha": "1" * 40},
-        "ahead_by": 2,
-        "behind_by": 0,
-        **change,
-    }
-    monkeypatch.setattr(transport, "download", lambda *args: json.dumps(value).encode())
-    with pytest.raises(ValueError, match="descendant"):
-        transport.require_source_ancestor("1" * 40, "2" * 40)
+from codex_plugin_scanner.guard.catalog_delivery import selection, transport
 
 
 @pytest.mark.parametrize(
@@ -139,6 +90,108 @@ def test_approved_redirect_reenters_managed_transport_without_credentials(monkey
     assert len(calls) == 2
 
 
+def test_transient_refusals_are_retried_and_permanent_ones_are_not(monkeypatch):
+    monkeypatch.setattr(transport.time, "sleep", lambda seconds: None)
+    calls = []
+
+    def refusing(status, body=b"ok"):
+        def open_managed(request, **kwargs):
+            calls.append(request.full_url)
+            if len(calls) <= 2:
+                raise urllib.error.HTTPError(request.full_url, status, "refused", {}, io.BytesIO())
+            return Response(body, {"Content-Length": str(len(body))})
+
+        return open_managed
+
+    monkeypatch.setattr(transport, "managed_urlopen", refusing(429))
+    assert transport.download("https://github.com/asset", 100) == b"ok"
+    assert len(calls) == 3
+
+    calls.clear()
+    monkeypatch.setattr(transport, "managed_urlopen", refusing(503))
+    assert transport.download("https://github.com/asset", 100) == b"ok"
+    assert len(calls) == 3
+
+    # A connection that never completed is the same transient shape.
+    calls.clear()
+
+    def unreachable(request, **kwargs):
+        calls.append(request.full_url)
+        if len(calls) <= 2:
+            raise urllib.error.URLError("unreachable")
+        return Response(b"ok", {"Content-Length": "2"})
+
+    monkeypatch.setattr(transport, "managed_urlopen", unreachable)
+    assert transport.download("https://github.com/asset", 100) == b"ok"
+    assert len(calls) == 3
+
+    # A missing release and a refused request are answers, not outages.
+    for status, error in ((404, transport.MissingReleaseError), (403, urllib.error.HTTPError)):
+        calls.clear()
+
+        def permanent(request, _status=status, **kwargs):
+            calls.append(request.full_url)
+            raise urllib.error.HTTPError(request.full_url, _status, "no", {}, io.BytesIO())
+
+        monkeypatch.setattr(transport, "managed_urlopen", permanent)
+        with pytest.raises(error):
+            transport.download("https://github.com/asset", 100)
+        assert len(calls) == 1
+
+
+def test_retry_gives_up_after_a_bounded_number_of_attempts(monkeypatch):
+    monkeypatch.setattr(transport.time, "sleep", lambda seconds: None)
+    calls = []
+
+    def open_managed(request, **kwargs):
+        calls.append(request.full_url)
+        raise urllib.error.HTTPError(request.full_url, 503, "refused", {}, io.BytesIO())
+
+    monkeypatch.setattr(transport, "managed_urlopen", open_managed)
+    with pytest.raises(urllib.error.HTTPError):
+        transport.download("https://github.com/asset", 100)
+    # The first attempt and the two retries the runtime's schedule allows.
+    assert len(calls) == 3
+
+
+def test_every_refusal_is_closed_before_it_is_retried_or_raised(monkeypatch):
+    monkeypatch.setattr(transport.time, "sleep", lambda seconds: None)
+    bodies = []
+
+    def refuse(request, **kwargs):
+        body = io.BytesIO()
+        bodies.append(body)
+        raise urllib.error.HTTPError(request.full_url, 503, "refused", {}, body)
+
+    monkeypatch.setattr(transport, "managed_urlopen", refuse)
+    with pytest.raises(urllib.error.HTTPError):
+        transport.download("https://github.com/asset", 100)
+    assert len(bodies) == 3
+    assert all(body.closed for body in bodies)
+
+
+@pytest.mark.parametrize("location", [None, "", "http://[::1"])
+def test_redirect_without_a_resolvable_target_is_refused_before_a_second_request(monkeypatch, location):
+    calls = []
+
+    def open_managed(request, **kwargs):
+        calls.append(request)
+        headers = {} if location is None else {"Location": location}
+        raise urllib.error.HTTPError(request.full_url, 302, "redirect", headers, io.BytesIO())
+
+    monkeypatch.setattr(transport, "managed_urlopen", open_managed)
+    with pytest.raises(ValueError, match="redirect limit or destination invalid"):
+        transport.download("https://github.com/asset", 100)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("maximum", [0, -1, 32 * 1024 * 1024 + 1, 1.5, True, "100", None])
+def test_byte_limit_is_bounded_before_any_request(monkeypatch, maximum):
+    monkeypatch.setattr(transport, "managed_urlopen", lambda *args, **kwargs: pytest.fail("request was made"))
+    with pytest.raises(ValueError, match="byte limit invalid"):
+        transport.download("https://github.com/asset", maximum)
+
+
 def test_redirect_loop_is_bounded(monkeypatch):
     calls = []
 
@@ -165,6 +218,26 @@ def test_pointer_digest_and_publication_are_bound_before_returning_a_root(monkey
     )
     with pytest.raises(ValueError, match="differs from advisory"):
         transport.fetch_root(now=1000, selection=selection)
+
+
+def test_selector_and_root_tag_keep_their_error_contract():
+    value = {
+        "schema": "guard.extension-distribution-selector.v2",
+        "source_sha": "1" * 40,
+        "publication_id": "12.1",
+        "root_sha256": "2" * 64,
+    }
+    assert selection.validate(value) is value
+    assert selection.root_tag("1" * 40, "12.1") == "extension-distribution-" + "1" * 40 + "-12.1"
+    for invalid in (None, [], {}, {**value, "extra": 1}, {**value, "schema": "other"}, {**value, "root_sha256": 3}):
+        with pytest.raises(ValueError, match=r"delivery selector (contract|identity) invalid"):
+            selection.validate(invalid)
+    # A value that cannot be sent is the same rejection as one the runtime refuses.
+    with pytest.raises(ValueError, match="delivery selector contract invalid"):
+        selection.validate({1, 2})
+    for source, publication in (("1" * 39, "12.1"), ("1" * 40, "12"), (None, "12.1"), ("1" * 40, 12.1)):
+        with pytest.raises(ValueError, match="release source or publication identity invalid"):
+            selection.root_tag(source, publication)
 
 
 def test_untrusted_location_cannot_choose_a_url_or_path():

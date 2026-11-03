@@ -56,45 +56,7 @@ pub(crate) fn consume(
         crate::guard_store_db::StoreError::Invalid("continuation_time_invalid"),
     )?;
     let row = if kind == "exact-cloud" {
-        let Some(request) = query_one(
-            connection,
-            "select * from approval_requests where request_id = ?",
-            &[json!(request_id)],
-        )?
-        else {
-            return Ok(false);
-        };
-        if request.get("status") != Some(&json!("resolved"))
-            || request.get("resolution_action") != Some(&json!("allow"))
-            || request.get("resolution_scope") != Some(&json!("artifact"))
-            || !matches!(
-                request.get("policy_action").and_then(Value::as_str),
-                Some("review" | "require-reapproval")
-            )
-        {
-            return Ok(false);
-        }
-        if ["request_id", "harness", "artifact_id", "artifact_hash"]
-            .iter()
-            .any(|k| {
-                request
-                    .get(*k)
-                    .and_then(Value::as_str)
-                    .filter(|s| !s.is_empty())
-                    .is_none()
-            })
-        {
-            return Ok(false);
-        }
-        let workspace = crate::policy_decision_lookup_op::computed_workspace_policy_key(
-            request.get("workspace").and_then(Value::as_str),
-        );
-        let publisher = request
-            .get("publisher")
-            .and_then(Value::as_str)
-            .filter(|s| !s.is_empty());
-        query_one(connection,"select * from guard_local_once_approvals where authority_kind = ? and request_id = ? and harness = ? and artifact_id = ? and artifact_hash = ? and claimed_at is null and julianday(expires_at) > julianday(?) and workspace is ? and publisher is ? order by created_at desc, approval_id desc limit 1",
-            &[json!(kind),json!(request_id),request["harness"].clone(),request["artifact_id"].clone(),request["artifact_hash"].clone(),json!(now),json!(workspace),json!(publisher)])?
+        crate::guard_store_exact_cloud_peek::exact_cloud_row(connection, request_id, &now)?
     } else {
         query_one(connection,"select * from guard_local_once_approvals where approval_id = ? and claimed_at is null and julianday(expires_at) > julianday(?)", &[json!(id),json!(now)])?
     };
@@ -164,3 +126,7 @@ pub(crate) fn consume(
         params![now,signature.integrity_version,signature.payload_hash,signature.payload_mac,signature.integrity_key_id,signature.signed_at,id])?;
     Ok(changed == 1)
 }
+
+#[cfg(test)]
+#[path = "continuation_grants_tests.rs"]
+mod tests;

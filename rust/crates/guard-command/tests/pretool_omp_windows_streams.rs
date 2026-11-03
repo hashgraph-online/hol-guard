@@ -11,10 +11,7 @@ fn ntfs_stream_spellings_are_judged_as_the_omp_selectors_they_spell() {
         .join(format!(
             "{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let _cleanup = fixture::FixtureCleanup(root.clone());
     std::fs::create_dir_all(&root).unwrap();

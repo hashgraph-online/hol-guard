@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Protocol
 from urllib.parse import parse_qs
 
+from .background_diagnostics import failure_detail, record_background_event
 from .local_cli_api import LocalCliApiError
 
 _IDENTITY_HASH = re.compile(r"[0-9a-f]{64}")
@@ -73,6 +74,16 @@ def handle_local_cli_post(handler: object, path: str, payload: dict[str, object]
         response = dispatch_local_cli_post(api, path, payload)
     except LocalCliApiError as error:
         write_json(error.to_payload(), status=error.status)
+        return
+    except Exception as error:
+        # An unhandled failure here used to abandon the request, so the page
+        # saw a dropped connection and daemon.log held nothing. Name the route
+        # and the exception class, then answer a reply the page can explain.
+        record_background_event(
+            "local_cli_post_failed",
+            f"route={path.rsplit('/', 1)[-1]} {failure_detail(error)}",
+        )
+        _write_unavailable(write_json)
         return
     if isinstance(response, dict):
         write_json(response, extra_headers={"Cache-Control": "no-store"})

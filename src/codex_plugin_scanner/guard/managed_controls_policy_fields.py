@@ -8,6 +8,7 @@ runtime cannot answer, parsing fails closed with ``native_unavailable``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, TypeGuard, cast
@@ -75,6 +76,9 @@ class ParsedManagedControlsPolicy:
     managed_global_lockdown: bool
     rule_targets: tuple[ExtensionRuleTargets, ...]
     delegated_targets: tuple[DelegatedExtensionTarget, ...]
+    cloud_projection_json: str | None = None
+    cloud_projection_digest: str | None = None
+    cloud_enforcement_digest: str | None = None
 
     @property
     def has_extension_semantics(self) -> bool:
@@ -85,6 +89,10 @@ class ParsedManagedControlsPolicy:
             or self.rule_targets
             or self.delegated_targets
         )
+
+
+_UNBOUND: Final = object()
+"""Marks a parse request that no policy delivery envelope accompanied."""
 
 
 def is_mapping(value: object) -> TypeGuard[dict[str, object]]:
@@ -98,10 +106,12 @@ def is_mapping(value: object) -> TypeGuard[dict[str, object]]:
 def parse_managed_controls_policy_fields(
     document: dict[str, object],
     *,
-    registry: CommandSafetyExtensionRegistry,
+    registry: CommandSafetyExtensionRegistry | Callable[[], CommandSafetyExtensionRegistry],
     negotiated_capabilities: frozenset[str],
     package_firewall_supported: bool = False,
     guard_home: Path | None = None,
+    cloud_view: dict[str, object] | Callable[[CommandSafetyExtensionRegistry], dict[str, object] | None] | None = None,
+    delivery_catalog_digest: object = _UNBOUND,
 ) -> ParsedManagedControlsPolicy:
     """Parse signed policy Extension fields after envelope authenticity is established."""
 
@@ -109,26 +119,58 @@ def parse_managed_controls_policy_fields(
         isinstance(item, str) for item in negotiated_capabilities
     ):
         raise ManagedControlsPolicyError("invalid_capabilities", "Managed Controls capabilities are malformed.")
-    if _without_extension_fields(document):
-        return _EMPTY
     capabilities = set(negotiated_capabilities)
     if package_firewall_supported:
         capabilities.add(PACKAGE_FIREWALL_CAPABILITY)
+    request = {
+        "document": _projected_document(document),
+        "capabilities": sorted(capabilities),
+    }
     result = native_context_digest(
         "managed_controls_policy_fields",
-        {
-            "request": {
-                "document": _projected_document(document),
-                "capabilities": sorted(capabilities),
-                "catalog": _catalog(registry),
-            }
-        },
+        {"request": request},
         guard_home=_resolve_digest_home(guard_home),
     )
+    if (
+        isinstance(result, dict)
+        and result.get("status") == "ok"
+        and result.get("managed_controls_policy_fields") == {"catalog_required": True}
+    ):
+        registry = registry() if callable(registry) else registry
+        cloud_view = cloud_view(registry) if callable(cloud_view) else cloud_view
+        request["catalog"] = _catalog(registry)
+    else:
+        return _parse_answer(result, registry=None, cloud_view=None)
+    if cloud_view is not None:
+        request.update(
+            {
+                "cloud_view": cloud_view,
+                "enforcement_catalog_digest": registry.catalog_digest,
+                "projection": {"version": 2, "catalog_digest": registry.catalog_digest},
+            }
+        )
+        if delivery_catalog_digest is not _UNBOUND:
+            # A caller that observed a delivery envelope reports its catalog
+            # digest here; the native parse refuses an identity it did not cut.
+            request["delivery_catalog_digest"] = delivery_catalog_digest
+    result = native_context_digest(
+        "managed_controls_policy_fields",
+        {"request": request},
+        guard_home=_resolve_digest_home(guard_home),
+    )
+    return _parse_answer(result, registry=registry, cloud_view=cloud_view)
+
+
+def _parse_answer(
+    result: object,
+    *,
+    registry: CommandSafetyExtensionRegistry | None,
+    cloud_view: dict[str, object] | None,
+) -> ParsedManagedControlsPolicy:
     if not isinstance(result, dict) or result.get("status") != "ok":
         raise _unavailable()
     answer = result.get("managed_controls_policy_fields")
-    if not isinstance(answer, dict) or len(answer) != 1:
+    if not isinstance(answer, dict) or set(answer) not in ({"ok"}, {"error"}, {"ok", "projection"}):
         raise _unavailable()
     refusal = answer.get("error")
     if refusal is not None:
@@ -139,40 +181,26 @@ def parse_managed_controls_policy_fields(
     if not isinstance(parsed, dict) or set(parsed) != _ANSWER_KEYS:
         raise _unavailable()
     try:
-        return _parsed(parsed, registry)
+        result = _parsed(parsed, registry)
+        if cloud_view is not None and registry is not None:
+            from dataclasses import replace
+
+            proof = answer.get("projection")
+            if (
+                not isinstance(proof, dict)
+                or not isinstance(proof.get("canonical_json"), str)
+                or not isinstance(proof.get("digest"), str)
+            ):
+                raise _unavailable()
+            result = replace(
+                result,
+                cloud_projection_json=proof["canonical_json"],
+                cloud_projection_digest=proof["digest"],
+                cloud_enforcement_digest=registry.catalog_digest,
+            )
+        return result
     except (KeyError, TypeError, ValueError) as error:
         raise _unavailable() from error
-
-
-_EMPTY: Final = ParsedManagedControlsPolicy(
-    authority_mode=None,
-    signed_cloud_layer=None,
-    managed_controls=(),
-    managed_global_lockdown=False,
-    rule_targets=(),
-    delegated_targets=(),
-)
-
-
-def _rules(document: object) -> list[object] | None:
-    if not is_mapping(document):
-        return None
-    spec = document.get("spec")
-    if not is_mapping(spec):
-        return None
-    rules = spec.get("rules")
-    return cast(list[object], rules) if isinstance(rules, list) else None
-
-
-def _without_extension_fields(document: object) -> bool:
-    """A well-formed document that carries neither Extension field has nothing to parse."""
-
-    rules = _rules(document)
-    return (
-        rules is not None
-        and HOL_EXTENSION_CONTROLS_FIELD not in cast(dict[str, object], document)
-        and all(is_mapping(rule) and HOL_EXTENSION_TARGETS_FIELD not in rule for rule in rules)
-    )
 
 
 def _projected_document(document: object) -> object:
@@ -230,10 +258,12 @@ def _controls(values: object) -> tuple[ExtensionControl, ...]:
     )
 
 
-def _parsed(answer: dict[str, object], registry: CommandSafetyExtensionRegistry) -> ParsedManagedControlsPolicy:
+def _parsed(answer: dict[str, object], registry: CommandSafetyExtensionRegistry | None) -> ParsedManagedControlsPolicy:
     layer_value = answer["signed_cloud_layer"]
     layer = None
     if layer_value is not None:
+        if registry is None:
+            raise ValueError("native policy layer requires the requested catalog")
         layer_value = cast(dict[str, object], layer_value)
         layer = ExtensionControlLayer(
             schema_version=CONTROL_SCHEMA_VERSION,

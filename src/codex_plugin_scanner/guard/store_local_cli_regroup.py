@@ -32,13 +32,15 @@ from typing import Final
 
 _LOGGER = logging.getLogger(__name__)
 
-# The stored text of the two reviews that mean only "Guard does not recognise
-# this command": the generic review, and the one for a program the workspace
-# sandbox cannot run. Mirrors `connector_setup::NON_RECOGNITION_REASON_CODES`;
-# the approval row keeps this text, not the code.
+# The stored text of the reviews that mean only "Guard does not recognise this
+# command": the generic review (with split advice for a chain, without it for a
+# single step), and the one for a program the workspace sandbox cannot run.
+# Mirrors `connector_setup::NON_RECOGNITION_REASON_CODES`; the approval row keeps
+# this text, not the code.
 NON_RECOGNITION_RISK_SUMMARIES: Final = (
     "HOL Guard requires review because this command could not be confirmed read-only. "
     "Splitting it into simpler commands can let the read-only parts run without review.",
+    "HOL Guard requires review because this command could not be confirmed read-only.",
     "HOL Guard's workspace sandbox cannot run this program, so it was not started there.",
 )
 ACTION_DIGEST_HEX: Final = 16

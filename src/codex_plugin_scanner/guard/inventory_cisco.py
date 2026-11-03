@@ -11,6 +11,12 @@ from ..integrations.cisco_mcp_scanner import run_cisco_mcp_scan
 from ..integrations.cisco_skill_scanner import run_cisco_skill_scan
 from ..models import Finding
 from .adapters.base import HarnessContext
+from .native_inventory_scan_targets import (
+    CiscoMcpScanTarget,
+    CiscoScanTargets,
+    InventoryScanTargetsUnavailableError,
+    native_inventory_scan_targets,
+)
 
 CiscoInventorySource = Literal["cisco-mcp-scanner", "cisco-skill-scanner"]
 
@@ -43,14 +49,29 @@ def run_cisco_inventory_scans(
     skill_mode: str = "off",
     timeout_seconds: float | None = None,
 ) -> tuple[CiscoInventoryRun, ...]:
+    if mcp_mode == "off" and skill_mode == "off":
+        return ()
+    # Choosing the targets is part of the pass the caller gave a budget to, so
+    # it is charged against that budget rather than taking a deadline of its
+    # own and still handing the scanners the whole of it.
+    pass_started = time.perf_counter()
+    try:
+        targets = _scan_targets(
+            harness=harness,
+            context=context,
+            detection=detection,
+            timeout_seconds=timeout_seconds,
+        )
+    except InventoryScanTargetsUnavailableError:
+        return _unavailable_runs(mcp_mode=mcp_mode, skill_mode=skill_mode)
+
     runs: list[CiscoInventoryRun] = []
-    remaining_timeout_seconds = timeout_seconds
+    remaining_timeout_seconds = _consume_timeout_budget(timeout_seconds, started_at=pass_started)
     if mcp_mode != "off":
         mcp_started = time.perf_counter()
         runs.extend(
             _run_mcp_inventory_scans(
-                context=context,
-                detection=detection,
+                targets=targets.mcp_targets,
                 mode=mcp_mode,
                 timeout_seconds=remaining_timeout_seconds,
             )
@@ -62,9 +83,7 @@ def run_cisco_inventory_scans(
     if skill_mode != "off":
         runs.extend(
             _run_skill_inventory_scans(
-                harness=harness,
-                context=context,
-                detection=detection,
+                roots=targets.skill_roots,
                 mode=skill_mode,
                 timeout_seconds=remaining_timeout_seconds,
             )
@@ -72,14 +91,71 @@ def run_cisco_inventory_scans(
     return tuple(runs)
 
 
-def _run_mcp_inventory_scans(
+def _scan_targets(
     *,
+    harness: str,
     context: HarnessContext,
     detection: object,
+    timeout_seconds: float | None = None,
+) -> CiscoScanTargets:
+    """Ask the resident what this pass is allowed to read."""
+
+    return native_inventory_scan_targets(
+        harness=harness,
+        home_dir=context.home_dir,
+        workspace_dir=context.workspace_dir,
+        artifacts=tuple(getattr(detection, "artifacts", ())),
+        guard_home=getattr(context, "guard_home", None),
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _unavailable_runs(*, mcp_mode: str, skill_mode: str) -> tuple[CiscoInventoryRun, ...]:
+    """Report that the scan did not happen, rather than that it found nothing.
+
+    Choosing the targets here instead would be the second implementation the
+    op exists to remove, and reporting a clean pass would describe
+    configurations nothing opened.
+    """
+
+    runs: list[CiscoInventoryRun] = []
+    if mcp_mode != "off":
+        runs.append(
+            CiscoInventoryRun(
+                source="cisco-mcp-scanner",
+                status="unavailable",
+                message=(
+                    "Guard's native runtime could not choose the MCP configurations to scan; "
+                    "Cisco MCP inventory scan did not run."
+                ),
+                findings=(),
+                duration_ms=0,
+                metadata=_local_scanner_metadata({"target": "unavailable", "targetsScanned": 0, "mode": mcp_mode}),
+            )
+        )
+    if skill_mode != "off":
+        runs.append(
+            CiscoInventoryRun(
+                source="cisco-skill-scanner",
+                status="unavailable",
+                message=(
+                    "Guard's native runtime could not choose the skill collections to scan; "
+                    "Cisco skill inventory scan did not run."
+                ),
+                findings=(),
+                duration_ms=0,
+                metadata=_local_scanner_metadata({"target": "unavailable", "skillsScanned": 0, "mode": skill_mode}),
+            )
+        )
+    return tuple(runs)
+
+
+def _run_mcp_inventory_scans(
+    *,
+    targets: tuple[CiscoMcpScanTarget, ...],
     mode: str,
     timeout_seconds: float | None,
 ) -> tuple[CiscoInventoryRun, ...]:
-    targets = _mcp_scan_targets(context=context, detection=detection)
     if not targets:
         return (
             CiscoInventoryRun(
@@ -93,25 +169,16 @@ def _run_mcp_inventory_scans(
         )
     remaining_timeout_seconds = timeout_seconds
     runs: list[CiscoInventoryRun] = []
-    for root, config_path in targets:
+    for target in targets:
         if remaining_timeout_seconds is not None and remaining_timeout_seconds <= 0:
-            runs.append(
-                _build_mcp_inventory_budget_exhausted_run(
-                    root=root,
-                    config_path=config_path,
-                    mode=mode,
-                    workspace_dir=context.workspace_dir,
-                )
-            )
+            runs.append(_build_mcp_inventory_budget_exhausted_run(target=target, mode=mode))
             continue
         started = time.perf_counter()
         runs.append(
             _run_single_mcp_inventory_scan(
-                root=root,
-                config_path=config_path,
+                target=target,
                 mode=mode,
                 timeout_seconds=remaining_timeout_seconds,
-                workspace_dir=context.workspace_dir,
             )
         )
         remaining_timeout_seconds = _consume_timeout_budget(
@@ -123,14 +190,17 @@ def _run_mcp_inventory_scans(
 
 def _run_single_mcp_inventory_scan(
     *,
-    root: Path,
-    config_path: Path,
+    target: CiscoMcpScanTarget,
     mode: str,
     timeout_seconds: float | None,
-    workspace_dir: Path | None,
 ) -> CiscoInventoryRun:
     started = time.perf_counter()
-    summary = run_cisco_mcp_scan(root, mode=mode, timeout_seconds=timeout_seconds, config_path=config_path)
+    summary = run_cisco_mcp_scan(
+        target.root,
+        mode=mode,
+        timeout_seconds=timeout_seconds,
+        config_path=target.config_path,
+    )
     duration_ms = int((time.perf_counter() - started) * 1000)
     return CiscoInventoryRun(
         source="cisco-mcp-scanner",
@@ -140,9 +210,9 @@ def _run_single_mcp_inventory_scan(
         duration_ms=duration_ms,
         metadata=_local_scanner_metadata(
             {
-                "target": _safe_mcp_target_label(root=root, config_path=config_path, workspace_dir=workspace_dir),
-                "_targetPath": str(root),
-                "_configPath": str(config_path),
+                "target": target.label,
+                "_targetPath": str(target.root),
+                "_configPath": str(target.config_path),
                 "targetsScanned": summary.targets_scanned,
                 "totalFindings": summary.total_findings,
                 "findingsBySeverity": summary.findings_by_severity,
@@ -154,9 +224,7 @@ def _run_single_mcp_inventory_scan(
     )
 
 
-def _build_mcp_inventory_budget_exhausted_run(
-    *, root: Path, config_path: Path, mode: str, workspace_dir: Path | None
-) -> CiscoInventoryRun:
+def _build_mcp_inventory_budget_exhausted_run(*, target: CiscoMcpScanTarget, mode: str) -> CiscoInventoryRun:
     return CiscoInventoryRun(
         source="cisco-mcp-scanner",
         status="timed_out",
@@ -165,9 +233,9 @@ def _build_mcp_inventory_budget_exhausted_run(
         duration_ms=0,
         metadata=_local_scanner_metadata(
             {
-                "target": _safe_mcp_target_label(root=root, config_path=config_path, workspace_dir=workspace_dir),
-                "_targetPath": str(root),
-                "_configPath": str(config_path),
+                "target": target.label,
+                "_targetPath": str(target.root),
+                "_configPath": str(target.config_path),
                 "targetsScanned": 0,
                 "mode": mode,
             }
@@ -177,13 +245,10 @@ def _build_mcp_inventory_budget_exhausted_run(
 
 def _run_skill_inventory_scans(
     *,
-    harness: str,
-    context: HarnessContext,
-    detection: object,
+    roots: tuple[Path, ...],
     mode: str,
     timeout_seconds: float | None,
 ) -> tuple[CiscoInventoryRun, ...]:
-    roots = _skill_scan_roots(harness=harness, context=context, detection=detection)
     if not roots:
         return (
             CiscoInventoryRun(
@@ -266,159 +331,6 @@ def _build_skill_inventory_budget_exhausted_run(*, root: Path, mode: str) -> Cis
             }
         ),
     )
-
-
-def _mcp_scan_targets(*, context: HarnessContext, detection: object) -> tuple[tuple[Path, Path], ...]:
-    targets: list[tuple[Path, Path]] = []
-    seen: set[str] = set()
-
-    for base_dir in (context.workspace_dir, context.home_dir):
-        if base_dir is None:
-            continue
-        config_path = base_dir / ".mcp.json"
-        if config_path.is_file():
-            _extend_unique_mcp_targets(targets, seen, root=base_dir, config_path=config_path)
-
-    for artifact in tuple(getattr(detection, "artifacts", ())):
-        if str(getattr(artifact, "artifact_type", "")) != "mcp_server":
-            continue
-        config_value = getattr(artifact, "config_path", None)
-        if not isinstance(config_value, str) or not config_value.strip():
-            continue
-        config_path = Path(config_value)
-        if not config_path.is_file():
-            continue
-        root = _mcp_scan_root_for_config(config_path, context=context)
-        _extend_unique_mcp_targets(targets, seen, root=root, config_path=config_path)
-
-    return tuple(targets)
-
-
-def _extend_unique_mcp_targets(
-    targets: list[tuple[Path, Path]],
-    seen: set[str],
-    *,
-    root: Path,
-    config_path: Path,
-) -> None:
-    try:
-        key = f"{root.resolve()}::{config_path.resolve()}"
-    except OSError:
-        return
-    if key in seen:
-        return
-    seen.add(key)
-    targets.append((root, config_path))
-
-
-def _mcp_scan_root_for_config(config_path: Path, *, context: HarnessContext) -> Path:
-    workspace_dir = context.workspace_dir
-    if workspace_dir is None:
-        return config_path.parent
-    try:
-        config_path.resolve().relative_to(workspace_dir.resolve())
-    except (OSError, ValueError):
-        return config_path.parent
-    return workspace_dir
-
-
-def _safe_mcp_target_label(*, root: Path, config_path: Path, workspace_dir: Path | None = None) -> str:
-    if workspace_dir is not None:
-        try:
-            return config_path.resolve().relative_to(workspace_dir.resolve()).as_posix()
-        except (OSError, ValueError):
-            pass
-    try:
-        return config_path.resolve().relative_to(root.resolve()).as_posix()
-    except (OSError, ValueError):
-        return config_path.name
-
-
-def _skill_scan_roots(*, harness: str, context: HarnessContext, detection: object) -> tuple[Path, ...]:
-    roots: list[Path] = []
-    seen: set[str] = set()
-
-    if harness == "hermes":
-        hermes_skills = context.home_dir / ".hermes" / "skills"
-        _extend_unique_skill_roots(roots, seen, _skill_dirs_under(hermes_skills))
-        if roots:
-            return tuple(roots)
-
-    artifacts = tuple(getattr(detection, "artifacts", ()))
-    for artifact in artifacts:
-        artifact_type = str(getattr(artifact, "artifact_type", ""))
-        if artifact_type not in {"skill", "skill_file"}:
-            continue
-        root = _artifact_skill_root(artifact, context=context)
-        if root is not None:
-            resolved = str(root.resolve())
-            if resolved not in seen:
-                seen.add(resolved)
-                roots.append(root)
-    return tuple(roots)
-
-
-def _artifact_skill_root(artifact: object, *, context: HarnessContext) -> Path | None:
-    metadata = getattr(artifact, "metadata", {})
-    if isinstance(metadata, dict):
-        skill_root = metadata.get("skill_root")
-        if isinstance(skill_root, str):
-            for base_dir in (context.workspace_dir, context.home_dir):
-                if base_dir is None:
-                    continue
-                candidate = (base_dir / skill_root).resolve()
-                if candidate.is_dir():
-                    if (candidate / "SKILL.md").is_file():
-                        return candidate
-                    if _skill_dirs_under(candidate):
-                        return candidate
-    config_path = getattr(artifact, "config_path", None)
-    if not isinstance(config_path, str):
-        return None
-    skill_path = Path(config_path)
-    collection_root = _nearest_skill_collection_dir(skill_path)
-    if collection_root is not None and collection_root.is_dir():
-        return collection_root
-    root = _nearest_skill_dir(skill_path)
-    if root is not None and root.is_dir():
-        return root
-    if skill_path.is_dir() and (skill_path / "SKILL.md").is_file():
-        return skill_path
-    return None
-
-
-def _extend_unique_skill_roots(roots: list[Path], seen: set[str], candidates: tuple[Path, ...]) -> None:
-    for candidate in candidates:
-        resolved = str(candidate.resolve())
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        roots.append(candidate)
-
-
-def _skill_dirs_under(root: Path) -> tuple[Path, ...]:
-    if not root.is_dir():
-        return ()
-    skill_dirs = sorted({path.parent.resolve() for path in root.rglob("SKILL.md") if path.is_file()})
-    return tuple(skill_dirs)
-
-
-def _nearest_skill_dir(path: Path) -> Path | None:
-    if path.name == "SKILL.md":
-        return path.parent
-    for parent in path.parents:
-        if (parent / "SKILL.md").is_file():
-            return parent
-    return None
-
-
-def _nearest_skill_collection_dir(path: Path) -> Path | None:
-    for parent in path.parents:
-        if parent.name != "skills":
-            continue
-        if _skill_dirs_under(parent):
-            return parent
-    return None
 
 
 def _consume_timeout_budget(

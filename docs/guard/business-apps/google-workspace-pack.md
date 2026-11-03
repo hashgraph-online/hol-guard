@@ -16,7 +16,7 @@ The pack lists:
 - operations the pack does not cover, with the reason;
 - setup recipes that point to the existing extension documentation.
 
-`validate_pack` in `guard/extension_builder/pack.py` checks the pack against the
+`validate_pack` in `tests/extension_pack.py` checks the pack against the
 generated catalog. Unknown extensions, version drift, permissions outside the
 pack, missing or duplicated coverage and missing setup documents are rejected.
 

@@ -55,7 +55,7 @@
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value};
@@ -89,6 +89,11 @@ const CURSOR_ENV_MARKERS: [&str; 5] = [
     "CURSOR_TRANSCRIPT_PATH",
 ];
 const INVALID_CONFIG: &str = "claude session start configuration is invalid";
+/// The resident's state base under the Guard home, as the Python client
+/// derives it (`native_resident_client._client_pool_for`).
+const RESIDENT_STATE_DIRECTORY: &str = "native-runtime";
+/// The lane's own argv for the detached prewarm.
+const PREWARM_MODE: &str = "resident-prewarm";
 
 /// The installer's JSON config.
 #[derive(Debug, PartialEq, Eq)]
@@ -314,6 +319,46 @@ fn hand_off(argv: &[String]) -> i32 {
 }
 
 /// Run the lane; the exit status when this process is not replaced.
+/// Start this runtime's resident off to the side, so the session's first
+/// tool hook finds it up instead of paying for the start.
+///
+/// The child is this same runtime (`resident-prewarm`), detached into its
+/// own process group with no stdio, and never waited for: the lane's own
+/// answer, its budget and its hand-off are exactly what they were without
+/// it. A resident another client already holds, a runtime whose restart
+/// budget is paused, and a spawn that fails all end the same way, silently.
+fn prewarm_resident(config_text: &str) {
+    let Ok(executable) = std::env::current_exe() else {
+        return;
+    };
+    let Some(mut command) = prewarm_command(config_text, &executable) else {
+        return;
+    };
+    let _ = command.spawn();
+}
+
+/// The detached prewarm for this session's Guard home, or `None` when the
+/// configuration names no home to warm.
+fn prewarm_command(config_text: &str, executable: &Path) -> Option<Command> {
+    let state_directory = guard_home(config_text)?.join(RESIDENT_STATE_DIRECTORY);
+    let mut command = Command::new(executable);
+    command
+        .arg(PREWARM_MODE)
+        .arg("--state-dir")
+        .arg(state_directory)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    // The hold outlives this hook, so the prewarm must not be in the hook's
+    // process group: the harness may end that group when the hook returns.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    Some(command)
+}
+
 pub(crate) fn run(config_text: &str) -> i32 {
     let started = Instant::now();
     let deadline = started + CHECK_BUDGET;
@@ -321,8 +366,17 @@ pub(crate) fn run(config_text: &str) -> i32 {
         let _ = writeln!(io::stderr(), "{INVALID_CONFIG}");
         return 2;
     };
-    let start =
-        |command: &[String]| start_daemon(command, TRANSPORT_FAILURE, started + START_BUDGET);
+    // Before the checks, so a session that hands off to Python warms too.
+    prewarm_resident(config_text);
+    let home = guard_home(config_text);
+    let start = |command: &[String]| {
+        start_daemon(
+            command,
+            TRANSPORT_FAILURE,
+            started + START_BUDGET,
+            home.as_deref(),
+        )
+    };
     match session_output(config_text, &SessionEnvironment::current(), deadline, start) {
         Ok(output) => {
             let mut stdout = io::stdout().lock();
@@ -335,8 +389,8 @@ pub(crate) fn run(config_text: &str) -> i32 {
             }
         }
         Err(_) => {
-            if let Some(home) = guard_home(config_text) {
-                hook_bridge_fallback::note(&home, "claude-code", Fallback::ContractDrift);
+            if let Some(home) = &home {
+                hook_bridge_fallback::note(home, "claude-code", Fallback::ContractDrift);
             }
             hand_off(&fallback)
         }

@@ -908,7 +908,7 @@
    "bun.lockb": {
     "hex": "00ff00"
    },
-   "package-lock.json": "{}",
+   "package-lock.json": "{\"lockfileVersion\": 3,",
    "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}",
    "uv.lock": "not toml [",
    "yarn.lock": {
@@ -1583,10 +1583,26 @@
     {
      "direct": false,
      "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": null,
+     "version": "1.0.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
      "name": "alpha",
      "namespace": null,
      "range": null,
      "version": "1.0.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": null,
+     "version": "0.5.0"
     },
     {
      "direct": false,

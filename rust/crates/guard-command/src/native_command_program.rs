@@ -13,13 +13,17 @@ use guard_contracts::{
 use serde::Deserialize;
 use serde_json::Value;
 
+#[cfg(test)]
+#[path = "authored_test_support.rs"]
+pub(crate) mod authored_test_support;
+
 use crate::command_ascii_comparison::lowercase_for_ascii_comparison;
 use crate::command_common_cli_matchers::CommonCliMatcher;
 use crate::command_database_matchers::DatabaseMatcher;
 use crate::command_operand_matchers::OperandMatcher;
 use crate::command_option_parsing::{
     argument_semantics, flags_present_in_all_option_parses_with_deadline, known_option_advance,
-    matches_subcommands_conservatively_with_deadline,
+    matches_subcommands_conservatively_with_deadline, ArgumentSemantics,
 };
 use crate::command_specialized_matchers::SpecializedMatcher;
 use crate::command_structured_matchers::StructuredMatcher;
@@ -35,24 +39,21 @@ const MAX_NODES: usize = 16_384;
 const MAX_DEPTH: usize = 32;
 const MATCH_DETAIL: &str = "Matched bounded structured command constraints.";
 #[cfg(not(guard_source_bootstrap))]
-static EMBEDDED_PROGRAM: &[u8] = include_bytes!(concat!(
-    env!("OUT_DIR"),
-    "/native-command-program.v1.json.zst"
-));
+static EMBEDDED_PROGRAM: &[u8] = guard_command_catalog_data::PROGRAM_JSON_ZST;
 /// SHA-256 hex of the exact packaged program bytes (with trailing newline).
 #[cfg(not(guard_source_bootstrap))]
-pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = env!("GUARD_PACKAGED_PROGRAM_SHA256");
+pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = guard_command_catalog_data::PROGRAM_JSON_SHA256;
 #[cfg(guard_source_bootstrap)]
 pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = "";
 
 /// Program identity without decoding the legacy embedded artifact.
 #[cfg(not(guard_source_bootstrap))]
-pub const PACKAGED_COMMAND_PROGRAM_ID: &str = env!("GUARD_PACKAGED_PROGRAM_ID");
+pub const PACKAGED_COMMAND_PROGRAM_ID: &str = guard_command_catalog_data::PROGRAM_ID;
 #[cfg(guard_source_bootstrap)]
 pub const PACKAGED_COMMAND_PROGRAM_ID: &str = "";
 
 #[cfg(not(guard_source_bootstrap))]
-const DEFAULT_COMMAND_PACK_IDS: &str = env!("GUARD_DEFAULT_COMMAND_PACK_IDS");
+const DEFAULT_COMMAND_PACK_IDS: &str = guard_command_catalog_data::DEFAULT_COMMAND_PACK_IDS;
 #[cfg(guard_source_bootstrap)]
 const DEFAULT_COMMAND_PACK_IDS: &str = "";
 
@@ -70,8 +71,8 @@ pub fn packaged_command_program_bytes() -> &'static [u8] {
             .get_or_init(|| {
                 crate::packaged_blob::decode(
                     EMBEDDED_PROGRAM,
-                    env!("GUARD_PACKAGED_PROGRAM_LEN"),
-                    env!("GUARD_PACKAGED_PROGRAM_SHA256"),
+                    guard_command_catalog_data::PROGRAM_JSON_LEN,
+                    guard_command_catalog_data::PROGRAM_JSON_SHA256,
                 )
             })
             .as_ref()
@@ -108,6 +109,8 @@ mod observations;
 pub mod source;
 #[path = "native_command_program_wire.rs"]
 mod wire;
+#[path = "native_command_program_work_stats.rs"]
+pub mod work_stats;
 use compile::{compile_node, validate_graph};
 use evaluation::Evaluation;
 use wire::*;
@@ -333,7 +336,7 @@ fn digest_json_value(domain: &[u8], value: &Value) -> Result<String, &'static st
 // Do not depend on serde_json's selected Map implementation. Build dependencies
 // may enable preserve_order, while the packaged/runtime contract requires
 // recursively sorted object keys and the usual UTF-8 JSON string encoding.
-fn canonical_json_bytes(value: &Value) -> Result<Vec<u8>, serde_json::Error> {
+pub(crate) fn canonical_json_bytes(value: &Value) -> Result<Vec<u8>, serde_json::Error> {
     let mut canonical = value.clone();
     canonical.sort_all_objects();
     serde_json::to_vec(&canonical)
@@ -421,6 +424,32 @@ impl NativeCommandProgram {
         Some(names)
     }
 
+    /// The names `extension_names` lists, leaving out rules that can match
+    /// without naming a known program instead of giving up on the set.
+    pub(crate) fn extension_known_names(
+        &self,
+        extension_index: usize,
+        compatibility: Option<&[&str]>,
+    ) -> BTreeSet<String> {
+        let mut names: BTreeSet<String> = self.extensions[extension_index]
+            .executables
+            .iter()
+            .map(|name| lowercase_for_ascii_comparison(basename(name)))
+            .collect();
+        for rule in self.extension_rules(extension_index) {
+            match rule.matcher {
+                Some(node) => names.extend(self.required_executables(node, 0).unwrap_or_default()),
+                None => names.extend(
+                    compatibility
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|name| (*name).to_owned()),
+                ),
+            }
+        }
+        names
+    }
+
     /// Executables one of which a match of `node` must run. Alternatives need
     /// all of theirs; a conjunction needs any one child's. Matchers without a
     /// declared executable gate have no such set.
@@ -454,7 +483,7 @@ impl NativeCommandProgram {
     }
 }
 
-fn basename(value: &str) -> &str {
+pub(crate) fn basename(value: &str) -> &str {
     value.rsplit(['/', '\\']).next().unwrap_or(value)
 }
 

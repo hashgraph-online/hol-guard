@@ -47,9 +47,13 @@ impl StoreError {
             Self::Runtime(_) => "native_guard_store_runtime_error",
             Self::Invalid(_) => "native_guard_store_invalid",
             Self::Sqlite(error) => match error.sqlite_error_code() {
-                Some(ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked) => {
-                    "native_guard_store_busy"
-                }
+                // A WAL reader that keeps losing the wal-index race gives up
+                // with PROTOCOL; SQLite documents it as transient contention.
+                Some(
+                    ErrorCode::DatabaseBusy
+                    | ErrorCode::DatabaseLocked
+                    | ErrorCode::FileLockingProtocolFailed,
+                ) => "native_guard_store_busy",
                 Some(ErrorCode::DatabaseCorrupt | ErrorCode::NotADatabase) => {
                     "native_guard_store_sqlite_corrupt"
                 }
@@ -108,6 +112,22 @@ pub(crate) fn query_all(
     sql: &str,
     params: &[Value],
 ) -> StoreResult<Vec<Row>> {
+    let mut out = Vec::new();
+    query_each(connection, sql, params, |row| {
+        out.push(row);
+        Ok(true)
+    })?;
+    Ok(out)
+}
+
+/// `for row in execute(sql, params)`, stopping once `visit` returns false,
+/// so a caller that only wants a budget's worth never holds the rest.
+pub(crate) fn query_each(
+    connection: &Connection,
+    sql: &str,
+    params: &[Value],
+    mut visit: impl FnMut(Row) -> StoreResult<bool>,
+) -> StoreResult<()> {
     let mut statement = connection.prepare_cached(sql)?;
     let names: Vec<String> = statement
         .column_names()
@@ -116,15 +136,16 @@ pub(crate) fn query_all(
         .collect();
     let bound: Vec<rusqlite::types::Value> = params.iter().map(bind).collect();
     let mut rows = statement.query(rusqlite::params_from_iter(bound))?;
-    let mut out = Vec::new();
     while let Some(row) = rows.next()? {
         let mut map = Row::new();
         for (index, name) in names.iter().enumerate() {
             map.insert(name.clone(), cell(row.get_ref(index)?)?);
         }
-        out.push(map);
+        if !visit(map)? {
+            break;
+        }
     }
-    Ok(out)
+    Ok(())
 }
 
 /// `execute(sql, params).fetchone()`.
@@ -182,5 +203,14 @@ mod tests {
         assert_eq!(row["a"], Value::from(1));
         assert_eq!(row["b"], Value::from("x"));
         assert_eq!(row["c"], Value::Null);
+    }
+
+    #[test]
+    fn a_lost_wal_index_race_is_reported_as_busy() {
+        let error = StoreError::Sqlite(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_PROTOCOL),
+            None,
+        ));
+        assert_eq!(error.code(), "native_guard_store_busy");
     }
 }

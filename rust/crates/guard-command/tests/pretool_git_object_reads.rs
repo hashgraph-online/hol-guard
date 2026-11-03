@@ -27,10 +27,7 @@ fn home() -> PathBuf {
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
     for name in ["app", "api"] {
@@ -60,7 +57,7 @@ fn classify(home: &Path, harness: &str, command: &str) -> guard_contracts::PreTo
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let project = home.join("org/app");
     evaluate_pre_tool_envelope_with_execution_context(

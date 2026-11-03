@@ -30,12 +30,15 @@ if TYPE_CHECKING:
     from codex_plugin_scanner.guard.config import GuardConfig
     from codex_plugin_scanner.guard.store import GuardStore
 
+from ..version import __version__
 from .browser_opener import open_browser_url
+from .cli.update_desktop_core_start import wait_for_started_core
 from .daemon.manager import (
     desktop_preflight_requested,
     ensure_guard_daemon,
     load_guard_daemon_auth_token,
 )
+from .daemon.start_classification import GuardDaemonStillStartingError
 from .local_dashboard_session import build_local_dashboard_session_token
 from .runtime.surface_server import GuardSurfaceRuntime
 from .secret_redaction import sanitize_secret
@@ -121,11 +124,21 @@ def build_desktop_dashboard_session_url(
 
     if desktop_bootstrap_is_preflight():
         raise RuntimeError("Desktop preflight does not start a local daemon")
-    approval_center_url = ensure_guard_daemon(
-        guard_home,
-        home_dir=home_dir,
-        executable=_desktop_owned_core_executable(),
-    )
+    try:
+        approval_center_url = ensure_guard_daemon(
+            guard_home,
+            home_dir=home_dir,
+            executable=_desktop_owned_core_executable(),
+        )
+    except GuardDaemonStillStartingError:
+        # A loaded machine can need longer than the start window to load Core.
+        # The launch keeps running, so wait for it inside Desktop's activation
+        # budget instead of failing bootstrap. Only a daemon serving this Core
+        # (or newer) counts; an older one is not the Core Desktop activated.
+        started_url = wait_for_started_core(guard_home, minimum_version=__version__)
+        if started_url is None:
+            raise
+        approval_center_url = started_url
     auth_token = load_guard_daemon_auth_token(guard_home)
     if auth_token is None:
         raise RuntimeError("Guard daemon auth token is not available")

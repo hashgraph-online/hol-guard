@@ -68,7 +68,7 @@ from .guard_extension_control_authority_fixtures import (
 )
 
 
-def test_prepared_transition_retries_with_same_reserved_proof(tmp_path: Path) -> None:
+def test_prepared_transition_retries_with_same_reserved_proof(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
@@ -84,7 +84,9 @@ def test_prepared_transition_retries_with_same_reserved_proof(tmp_path: Path) ->
     )
     secrets.fail_anchor_set_number = secrets.anchor_set_count + 1
 
-    with pytest.raises(ExtensionControlAuthorityError, match="anchor unavailable"):
+    # A process that dies after preparing cannot take its row back.
+    with monkeypatch.context() as patch, pytest.raises(ExtensionControlAuthorityError, match="anchor unavailable"):
+        patch.setattr(store, "_roll_back_abandoned_transition", lambda *_args, **_kwargs: False)
         store.commit_extension_control_layers(
             layers,
             catalog_digest=digest,
@@ -240,4 +242,21 @@ def test_authenticated_history_fails_closed_on_tampered_transition(tmp_path: Pat
         store.list_extension_control_authority_history(
             catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
             limit=20,
+        )
+
+
+@pytest.mark.parametrize("limit", [0, 51])
+def test_history_refuses_out_of_range_limit_before_reading_authority(
+    tmp_path: Path, limit: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path, MemorySecretStore())
+
+    def unexpected_read(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("history read the authority for an invalid limit")
+
+    monkeypatch.setattr(store, "_read_extension_control_authority_locked", unexpected_read)
+    with pytest.raises(ExtensionControlAuthorityError, match="invalid extension control history limit"):
+        store.list_extension_control_authority_history(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            limit=limit,
         )

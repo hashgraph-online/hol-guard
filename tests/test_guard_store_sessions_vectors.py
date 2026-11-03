@@ -1,7 +1,7 @@
 """Parity of the native guard sessions, operations and client-lease store methods.
 
 The vectors were produced by the original Python store mixin (never by Rust).
-These tests check that (1) the Python wrappers translate every recorded call to
+These tests check that (1) the Python wrappers and test shims translate every recorded call to
 the recorded wire arguments and shape the recorded raw rows into the recorded
 results, (2) the tables the store creates are the tables the original wrote,
 and (3) every recorded call replays through the real resident with the
@@ -22,6 +22,8 @@ import pytest
 
 from codex_plugin_scanner.guard import native_guard_store, store_review_event_outbox, store_sessions
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import native_store_shims
+from tests.native_store_shims import attach_guard_client, renew_guard_client_attachment
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnknownMemberType=false
 # pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
@@ -50,12 +52,17 @@ def _cases() -> list[tuple[str, int, dict[str, Any], dict[str, Any]]]:
 
 
 def _invoke(store: GuardStore, source: dict[str, Any]) -> object:
-    return getattr(store, source["method"])(*source.get("args", ()), **source.get("kwargs", {}))
+    args, kwargs = source.get("args", ()), source.get("kwargs", {})
+    # Ops only tests reach have no store wrapper; their shim takes the store first.
+    shim = getattr(native_store_shims, source["method"], None)
+    if shim is not None:
+        return shim(store, *args, **kwargs)
+    return getattr(store, source["method"])(*args, **kwargs)
 
 
 def _pin_clock(monkeypatch: pytest.MonkeyPatch, lease_ids: Any) -> None:
     monkeypatch.setattr(store_sessions, "_utc_now_iso", lambda: VECTORS["now"])
-    monkeypatch.setattr(store_sessions, "uuid4", lambda: SimpleNamespace(hex=next(lease_ids)))
+    monkeypatch.setattr(native_store_shims, "uuid4", lambda: SimpleNamespace(hex=next(lease_ids)))
 
 
 def _expected_wire(step: dict[str, Any]) -> dict[str, Any]:
@@ -108,11 +115,11 @@ def test_wrappers_reject_an_unparsable_instant_before_calling_the_resident(
     calls: list[object] = []
     monkeypatch.setattr(store_review_event_outbox, "native_guard_store_call", lambda **kw: calls.append(kw))
     with pytest.raises(ValueError, match="Invalid isoformat string: 'later'"):
-        store.attach_guard_client(
-            client_id="c", surface="s", session_id=None, metadata={}, lease_seconds=5, now="later"
+        attach_guard_client(
+            store, client_id="c", surface="s", session_id=None, metadata={}, lease_seconds=5, now="later"
         )
     with pytest.raises(ValueError, match="Invalid isoformat string: 'later'"):
-        store.renew_guard_client_attachment(client_id="c", lease_id="l", lease_seconds=5, now="later")
+        renew_guard_client_attachment(store, client_id="c", lease_id="l", lease_seconds=5, now="later")
     assert calls == []
 
 
@@ -125,8 +132,8 @@ def test_wrappers_hand_the_resident_an_aware_instant(tmp_path: Path, monkeypatch
         return None, None
 
     monkeypatch.setattr(store_review_event_outbox, "native_guard_store_call", capture)
-    store.renew_guard_client_attachment(client_id="c", lease_id="l", lease_seconds=5, now="2026-01-01T00:00:00Z")
-    store.renew_guard_client_attachment(client_id="c", lease_id="l", lease_seconds=5, now="2026-01-01T00:00:00")
+    renew_guard_client_attachment(store, client_id="c", lease_id="l", lease_seconds=5, now="2026-01-01T00:00:00Z")
+    renew_guard_client_attachment(store, client_id="c", lease_id="l", lease_seconds=5, now="2026-01-01T00:00:00")
     assert sent[0] == "2026-01-01T00:00:00Z"
     assert datetime.fromisoformat(sent[1]).tzinfo is not None
     assert datetime.fromisoformat(sent[1]) == datetime.fromisoformat("2026-01-01T00:00:00").astimezone()

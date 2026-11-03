@@ -149,8 +149,13 @@ def _artifact_mappings(metadata: Metadata) -> tuple[tuple[str, str], ...]:
     return tuple(mappings)
 
 
-def edit_pyproject(content: str, metadata: Metadata) -> str:
+def edit_pyproject(content: str, metadata: Metadata, *, core_profile: bool = False) -> str:
+    """Keep legacy mappings unless the destination has the core bundle profile."""
     mapping = _wheel_mapping(content)
+    if core_profile:
+        # Authored sources are enumerated and globally validated by the bundle
+        # build. Adding an optional record must not relink the resident core.
+        return content
     lines = content.splitlines(keepends=True)
     anchors = [
         index

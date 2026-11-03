@@ -71,6 +71,9 @@ pub(crate) fn compose(query: &ConsumerArtifactComposeQueryV1) -> Result<Value, S
     Ok(match query {
         ConsumerArtifactComposeQueryV1::CurrentAction(query) => current_action(query),
         ConsumerArtifactComposeQueryV1::RuntimeDecision(query) => runtime_decision(query),
+        ConsumerArtifactComposeQueryV1::LowTrustFloor(query) => {
+            crate::consumer_low_trust_floor::low_trust_floor(query)
+        }
         ConsumerArtifactComposeQueryV1::RuntimeAuthoritative(query) => {
             use guard_command::decisions::{build_authoritative_decision, parse_signals};
             let invalid = || "native_consumer_artifact_compose_payload_invalid".to_owned();
@@ -148,6 +151,14 @@ fn current_action(query: &ConsumerCurrentActionQueryV1) -> Value {
         default
     } else {
         decide_action(query, query.changed)
+    };
+    // A low registry trust score raises an unconfigured artifact's fresh
+    // decision; a saved approval still applies in the runtime decision.
+    let base = match canonical(&query.low_trust_action) {
+        Some(low_trust) if unconfigured && (query.first_seen || query.changed) => {
+            stricter(base, low_trust)
+        }
+        _ => base,
     };
     let scanner = verdict.guard_action();
     let current = floor(stricter(base, scanner));

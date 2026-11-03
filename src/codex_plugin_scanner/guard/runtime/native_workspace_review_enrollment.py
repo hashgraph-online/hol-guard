@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 _STATE_KEY = "guard_cloud_review_workspace_enrollment"
-_AUTHORITY_PATH = "/api/guard/review/v2/authority/current"
 _CHECK_INTERVAL = timedelta(minutes=5)
 _MAX_RECORD_BYTES = 16 * 1024
 _RESIDENT_ENROLLMENT_FEATURE = "native-workspace-review-enrollment-resident-v1"

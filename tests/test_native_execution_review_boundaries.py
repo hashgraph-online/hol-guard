@@ -100,6 +100,25 @@ def test_malformed_approval_classes_do_not_reach_resident(monkeypatch, tmp_path,
     assert native_execution.prompt_analyze_native("extract", guard_home=tmp_path, approved_classes=classes) is None
 
 
+@pytest.mark.parametrize("artifacts", [[{}, None], ["bad"], "bad", {}, 7])
+def test_malformed_prompt_artifacts_do_not_reach_resident(monkeypatch, tmp_path, artifacts):
+    monkeypatch.setattr(native_execution, "_resident_request", lambda **_: pytest.fail("transport called"))
+    assert native_execution.prompt_analyze_native("merge_artifacts", guard_home=tmp_path, artifacts=artifacts) is None
+
+
+def test_prompt_artifacts_reach_the_resident_unredacted(monkeypatch, tmp_path):
+    captured = {}
+
+    def resident(**kwargs):
+        captured.update(kwargs)
+        return {"result": None}
+
+    monkeypatch.setattr(native_execution, "_resident_request", resident)
+    artifacts = [{"artifact_id": "codex:a", "metadata": {"prompt_matched_text": ".env"}}]
+    native_execution.prompt_analyze_native("merge_artifacts", guard_home=tmp_path, artifacts=artifacts)
+    assert captured["request"]["artifacts"] == artifacts
+
+
 def test_valid_prompt_requests_keep_their_fields(monkeypatch, tmp_path):
     captured = {}
 
@@ -195,22 +214,32 @@ def test_approval_filter_cannot_turn_non_string_into_permission(monkeypatch):
     assert captured["approved_classes"] == ["read"]
 
 
-def test_supported_manager_list_stays_on_the_static_contract(monkeypatch, tmp_path):
-    monkeypatch.setattr(local_supply_chain, "package_shim_dashboard_status", lambda _: {})
-    monkeypatch.setattr(local_supply_chain, "package_shim_supported_managers", lambda _guard_home=None: ("fallback",))
+def test_package_manager_protection_forwards_the_resident_projection(monkeypatch, tmp_path):
+    projection = {
+        "path_status": "in_path",
+        "detected_managers": ["npm", "pnpm"],
+        "protected_managers": ["npm"],
+        "unprotected_managers": ["pnpm"],
+        "supported_managers": ["npm", "pnpm"],
+    }
+    monkeypatch.setattr(local_supply_chain, "package_shim_protection", lambda _context: projection)
     result = local_supply_chain._build_package_manager_protection(SimpleNamespace(guard_home=tmp_path))
-    assert result["supported_managers"] == ["fallback"]
+    # The resident decides; Python must not recompose the block.
+    assert result == projection
 
 
 def test_package_manager_protection_degrades_when_the_resident_cannot_answer(monkeypatch, tmp_path):
     def unavailable(_context):
         raise NativeShimAdminError("native_shim_admin_unavailable")
 
-    monkeypatch.setattr(local_supply_chain, "package_shim_dashboard_status", unavailable)
+    monkeypatch.setattr(local_supply_chain, "package_shim_protection", unavailable)
     monkeypatch.setattr(local_supply_chain, "package_shim_supported_managers", lambda _guard_home=None: ("npm",))
     result = local_supply_chain._build_package_manager_protection(SimpleNamespace(guard_home=tmp_path))
     assert result["path_status"] == "unavailable"
+    assert result["error"] == "native_shim_admin_unavailable"
     assert result["protected_managers"] == []
+    assert result["unprotected_managers"] == []
+    assert result["supported_managers"] == ["npm"]
 
 
 @pytest.mark.parametrize(

@@ -1,13 +1,23 @@
-//! The portable Git project identity `resolve_portable_project_identity`
-//! (`project_identity.py`) derives for a workspace, read in-process.
+//! The portable Git project identity Guard derives for a workspace.
 //!
-//! Every answer is one of three outcomes. `Identity` is the exact identity
-//! the Python resolver returns. `Absent` is returned only after the whole
-//! input was read, where the Python resolver answers `None`. `Unknown` is
-//! every input whose Python outcome this reader does not reproduce exactly:
-//! an I/O error or a file that changed while it was read, a workspace path
-//! `expanduser` or `resolve` would rewrite, a stat error a Python release
-//! raises, or a remote or config shape only some Python releases accept.
+//! This is the only resolver: the Python `resolve_portable_project_identity`
+//! asks the resident's `project_identity` operation, which answers from
+//! here. The rules are the ones the retired Python resolver applied, and the
+//! checked-in vectors (`tests/fixtures/portable-project-identity.v1.json`)
+//! pin them.
+//!
+//! Every answer is one of three outcomes. `Identity` is the identity the
+//! workspace's Git metadata derives. `Absent` is returned only after the
+//! whole input was read and names no conventional clone. `Unknown` is every
+//! input this reader does not settle: an I/O error or a file that changed
+//! while it was read, a workspace path `expanduser` or `resolve` would
+//! rewrite, a stat error that is not plain absence, or a remote or config
+//! shape the old resolver read differently across Python releases. Every
+//! caller defers on `Unknown`: the in-process ones read no saved decision,
+//! and the resident operation answers `native_project_identity_unresolved`
+//! rather than no identity, because a lookup that lost its portable half
+//! composes a local decision alone and can land on a weaker action than the
+//! portable half would have forced.
 
 use crate::context_digest::{is_python_space, python_strip};
 use sha2::{Digest, Sha256};
@@ -59,15 +69,14 @@ pub(crate) fn resolve(workspace: &str) -> PortableIdentity {
 /// workspace the calling process names relative to its own directory, which
 /// `Path(...).resolve(strict=False)` reads against that process's `cwd`. The
 /// relay never runs in that directory, so the join is mirrored from the `cwd`
-/// the caller reports and only in the one shape a relative workspace takes:
-/// a plain name, under a directory that is already canonical, naming nothing
-/// on disk. Every other relative workspace is `Unknown`.
+/// the caller reports and then read exactly as an absolute workspace is read.
+/// A `~` name and a reported directory that is not absolute are `Unknown`.
 pub(crate) fn resolve_relative(workspace: &str, cwd: &str) -> PortableIdentity {
     let stripped = python_strip(workspace);
     if is_portable_project_identity(stripped) {
         return PortableIdentity::Identity(stripped.to_owned());
     }
-    if stripped.is_empty() || stripped.starts_with('/') {
+    if stripped.is_empty() || Path::new(stripped).is_absolute() {
         return resolve(stripped);
     }
     match relative_path(stripped, cwd).and_then(|path| derive_resolved(&path)) {
@@ -78,28 +87,28 @@ pub(crate) fn resolve_relative(workspace: &str, cwd: &str) -> PortableIdentity {
 }
 
 /// `Path(workspace).expanduser().resolve(strict=False)` against `cwd`.
+///
+/// `resolve` reads the name joined under the asking process's directory the
+/// same way it reads an absolute workspace, so a relative name that exists,
+/// or that carries separators or dot segments, is read here rather than left
+/// unsettled. Only a `~` name, whose expansion reads an environment this
+/// reader does not read, and a reported directory that is not absolute stay
+/// unknown.
 fn relative_path(workspace: &str, cwd: &str) -> Mirror<PathBuf> {
-    if workspace.starts_with('~') || workspace.contains('/') || workspace.starts_with('.') {
-        // `expanduser` rewrites a `~` name, and a separator or a dot segment
-        // is a resolution this reader does not reproduce.
+    if workspace.starts_with('~') {
+        // `expanduser` rewrites a `~` name against an environment this reader
+        // does not read.
         return Err(Unmirrored);
     }
-    if !cfg!(unix) || !cwd.starts_with('/') {
+    let directory = Path::new(cwd);
+    if !directory.is_absolute() {
+        // `resolve` joins a relative directory against the process's own
+        // directory, which is not the one the caller reported.
         return Err(Unmirrored);
     }
-    let resolved = fs::canonicalize(cwd).map_err(|_| Unmirrored)?;
-    if resolved.as_os_str() != cwd {
-        // A directory `resolve` would rewrite resolves the name under the
-        // rewritten path, which this reader does not reproduce.
-        return Err(Unmirrored);
-    }
-    let candidate = resolved.join(workspace);
-    match status(&candidate, false)? {
-        // Only a name that is absent resolves to the join itself; one that
-        // exists may be a link `resolve` follows.
-        None => Ok(candidate),
-        Some(_) => Err(Unmirrored),
-    }
+    let directory = fs::canonicalize(directory).map_err(|_| Unmirrored)?;
+    let resolved = resolve_existing_prefix(&directory.join(workspace))?;
+    without_verbatim_prefix(resolved)
 }
 
 /// `is_portable_project_identity(value)` (`project_identity.py`): the
@@ -139,8 +148,14 @@ fn ignorable(error: &io::Error) -> bool {
     }
     #[cfg(not(unix))]
     {
-        let _ = error;
-        false
+        // The same errno set as Windows reports it (a missing file or
+        // directory, a file where a directory was expected), plus the
+        // `_IGNORED_WINERRORS`: a drive that is not ready, an invalid name
+        // and a name the system cannot resolve.
+        matches!(
+            error.kind(),
+            io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+        ) || matches!(error.raw_os_error(), Some(21 | 123 | 1921))
     }
 }
 
@@ -172,18 +187,89 @@ fn is_symlink(metadata: &Option<Metadata>) -> bool {
 /// is what `realpath` answers for a name that exists, so a workspace reached
 /// through a symlink is read as the directory it names rather than deferred.
 /// A name that does not exist resolves the part that does and appends the
-/// rest without reading it, and a loop or an unreadable parent answers the
-/// part reached so far; neither is reproduced here, so both stay unmirrored.
+/// rest without reading it, which is what `resolve_existing_prefix` reads. A
+/// loop or an unreadable parent answers the part reached so far, which is
+/// not read here, so it stays unknown.
 fn workspace_path(workspace: &str) -> Mirror<Option<PathBuf>> {
     let stripped = python_strip(workspace);
     if stripped.is_empty() {
-        // project_identity.py:_workspace_path: a blank workspace is None.
+        // A blank workspace names no project.
         return Ok(None);
     }
-    if !cfg!(unix) || !stripped.starts_with('/') {
+    let path = Path::new(stripped);
+    if !path.is_absolute() {
+        // A relative or `~` name resolves against the asking process.
         return Err(Unmirrored);
     }
-    fs::canonicalize(stripped).map(Some).map_err(|_| Unmirrored)
+    let resolved = resolve_existing_prefix(path)?;
+    without_verbatim_prefix(resolved).map(Some)
+}
+
+/// `resolve(strict=False)`: the longest prefix of `path` that exists, read
+/// through its links, with the names below it appended unread.
+///
+/// A workspace whose directory is gone is an ordinary answer rather than an
+/// unsettled one, so only a name this reader cannot read at all — a link
+/// loop, an unreadable parent — stays unknown. A `..` below the prefix is
+/// rewritten against what the part before it resolved to, which is not read
+/// here, so it stays unknown too.
+fn resolve_existing_prefix(path: &Path) -> Mirror<PathBuf> {
+    match fs::canonicalize(path) {
+        Ok(resolved) => return Ok(resolved),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(_) => return Err(Unmirrored),
+    }
+    let mut unread = Vec::new();
+    let mut current = path;
+    loop {
+        // `file_name` is `None` for a name ending in `..`, which `resolve`
+        // rewrites against what the part before it resolved to.
+        let (Some(parent), Some(name)) = (current.parent(), current.file_name()) else {
+            return Err(Unmirrored);
+        };
+        unread.push(name);
+        match fs::canonicalize(parent) {
+            Ok(mut resolved) => {
+                if fs::symlink_metadata(current).is_ok() {
+                    // A name that exists but did not read is a link whose
+                    // target is gone; `resolve` follows it to that target,
+                    // which this reader does not reproduce.
+                    return Err(Unmirrored);
+                }
+                resolved.extend(unread.iter().rev());
+                return Ok(resolved);
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => current = parent,
+            Err(_) => return Err(Unmirrored),
+        }
+    }
+}
+
+/// `canonicalize` answers a verbatim (`\\?\`) path on Windows, where
+/// `realpath` answers the drive or UNC form it stands for.
+#[cfg(windows)]
+fn without_verbatim_prefix(path: PathBuf) -> Mirror<PathBuf> {
+    use std::path::{Component, Prefix};
+    let mut components = path.components();
+    let Some(Component::Prefix(prefix)) = components.next() else {
+        return Ok(path);
+    };
+    let head = match prefix.kind() {
+        Prefix::VerbatimDisk(letter) => format!("{}:", char::from(letter)),
+        Prefix::VerbatimUNC(server, share) => format!(
+            r"\\{}\{}",
+            server.to_str().ok_or(Unmirrored)?,
+            share.to_str().ok_or(Unmirrored)?
+        ),
+        Prefix::Verbatim(_) | Prefix::DeviceNS(_) => return Err(Unmirrored),
+        Prefix::Disk(_) | Prefix::UNC(..) => return Ok(path),
+    };
+    Ok(PathBuf::from(head).join(components.as_path()))
+}
+
+#[cfg(not(windows))]
+fn without_verbatim_prefix(path: PathBuf) -> Mirror<PathBuf> {
+    Ok(path)
 }
 
 struct Repository<'w> {
@@ -231,20 +317,20 @@ fn discover(workspace: &Path) -> Mirror<Option<Repository<'_>>> {
             // `marker.is_file()` follows the link first and raises its
             // errors before `is_symlink()` answers.
             status(&git_dir, true)?;
-            // project_identity.py:_discover_git_repository: a symlinked
+            // _discover_git_repository: a symlinked
             // `.git` is None.
             return Ok(None);
         }
         match own {
             Some(found) if found.is_file() => {
-                // project_identity.py:_discover_git_repository: a gitdir
+                // _discover_git_repository: a gitdir
                 // pointer file is None.
                 return Ok(None);
             }
             Some(found) if found.is_dir() => {}
             _ => continue,
         }
-        // project_identity.py:_discover_git_repository: a config or
+        // _discover_git_repository: a config or
         // logs/HEAD that is not a workspace-local file is None.
         let Some(config) = local_file(&git_dir, &["config"])? else {
             return Ok(None);
@@ -259,7 +345,7 @@ fn discover(workspace: &Path) -> Mirror<Option<Repository<'_>>> {
             head_log,
         }));
     }
-    // project_identity.py:_discover_git_repository: no `.git` up to the
+    // _discover_git_repository: no `.git` up to the
     // filesystem root is None.
     Ok(None)
 }
@@ -324,7 +410,7 @@ fn clone_anchor(content: &str) -> Mirror<Option<String>> {
 fn identity(workspace: &Path, repository: &Repository<'_>) -> Mirror<Option<String>> {
     let config_path = repository.git_dir.join("config");
     let Some(content) = read_capped(&config_path, CONFIG_MAX_BYTES)? else {
-        // project_identity.py:_read_origin_remote: an oversized or non-UTF-8
+        // _read_origin_remote: an oversized or non-UTF-8
         // config is None.
         return Ok(None);
     };
@@ -337,21 +423,27 @@ fn identity(workspace: &Path, repository: &Repository<'_>) -> Mirror<Option<Stri
     let log_path = repository.git_dir.join("logs").join("HEAD");
     let recorded = match read_capped(&log_path, REFLOG_MAX_BYTES)? {
         Some(content) => clone_anchor(&content)?,
-        // project_identity.py:_clone_remote_anchor: an oversized or non-UTF-8
+        // _clone_remote_anchor: an oversized or non-UTF-8
         // reflog records no clone.
         None => None,
     };
     if recorded.as_deref() != Some(anchor.as_str()) {
-        // project_identity.py:resolve_portable_project_identity: an origin
-        // the clone reflog does not record is None.
+        // An origin the clone reflog does not record is None.
         return Ok(None);
     }
-    // `_relative_workspace`: the stripped POSIX relative path, or `.`.
-    let relative = workspace
-        .strip_prefix(repository.root)
-        .ok()
-        .and_then(Path::to_str)
-        .map(python_strip)
+    // `_relative_workspace`: the stripped POSIX relative path, or `.`. The
+    // names are joined with `/` on every platform, so a clone reads the same
+    // identity on Windows as on Unix.
+    let names = match workspace.strip_prefix(repository.root) {
+        Ok(relative) => relative
+            .components()
+            .map(|name| name.as_os_str().to_str())
+            .collect::<Option<Vec<_>>>()
+            .ok_or(Unmirrored)?,
+        Err(_) => Vec::new(),
+    };
+    let joined = names.join("/");
+    let relative = Some(python_strip(&joined))
         .filter(|relative| !relative.is_empty())
         .unwrap_or(".");
     let digest = Sha256::digest(format!("{anchor}\n{relative}").as_bytes());

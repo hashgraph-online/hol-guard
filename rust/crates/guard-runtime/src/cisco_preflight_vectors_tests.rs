@@ -155,6 +155,10 @@ fn plan_query(root: &Scratch, query: &Value) -> CiscoPlanQueryV1 {
         cwd: text(&query["cwd"]).expect("cwd"),
         home: text(&query["home"]),
         approved_scan_roots: list(&query["approved_scan_roots"]),
+        shell_cwds: match query.get("shell_cwds") {
+            Some(value) => list(value),
+            None => Vec::new(),
+        },
         target_paths: list(&query["target_paths"]),
         sources: list(&query["sources"]),
     }
@@ -246,23 +250,74 @@ fn policy_cases_match_the_retired_python() {
     let cases = vectors["policy_cases"].as_array().expect("cases");
     assert!(cases.len() > 2000);
     for case in cases {
-        let query = CiscoPolicyQueryV1 {
-            signal_sources: serde_json::from_value(case["sources"].clone()).expect("sources"),
-            configured_actions: serde_json::from_value(case["configured"].clone())
-                .expect("configured"),
-        };
-        let actual = cisco_evidence::policy_action(&query).expect("policy");
+        let sources: Vec<String> =
+            serde_json::from_value(case["sources"].clone()).expect("sources");
+        let configured = serde_json::from_value(case["configured"].clone()).expect("configured");
+        let actual = cisco_evidence::compose_policy_action(&sources, &configured).expect("policy");
         assert_eq!(actual["policy_action"], case["expected"], "{case}");
     }
 }
 
 #[test]
 fn a_missing_configured_action_fails_closed() {
+    assert!(cisco_evidence::compose_policy_action(
+        &["cisco_skill".to_owned()],
+        &std::collections::BTreeMap::new(),
+    )
+    .is_err());
+}
+
+#[test]
+fn the_resident_resolves_each_signal_source_from_the_sent_config() {
     let query = CiscoPolicyQueryV1 {
-        signal_sources: vec!["cisco_skill".to_owned()],
-        configured_actions: std::collections::BTreeMap::new(),
+        signal_sources: vec!["cisco_skill".to_owned(), "cisco_mcp".to_owned()],
+        guard_config: guard_contracts::RiskActionConfigV1 {
+            security_level: "balanced".to_owned(),
+            protection_posture: "protected".to_owned(),
+            protection_posture_explicit: false,
+            risk_actions: [("malicious_skill".to_owned(), "block".to_owned())]
+                .into_iter()
+                .collect(),
+            ..Default::default()
+        },
+        harness: None,
     };
-    assert!(cisco_evidence::policy_action(&query).is_err());
+    let actual = cisco_evidence::policy_action(&query).expect("policy");
+    assert_eq!(actual["policy_action"], "block");
+}
+
+#[test]
+fn a_per_harness_risk_action_overrides_the_global_one() {
+    let config = guard_contracts::RiskActionConfigV1 {
+        security_level: "balanced".to_owned(),
+        protection_posture: "protected".to_owned(),
+        protection_posture_explicit: false,
+        risk_actions: [("malicious_skill".to_owned(), "warn".to_owned())]
+            .into_iter()
+            .collect(),
+        harness_risk_actions: [(
+            "codex".to_owned(),
+            [("malicious_skill".to_owned(), "block".to_owned())]
+                .into_iter()
+                .collect(),
+        )]
+        .into_iter()
+        .collect(),
+        ..Default::default()
+    };
+    let query = |harness: Option<&str>| CiscoPolicyQueryV1 {
+        signal_sources: vec!["cisco_skill".to_owned()],
+        guard_config: config.clone(),
+        harness: harness.map(str::to_owned),
+    };
+    assert_eq!(
+        cisco_evidence::policy_action(&query(Some("codex"))).expect("policy")["policy_action"],
+        "block"
+    );
+    assert_eq!(
+        cisco_evidence::policy_action(&query(None)).expect("policy")["policy_action"],
+        "warn"
+    );
 }
 
 #[test]
@@ -319,6 +374,7 @@ fn a_planned_scan_is_revalidated_through_its_own_binding() {
         cwd: root.text("{root}/ws"),
         home: None,
         approved_scan_roots: Vec::new(),
+        shell_cwds: Vec::new(),
         target_paths: vec!["skills/a/SKILL.md".to_owned()],
         sources: vec!["skill".to_owned()],
     };
@@ -344,4 +400,77 @@ fn a_planned_scan_is_revalidated_through_its_own_binding() {
     let mut unknown = recheck.clone();
     unknown.kind = "other".to_owned();
     assert!(cisco_plan::revalidated(&unknown).is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn every_proven_shell_directory_is_planned_in_one_exchange() {
+    let root = Scratch::new("cwds");
+    for workspace in ["w1", "w2"] {
+        let skill_dir = root.0.join(workspace).join("skills/a");
+        std::fs::create_dir_all(&skill_dir).expect("dirs");
+        std::fs::write(skill_dir.join("SKILL.md"), "x").expect("skill");
+    }
+    let query = CiscoPlanQueryV1 {
+        action_type: "file_write".to_owned(),
+        workspace: Some(root.text("{root}/w1")),
+        cwd: root.text("{root}/w1"),
+        home: None,
+        approved_scan_roots: Vec::new(),
+        shell_cwds: vec![
+            root.text("{root}/w1"),
+            root.text("{root}/w1"),
+            "   ".to_owned(),
+            root.text("{root}/w2"),
+        ],
+        target_paths: vec!["skills/a/SKILL.md".to_owned()],
+        sources: vec!["skill".to_owned()],
+    };
+    let steps = cisco_plan::plan(&query);
+    assert_eq!(
+        scans_of(&steps, &root),
+        vec![
+            json!({"kind": "skill", "scan_root": "{root}/w1/skills"}),
+            json!({"kind": "skill", "scan_root": "{root}/w2/skills"}),
+        ],
+        "each distinct proven directory is planned once, in the order proven"
+    );
+    assert!(
+        !steps
+            .iter()
+            .any(|step| matches!(step, CiscoStepV1::Signal { .. })),
+        "two proven directories that both contain the target earn no containment signal"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_proven_shell_directory_that_cannot_be_read_contains_the_whole_action() {
+    let root = Scratch::new("cwd-gone");
+    let skill_dir = root.0.join("w1/skills/a");
+    std::fs::create_dir_all(&skill_dir).expect("dirs");
+    std::fs::write(skill_dir.join("SKILL.md"), "x").expect("skill");
+    let query = CiscoPlanQueryV1 {
+        action_type: "file_write".to_owned(),
+        workspace: Some(root.text("{root}/w1")),
+        cwd: root.text("{root}/w1"),
+        home: None,
+        approved_scan_roots: Vec::new(),
+        shell_cwds: vec![root.text("{root}/w1"), root.text("{root}/never-created")],
+        target_paths: vec!["skills/a/SKILL.md".to_owned()],
+        sources: vec!["skill".to_owned()],
+    };
+    let steps = cisco_plan::plan(&query);
+    assert!(
+        scans_of(&steps, &root).is_empty(),
+        "an unprovable directory is an approved root for every plan, so none of them may scan"
+    );
+    assert_eq!(
+        steps
+            .iter()
+            .filter(|step| matches!(step, CiscoStepV1::Signal { .. }))
+            .count(),
+        1,
+        "the plans report that containment once, not once per planned workspace"
+    );
 }

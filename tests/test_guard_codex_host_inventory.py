@@ -35,8 +35,6 @@ def test_translated_codex_process_layouts(monkeypatch: pytest.MonkeyPatch, argum
     assert inventory._is_codex_process(123) is expected
 
 
-
-
 def test_existing_host_is_kernel_authenticated_and_summaries_cannot_grant(tmp_path, monkeypatch):
     with _host(tmp_path, monkeypatch, _handler) as (home, requests):
         snapshot = inventory.read_codex_host_inventory(codex_home=home)
@@ -167,36 +165,6 @@ def test_public_metadata_pages_are_bounded_and_preserve_all_installed_apps(tmp_p
     assert [len(row["params"]["appIds"]) for row in requests if row["method"] == "app/read"] == [100, 1]
     assert snapshot.apps[-1]["app_id"] == "app_100"
     assert snapshot.metadata_complete is True
-
-
-@pytest.mark.parametrize("value", [" example", "example\n", "example tool", "\x00example"])
-def test_identifiers_are_not_normalized_into_another_connection(value):
-    with pytest.raises(ValueError, match="codex_host_invalid"):
-        inventory._installed_apps({"apps": [{"id": value, "enabled": True, "callable": True}]})
-
-
-def test_empty_display_descriptions_are_valid_but_annotations_are_not_authority():
-    apps = inventory._installed_apps({"apps": [{"id": "example", "enabled": True, "callable": False}]})
-    assert (
-        inventory._merge_metadata(
-            apps,
-            {
-                "apps": [
-                    {
-                        "id": "example",
-                        "name": "Example",
-                        "tools": [
-                            {"name": "delete", "description": "", "isReadOnly": True, "isEnabled": True},
-                        ],
-                    }
-                ],
-                "missingAppIds": [],
-            },
-        )
-        is True
-    )
-    assert apps[0]["tools"] == [{"name": "delete", "title": None, "description": None}]
-    assert apps[0]["callable"] is False
 
 
 def test_private_socket_alias_is_pinned_to_authenticated_target(tmp_path, monkeypatch):
@@ -341,7 +309,9 @@ def test_failed_host_snapshot_marks_background_job_failed(tmp_path, monkeypatch)
                 break
             inventory.time.sleep(0.01)
         assert state["state"] == "failed"
-        assert state["error"] == "discovery_failed"
+        # The reason reaches the page as itself: a generic code would send the
+        # reader to a restart instead of to the Codex app that refused.
+        assert state["error"] == "codex_host_untrusted"
         assert service.list_items()["host_inventory"] is None
         assert store.read_local_cli_revision() == before
     finally:

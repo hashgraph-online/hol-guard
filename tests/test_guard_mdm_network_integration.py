@@ -27,6 +27,8 @@ from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.mdm.network import managed_requests_session, managed_urlopen
 from codex_plugin_scanner.guard.mdm.network_diagnostics import diagnose_endpoint
 
+_NO_PROXY_RECORD: dict[str, object] = {"ok": True, "credentials": None}
+
 
 class _OriginHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -328,7 +330,7 @@ def test_explicit_https_proxy_cannot_be_bypassed_by_no_proxy(
 ) -> None:
     monkeypatch.setenv("NO_PROXY", "*")
     monkeypatch.setenv("no_proxy", "*")
-    monkeypatch.setattr(transport_module, "read_proxy_credential_record", lambda _key: None)
+    monkeypatch.setattr(transport_module, "_native_proxy_credentials", lambda _url: _NO_PROXY_RECORD)
     policy = ManagedNetworkPolicy(
         proxy_mode="explicit",
         proxy_url=network_lab.proxy_url,
@@ -368,8 +370,8 @@ def test_authenticated_proxy_uses_keyring_without_secret_in_public_state(
     monkeypatch.setenv("no_proxy", "*")
     monkeypatch.setattr(
         transport_module,
-        "read_proxy_credential_record",
-        lambda _key: json.dumps({"username": username, "password": password}),
+        "_native_proxy_credentials",
+        lambda _url: {"ok": True, "credentials": {"username": username, "password": password}},
     )
     policy = ManagedNetworkPolicy(
         proxy_mode="explicit",
@@ -396,7 +398,7 @@ def test_real_proxy_outage_reports_redacted_failure(
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as reservation:
         reservation.bind(("127.0.0.1", 0))
         unused_port = reservation.getsockname()[1]
-    monkeypatch.setattr(transport_module, "read_proxy_credential_record", lambda _key: None)
+    monkeypatch.setattr(transport_module, "_native_proxy_credentials", lambda _url: _NO_PROXY_RECORD)
     policy = ManagedNetworkPolicy(
         proxy_mode="explicit",
         proxy_url=f"https://127.0.0.1:{unused_port}",

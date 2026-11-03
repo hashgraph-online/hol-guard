@@ -11,7 +11,7 @@ from __future__ import annotations
 import atexit
 import shutil
 import tempfile
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -59,8 +59,9 @@ def ensure_keyed_home(guard_home: Path) -> None:
 
 @pytest.fixture(autouse=True)
 def native_local_cli_grant_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
-    from codex_plugin_scanner.guard import local_cli_grant_decision, local_cli_hook
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+
+    from . import runtime_wrapper_support
 
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(_resolve_native_hook_runtime()))
@@ -68,27 +69,76 @@ def native_local_cli_grant_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     homes.clear()
     _TEST_GUARD_HOME[:] = [tmp_path / "native-guard-home"]
 
-    def keyed(native: Callable[..., Any]) -> Callable[..., Any]:
-        """Wrap a native grant call so its home holds a verifier key first."""
-
-        def call(*, guard_home: Path, **kwargs: Any) -> Any:
-            ensure_keyed_home(guard_home)
-            return native(guard_home=guard_home, **kwargs)
-
-        return call
-
-    monkeypatch.setattr(
-        local_cli_grant_decision, "native_local_cli_grant", keyed(local_cli_grant_decision.native_local_cli_grant)
-    )
-    native_hook = local_cli_hook.native_local_cli_hook
+    native_hook = runtime_wrapper_support.native_local_cli_hook
 
     def keyed_hook(store: Any, **kwargs: Any) -> Any:
         ensure_keyed_home(store.guard_home)
         return native_hook(store, **kwargs)
 
-    monkeypatch.setattr(local_cli_hook, "native_local_cli_hook", keyed_hook)
+    monkeypatch.setattr(runtime_wrapper_support, "native_local_cli_hook", keyed_hook)
     yield
     for home in tuple(homes):
         close_native_residents(home)
     homes.clear()
     _TEST_GUARD_HOME.clear()
+
+
+def review_rule_verdict(
+    store: Any,
+    *,
+    command: str,
+    cwd: Path,
+    home_dir: Path,
+    mode: str = "review",
+    native_result: dict[str, object] | None = None,
+    input_key: str = "tool_input",
+) -> tuple[str, str | None] | None:
+    """The resident's custom-rule verdict for ``command``, or ``None`` when no rule applies.
+
+    ``review`` checks a non-recognition review; ``allowed`` checks a command
+    the native runtime allowed. ``native_result`` replaces the mode's default
+    verdict.
+    """
+
+    import os
+    from uuid import uuid4
+
+    from codex_plugin_scanner.guard.native_execution import _resident_request
+
+    if native_result is None and mode == "allowed":
+        native_result = {"decision": "allow", "policy_action": "allow", "minimum_action": "allow"}
+    elif native_result is None:
+        native_result = {
+            "decision": "ask",
+            "policy_action": "review",
+            "minimum_action": "review",
+            "reason_code": "native_command_review_required",
+            "reason": "Review",
+            "action": {"action_type": "shell"},
+        }
+    ensure_keyed_home(store.guard_home)
+    request_id = f"hook-local-cli-rule-{uuid4().hex}"
+    response = _resident_request(
+        operation="hook_local_cli_rule",
+        request={
+            "schema": "guard-hook-local-cli-rule-request.v1",
+            "request_id": request_id,
+            "store_path": str(store.path),
+            "guard_home": str(store.guard_home),
+            "mode": mode,
+            "payload": {input_key: {"command": command}, "cwd": str(cwd)},
+            "native_result": native_result,
+            "workspace": str(cwd),
+            "home_dir": str(home_dir),
+            "user_home": str(Path.home()),
+            "env": dict(os.environ),
+        },
+        guard_home=store.guard_home,
+        timeout_seconds=5.0,
+        required_feature="hook-local-cli-rule-v1",
+        response_schema="guard-hook-local-cli-rule-result.v1",
+    )
+    if response is None or response.get("request_id") != request_id or response.get("verdict") == "none":
+        return None
+    name = response.get("name")
+    return str(response["verdict"]), name if isinstance(name, str) else None

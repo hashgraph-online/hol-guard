@@ -25,6 +25,8 @@ pub const APPROVAL_SCOPE_MAX_ITEMS: usize = 1024;
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ApprovalScopeItemV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<Value>,
     #[serde(default)]
     pub artifact_id: Option<Value>,
     #[serde(default)]

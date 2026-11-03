@@ -87,6 +87,38 @@ fn checked(workspace: &Path, code: &str) -> Option<String> {
     Some(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
+/// A contained pytest run names its interpreter relative to the workspace,
+/// because the snapshot root does not exist until the run starts. A spelling
+/// that climbs out of the snapshot must not resolve against it.
+#[test]
+fn a_relative_executable_cannot_climb_out_of_the_snapshot() {
+    let (_directory, workspace) = workspace();
+    let cancel = AtomicBool::new(false);
+    let withhold = |_: &Path| false;
+    let error = run_readonly_snapshot(ReadonlySnapshotRun {
+        workspace: &workspace,
+        cwd: &workspace,
+        executable: Path::new(r"..\..\Windows\System32\cmd.exe"),
+        arguments: &[],
+        environment: &[],
+        withhold: &withhold,
+        max_entries: 100,
+        max_bytes: 1024 * 1024,
+        output_cap: 64 * 1024,
+        deadline: Instant::now() + Duration::from_secs(60),
+        cancel: &cancel,
+        job_limits: guard_runtime_windows_process::ResourceLimits {
+            active_processes: Some(8),
+            ..Default::default()
+        },
+        build: None,
+        stage_executable: false,
+    })
+    .expect_err("a climbing relative executable is refused");
+
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData, "{error}");
+}
+
 #[test]
 fn snapshot_files_are_readable() {
     let (_directory, workspace) = workspace();

@@ -53,11 +53,9 @@ ACTIVE_RUST_FILES: Final = (
     Path("rust/crates/guard-runtime/src/resident_protocol.rs"),
 )
 DECODER = Path("src/codex_plugin_scanner/guard/native_response_decoder.py")
-PROTOCOL = Path("src/codex_plugin_scanner/guard/native_approval_protocol.py")
-V4_PROTOCOL = Path("src/codex_plugin_scanner/guard/native_approval_v4_protocol.py")
+PROTOCOL = Path("tests/native_approval_protocol_support.py")
 ERRORS = Path("src/codex_plugin_scanner/guard/native_approval_errors.py")
 APPROVAL_CONTRACT = Path("rust/crates/guard-contracts/src/approval_contracts.rs")
-V4_APPROVAL_CONTRACT = Path("rust/crates/guard-contracts/src/approval_v4_contracts.rs")
 AUTHORITY = Path("rust/crates/guard-runtime/src/approval_authority.rs")
 RUNTIME_APPROVAL = Path("rust/crates/guard-runtime/src/approval.rs")
 REPLAY_MEMORY = Path("rust/crates/guard-runtime/src/approval_replay_memory.rs")
@@ -67,6 +65,7 @@ MANAGED_RESIDENT = Path("rust/crates/guard-runtime/src/managed_resident.rs")
 MANAGED_OWNER_LOCK = Path("rust/crates/guard-runtime/src/managed_resident_owner_lock.rs")
 WORKFLOW = Path(".github/actions/ci-job-quality/action.yml")
 PUBLISH_WORKFLOW = Path(".github/workflows/publish.yml")
+RELEASE_WHEEL_WORKFLOW = Path(".github/workflows/release-native-wheel.yml")
 ENROLLMENT_DOC = Path("docs/guard/native-approval-enrollment.md")
 
 OBSOLETE_FILES: Final = (
@@ -262,22 +261,13 @@ def _check_authority_fence(root: Path) -> None:
 
 def _check_contracts(root: Path) -> None:
     rust_contract = _read(root / APPROVAL_CONTRACT)
-    rust_v4_contract = _read(root / V4_APPROVAL_CONTRACT)
     decoder = _read(root / DECODER)
     protocol = _read(root / PROTOCOL)
-    protocol_v4 = _read(root / V4_PROTOCOL)
     errors = _read(root / ERRORS)
     if _struct_fields(rust_contract, "ApprovalReceiptV3") != RECEIPT_FIELDS:
         raise RuntimeError("native receipt fields do not match the declared contract")
     if _python_key_set(protocol, "_RECEIPT_KEYS") != RECEIPT_FIELDS:
         raise RuntimeError("Python receipt decoder fields drifted from the native contract")
-    for rust_name, python_name in (
-        ("ApprovalChallengeV4", "_CHALLENGE_V4_KEYS"),
-        ("ApprovalArtifactV4", "_ARTIFACT_V4_KEYS"),
-        ("ApprovalReceiptV4", "_RECEIPT_V4_KEYS"),
-    ):
-        if _struct_fields(rust_v4_contract, rust_name) != _python_key_set(protocol_v4, python_name):
-            raise RuntimeError(f"V4 {rust_name} fields drifted from the Python transport contract")
     if "resident_epoch" not in _python_key_set(protocol, "_CHALLENGE_KEYS"):
         raise RuntimeError("Python challenge decoder does not bind the resident epoch")
     if not _uses_canonical_approval_error_import(decoder):
@@ -327,10 +317,13 @@ def _check_ownership_contract(root: Path) -> None:
     if "--root ." not in workflow:
         raise RuntimeError("approval gate invocation is not rooted at the checkout")
     publish = _read(root / PUBLISH_WORKFLOW)
-    if "--require-release-root" not in publish:
+    if "uses: ./" + RELEASE_WHEEL_WORKFLOW.as_posix() not in publish:
+        raise RuntimeError("release workflow does not invoke the native wheel workflow")
+    wheel = _read(root / RELEASE_WHEEL_WORKFLOW)
+    if "--require-release-root" not in wheel:
         raise RuntimeError("release workflow does not gate the external approval enrollment root")
     for name in ("HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX", "HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX"):
-        if name not in publish:
+        if name not in wheel:
             raise RuntimeError(f"release workflow does not pass the pinned enrollment root: {name}")
     managed = _read(root / MANAGED_RESIDENT)
     owner_lock = _read(root / MANAGED_OWNER_LOCK)

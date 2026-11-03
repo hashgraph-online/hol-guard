@@ -15,6 +15,10 @@ pub const APPROVAL_PROOF_REQUEST_SCHEMA: &str = "guard-approval-proof-request.v1
 pub const APPROVAL_PROOF_RESULT_SCHEMA: &str = "guard-approval-proof-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const APPROVAL_PROOF_FEATURE: &str = "approval-proof-v1";
+/// Capability advertised when the op can also revalidate a claimed row against
+/// the row a fresh lookup selects. Older residents reject the query as an
+/// unknown kind, so callers ask for this before sending it.
+pub const APPROVAL_PROOF_CLAIM_ROW_FEATURE: &str = "approval-proof-claim-row-v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -55,6 +59,13 @@ pub enum ApprovalProofQueryV1 {
         harness: String,
         artifact_id: String,
         artifact_hash: String,
+    },
+    /// Whether a claimed row is still the authority the fresh lookup selects.
+    ClaimRowRevalidated {
+        #[serde(default)]
+        claimed_decision: Option<Map<String, Value>>,
+        #[serde(default)]
+        current_decision: Option<Map<String, Value>>,
     },
     /// Whether the claimed row still authorizes the post-claim review.
     PostclaimReviewAuthorized {

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from extension_delivery_fetch import cached_fetcher
 from extension_delivery_located_store import LocatedStore
 from extension_delivery_objects import entries
 from extension_delivery_policy_lookup import read_transport_page, validate_record
 
 from codex_plugin_scanner.guard.catalog_delivery.authority import VerifiedDistribution
-from codex_plugin_scanner.guard.catalog_delivery.transport import cached_fetcher
 
 
 class ReuseStore(LocatedStore):

@@ -418,3 +418,208 @@ fn inventory_row_larger_than_the_resident_reply_is_rejected() {
         "workspace_inventory_exceeds_resident_response"
     );
 }
+
+#[test]
+fn every_resolved_version_in_the_workspace_is_listed() {
+    // A monorepo lockfile pins lodash below the root's version, and the root
+    // lock nests an old minimist under `a`. Each is audited on its own.
+    let scratch = Scratch::new("resolved-versions");
+    let workspace = scratch.0.join("ws");
+    write_files(
+        &workspace,
+        &json!({
+            "package.json": r#"{"dependencies": {"lodash": "^4"}}"#,
+            "package-lock.json": r#"{"lockfileVersion": 3, "packages": {
+                "": {"dependencies": {"lodash": "^4"}},
+                "node_modules/lodash": {"version": "4.17.21"},
+                "node_modules/a": {"version": "1.0.0"},
+                "node_modules/a/node_modules/minimist": {"version": "0.0.8"},
+                "node_modules/minimist": {"version": "1.2.8"}
+            }}"#,
+            "packages/app/package.json": r#"{"dependencies": {"lodash": "^4"}}"#,
+            "packages/app/package-lock.json": r#"{"lockfileVersion": 3, "packages": {
+                "": {"dependencies": {"lodash": "^4"}},
+                "node_modules/lodash": {"version": "4.17.15"}
+            }}"#,
+        }),
+    );
+    let payload = run(&request(&workspace, None, &[], "inventory")).unwrap();
+    let mut resolved: Vec<(String, String)> = payload["inventory"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| {
+            (
+                item["name"].as_str().unwrap().to_owned(),
+                item["version"].as_str().unwrap_or("").to_owned(),
+            )
+        })
+        .collect();
+    resolved.sort();
+    let expected = [
+        ("a", "1.0.0"),
+        ("lodash", "4.17.15"),
+        ("lodash", "4.17.21"),
+        ("minimist", "0.0.8"),
+        ("minimist", "1.2.8"),
+    ];
+    assert_eq!(
+        resolved,
+        expected
+            .iter()
+            .map(|(name, version)| (name.to_string(), version.to_string()))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn a_lockfile_that_lists_no_packages_is_not_a_parse_warning() {
+    // A project with no dependencies still has a valid lockfile. Only a
+    // lockfile Guard cannot parse, or one in a format it has no parser for,
+    // leaves the audit incomplete. A line-scanned lockfile with no packages
+    // counts only when it carries its package manager's header.
+    let scratch = Scratch::new("empty-lockfiles");
+    let workspace = scratch.0.join("ws");
+    write_files(
+        &workspace,
+        &json!({
+            "package.json": r#"{"name": "demo"}"#,
+            "package-lock.json": r#"{"name": "demo", "lockfileVersion": 3, "requires": true,
+                "packages": {"": {"name": "demo"}}}"#,
+            "Cargo.lock": "version = 4\n",
+            "yarn.lock": "# yarn lockfile v1\n\n\n",
+            "Gemfile.lock": "not a lockfile\n",
+            "uv.lock": "not toml [",
+            "go.sum": "github.com/pkg/errors v0.9.1 h1:abc=\n",
+        }),
+    );
+    let payload = run(&request(&workspace, None, &[], "inventory")).unwrap();
+    let mut warnings: Vec<(String, String)> = payload["lockfile_warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|warning| {
+            (
+                warning["path"].as_str().unwrap().to_owned(),
+                warning["code"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    warnings.sort();
+    assert_eq!(
+        warnings,
+        [
+            (
+                "Gemfile.lock".to_owned(),
+                "lockfile_parse_warning".to_owned()
+            ),
+            ("go.sum".to_owned(), "lockfile_parse_warning".to_owned()),
+            ("uv.lock".to_owned(), "lockfile_parse_warning".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn each_workspace_keeps_the_direct_requirement_of_its_own_version() {
+    // Two workspaces require lodash directly and resolve different versions;
+    // the root lock also nests a copy under `a`, which stays transitive even
+    // though npm's sorted keys list it before the root's own copy.
+    let scratch = Scratch::new("direct-versions");
+    let workspace = scratch.0.join("ws");
+    write_files(
+        &workspace,
+        &json!({
+            "package.json": r#"{"dependencies": {"lodash": "^4", "a": "^1"}}"#,
+            "package-lock.json": r#"{"lockfileVersion": 3, "packages": {
+                "": {"dependencies": {"lodash": "^4", "a": "^1"}},
+                "node_modules/a": {"version": "1.0.0"},
+                "node_modules/a/node_modules/lodash": {"version": "3.10.1"},
+                "node_modules/lodash": {"version": "4.17.21"}
+            }}"#,
+            "packages/app/package.json": r#"{"dependencies": {"lodash": "~4.17.15"}}"#,
+            "packages/app/package-lock.json": r#"{"lockfileVersion": 3, "packages": {
+                "": {"dependencies": {"lodash": "~4.17.15"}},
+                "node_modules/lodash": {"version": "4.17.15"}
+            }}"#,
+        }),
+    );
+    let payload = run(&request(&workspace, None, &[], "inventory")).unwrap();
+    let mut lodash: Vec<(String, bool, Value)> = payload["inventory"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["name"] == "lodash")
+        .map(|item| {
+            (
+                item["version"].as_str().unwrap().to_owned(),
+                item["direct"].as_bool().unwrap(),
+                item["range"].clone(),
+            )
+        })
+        .collect();
+    lodash.sort_by(|a, b| a.0.cmp(&b.0));
+    assert_eq!(
+        lodash,
+        vec![
+            ("3.10.1".to_owned(), false, Value::Null),
+            ("4.17.15".to_owned(), true, json!("~4.17.15")),
+            ("4.17.21".to_owned(), true, json!("^4")),
+        ]
+    );
+}
+
+/// The lodash rows a workspace lists when its yarn.lock resolves lodash 3
+/// and 4 and its manifest asks for `range`.
+fn lodash_rows(label: &str, range: &str) -> Vec<(String, bool, Value)> {
+    let scratch = Scratch::new(label);
+    let workspace = scratch.0.join("ws");
+    write_files(
+        &workspace,
+        &json!({
+            "package.json": format!(r#"{{"dependencies": {{"lodash": "{range}", "a": "^1"}}}}"#),
+            "yarn.lock": "a@^1:\n  version \"1.0.0\"\n\nlodash@^3:\n  version \"3.10.1\"\n\nlodash@^4:\n  version \"4.17.21\"\n",
+        }),
+    );
+    let payload = run(&request(&workspace, None, &[], "inventory")).unwrap();
+    let mut lodash: Vec<(String, bool, Value)> = payload["inventory"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["name"] == "lodash")
+        .map(|item| {
+            (
+                item["version"].as_str().unwrap().to_owned(),
+                item["direct"].as_bool().unwrap(),
+                item["range"].clone(),
+            )
+        })
+        .collect();
+    lodash.sort_by(|a, b| a.0.cmp(&b.0));
+    lodash
+}
+
+#[test]
+fn every_version_one_lockfile_installs_is_listed() {
+    // yarn.lock names a package once per version it resolves, and yarn installs
+    // each copy, so the old lodash under another package is audited too.
+    assert_eq!(
+        lodash_rows("lockfile-versions", "^4"),
+        vec![
+            ("3.10.1".to_owned(), false, Value::Null),
+            ("4.17.21".to_owned(), true, json!("^4")),
+        ]
+    );
+}
+
+#[test]
+fn the_copy_the_manifest_range_selects_is_the_direct_one() {
+    // The lockfile names lodash 4 last, but the manifest's ^3 installs 3.10.1
+    // at the top level; lodash 4 is the copy another package pulled in.
+    assert_eq!(
+        lodash_rows("lockfile-direct-copy", "^3"),
+        vec![
+            ("3.10.1".to_owned(), true, json!("^3")),
+            ("4.17.21".to_owned(), false, Value::Null),
+        ]
+    );
+}

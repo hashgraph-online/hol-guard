@@ -1,12 +1,14 @@
-// Guidance for native reviews queued before every review carried a retry binding.
-// The daemon marks them with the `retry_cannot_reuse_approval` scope restriction. Every review
-// queued now offers Allow once and Always allow (docs/guard/approval-invariant.md).
+// Native reviews may lack a retry binding or a supported script execution route.
+// The daemon reports the restriction; a specific script refusal takes precedence
+// over stale persistence eligibility and legacy retry advice.
+import { onceOnlyReasonCopy } from "./approval-scopes";
 import type { GuardApprovalRequest } from "./guard-types";
 import type { QueueGroup } from "./queue-state";
 
 /** True when the daemon reports that a retry of this native command can never reuse its approval. */
 export function retryCannotReuseApproval(item: GuardApprovalRequest): boolean {
-  return item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
+  return item.once_only_reason === "script_execution_binding_unavailable" ||
+    item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
 }
 
 /** Native one-time approvals are honoured for 5 minutes (store_native_review_approvals.py); others for 15. */
@@ -33,13 +35,19 @@ function legacyRequestNextStep(item: GuardApprovalRequest, harness: string): str
   return labels === null ? retry : `${retry} To let ${harness} run commands like this, set ${labels} to Allow in Extensions.`;
 }
 
-/** Explain, before approval, what lets the agent run a command whose request predates retry bindings. */
+/** Explain unavailable delivery before approval, preserving legacy recovery where applicable. */
 export function retryCannotReuseApprovalHint(item: GuardApprovalRequest, harness: string): string {
+  if (item.once_only_reason === "script_execution_binding_unavailable") {
+    return onceOnlyReasonCopy(item.once_only_reason);
+  }
   return `An older version of Guard recorded this request, so Run once cannot reach ${harness}'s retry. ${legacyRequestNextStep(item, harness)}`;
 }
 
-/** Post-approval copy for a one-time approval on a request that predates retry bindings. */
+/** Post-decision copy must not promise a retry through an unsupported execution route. */
 export function retryBlockedApprovalCopy(item: GuardApprovalRequest, harness: string): string {
+  if (item.once_only_reason === "script_execution_binding_unavailable") {
+    return `Decision recorded. ${onceOnlyReasonCopy(item.once_only_reason)}`;
+  }
   return `Decision recorded. ${legacyRequestNextStep(item, harness)}`;
 }
 

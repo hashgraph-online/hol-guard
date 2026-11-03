@@ -25,6 +25,9 @@ pub(crate) const REASON_TEXT: &str = concat!(
 
 const PUBLISHERS: &[&str] = &["git", "gh"];
 
+#[path = "contained_worktree_add.rs"]
+pub(crate) mod worktree;
+
 /// The checks and the Git steps of `text`: the text before and after the
 /// `&&` that starts its final run of `git`/`gh` steps, or `None` for any
 /// other shape. Classification and the launch plan both split with this.
@@ -81,9 +84,22 @@ pub(crate) fn split(text: &str) -> Option<(String, String)> {
     Some((checks.to_owned(), publish.trim().to_owned()))
 }
 
+/// The chain split into parts the sandbox and the host each run, when every
+/// part passes on its own: checks before Git steps, or a new linked worktree
+/// before checks in it.
+pub(crate) fn rejudge(
+    raw: PreToolResultV1,
+    payload: &Value,
+    context: PathContext<'_>,
+    evaluate: impl Fn(&Value) -> PreToolResultV1,
+) -> PreToolResultV1 {
+    let published = publish(raw, payload, context, &evaluate);
+    worktree::rejudge(published, payload, context, evaluate)
+}
+
 /// The chain as a contained run of its checks followed by its proven Git
 /// steps, or `raw` unchanged when either part would not pass on its own.
-pub(crate) fn rejudge(
+fn publish(
     raw: PreToolResultV1,
     payload: &Value,
     context: PathContext<'_>,
@@ -155,7 +171,7 @@ fn clean_evidence(result: &PreToolResultV1) -> bool {
 /// The sandbox runs the checks exactly as written, with no `git init` split.
 #[cfg(unix)]
 fn launches(checks: &str, workspace: &std::path::Path) -> bool {
-    crate::restricted_pytest::workspace_exact_shape(checks, workspace).is_some_and(|shape| {
+    crate::pretool::workspace_exact_shape(checks, workspace).is_some_and(|shape| {
         shape.bootstrap.is_none() && shape.prefix.is_none() && shape.remainder.is_none()
     })
 }

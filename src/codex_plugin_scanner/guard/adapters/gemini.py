@@ -32,8 +32,8 @@ class GeminiHarnessAdapter(HarnessAdapter):
         )
         detection = HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or _command_available(self.executable),
-            command_available=_command_available(self.executable),
+            installed=bool(found_paths) or _command_available(self.executable, context.home_dir),
+            command_available=_command_available(self.executable, context.home_dir),
             config_paths=found_paths,
             artifacts=artifacts,
             warnings=warnings,

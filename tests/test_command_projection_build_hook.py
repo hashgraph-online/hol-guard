@@ -32,16 +32,43 @@ def hook(monkeypatch, tmp_path):
     archive.write_projection_manifest = lambda root, **kwargs: None
     archive.verify_projection_manifest = lambda root: None
     monkeypatch.setattr(module, "_archive_support", lambda: archive)
+    bundle = types.SimpleNamespace(
+        DIRECTORY="contracts/extensions/command-pack-bundle",
+        MANIFEST="contracts/extensions/command-pack-bundle-build.v1.json",
+        prepare=lambda root, **kwargs: (root / "bundle", root / "bundle-manifest", None),
+    )
+    monkeypatch.setattr(module, "_bundle_support", lambda: bundle)
     instance = module.CommandProjectionBuildHook()
     instance.archive_test_support = archive
     instance.root = str(tmp_path)
     instance.target_name = "wheel"
+    extensions = tmp_path / "contracts/extensions"
+    extensions.mkdir(parents=True)
+    (extensions / "core-defaults.v1.json").write_text(
+        json.dumps(
+            {
+                "schema": "guard.core-defaults.v1",
+                "entries": [
+                    {
+                        "extension_id": "command.example",
+                        "source": "contributions/command-sources/command.example.json",
+                        "trust": "contracts/extensions/trust/command.example.v1.json",
+                    }
+                ],
+            }
+        )
+    )
+    (extensions / "native-command-program.v1.json").write_text(
+        json.dumps({"extensions": [{"extension_id": "command.example"}]})
+    )
     monkeypatch.delenv("HOL_GUARD_BUILD_SOURCE_COMPILER", raising=False)
     return instance
 
 
 def test_editable_setup_does_not_require_outputs_or_rust(hook, monkeypatch):
     """Editable dependency setup must neither invoke Rust nor require generated files."""
+    for name in ("core-defaults.v1.json", "native-command-program.v1.json"):
+        (Path(hook.root) / "contracts/extensions" / name).unlink()
 
     def unexpected(*args, **kwargs):
         """Fail immediately if this compiler-free path attempts a subprocess."""
@@ -54,7 +81,7 @@ def test_editable_setup_does_not_require_outputs_or_rust(hook, monkeypatch):
 
 
 @pytest.mark.parametrize("target", ["wheel", "sdist"])
-def test_package_build_stages_and_verifies_before_registering_absent_outputs(hook, monkeypatch, target):
+def test_package_build_stages_and_verifies_before_registering_outputs(hook, monkeypatch, target):
     """Package resources become eligible for inclusion only after generation and verification."""
     hook.target_name = target
     data = {"force_include": {}}
@@ -78,13 +105,15 @@ def test_package_build_stages_and_verifies_before_registering_absent_outputs(hoo
         f"{prefix}/native-command-program.v1.json",
         f"{prefix}/trust-class-map.v1.json",
     }
-    expected.add(
-        "contributions/extensions"
-        if target == "sdist"
-        else "codex_plugin_scanner/guard/contracts/data/extensions/contributions"
-    )
     if target == "sdist":
         expected.add(hook.archive_test_support.MANIFEST)
+        expected.add("contracts/extensions/command-pack-bundle-build.v1.json")
+        expected.add("tests/fixtures")
+    expected.add(
+        "contracts/extensions/command-pack-bundle"
+        if target == "sdist"
+        else "codex_plugin_scanner/guard/contracts/data/extensions/command-pack-bundle"
+    )
     assert set(data["force_include"].values()) == expected
 
 
@@ -114,6 +143,25 @@ def test_pinned_compiler_is_used_for_generation_and_strict_check(hook, monkeypat
     monkeypatch.setattr(subprocess, "run", lambda command, **kwargs: calls.append(command))
     hook.initialize("standard", {"force_include": {}})
     assert all(command[command.index("--compiler") + 1] == compiler for command in calls)
+
+
+def test_core_manifest_selects_bounded_projections(hook, monkeypatch):
+    calls = []
+    monkeypatch.setattr(subprocess, "run", lambda command, **kwargs: calls.append(command))
+    hook.initialize("standard", {"force_include": {}})
+    assert all("--projections-only" in command for command in calls)
+
+
+@pytest.mark.parametrize("identities", [[], ["command.example", "command.optional"]])
+def test_core_program_mismatch_aborts_before_registering_outputs(hook, monkeypatch, identities):
+    """A missing core member or an embedded optional pack must abort packaging."""
+    program = Path(hook.root) / "contracts/extensions/native-command-program.v1.json"
+    program.write_text(json.dumps({"extensions": [{"extension_id": identity} for identity in identities]}))
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: None)
+    data = {"force_include": {}}
+    with pytest.raises(ValueError, match="contain optional policy or omit core policy"):
+        hook.initialize("standard", data)
+    assert not data["force_include"]
 
 
 def test_frozen_source_archive_uses_verified_projections_without_rust(hook, monkeypatch):

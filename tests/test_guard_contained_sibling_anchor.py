@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
-from codex_plugin_scanner.guard.runtime.contained_command_prefix import _split_command_prefix
 from codex_plugin_scanner.guard.runtime.contained_wrapper import anchored_sibling_root, peel_contained_wrapper
 
 
@@ -22,6 +21,11 @@ def sibling_home(tmp_path: Path) -> tuple[Path, Path, Path]:
     for script in (sibling / "scripts" / "report.py", home / "loose" / "probe.py", workspace / "notes.txt"):
         script.write_text("")
     return home, workspace, sibling
+
+
+@pytest.fixture(autouse=True)
+def _peel_from_the_resident(native_contained_wrapper_runtime: Path) -> None:
+    """Every peel here is the classifier's answer, asked of the session resident."""
 
 
 def test_quiet_or_sequenced_cd_into_a_sibling_repository_is_peeled(tmp_path: Path) -> None:
@@ -52,6 +56,8 @@ def test_an_absolute_script_in_a_sibling_repository_anchors_its_root(tmp_path: P
         f"python3 {script} --top 40",
         f"python3 -m py_compile {script}",
         f"bun {script} --root={sibling / 'dashboard'}",
+        # A heap size ahead of the script leaves the script as the program.
+        f"node --max-old-space-size=4096 {script} --config jest.config.js",
     ):
         assert anchored_sibling_root(command, workspace=workspace, cwd=workspace, home=home) == sibling.resolve()
     for command in (
@@ -69,6 +75,13 @@ def test_an_absolute_script_in_a_sibling_repository_anchors_its_root(tmp_path: P
         f"jq . {script}",
         f"rg -n report {sibling}",
         f"python3 -c 1 {script}",
+        # Only a bounded numeric heap size is peeled; any other option keeps
+        # the script an operand of a program that runs from the session.
+        f"node --max-old-space-size=0 {script}",
+        f"node --max-old-space-size=4096k {script}",
+        f"node --max-old-space-size={'9' * 5000} {script}",
+        f"node --require=./hook.js {script}",
+        f"node --max-old-space-size=4096 --require=./hook.js {script}",
     ):
         assert anchored_sibling_root(command, workspace=workspace, cwd=workspace, home=home) is None, command
     assert anchored_sibling_root(f"python3 {script}", workspace=workspace, cwd=workspace, home=None) is None
@@ -125,24 +138,3 @@ def test_sink_runs_an_anchored_script_from_the_sibling_root(monkeypatch: pytest.
         == 0
     )
     assert runs == [(sibling.resolve(), sibling.resolve())]
-
-
-def test_plain_data_settings_are_dropped_and_others_stay() -> None:
-    assert _split_command_prefix(["REPORT_DIR=/tmp/report", "CI=1", "vitest", "run"], drop_data=True) == (
-        ["vitest", "run"],
-        {"CI": "1"},
-    )
-    for command in (
-        ["PYTHONPATH=.", "pytest"],
-        ["REPORT_DIR=$HOME/x", "pytest"],
-        ["REPORT_DIR=-r", "pytest"],
-        ["TMPDIR=/tmp/x", "pytest"],
-    ):
-        assert _split_command_prefix(command, drop_data=True) == (command, {})
-
-
-def test_without_posix_owners_no_sibling_root_is_proven(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    home, workspace, sibling = sibling_home(tmp_path)
-    monkeypatch.delattr("os.getuid", raising=False)
-    for command in ("pytest -q", f"python3 {sibling / 'scripts' / 'report.py'}"):
-        assert anchored_sibling_root(command, workspace=workspace, cwd=workspace, home=home) is None

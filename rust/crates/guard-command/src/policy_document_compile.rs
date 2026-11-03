@@ -98,7 +98,8 @@ fn export_rule(row: &Value, provenance: bool) -> Result<Value, Error> {
     if optional(&row["workspace"]).is_some() && !provenance {
         return Err(error("sensitive_local_policy_requires_provenance", &id));
     }
-    if !matches!(row["action"].as_str(), Some("allow" | "block")) {
+    // A synced Cloud rule can ask before one exact command; show it as is.
+    if !matches!(row["action"].as_str(), Some("allow" | "block" | "review")) {
         return Err(error("unsupported_local_policy_action", &id));
     }
     let expiry = expiry(&row["expires_at"], &id, "invalid_local_policy_expiry")?;
@@ -240,6 +241,45 @@ fn artifact_selectors(matcher: &Value, id: &str) -> Result<Vec<Value>, Error> {
         .collect()
 }
 
+/// A policy key bound to one exact shell command, hashed over the raw bytes the
+/// same way the legacy bundle builder and the hook lookup key them.
+fn exact_shell_command_id(command: &str) -> String {
+    format!(
+        "memory:exact-shell-command:{}",
+        hex::encode(Sha256::digest(command.as_bytes()))
+    )
+}
+
+fn has_selector(matcher: &Value, key: &str) -> bool {
+    !matcher[key].is_null() && matcher[key] != json!([])
+}
+
+/// Exact `commands` selectors as exact-shell-command artifact ids. Command
+/// expressions (objects) are refused before this runs; an exact command cannot
+/// be combined with artifact, tool or publisher selectors.
+fn command_artifact_selectors(matcher: &Value, id: &str) -> Result<Option<Vec<Value>>, Error> {
+    if !has_selector(matcher, "commands") {
+        return Ok(None);
+    }
+    if ["artifacts", "tools", "publishers"]
+        .iter()
+        .any(|key| has_selector(matcher, key))
+    {
+        return Err(error("unsupported_policy_match", id));
+    }
+    selectors(matcher, "commands", id)?
+        .iter()
+        .map(|command| {
+            let command = command.as_str().unwrap_or("");
+            if command.trim().is_empty() {
+                return Err(error("invalid_policy_match_selector", id));
+            }
+            Ok(json!(exact_shell_command_id(command)))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+}
+
 fn scope(
     extension: &Value,
     artifact: &Value,
@@ -280,8 +320,27 @@ fn scope(
     .into()
 }
 
+/// The effects a compiled rule may carry.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Effects {
+    /// Local policy files and imports: a rule allows or blocks.
+    AllowBlock,
+    /// Signed Cloud bundles also carry review rules. A review rule compiles to
+    /// the same `review` row a v1 bundle materializes, so the hook holds the
+    /// action for a person to decide instead of the device refusing the bundle.
+    WithReview,
+}
+
 pub(super) fn compile(document: &Value, deadline: Instant) -> Result<Value, Error> {
-    compile_range(document, deadline, 0, 10_000).map(|(items, _)| json!(items))
+    compile_effects(document, deadline, Effects::AllowBlock)
+}
+
+pub(super) fn compile_effects(
+    document: &Value,
+    deadline: Instant,
+    effects: Effects,
+) -> Result<Value, Error> {
+    compile_range(document, deadline, 0, 10_000, effects).map(|(items, _)| json!(items))
 }
 
 pub(super) fn page(body: &Value, deadline: Instant) -> Result<Value, Error> {
@@ -295,7 +354,13 @@ pub(super) fn page(body: &Value, deadline: Instant) -> Result<Value, Error> {
         .filter(|value| (1..=32).contains(value))
         .ok_or_else(|| failure("ValueError", "policy_document_page_invalid", None))?
         as usize;
-    let (items, total) = compile_range(&body["document"], deadline, offset, limit)?;
+    let (items, total) = compile_range(
+        &body["document"],
+        deadline,
+        offset,
+        limit,
+        Effects::AllowBlock,
+    )?;
     if offset > total {
         return Err(failure("ValueError", "policy_document_page_invalid", None));
     }
@@ -307,6 +372,7 @@ fn compile_range(
     deadline: Instant,
     offset: usize,
     limit: usize,
+    effects: Effects,
 ) -> Result<(Vec<Value>, usize), Error> {
     let id = document["metadata"]["id"].as_str().unwrap_or("");
     let spec = document["spec"]
@@ -323,6 +389,7 @@ fn compile_range(
     let mut total = 0usize;
     let supported = BTreeSet::from([
         "artifacts",
+        "commands",
         "harnesses",
         "publishers",
         "tools",
@@ -339,7 +406,12 @@ fn compile_range(
         if rule["enabled"] == false {
             continue;
         }
-        if !matches!(rule["effect"].as_str(), Some("allow" | "block")) {
+        let effect_supported = match rule["effect"].as_str() {
+            Some("allow" | "block") => true,
+            Some("review") => effects == Effects::WithReview,
+            _ => false,
+        };
+        if !effect_supported {
             return Err(error("unsupported_policy_effect", id));
         }
         if !matches!(
@@ -363,7 +435,17 @@ fn compile_range(
             return Err(error("unsupported_policy_match", id));
         }
         let matcher = &rule["match"];
-        let artifacts = artifact_selectors(matcher, id)?;
+        let command_artifacts = command_artifact_selectors(matcher, id)?;
+        let exact_command = command_artifacts.is_some();
+        // The hook applies only a block saved under an exact command, so a
+        // review there would let the command run without asking anyone.
+        if exact_command && rule["effect"] == "review" {
+            return Err(error("unsupported_exact_command_review", id));
+        }
+        let artifacts = match command_artifacts {
+            Some(artifacts) => artifacts,
+            None => artifact_selectors(matcher, id)?,
+        };
         let harnesses = selectors(matcher, "harnesses", id)?;
         let publishers = selectors(matcher, "publishers", id)?;
         let workspaces = selectors(matcher, "workspaces", id)?;
@@ -403,7 +485,11 @@ fn compile_range(
                         }
                         if (offset..offset + limit).contains(&total) {
                             result.push(json!({"decision":{"harness":harness.as_str().unwrap_or("*"),
-                "scope":scope(&extension,artifact,workspace,publisher,harness),"action":rule["effect"],
+                "scope":if exact_command {
+                    if workspace.is_null() { "artifact" } else { "workspace" }.to_owned()
+                } else {
+                    scope(&extension,artifact,workspace,publisher,harness)
+                },"action":rule["effect"],
                 "artifact_id":artifact,"artifact_hash":optional(&extension["artifactHash"]),
                 "workspace":workspace,"publisher":publisher,"reason":optional(&rule["description"]),
                 "owner":optional(&provenance["createdBy"]),"source":"policy-yaml-import","expires_at":optional(&expires)},

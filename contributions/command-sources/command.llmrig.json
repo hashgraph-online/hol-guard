@@ -1,0 +1,484 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "action_classes": [
+      "LLMRig setup and verification execution",
+      "LLMRig report file creation",
+      "LLMRig optional agent and inference experiment",
+      "LLMRig Rescue report file creation"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "External, locally opt-in command safety rules for LLMRig execution, Rescue experiments and report file creation, while excluding read-only inspection commands.",
+    "ecosystem_ids": [],
+    "executables": [
+      "llmrig",
+      "llmrig.cmd",
+      "llmrig.exe"
+    ],
+    "extension_id": "command.llmrig",
+    "homepage": "https://github.com/sunilteja93/llmrig",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "MIT",
+    "name": "LLMRig command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "LLMRig setup and verification execution"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews LLMRig apply, run, and verify commands, which may download model artifacts, start runtimes, perform inference, or write verification receipts. LLMRig retains its own approval checks.",
+        "example_command": "llmrig run mlx-community/Qwen3-0.6B-4bit",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "LLMRig Autopilot execution",
+        "permission_id": "command.llmrig.permission.autopilot-execution",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect llmrig plan MODEL and doctor MODEL first.",
+          "Approve supported setup changes through LLMRig's own prompts."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "LLMRig report file creation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews --output on report and rescue-evidence commands, which create local files without uploading them.",
+        "example_command": "llmrig report --share --output rig-report.md",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "LLMRig local report file creation",
+        "permission_id": "command.llmrig.permission.report-write",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Inspect the report on stdout first.",
+          "Review the --output path; LLMRig creates new files without overwriting."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "LLMRig optional agent and inference experiment"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews opt-in Rescue probes and agent experiments. Without experiment flags, Rescue preflight remains read-only except for explicit output requests.",
+        "example_command": "llmrig rescue --agent opencode --model qwen3.8:27b-mlx --agent-test",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "LLMRig Rescue experiment execution",
+        "permission_id": "command.llmrig.permission.rescue-execution",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run read-only Rescue preflight before opt-in experiments.",
+          "Review experiment flags and resource budgets."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "LLMRig Rescue report file creation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews Rescue --output requests which create a new local report file even without experiment flags.",
+        "example_command": "llmrig rescue --agent opencode --model qwen3.8:27b-mlx --output rescue.json",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "LLMRig Rescue report file creation",
+        "permission_id": "command.llmrig.permission.rescue-write",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Inspect Rescue preflight without --output first.",
+          "Use a new filename; LLMRig does not automatically upload reports."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "id": "community.llmrig",
+      "display_name": "LLMRig",
+      "url": "https://github.com/sunilteja93/llmrig"
+    },
+    "reference_urls": [
+      "https://github.com/sunilteja93/llmrig",
+      "https://github.com/sunilteja93/llmrig/blob/1e79048278e13bd3341acd70f8080bd741796a0d/README.md"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "LLMRig setup and verification execution"
+        ],
+        "default_mode": "review",
+        "description": "Reviews LLMRig apply, run, and verify commands, which may download model artifacts, start runtimes, perform inference, or write verification receipts. LLMRig retains its own approval checks.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "apply"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "run"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "verify"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            }
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.llmrig.permission.autopilot-execution",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.llmrig.autopilot-execution",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect llmrig plan MODEL and doctor MODEL first.",
+          "Approve supported setup changes through LLMRig's own prompts."
+        ],
+        "severity": "high",
+        "title": "LLMRig Autopilot execution"
+      },
+      {
+        "action_classes": [
+          "LLMRig report file creation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews --output on report and rescue-evidence commands, which create local files without uploading them.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "report"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [
+                  "--output"
+                ],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "rescue-evidence"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [
+                  "--output"
+                ],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            }
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.llmrig.permission.report-write",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.llmrig.report-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the report on stdout first.",
+          "Review the --output path; LLMRig creates new files without overwriting."
+        ],
+        "severity": "medium",
+        "title": "LLMRig local report file creation"
+      },
+      {
+        "action_classes": [
+          "LLMRig optional agent and inference experiment"
+        ],
+        "default_mode": "review",
+        "description": "Reviews opt-in Rescue probes and agent experiments. Without experiment flags, Rescue preflight remains read-only except for explicit output requests.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "rescue"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [
+                  "--probe"
+                ],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "rescue"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [
+                  "--agent-test"
+                ],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "rescue"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [
+                  "--ab-test"
+                ],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "rescue"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [
+                  "--compaction-ab"
+                ],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            }
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.llmrig.permission.rescue-execution",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.llmrig.rescue-execution",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run read-only Rescue preflight before opt-in experiments.",
+          "Review experiment flags and resource budgets."
+        ],
+        "severity": "high",
+        "title": "LLMRig Rescue experiment execution"
+      },
+      {
+        "action_classes": [
+          "LLMRig Rescue report file creation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews Rescue --output requests which create a new local report file even without experiment flags.",
+        "family": null,
+        "matcher": {
+          "op": "leading-subcommand.v1",
+          "config": {
+            "executables": [
+              "llmrig",
+              "llmrig.cmd",
+              "llmrig.exe"
+            ],
+            "subcommands": [
+              "rescue"
+            ],
+            "options_with_values": [],
+            "required_flags_anywhere": [
+              "--output"
+            ],
+            "forbidden_flags_before_delimiter": [
+              "--help",
+              "-h",
+              "--version"
+            ]
+          }
+        },
+        "native_capability": null,
+        "permission_id": "command.llmrig.permission.rescue-write",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.llmrig.rescue-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect Rescue preflight without --output first.",
+          "Use a new filename; LLMRig does not automatically upload reports."
+        ],
+        "severity": "medium",
+        "title": "LLMRig Rescue report file creation"
+      }
+    ],
+    "safer_alternatives": [
+      "Use LLMRig plan and doctor to inspect readiness before execution.",
+      "Review Rescue experiments before opt-in.",
+      "Inspect privacy-filtered report output before saving."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  }
+}

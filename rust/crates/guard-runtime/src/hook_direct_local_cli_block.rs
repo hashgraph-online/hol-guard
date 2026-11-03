@@ -1,11 +1,10 @@
 //! The daemon's custom extension block for an allowed `PreToolUse`, once the
 //! launch identity and its grant are known.
 //!
-//! Ports the decision and response steps of `native_local_cli_block_response`
-//! (`hook_native_local_cli.py`), `decide_local_cli_grant`
-//! (`local_cli_grant_decision.py`) and `match_command_id`
-//! (`runtime/local_cli_commands.py`). Recorded parity vectors
-//! (`scripts/record_local_cli_block_vectors.py`) pin every step.
+//! Ports the decision and response steps of the retired Python custom block,
+//! `decide_local_cli_grant` (`local_cli_grant_decision.py`) and
+//! `match_command_id` (`runtime/local_cli_commands.py`). Parity vectors
+//! recorded from the Python steps pin every step.
 
 use std::collections::BTreeSet;
 
@@ -289,7 +288,7 @@ pub(crate) fn block_response(
 /// `block_response` for a launch whose grant the daemon could not check:
 /// `native_local_cli_block_response` blocks it as unverified while some custom
 /// block rule exists, and Watch records it as the custom block.
-pub(super) fn unverified_response(
+pub(crate) fn unverified_response(
     harness: &str,
     result: &Object,
     recording_only: bool,

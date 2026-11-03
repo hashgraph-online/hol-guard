@@ -1,11 +1,22 @@
 use serde_json::Value;
 use std::{
+    ffi::OsString,
     io::Write,
     process::{Command, Stdio},
 };
 
+fn pack_compiler_binary() -> OsString {
+    [
+        "NEXTEST_BIN_EXE_guard-pack-compiler",
+        "NEXTEST_BIN_EXE_guard_pack_compiler",
+    ]
+    .into_iter()
+    .find_map(std::env::var_os)
+    .unwrap_or_else(|| env!("CARGO_BIN_EXE_guard-pack-compiler").into())
+}
+
 fn run(operation: &str, bytes: &[u8]) -> (i32, Value) {
-    let mut process = Command::new(env!("CARGO_BIN_EXE_guard-pack-compiler"))
+    let mut process = Command::new(pack_compiler_binary())
         .arg(operation)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -50,6 +61,21 @@ fn bootstrap_tool_cannot_export_or_evaluate_a_packaged_program() {
     let (status, result) = run("schema", b"");
     assert_eq!(status, 0);
     assert!(result.is_object());
+}
+
+#[test]
+fn bootstrap_tool_answers_bundle_metadata_for_policy_delivery() {
+    // Policy delivery asks this tool for release defaults; refusing the
+    // operation stopped every catalog publication (#5816).
+    let (status, result) = run(
+        "bundle-metadata",
+        br#"{"operation":"release-defaults","catalogs":[]}"#,
+    );
+    assert_eq!(status, 0);
+    assert_eq!(result["selected_ids"], serde_json::json!([]));
+    let (status, invalid) = run("bundle-metadata", br#"{"operation":"unknown"}"#);
+    assert_eq!(status, 2);
+    assert_eq!(invalid["code"], "installed bundle metadata invalid");
 }
 
 #[test]

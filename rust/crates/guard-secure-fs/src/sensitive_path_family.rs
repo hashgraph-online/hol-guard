@@ -49,6 +49,7 @@ pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)
         (".pypirc", "Python package credentials", "high"),
         (".netrc", "netrc credentials", "high"),
         (".git-credentials", "Git credential store", "high"),
+        (".terraform.tfvars", "Terraform variable secrets", "high"),
         ("terraform.tfvars", "Terraform variable secrets", "high"),
         ("private-key.pem", "wallet/private-key file", "critical"),
         ("private.key", "wallet/private-key file", "critical"),

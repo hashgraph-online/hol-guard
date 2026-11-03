@@ -52,6 +52,12 @@ DIGLINE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "digline baseline promotion command",
         _PROMOTE_RULE,
     ),
+    # `exec` hands the run to digline itself, so the promotion is the same one.
+    (
+        "exec digline promote --suite evals/suite.py --run 20260924T101500Z",
+        "digline baseline promotion command",
+        _PROMOTE_RULE,
+    ),
     (
         "digline register --suite evals/suite.py --run 20260924T101500Z --disposition accepted",
         "digline disposition record command",
@@ -102,10 +108,6 @@ DIGLINE_MODULE_BLOCK_CASES: tuple[tuple[str, str, str], ...] = (
 # Forms the command parser does not yet normalize; each must stay uncertain for the stated reason.
 DIGLINE_UNCERTAIN_CASES: tuple[tuple[str, str], ...] = (
     (
-        "exec digline promote --suite evals/suite.py --run 20260924T101500Z",
-        "nested_command_executor_not_yet_supported",
-    ),
-    (
         "xargs -n 1 digline rejudge --suite evals/suite.py",
         "nested_command_executor_not_yet_supported",
     ),
@@ -138,7 +140,7 @@ def test_enabled_digline_writes_and_spending_reach_review(tmp_path: Path) -> Non
         assert rule_id in matched, command
         assert evaluation.evaluation.controlling_rule_id == rule_id, command
         assert any(item.match.action_class == action_class for item in evaluation.evaluation.matches), command
-        assert evaluation.native_minimum_action == "review", command
+        assert evaluation.payload["minimum_action"] == "review", command
 
 
 def test_enabled_digline_module_invocations_require_review(tmp_path: Path) -> None:
@@ -156,7 +158,7 @@ def test_enabled_digline_module_invocations_require_review(tmp_path: Path) -> No
         }
         assert rule_id in matched, command
         assert any(item.match.action_class == action_class for item in evaluation.evaluation.matches), command
-        assert evaluation.native_minimum_action == "review", command
+        assert evaluation.payload["minimum_action"] == "review", command
 
 
 def test_enabled_digline_declared_uncertain_forms_stay_uncertain(tmp_path: Path) -> None:

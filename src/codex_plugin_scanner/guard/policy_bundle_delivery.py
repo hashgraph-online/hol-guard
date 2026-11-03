@@ -21,7 +21,7 @@ from .native_policy_bundle import (
 from .runtime.extension_control_authority import ExtensionControlAuthorityView
 from .runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 
-_ACK_BUNDLE_KEYS = ("contractVersion", "bundleHash", "bundleVersion")
+_ACK_BUNDLE_KEYS = ("contractVersion", "workspaceId", "bundleHash", "bundleVersion", "payload")
 
 
 def effective_projection_digest(view: ExtensionControlAuthorityView) -> str:

@@ -1,6 +1,7 @@
 import type {
   GuardReceipt,
   GuardRuntimeSnapshot,
+  GuardSupplyChainScannerEvidence,
 } from "./guard-types";
 import { isSupplyChainScannerEvidence } from "./guard-types";
 import { guardActionPresentation, isBlockedGuardAction } from "./guard-action";
@@ -48,7 +49,8 @@ function receiptEvidenceOperations(receipt: GuardReceipt): string[] {
   return operations;
 }
 
-function isPackageBlockReceipt(receipt: GuardReceipt): boolean {
+/** A receipt for a package install Guard stopped, as opposed to an audit or sync record. */
+export function isPackageBlockReceipt(receipt: GuardReceipt): boolean {
   if (!isBlockedGuardAction(receipt.policy_decision)) {
     return false;
   }

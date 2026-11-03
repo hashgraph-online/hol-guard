@@ -62,6 +62,7 @@ def test_event_upload_refreshes_oauth_once_without_requeueing(tmp_path: Path, mo
     assert refreshes == [True]
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_command_lease_refreshes_oauth_once_and_uses_new_token_for_job(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

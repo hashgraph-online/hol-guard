@@ -65,7 +65,7 @@ def test_real_native_review_classification_accepts_explicit_stash_permission(
         extension_control_snapshot=fixture.snapshot,
     )
     assert reviewed is not None
-    assert reviewed.native_minimum_action == "allow"
+    assert reviewed.payload["minimum_action"] == "allow"
     assert reviewed.evaluation.minimum_action == "allow"
     assert reviewed.evaluation.control_resolution.explicitly_enabled_permission_ids == ("command.git.permission.stash",)
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_restricted_linux as transport
 from codex_plugin_scanner.guard.runtime.restricted_linux_landlock import LinuxContainmentUnavailableError
+from tests import restricted_linux_test_support as transport
 
 
 def test_large_native_index_uses_one_small_reply_and_cleans_private_snapshot(monkeypatch, tmp_path):

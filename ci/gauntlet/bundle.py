@@ -11,9 +11,21 @@ import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
 
+from .case_retry import MAX_CASE_RETRIES
+from .catalog import MAX_SCENARIOS
+
 MAX_ARCHIVE = 16 * 1024 * 1024
 MAX_EXTRACTED = 64 * 1024 * 1024
+# A full run writes one final case file per scenario, up to `MAX_CASE_RETRIES`
+# superseded attempts beside it, and the two summaries. The catalog's bound is
+# what decides how many that is, so this follows it rather than standing on its
+# own: a catalog the runner accepts must stay exportable. `MAX_ARCHIVE` and
+# `MAX_EXTRACTED` remain the limits that bound an archive's size.
+MAX_ENTRIES = MAX_SCENARIOS * (1 + MAX_CASE_RETRIES) + 2
 CASE_PATH = re.compile(r"cases/[a-z][a-z0-9-]{0,79}\.json")
+# A case the runner re-ran banks its earlier attempts beside `cases/`; they are the
+# same bounded public case JSON, and without them a retried run cannot be exported.
+SUPERSEDED_PATH = re.compile(r"superseded/[a-z][a-z0-9-]{0,79}\.attempt-[1-9]\.json")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -23,8 +35,12 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def allowed_name(name: str) -> bool:
-    """Only the public summary and case JSON belong in a qualification bundle."""
-    return name in {"summary.json", "summary.md"} or CASE_PATH.fullmatch(name) is not None
+    """Only the public summary and case JSON, final or superseded, belong in a bundle."""
+    return (
+        name in {"summary.json", "summary.md"}
+        or CASE_PATH.fullmatch(name) is not None
+        or SUPERSEDED_PATH.fullmatch(name) is not None
+    )
 
 
 def pack(directory: Path, output: Path) -> str:
@@ -52,7 +68,7 @@ def unpack(data: bytes, directory: Path, expected_sha256: str) -> None:
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         entries = archive.infolist()
         names = [entry.filename for entry in entries]
-        if len(entries) > 256 or len(names) != len(set(names)) or "summary.json" not in names:
+        if len(entries) > MAX_ENTRIES or len(names) != len(set(names)) or "summary.json" not in names:
             raise ValueError("missing summary, duplicate entries or oversized evidence inventory")
         if sum(entry.file_size for entry in entries) > MAX_EXTRACTED:
             raise ValueError("evidence expands beyond the extraction budget")

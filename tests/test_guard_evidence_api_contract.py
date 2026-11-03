@@ -34,8 +34,7 @@ def _record(evidence_id: str, **overrides: object) -> EvidenceRecord:
 
 
 def _store_record(store: GuardStore, record: EvidenceRecord) -> None:
-    with store._connect() as connection:
-        store_evidence(connection, record)
+    store_evidence(store, record)
 
 
 def _receipt(receipt_id: str, *, harness: str, timestamp: str) -> GuardReceipt:

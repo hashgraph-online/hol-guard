@@ -25,18 +25,13 @@ from pathlib import Path
 
 import pytest
 
-from scripts.ci.detect_pending_extension_regen import contribution_ids
+from scripts.ci.detect_pending_extension_regen import catalog_ids, contribution_ids
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def pending_contribution_regen() -> bool:
-    from codex_plugin_scanner.guard.runtime.command_extensions import (
-        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    )
-
-    registry_ids = {extension.extension_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
-    return bool(contribution_ids() - registry_ids)
+    return bool(contribution_ids() - catalog_ids())
 
 
 def _git(*arguments: str) -> subprocess.CompletedProcess[str]:

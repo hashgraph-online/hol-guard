@@ -118,7 +118,9 @@ class _Install:
             f"[mcp_servers.canary]\ncommand = {json.dumps(sys.executable)}\nargs = [{json.dumps(str(server))}]\n",
             encoding="utf-8",
         )
-        keep = {"PATH", "LANG", "LC_ALL", "TMPDIR", "PYTHONPATH"}
+        # A source checkout names its source compiler; the daemon asks it
+        # whether this installation carries a release bundle.
+        keep = {"PATH", "LANG", "LC_ALL", "TMPDIR", "PYTHONPATH", "HOL_GUARD_NATIVE_SOURCE_COMPILER"}
         if os.name == "nt":
             keep |= {"PATHEXT", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP"}
         self.env = {key: value for key, value in os.environ.items() if key in keep}
@@ -225,9 +227,7 @@ def _until(condition: Callable[[], T | None | bool], what: str) -> T:
 def installed(tmp_path: Path) -> Iterator[_Install]:
     install = _Install(tmp_path, _runtime())
     try:
-        result = install.guard(
-            "install", "codex", "--workspace", str(install.workspace), "--json", extra={"HOL_GUARD_MCP_RELAY": "native"}
-        )
+        result = install.guard("install", "codex", "--workspace", str(install.workspace), "--json")
         assert result.returncode == 0, result.stderr[-2000:]
         result = install.guard("daemon", "ensure", "--workspace", str(install.workspace))
         assert result.returncode == 0, result.stderr[-2000:]

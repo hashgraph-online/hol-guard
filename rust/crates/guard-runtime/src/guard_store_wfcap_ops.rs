@@ -12,8 +12,8 @@ use crate::guard_store_wfcap_authority::{
 };
 use crate::guard_store_wfcap_claim::claim;
 use crate::guard_store_wfcap_contract::{
-    claim_sha256, decode_signed_claim, decode_signed_receipt, int, text, validate_signed_claim,
-    verify_claim, verify_claim_signature, verify_receipt,
+    claim_sha256, decode_signed_claim, decode_signed_receipt, int, sign_claim, text,
+    validate_claim, validate_signed_claim, verify_claim, verify_claim_signature, verify_receipt,
 };
 use crate::guard_store_wfcap_control::{
     finalize_transition, load_validate_and_observe, prepare_transition,
@@ -35,10 +35,10 @@ pub(crate) const CLAIM_COLUMNS: &str =
 pub(crate) fn prelude(op: &str, args: &Args<'_>) -> WfResult<()> {
     match op {
         "issue" => {
-            let signed = signed_claim(args)?;
+            let claim = issue_claim(args)?;
             let provenance = args.str("approval_provenance_id")?;
             ident("approval_provenance_id", provenance)?;
-            if provenance != text(&signed["claim"], "approval_provenance_id") {
+            if provenance != text(&claim, "approval_provenance_id") {
                 return cap("capability_approval_binding_mismatch");
             }
             Ok(())
@@ -83,6 +83,22 @@ pub(crate) fn run(op: &str, ctx: &mut Ctx<'_>, args: &Args<'_>) -> WfResult<Valu
         "lookup" => lookup(ctx, args),
         _ => receipt_lookup(ctx, args),
     }
+}
+
+/// The claim an issue request names.
+///
+/// `claim_json` is the live route: the caller sends the claim and the resident
+/// signs it. `signed_json` stays for the recorded pre-native vectors, whose
+/// envelopes this resident still verifies against its own key.
+fn issue_claim(args: &Args<'_>) -> WfResult<Value> {
+    if args.opt_str("signed_json")?.is_some() {
+        return Ok(signed_claim(args)?["claim"].clone());
+    }
+    let Ok(claim) = serde_json::from_str::<Value>(args.str("claim_json")?) else {
+        return cap("invalid_capability_claim");
+    };
+    validate_claim(&claim)?;
+    Ok(claim)
 }
 
 pub(crate) fn signed_claim(args: &Args<'_>) -> WfResult<Value> {
@@ -178,7 +194,11 @@ pub(crate) fn validate_claim_row(
 }
 
 fn issue(ctx: &mut Ctx<'_>, args: &Args<'_>) -> WfResult<Value> {
-    let signed = signed_claim(args)?;
+    let signed = if args.opt_str("signed_json")?.is_some() {
+        signed_claim(args)?
+    } else {
+        sign_claim(&issue_claim(args)?, &ctx.key, &ctx.key_id)?
+    };
     let provenance = args.str("approval_provenance_id")?;
     let claim = &signed["claim"];
     verify_claim(&signed, &ctx.key, &ctx.key_id, &ctx.now, &claim["binding"])?;
@@ -244,7 +264,7 @@ fn issue(ctx: &mut Ctx<'_>, args: &Args<'_>) -> WfResult<Value> {
     let pending = prepare_transition(ctx, &control, &transition)?;
     append_transition(ctx.conn, &transition)?;
     finalize_transition(ctx, &pending)?;
-    Ok(Value::Null)
+    Ok(signed)
 }
 
 fn revoke(ctx: &mut Ctx<'_>, args: &Args<'_>) -> WfResult<Value> {

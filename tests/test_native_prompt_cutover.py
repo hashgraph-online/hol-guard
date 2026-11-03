@@ -65,7 +65,9 @@ def test_real_resident_prompt_artifacts_and_reapproval(prompt_home, tmp_path):
     ],
 )
 def test_real_resident_attachment_intent(prompt_home, text, state):
-    assert native_prompt.trailing_secret_read_state(text) == state
+    result = native_prompt.analyze("trailing_secret_read_state", prompt_text=text)
+    assert isinstance(result, dict)
+    assert result["state"] == (list(state) if state is not None else None)
 
 
 @pytest.mark.parametrize("reply", [None, {}, {"result": None}, {"result": "bad"}])
@@ -135,7 +137,7 @@ def test_prompt_transport_rejects_wrong_or_ambiguous_response(monkeypatch, tmp_p
         available=True,
         compatible=True,
         identity=SimpleNamespace(path=tmp_path / "runtime", sha256="a" * 64),
-        capabilities=SimpleNamespace(features=("resident-protocol-v2", "prompt-analyze-v1")),
+        capabilities=SimpleNamespace(features=("resident-protocol-v2", "prompt-analyze-v2")),
     )
     monkeypatch.setattr(native_execution, "native_runtime_status", lambda: status)
     monkeypatch.setattr(native_execution, "native_resident_client_request", lambda **_: json.dumps(payload).encode())

@@ -6,14 +6,72 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.checks.kimi import check_kimi_manifest_shapes
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.ecosystems.detect import detect_packages
 from codex_plugin_scanner.ecosystems.kimi import KimiAdapter
-from codex_plugin_scanner.ecosystems.types import Ecosystem
+from codex_plugin_scanner.ecosystems.types import Ecosystem, NormalizedPackage
 from codex_plugin_scanner.models import ScanOptions
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "extra_metadata",
+    [
+        {"tryPrompts": ["Summarize the project"]},
+        {"mcpOverrides": {"demo": {"displayName": "Demo", "description": "Project context"}}},
+        {"skillOverrides": {"using-demo": {"displayName": "Using Demo", "description": "Inspect context"}}},
+        {"futureMetadata": {"enabled": True, "items": [1, 2]}},
+    ],
+)
+def test_kimi_interface_accepts_additional_metadata(tmp_path: Path, extra_metadata: dict[str, object]) -> None:
+    package = NormalizedPackage(
+        ecosystem=Ecosystem.KIMI,
+        package_kind="plugin",
+        root_path=tmp_path,
+        raw_manifest={"interface": {"displayName": "Demo", **extra_metadata}},
+    )
+
+    result = check_kimi_manifest_shapes(package)
+
+    assert result.passed
+    assert result.points == result.max_points
+    assert not result.findings
+
+
+@pytest.mark.parametrize("field", ["displayName", "shortDescription", "longDescription", "developerName", "websiteURL"])
+@pytest.mark.parametrize("value", [None, 42, False, [], {}])
+def test_kimi_interface_rejects_non_string_display_fields(tmp_path: Path, field: str, value: object) -> None:
+    package = NormalizedPackage(
+        ecosystem=Ecosystem.KIMI,
+        package_kind="plugin",
+        root_path=tmp_path,
+        raw_manifest={"interface": {field: value}},
+    )
+
+    result = check_kimi_manifest_shapes(package)
+
+    assert not result.passed
+    assert result.points == 0
+    assert [finding.rule_id for finding in result.findings] == ["KIMI_INTERFACE_INVALID"]
+
+
+@pytest.mark.parametrize("interface", ["Demo", [], 42, False])
+def test_kimi_interface_rejects_non_objects(tmp_path: Path, interface: object) -> None:
+    package = NormalizedPackage(
+        ecosystem=Ecosystem.KIMI,
+        package_kind="plugin",
+        root_path=tmp_path,
+        raw_manifest={"interface": interface},
+    )
+
+    result = check_kimi_manifest_shapes(package)
+
+    assert not result.passed
+    assert [finding.rule_id for finding in result.findings] == ["KIMI_INTERFACE_INVALID"]
 
 
 def _symlink_or_skip(link_path: Path, target: Path) -> None:
@@ -335,3 +393,4 @@ def test_cli_scans_kimi_ecosystem_explicitly(capsys: pytest.CaptureFixture[str])
 
     assert rc == 0
     assert payload["ecosystems"] == ["kimi"]
+    assert all(finding["ruleId"] != "KIMI_INTERFACE_INVALID" for finding in payload["findings"])

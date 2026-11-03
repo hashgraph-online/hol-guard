@@ -1,0 +1,104 @@
+# Supply-chain gates for the Rust workspace, run by `cargo deny` in CI.
+#
+# Guard's runtime is the component that decides what a harness may do, so its
+# dependency set is part of the security boundary: an advisory, an unexpected
+# registry or a second copy of a crate all change what ships in the binary that
+# makes those decisions. Every check below fails the build rather than warning,
+# and the exceptions are listed by name so they stay visible.
+
+[graph]
+# Tier 1 targets. A crate that only ever builds for some other platform does not
+# need to clear these gates.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+    "aarch64-unknown-linux-musl",
+]
+all-features = true
+
+[advisories]
+db-urls = ["https://github.com/RustSec/advisory-db"]
+# A yanked version is a signal from the publisher that the release should not be
+# used. For a security runtime that is an error, not a note.
+yanked = "deny"
+unmaintained = "all"
+# An entry here needs the advisory id and the reason the code path does not
+# reach us.
+ignore = [
+    { id = "RUSTSEC-2023-0071", reason = "the Marvin attack recovers a key from the timing of RSA private-key operations; Guard only ever verifies signatures with rsa, so no private key and no decryption reaches the crate outside its own tests, and the advisory has no fixed release" },
+]
+
+[licenses]
+# Permissive licenses only, matching the workspace's own Apache-2.0 terms. Guard
+# ships these crates inside a redistributed binary, so a copyleft obligation
+# would reach the whole runtime.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+# Build scripts run on the machine that produces the shipped binary, so their
+# dependencies are in scope. Test-only crates are not.
+include-build = true
+include-dev = false
+confidence-threshold = 0.93
+
+[bans]
+# A second copy of a crate means two versions of the same logic in one binary,
+# and an advisory fixed in one of them is not fixed in the other. New duplicates
+# fail; the ones already in the tree are listed below so they stay countable.
+multiple-versions = "deny"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+deny = [
+    # Guard's runtime speaks TLS through rustls. Linking a system TLS stack
+    # would move certificate verification out of the build we reproduce and
+    # into whatever the host happens to ship.
+    { crate = "openssl", reason = "the runtime uses rustls; a system TLS stack is not reproducible across the platforms Guard ships" },
+    { crate = "openssl-sys", reason = "pulls in the system OpenSSL that rustls exists to avoid" },
+    { crate = "native-tls", reason = "delegates certificate verification to the host TLS stack" },
+]
+
+# Each entry is a duplicate that exists in the current lock file. Removing one of
+# these lines is the way to record that the duplicate is gone; adding a line
+# needs a reason the two versions cannot be unified yet.
+skip = [
+    { crate = "base64@0.22.1", reason = "transitive, pending the dependents that still pin 0.22" },
+    { crate = "bitflags@1.3.2", reason = "transitive, dependents still on the 1.x API" },
+    { crate = "fancy-regex@0.16.2", reason = "transitive, pending a dependent upgrade" },
+    { crate = "getrandom@0.2.17", reason = "transitive, dependents still on the 0.2 API" },
+    { crate = "getrandom@0.3.4", reason = "transitive, dependents still on the 0.3 API" },
+    { crate = "roxmltree@0.20.0", reason = "transitive, pending a dependent upgrade" },
+    { crate = "serde_spanned@0.6.9", reason = "transitive through the toml 0.8 line" },
+    { crate = "shlex@1.3.0", reason = "transitive, dependents still on the 1.x API" },
+    { crate = "syn@2.0.119", reason = "transitive, proc-macro dependents still on syn 2" },
+    { crate = "thiserror@1.0.69", reason = "transitive, dependents still on the 1.x API" },
+    { crate = "thiserror-impl@1.0.69", reason = "paired with thiserror 1.x" },
+    { crate = "toml@0.8.23", reason = "transitive, pending a dependent upgrade" },
+    { crate = "toml_datetime@0.6.11", reason = "transitive through the toml 0.8 line" },
+    { crate = "windows-link@0.1.3", reason = "transitive through the older windows-sys line" },
+    { crate = "windows-sys@0.52.0", reason = "transitive, dependents still on the 0.52 API" },
+    { crate = "winnow@0.7.15", reason = "transitive through the toml 0.8 line" },
+]
+
+[sources]
+# Everything comes from crates.io. A git dependency would make the build depend
+# on a branch someone can move after review.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = []

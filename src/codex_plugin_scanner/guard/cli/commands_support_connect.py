@@ -447,6 +447,12 @@ def _announce_guard_device_connect_copy(payload: dict[str, object]) -> None:
     )
     if target is None:
         return
+    if payload.get("approval_lost") is True:
+        print(
+            "Guard Cloud approved this device, but its answer never reached HOL Guard. "
+            "Approve once more with this new code.",
+            file=sys.stderr,
+        )
     print("HOL Guard headless approval", file=sys.stderr)
     print(f"1. Open {target}", file=sys.stderr)
     print(f"2. Enter code {user_code}", file=sys.stderr)

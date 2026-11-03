@@ -28,6 +28,7 @@ from .workflow_capabilities import (
     SignedWorkflowCapability,
     SignedWorkflowCapabilityReceipt,
     WorkflowCapabilityBinding,
+    WorkflowCapabilityClaim,
     WorkflowCapabilityError,
 )
 
@@ -116,22 +117,26 @@ class StoreWorkflowCapabilitiesMixin:
     @serialized_workflow_capability_authority
     def issue_workflow_capability(
         self,
-        signed: SignedWorkflowCapability,
+        claim: WorkflowCapabilityClaim,
         *,
         approval_provenance_id: str,
     ) -> SignedWorkflowCapability:
+        """Issue a claim the resident signs with the capability key."""
+
         now = WORKFLOW_CAPABILITY_STORE_CLOCK.now()
-        if type(signed) is not SignedWorkflowCapability:
-            raise WorkflowCapabilityError("invalid_signed_capability")
-        self._run_workflow_capability(
+        if type(claim) is not WorkflowCapabilityClaim:
+            raise WorkflowCapabilityError("invalid_capability_claim")
+        issued = self._run_workflow_capability(
             "issue",
             now,
             {
-                "signed_json": _canonical_json(signed.to_dict()),
+                "claim_json": _canonical_json(asdict(claim)),
                 "approval_provenance_id": approval_provenance_id,
             },
         )
-        return signed
+        if not isinstance(issued, Mapping):
+            raise WorkflowCapabilityError("invalid_signed_capability")
+        return SignedWorkflowCapability.from_dict(dict(issued))
 
     @serialized_workflow_capability_authority
     def claim_workflow_capability(

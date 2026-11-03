@@ -4,6 +4,7 @@ import threading
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from typing_extensions import override
@@ -11,7 +12,6 @@ from typing_extensions import override
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_mcp_relay import (
     MCP_RELAY_BINDING_KEY,
-    MCP_RELAY_DECIDE_FEATURE,
     MCP_RELAY_VIEW_SCHEMA,
     REDACTION_LEVEL_KEY,
     NativePolicySnapshotMcpRelayMixin,
@@ -35,7 +35,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
 )
 
-FEATURES = (MCP_RELAY_DECIDE_FEATURE,)
 DIGEST = "a" * 64
 LAYERS: list[object] = [{"kind": "local-admin", "global_lockdown": False, "controls": []}]
 
@@ -60,13 +59,17 @@ def test_a_harness_view_carries_the_proxy_config_and_hash_fields(tmp_path: Path)
         "harness_actions",
         "risk_actions",
         "harness_risk_actions",
+        "harness_postures",
         "security_level",
         "protection_posture",
         "protection_posture_explicit",
         "managed_locked_settings",
     }
+    # The posture override is the resolver's own input; the approval token the
+    # proxy binds does not carry it, so it stays out of the hash fields.
+    assert config["harness_postures"] == {}
     assert hash_config == {
-        **config,
+        **{field: value for field, value in config.items() if field != "harness_postures"},
         "managed_policy_hash": "a" * 64,
         "managed_policy_status": "absent",
         "sandbox_analysis": "on",
@@ -80,12 +83,23 @@ def test_a_per_harness_posture_changes_only_that_harness(tmp_path: Path) -> None
     assert harness_view(config, "codex") == harness_view(_config(tmp_path), "codex")
 
 
+def test_a_harness_view_carries_only_its_own_posture_override(tmp_path: Path) -> None:
+    config = _config(tmp_path, harness_postures={"cursor": "extra_careful"})
+
+    cursor = harness_view(config, "cursor")
+    codex = harness_view(config, "codex")
+
+    assert cursor is not None and codex is not None
+    assert cast("dict[str, object]", cursor["config"])["harness_postures"] == {"cursor": "extra_careful"}
+    assert cast("dict[str, object]", codex["config"])["harness_postures"] == {}
+
+
 def test_only_harnesses_every_config_agrees_on_are_bound(tmp_path: Path) -> None:
     home = _config(tmp_path)
     workspace = _config(tmp_path, harness_postures={"cursor": "watch"})
 
-    assert set(uniform_harness_views([home])) == {"codex", "copilot", "cursor", "opencode"}
-    assert set(uniform_harness_views([home, workspace])) == {"codex", "copilot", "opencode"}
+    assert set(uniform_harness_views([home])) == {"cline", "codex", "copilot", "cursor", "hermes", "opencode"}
+    assert set(uniform_harness_views([home, workspace])) == {"cline", "codex", "copilot", "hermes", "opencode"}
     assert uniform_harness_views([]) == {}
 
 
@@ -101,7 +115,7 @@ def test_a_bound_harness_carries_the_redaction_level_every_config_agrees_on(tmp_
     # A disagreement leaves the harnesses bound without the level, so only a
     # queued call defers.
     unlevelled = uniform_harness_views([home, workspace])
-    assert set(unlevelled) == {"codex", "copilot", "cursor", "opencode"}
+    assert set(unlevelled) == {"cline", "codex", "copilot", "cursor", "hermes", "opencode"}
     assert all(REDACTION_LEVEL_KEY not in view for view in unlevelled.values())  # type: ignore[operator]
     assert unlevelled["codex"] == harness_view(home, "codex")
 
@@ -178,35 +192,41 @@ class _Publisher(NativePolicySnapshotMcpRelayMixin):
 def test_the_binding_carries_the_view_only_for_a_resident_that_accepts_it(tmp_path: Path) -> None:
     publisher = _Publisher(tmp_path)
 
-    bound = publisher._with_mcp_relay_view({"generation": 1}, FEATURES)
+    bound = publisher._with_mcp_relay_view({"generation": 1})
     assert bound is not None
     view = bound[MCP_RELAY_BINDING_KEY]
-    assert isinstance(view, dict) and set(view["harnesses"]) == {"codex", "copilot", "cursor", "opencode"}
-    assert publisher._with_mcp_relay_view({"generation": 1}, ()) == {"generation": 1}
-    assert publisher._with_mcp_relay_view(None, FEATURES) is None
+    assert isinstance(view, dict) and set(view["harnesses"]) == {
+        "cline",
+        "codex",
+        "copilot",
+        "cursor",
+        "hermes",
+        "opencode",
+    }
+    assert publisher._with_mcp_relay_view(None) is None
     harnesses = publisher._compiled_mcp_relay_harnesses
     publisher._compiled_mcp_relay_harnesses = {}
-    assert publisher._with_mcp_relay_view({"generation": 1}, FEATURES) == {"generation": 1}
+    assert publisher._with_mcp_relay_view({"generation": 1}) == {"generation": 1}
     publisher._compiled_mcp_relay_harnesses = harnesses
 
     assert view["extension_layers"] == []
     publisher._command_control_runtime = None
-    unlayered = publisher._with_mcp_relay_view({"generation": 1}, FEATURES)
+    unlayered = publisher._with_mcp_relay_view({"generation": 1})
     assert unlayered is not None
     unlayered_view = unlayered[MCP_RELAY_BINDING_KEY]
     assert isinstance(unlayered_view, dict) and "extension_layers" not in unlayered_view
     publisher._command_control_runtime = _runtime()
 
-    publisher._bind_mcp_relay_view(bound, FEATURES)
+    publisher._bind_mcp_relay_view(bound)
     assert publisher._direct_lane_mcp_relay == view
-    publisher._bind_mcp_relay_view(bound, ())
+    publisher._bind_mcp_relay_view({"generation": 1})
     assert publisher._direct_lane_mcp_relay is None
 
 
 @pytest.mark.parametrize("compiled", [None, {}])
 def test_a_moved_view_rebinds_the_lane(tmp_path: Path, compiled: dict[str, object] | None) -> None:
     publisher = _Publisher(tmp_path)
-    publisher._bind_mcp_relay_view(publisher._with_mcp_relay_view({}, FEATURES), FEATURES)
+    publisher._bind_mcp_relay_view(publisher._with_mcp_relay_view({}))
     publisher._recheck_direct_lane_mcp_relay()
     assert publisher.rebound == 0
 
@@ -220,7 +240,7 @@ def test_an_unbound_or_closed_lane_is_not_rechecked(tmp_path: Path) -> None:
     publisher = _Publisher(tmp_path)
     publisher._compiled_mcp_relay_harnesses = None
     publisher._recheck_direct_lane_mcp_relay()
-    publisher._bind_mcp_relay_view(publisher._with_mcp_relay_view({}, FEATURES), FEATURES)
+    publisher._bind_mcp_relay_view(publisher._with_mcp_relay_view({}))
     publisher._direct_lane_ack_target = None
     publisher._recheck_direct_lane_mcp_relay()
     assert publisher.rebound == 0

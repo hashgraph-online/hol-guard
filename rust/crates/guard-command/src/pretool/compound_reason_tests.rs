@@ -3,6 +3,8 @@ use crate::CommandModelRequestV1;
 
 const GENERIC: &str =
     "HOL Guard requires review because this command could not be confirmed read-only. Splitting it into simpler commands can let the read-only parts run without review.";
+const SINGLE_STEP: &str =
+    "HOL Guard requires review because this command could not be confirmed read-only.";
 
 fn decision(command: &str) -> (String, String, String) {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -92,16 +94,27 @@ fn labels_never_echo_raw_operands() {
 }
 
 #[test]
-fn single_steps_and_wholly_unproven_chains_keep_the_generic_reason() {
+fn wholly_unproven_chains_keep_the_generic_reason() {
     for command in [
-        "npm install",
         "npm install && make build",
         "cd /nonexistent-guard-dir && git push",
+        // Unflattened shell control has no modeled steps but can hold several.
+        "while true; do git status; npm install; done",
     ] {
         let (action, _, reason) = decision(command);
         assert_eq!(action, "review", "{command}");
         assert_eq!(reason, GENERIC, "{command}");
     }
+}
+
+#[test]
+fn a_single_step_is_not_told_to_split_itself() {
+    // One step has nothing to split, so the advice only sent agents hunting
+    // for a split that does not exist.
+    let (action, code, reason) = decision("npm install");
+    assert_eq!(action, "review");
+    assert_eq!(code, "native_command_review_required");
+    assert_eq!(reason, SINGLE_STEP);
 }
 
 #[test]

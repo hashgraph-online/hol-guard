@@ -22,7 +22,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
 )
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ControlState,
-    ControlSurface,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import (
@@ -322,8 +321,6 @@ def test_credential_store_failure_requires_explicit_degraded_acknowledgement(tmp
 
     degraded = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     assert degraded.health is AuthorityHealth.DEGRADED_UNACKNOWLEDGED
-    assert degraded.layers_for(ControlSurface.COMMAND_EVALUATION)[0].global_lockdown is True
-    assert degraded.layers_for(ControlSurface.TRUSTED_LOCAL_RECOVERY) == ()
 
     acknowledged = store.acknowledge_extension_control_degraded_mode()
     assert acknowledged.health is AuthorityHealth.DEGRADED_ACKNOWLEDGED

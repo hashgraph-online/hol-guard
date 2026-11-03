@@ -1,6 +1,6 @@
 # HOL Guard Rust runtime migration
 
-Status: foundation implemented on the 3.0 prerelease train. The canonical follow-up is `docs/guard/rust-runtime-hardening-prd.md`.
+Status: foundation implemented and shipped on `main` (3.58.0 as of 2026-10-28). The canonical follow-up is `docs/guard/rust-runtime-hardening-prd.md`. The 3.0 prerelease train named in earlier revisions is historical; the work merged to `main` through ordinary PRs.
 
 ## Objective
 

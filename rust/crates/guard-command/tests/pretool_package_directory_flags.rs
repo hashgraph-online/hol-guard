@@ -9,10 +9,7 @@ use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use serde_json::json;
 
 fn fixture() -> std::path::PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/package-directory-flag-fixtures")
         .join(format!("fixture-{}-{nonce}", std::process::id()));

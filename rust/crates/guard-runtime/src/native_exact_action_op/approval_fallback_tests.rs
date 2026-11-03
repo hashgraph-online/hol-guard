@@ -36,7 +36,7 @@ fn outcome(
     request: &NativeExactActionRequestV1,
     fallback: Fallback,
 ) -> (Option<String>, Option<String>) {
-    match decide_with(request, &ResidentEngines, fallback).unwrap() {
+    match decide_with(request, &ResidentEngines { guard_home: None }, fallback).unwrap() {
         NativeExactActionPayloadV1::ExactAction {
             token,
             once_only_reason,
@@ -51,6 +51,65 @@ fn token(root: &str, edit: impl FnOnce(&mut Value)) -> Option<String> {
 
 fn root() -> String {
     std::env::temp_dir().to_string_lossy().into_owned()
+}
+
+const SCRIPTS: [&str; 5] = [
+    "python3 report.py",
+    "python3 -c 'print(1)'",
+    "node report.mjs",
+    "node -e 'console.log(1)'",
+    "npx fixture-runner",
+];
+
+fn script_request(harness: &str, command: &str) -> NativeExactActionRequestV1 {
+    exact_request(&root(), |query| {
+        query["harness"] = json!(harness);
+        query["command"] = json!(command);
+        query["tool_input"] = json!([["command", command]]);
+    })
+}
+
+/// A script review keeps Allow once and Always allow on every harness and
+/// platform (`docs/guard/approval-invariant.md`), including the native
+/// execution-owner route. Withholding the token is not what holds a script to
+/// the bytes the user saw: the owner matches a saved decision against the
+/// captured artifact hash at its launch barrier, so edited bytes ask again.
+/// The command hash still binds the approval to this command in this directory.
+#[test]
+fn a_script_review_without_an_owner_route_keeps_both_choices() {
+    for harness in ["codex", "claude-code", "omp", "pi"] {
+        for command in SCRIPTS {
+            let (token, reason) = outcome(&script_request(harness, command), Fallback::CommandHash);
+            assert!(
+                token.is_some(),
+                "{harness} {command} offers Allow once and Always allow"
+            );
+            assert_eq!(reason, None, "{harness} {command}");
+        }
+    }
+    let first = outcome(&script_request("codex", SCRIPTS[0]), Fallback::CommandHash).0;
+    let second = outcome(&script_request("codex", SCRIPTS[2]), Fallback::CommandHash).0;
+    assert_ne!(
+        first, second,
+        "the hash binds the command it was approved for"
+    );
+}
+
+/// A script launch never gets the proven exact-action token: its approval is
+/// saved under the command hash, so it covers this command only and never
+/// claims the bytes behind it. `Fallback::Strict` is the caller that wants the
+/// refusal itself, and it still sees it.
+#[test]
+fn a_script_launch_never_claims_a_proven_execution_binding() {
+    for harness in ["codex", "omp", "pi"] {
+        for command in SCRIPTS {
+            assert_eq!(
+                outcome(&script_request(harness, command), Fallback::Strict),
+                (None, Some("script_execution_binding_unavailable".into())),
+                "{harness} {command}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -91,6 +150,38 @@ fn the_command_hash_holds_until_the_command_changes() {
     for edit in changed {
         assert_ne!(token(&root, edit).unwrap(), first);
     }
+}
+
+/// A Node launch held because its build has a known advisory keeps both
+/// choices, and an Always allow saved for it still answers after the advisory
+/// feed updates. The feed changes only the review's reason text; even a new
+/// rule digest or runtime identity on its policy binding is not part of the
+/// hash, so only a changed command, directory or workspace asks again.
+#[test]
+fn a_known_vulnerable_runtime_approval_survives_a_feed_update() {
+    let root = root();
+    let launch = |rule_digest: &str, runtime_identity: &str| {
+        let request = exact_request(&root, |query| {
+            query["command"] = json!("node server.js");
+            query["tool_input"] = json!([["command", "node server.js"]]);
+            query["facts"] = json!({
+                "decision": "deny", "minimum_action": "require-reapproval",
+                "policy_action": "require-reapproval",
+                "reason_code": "native_runtime_known_vulnerable", "action_type": "shell"
+            });
+            query["policy_binding"] = json!({"state": "bound", "value": {
+                "schema": "guard.native-review-policy-binding.v2",
+                "rule_digest": rule_digest, "runtime_identity": runtime_identity,
+                "command_extensions": {"uncertainty_count": 0}
+            }});
+        });
+        outcome(&request, Fallback::CommandHash)
+    };
+    let (saved, reason) = launch(&"a".repeat(64), "runtime-1");
+    assert!(saved.is_some(), "the review offers Always allow");
+    assert_eq!(reason, None);
+    let (updated, _) = launch(&"b".repeat(64), "runtime-2");
+    assert_eq!(updated, saved, "a feed update keeps the saved approval");
 }
 
 #[test]
@@ -198,7 +289,7 @@ fn binding_request(command: &str, action_type: &str) -> NativeExactActionRequest
 }
 
 fn binding(request: &NativeExactActionRequestV1, fallback: Fallback) -> Option<String> {
-    match decide_with(request, &ResidentEngines, fallback).unwrap() {
+    match decide_with(request, &ResidentEngines { guard_home: None }, fallback).unwrap() {
         NativeExactActionPayloadV1::ReviewBinding { binding } => binding,
         _ => panic!("a review-binding query answers with a binding"),
     }
@@ -219,7 +310,7 @@ fn allow_once_reaches_the_retry_of_any_review() {
             "{command}"
         );
         let NativeExactActionPayloadV1::ReviewBinding { binding } =
-            decide(&request, &ResidentEngines).unwrap()
+            decide(&request, &ResidentEngines { guard_home: None }).unwrap()
         else {
             panic!("a review-binding query answers with a binding");
         };

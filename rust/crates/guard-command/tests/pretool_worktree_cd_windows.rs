@@ -70,7 +70,7 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let controls = git_helper_fixture::github_controls("enabled");
     let action = |command: &str| {
@@ -85,11 +85,15 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
                 cwd: Some(&cwd),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&environment),
         )
@@ -103,7 +107,9 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
         "allow"
     );
     for command in [
-        // Another directory than the one Git creates.
+        // The chain proof covers reads in the checkout Git creates. A `cd`
+        // anywhere else, even the agent's own source checkout, leaves the
+        // read floor in place: Windows has no workspace sandbox to lift it.
         format!("{add} && cd {source} && git log -1"),
         // A different spelling of the parent stays unproved.
         format!("{add} && cd {} && git log -1", fresh.to_lowercase()),

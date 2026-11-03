@@ -385,6 +385,7 @@ def test_poll_exact_leases_acks_applies_and_posts_versioned_result(
     assert row is not None and row["status"] == "resolved"
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_mixed_capability_polls_exact_nonblocking_then_generic_queue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -422,6 +423,7 @@ def test_mixed_capability_polls_exact_nonblocking_then_generic_queue(
     assert generic_capabilities["operations"] == ["guard.packageShims.status"]
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_missing_exact_route_preserves_generic_queue_progress_and_exact_health(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

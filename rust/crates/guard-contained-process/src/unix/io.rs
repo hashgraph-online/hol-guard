@@ -2,7 +2,7 @@ use super::launch::RequestWindow;
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
-pub(super) fn pipe() -> io::Result<(OwnedFd, OwnedFd)> {
+pub(crate) fn pipe() -> io::Result<(OwnedFd, OwnedFd)> {
     let mut fds = [-1; 2];
     #[cfg(target_os = "linux")]
     let result = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) };
@@ -22,7 +22,7 @@ pub(super) fn pipe() -> io::Result<(OwnedFd, OwnedFd)> {
     Ok((read, write))
 }
 
-pub(super) fn nonblocking(fd: &OwnedFd) -> io::Result<()> {
+pub(crate) fn nonblocking(fd: &OwnedFd) -> io::Result<()> {
     let flags = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_GETFL) };
     if flags < 0
         || unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) } != 0

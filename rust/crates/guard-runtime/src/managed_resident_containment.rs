@@ -17,6 +17,7 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use std::time::Instant;
+use zeroize::Zeroizing;
 
 use crate::resident_state::{
     discover_states, process_start_marker, runtime_digest, token_from_state,
@@ -125,11 +126,14 @@ pub(super) fn spawn_managed_for_owner(
     }
 }
 
-pub(super) fn hex_token(token: &[u8]) -> String {
-    let mut output = String::with_capacity(token.len() * 2);
+/// Renders the token for the one write that hands it to a child over stdin.
+/// The rendering is a plaintext copy of the key, so it is cleared when the
+/// caller drops it rather than left behind in a freed allocation.
+pub(super) fn hex_token(token: &[u8]) -> Zeroizing<String> {
+    let mut output = Zeroizing::new(String::with_capacity(token.len() * 2));
     for byte in token {
         use std::fmt::Write as _;
-        let _ = write!(output, "{byte:02x}");
+        let _ = write!(*output, "{byte:02x}");
     }
     output
 }

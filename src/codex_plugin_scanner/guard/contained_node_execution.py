@@ -1,23 +1,23 @@
 """Execution-owned containment for exact local test and lint commands.
 
-The resident owns containment, enforcement and the verdict. This module keeps
-the caller-side checks that need the shell: package-intent parsing and the
-fail-closed handoff for an allowed native Vitest launch.
+The resident owns the whole launch: it parses the package intent from the
+shim's manager and argv, applies the manager and workspace limits, runs the
+single local execution under enforcement and returns the verdict. An allowed
+Vitest handoff from Guard's installed package shims that cannot be contained
+stops with ``SystemExit`` instead of falling through uncontained, including
+when the resident gives no verdict at all.
 """
 
 from __future__ import annotations
 
-import shlex
 from pathlib import Path
 
 from . import native_execution as _native_execution
 from .contained_runner_result import ContainedRunnerResult
-from .runtime.contained_execution_common import (
-    canonical_existing_directory as _canonical_directory,
-)
-from .runtime.package_intent_parser import parse_package_intent
 
 ContainedNodeResult = ContainedRunnerResult
+
+_VITEST_REFUSAL = "HOL Guard refused uncontained Vitest execution: the resident returned no verdict"
 
 
 def _package_shim_handoff_active(shim_directory: Path) -> bool:
@@ -30,11 +30,17 @@ def _package_shim_handoff_active(shim_directory: Path) -> bool:
     return canonical.name == "bin" and canonical.parent.name == "package-shims"
 
 
-def _fail_closed_vitest_handoff(shim_directory: Path, runner: str | None, reason: str) -> None:
-    """Stop an allowed native Vitest handoff instead of falling through uncontained."""
+def _names_vitest(token: str) -> bool:
+    """``vitest`` or a versioned ``vitest@<spec>`` package token.
 
-    if runner == "vitest" and _package_shim_handoff_active(shim_directory):
-        raise SystemExit(f"HOL Guard refused uncontained Vitest execution: {reason}")
+    The resident owns the exact rule, over the package name it parsed out of
+    the launch (``vitest_refusal`` in ``guard-command``). This reading is
+    deliberately broader: it runs only where no verdict came back, so no
+    parse exists to read, and a launch that merely mentions Vitest is stopped
+    rather than handed to review uncontained.
+    """
+
+    return token == "vitest" or token.startswith("vitest@")
 
 
 def try_execute_contained_node_command(
@@ -49,43 +55,25 @@ def try_execute_contained_node_command(
 ) -> ContainedNodeResult | None:
     """Run one exact local test or lint command, or return to Guard review."""
 
-    normalized_manager = manager.strip().lower()
-    if normalized_manager not in {"npx", "bunx"}:
-        return None
     try:
-        canonical_workspace = _canonical_directory(workspace)
-        # The OS backends expose system runtime roots read-only. A project
-        # beneath one of those roots would bypass omission via an absolute path.
-        system_roots = ("/System", "/usr", "/bin", "/lib", "/lib64", "/sbin")
-        if any(canonical_workspace.is_relative_to(Path(root).resolve(strict=False)) for root in system_roots):
-            return None
-    except ValueError:
-        return None
-    intent = parse_package_intent(
-        shlex.join((normalized_manager, *argv)),
-        workspace=canonical_workspace,
-        guard_home=guard_home,
-    )
-    if intent is None or len(intent.local_executions) != 1:
-        return None
-    execution = intent.local_executions[0]
-    result = _native_execution.contained_node_execute_native(
-        canonical_workspace,
-        normalized_manager,
-        argv,
-        guard_home=guard_home,
-        shim_directory=shim_directory,
-        environment=environment,
-        evidence=execution.to_dict(),
-        timeout_seconds=timeout_seconds,
-    )
-    if result is None:
-        _fail_closed_vitest_handoff(
-            shim_directory,
-            execution.package_name,
-            "sandbox startup or enforcement proof failed",
+        return _native_execution.contained_node_execute_native(
+            workspace,
+            manager,
+            argv,
+            guard_home=guard_home,
+            shim_directory=shim_directory,
+            environment=environment,
+            timeout_seconds=timeout_seconds,
+            require_verdict=True,
         )
-    return result
+    except _native_execution.ContainedVerdictUnavailableError:
+        # Without a verdict the resident cannot have parsed this launch, so
+        # the shim stops anything that names Vitest rather than letting
+        # review run it uncontained. A well-formed reply that returns the
+        # launch to review still does.
+        if _package_shim_handoff_active(shim_directory) and any(_names_vitest(token) for token in argv):
+            raise SystemExit(_VITEST_REFUSAL) from None
+        return None
 
 
 __all__ = ("ContainedNodeResult", "try_execute_contained_node_command")

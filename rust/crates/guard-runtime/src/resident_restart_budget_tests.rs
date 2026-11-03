@@ -1,6 +1,15 @@
-use super::*;
 #[cfg(windows)]
+use super::super::private_file::backup_path;
+use super::super::requested_stop::{record as record_requested_stop, take as take_requested_stop};
+use super::*;
 use std::fs;
+#[cfg(windows)]
+use std::io::{Read, Write};
+use std::path::PathBuf;
+
+/// Any process id will do here: the note is only ever read back for the same
+/// one, and these tests stand in for both halves of that handshake.
+const SERVING_CHILD: u32 = 4_242;
 
 #[test]
 fn repeated_updates_replace_budget_without_leaving_temporary_state() {
@@ -61,7 +70,6 @@ fn temp_scope(label: &str) -> PathBuf {
     std::fs::create_dir(&scope).unwrap();
     scope
 }
-
 fn read_budget(scope: &Path) -> RestartBudget {
     serde_json::from_slice(&std::fs::read(scope.join("restart-budget.json")).unwrap()).unwrap()
 }
@@ -182,6 +190,45 @@ fn clear_reopens_a_tripped_circuit() {
     std::fs::remove_dir_all(scope).unwrap();
 }
 
+#[test]
+fn a_held_budget_lock_reads_as_busy_and_a_spawn_waits_it_out() {
+    let scope = temp_scope("held-lock");
+    let held = acquire_budget_lock(&scope).unwrap();
+    // Windows reports this overlap as a lock violation rather than WouldBlock.
+    assert_eq!(
+        acquire_budget_lock(&scope).err().as_deref(),
+        Some("native_resident_restart_budget_busy")
+    );
+    let waiting_scope = scope.clone();
+    let (started, worker_started) = std::sync::mpsc::channel();
+    let spawn = std::thread::spawn(move || {
+        started.send(()).unwrap();
+        consume(&waiting_scope)
+    });
+    worker_started.recv().unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    // Still waiting on the held lock, not refused with a busy error.
+    assert!(!spawn.is_finished());
+    drop(held);
+    spawn.join().unwrap().unwrap();
+    assert_eq!(read_budget(&scope).attempts, 1);
+    std::fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
+fn a_spawn_out_of_time_on_a_held_budget_lock_charges_nothing() {
+    let scope = temp_scope("held-lock-deadline");
+    let held = acquire_budget_lock(&scope).unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_millis(60);
+    assert_eq!(
+        consume_before(&scope, Some(deadline)).err().as_deref(),
+        Some("native_client_deadline_exceeded")
+    );
+    drop(held);
+    assert!(!scope.join("restart-budget.json").exists());
+    std::fs::remove_dir_all(scope).unwrap();
+}
+
 #[cfg(windows)]
 #[test]
 fn restart_budget_lock_retains_directory_binding_until_drop() {
@@ -262,12 +309,45 @@ const SERVED_RUN: Duration = Duration::from_secs(3);
 const INSTANT_RUN: Duration = Duration::from_millis(5);
 
 #[test]
-fn only_a_served_run_that_exited_cleanly_counts_as_healthy() {
-    assert!(healthy_exit(true, SERVED_RUN));
-    assert!(healthy_exit(true, Duration::from_millis(1_000)));
-    assert!(!healthy_exit(true, Duration::from_millis(999)));
-    assert!(!healthy_exit(false, SERVED_RUN));
-    assert!(!healthy_exit(false, INSTANT_RUN));
+fn only_a_served_run_that_exited_cleanly_counts_as_orderly() {
+    assert!(orderly_exit(true, SERVED_RUN, false));
+    assert!(orderly_exit(true, Duration::from_millis(1_000), false));
+    assert!(!orderly_exit(true, Duration::from_millis(999), false));
+    assert!(!orderly_exit(false, SERVED_RUN, false));
+    assert!(!orderly_exit(false, INSTANT_RUN, false));
+}
+
+#[test]
+fn a_run_that_was_asked_to_stop_is_orderly_however_briefly_it_lived() {
+    assert!(orderly_exit(true, INSTANT_RUN, true));
+    assert!(orderly_exit(true, Duration::from_millis(1), true));
+    // Being asked to stop does not excuse ending badly.
+    assert!(!orderly_exit(false, INSTANT_RUN, true));
+}
+
+#[test]
+fn repeated_requested_stops_never_open_the_restart_circuit() {
+    // The shape that took every prompt down: a second runtime sharing the
+    // guard home stops this one's resident the instant it starts, over and
+    // over inside one window. Each of those is a complete lifecycle.
+    let scope = temp_scope("requested-stop-loop");
+    for _ in 0..(MAX_RESTARTS_PER_WINDOW * 3) {
+        consume(&scope).expect("a stop that was asked for is never a restart");
+        record_requested_stop(&scope, SERVING_CHILD).unwrap();
+        backdate_window(&scope, INSTANT_RUN.as_millis() as u64 + 1_000);
+        let stop_requested = take_requested_stop(&scope, SERVING_CHILD);
+        assert!(stop_requested);
+        release_after_exit(
+            &scope,
+            orderly_exit(true, INSTANT_RUN, stop_requested),
+            INSTANT_RUN,
+        )
+        .unwrap();
+        assert_eq!(read_budget(&scope).attempts, 0);
+    }
+    consume(&scope).expect("the circuit stays closed after repeated requested stops");
+
+    std::fs::remove_dir_all(scope).unwrap();
 }
 
 #[test]
@@ -310,7 +390,7 @@ fn a_resident_that_exits_zero_immediately_keeps_its_restart_charge() {
     let scope = temp_scope("instant-success");
     for _ in 0..MAX_RESTARTS_PER_WINDOW {
         consume(&scope).unwrap();
-        release_after_exit(&scope, true, INSTANT_RUN).unwrap();
+        release_after_exit(&scope, orderly_exit(true, INSTANT_RUN, false), INSTANT_RUN).unwrap();
     }
     assert_eq!(
         consume(&scope).unwrap_err(),
@@ -380,4 +460,129 @@ fn an_older_run_cannot_clear_a_newer_windows_crash_circuit() {
     );
 
     std::fs::remove_dir_all(scope).unwrap();
+}
+
+/// A state base laid out the way a spawn sees it: the verifier key beside the
+/// scope directory, because `consume_for_spawn` refuses to charge an install
+/// whose policy key is missing before it looks at the budget at all.
+fn spawn_state_base(label: &str) -> PathBuf {
+    let state_base = std::env::temp_dir().join(format!(
+        "hol-guard-restart-spawn-{label}-{}-{}",
+        std::process::id(),
+        now_ms().unwrap()
+    ));
+    fs::create_dir(&state_base).unwrap();
+    fs::write(
+        state_base.join(crate::policy_store::VERIFIER_KEY_FILE_NAME),
+        [0_u8; crate::policy_store::VERIFIER_KEY_BYTES],
+    )
+    .unwrap();
+    fs::create_dir(state_base.join("scope")).unwrap();
+    state_base
+}
+
+#[test]
+fn a_charge_the_spawn_never_completes_is_not_reported_as_a_start() {
+    let state_base = spawn_state_base("charge");
+    let scope = state_base.join("scope");
+    let deadline = Instant::now() + Duration::from_secs(5);
+
+    // Three charges the caller never turns into a running resident: the budget
+    // has spent its window, but nothing was ever started, so a support request
+    // must not read this install as three healthy runs.
+    consume_for_spawn(&state_base, &scope, deadline).unwrap();
+    consume_for_spawn(&state_base, &scope, deadline).unwrap();
+    consume_for_spawn(&state_base, &scope, deadline).unwrap();
+
+    assert!(super::super::lifecycle_journal::health(&scope)
+        .unwrap()
+        .is_none());
+
+    fs::remove_dir_all(state_base).unwrap();
+}
+
+#[test]
+fn a_start_the_budget_refuses_is_the_one_event_a_failed_spawn_leaves() {
+    let state_base = spawn_state_base("refused");
+    let scope = state_base.join("scope");
+    let deadline = Instant::now() + Duration::from_secs(5);
+
+    for _ in 0..MAX_RESTARTS_PER_WINDOW {
+        consume_for_spawn(&state_base, &scope, deadline).unwrap();
+    }
+    assert_eq!(
+        consume_for_spawn(&state_base, &scope, deadline).unwrap_err(),
+        "native_resident_restart_circuit_open"
+    );
+
+    let health = super::super::lifecycle_journal::health(&scope)
+        .unwrap()
+        .unwrap();
+    assert_eq!(health.state, "critical");
+    assert_eq!(health.refused_starts, 1);
+    assert_eq!(health.starts, 0);
+    assert_eq!(health.last_event, "start_refused");
+
+    fs::remove_dir_all(state_base).unwrap();
+}
+
+#[test]
+fn a_spawn_refused_for_its_policy_key_never_reaches_the_budget_or_the_journal() {
+    let state_base = spawn_state_base("nokey");
+    let scope = state_base.join("scope");
+    fs::remove_file(state_base.join(crate::policy_store::VERIFIER_KEY_FILE_NAME)).unwrap();
+
+    assert_eq!(
+        consume_for_spawn(&state_base, &scope, Instant::now() + Duration::from_secs(5))
+            .unwrap_err(),
+        "native_policy_verifier_key_missing"
+    );
+    assert!(super::super::lifecycle_journal::health(&scope)
+        .unwrap()
+        .is_none());
+    assert!(!scope.join("restart-budget.json").exists());
+
+    fs::remove_dir_all(state_base).unwrap();
+}
+
+#[test]
+fn a_refused_start_is_recorded_even_while_the_journal_is_busy() {
+    let state_base = spawn_state_base("busy");
+    let scope = state_base.join("scope");
+    let deadline = Instant::now() + Duration::from_secs(5);
+
+    for _ in 0..MAX_RESTARTS_PER_WINDOW {
+        consume_for_spawn(&state_base, &scope, deadline).unwrap();
+    }
+
+    // The contended case this refusal path actually meets: a supervisor is
+    // recording an exit while the circuit that exit opened refuses a client.
+    // The refusal is the only event that makes the journal read `critical`, so
+    // losing it here would report a crash loop as merely degraded.
+    let (held, release) = std::sync::mpsc::channel();
+    let holder = {
+        let scope = scope.clone();
+        std::thread::spawn(move || {
+            let lock = super::super::lifecycle_journal::lock_for_test(&scope);
+            held.send(()).unwrap();
+            std::thread::sleep(Duration::from_millis(60));
+            drop(lock);
+        })
+    };
+    release.recv().unwrap();
+
+    assert_eq!(
+        consume_for_spawn(&state_base, &scope, deadline).unwrap_err(),
+        "native_resident_restart_circuit_open"
+    );
+    holder.join().unwrap();
+
+    let health = super::super::lifecycle_journal::health(&scope)
+        .unwrap()
+        .unwrap();
+    assert_eq!(health.state, "critical");
+    assert_eq!(health.refused_starts, 1);
+    assert_eq!(health.last_event, "start_refused");
+
+    fs::remove_dir_all(state_base).unwrap();
 }

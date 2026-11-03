@@ -5,17 +5,13 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 from ..approvals import first_approval_url, queue_blocked_approvals
 from ..codex_resume import seed_request_resume_record
 from ..models import GuardArtifact, HarnessDetection
-from ..schemas import build_surface_server_contract
-from ..schemas.surface_server import (
-    CURRENT_PROTOCOL_VERSION,
-    SCHEMA_VERSION,
-    SUPPORTED_PROTOCOL_VERSIONS,
-)
+from ..schemas.surface_server import surface_server_contract, surface_server_handshake
 from ..store import GuardStore
 
 SERVER_METHODS = (
@@ -68,20 +64,21 @@ class GuardSurfaceRuntime:
         supported_protocol_versions: tuple[str, ...] = (),
         include_sessions: bool = True,
     ) -> dict[str, object]:
-        negotiated_version = _negotiate_protocol_version(supported_protocol_versions)
-        client_id = uuid.uuid4().hex
-        contract = build_surface_server_contract()
-        protocol_payload = contract.get("protocol")
-        protocol_bundle: dict[str, object] = (
-            {str(key): value for key, value in protocol_payload.items()} if isinstance(protocol_payload, dict) else {}
+        handshake = surface_server_handshake(
+            supported_protocol_versions,
+            guard_home=Path(self.store.guard_home),
         )
-        protocol_bundle["negotiated_version"] = negotiated_version
+        negotiated_version = handshake.get("negotiated_version")
+        if not isinstance(negotiated_version, str):
+            raise ValueError("unsupported_protocol_version")
+        contract = surface_server_contract(handshake)
+        client_id = uuid.uuid4().hex
         response: dict[str, object] = {
             "protocol_version": negotiated_version,
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": contract.get("schema_version"),
             "schema": contract,
             "client_id": client_id,
-            "protocol": protocol_bundle,
+            "protocol": handshake["protocol"],
             "server_capabilities": {
                 "methods": list(SERVER_METHODS),
                 "notifications": list(SERVER_NOTIFICATIONS),
@@ -124,51 +121,6 @@ class GuardSurfaceRuntime:
         )
         self.store.add_event("session/started", {"session": session}, _now())
         return session
-
-    def attach_client(
-        self,
-        *,
-        client_id: str,
-        surface: str,
-        session_id: str | None = None,
-        metadata: dict[str, object] | None = None,
-        lease_seconds: int = 60,
-    ) -> dict[str, object]:
-        if session_id is not None and self.store.get_guard_session(session_id) is None:
-            raise ValueError(f"Unknown guard session: {session_id}")
-        attachment = self.store.attach_guard_client(
-            client_id=client_id,
-            surface=surface,
-            session_id=session_id,
-            metadata=metadata or {},
-            lease_seconds=lease_seconds,
-            now=_now(),
-        )
-        if session_id is not None:
-            self._set_session_status(session_id, "attached")
-        self.store.add_event("session/attached", {"attachment": attachment}, _now())
-        return attachment
-
-    def renew_client(
-        self,
-        *,
-        client_id: str,
-        lease_id: str,
-        lease_seconds: int = 60,
-    ) -> dict[str, object]:
-        attachment = self.store.renew_guard_client_attachment(
-            client_id=client_id,
-            lease_id=lease_id,
-            lease_seconds=lease_seconds,
-            now=_now(),
-        )
-        if attachment is None:
-            raise ValueError(f"Unknown guard client lease: {client_id}")
-        self.store.add_event("session/attached", {"attachment": attachment}, _now())
-        return attachment
-
-    def has_live_surface(self, surface: str) -> bool:
-        return len(self.store.list_guard_client_attachments(surface=surface)) > 0
 
     def has_surface_opened(self, surface: str, open_key: str) -> bool:
         return self.store.has_guard_surface_open(surface=surface, open_key=open_key)
@@ -377,8 +329,6 @@ class GuardSurfaceRuntime:
             and self.has_surface_opened(surface, open_key)
         ):
             return {"surface": surface, "opened": False, "reason": "already-opened", "open_key": open_key}
-        if self.has_live_surface(surface):
-            return {"surface": surface, "opened": False, "reason": "live-client", "open_key": open_key}
         try:
             opened = opener(browser_url or approval_center_url)
         except Exception:
@@ -420,28 +370,6 @@ class GuardSurfaceRuntime:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _negotiate_protocol_version(supported_protocol_versions: tuple[str, ...]) -> str:
-    if not supported_protocol_versions:
-        return CURRENT_PROTOCOL_VERSION
-    supported = tuple(value for value in supported_protocol_versions if isinstance(value, str))
-    compatible_versions = [
-        version
-        for version in SUPPORTED_PROTOCOL_VERSIONS
-        if version in supported or any(_major(version) == _major(candidate) for candidate in supported)
-    ]
-    if compatible_versions:
-        return sorted(compatible_versions, key=_version_key, reverse=True)[0]
-    raise ValueError("unsupported_protocol_version")
-
-
-def _major(version: str) -> str:
-    return version.split(".", maxsplit=1)[0]
-
-
-def _version_key(version: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in version.split("."))
 
 
 def _parse_detection(payload: dict[str, object]) -> HarnessDetection:

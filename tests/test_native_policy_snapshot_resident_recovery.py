@@ -259,7 +259,7 @@ def _publisher_with_flaky_resident(
             return _TIMED_OUT
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,

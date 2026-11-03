@@ -199,6 +199,13 @@ def _good(request: dict[str, object], body: dict[str, object], **overrides: obje
 
 
 def _resident(monkeypatch: pytest.MonkeyPatch, reply) -> None:
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=object(),
+        capabilities=SimpleNamespace(features={"resident-protocol-v2", route.DAEMON_ROUTE_FEATURE}),
+    )
+    monkeypatch.setattr(shared, "native_runtime_status", lambda: status)
     monkeypatch.setattr(shared, "_resolve_digest_home", lambda _home: Path("/tmp/daemon-route-home"))
     monkeypatch.setattr(shared, "ensure_resident_prerequisite", lambda _home: True)
     monkeypatch.setattr(shared, "record_resident", lambda *_args, **_kwargs: None)
@@ -287,11 +294,11 @@ def test_waiting_for_an_ask_slot_past_the_deadline_fails_closed(monkeypatch: pyt
     assert caught.value.code == "native_daemon_route_unavailable"
 
 
-def test_exact_action_asks_do_not_use_the_shared_route_slots(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dedicated_ask_slots_do_not_use_the_shared_route_slots(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident(monkeypatch, lambda request: pytest.fail("resident must not be asked"))
     monkeypatch.setattr(route, "_OPERATION", dataclasses.replace(route._OPERATION, timeout_seconds=0.05))
     exact_slots = threading.BoundedSemaphore(1)
-    # Route slots exhausted by long exact-action work must not block a route ask, and vice versa.
+    # A dedicated pool exhausted by long asks must not block a route ask, and vice versa.
     assert exact_slots.acquire(blocking=False)
     seen: list[object] = []
 
@@ -304,7 +311,6 @@ def test_exact_action_asks_do_not_use_the_shared_route_slots(monkeypatch: pytest
     assert seen == []
     assert route._ASK_SLOTS.acquire(blocking=False)
     route._ASK_SLOTS.release()
-    assert route.EXACT_ACTION_ASK_SLOTS is not route._ASK_SLOTS
 
 
 def test_slot_wait_and_resident_ask_share_one_deadline(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -63,8 +63,10 @@ def _classification(result: Mapping[str, object]) -> Mapping[str, object]:
         # returning the old unmodeled "no_match" status.
         ("git checkout --detach $commit", "review", "review"),
         ("git merge-base --is-ancestor $commit HEAD && cat .env", "review", "review"),
-        # Command substitution still fails native evaluation.
-        ("git merge-base --is-ancestor $(payload) HEAD", "native_unavailable", "block"),
+        # A substitution in argument position runs a program the text names,
+        # so it reaches the unmodeled review floor instead of an evaluation
+        # failure. It still cannot pass silently.
+        ("git merge-base --is-ancestor $(payload) HEAD", "no_match", "review"),
     ),
 )
 def test_widened_ancestry_loop_remains_sensitive(

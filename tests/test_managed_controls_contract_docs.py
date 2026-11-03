@@ -167,7 +167,7 @@ def test_local_navigation_uses_product_language_without_breaking_routes() -> Non
     assert 'href: "/extensions"' in navigation
     assert 'description: "Tools and capabilities protected on this device"' in navigation
     assert 'eyebrow="Rules & exceptions"' in rules_page
-    assert 'title="Remembered decisions and exceptions"' in rules_page
+    assert 'title="What Guard remembers, allows, and blocks"' in rules_page
     assert "Configure tools and capability posture in Extensions." in rules_page
     assert 'if (view === "policy") return "Rules & exceptions";' in app
     assert 'viewTitle("policy") === "Rules & exceptions"' in app_title_test
@@ -181,7 +181,7 @@ def test_packaged_dashboard_matches_the_reviewed_product_vocabulary() -> None:
     assert "Rules & exceptions" in dashboard_bundle
     assert "Tools and capabilities protected on this device" in dashboard_bundle
     assert "Rules & exceptions" in policy_bundle
-    assert "Remembered decisions and exceptions" in policy_bundle
+    assert "What Guard remembers, allows, and blocks" in policy_bundle
     assert "Configure tools and capability posture in Extensions." in policy_bundle
 
     for stale_copy in (

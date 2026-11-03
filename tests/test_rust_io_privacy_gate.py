@@ -60,11 +60,11 @@ def test_static_gate_rejects_new_command_field_in_serializer(tmp_path: Path) -> 
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
 
-    queue = tmp_path / "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py"
-    source = queue.read_text(encoding="utf-8")
-    marker = '                "schema": "hol-guard-native-hook-evidence.v1",\n'
+    metrics = tmp_path / "src/codex_plugin_scanner/guard/daemon/hook_metrics.py"
+    source = metrics.read_text(encoding="utf-8")
+    marker = '            "counters": dict(self._counters),\n'
     assert marker in source
-    queue.write_text(source.replace(marker, '                "command": "raw",\n' + marker, 1), encoding="utf-8")
+    metrics.write_text(source.replace(marker, '            "command": "raw",\n' + marker, 1), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="forbidden raw-content artifact field"):
         MODULE.validate(tmp_path)

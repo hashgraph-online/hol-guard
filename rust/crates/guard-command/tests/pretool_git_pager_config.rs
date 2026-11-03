@@ -109,7 +109,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     for (command, expected) in [
         ("git status --short", "deny"),
@@ -126,11 +126,15 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
                 cwd: repository.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&context),
         );
@@ -160,11 +164,15 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
                 cwd: repository.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&caller),
         );
@@ -209,11 +217,15 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
                 cwd: repository.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&caller),
         );
@@ -255,7 +267,7 @@ fn empty_git_pager_overrides_a_custom_pager_variable() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let mut without_git_pager = caller.clone();
     without_git_pager
@@ -274,11 +286,15 @@ fn empty_git_pager_overrides_a_custom_pager_variable() {
                 cwd: repository.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(context),
         );
@@ -315,7 +331,7 @@ fn piped_git_output_never_starts_a_configured_pager() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     for (command, expected) in [
         ("git log --oneline -2 | cat", "allow"),
@@ -340,11 +356,15 @@ fn piped_git_output_never_starts_a_configured_pager() {
                 cwd: repository.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&context),
         );

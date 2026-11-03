@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from ci.native_runtime.post_tool_review import HookReviewResponse
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewResponse
 from codex_plugin_scanner.guard.store import GuardStore
 
 

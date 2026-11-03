@@ -13,6 +13,7 @@ const approvalPassword = process.env.GUARD_INSTALLED_APPROVAL_PASSWORD ?? "";
 const extensionId = "command.api-gateway";
 const permissionId = "command.api-gateway.permission.delete";
 const governedRuleId = "command.api-gateway.delete";
+const REVIEW_TIMEOUT_MS = 60_000;
 
 async function installSession(page: import("@playwright/test").Page) {
   await page.addInitScript(({ daemon, token }) => {
@@ -75,22 +76,78 @@ async function openPolicy(page: import("@playwright/test").Page) {
   return page.locator(`[data-permission-id="${permissionId}"]`);
 }
 
-async function authenticateAndApply(page: import("@playwright/test").Page, count = 1) {
+type EffectiveControls = {
+  revision: number;
+  controls: Array<{ target: { kind: string; target_id: string }; state: string }>;
+  projection?: { permissions: Array<{ permission_id: string; effective_state: string; local_state: string }> };
+};
+
+/**
+ * The revision the panel says it saved. Waiting for a response to the apply is
+ * a race: the workspace also refreshes the effective controls while the
+ * mutation is in flight, and that earlier read answers 200 with the revision
+ * from before the save. The toast appears only once the save has landed.
+ */
+async function appliedRevision(page: import("@playwright/test").Page): Promise<number> {
+  const toast = page.getByTestId("extension-policy-applied-toast");
+  try {
+    // The first save on a freshly started daemon writes the authority and
+    // recomputes the projection, which takes longer than the default wait.
+    await expect(toast).toContainText(/Applied · revision \d+/, { timeout: 60_000 });
+  } catch (error) {
+    // A refused save renders in the workspace alert. Report the sentence the
+    // operator would have read, so a regression names the failure instead of
+    // leaving a bare timeout.
+    const alert = await page.getByRole("alert").first().innerText().catch(() => "<no alert rendered>");
+    throw new Error(`applying the reviewed change failed: ${alert}`, { cause: error });
+  }
+  const text = await toast.innerText();
+  const revision = Number(/Applied · revision (\d+)/.exec(text)?.[1]);
+  expect(Number.isInteger(revision)).toBe(true);
+  return revision;
+}
+
+/** The controls the daemon serves, read back through the dashboard's own session. */
+async function readEffective(page: import("@playwright/test").Page): Promise<EffectiveControls> {
+  return page.evaluate(async () => {
+    const token = sessionStorage.getItem("guard-token") ?? "";
+    const response = await fetch("/v1/extension-controls/effective", { headers: { "X-Guard-Dashboard-Session": token } });
+    if (!response.ok) throw new Error(`effective controls answered ${response.status}`);
+    return await response.json() as {
+      revision: number;
+      controls: Array<{ target: { kind: string; target_id: string }; state: string }>;
+      projection?: { permissions: Array<{ permission_id: string; effective_state: string; local_state: string }> };
+    };
+  });
+}
+
+async function authenticateAndApply(page: import("@playwright/test").Page, count = 1): Promise<EffectiveControls> {
   expect(approvalPassword.length).toBeGreaterThan(20);
   const dialog = page.getByRole("dialog", { name: `Review and apply ${count} protection setting change${count === 1 ? "" : "s"}` });
-  await expect(dialog).toBeVisible();
+  await expect(dialog).toBeVisible({ timeout: REVIEW_TIMEOUT_MS });
   await dialog.getByLabel("Approval password").fill(approvalPassword);
-  const effectiveResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return url.pathname === "/v1/extension-controls/effective" && response.status() === 200;
-  });
   await dialog.getByRole("button", { name: `Apply ${count} reviewed change${count === 1 ? "" : "s"}` }).click();
-  const response = await effectiveResponse;
-  return response.json() as Promise<{
-    revision: number;
-    controls: Array<{ target: { kind: string; target_id: string }; state: string }>;
-    projection?: { permissions: Array<{ permission_id: string; effective_state: string; local_state: string }> };
-  }>;
+  const revision = await appliedRevision(page);
+  const effective = await readEffective(page);
+  // What the operator was told was saved has to be what the daemon now serves.
+  expect(effective.revision).toBe(revision);
+  return effective;
+}
+
+/**
+ * Distance from the toolbar to the tool count, sampled in one frame. The
+ * catalog scrolls inside the workspace, so a document- or viewport-relative
+ * top moves whenever clicking the trigger scrolls it into view, which is not
+ * a layout shift. The gap between the two elements only changes if the filter
+ * popover actually pushes the catalog down.
+ */
+async function catalogCountOffset(page: import("@playwright/test").Page): Promise<number> {
+  return page.evaluate(() => {
+    const toolbar = document.querySelector('[data-testid="catalog-filters"]');
+    const count = document.querySelector('[data-testid="catalog-tool-count"]');
+    if (!toolbar || !count) throw new Error("the catalog toolbar or tool count is missing");
+    return count.getBoundingClientRect().top - toolbar.getBoundingClientRect().top;
+  });
 }
 
 async function openDeveloperDetails(page: import("@playwright/test").Page) {
@@ -101,6 +158,7 @@ async function openDeveloperDetails(page: import("@playwright/test").Page) {
 }
 
 test("installed Protection Center keeps canonical routes and real-daemon inspection", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
   const extensionResponses: { path: string; status: number }[] = [];
   const runtimeErrors: string[] = [];
   page.on("pageerror", (error) => runtimeErrors.push(error.message));
@@ -117,6 +175,15 @@ test("installed Protection Center keeps canonical routes and real-daemon inspect
   await page.goto("/extensions");
   await expectSecretSafeUrl(page);
   await expect(page.getByRole("heading", { name: "Extensions", level: 1 })).toBeVisible();
+  // The first catalog read on a fresh installed daemon prepares the native
+  // runtime, so it gets longer than the default wait. If it never loads, the
+  // failure names what the workspace showed and what the daemon answered.
+  await expect(page.getByRole("heading", { name: "All tools" })).toBeAttached({ timeout: 30_000 }).catch(async (error: unknown) => {
+    const workspace = await page.getByTestId("extensions-workspace").innerText({ timeout: 2_000 }).catch(() => "<absent>");
+    throw new Error(
+      `${String(error)}\nworkspace: ${workspace.slice(0, 600)}\nextension-controls: ${JSON.stringify(extensionResponses)}\npage errors: ${JSON.stringify(runtimeErrors)}`,
+    );
+  });
   await expect(page.getByRole("heading", { name: "All tools" })).toBeVisible();
   await expect(page.getByTestId("catalog-tool-count")).toHaveText(/^[1-9]\d* tools$/);
   await expect(page.getByRole("button", { name: /Git/ }).first()).toBeVisible();
@@ -128,18 +195,15 @@ test("installed Protection Center keeps canonical routes and real-daemon inspect
   await expect(page.getByRole("group", { name: "Trust" })).toBeHidden();
   await expect(page.getByRole("group", { name: "Kind" })).toBeHidden();
   await expect(page.getByRole("group", { name: "Area" })).toBeHidden();
-  const toolCountTop = await page.getByTestId("catalog-tool-count").evaluate((element) => element.getBoundingClientRect().top + window.scrollY);
+  const toolCountOffset = await catalogCountOffset(page);
   await filtersTrigger.click();
   await expect(filtersTrigger).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("group", { name: "Trust" })).toBeVisible();
   await expect(page.getByRole("group", { name: "Kind" })).toBeVisible();
   await expect(page.getByRole("group", { name: "Area" })).toBeVisible();
   await expect(page.getByTestId("catalog-tool-count")).toHaveText(/^[1-9]\d* tools$/);
-  const toolCountTopOpen = await page.getByTestId("catalog-tool-count").evaluate((element) => element.getBoundingClientRect().top + window.scrollY);
-  // Clicking the trigger can scroll it into view. Compare document positions
-  // Atomically sample document positions so a scroll frame between protocol
-  // calls cannot look like layout movement. Real layout shifts still fail.
-  expect(Math.abs(toolCountTopOpen - toolCountTop)).toBeLessThanOrEqual(1);
+  const toolCountOffsetOpen = await catalogCountOffset(page);
+  expect(Math.abs(toolCountOffsetOpen - toolCountOffset)).toBeLessThanOrEqual(1);
   const externalFilter = page.getByTestId("catalog-filters").getByRole("button", { name: /^External,/ });
   await expect(externalFilter).toBeVisible();
   await externalFilter.click();
@@ -252,12 +316,19 @@ test("installed Protection Center keeps canonical routes and real-daemon inspect
   expect(extensionResponses.some((response) => response.path === "/v2/extension-controls/catalog/extensions/command.git/rules" && response.status === 200)).toBe(true);
   expect(extensionResponses.some((response) => response.path === "/v1/extension-controls/catalog")).toBe(false);
   expect(extensionResponses.some((response) => response.path === "/v1/extension-controls/effective" && response.status === 200)).toBe(true);
-  expect(extensionResponses.every((response) => (response.status >= 200 && response.status < 300) || response.status === 304)).toBe(true);
+  // A daemon still preparing its catalog read model answers a v2 catalog read
+  // with 503 and the dashboard retries it; every other answer is a success.
+  expect(extensionResponses.every((response) =>
+    (response.status >= 200 && response.status < 300)
+    || response.status === 304
+    || (response.status === 503 && response.path.startsWith("/v2/extension-controls/catalog/")),
+  )).toBe(true);
   expect(runtimeErrors).toEqual([]);
 });
 
 test("installed dashboard previews and proof-applies a permission block", async ({ page }, testInfo) => {
   test.skip(policyPhase !== "apply", "policy apply phase runs before the deliberate daemon restart");
+  test.setTimeout(180_000);
   const runtimeErrors: string[] = [];
   page.on("pageerror", (error) => runtimeErrors.push(error.message));
   const row = await openPolicy(page);
@@ -267,6 +338,9 @@ test("installed dashboard previews and proof-applies a permission block", async 
   await expect(page.getByText("1 unsaved setting change.")).toBeVisible();
   await page.getByRole("button", { name: "Review 1 change" }).click();
   const review = page.getByRole("dialog", { name: "Review and apply 1 protection setting change" });
+  // The first preview on a freshly started daemon computes the real outcome
+  // from the native runtime, which takes longer than the default wait.
+  await expect(review).toBeVisible({ timeout: REVIEW_TIMEOUT_MS });
   await expect(review.getByText("Protection review", { exact: true }).first()).toBeVisible();
   await review.getByText("Developer details", { exact: true }).click();
   await expect(review.getByText(governedRuleId, { exact: true })).toBeVisible();
@@ -274,7 +348,6 @@ test("installed dashboard previews and proof-applies a permission block", async 
 
   const effective = await authenticateAndApply(page);
   expect(effective.revision).toBeGreaterThan(0);
-  await expect(page.getByTestId("extension-policy-applied-toast")).toContainText(`Applied · revision ${effective.revision}`);
   expect(effective.controls).toContainEqual({ target: { kind: "permission", target_id: permissionId }, state: "disabled" });
   expect(effective.projection?.permissions.find((permission) => permission.permission_id === permissionId)?.effective_state).toBe("blocked");
   await expectSecretSafeUrl(page);
@@ -286,6 +359,7 @@ test("installed dashboard previews and proof-applies a permission block", async 
 
 test("permission authority persists across daemon restart and can be proof-restored", async ({ page }, testInfo) => {
   test.skip(policyPhase !== "verify", "persistence phase runs only after the workflow restarts the real daemon");
+  test.setTimeout(180_000);
   const runtimeErrors: string[] = [];
   page.on("pageerror", (error) => runtimeErrors.push(error.message));
   const row = await openPolicy(page);
@@ -294,7 +368,7 @@ test("permission authority persists across daemon restart and can be proof-resto
 
   await row.getByRole("radio", { name: "Recommended" }).click();
   await page.getByRole("button", { name: "Review 1 change" }).click();
-  await expect(page.getByRole("dialog", { name: "Review and apply 1 protection setting change" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Review and apply 1 protection setting change" })).toBeVisible({ timeout: REVIEW_TIMEOUT_MS });
   const effective = await authenticateAndApply(page);
   expect(effective.controls.some((control) => control.target.kind === "permission" && control.target.target_id === permissionId)).toBe(false);
   const restoredRow = await openPolicy(page);

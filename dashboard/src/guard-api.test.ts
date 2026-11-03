@@ -20,6 +20,7 @@ import {
   readGuardToken,
   runPackageFirewallAction,
   runPackageSync,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS,
   repairSupplyChainProtection,
   startPackageFirewallConnect,
 	  runAuditRemediation,
@@ -1500,6 +1501,34 @@ try {
   globalThis.setTimeout = originalSetTimeout;
 }
 assert(bodySignal?.aborted, "a stalled response body aborts the pending request");
+
+installGuardWindow("?guard-token=token-sync-deadline&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const syncDeadline: { expire?: () => void; delay?: number } = {};
+let syncSignal: AbortSignal | undefined;
+globalThis.setTimeout = ((callback: () => void, delay?: number) => {
+  syncDeadline.expire = callback;
+  syncDeadline.delay = delay;
+  return 1 as unknown as ReturnType<typeof setTimeout>;
+}) as typeof setTimeout;
+globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  syncSignal = init?.signal ?? undefined;
+  return new Promise<Response>(() => undefined);
+};
+const pendingSync = runPackageSync({ approval_password: "pw" });
+await Promise.resolve();
+assert(syncSignal !== undefined, "an intel sync passes a cancellation signal to fetch");
+assert(syncDeadline.delay === SUPPLY_CHAIN_SYNC_TIMEOUT_MS, "an intel sync waits for the published sync deadline");
+syncDeadline.expire?.();
+let syncTimeout: unknown = null;
+try {
+  await pendingSync;
+} catch (error) {
+  syncTimeout = error;
+} finally {
+  globalThis.setTimeout = originalSetTimeout;
+}
+assert(syncTimeout instanceof GuardOperationTimeoutError, "a stalled intel sync reports a bounded timeout");
+assert(syncSignal?.aborted === true, "a stalled intel sync aborts the pending fetch");
 
 installGuardWindow("?guard-token=token-sync&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const syncCalls = installFetchStub({

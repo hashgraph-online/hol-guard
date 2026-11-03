@@ -37,6 +37,18 @@ pub(super) fn plan_note_output_target(target: &str, context: PathContext<'_>) ->
 }
 
 pub(super) fn safe_output_target(target: &str, context: PathContext<'_>) -> bool {
+    // NTFS reads any later colon as a stream name, and `C:name` is relative
+    // to that drive's own directory. The only colon a Windows target may
+    // hold is the designator of a `C:/` drive path.
+    #[cfg(windows)]
+    if target.char_indices().any(|(index, value)| {
+        value == ':'
+            && !(index == 1
+                && target.as_bytes()[0].is_ascii_alphabetic()
+                && target.as_bytes().get(2) == Some(&b'/'))
+    }) {
+        return false;
+    }
     if plan_note_output_target(target, context) {
         return true;
     }
@@ -71,6 +83,10 @@ pub(super) fn safe_output_target(target: &str, context: PathContext<'_>) -> bool
                 None => return false,
             },
             std::path::Component::RootDir | std::path::Component::CurDir => {}
+            // `C:/...` is how Git Bash agents spell an absolute Windows path.
+            #[cfg(windows)]
+            std::path::Component::Prefix(prefix)
+                if matches!(prefix.kind(), std::path::Prefix::Disk(_)) => {}
             _ => return false,
         }
     }
@@ -102,6 +118,18 @@ pub(super) fn safe_output_target(target: &str, context: PathContext<'_>) -> bool
                 .strip_prefix(base)
                 .is_ok_and(|rest| no_symlink_components(base, rest));
         }
+        // Git Bash's `/tmp` is the profile's `AppData\Local\Temp`, which an
+        // agent may also spell as a drive path. The temporary file proof
+        // locates that folder from the canonical home and refuses links,
+        // hidden parts and credential-shaped names.
+        #[cfg(windows)]
+        if crate::pretool::chain_temporary::temporary_file_target(
+            target,
+            context.home_dir,
+            context.cwd,
+        ) {
+            return true;
+        }
         if let Some(cwd) = cwd.filter(|cwd| path.starts_with(cwd)) {
             return path != cwd
                 && path
@@ -111,10 +139,19 @@ pub(super) fn safe_output_target(target: &str, context: PathContext<'_>) -> bool
         // A session started in a directory above its checkouts, or in a
         // sibling one, still writes the repository it works on. Instruction
         // files were refused above.
+        // The root is resolved, and the home may be spelled through a
+        // symlinked parent, so take the part below the root from the resolved
+        // target. `sibling_repository_root` already required that part to be
+        // spelled exactly as the hook spelled it below the home.
         return bounded_write(target, context)
             && sibling_repository_root(path, context).is_some_and(|root| {
-                path.strip_prefix(&root)
-                    .is_ok_and(|rest| no_symlink_components(&root, rest))
+                crate::pretool::worktree_writes::canonical_write_target(path).is_some_and(
+                    |canonical| {
+                        canonical
+                            .strip_prefix(&root)
+                            .is_ok_and(|rest| no_symlink_components(&root, rest))
+                    },
+                )
             });
     }
     cwd.is_some_and(|cwd| no_symlink_components(cwd, path))
@@ -161,16 +198,89 @@ fn sibling_repository_root(
 ) -> Option<std::path::PathBuf> {
     let home = std::fs::canonicalize(context.home_dir?).ok()?;
     let canonical = crate::pretool::worktree_writes::canonical_write_target(path)?;
-    let root =
-        crate::pretool::contained_wrapper::sibling_project_root(&canonical, context.home_dir?)?;
+    let root = repository_below_home(&canonical, context.home_dir?, &home)?;
     // The repository must sit below the home itself, not merely below a
     // temporary directory the helper also accepts, and must be spelled the
-    // way the filesystem resolves it, so no alias redirects the write.
+    // way the filesystem resolves it, so no alias redirects the write. The
+    // home's own spelling is not such an alias: a home reached through a
+    // symlinked parent, as `/var/folders/...` is on macOS, resolves to a
+    // different prefix than the one the hook was handed. Comparing the path
+    // below the home keeps a symlink inside the home refused.
     (root != home
         && root.starts_with(&home)
-        && canonical.as_path() == path
+        && spelling_survives_the_filesystem(path)
+        && crate::pretool::safe_writes::home_spelling_matches_target(
+            path,
+            &canonical,
+            context.home_dir,
+            &home,
+        )
         && validated_git_marker(&root))
     .then_some(root)
+}
+
+/// Whether every component of `path` names the file the filesystem will open.
+/// On Windows a trailing dot or space is dropped when the file is created, so
+/// `AGENTS.md.` lands on the protected name that `instruction_file` and
+/// `write_target_protected` spell literally and would otherwise miss. Such a
+/// target keeps its review rather than taking the sibling-repository route.
+#[cfg(not(unix))]
+fn spelling_survives_the_filesystem(path: &std::path::Path) -> bool {
+    path.components().all(|component| match component {
+        std::path::Component::Normal(name) => name
+            .to_str()
+            .is_some_and(|name| !name.ends_with('.') && !name.ends_with(' ')),
+        _ => true,
+    })
+}
+
+/// [`spelling_survives_the_filesystem`] on Unix, where a trailing dot or space
+/// is part of the name and a screen that spells the protected name literally
+/// already sees a different file.
+#[cfg(unix)]
+fn spelling_survives_the_filesystem(_path: &std::path::Path) -> bool {
+    true
+}
+
+/// The nearest ancestor of the resolved `canonical` target that holds a `.git`
+/// entry. On Unix this is the repository a `cd` into a sibling checkout is
+/// contained to, which also requires the agent's user to own it.
+#[cfg(unix)]
+fn repository_below_home(
+    canonical: &std::path::Path,
+    home_dir: &str,
+    _home: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    crate::pretool::contained_wrapper::sibling_project_root(canonical, home_dir)
+}
+
+/// Windows has no execution sink to contain a `cd` into a sibling checkout,
+/// so that route stays closed, but a redirect writes one file the same way a
+/// file-edit tool does. The resolved home must be a local disk path, so a
+/// profile on a network share stays reviewed (a mapped drive or a link onto a
+/// share resolves to its `\\?\UNC\` form), and the repository must be owned
+/// by the agent's user, as on Unix. The caller still validates the marker and
+/// screens the target.
+#[cfg(not(unix))]
+fn repository_below_home(
+    canonical: &std::path::Path,
+    _home_dir: &str,
+    home: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    use std::path::{Component, Prefix};
+    let local = matches!(
+        home.components().next(),
+        Some(Component::Prefix(prefix)) if matches!(prefix.kind(), Prefix::VerbatimDisk(_))
+    );
+    if !local || !canonical.starts_with(home) {
+        return None;
+    }
+    canonical
+        .ancestors()
+        .take_while(|directory| *directory != home)
+        .find(|directory| directory.join(".git").symlink_metadata().is_ok())
+        .filter(|root| guard_runtime_windows_process::owned_by_current_user(root))
+        .map(std::path::Path::to_path_buf)
 }
 
 /// An empty `.git` marker is not a repository. Bound this check to Git's
@@ -210,6 +320,17 @@ pub(super) fn bounded_write(target: &str, context: PathContext<'_>) -> bool {
     // Home is outside the workspace even when it sits below a temporary
     // directory, as it does for disposable and CI accounts.
     let path = std::path::Path::new(target);
+    // On Windows the profile's temporary folder lies below home, so prove it
+    // before the home rule below admits only a sibling repository.
+    #[cfg(windows)]
+    if path.is_absolute()
+        && bounded_native_temporary_write_target(target, context.home_dir, context.cwd)
+    {
+        return !crate::pretool::curl_reads::output_targets::existing_executable(
+            target,
+            context.cwd,
+        );
+    }
     let under = |base: Option<&str>| base.is_some_and(|base| path.starts_with(base));
     if path.is_absolute() && under(context.home_dir) && !under(context.cwd) {
         // Only a file in a repository beside the session's directory is a

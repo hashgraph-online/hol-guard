@@ -14,9 +14,10 @@ use crate::codex_output_fs as pyfs;
 use crate::codex_output_py::PyPath;
 use crate::sfrs_developer_graph::git_segment;
 use crate::sfrs_git_cached_diff::{
-    cached_diff_operands_are_safe, command_has_execution_routed_git_cached_diff,
-    command_has_owned_git_cached_diff, executable_tokens, git_diff_operands,
-    has_unproven_repository_selector, listed, proof_cached_diff_tokens, tokens_are_cached_diff,
+    cached_diff_operand_directory, cached_diff_operands_are_safe,
+    command_has_execution_routed_git_cached_diff, command_has_owned_git_cached_diff,
+    executable_tokens, git_diff_operands, has_unproven_repository_selector, listed,
+    proof_cached_diff_tokens, tokens_are_cached_diff,
 };
 use crate::sfrs_shell_tokens::shell_segment_primary_command;
 use crate::shell_execution_context::{
@@ -107,7 +108,8 @@ fn git_cached_diff_segment_is_safe(
     let Some(operands) = git_diff_operands(tokens) else {
         return false;
     };
-    if !cached_diff_operands_are_safe(&operands, ctx) {
+    let operand_directory = cached_diff_operand_directory(tokens, segment.effective_cwd.as_deref());
+    if !cached_diff_operands_are_safe(&operands, operand_directory.as_deref(), ctx) {
         return false;
     }
     let mut synthetic = segment.clone();

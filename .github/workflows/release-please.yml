@@ -21,7 +21,7 @@ jobs:
   release-please:
     name: Open or tag the next stable release
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       pull-requests: write
@@ -53,7 +53,7 @@ jobs:
     name: Dispatch stable PyPI publish
     if: needs.release-please.outputs.release_created == 'true'
     needs: release-please
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: write
       contents: read
@@ -89,7 +89,7 @@ jobs:
   dispatch-alpha-publish:
     name: Dispatch optional alpha publish
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: write
       contents: read

@@ -33,6 +33,7 @@ pub(crate) fn get_approval_request(
     connection: &Connection,
     guard_home: &str,
     args: &Args<'_>,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     let Some(row) = query_one(
         connection,
@@ -44,7 +45,11 @@ pub(crate) fn get_approval_request(
     };
     let projection = project(&row, guard_home)?;
     let mut built = if args.flag("derive_scope")? {
-        payloads(vec![(&row, projection)], args.opt_str("cwd")?)?
+        payloads(
+            vec![(&row, projection)],
+            args.opt_str("cwd")?,
+            owner.map(|owner| (connection, owner)),
+        )?
     } else {
         let (mut payload, contract_error) = draft(&row, &projection)?;
         if let Some(error) = contract_error {
@@ -62,6 +67,51 @@ pub(crate) fn get_approval_request(
     Ok(Value::Object(payload))
 }
 
+/// A queue write's reply with the row it stored, when the caller asked for it
+/// with `return_row`: `{"request_id", "row"}` plus the write's own fields.
+/// The row is `get_approval_request` with the derived scope, read inside the
+/// write's transaction, so the hook queues a review and reads it back in one
+/// resident call. A failed read never undoes the write: it rolls back to its
+/// own savepoint and answers `row_error` instead, and the caller reads the
+/// row separately as it did before. A write that queued nothing is answered
+/// unchanged.
+pub(crate) fn with_stored_row(
+    connection: &Connection,
+    guard_home: &str,
+    args: &Args<'_>,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
+    written: Value,
+) -> StoreResult<Value> {
+    if !args.flag("return_row")? {
+        return Ok(written);
+    }
+    let mut reply = match written {
+        Value::String(request_id) => Map::from_iter([("request_id".to_owned(), json!(request_id))]),
+        Value::Object(reply) => reply,
+        other => return Ok(other),
+    };
+    let Some(request_id) = reply.get("request_id").filter(|id| id.is_string()).cloned() else {
+        return Ok(Value::Object(reply));
+    };
+    let mut read = Map::from_iter([
+        ("request_id".to_owned(), request_id),
+        ("derive_scope".to_owned(), Value::Bool(true)),
+    ]);
+    if let Some(cwd) = args.raw("cwd") {
+        read.insert("cwd".to_owned(), cwd.clone());
+    }
+    connection.execute_batch("savepoint stored_row")?;
+    let row = get_approval_request(connection, guard_home, &Args(&read), owner);
+    // The read changes nothing the write keeps, as the snapshot read it
+    // replaces rolled back too.
+    connection.execute_batch("rollback to stored_row; release stored_row")?;
+    match row {
+        Ok(row) => reply.insert("row".to_owned(), row),
+        Err(error) => reply.insert("row_error".to_owned(), json!(error.code())),
+    };
+    Ok(Value::Object(reply))
+}
+
 /// `list_approval_requests(status, harness, limit, cursor, search)` as
 /// bounded chunks: `{"items": [...], "complete": bool}`. An incomplete chunk
 /// also carries `after`, the sort key of its last item; the caller passes it
@@ -71,6 +121,7 @@ pub(crate) fn list_approval_requests(
     connection: &Connection,
     guard_home: &str,
     args: &Args<'_>,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     let limit = args.raw("limit").map(|_| args.int("limit")).transpose()?;
     let taken = args.raw("taken").map_or(Ok(0), |_| args.int("taken"))?;
@@ -98,7 +149,12 @@ pub(crate) fn list_approval_requests(
     // projecting rows the next chunk reads again.
     for row in &rows {
         let projection = project(row, guard_home)?;
-        let item = payloads(vec![(row, projection)], cwd)?.remove(0);
+        let item = payloads(
+            vec![(row, projection)],
+            cwd,
+            owner.map(|owner| (connection, owner)),
+        )?
+        .remove(0);
         bytes += serde_json::to_vec(&item).map_or(0, |encoded| encoded.len());
         if !returned.is_empty() && bytes > PAGE_BYTES {
             break;
@@ -124,6 +180,7 @@ pub(crate) fn continuation(row: &Row) -> Value {
 pub(crate) fn payloads(
     rows: Vec<(&Row, Value)>,
     cwd: Option<&str>,
+    owner: Option<(&Connection, &crate::policy_store::PolicySnapshotStore)>,
 ) -> StoreResult<Vec<Map<String, Value>>> {
     let drafts = rows
         .iter()
@@ -131,7 +188,7 @@ pub(crate) fn payloads(
         .collect::<StoreResult<Vec<_>>>()?;
     let contracts = drafts
         .iter()
-        .map(|(payload, _)| scope_contract(payload, cwd))
+        .map(|(payload, _)| scope_contract(payload, cwd, owner))
         .collect::<StoreResult<Vec<_>>>()?;
     let mut payloads = Vec::with_capacity(drafts.len());
     for ((mut payload, contract_error), contract) in drafts.into_iter().zip(contracts) {

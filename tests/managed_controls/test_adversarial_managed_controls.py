@@ -2,52 +2,23 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.managed_controls.acknowledgement import (
+from tests.managed_controls.acknowledgement import (
     AcknowledgementError,
     ManagedControlsAcknowledgement,
     accept_acknowledgement,
 )
-from codex_plugin_scanner.guard.managed_controls.atomic_apply import (
+from tests.managed_controls.atomic_apply import (
     AppliedManagedControls,
     AtomicApplyError,
     AtomicManagedControlsStore,
     PreparedProjection,
 )
-from codex_plugin_scanner.guard.managed_controls.authority import (
+from tests.managed_controls.authority import (
     AuthorityMode,
     ControlEffect,
     ControlInstruction,
     compose_control_instructions,
 )
-from codex_plugin_scanner.guard.managed_controls.bundle import (
-    parse_extension_contract,
-)
-from codex_plugin_scanner.guard.managed_controls.catalog import (
-    CatalogExtension,
-    CatalogPermission,
-    CatalogProjection,
-    CatalogValidationError,
-)
-
-
-def _catalog() -> CatalogProjection:
-    return CatalogProjection(
-        1,
-        (
-            CatalogExtension(
-                "command.git",
-                "Git",
-                "1",
-                (
-                    CatalogPermission(
-                        "command.git.permission.push",
-                        "Push",
-                        configurable=True,
-                    ),
-                ),
-            ),
-        ),
-    )
 
 
 def test_contextual_allow_cannot_bypass_managed_extension_block() -> None:
@@ -70,27 +41,6 @@ def test_contextual_allow_cannot_bypass_managed_extension_block() -> None:
         )
     )
     assert result.effect is ControlEffect.BLOCK
-
-
-def test_unknown_target_is_never_silently_dropped() -> None:
-    with pytest.raises(CatalogValidationError):
-        parse_extension_contract(
-            {
-                "spec": {
-                    "rules": [
-                        {
-                            "id": "unknown",
-                            "x-hol-extension-targets": {
-                                "schemaVersion": "guard.policy-extension-targets.v1",
-                                "extensionIds": [],
-                                "permissionIds": ["command.git.permission.missing"],
-                            },
-                        }
-                    ]
-                }
-            },
-            _catalog(),
-        )
 
 
 def test_partial_apply_and_revision_rollback_fail_closed() -> None:

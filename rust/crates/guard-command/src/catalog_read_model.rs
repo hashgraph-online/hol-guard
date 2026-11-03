@@ -28,6 +28,8 @@ use crate::native_command_catalog::{embedded_catalog_bytes, packaged_command_cat
 #[path = "catalog_read_search.rs"]
 mod search;
 use search::matches_filter;
+#[path = "catalog_read_discovery.rs"]
+pub mod discovery;
 
 pub const CATALOG_READ_CAPABILITY: &str = "catalog-read-model-v1";
 pub const CATALOG_READ_REQUEST_SCHEMA: &str = "guard-catalog-read-request.v1";
@@ -89,7 +91,7 @@ impl CatalogReadError {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CatalogReadRequestV1 {
     pub schema: String,
@@ -227,33 +229,7 @@ impl CatalogReadSnapshot {
     }
 
     pub fn read(&self, request: &CatalogReadRequestV1) -> CatalogReadResultV1 {
-        match self.render(request) {
-            Ok(body) => {
-                let etag = etag_for(&body);
-                if if_none_match_matches(request.if_none_match.as_deref(), &etag) {
-                    return CatalogReadResultV1 {
-                        schema: CATALOG_READ_RESULT_SCHEMA,
-                        outcome: "not_modified",
-                        http_status: 304,
-                        etag: Some(etag),
-                        body: None,
-                        error_code: None,
-                    };
-                }
-                match String::from_utf8(body) {
-                    Ok(body) => CatalogReadResultV1 {
-                        schema: CATALOG_READ_RESULT_SCHEMA,
-                        outcome: "ok",
-                        http_status: 200,
-                        etag: Some(etag),
-                        body: Some(body),
-                        error_code: None,
-                    },
-                    Err(_) => CatalogReadResultV1::error(CatalogReadError::Unavailable),
-                }
-            }
-            Err(error) => CatalogReadResultV1::error(error),
-        }
+        read_result(self.render(request), request)
     }
 
     fn render(&self, request: &CatalogReadRequestV1) -> Result<Vec<u8>, CatalogReadError> {
@@ -453,4 +429,37 @@ fn snapshot_id_for(catalog_digest: &str) -> String {
 
 fn is_sha256_hex(text: &str) -> bool {
     text.len() == 64 && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+pub(crate) fn read_result(
+    rendered: Result<Vec<u8>, CatalogReadError>,
+    request: &CatalogReadRequestV1,
+) -> CatalogReadResultV1 {
+    match rendered {
+        Ok(body) => {
+            let etag = etag_for(&body);
+            if if_none_match_matches(request.if_none_match.as_deref(), &etag) {
+                return CatalogReadResultV1 {
+                    schema: CATALOG_READ_RESULT_SCHEMA,
+                    outcome: "not_modified",
+                    http_status: 304,
+                    etag: Some(etag),
+                    body: None,
+                    error_code: None,
+                };
+            }
+            match String::from_utf8(body) {
+                Ok(body) => CatalogReadResultV1 {
+                    schema: CATALOG_READ_RESULT_SCHEMA,
+                    outcome: "ok",
+                    http_status: 200,
+                    etag: Some(etag),
+                    body: Some(body),
+                    error_code: None,
+                },
+                Err(_) => CatalogReadResultV1::error(CatalogReadError::Unavailable),
+            }
+        }
+        Err(error) => CatalogReadResultV1::error(error),
+    }
 }

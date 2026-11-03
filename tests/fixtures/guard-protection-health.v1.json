@@ -1,0 +1,459 @@
+{
+  "schema": "guard-protection-health-parity.v1",
+  "cases": [
+    {
+      "name": "every check proven",
+      "signals": {
+        "harness_hooks": [
+          "pass",
+          "verified"
+        ],
+        "daemon": [
+          "pass",
+          "verified"
+        ],
+        "policy_engine": [
+          "pass",
+          "verified"
+        ],
+        "rule_packs": [
+          "pass",
+          "verified"
+        ],
+        "decision_plane_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "containment_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "sandbox": [
+          "pass",
+          "verified"
+        ],
+        "decision_stream": [
+          "pass",
+          "verified"
+        ],
+        "tamper_checks": [
+          "pass",
+          "verified"
+        ]
+      },
+      "harness_signals": {},
+      "expected_json": "{\"schema_version\":\"guard.protection-health.v1\",\"state\":\"protected\",\"label\":\"Protected\",\"detail\":\"All required protection checks have current proof.\",\"evidence_gap\":false,\"checks\":[{\"check_id\":\"harness_hooks\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"daemon\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"policy_engine\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"rule_packs\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_plane_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"containment_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"sandbox\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_stream\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"tamper_checks\",\"status\":\"pass\",\"reason_code\":\"verified\"}],\"reason_codes\":[\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\"],\"apps\":[]}"
+    },
+    {
+      "name": "no signals at all",
+      "signals": {},
+      "harness_signals": {},
+      "expected_json": "{\"schema_version\":\"guard.protection-health.v1\",\"state\":\"degraded\",\"label\":\"Degraded\",\"detail\":\"One or more required protection checks failed or remain unproven.\",\"evidence_gap\":true,\"checks\":[{\"check_id\":\"harness_hooks\",\"status\":\"unknown\",\"reason_code\":\"proof_unavailable\"},{\"check_id\":\"daemon\",\"status\":\"unknown\",\"reason_code\":\"proof_unavailable\"},{\"check_id\":\"policy_engine\",\"status\":\"unknown\",\"reason_code\":\"proof_unavailable\"},{\"check_id\":\"rule_packs\",\"status\":\"unknown\",\"reason_code\":\"proof_unavailable\"},{\"check_id\":\"decision_plane_compatibility\",\"status\":\"unknown\",\"reason_code\":\"proof_unavailable\"},{\"check_id\":\"containment_compatibility\",\"status\":\"unknown\",\"reason_code\":\"proof_unavailable\"},{\"check_id\":\"sandbox\",\"status\":\"unknown\",\"reason_code\":\"proof_unavailable\"},{\"check_id\":\"decision_stream\",\"status\":\"unknown\",\"reason_code\":\"proof_unavailable\"},{\"check_id\":\"tamper_checks\",\"status\":\"unknown\",\"reason_code\":\"proof_unavailable\"}],\"reason_codes\":[\"proof_unavailable\",\"proof_unavailable\",\"proof_unavailable\",\"proof_unavailable\",\"proof_unavailable\",\"proof_unavailable\",\"proof_unavailable\",\"proof_unavailable\",\"proof_unavailable\"],\"apps\":[]}"
+    },
+    {
+      "name": "decision stream unproven",
+      "signals": {
+        "harness_hooks": [
+          "pass",
+          "verified"
+        ],
+        "daemon": [
+          "pass",
+          "verified"
+        ],
+        "policy_engine": [
+          "pass",
+          "verified"
+        ],
+        "rule_packs": [
+          "pass",
+          "verified"
+        ],
+        "decision_plane_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "containment_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "sandbox": [
+          "pass",
+          "verified"
+        ],
+        "decision_stream": [
+          "unknown",
+          "proof_unavailable"
+        ],
+        "tamper_checks": [
+          "pass",
+          "verified"
+        ]
+      },
+      "harness_signals": {},
+      "expected_json": "{\"schema_version\":\"guard.protection-health.v1\",\"state\":\"partial\",\"label\":\"Partially protected\",\"detail\":\"Core protection passes, but decision-stream evidence is incomplete.\",\"evidence_gap\":true,\"checks\":[{\"check_id\":\"harness_hooks\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"daemon\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"policy_engine\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"rule_packs\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_plane_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"containment_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"sandbox\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_stream\",\"status\":\"unknown\",\"reason_code\":\"proof_unavailable\"},{\"check_id\":\"tamper_checks\",\"status\":\"pass\",\"reason_code\":\"verified\"}],\"reason_codes\":[\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"proof_unavailable\",\"verified\"],\"apps\":[]}"
+    },
+    {
+      "name": "tamper check failed",
+      "signals": {
+        "harness_hooks": [
+          "pass",
+          "verified"
+        ],
+        "daemon": [
+          "pass",
+          "verified"
+        ],
+        "policy_engine": [
+          "pass",
+          "verified"
+        ],
+        "rule_packs": [
+          "pass",
+          "verified"
+        ],
+        "decision_plane_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "containment_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "sandbox": [
+          "pass",
+          "verified"
+        ],
+        "decision_stream": [
+          "pass",
+          "verified"
+        ],
+        "tamper_checks": [
+          "fail",
+          "digest_mismatch"
+        ]
+      },
+      "harness_signals": {},
+      "expected_json": "{\"schema_version\":\"guard.protection-health.v1\",\"state\":\"degraded\",\"label\":\"Degraded\",\"detail\":\"One or more required protection checks failed or remain unproven.\",\"evidence_gap\":false,\"checks\":[{\"check_id\":\"harness_hooks\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"daemon\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"policy_engine\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"rule_packs\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_plane_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"containment_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"sandbox\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_stream\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"tamper_checks\",\"status\":\"fail\",\"reason_code\":\"digest_mismatch\"}],\"reason_codes\":[\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"digest_mismatch\"],\"apps\":[]}"
+    },
+    {
+      "name": "every optional check is unsupported here",
+      "signals": {
+        "harness_hooks": [
+          "pass",
+          "verified"
+        ],
+        "daemon": [
+          "pass",
+          "verified"
+        ],
+        "policy_engine": [
+          "fail",
+          "unsupported_platform"
+        ],
+        "rule_packs": [
+          "pass",
+          "verified"
+        ],
+        "decision_plane_compatibility": [
+          "fail",
+          "unsupported_platform"
+        ],
+        "containment_compatibility": [
+          "fail",
+          "unsupported_platform"
+        ],
+        "sandbox": [
+          "fail",
+          "unsupported_platform"
+        ],
+        "decision_stream": [
+          "pass",
+          "verified"
+        ],
+        "tamper_checks": [
+          "pass",
+          "verified"
+        ]
+      },
+      "harness_signals": {},
+      "expected_json": "{\"schema_version\":\"guard.protection-health.v1\",\"state\":\"protected\",\"label\":\"Protected\",\"detail\":\"All required protection checks have current proof.\",\"evidence_gap\":false,\"checks\":[{\"check_id\":\"harness_hooks\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"daemon\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"policy_engine\",\"status\":\"fail\",\"reason_code\":\"unsupported_platform\"},{\"check_id\":\"rule_packs\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_plane_compatibility\",\"status\":\"fail\",\"reason_code\":\"unsupported_platform\"},{\"check_id\":\"containment_compatibility\",\"status\":\"fail\",\"reason_code\":\"unsupported_platform\"},{\"check_id\":\"sandbox\",\"status\":\"fail\",\"reason_code\":\"unsupported_platform\"},{\"check_id\":\"decision_stream\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"tamper_checks\",\"status\":\"pass\",\"reason_code\":\"verified\"}],\"reason_codes\":[\"verified\",\"verified\",\"unsupported_platform\",\"verified\",\"unsupported_platform\",\"unsupported_platform\",\"unsupported_platform\",\"verified\",\"verified\"],\"apps\":[]}"
+    },
+    {
+      "name": "a required check cannot plead an unsupported platform",
+      "signals": {
+        "harness_hooks": [
+          "pass",
+          "verified"
+        ],
+        "daemon": [
+          "fail",
+          "unsupported_platform"
+        ],
+        "policy_engine": [
+          "pass",
+          "verified"
+        ],
+        "rule_packs": [
+          "pass",
+          "verified"
+        ],
+        "decision_plane_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "containment_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "sandbox": [
+          "pass",
+          "verified"
+        ],
+        "decision_stream": [
+          "pass",
+          "verified"
+        ],
+        "tamper_checks": [
+          "pass",
+          "verified"
+        ]
+      },
+      "harness_signals": {},
+      "expected_json": "{\"schema_version\":\"guard.protection-health.v1\",\"state\":\"degraded\",\"label\":\"Degraded\",\"detail\":\"One or more required protection checks failed or remain unproven.\",\"evidence_gap\":false,\"checks\":[{\"check_id\":\"harness_hooks\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"daemon\",\"status\":\"fail\",\"reason_code\":\"unsupported_platform\"},{\"check_id\":\"policy_engine\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"rule_packs\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_plane_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"containment_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"sandbox\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_stream\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"tamper_checks\",\"status\":\"pass\",\"reason_code\":\"verified\"}],\"reason_codes\":[\"verified\",\"unsupported_platform\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\"],\"apps\":[]}"
+    },
+    {
+      "name": "one harness has no hooks",
+      "signals": {
+        "harness_hooks": [
+          "pass",
+          "verified"
+        ],
+        "daemon": [
+          "pass",
+          "verified"
+        ],
+        "policy_engine": [
+          "pass",
+          "verified"
+        ],
+        "rule_packs": [
+          "pass",
+          "verified"
+        ],
+        "decision_plane_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "containment_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "sandbox": [
+          "pass",
+          "verified"
+        ],
+        "decision_stream": [
+          "pass",
+          "verified"
+        ],
+        "tamper_checks": [
+          "pass",
+          "verified"
+        ]
+      },
+      "harness_signals": {
+        "codex": [
+          "pass",
+          "verified"
+        ],
+        "claude_code": [
+          "fail",
+          "hooks_missing"
+        ]
+      },
+      "expected_json": "{\"schema_version\":\"guard.protection-health.v1\",\"state\":\"protected\",\"label\":\"Protected\",\"detail\":\"All required protection checks have current proof.\",\"evidence_gap\":false,\"checks\":[{\"check_id\":\"harness_hooks\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"daemon\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"policy_engine\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"rule_packs\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_plane_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"containment_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"sandbox\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_stream\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"tamper_checks\",\"status\":\"pass\",\"reason_code\":\"verified\"}],\"reason_codes\":[\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\"],\"apps\":[{\"harness\":\"claude_code\",\"state\":\"degraded\",\"label\":\"Degraded\",\"detail\":\"One or more required protection checks failed or remain unproven.\",\"evidence_gap\":false,\"checks\":[{\"check_id\":\"harness_hooks\",\"status\":\"fail\",\"reason_code\":\"hooks_missing\"},{\"check_id\":\"daemon\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"policy_engine\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"rule_packs\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_plane_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"containment_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"sandbox\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_stream\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"tamper_checks\",\"status\":\"pass\",\"reason_code\":\"verified\"}],\"reason_codes\":[\"hooks_missing\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\"]},{\"harness\":\"codex\",\"state\":\"protected\",\"label\":\"Protected\",\"detail\":\"All required protection checks have current proof.\",\"evidence_gap\":false,\"checks\":[{\"check_id\":\"harness_hooks\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"daemon\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"policy_engine\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"rule_packs\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_plane_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"containment_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"sandbox\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_stream\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"tamper_checks\",\"status\":\"pass\",\"reason_code\":\"verified\"}],\"reason_codes\":[\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\"]}]}"
+    },
+    {
+      "name": "a harness inherits a global gap",
+      "signals": {
+        "harness_hooks": [
+          "pass",
+          "verified"
+        ],
+        "daemon": [
+          "pass",
+          "verified"
+        ],
+        "policy_engine": [
+          "pass",
+          "verified"
+        ],
+        "rule_packs": [
+          "pass",
+          "verified"
+        ],
+        "decision_plane_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "containment_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "sandbox": [
+          "pass",
+          "verified"
+        ],
+        "decision_stream": [
+          "unknown",
+          "proof_unavailable"
+        ],
+        "tamper_checks": [
+          "pass",
+          "verified"
+        ]
+      },
+      "harness_signals": {
+        "codex": [
+          "pass",
+          "verified"
+        ]
+      },
+      "expected_json": "{\"schema_version\":\"guard.protection-health.v1\",\"state\":\"partial\",\"label\":\"Partially protected\",\"detail\":\"Core protection passes, but decision-stream evidence is incomplete.\",\"evidence_gap\":true,\"checks\":[{\"check_id\":\"harness_hooks\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"daemon\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"policy_engine\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"rule_packs\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_plane_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"containment_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"sandbox\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_stream\",\"status\":\"unknown\",\"reason_code\":\"proof_unavailable\"},{\"check_id\":\"tamper_checks\",\"status\":\"pass\",\"reason_code\":\"verified\"}],\"reason_codes\":[\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"proof_unavailable\",\"verified\"],\"apps\":[{\"harness\":\"codex\",\"state\":\"partial\",\"label\":\"Partially protected\",\"detail\":\"Core protection passes, but decision-stream evidence is incomplete.\",\"evidence_gap\":true,\"checks\":[{\"check_id\":\"harness_hooks\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"daemon\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"policy_engine\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"rule_packs\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_plane_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"containment_compatibility\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"sandbox\",\"status\":\"pass\",\"reason_code\":\"verified\"},{\"check_id\":\"decision_stream\",\"status\":\"unknown\",\"reason_code\":\"proof_unavailable\"},{\"check_id\":\"tamper_checks\",\"status\":\"pass\",\"reason_code\":\"verified\"}],\"reason_codes\":[\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"verified\",\"proof_unavailable\",\"verified\"]}]}"
+    },
+    {
+      "name": "unsupported check ids are refused",
+      "signals": {
+        "harness_hooks": [
+          "pass",
+          "verified"
+        ],
+        "zzz_made_up": [
+          "pass",
+          "verified"
+        ],
+        "aaa_also_made_up": [
+          "pass",
+          "verified"
+        ]
+      },
+      "harness_signals": {},
+      "expected_error": "unsupported protection check IDs: aaa_also_made_up, zzz_made_up"
+    },
+    {
+      "name": "a harness name must be a stable identifier",
+      "signals": {
+        "harness_hooks": [
+          "pass",
+          "verified"
+        ],
+        "daemon": [
+          "pass",
+          "verified"
+        ],
+        "policy_engine": [
+          "pass",
+          "verified"
+        ],
+        "rule_packs": [
+          "pass",
+          "verified"
+        ],
+        "decision_plane_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "containment_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "sandbox": [
+          "pass",
+          "verified"
+        ],
+        "decision_stream": [
+          "pass",
+          "verified"
+        ],
+        "tamper_checks": [
+          "pass",
+          "verified"
+        ]
+      },
+      "harness_signals": {
+        "Codex!": [
+          "pass",
+          "verified"
+        ]
+      },
+      "expected_error": "harness protection identity must be a stable identifier"
+    },
+    {
+      "name": "a harness name must be short",
+      "signals": {
+        "harness_hooks": [
+          "pass",
+          "verified"
+        ],
+        "daemon": [
+          "pass",
+          "verified"
+        ],
+        "policy_engine": [
+          "pass",
+          "verified"
+        ],
+        "rule_packs": [
+          "pass",
+          "verified"
+        ],
+        "decision_plane_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "containment_compatibility": [
+          "pass",
+          "verified"
+        ],
+        "sandbox": [
+          "pass",
+          "verified"
+        ],
+        "decision_stream": [
+          "pass",
+          "verified"
+        ],
+        "tamper_checks": [
+          "pass",
+          "verified"
+        ]
+      },
+      "harness_signals": {
+        "h0000000000000000000000000000000000000000000000000000000000000000": [
+          "pass",
+          "verified"
+        ]
+      },
+      "expected_error": "harness protection identity must be a stable identifier"
+    }
+  ],
+  "rejected_reason_codes": [
+    {
+      "reason_code": "Proof Unavailable",
+      "expected_error": "protection signal reason_code must be a stable identifier"
+    },
+    {
+      "reason_code": "",
+      "expected_error": "protection signal reason_code must be a stable identifier"
+    },
+    {
+      "reason_code": "_leading",
+      "expected_error": "protection signal reason_code must be a stable identifier"
+    },
+    {
+      "reason_code": "trailing_",
+      "expected_error": "protection signal reason_code must be a stable identifier"
+    }
+  ]
+}

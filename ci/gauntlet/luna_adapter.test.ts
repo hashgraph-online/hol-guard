@@ -240,8 +240,11 @@ test('a conversation must end with a user or tool message', () => {
   expect(requirePromptable(convertMessages([{ role: 'user', content: 'u' }])).length).toBe(1);
 });
 
-test('only listed native backends load, each with its own efforts', () => {
+test('listed native backends include GPT-6.1 Sol with medium thinking and Responses SSE', () => {
   expect(nativeBackend(undefined)).toMatchObject({ provider: 'openai-codex', id: 'gpt-6-luna', sse: true });
+  const sol = nativeBackend('openai-codex/gpt-6.1-sol');
+  expect(sol).toMatchObject({ provider: 'openai-codex', id: 'gpt-6.1-sol', sse: true });
+  expect(thinkingLevel('medium', sol.levels)).toBe('medium');
   const devin = nativeBackend('devin/swe-2');
   expect(devin).toMatchObject({ provider: 'devin', id: 'swe-2', sse: false });
   expect(thinkingLevel('high', devin.levels)).toBe('high');

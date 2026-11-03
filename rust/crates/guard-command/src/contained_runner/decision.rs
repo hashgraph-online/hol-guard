@@ -1,6 +1,6 @@
 //! Proof, decision and result assembly shared by the contained runners.
 //!
-//! Faithful port of `containment_execution_support.py`.
+//! Faithful port of the retired `containment_execution_support.py`.
 
 use serde_json::{json, Value};
 

@@ -4,6 +4,8 @@ The managed hook groups (events, matchers, timeouts, status messages, pruned
 events, and bridge config keys) come from one declarative contract,
 ``guard/contracts/claude-hook-groups.v1.json``. The native SessionStart lane
 compares installed settings against the same file, so the two cannot drift.
+Handler identity, Guard-handler checks and the entry prune and merge run in the
+native ``claude_hook_config`` kind; lists are rebuilt here from the caller's objects.
 """
 
 from __future__ import annotations
@@ -11,9 +13,12 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Final, NamedTuple
+from typing import TYPE_CHECKING, Final, NamedTuple
 
 from .base import HarnessContext
+
+if TYPE_CHECKING:
+    from ..native_runner_authority import NativeRunnerAuthorityError
 
 CLAUDE_HOOK_GROUPS_CONTRACT_PATH: Final = (
     Path(__file__).resolve().parent.parent / "contracts" / "claude-hook-groups.v1.json"
@@ -180,26 +185,147 @@ def guard_command_handler(
     return handler
 
 
+# Merge ``handler`` into ``entries`` once per matcher, after pruning Guard's entries when the flag is set.
+ClaudeHookMergeJob = tuple[list[object], tuple[str | None, ...], dict[str, object], bool]
+_Source = tuple[list[object], dict[str, object] | None]
+
+
+def _malformed() -> NativeRunnerAuthorityError:
+    from ..native_runner_authority import NativeRunnerAuthorityError
+
+    return NativeRunnerAuthorityError("Claude hook config answer is malformed")
+
+
+def _ask(op: str, **fields: object) -> dict[str, object]:
+    # Imported here so the Claude hook bridge stays off the native runtime at import time.
+    from ..native_runner_authority import native_runner_authority
+
+    answer: dict[str, object] = native_runner_authority("claude_hook_config", {"op": op, **fields})
+    error = answer.get("error")
+    if error == "claude_hook_handler_type_unhashable":
+        raise TypeError("Claude hook handler type is unhashable")
+    if error is not None:
+        raise _malformed()
+    return answer
+
+
+def _flag(value: object) -> bool:
+    if not isinstance(value, bool):
+        raise _malformed()
+    return value
+
+
+def _answer_texts(value: object, *, optional: bool = False) -> list[str] | None:
+    if (value is not None or not optional) and (
+        not isinstance(value, list) or not all(isinstance(item, str) for item in value)
+    ):
+        raise _malformed()
+    return value
+
+
+def _index(value: object, size: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value < size:
+        raise _malformed()
+    return value
+
+
+def _rebuilt(answer: dict[str, object], key: str, sources: list[_Source]) -> list[list[object]]:
+    plans = answer.get(key)
+    if not isinstance(plans, list) or len(plans) != len(sources):
+        raise _malformed()
+    return [_rebuild(entries, plan, handler) for (entries, handler), plan in zip(sources, plans, strict=True)]
+
+
+def _copied_entry(entries: list[object], step: dict[str, object], handler: dict[str, object] | None) -> object:
+    entry, items = entries[_index(step.get("entry"), len(entries))], step.get("hooks")
+    if set(step) != {"entry", "hooks"} or not isinstance(entry, dict) or not isinstance(items, list):
+        raise _malformed()
+    own = entry.get("hooks")
+    own_hooks = own if isinstance(own, list) else []
+    updated_entry = dict(entry)
+    updated_entry["hooks"] = [
+        handler if item is None and handler is not None else own_hooks[_index(item, len(own_hooks))] for item in items
+    ]
+    return updated_entry
+
+
+def _rebuild(entries: list[object], plan: object, handler: dict[str, object] | None) -> list[object]:
+    """Apply a native plan to the caller's own entries, keeping their objects and key order."""
+
+    if not isinstance(plan, list):
+        raise _malformed()
+    rebuilt: list[object] = []
+    for step in plan:
+        if not isinstance(step, dict):
+            rebuilt.append(entries[_index(step, len(entries))])
+        elif "entry" in step:
+            rebuilt.append(_copied_entry(entries, step, handler))
+        elif handler is not None and set(step) == {"matcher"} and isinstance(step["matcher"], str | None):
+            rebuilt.append(guard_hook_group(step["matcher"], handler))
+        else:
+            raise _malformed()
+    return rebuilt
+
+
+def entry_list(entries: object) -> list[object]:
+    """The entries of a hook event, or an empty list for a missing or non-list value."""
+
+    return entries if isinstance(entries, list) else []
+
+
+def prune_guard_hook_lists(lists: list[list[object]]) -> list[list[object]]:
+    """Drop Guard's entries and handlers from each list, in one native call."""
+
+    return _rebuilt(_ask("prune", lists=lists), "lists", [(entries, None) for entries in lists])
+
+
+def prune_guard_hook_entries(entries: list[object]) -> list[object]:
+    return prune_guard_hook_lists([entries])[0]
+
+
+def prune_guard_hook_events(hooks: dict[str, object], events: tuple[str, ...]) -> None:
+    lists = [entry_list(hooks.get(event)) for event in events]
+    for event, entries in zip(events, prune_guard_hook_lists(lists), strict=True):
+        hooks[event] = entries
+
+
+def merge_hook_groups(jobs: list[ClaudeHookMergeJob]) -> list[list[object]]:
+    """Run each merge job in one native call; results reuse the caller's entry and handler objects."""
+
+    request = [{"entries": e, "prune": prune, "matchers": list(m), "handler": h} for e, m, h, prune in jobs]
+    return _rebuilt(_ask("merge", jobs=request), "jobs", [(entries, handler) for entries, _, handler, _ in jobs])
+
+
+def merge_hook_group(
+    entries: list[object],
+    matcher: str | None,
+    handler: dict[str, object],
+) -> list[object]:
+    return merge_hook_groups([(entries, (matcher,), handler, False)])[0]
+
+
 def sync_runtime_hook_groups(hooks: dict[str, object], hook_argv: tuple[str, ...]) -> None:
-    for group in CLAUDE_RUNTIME_HOOK_GROUPS:
-        existing_entries = hooks.get(group.event)
-        hooks[group.event] = merge_hook_group(
-            prune_guard_hook_entries(existing_entries if isinstance(existing_entries, list) else []),
-            group.matcher,
+    jobs: list[ClaudeHookMergeJob] = [
+        (
+            entry_list(hooks.get(group.event)),
+            (group.matcher,),
             guard_command_handler(hook_argv, timeout=group.timeout_seconds, status_message=group.status_message),
+            True,
         )
+        for group in CLAUDE_RUNTIME_HOOK_GROUPS
+    ]
+    for group, entries in zip(CLAUDE_RUNTIME_HOOK_GROUPS, merge_hook_groups(jobs), strict=True):
+        hooks[group.event] = entries
 
 
 def remove_unsupported_guard_hook_groups(hooks: dict[str, object]) -> None:
-    for key in CLAUDE_GUARD_PRUNED_HOOK_EVENTS:
-        entries = hooks.get(key)
-        if not isinstance(entries, list):
-            continue
-        remaining = prune_guard_hook_entries(entries)
+    events = [event for event in dict.fromkeys(CLAUDE_GUARD_PRUNED_HOOK_EVENTS) if isinstance(hooks.get(event), list)]
+    pruned = prune_guard_hook_lists([entry_list(hooks[event]) for event in events]) if events else []
+    for event, remaining in zip(events, pruned, strict=True):
         if remaining:
-            hooks[key] = remaining
+            hooks[event] = remaining
         else:
-            hooks.pop(key, None)
+            hooks.pop(event, None)
 
 
 def guard_hook_group(matcher: str | None, handler: dict[str, object]) -> dict[str, object]:
@@ -210,55 +336,32 @@ def guard_hook_group(matcher: str | None, handler: dict[str, object]) -> dict[st
 
 
 def is_guard_hook_command(command: object) -> bool:
-    if not isinstance(command, str):
-        return False
-    if CLAUDE_GUARD_DAEMON_HOOK_MARKER in command:
-        return True
-    if CLAUDE_GUARD_SESSION_START_HOOK_MARKER in command:
-        return True
-    if "codex_plugin_scanner.cli" in command:
-        return "guard hook" in command or "'guard', 'hook'" in command or '"guard", "hook"' in command
-    return "ensure_guard_daemon(" in command and CLAUDE_GUARD_SESSION_START_CONTEXT in command
-
-
-def command_handler_argv(handler: dict[str, object]) -> tuple[str, ...] | None:
-    command = handler.get("command")
-    args = handler.get("args")
-    if not isinstance(command, str) or not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
-        return None
-    return (command, *args)
-
-
-def handler_identity(handler: dict[str, object]) -> tuple[str, ...]:
-    handler_type = str(handler.get("type", ""))
-    if handler_type == "http":
-        return (handler_type, str(handler.get("url", "")))
-    argv = command_handler_argv(handler)
-    if argv is not None:
-        return (handler_type, "exec", *argv)
-    shell = handler.get("shell")
-    shell_identity = shell if isinstance(shell, str) and shell else "default"
-    return (handler_type, f"shell:{shell_identity}", str(handler.get("command", "")))
+    return isinstance(command, str) and _flag(_ask("text", value=command).get("command"))
 
 
 def is_guard_hook_url(url: object) -> bool:
-    if not isinstance(url, str):
-        return False
-    return url.startswith("http://127.0.0.1:") and "/v1/hooks/claude-code" in url
+    return isinstance(url, str) and _flag(_ask("text", value=url).get("url"))
+
+
+def command_handler_argv(handler: dict[str, object]) -> tuple[str, ...] | None:
+    answer = _ask("handler", handler=handler)
+    if "argv" not in answer:
+        raise _malformed()
+    argv = _answer_texts(answer["argv"], optional=True)
+    return None if argv is None else tuple(argv)
+
+
+def handler_identity(handler: dict[str, object]) -> tuple[str, ...]:
+    return tuple(_answer_texts(_ask("handler", handler=handler).get("identity")) or ())
 
 
 def is_guard_hook_handler(handler: object) -> bool:
     if not isinstance(handler, dict):
         return False
-    handler_type = handler.get("type")
-    if handler_type in {None, "command"}:
-        argv = command_handler_argv(handler)
-        if argv is not None:
-            return any(is_guard_hook_command(argument) for argument in argv)
-        return is_guard_hook_command(handler.get("command"))
-    if handler_type == "http":
-        return is_guard_hook_url(handler.get("url"))
-    return False
+    guard = _ask("handler", handler=handler).get("guard")
+    if guard is None:
+        raise TypeError("Claude hook handler type is unhashable")
+    return _flag(guard)
 
 
 CLAUDE_GUARD_REQUIRED_HOOK_EVENTS = ("PreToolUse", "PermissionRequest")
@@ -267,13 +370,13 @@ CLAUDE_GUARD_REQUIRED_HOOK_EVENTS = ("PreToolUse", "PermissionRequest")
 def missing_guard_hook_events(payload: dict[str, object]) -> list[str]:
     """Required hook events whose Guard handler does not cover the protected tools."""
 
-    hooks = payload.get("hooks")
-    missing: list[str] = []
-    for event in CLAUDE_GUARD_REQUIRED_HOOK_EVENTS:
-        entries = hooks.get(event) if isinstance(hooks, dict) else None
-        if not isinstance(entries, list) or not any(_entry_covers_guard_tools(entry) for entry in entries):
-            missing.append(event)
-    return missing
+    answer = _ask(
+        "missing",
+        payload={"hooks": payload["hooks"]} if "hooks" in payload else {},
+        events=list(CLAUDE_GUARD_REQUIRED_HOOK_EVENTS),
+        matcher=CLAUDE_GUARD_TOOL_MATCHER,
+    )
+    return _answer_texts(answer.get("missing")) or []
 
 
 def mark_missing_guard_hooks(
@@ -294,88 +397,3 @@ def mark_missing_guard_hooks(
         "Run `hol-guard repair` or `hol-guard install claude-code` to restore protection.",
     ]
     diagnostics["setup_status"] = "broken"
-
-
-def _matcher_covers_guard_tools(matcher: object) -> bool:
-    """An omitted matcher matches every tool. A set matcher must still name each protected tool."""
-
-    if matcher is None:
-        return True
-    if not isinstance(matcher, str):
-        return False
-    installed = {part.strip() for part in matcher.split("|") if part.strip()}
-    required = {part.strip() for part in CLAUDE_GUARD_TOOL_MATCHER.split("|") if part.strip()}
-    return required <= installed
-
-
-def _entry_covers_guard_tools(entry: object) -> bool:
-    if not _entry_has_guard_handler(entry) or not isinstance(entry, dict):
-        return False
-    return _matcher_covers_guard_tools(entry.get("matcher"))
-
-
-def _entry_has_guard_handler(entry: object) -> bool:
-    if not isinstance(entry, dict):
-        return False
-    if is_guard_hook_handler(entry):
-        return True
-    handlers = entry.get("hooks")
-    return isinstance(handlers, list) and any(is_guard_hook_handler(handler) for handler in handlers)
-
-
-def merge_hook_group(
-    entries: list[object],
-    matcher: str | None,
-    handler: dict[str, object],
-) -> list[object]:
-    normalized: list[object] = []
-    for entry in entries:
-        if isinstance(entry, dict):
-            normalized.append(entry)
-    matcher_key = matcher.strip() if isinstance(matcher, str) and matcher.strip() else None
-    expected_identity = handler_identity(handler)
-    for index, entry in enumerate(normalized):
-        if not isinstance(entry, dict):
-            continue
-        entry_matcher = entry.get("matcher")
-        entry_matcher_key = entry_matcher.strip() if isinstance(entry_matcher, str) and entry_matcher.strip() else None
-        if entry_matcher_key != matcher_key:
-            continue
-        hooks = entry.get("hooks")
-        if not isinstance(hooks, list):
-            hooks = []
-        if any(isinstance(item, dict) and handler_identity(item) == expected_identity for item in hooks):
-            updated_entry = dict(entry)
-            updated_entry["hooks"] = [
-                handler if isinstance(item, dict) and handler_identity(item) == expected_identity else item
-                for item in hooks
-            ]
-            normalized[index] = updated_entry
-            return normalized
-        hooks.append(handler)
-        updated_entry = dict(entry)
-        updated_entry["hooks"] = hooks
-        normalized[index] = updated_entry
-        return normalized
-    normalized.append(guard_hook_group(matcher_key, handler))
-    return normalized
-
-
-def prune_guard_hook_entries(entries: list[object]) -> list[object]:
-    remaining: list[object] = []
-    for entry in entries:
-        if not isinstance(entry, dict):
-            remaining.append(entry)
-            continue
-        if is_guard_hook_handler(entry):
-            continue
-        hooks = entry.get("hooks")
-        if not isinstance(hooks, list):
-            remaining.append(entry)
-            continue
-        filtered_hooks = [item for item in hooks if not is_guard_hook_handler(item)]
-        if filtered_hooks:
-            updated_entry = dict(entry)
-            updated_entry["hooks"] = filtered_hooks
-            remaining.append(updated_entry)
-    return remaining

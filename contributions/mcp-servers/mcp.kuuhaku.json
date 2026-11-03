@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.kuuhaku",
+  "version": "1.0.0",
+  "name": "Kuuhaku",
+  "description": "Read-only architecture map for coding agents: which repository calls which HTTP route, with file:line on both sides, plus queues, gRPC links, shared databases, env key names and the repos that read a model's field. Answers from the graph.json a local kuuhaku scan wrote, or, with a login token, the workspace graph on api.kuuhaku.dev. All eight tools are read-only (readOnlyHint: true): no shell, no file writes. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "dev.kuuhaku",
+    "displayName": "Kuuhaku",
+    "url": "https://kuuhaku.dev"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0A0A0B"
+  },
+  "homepage": "https://kuuhaku.dev",
+  "license": "FSL-1.1-MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "kuuhaku"
+  },
+  "riskClasses": [
+    "external-architecture-read",
+    "external-filesystem-read",
+    "external-network-read",
+    "external-content-ingestion",
+    "package-or-source-installation"
+  ],
+  "tools": [
+    {
+      "name": "repos",
+      "state": "allow"
+    },
+    {
+      "name": "repo",
+      "state": "allow"
+    },
+    {
+      "name": "who_calls",
+      "state": "allow"
+    },
+    {
+      "name": "impact",
+      "state": "allow"
+    },
+    {
+      "name": "connections",
+      "state": "allow"
+    },
+    {
+      "name": "queue",
+      "state": "allow"
+    },
+    {
+      "name": "search",
+      "state": "allow"
+    },
+    {
+      "name": "field",
+      "state": "allow"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://kuuhaku.dev/cli.html",
+    "https://www.npmjs.com/package/kuuhaku",
+    "https://unpkg.com/kuuhaku@0.2.9/lib/mcp.js",
+    "https://unpkg.com/kuuhaku@0.2.9/bin/kuuhaku.js",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=dev.kuuhaku/kuuhaku"
+  ],
+  "saferAlternatives": [
+    "All eight tools (repos, repo, who_calls, impact, connections, queue, search, field) are read-only (readOnlyHint: true): they answer from the loaded graph and never run a shell or write files.",
+    "Launch with --graph <file> (npx kuuhaku mcp --graph ./graph.json) to serve one local graph with no network calls; without --graph or a login token it serves the latest local scan.",
+    "Results quote route paths, repository names and README openings from the scanned repositories; scan only repositories you trust.",
+    "Pin the package version when launching via npx (npx kuuhaku@0.2.9 mcp) so only the reviewed release runs.",
+    "Review any tool outside these eight."
+  ]
+}

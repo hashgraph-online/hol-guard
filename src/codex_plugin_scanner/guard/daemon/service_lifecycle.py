@@ -149,6 +149,8 @@ def start_serve_thread(server: GuardDaemonServer, *, already_locked: bool = Fals
     """Start the HTTP serve loop while holding the service ownership lock."""
 
     def start_locked() -> None:
+        finished = threading.Event()
+
         def run_serve() -> None:
             try:
                 server._serve_forever()
@@ -157,12 +159,15 @@ def start_serve_thread(server: GuardDaemonServer, *, already_locked: bool = Fals
                     server._serve_thread_error = error
                 if not isinstance(error, (KeyboardInterrupt, SystemExit)):
                     _LOGGER.exception("Guard daemon serve thread failed")
+            finally:
+                finished.set()
 
         if server._shutdown_started.is_set():
             raise RuntimeError("Guard daemon stopped during startup")
         if server._thread is not None and server._thread.is_alive():
             return
         server._serve_loop_started.clear()
+        server._serve_loop_finished = finished
         server._thread = threading.Thread(target=run_serve, daemon=True)
         server._thread.start()
 
@@ -171,6 +176,21 @@ def start_serve_thread(server: GuardDaemonServer, *, already_locked: bool = Fals
         return
     with server._finish_service_lock:
         start_locked()
+
+
+def stop_interrupted_foreground_service(server: GuardDaemonServer) -> bool:
+    """Acknowledge Ctrl-C only after bounded startup/running containment."""
+
+    finished = server._serve_loop_finished
+    thread_started = server._thread is not None or server._serve_loop_started.is_set()
+    server._record_lifecycle("shutdown_requested", reason="keyboard_interrupt")
+    server._diagnostics.record("daemon_shutdown_requested")
+    server.stop()
+    if server._serve_thread_error is not None:
+        raise server._serve_thread_error from None
+    return (
+        server._finish_service_completed and not server._is_quarantined() and (not thread_started or finished.is_set())
+    )
 
 
 def contain_failed_service_start(
@@ -214,4 +234,5 @@ __all__ = [
     "contain_failed_service_start",
     "start_serve_thread",
     "startup_generation_is_current",
+    "stop_interrupted_foreground_service",
 ]

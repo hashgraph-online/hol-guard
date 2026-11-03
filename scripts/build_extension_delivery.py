@@ -7,7 +7,6 @@ maintainer operation does not install policy or change extension controls.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import time
@@ -20,33 +19,15 @@ from extension_delivery_legacy import prepare as prepare_legacy
 from extension_delivery_located_store import LocatedStore
 from extension_delivery_objects import encoded, entries
 from extension_delivery_revocations import build as build_revocations
+from extension_delivery_runtime import pinned_runtime
 from extension_delivery_source import verify_sources
-from extension_pack_archives import pack_objects, parts
 from extension_pack_directory import public_entry
+from extension_policy_delivery import build_policy
+from extension_policy_delivery import policy_transport as policy_transport
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "guard.extension-distribution.v2"
 MANIFEST = "extension-distribution.v2.json"
-
-
-def policy_transport(reader, reference, records, store):
-    """Mirror the native index without copying a global proof into each record."""
-    if reference["kind"] != "data" or reference["expanded_length"] > MAX_OBJECT_BYTES:
-        raise ValueError("native index representation unsupported")
-    raw = reader.blob(reference)
-    native = store.put(raw)
-    if {key: native[key] for key in reference} != reference:
-        raise ValueError("native index transport identity differs")
-    page = reader.json(reference)
-    output = {"schema": "guard.policy-transport.v2", "native": native, "kind": page["kind"]}
-    if page["kind"] == "leaf":
-        output["records"] = [[identity, records[identity]] for identity, _ in page["entries"]]
-    else:
-        output["children"] = [
-            [prefix, count, policy_transport(reader, target, records, store)]
-            for prefix, count, target in page["children"]
-        ]
-    return store.put_json(output)
 
 
 def claim_context(root, public, commit):
@@ -91,47 +72,20 @@ def enrich_entry(root, entry, commit, history):
     return json.loads(files["docs/guard/extensions/catalog.v2.json"])["entries"][0], invitation
 
 
-def build_from_packs(root, pack_directory, native_root, plan, store, commit, *, resolve_claimants=False):
+def build_from_packs(root, pack_directory, native_root, plan, store, commit, *, resolve_claimants=False, compiler=None):
     reader = PackReader(pack_directory / "objects")
     inventory = dict(entries(reader, native_root["index"], native_root["extensions"]))
     public = {}
-    manifests = {}
     for identity, reference in sorted(inventory.items()):
         manifest = reader.json(reference)
-        catalog = reader.json(manifest["catalog"])
-        entry = public_entry(root, catalog)
+        entry = public_entry(root, reader.json(manifest["catalog"]))
         if entry["runtimeExtensionId"] != identity:
             raise ValueError("public metadata differs from native pack identity")
-        manifests[identity] = manifest
         public[identity] = entry
     history = claim_context(root, public, commit) if resolve_claimants else None
-    directory = {}
-    records = {}
-    defaults = {}
-    claims = {}
-    for identity, reference in sorted(inventory.items()):
-        manifest, objects = pack_objects(PackReader(pack_directory / "objects"), reference)
-        archives = []
-        for data in parts(pack_directory / "objects", objects):
-            archives.append(
-                {"sha256": hashlib.sha256(data).hexdigest(), "length": len(data), "location": plan.asset(data, "pack")}
-            )
-        catalog = reader.json(manifest["catalog"])[0]
-        record = {
-            "schema": "guard.policy-delivery.v2",
-            "extension_id": identity,
-            "manifest": reference,
-            "catalog_metadata": store.put_json([catalog]),
-            "archives": archives,
-            "dependencies": catalog["dependencies"],
-            "related_interfaces": sorted(manifests[identity]["related_interfaces"]),
-            "required": catalog["required"],
-            "activation": catalog["activation"],
-            "trust_class": catalog["trust_class"],
-        }
-        records[identity] = store.put_json(record)
-        if catalog["enabled"]:
-            defaults[identity] = records[identity]
+    policy = build_policy(pack_directory, native_root, plan, store, compiler=compiler)
+    directory, claims = {}, {}
+    for identity in sorted(inventory):
         entry, invitation = (
             enrich_entry(root, public[identity], commit, history) if history is not None else (public[identity], None)
         )
@@ -140,8 +94,8 @@ def build_from_packs(root, pack_directory, native_root, plan, store, commit, *, 
             claims[entry["id"]] = store.put_json(invitation)
     if len(directory) != native_root["extensions"]:
         raise ValueError("public directory ownership is incomplete")
-    transport = policy_transport(reader, native_root["index"], records, store)
     authority_epoch, revocations = build_revocations(root, store)
+    policy["revocations"] = revocations
     return {
         "schema": SCHEMA,
         "source_sha": commit,
@@ -152,12 +106,7 @@ def build_from_packs(root, pack_directory, native_root, plan, store, commit, *, 
             "index": store.index(directory),
             "claims": {"count": len(claims), "index": store.index(claims) if claims else None},
         },
-        "policy": {
-            "root": native_root,
-            "transport": transport,
-            "defaults": {"count": len(defaults), "index": store.index(defaults) if defaults else None},
-            "revocations": revocations,
-        },
+        "policy": policy,
         "claim_provenance": "resolved" if history is not None else "not-resolved",
         "legacy": {"status": "not-generated"},
     }
@@ -182,7 +131,9 @@ def create_distribution(
     plan = AssetPlan(output / "assets", commit, existing=existing_locations, publication_id=publication_id)
     store = LocatedStore(output / "metadata", publisher=plan)
     try:
-        root = build_from_packs(ROOT, policy, native_root, plan, store, commit, resolve_claimants=resolve_claimants)
+        root = build_from_packs(
+            ROOT, policy, native_root, plan, store, commit, resolve_claimants=resolve_claimants, compiler=compiler
+        )
     finally:
         plan.finish()
     root["legacy"] = prepare_legacy(
@@ -268,4 +219,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    with pinned_runtime():
+        main()

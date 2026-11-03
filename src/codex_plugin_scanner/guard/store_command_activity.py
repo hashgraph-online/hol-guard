@@ -15,7 +15,6 @@ from contextlib import AbstractContextManager
 from typing import Any, Protocol, cast
 
 from .runtime.command_activity_contract import CommandActivityEvidence
-from .runtime.command_activity_display import INVOCATION_PREVIEW_MAX_CHARS
 from .runtime.command_shadow_evaluation import CommandShadowObservation
 from .store_command_activity_wire import evidence_wire, shadow_wire
 
@@ -27,30 +26,6 @@ class _ConnectionOwner(Protocol):
 
 
 class StoreCommandActivityMixin:
-    def record_command_activity(
-        self: _ConnectionOwner,
-        evidence: CommandActivityEvidence,
-        *,
-        shadow: CommandShadowObservation | None = None,
-        shadow_evaluation_succeeded: bool = False,
-        invocation_preview: str | None = None,
-    ) -> bool:
-        """Persist one logical command and its rule hits; return false for an exact replay."""
-
-        _validate_command_activity_write(evidence, shadow)
-        preview = _validated_invocation_preview(invocation_preview)
-        return bool(
-            self._native_store_call(
-                "record_command_activity",
-                {
-                    "evidence": evidence_wire(evidence),
-                    "shadow": shadow_wire(shadow),
-                    "shadow_evaluation_succeeded": shadow_evaluation_succeeded,
-                    "invocation_preview": preview,
-                },
-            )
-        )
-
     def probe_command_activity_persistence(
         self: _ConnectionOwner,
         evidence: CommandActivityEvidence,
@@ -93,14 +68,3 @@ def _validate_command_activity_write(
         raise ValueError("shadow activity_id must match command evidence")
     if shadow.occurred_at != evidence.activity.occurred_at:
         raise ValueError("shadow occurred_at must match command evidence")
-
-
-def _validated_invocation_preview(value: str | None) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str) or "\x00" in value:
-        raise ValueError("invalid_invocation_preview")
-    stripped = value.strip()
-    if not stripped or len(stripped) > INVOCATION_PREVIEW_MAX_CHARS:
-        raise ValueError("invalid_invocation_preview")
-    return stripped

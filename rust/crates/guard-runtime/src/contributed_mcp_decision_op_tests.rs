@@ -59,13 +59,11 @@ fn run(request: &ContributedMcpDecisionRequestV1) -> Value {
 }
 
 #[test]
-fn blocked_tool_is_decided_from_the_bundled_catalog() {
+fn optional_tool_is_inert_without_an_admitted_collection() {
     let home = home("blocked");
     let result = run(&request(&home, "write_file", "allow"));
     assert_eq!(result["status"], "ok");
-    assert_eq!(result["payload"]["state"], "decided");
-    assert_eq!(result["payload"]["action"], "block");
-    assert_eq!(result["payload"]["source"], "catalog-mcp-extension");
+    assert_eq!(result["payload"]["state"], "none");
     assert_eq!(result["request_id"], "contributed-mcp-test");
     assert!(result["request_sha256"]
         .as_str()
@@ -74,7 +72,7 @@ fn blocked_tool_is_decided_from_the_bundled_catalog() {
 }
 
 #[test]
-fn package_allow_binding_relaxes_a_reviewed_tool() {
+fn request_enablement_cannot_load_optional_package_allow_metadata() {
     let home = home("allow");
     let enola = |lockdown: bool| {
         let mut request = request(&home, "query_facts", "review");
@@ -99,8 +97,33 @@ fn package_allow_binding_relaxes_a_reviewed_tool() {
         request
     };
     let result = run(&enola(false));
-    assert_eq!(result["payload"]["action"], "allow");
+    assert_eq!(result["payload"]["state"], "none");
     assert_eq!(run(&enola(true))["payload"]["state"], "none");
+}
+
+#[test]
+fn admitted_collection_drives_the_runtime_mcp_path() {
+    let home = home("active-collection");
+    let controls = crate::contributed_mcp_catalog_test_support::controls(&home, false);
+    let catalog = super::Catalog {
+        guard_home: home.to_str().unwrap(),
+        controls: Some(&controls),
+    };
+    let mut request = request(&home, "write_file", "allow");
+    request.layers.clear();
+    let payload = super::decide_with_catalog(&request, Some(&catalog)).unwrap();
+    assert_eq!(payload["action"], "block");
+    let inactive = super::Catalog {
+        guard_home: home.to_str().unwrap(),
+        controls: None,
+    };
+    assert_eq!(
+        super::decide_with_catalog(&request, Some(&inactive)).unwrap()["state"],
+        "none"
+    );
+    request.guard_home = home.join("other").to_string_lossy().into_owned();
+    request.store_path = format!("{}/guard.db", request.guard_home);
+    assert!(super::decide_with_catalog(&request, Some(&catalog)).is_err());
 }
 
 #[test]

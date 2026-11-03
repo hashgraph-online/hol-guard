@@ -17,7 +17,7 @@ def _configure_guard_desktop_parser(
         dest="desktop_command",
         required=True,
         parser_class=FriendlyArgumentParser,
-        metavar="{bootstrap,qualify,dashboard-update}",
+        metavar="{bootstrap,qualify,dashboard-update,converge}",
     )
     bootstrap_parser = desktop_subparsers.add_parser("bootstrap", help=argparse.SUPPRESS)
     _add_guard_common_args(bootstrap_parser, suppress_defaults=True)
@@ -48,6 +48,10 @@ def _configure_guard_desktop_parser(
         if command == "transition-activate":
             transition_parser.add_argument("--request", required=True)
             transition_parser.add_argument("--request-sha256", required=True)
+    converge_parser = desktop_subparsers.add_parser("converge", help=argparse.SUPPRESS)
+    _add_guard_common_args(converge_parser, suppress_defaults=True)
+    converge_parser.add_argument("--json", action="store_true")
+    converge_parser.add_argument("--dry-run", action="store_true")
     dashboard_update_parser = desktop_subparsers.add_parser("dashboard-update", help=argparse.SUPPRESS)
     _add_guard_common_args(dashboard_update_parser, suppress_defaults=True)
     dashboard_update_parser.add_argument("--daemon-pid", type=int, required=True)

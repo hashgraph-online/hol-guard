@@ -92,3 +92,34 @@ fn a_non_object_envelope_is_rejected() {
     };
     assert!(evaluate(&request(vec![item])).is_err());
 }
+
+#[test]
+fn a_retry_through_a_new_codex_bridge_keeps_the_action_identity() {
+    let item = |pid: u64, command: &str| ApprovalQueueIdentityItemV1 {
+        harness: "codex".to_owned(),
+        artifact_id: "codex:project:bash".to_owned(),
+        envelope: Some(json!({
+            "action_type": "shell",
+            "tool_name": "Bash",
+            "command": command,
+            "raw_payload_redacted": {
+                "tool_name": "Bash",
+                "guard_codex_browser_wait_process": {"pid": pid, "startToken": format!("start-{pid}")},
+                "guard_codex_browser_wait_timeout_seconds": 300,
+            },
+        })),
+        ..Default::default()
+    };
+    let result = evaluate(&request(vec![
+        item(101, "curl https://example.test"),
+        item(202, "curl https://example.test"),
+        item(303, "curl https://other.example.test"),
+    ]))
+    .expect("ok");
+    let items = &result["items"];
+    for key in ["action_identity", "queue_group_id"] {
+        assert!(items[0][key].is_string(), "{key}");
+        assert_eq!(items[0][key], items[1][key], "{key}");
+        assert_ne!(items[0][key], items[2][key], "{key}");
+    }
+}

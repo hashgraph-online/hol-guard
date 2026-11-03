@@ -6,10 +6,12 @@ import hashlib
 import json
 import re
 import shlex
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from .catalog import load_catalog, load_catalog_data, retain_trusted_cases
+from .case_retry import retryable as retry_eligible
+from .catalog import Scenario, load_catalog, load_catalog_data, retain_trusted_cases
 from .contained_core import contained_wrapper_argv as _contained_wrapper_argv
 from .evidence import assess_case, reconcile
 from .fixtures import digest_file
@@ -299,6 +301,44 @@ def verify_contained_report(
     }
 
 
+def _reconcile_case_retries(report: dict[str, Any], directory: Path, expected: Sequence[Scenario]) -> None:
+    """Judge every superseded attempt the report declares, with this verifier's own judge.
+
+    The runner that decided to grant a re-run is candidate code. A reader that only
+    checked digests would accept whatever that runner chose to bury: let a regression
+    re-run a false negative until it passed, and the failure ships in ``superseded/``,
+    digested and unread, behind a pass. So each banked attempt is read back, judged
+    here, and required to be one of the outcomes a re-run is allowed for — the rule
+    ``case_retry.retryable`` applies, enforced by the side that does not trust the
+    runner. The file name binds to its own entry, so one case's history cannot point
+    at another case's evidence, and the digest still binds the bytes. The outcome and
+    reason the history row shows readers must be the ones judged here.
+    """
+    by_id = {scenario.id: scenario for scenario in expected}
+    for entry in report.get("case_retries") or []:
+        if not isinstance(entry, dict) or entry.get("id") not in by_id:
+            raise ValueError("a superseded attempt names a scenario outside this profile")
+        name = entry.get("evidence")
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9-]{0,79}\.attempt-[1-9]\.json", name):
+            raise ValueError("a superseded attempt does not name its evidence")
+        if name != f"{entry['id']}.attempt-{entry.get('attempt')}.json":
+            raise ValueError("a superseded attempt names another case's evidence")
+        path = directory / "superseded" / name
+        if not path.is_file() or digest_file(path) != entry.get("evidence_sha256"):
+            raise ValueError("superseded attempt evidence is missing or changed")
+        case = _read_json(path, 8_000_000)
+        scenario = by_id[entry["id"]]
+        if case.get("id") != scenario.id or case.get("expectation") != scenario.expectation:
+            raise ValueError("a superseded attempt holds another case's evidence")
+        result = assess_case(scenario, case)
+        if result != case.get("assessment"):
+            raise ValueError("a superseded attempt's claimed result does not match observed evidence")
+        if (entry.get("outcome"), entry.get("reason")) != (result["outcome"], result["reason"]):
+            raise ValueError("a superseded attempt's declared outcome does not match its evidence")
+        if not retry_eligible(result):
+            raise ValueError("a superseded attempt was never eligible for a re-run")
+
+
 def verify_report(
     directory: Path,
     *,
@@ -402,6 +442,7 @@ def verify_report(
         if result["outcome"] != "pass":
             raise ValueError("a required scenario did not pass")
         results.append(result)
+    _reconcile_case_retries(report, directory, expected)
     latency = summarize_hook_latency(observations)
     if "hook_latency" in report and report["hook_latency"] != latency:
         raise ValueError("claimed aggregate hook latency does not match observed evidence")

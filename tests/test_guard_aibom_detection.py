@@ -18,7 +18,6 @@ from codex_plugin_scanner.guard.aibom_detection import (
     discover_shared_workspace_aibom_artifacts,
     extend_codex_runtime_inventory,
     extend_detection_with_workspace_aibom,
-    instruction_role_for_path,
 )
 from codex_plugin_scanner.guard.consumer.service import artifact_hash, diff_artifact
 from codex_plugin_scanner.guard.inventory_contract import (
@@ -73,13 +72,6 @@ def test_discover_agents_md_and_cursor_rules(tmp_path: Path) -> None:
     assert "instruction" in kinds
     assert "agents_md" in roles
     assert "cursor_rules" in roles
-
-
-def test_instruction_role_for_path_recognizes_standards_files() -> None:
-    assert instruction_role_for_path(Path("PRODUCT.md")) == "product_md"
-    assert instruction_role_for_path(Path("DESIGN.md")) == "design_md"
-    assert instruction_role_for_path(Path("CLAUDE.md")) == "claude_md"
-    assert instruction_role_for_path(Path("docs/PRODUCT.md")) == "product_md"
 
 
 def test_discover_standards_context_files_in_root_and_fallback_dirs(tmp_path: Path) -> None:
@@ -317,18 +309,6 @@ def test_hermes_and_openclaw_inventory_snapshots_include_workspace_agents_md(tmp
         snapshot = adapter.inventory_snapshot(context, generated_at="2026-06-10T00:00:00Z")
         overlay_items = [item for item in snapshot.items if item.item_kind == "overlay"]
         assert any(item.metadata.get("instructionRole") == "agents_md" for item in overlay_items)
-
-
-def test_instruction_role_ignores_unrelated_rules_paths(tmp_path: Path) -> None:
-    unrelated = tmp_path / "src" / "rules" / "guide.md"
-    unrelated.parent.mkdir(parents=True)
-    unrelated.write_text("not cursor\n", encoding="utf-8")
-    cursor_rule = tmp_path / ".cursor" / "rules" / "typescript.mdc"
-    cursor_rule.parent.mkdir(parents=True)
-    cursor_rule.write_text("cursor rule\n", encoding="utf-8")
-
-    assert instruction_role_for_path(unrelated) is None
-    assert instruction_role_for_path(cursor_rule) == "cursor_rules"
 
 
 def test_discover_named_instruction_docs(tmp_path: Path) -> None:

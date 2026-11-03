@@ -18,10 +18,11 @@ from codex_plugin_scanner.guard.cli.install_commands import (
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
-from codex_plugin_scanner.guard.store_approvals import (
+from tests.native_approval_writes import (
+    add_approval_request,
+    native_approval_connection,
     resolve_request_with_queue_result,
 )
-from tests.native_approval_writes import add_approval_request, native_approval_connection
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:

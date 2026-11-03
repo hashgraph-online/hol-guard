@@ -119,6 +119,26 @@
    }
   },
   {
+   "name": "cargo_lock_two_versions",
+   "path": "Cargo.lock",
+   "text": "version = 3\n\n[[package]]\nname = \"syn\"\nversion = \"1.0.109\"\n\n[[package]]\nname = \"syn\"\nversion = \"2.0.66\"\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "syn",
+      "syn",
+      "1.0.109"
+     ],
+     [
+      "syn",
+      "syn",
+      "2.0.66"
+     ]
+    ]
+   }
+  },
+  {
    "name": "uv_lock_clean",
    "path": "uv.lock",
    "text": "version = 1\n\n[[package]]\nname = \"requests\"\nversion = \"2.32.3\"\n",
@@ -129,6 +149,21 @@
       "requests",
       "requests",
       "2.32.3"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "uv_lock_marker_alternatives",
+   "path": "uv.lock",
+   "text": "version = 1\nresolution-markers = [\n    \"python_full_version >= '3.10'\",\n    \"python_full_version < '3.10'\",\n]\n\n[[package]]\nname = \"numpy\"\nversion = \"1.26.4\"\nresolution-markers = [\n    \"python_full_version < '3.10'\",\n]\n\n[[package]]\nname = \"numpy\"\nversion = \"2.1.3\"\nresolution-markers = [\n    \"python_full_version >= '3.10'\",\n]\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "numpy",
+      "numpy",
+      "2.1.3"
      ]
     ]
    }
@@ -275,6 +310,26 @@
    }
   },
   {
+   "name": "pnpm_lock_two_versions",
+   "path": "pnpm-lock.yaml",
+   "text": "lockfileVersion: '9.0'\n\npackages:\n\n  react@17.0.2:\n    resolution: {integrity: sha512-x}\n\n  react@18.2.0:\n    resolution: {integrity: sha512-y}\n\nsnapshots:\n\n  react@17.0.2: {}\n\n  react@18.2.0: {}\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "react",
+      "react",
+      "17.0.2"
+     ],
+     [
+      "react",
+      "react",
+      "18.2.0"
+     ]
+    ]
+   }
+  },
+  {
    "name": "pnpm_lock_tab_indent",
    "path": "pnpm-lock.yaml",
    "text": "packages:\n\treact@18.2.0:\n",
@@ -308,6 +363,46 @@
    "expect": {
     "complete": true,
     "entries": [
+     [
+      "lodash",
+      "lodash",
+      "4.17.21"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "yarn_lock_classic_two_versions",
+   "path": "yarn.lock",
+   "text": "# yarn lockfile v1\n\nlodash@^3.10.0:\n  version \"3.10.1\"\n  resolved \"https://registry.yarnpkg.com/lodash/-/lodash-3.10.1.tgz\"\n\nlodash@^4.17.21:\n  version \"4.17.21\"\n  resolved \"https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz\"\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "lodash",
+      "lodash",
+      "3.10.1"
+     ],
+     [
+      "lodash",
+      "lodash",
+      "4.17.21"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "bun_lock_two_versions",
+   "path": "bun.lock",
+   "text": "{\n  \"lockfileVersion\": 1,\n  \"packages\": {\n    \"lodash\": [\"lodash@4.17.21\", \"\", {}, \"sha512-a\"],\n    \"legacy/lodash\": [\"lodash@3.10.1\", \"\", {}, \"sha512-b\"],\n  },\n}\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "lodash",
+      "lodash",
+      "3.10.1"
+     ],
      [
       "lodash",
       "lodash",
@@ -502,6 +597,31 @@
    "lockfile_paths": [],
    "files": {},
    "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "external_tarball_source"
+    ],
+    "packages": [
+     [
+      "npm",
+      "demo",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "external_tarball_review_opt_in",
+   "targets": [
+    "demo@https://packages.example.com/demo-1.0.0.tgz"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
     "decision": "ask",
     "policy_action": "review",
     "enforcement": "free_local",
@@ -517,6 +637,11 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_direct_source = \"review\"\n"
+    }
    }
   },
   {
@@ -553,6 +678,31 @@
    "lockfile_paths": [],
    "files": {},
    "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "git_dependency_source"
+    ],
+    "packages": [
+     [
+      "npm",
+      "demo",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "git_dependency_review_opt_in",
+   "targets": [
+    "demo@git+https://github.com/org/demo.git"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
     "decision": "ask",
     "policy_action": "require-reapproval",
     "enforcement": "free_local",
@@ -568,10 +718,40 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_direct_source = \"require-reapproval\"\n"
+    }
    }
   },
   {
    "name": "unpinned_unknown",
+   "targets": [
+    "left-pad"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "no_cached_match"
+    ],
+    "packages": [
+     [
+      "npm",
+      "left-pad",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "unpinned_unknown_review_opt_in",
    "targets": [
     "left-pad"
    ],
@@ -594,10 +774,40 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_unknown = \"require-reapproval\"\n"
+    }
    }
   },
   {
    "name": "pinned_unknown",
+   "targets": [
+    "left-pad@1.0.0"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "no_cached_match"
+    ],
+    "packages": [
+     [
+      "npm",
+      "left-pad",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "pinned_unknown_review_opt_in",
    "targets": [
     "left-pad@1.0.0"
    ],
@@ -620,10 +830,47 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_unknown = \"require-reapproval\"\n"
+    }
    }
   },
   {
    "name": "lockfile_invalid_bytes",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {
+    "package-lock.json": {
+     "bytes_hex": "fffefd"
+    }
+   },
+   "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "summary_contains": "so it recorded this install without lockfile evidence.",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "lockfile_parse_incomplete"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "lockfile_invalid_bytes_review_opt_in",
    "targets": [
     "react@18.0.0"
    ],
@@ -652,6 +899,11 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_unknown = \"require-reapproval\"\n"
+    }
    }
   },
   {
@@ -742,6 +994,37 @@
     }
    },
    "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "lockfile_parse_incomplete"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "lockfile_duplicate_key_review_opt_in",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {
+    "package-lock.json": {
+     "text": "{\"packages\":{\"a\":{},\"a\":{}}}"
+    }
+   },
+   "expect": {
     "decision": "ask",
     "policy_action": "require-reapproval",
     "enforcement": "free_local",
@@ -757,10 +1040,46 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_unknown = \"require-reapproval\"\n"
+    }
    }
   },
   {
    "name": "lockfile_clean",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {
+    "package-lock.json": {
+     "text": "{\"lockfileVersion\": 3, \"packages\": {\"\": {\"name\": \"a\"}, \"node_modules/react\": {\"version\": \"18.0.0\"}}}"
+    }
+   },
+   "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "no_cached_match"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "lockfile_clean_review_opt_in",
    "targets": [
     "react@18.0.0"
    ],
@@ -789,10 +1108,42 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_unknown = \"require-reapproval\"\n"
+    }
    }
   },
   {
    "name": "lockfile_missing",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {},
+   "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "no_cached_match"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "lockfile_missing_review_opt_in",
    "targets": [
     "react@18.0.0"
    ],
@@ -817,6 +1168,11 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_unknown = \"require-reapproval\"\n"
+    }
    }
   }
  ]

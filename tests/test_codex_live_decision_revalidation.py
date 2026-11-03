@@ -10,15 +10,40 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_live_decision_revalidation as revalidation_module
+from codex_plugin_scanner.guard.cli import commands_support_hook_payload as hook_payload_support
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
     _action_envelope_json,
     _hook_action_envelope,
 )
 from codex_plugin_scanner.guard.codex_live_decision_revalidation import revalidate_codex_live_allow
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.native_hook_adapter import NativeHookAdapterError
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
+
+@pytest.fixture
+def native_live_allow(
+    native_hook_force: Path,
+    _native_context_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Path:
+    """Answer the live-allow queries from the session's keyed resident.
+
+    The precheck and the settle are decided by the native runtime, and these
+    tests build throwaway homes that never had a resident of their own, so the
+    queries are routed to the session home instead.
+    """
+
+    compose = revalidation_module.native_hook_compose
+    monkeypatch.setattr(
+        revalidation_module,
+        "native_hook_compose",
+        lambda kind, fields, *, guard_home: compose(kind, fields, guard_home=_native_context_home),
+    )
+    return _native_context_home
 
 
 def test_daemon_server_import_is_order_independent() -> None:
@@ -56,13 +81,15 @@ def _fixture(tmp_path: Path) -> tuple[dict[str, object], dict[str, object], Path
     )
     request: dict[str, object] = {
         "resolution_action": "allow",
+        "request_id": "request-replay",
+        "artifact_hash": "approval-context-hash",
         "workspace": str(workspace),
         "action_envelope_json": _action_envelope_json(envelope),
     }
     return request, hook_payload, home_dir
 
 
-def test_fresh_allow_requires_the_exact_original_action(tmp_path: Path) -> None:
+def test_fresh_allow_requires_the_exact_original_action(tmp_path: Path, native_live_allow: Path) -> None:
     request, hook_payload, home_dir = _fixture(tmp_path)
     changed = {**hook_payload, "tool_input": {"command": "npm install left-pad@1.3.0"}}
 
@@ -70,8 +97,8 @@ def test_fresh_allow_requires_the_exact_original_action(tmp_path: Path) -> None:
         request,
         {"hook_input": json.dumps(changed)},
         home_dir=home_dir,
-        claimed_saved_allow_hash="approval-context-hash",
-        claimed_approval_request_id="request-replay",
+        request_id="request-replay",
+        authority_resolved=True,
         reviewer=lambda _payload, _workspace, _claimed_hash, _request_id: {
             "hookSpecificOutput": {"hookEventName": "PreToolUse"}
         },
@@ -80,7 +107,34 @@ def test_fresh_allow_requires_the_exact_original_action(tmp_path: Path) -> None:
     assert authorized is False
 
 
-def test_fresh_allow_rejects_a_reviewer_that_raises(tmp_path: Path) -> None:
+def test_a_decision_completes_when_the_action_adapter_cannot_build_an_envelope(
+    tmp_path: Path, native_live_allow: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An adapter failure refuses the fresh allow instead of escaping the handler.
+
+    Every live decision runs this path, a deny included. An exception here would
+    leave the daemon handler without a completion, and the harness waiting on it
+    would never be answered.
+    """
+
+    request, hook_payload, home_dir = _fixture(tmp_path)
+
+    def unavailable(**_kwargs: object) -> None:
+        raise NativeHookAdapterError("native_hook_adapter_unavailable")
+
+    monkeypatch.setattr(hook_payload_support, "_hook_action_envelope", unavailable)
+
+    authorized = revalidate_codex_live_allow(
+        {**request, "resolution_action": "block"},
+        {"hook_input": json.dumps(hook_payload)},
+        home_dir=home_dir,
+        reviewer=lambda _payload, _workspace, _claimed_hash, _request_id: None,
+    )
+
+    assert authorized is False
+
+
+def test_fresh_allow_rejects_a_reviewer_that_raises(tmp_path: Path, native_live_allow: Path) -> None:
     request, hook_payload, home_dir = _fixture(tmp_path)
 
     def raise_review(*_args: object) -> dict[str, object]:
@@ -96,7 +150,7 @@ def test_fresh_allow_rejects_a_reviewer_that_raises(tmp_path: Path) -> None:
     assert authorized is False
 
 
-def test_fresh_allow_rejects_policy_that_became_terminal(tmp_path: Path) -> None:
+def test_fresh_allow_rejects_policy_that_became_terminal(tmp_path: Path, native_live_allow: Path) -> None:
     request, hook_payload, home_dir = _fixture(tmp_path)
 
     authorized = revalidate_codex_live_allow(
@@ -114,7 +168,7 @@ def test_fresh_allow_rejects_policy_that_became_terminal(tmp_path: Path) -> None
     assert authorized is False
 
 
-def test_fresh_allow_rejects_nonterminal_ask_output(tmp_path: Path) -> None:
+def test_fresh_allow_rejects_nonterminal_ask_output(tmp_path: Path, native_live_allow: Path) -> None:
     request, hook_payload, home_dir = _fixture(tmp_path)
 
     authorized = revalidate_codex_live_allow(
@@ -132,7 +186,7 @@ def test_fresh_allow_rejects_nonterminal_ask_output(tmp_path: Path) -> None:
     assert authorized is False
 
 
-def test_fresh_allow_accepts_current_policy_for_the_exact_action(tmp_path: Path) -> None:
+def test_fresh_allow_accepts_current_policy_for_the_exact_action(tmp_path: Path, native_live_allow: Path) -> None:
     request, hook_payload, home_dir = _fixture(tmp_path)
 
     authorized = revalidate_codex_live_allow(
@@ -147,7 +201,7 @@ def test_fresh_allow_accepts_current_policy_for_the_exact_action(tmp_path: Path)
     assert authorized is True
 
 
-def test_replay_binds_claimed_context_to_the_exact_input(tmp_path: Path) -> None:
+def test_replay_binds_claimed_context_to_the_exact_input(tmp_path: Path, native_live_allow: Path) -> None:
     request, hook_payload, home_dir = _fixture(tmp_path)
     observed: list[tuple[str | None, str | None]] = []
 
@@ -155,8 +209,7 @@ def test_replay_binds_claimed_context_to_the_exact_input(tmp_path: Path) -> None
         request,
         {"hook_input": json.dumps(hook_payload)},
         home_dir=home_dir,
-        claimed_saved_allow_hash="approval-context-hash",
-        claimed_approval_request_id="request-replay",
+        previous={"resolution_action": "allow", "status": "resumed"},
         reviewer=lambda _payload, _workspace, claimed_hash, request_id: (
             observed.append((claimed_hash, request_id)) or {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
         ),
@@ -166,7 +219,7 @@ def test_replay_binds_claimed_context_to_the_exact_input(tmp_path: Path) -> None
     assert observed == [("approval-context-hash", "request-replay")]
 
 
-def test_explicit_home_is_part_of_exact_action_binding(tmp_path: Path) -> None:
+def test_explicit_home_is_part_of_exact_action_binding(tmp_path: Path, native_live_allow: Path) -> None:
     custom_home = tmp_path / "custom-home"
     workspace = tmp_path / "workspace"
     hook_payload: dict[str, object] = {
@@ -176,6 +229,8 @@ def test_explicit_home_is_part_of_exact_action_binding(tmp_path: Path) -> None:
     }
     request: dict[str, object] = {
         "resolution_action": "allow",
+        "request_id": "request-replay",
+        "artifact_hash": "approval-context-hash",
         "workspace": str(workspace),
         "action_envelope_json": _action_envelope_json(
             _hook_action_envelope(
@@ -227,7 +282,7 @@ def acknowledged_live_policy(tmp_path: Path, native_hook_force):
 
 
 def test_first_exact_live_allow_revalidates_through_resident_worker(
-    tmp_path: Path, acknowledged_live_policy: GuardStore
+    tmp_path: Path, acknowledged_live_policy: GuardStore, native_live_allow: Path
 ) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
@@ -293,8 +348,8 @@ def test_first_exact_live_allow_revalidates_through_resident_worker(
         {**approval, "resolution_action": "allow"},
         {"hook_input": json.dumps(payload)},
         home_dir=home_dir,
-        claimed_saved_allow_hash=artifact_hash,
-        claimed_approval_request_id=request_id,
+        request_id=request_id,
+        authority_resolved=True,
         reviewer=resident_reviewer,
     )
 

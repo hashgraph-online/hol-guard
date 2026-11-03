@@ -102,13 +102,56 @@ pub(in crate::pretool) fn agent_skill_document(
     canonical: &std::path::Path,
     home_dir: Option<&str>,
 ) -> bool {
+    skill_tree_file(canonical, home_dir, |extension| extension == "md")
+}
+
+/// The helper a skill document tells its reader to run.
+///
+/// A skill is a document and the scripts it names, written together and
+/// installed together. Reading the script before running it is the careful
+/// step -- the one that notices what the document left out -- so sending that
+/// read to review taxes the reader for looking first.
+///
+/// The extension list is what keeps this narrow. The document allowance
+/// refuses a `credentials.json` planted in a skill tree, and a list of
+/// interpreter extensions keeps refusing it: a store of secrets is named for
+/// what it holds, not for a language. Anything outside the list -- an archive,
+/// a key, a database, a file with no extension at all -- keeps its review.
+pub(in crate::pretool) fn agent_skill_script(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+) -> bool {
+    // The filename screen stands aside as soon as a name carries a source
+    // extension, so it never reaches its own directory half for a script.
+    // A skill tree may still hold a credential store, and a script written
+    // into one is named for the language it is in, not for what it reads.
+    // Ask the directory question here, where the extension list is what
+    // admits the file in the first place.
+    !guard_secure_fs::credential_directory_path(canonical)
+        && skill_tree_file(canonical, home_dir, |extension| {
+            SKILL_SCRIPT_EXTENSIONS.contains(&extension)
+        })
+}
+
+/// Extensions that name the language a file is written in.
+const SKILL_SCRIPT_EXTENSIONS: &[&str] = &[
+    "sh", "bash", "zsh", "fish", "py", "rb", "js", "mjs", "cjs", "ts", "mts", "ps1", "lua", "pl",
+];
+
+/// A file inside a skill tree whose extension this reading admits.
+fn skill_tree_file(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    admits: impl Fn(&str) -> bool,
+) -> bool {
     let canonical: &std::path::Path = &plain(canonical);
     let Some(home) = home_dir.and_then(canonical_root) else {
         return false;
     };
-    if canonical
+    if !canonical
         .extension()
-        .is_none_or(|extension| extension != "md")
+        .and_then(|extension| extension.to_str())
+        .is_some_and(&admits)
     {
         return false;
     }
@@ -439,9 +482,10 @@ pub(in crate::pretool) fn project_skill_document(
 }
 
 /// Agent planning and memory notes in the verified user home:
-/// `~/.codex/plans/**`, `~/.codex/memories/**` and `~/.claude/plans/**`.
-/// Notes are Markdown, plain text or JSON evidence. Auth material, config and
-/// sessions live elsewhere under `.codex` and `.claude` and stay guarded, and
+/// `~/.codex/plans/**`, `~/.codex/memories/**`, `~/.claude/plans/**` and
+/// `~/.grok/memory-v2/**`. Notes are Markdown, plain text or JSON evidence.
+/// Auth material, config and sessions live elsewhere under `.codex`, `.claude`
+/// and `.grok` and stay guarded, and
 /// the caller has already refused credential names and sensitive families.
 pub(in crate::pretool) fn codex_notes_document(
     canonical: &std::path::Path,
@@ -458,14 +502,18 @@ pub(in crate::pretool) fn codex_notes_document(
     {
         return false;
     }
-    [".codex/plans", ".codex/memories", ".claude/plans"]
-        .iter()
-        .any(|name| {
-            let root = under(&home, name);
-            crate::runtime_read_paths::canonicalize_text(&root)
-                .is_ok_and(|resolved| resolved == root)
-                && canonical.strip_prefix(&root).is_ok_and(|relative| {
-                    visible_components(relative).is_some_and(|parts| !parts.is_empty())
-                })
-        })
+    [
+        ".codex/plans",
+        ".codex/memories",
+        ".claude/plans",
+        ".grok/memory-v2",
+    ]
+    .iter()
+    .any(|name| {
+        let root = under(&home, name);
+        crate::runtime_read_paths::canonicalize_text(&root).is_ok_and(|resolved| resolved == root)
+            && canonical.strip_prefix(&root).is_ok_and(|relative| {
+                visible_components(relative).is_some_and(|parts| !parts.is_empty())
+            })
+    })
 }

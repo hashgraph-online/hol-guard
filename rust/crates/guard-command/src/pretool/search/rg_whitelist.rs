@@ -154,7 +154,7 @@ fn no_hidden_whitelist(root: &Path, context: ReadContext<'_>) -> bool {
     }
     // The memo key's marker keeps this walk apart from the recursive-read
     // walks that share the same per-evaluation memo.
-    super::walk_memo::memoized(&root, &[".rg-whitelist"], &[], false, false, || {
+    super::walk_memo::memoized(&root, &[".rg-whitelist"], &[], false, false, false, || {
         let mut negations = Negations::default();
         let Some((repository, rules)) = outer_sources_safe(&root, context, &mut negations) else {
             return false;

@@ -82,6 +82,10 @@ fn write_into_profile_temporary_directory_is_bounded() {
     std::fs::write(&target, "first draft").unwrap();
     let overwrite = write(&fixture, target.to_str().unwrap());
     assert_eq!(overwrite.reason_code, "native_exact_safe_file_write");
+
+    // Git Bash writes `/tmp/notes.txt` directly into the folder itself.
+    let direct = write(&fixture, fixture.temp.join("notes.txt").to_str().unwrap());
+    assert_eq!(direct.reason_code, "native_exact_safe_file_write");
 }
 
 #[test]
@@ -109,7 +113,7 @@ fn profile_temporary_write_keeps_spelling_link_and_leaf_boundaries() {
 
     let scratch_text = scratch.to_str().unwrap();
     let mut targets = vec![
-        fixture.temp.join("notes.txt").to_str().unwrap().to_owned(),
+        fixture.temp.join("helper.dll").to_str().unwrap().to_owned(),
         hard.to_str().unwrap().to_owned(),
         junction.join("notes.txt").to_str().unwrap().to_owned(),
         scratch.join("helper.dll").to_str().unwrap().to_owned(),

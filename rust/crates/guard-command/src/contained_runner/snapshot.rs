@@ -1,6 +1,6 @@
 //! Complete bounded workspace snapshots for result-only contained commands.
 //!
-//! Faithful port of `runtime/workspace_snapshot_inputs.py`.
+//! Faithful port of the retired `runtime/workspace_snapshot_inputs.py`.
 
 use std::ffi::{CStr, CString, OsStr};
 use std::fs::{self, File, Metadata};

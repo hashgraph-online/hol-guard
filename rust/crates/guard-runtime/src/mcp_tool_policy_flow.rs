@@ -67,6 +67,7 @@ pub(crate) struct Ctx<'a> {
     pub(crate) lookup: Option<&'a McpPolicyLookupInputV1>,
     /// What this call's passes over one subject share (`PassMemo`).
     pub(crate) memo: Option<&'a PassMemo<'a>>,
+    pub(crate) catalog: Option<&'a crate::contributed_mcp_decision_op::Catalog<'a>>,
 }
 
 impl Ctx<'_> {
@@ -210,7 +211,8 @@ fn apply_temporary_grant(
     let local_decision;
     let granted = match &subject.extension {
         Some(extension) => {
-            local_decision = memo::extension(ctx.memo, subject, extension, original.as_str());
+            local_decision =
+                memo::extension(ctx.memo, subject, extension, original.as_str(), ctx.catalog);
             &local_decision
         }
         None => ctx.ask(json!({

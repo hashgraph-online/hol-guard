@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.mac-address-lookup",
+  "version": "1.0.0",
+  "name": "MAC Address Lookup MCP",
+  "description": "A MAC address lookup with no ads, no cookie popups, and no per-request cost. Its one tool, lookup, reads the public IEEE registries and tells you the vendor, country, and registry of a MAC address or OUI prefix, with a link to more information at mac.jasontally.com. No API key, no account, no session. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "com.jasontally",
+    "displayName": "Jason Tally",
+    "url": "https://jasontally.com"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#0F172A"
+  },
+  "homepage": "https://mac.jasontally.com",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://mac.jasontally.com/mcp",
+    "serverNames": [
+      "mac-lookup",
+      "mac-address-lookup"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-public-data-read"
+  ],
+  "tools": [
+    {
+      "name": "lookup",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://mac.jasontally.com",
+    "https://mac.jasontally.com/help",
+    "https://mac.jasontally.com/llms.txt",
+    "https://mac.jasontally.com/.well-known/mcp/server-card.json",
+    "https://mac.jasontally.com/privacy",
+    "https://github.com/jasontally/mac-address-lookup",
+    "https://jasontally.com/posts/2026-10-01-a-mac-address-lookup-that-tries-very-hard-not-to-exist/"
+  ],
+  "saferAlternatives": [
+    "lookup only reads public IEEE registry data. It writes nothing, needs no key, and is annotated readOnlyHint, so it keeps Guard's usual handling.",
+    "The MAC address you send to lookup is in the request, so it reaches the host. To keep a lookup on your own computer, use https://mac.jasontally.com in a browser, where the query runs locally."
+  ]
+}

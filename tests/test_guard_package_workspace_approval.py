@@ -24,13 +24,22 @@ from tests.manifest_install_fixtures import (
     _write_linked_git_worktrees,
     _write_pnpm_workspace,
 )
+from tests.package_review_settings import review_package_signals
 
 
-def test_workspace_package_approval_cannot_lower_current_gate_across_linked_worktrees(
+def test_workspace_package_approval_is_reused_across_linked_worktrees_with_the_same_dependency_graph(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A workspace allow answers the identical install in every linked worktree.
+
+    The portable workspace scope is the repository identity plus the dependency
+    graph, not the checkout path, so a linked worktree with the same lockfile is
+    the artifact the user approved. A different repository is a different scope
+    and is still reviewed.
+    """
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home", "package_unknown", "package_lockfile_drift")
     workspace_dir = tmp_path / "workspace"
     worktree_dir = tmp_path / "workspace-worktree"
     workspace_dir.mkdir()
@@ -100,8 +109,8 @@ def test_workspace_package_approval_cannot_lower_current_gate_across_linked_work
         timeout_seconds=30,
     )
 
-    assert retry_rc == 2
-    assert retry_payload["verdict"]["action"] == "require-reapproval"
+    assert retry_rc == 0
+    assert retry_payload["verdict"]["action"] == "allow"
     retry_receipt = retry_payload["receipt"]
     assert isinstance(retry_receipt, dict)
     assert retry_receipt["artifact_id"] == receipt["artifact_id"]
@@ -109,10 +118,6 @@ def test_workspace_package_approval_cannot_lower_current_gate_across_linked_work
     evaluation = retry_payload["supply_chain_evaluation"]
     assert isinstance(evaluation, dict)
     assert any(
-        isinstance(reason, dict) and reason.get("code") == "approval_reuse_reapproval_required"
-        for reason in evaluation.get("reasons", [])
-    )
-    assert not any(
         isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
         for reason in evaluation.get("reasons", [])
     )
@@ -191,6 +196,7 @@ def test_legacy_v1_package_workspace_approval_is_not_reused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home", "package_unknown", "package_lockfile_drift")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     _write_linked_git_worktrees(workspace_dir, tmp_path / "unused-linked")

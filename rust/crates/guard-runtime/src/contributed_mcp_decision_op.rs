@@ -1,11 +1,10 @@
 //! `ContributedMcpDecide` — the native decision for catalog MCP contributions.
 //!
-//! The bundled MCP contributions, per-tool states, package-launcher allow
-//! binding, and direct-command and remote-endpoint matching are decided here.
-//! The caller supplies only the identity fields recorded in artifact metadata,
-//! the tool name, and the extension-control layers it verified; the request is
-//! pinned to the guard home's store, and the reply is bound to the request by
-//! digest.
+//! Production dispatch retains the authenticated active collection and its
+//! mutation lease. Identity fields and legacy request layers cannot activate
+//! optional code. Per-tool states, reviewed package-launcher allows, direct
+//! commands and remote endpoints are decided against that captured collection;
+//! the request is pinned to the guard home and the reply is request-bound.
 
 use guard_command::contributed_mcp_decision::{
     contributions, decide_contributed_mcp, ContributedMcpInput,
@@ -30,14 +29,53 @@ const MAX_ENV_KEYS: usize = 1024;
 const REQUEST_INVALID: &str = "native_contributed_mcp_request_invalid";
 const PLACEHOLDER_DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
+/// Borrowed only while the captured snapshot's mutation lease is held.
+pub(crate) struct Catalog<'a> {
+    pub(crate) guard_home: &'a str,
+    pub(crate) controls:
+        Option<&'a guard_command::native_command_controls::CompiledNativeCommandControls>,
+}
+
+pub(crate) fn with_catalog<T>(
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
+    guard_home: &str,
+    evaluate: impl FnOnce(&Catalog<'_>) -> Result<T, String>,
+) -> Result<T, String> {
+    let store = store.ok_or("native_contributed_mcp_authority_unavailable")?;
+    store.require_guard_home(guard_home)?;
+    let snapshot = store.current_admitted_snapshot()?;
+    let _lease = store.command_authority_lease(&snapshot)?;
+    evaluate(&Catalog {
+        guard_home,
+        controls: snapshot.command_extensions.as_ref(),
+    })
+}
+
+pub(crate) fn evaluate_with_store(
+    request: &ContributedMcpDecisionRequestV1,
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> Result<Vec<u8>, String> {
+    with_catalog(store, &request.guard_home, |catalog| {
+        evaluate_with_catalog(request, Some(catalog))
+    })
+}
+
+#[cfg(test)]
 pub(crate) fn evaluate_contributed_mcp_decision_request(
     request: &ContributedMcpDecisionRequestV1,
+) -> Result<Vec<u8>, String> {
+    evaluate_with_catalog(request, None)
+}
+
+fn evaluate_with_catalog(
+    request: &ContributedMcpDecisionRequestV1,
+    catalog: Option<&Catalog<'_>>,
 ) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest(request)?;
     if request.schema != CONTRIBUTED_MCP_DECISION_REQUEST_SCHEMA {
         return Err("native_contributed_mcp_schema_mismatch".to_owned());
     }
-    let (status, code, payload) = match decide(request) {
+    let (status, code, payload) = match decide_with_catalog(request, catalog) {
         Ok(payload) => ("ok".to_owned(), "ok".to_owned(), Some(payload)),
         Err(code) => ("error".to_owned(), code.to_owned(), None),
     };
@@ -155,7 +193,10 @@ fn layer(source: &ContributedMcpLayerV1) -> Result<ExtensionControlLayer, &'stat
     })
 }
 
-pub(crate) fn decide(request: &ContributedMcpDecisionRequestV1) -> Result<Value, &'static str> {
+pub(crate) fn decide_with_catalog(
+    request: &ContributedMcpDecisionRequestV1,
+    catalog: Option<&Catalog<'_>>,
+) -> Result<Value, &'static str> {
     local_store_read::require_store_path(&request.store_path, &request.guard_home)
         .map_err(store_error)?;
     validate(request)?;
@@ -164,8 +205,6 @@ pub(crate) fn decide(request: &ContributedMcpDecisionRequestV1) -> Result<Value,
         .iter()
         .map(layer)
         .collect::<Result<Vec<_>, _>>()?;
-    let program =
-        packaged_command_program().map_err(|_| "native_contributed_mcp_catalog_unavailable")?;
     let input = ContributedMcpInput {
         current_action: &request.current_action,
         server_identity: request.server_identity.as_ref(),
@@ -174,7 +213,18 @@ pub(crate) fn decide(request: &ContributedMcpDecisionRequestV1) -> Result<Value,
         tool_name: request.tool_name.as_ref(),
         layers: &layers,
     };
-    let decided = decide_contributed_mcp(&contributions(&program), &input);
+    let decided = if let Some(catalog) = catalog {
+        if catalog.guard_home != request.guard_home {
+            return Err("native_contributed_mcp_guard_home_mismatch");
+        }
+        catalog
+            .controls
+            .and_then(|controls| controls.decide_contributed_mcp(&input))
+    } else {
+        let program =
+            packaged_command_program().map_err(|_| "native_contributed_mcp_catalog_unavailable")?;
+        decide_contributed_mcp(&contributions(&program), &input)
+    };
     Ok(outcome(
         decided
             .as_ref()

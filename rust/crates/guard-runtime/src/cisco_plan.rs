@@ -47,6 +47,7 @@ struct Plan {
     signals: Vec<GuardRiskSignalV3>,
     skill_roots: BTreeSet<PathBuf>,
     mcp_roots: BTreeSet<PathBuf>,
+    contained_action: BTreeSet<&'static str>,
 }
 
 impl Plan {
@@ -57,6 +58,17 @@ impl Plan {
             self.steps.push(CiscoStepV1::Signal {
                 signal: signal.to_value(),
             });
+        }
+    }
+
+    /// An approved root that cannot be proven contains the whole action, so
+    /// report it once. Each planned workspace reaches the same unprovable
+    /// directory under its own label -- the selected workspace in one plan and
+    /// an explicit root in the next -- and that label names the plan that
+    /// reached it, not a second containment to report.
+    fn contained_action(&mut self, error: &Contain) {
+        if self.contained_action.insert(error.reason) {
+            self.contained("approved-root", error);
         }
     }
 
@@ -91,27 +103,85 @@ fn checked(validated: Result<Validated, Contain>) -> Result<Validated, Contain> 
     Ok(validated)
 }
 
+/// Every workspace this action is planned against, in the order the caller
+/// proved them.
+///
+/// A relative target resolves against the shell's working directory, and an
+/// action may carry more than one proven directory, so each is planned as the
+/// selected workspace in turn and the rest stay approved roots for that plan.
+/// Spellings are deduplicated before planning so one directory named twice is
+/// planned once. A directory that cannot be read is an approved root for every
+/// plan, so it contains all of them, and that containment is reported once
+/// rather than once per planned workspace. With no proven shell directory the
+/// caller's own workspace is the only one, which may be absent.
+fn planned_workspaces(query: &CiscoPlanQueryV1, home: Option<&str>) -> Vec<Option<String>> {
+    let mut named: Vec<String> = Vec::new();
+    for value in &query.shell_cwds {
+        if value.trim().is_empty() {
+            continue;
+        }
+        let expanded = contain::expand(value, home).to_string_lossy().into_owned();
+        if !named.contains(&expanded) {
+            named.push(expanded);
+        }
+    }
+    if named.is_empty() {
+        return vec![query.workspace.clone()];
+    }
+    named.into_iter().map(Some).collect()
+}
+
+/// The roots every plan may reach: the explicitly approved ones the caller
+/// named, then each proven shell directory.
+fn approved(query: &CiscoPlanQueryV1, home: Option<&str>) -> Vec<String> {
+    let mut roots = query.approved_scan_roots.clone();
+    for workspace in planned_workspaces(query, home).into_iter().flatten() {
+        if !roots.contains(&workspace) {
+            roots.push(workspace);
+        }
+    }
+    roots
+}
+
 pub(crate) fn plan(query: &CiscoPlanQueryV1) -> Vec<CiscoStepV1> {
     if query.action_type != "file_write" && query.action_type != "config_change" {
         return Vec::new();
     }
     let cwd = Path::new(&query.cwd);
     let home = query.home.as_deref();
-    let roots = match contain::approved_roots(
-        query.workspace.as_deref(),
-        &query.approved_scan_roots,
-        cwd,
-        home,
-    ) {
+    let approved_roots = approved(query, home);
+    let mut plan = Plan::default();
+    for workspace in planned_workspaces(query, home) {
+        plan_one(
+            query,
+            workspace.as_deref(),
+            &approved_roots,
+            cwd,
+            home,
+            &mut plan,
+        );
+    }
+    plan.steps
+}
+
+/// Plan the action against one selected workspace, adding to what the
+/// workspaces before it already planned.
+fn plan_one(
+    query: &CiscoPlanQueryV1,
+    workspace: Option<&str>,
+    approved_roots: &[String],
+    cwd: &Path,
+    home: Option<&str>,
+    plan: &mut Plan,
+) {
+    let roots = match contain::approved_roots(workspace, approved_roots, cwd, home) {
         Ok(roots) => roots,
         Err(error) => {
-            return vec![CiscoStepV1::Signal {
-                signal: containment_signal("approved-root", &error).to_value(),
-            }];
+            plan.contained_action(&error);
+            return;
         }
     };
     let primary: &ApprovedRoot = &roots[0];
-    let mut plan = Plan::default();
     let (mut redacted_skill, mut redacted_mcp) = (false, false);
     for target in &query.target_paths {
         let Some(kind) = contain::target_kind(target, &query.sources) else {
@@ -142,7 +212,6 @@ pub(crate) fn plan(query: &CiscoPlanQueryV1) -> Vec<CiscoStepV1> {
             Err(error) => plan.contained(kind, &error),
         }
     }
-    plan.steps
 }
 
 /// Re-proves one planned scan root is still contained, immediately before the

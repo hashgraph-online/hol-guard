@@ -22,6 +22,8 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import Exten
 from codex_plugin_scanner.guard.store_extension_control_authority_schema import (
     ensure_extension_control_authority_schema,
 )
+from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
+from tests.native_activation_support import seed
 from tests.test_extension_pack_preparation import delivery as delivery
 
 
@@ -39,6 +41,7 @@ def active(delivery):
     )
     ensure_extension_control_authority_schema(connection)
     connection.commit()
+    seed(store)
     prepared = preparation.prepare(
         delivery.verified(),
         [],
@@ -47,9 +50,7 @@ def active(delivery):
         now=1500,
         fetch=delivery.fetch,
     )
-    draft = activation_transition.stage(
-        None, prepared, verifier_key=_key(store), installed_source=prepared.source_sha, now=1500
-    )
+    draft = activation_transition.stage(None, prepared, verifier_key=_key(store), store=store, now=1500)
     with hold_command_control_authority_lock(home), connection:
         activation_store.write_in_transaction(
             store, connection, draft, verifier_key=_key(store), recorded_at="unit", now=1500

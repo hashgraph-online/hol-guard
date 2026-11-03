@@ -8,7 +8,6 @@ import json
 import logging
 import os
 import platform
-import secrets
 import shutil
 import stat
 from collections.abc import Generator
@@ -16,7 +15,6 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import cast
 
 from ..adapters.base import HarnessContext
 from ..cli.install_commands import apply_managed_install
@@ -24,7 +22,11 @@ from ..daemon.manager import retire_all_guard_daemons_for_home
 from ..policy_bundle_trusted_keys import policy_bundle_keyring_payload
 from ..store import GuardStore
 from .contracts import MDM_STATUS_SCHEMA_VERSION, ManagedPolicy, default_machine_paths
-from .harness_coverage import register_user_harnesses, unregister_user_harnesses
+from .harness_coverage import (
+    register_requested_user_harnesses,
+    unregister_user_harnesses,
+    write_user_coverage_request,
+)
 from .manifest import verify_release_manifest
 from .native import NativeInstallVerification, verify_native_install
 from .policy import load_managed_policy
@@ -182,95 +184,10 @@ def _activation_lock(guard_home: Path) -> Generator[None, None, None]:
 
 
 _COVERAGE_REQUEST_NAME = "mdm-harness-coverage-request.json"
-_COVERAGE_REQUEST_SCHEMA = "hol-guard-harness-coverage-request.v1"
-_MAX_COVERAGE_REQUEST_BYTES = 256 * 1024
 
 
 def _coverage_request_path(home: Path) -> Path:
     return home / ".hol-guard" / _COVERAGE_REQUEST_NAME
-
-
-def _write_coverage_request(home: Path, installs: list[dict[str, object]]) -> None:
-    target = _coverage_request_path(home)
-    payload = (
-        json.dumps(
-            {"schemaVersion": _COVERAGE_REQUEST_SCHEMA, "installs": installs},
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        + b"\n"
-    )
-    if len(payload) > _MAX_COVERAGE_REQUEST_BYTES:
-        raise ValueError("harness_coverage_request_capacity_exceeded")
-    temporary = target.parent / f".{_COVERAGE_REQUEST_NAME}.{secrets.token_hex(8)}.tmp"
-    descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    try:
-        with os.fdopen(descriptor, "wb") as stream:
-            _ = stream.write(payload)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-        target.chmod(0o600)
-    finally:
-        temporary.unlink(missing_ok=True)
-
-
-def _read_coverage_request(home: Path) -> list[dict[str, object]]:
-    guard_home = home / ".hol-guard"
-    target = _coverage_request_path(home)
-    home_metadata = home.stat()
-    try:
-        guard_metadata = guard_home.lstat()
-        target_metadata = target.lstat()
-    except FileNotFoundError as exc:
-        raise ValueError("harness_coverage_request_absent") from exc
-    if (
-        not stat.S_ISDIR(guard_metadata.st_mode)
-        or stat.S_ISLNK(guard_metadata.st_mode)
-        or guard_metadata.st_uid != home_metadata.st_uid
-        or guard_metadata.st_mode & 0o022
-        or not stat.S_ISREG(target_metadata.st_mode)
-        or stat.S_ISLNK(target_metadata.st_mode)
-        or target_metadata.st_uid != home_metadata.st_uid
-        or target_metadata.st_mode & 0o077
-        or target_metadata.st_size > _MAX_COVERAGE_REQUEST_BYTES
-    ):
-        raise PermissionError("harness_coverage_request_acl_invalid")
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(target, flags)
-    try:
-        opened = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(opened.st_mode)
-            or opened.st_size > _MAX_COVERAGE_REQUEST_BYTES
-            or (opened.st_dev, opened.st_ino) != (target_metadata.st_dev, target_metadata.st_ino)
-        ):
-            raise ValueError("harness_coverage_request_invalid")
-        payload = os.read(descriptor, _MAX_COVERAGE_REQUEST_BYTES + 1)
-    finally:
-        os.close(descriptor)
-    final = target.lstat()
-    stable_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
-    if not stat.S_ISREG(final.st_mode) or any(
-        len({getattr(target_metadata, field), getattr(opened, field), getattr(final, field)}) != 1
-        for field in stable_fields
-    ):
-        raise ValueError("harness_coverage_request_changed")
-    if len(payload) > _MAX_COVERAGE_REQUEST_BYTES:
-        raise ValueError("harness_coverage_request_capacity_exceeded")
-    parsed = cast(object, json.loads(payload))
-    if not isinstance(parsed, dict):
-        raise ValueError("harness_coverage_request_invalid")
-    request = cast(dict[str, object], parsed)
-    if set(request) != {"schemaVersion", "installs"}:
-        raise ValueError("harness_coverage_request_invalid")
-    installs = request.get("installs")
-    if request.get("schemaVersion") != _COVERAGE_REQUEST_SCHEMA or not isinstance(installs, list):
-        raise ValueError("harness_coverage_request_invalid")
-    install_items = cast(list[object], installs)
-    if any(not isinstance(item, dict) for item in install_items):
-        raise ValueError("harness_coverage_request_invalid")
-    return [cast(dict[str, object], item) for item in install_items]
 
 
 def machine_status(
@@ -426,7 +343,7 @@ def activate_user(home: Path, user: str) -> dict[str, object]:
                 encoding="utf-8",
             )
             marker.chmod(stat.S_IRUSR | stat.S_IWUSR)
-            _write_coverage_request(home, store.list_managed_installs())
+            write_user_coverage_request(default_machine_paths(), home, store.list_managed_installs())
             _audit(guard_home / "logs" / "mdm-lifecycle.log", operation="activate", status="complete", scope="user")
         except (OSError, RuntimeError, ValueError):
             request.unlink(missing_ok=True)
@@ -464,8 +381,7 @@ def register_user_coverage(home: Path, user: str) -> dict[str, object]:
     ):
         raise RuntimeError("harness_coverage_activation_incomplete")
     paths = default_machine_paths()
-    installs = _read_coverage_request(home)
-    register_user_harnesses(paths, home, installs)
+    register_requested_user_harnesses(paths, home)
     _audit(
         paths.log_root / "mdm-lifecycle.log", operation="harness-coverage-register", status="complete", scope="machine"
     )

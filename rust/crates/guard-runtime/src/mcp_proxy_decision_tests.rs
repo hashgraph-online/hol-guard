@@ -199,3 +199,80 @@ fn a_rewritten_decision_carries_the_action_it_enforces() {
     assert_eq!(packaged["route"]["tool_source"], "native-approved");
     assert_eq!(packaged["route"]["decision_policy_action"], "allow");
 }
+
+#[test]
+fn an_inline_approval_answer_reaches_the_classifier_over_the_op() {
+    let answered = reply(&request(
+        MCP_PROXY_DECISION_REQUEST_SCHEMA,
+        json!({
+            "check": "inline_approval_reply",
+            "payload": {"action": "accept", "content": {"decision": "deny"}},
+            "tool_name": "demo",
+            "server_name": "files",
+        }),
+    ));
+    assert_eq!(answered["status"], "ok");
+    assert_eq!(answered["payload"]["inline_approval"], "denied");
+    assert_eq!(
+        answered["payload"]["block"]["decision_source"],
+        "inline-denied"
+    );
+}
+
+fn binding_required(evaluation: Value) -> Value {
+    reply(&request(
+        MCP_PROXY_DECISION_REQUEST_SCHEMA,
+        json!({"check": "external_archive_binding_required", "evaluation": evaluation}),
+    ))["payload"]["required"]
+        .clone()
+}
+
+#[test]
+fn an_evaluation_that_resolved_a_tarball_demands_its_binding() {
+    // Any of the three places the evaluator records it answers for the whole
+    // evaluation: the source hashes it verified, its own reasons, or the
+    // reasons of one package inside it.
+    assert_eq!(binding_required(json!({})), json!(false));
+    assert_eq!(
+        binding_required(json!({"external_archive_source_hashes": ["a".repeat(64)]})),
+        json!(true)
+    );
+    assert_eq!(
+        binding_required(json!({"external_archive_source_hashes": ["a".repeat(63)]})),
+        json!(false)
+    );
+    assert_eq!(
+        binding_required(json!({"reasons": [{"code": "external_tarball_source"}]})),
+        json!(true)
+    );
+    assert_eq!(
+        binding_required(json!({"reasons": [{"code": "other"}]})),
+        json!(false)
+    );
+    assert_eq!(
+        binding_required(json!({"packages": [{"reasons": [{"code": "external_tarball_source"}]}]})),
+        json!(true)
+    );
+    // Entries of the wrong shape are not reasons, and must not read as one.
+    assert_eq!(
+        binding_required(json!({"reasons": "external_tarball_source", "packages": ["x"]})),
+        json!(false)
+    );
+}
+
+#[test]
+fn a_source_hash_is_measured_in_characters() {
+    // Python counts characters, so a 64-character hash stays one here however
+    // many bytes it encodes to, and a 64-byte string that is shorter than 64
+    // characters is not one. The second case is where counting bytes used to
+    // demand a binding Python never demanded; these assertions pin the lane to
+    // Python's answer in both directions rather than to a stricter rule.
+    assert_eq!(
+        binding_required(json!({"external_archive_source_hashes": ["é".repeat(64)]})),
+        json!(true)
+    );
+    assert_eq!(
+        binding_required(json!({"external_archive_source_hashes": ["é".repeat(32)]})),
+        json!(false)
+    );
+}

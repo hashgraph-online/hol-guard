@@ -10,7 +10,9 @@
 //! the resolution the daemon reports for the request it opened.
 
 use crate::blocked_request_mode::is_unlinked_connector_setup_reason;
-use crate::bounded_hook_bridge_render::{member, FAILURE_REASON};
+use crate::bounded_hook_bridge_render::{
+    decision_word, has_key, is_guard_action, member, FAILURE_REASON,
+};
 use crate::claude_hook_bridge_render::py_strip;
 use crate::hook_env_stamp::{dumps, set_member};
 use crate::pyjson::{self, PyVal};
@@ -55,6 +57,12 @@ const PROMPT_EVENTS: [&str; 2] = ["userpromptsubmit", "userpromptsubmitted"];
 const BLOCKING_EVENTS: [&str; 3] = ["pretooluse", "userpromptsubmit", "pretoolcall"];
 const RESTRICTIVE_ACTIONS: [&str; 4] =
     ["review", "require-reapproval", "sandbox-required", "block"];
+const GATING_EVENTS: [&str; 4] = [
+    "permissionrequest",
+    "pretoolcall",
+    "pretooluse",
+    "userpromptsubmit",
+];
 const APPROVAL_KEYS: [&str; 8] = [
     "reason_code",
     "approval_url",
@@ -220,9 +228,31 @@ fn py_str_or(value: Option<&PyVal>, default: &str) -> Option<String> {
     }
 }
 
+/// `_canonical_policy_action` over an action this client already holds as
+/// text: an action it cannot place is not evidence of permission, so it
+/// reads as "block".
+fn canonical_action(policy_action: &str) -> &str {
+    let stripped = py_strip(policy_action);
+    if is_guard_action(stripped) {
+        stripped
+    } else {
+        "block"
+    }
+}
+
+/// `_canonical_policy_action(value or "block")` over the daemon's own field:
+/// a falsy or non-string value names no action, and reads as "block" too.
+fn canonical_policy_action(value: Option<&PyVal>) -> String {
+    value
+        .filter(|value| value.truthy())
+        .and_then(PyVal::as_str)
+        .map_or("block", canonical_action)
+        .to_owned()
+}
+
 /// `_permission_decision`.
 fn permission_decision(policy_action: &str) -> Option<&'static str> {
-    match policy_action {
+    match canonical_action(policy_action) {
         "allow" | "warn" => Some("allow"),
         "review" | "require-reapproval" | "sandbox-required" => Some("ask"),
         "block" => Some("deny"),
@@ -233,7 +263,123 @@ fn permission_decision(policy_action: &str) -> Option<&'static str> {
 /// `_should_exit_block` for Grok.
 fn should_exit_block(event_name: &str, policy_action: &str) -> bool {
     BLOCKING_EVENTS.contains(&compact(event_name).as_str())
-        && RESTRICTIVE_ACTIONS.contains(&policy_action)
+        && RESTRICTIVE_ACTIONS.contains(&canonical_action(policy_action))
+}
+
+/// `_agreeing_native_response`: make a response that already carries its
+/// harness's own decision fields say what the canonical action says.
+///
+/// Those fields, not the action beside them, are what Grok honours, so an
+/// action this bridge cannot place must not leave an "allow" decision
+/// standing next to it. On an event that gates the call a decision word the
+/// bridge cannot place names no permission either, and a restrictive action
+/// whose envelope carries no decision at all has one inserted. The envelope
+/// is only ever tightened: a restrictive decision beside a permissive action
+/// lowers the action, never the other way round.
+fn agreeing_native_response(
+    response: &mut Vec<(String, PyVal)>,
+    mut policy_action: String,
+    event_name: &str,
+) -> String {
+    let compacted = compact(event_name);
+    let gating = GATING_EVENTS.contains(&compacted.as_str());
+    let mut entries = match member(response, "hookSpecificOutput") {
+        Some(PyVal::Dict(entries)) => Some(entries.clone()),
+        _ => None,
+    };
+    let has_top = has_key(response, "decision");
+    let has_nested = entries
+        .as_ref()
+        .is_some_and(|entries| has_key(entries, "permissionDecision"));
+    let mut top = decision_word(member(response, "decision"));
+    let mut nested = entries
+        .as_ref()
+        .and_then(|entries| decision_word(member(entries, "permissionDecision")));
+    if gating && has_top && top.is_none() {
+        top = Some("deny".to_owned());
+        set_member(response, "decision", text("deny"));
+    }
+    if gating && has_nested && nested.is_none() {
+        if let Some(entries) = entries.as_mut() {
+            nested = Some("deny".to_owned());
+            set_member(entries, "permissionDecision", text("deny"));
+        }
+    }
+    let restrictive = RESTRICTIVE_ACTIONS.contains(&policy_action.as_str());
+    if restrictive && compacted == "userpromptsubmit" && top.is_none() {
+        top = Some("block".to_owned());
+        set_member(response, "decision", text("block"));
+    } else if restrictive
+        && matches!(
+            compacted.as_str(),
+            "permissionrequest" | "pretoolcall" | "pretooluse"
+        )
+    {
+        if entries.is_none() && has_key(response, "hookSpecificOutput") {
+            // The key is there but carries no envelope this bridge can read,
+            // so the decision goes into one Grok can.
+            entries = Some(vec![("hookEventName".to_owned(), text(event_name))]);
+        }
+        if let Some(entries) = entries.as_mut() {
+            if nested.is_none() {
+                let word = if policy_action == "block" {
+                    "deny"
+                } else {
+                    "ask"
+                };
+                nested = Some(word.to_owned());
+                set_member(entries, "permissionDecision", text(word));
+            }
+        }
+        if top.is_none() {
+            // The script lists Grok's own harness beside openclaw here.
+            top = Some("deny".to_owned());
+            set_member(response, "decision", text("deny"));
+        }
+    }
+    let words: Vec<&str> = [top.as_deref(), nested.as_deref()]
+        .into_iter()
+        .flatten()
+        .collect();
+    if matches!(policy_action.as_str(), "allow" | "warn") {
+        if words.iter().any(|word| matches!(*word, "deny" | "block")) {
+            policy_action = "block".to_owned();
+        } else if words.contains(&"ask") {
+            policy_action = "review".to_owned();
+        }
+    }
+    let top_word = |top: &str| if top == "block" { "block" } else { "deny" };
+    if policy_action == "block" {
+        if let Some(top) = top.as_deref() {
+            set_member(response, "decision", text(top_word(top)));
+        }
+        if nested.is_some() {
+            if let Some(entries) = entries.as_mut() {
+                set_member(entries, "permissionDecision", text("deny"));
+            }
+        }
+    } else if RESTRICTIVE_ACTIONS.contains(&policy_action.as_str()) {
+        if let Some(top) = top.as_deref() {
+            set_member(response, "decision", text(top_word(top)));
+        }
+        if nested.as_deref() == Some("allow") {
+            if let Some(entries) = entries.as_mut() {
+                set_member(entries, "permissionDecision", text("ask"));
+            }
+        }
+    }
+    if let Some(entries) = entries {
+        set_member(response, "hookSpecificOutput", PyVal::Dict(entries));
+    }
+    if has_key(response, "policy_action")
+        && member(response, "policy_action").and_then(PyVal::as_str) != Some(policy_action.as_str())
+    {
+        // The action travels with the decision it produced, so a reader that
+        // looks at the action alone cannot read permission out of a stale or
+        // unplaceable value the decision fields no longer agree with.
+        set_member(response, "policy_action", text(&policy_action));
+    }
+    policy_action
 }
 
 /// `_to_native(daemon_response, event_name)` for Grok: the payload Grok
@@ -251,15 +397,20 @@ pub(crate) fn to_native(
         return Some((Vec::new(), 0));
     }
     if member(response, "hookSpecificOutput").is_some() || member(response, "decision").is_some() {
-        let policy = py_str_or(member(response, "policy_action"), "block")?;
+        let mut native_response = response.to_vec();
+        let policy = agreeing_native_response(
+            &mut native_response,
+            canonical_policy_action(member(response, "policy_action")),
+            event_name,
+        );
         let exit_code = if should_exit_block(event_name, &policy) {
             2
         } else {
             0
         };
-        return Some((response.to_vec(), exit_code));
+        return Some((native_response, exit_code));
     }
-    let policy_action = py_str_or(member(response, "policy_action"), "block")?;
+    let policy_action = canonical_policy_action(member(response, "policy_action"));
     let reason_value = member(response, "reason")
         .filter(|value| value.truthy())
         .or_else(|| member(response, "permission_decision_reason"));

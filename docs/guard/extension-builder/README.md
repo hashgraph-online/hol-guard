@@ -88,10 +88,13 @@ separately reviewed trust map, and the compiler's packaged baseline:
 
 ```sh
 rust/target/release/guard-command-source export-trust > contracts/extensions/build-trust-class-map.v1.json
+rust/target/release/guard-command-source export-built > packaged-build.json
 jq -n \
   --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
   --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
-  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
+  --slurpfile built packaged-build.json \
+  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",
+    validation_base:{catalog:$built[0].catalog,programs:[]}}' \
   > source-build.json
 
 rust/target/release/guard-command-source schema > source-schema.json
@@ -133,6 +136,14 @@ there is no packaged compiler manifest; add `.exe` to its value on Windows.
 A native wheel supplies its own platform compiler and manifest. The installed
 builder verifies package, source, binary, and embedded-program identities and
 does not discover Cargo or fall back to Python matcher semantics.
+
+## Bind a hosted action
+
+A command source or MCP server contribution stays local-only unless a sibling
+`guard.cloud-action-binding-contribution.v1` document names hosted actions it
+covers. Most contributions need none. [Bind a hosted action](HOSTED-ACTIONS.md)
+explains when to add a binding, how to validate and compile it offline, what
+reviewers check and what a merged binding changes today.
 
 ## Run portable fixtures
 
@@ -192,6 +203,14 @@ hol-guard extensions generate \
 
 hol-guard extensions validate samplectl-kit
 ```
+
+Optional `--license` (an SPDX expression such as `MIT` or
+`(MIT OR CC0-1.0)`, at most 64 characters) and `--description`
+(one line, at most 512 characters) record the upstream license and a specific
+summary in the discovery snapshot. CLI kits render them into the command
+source; without them the source keeps `license: null` and the generic
+description. They are part of the snapshot binding, so adding them to an
+existing kit means a new discovery and a re-bound review.
 
 The output directory must not exist and its parent must already exist. A CLI
 kit contains `discovery.json`, `review.json`, `report.json`, a README, a file
@@ -289,7 +308,11 @@ hol-guard extensions diff samplectl-kit samplectl-reviewed
 
 Changed source bytes, identity, or metadata invalidate the old review binding.
 `diff` exits 1 when valid kits differ. A safe literal removes review evidence
-only from its own generated rule; it cannot suppress another rule, a required
+only from its own generated rule and from the kit's unclassified fallback rule,
+which matches every invocation and therefore carries every reviewed literal
+(at most 64 per kit). Each literal gets a fixture case on both rules, so a CLI
+review also needs operations plus twice its literals to stay within the native
+runner's 256 fixture cases. It cannot suppress another rule, a required
 floor, device policy, or executable-identity checks. Unknown CLI invocations
 retain review. Unknown and unreviewed MCP tools inherit existing handling.
 
@@ -382,9 +405,11 @@ descriptions and review input are publishable author input; inspect them for
 secrets before submission.
 
 The bounded contracts reject excessive input rather than truncating it. The
-current limits include 8 MiB source/compiler input, 4 MiB compiled program,
-32 matcher depth, 16,384 matcher nodes, 512 extensions, 1,024 rules, 64 safe
-variants per rule, and the adapter limits in `contracts/extensions/`.
+current limits include 8 MiB source/compiler input (the pack lifecycle
+subcommand is read by the runtime's own stdin reader instead, at 6 MiB),
+4 MiB compiled program, 32 matcher depth, 16,384 matcher nodes, 512
+extensions, 1,024 rules, 64 safe variants per rule, and the adapter limits in
+`contracts/extensions/`.
 
 ## Exit statuses
 

@@ -13,10 +13,10 @@ import pytest
 def test_windows_directory_repair_is_not_repeated_for_the_same_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from codex_plugin_scanner.guard import native_policy_snapshot_windows_state, store_base
+    from codex_plugin_scanner.guard import native_policy_snapshot_windows_atomic, store_base
 
     bound: list[Path] = []
-    monkeypatch.setattr(native_policy_snapshot_windows_state, "_windows_ensure_private_directory", bound.append)
+    monkeypatch.setattr(native_policy_snapshot_windows_atomic, "_windows_ensure_private_directory", bound.append)
     monkeypatch.setattr(store_base, "_windows_private_directory_bound", {})
     clock = [100.0]
     monkeypatch.setattr(store_base.time, "monotonic", lambda: clock[0])
@@ -41,7 +41,7 @@ def test_windows_directory_repair_is_not_repeated_for_the_same_directory(
         bound.append(path)
         raise OSError("denied")
 
-    monkeypatch.setattr(native_policy_snapshot_windows_state, "_windows_ensure_private_directory", fail)
+    monkeypatch.setattr(native_policy_snapshot_windows_atomic, "_windows_ensure_private_directory", fail)
     clock[0] += store_base._WINDOWS_PRIVATE_DIRECTORY_RECHECK_SECONDS
     store_base._set_windows_private_directory(home)
     store_base._set_windows_private_directory(home)
@@ -51,10 +51,10 @@ def test_windows_directory_repair_is_not_repeated_for_the_same_directory(
 def test_windows_directory_behind_a_junction_is_bound_every_time(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from codex_plugin_scanner.guard import native_policy_snapshot_windows_state, store_base
+    from codex_plugin_scanner.guard import native_policy_snapshot_windows_atomic, store_base
 
     bound: list[Path] = []
-    monkeypatch.setattr(native_policy_snapshot_windows_state, "_windows_ensure_private_directory", bound.append)
+    monkeypatch.setattr(native_policy_snapshot_windows_atomic, "_windows_ensure_private_directory", bound.append)
     monkeypatch.setattr(store_base, "_windows_private_directory_bound", {})
     home = tmp_path / "parent" / "guard-home"
     home.mkdir(parents=True)

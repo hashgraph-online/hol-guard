@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.raw-browser",
+  "version": "1.0.0",
+  "name": "Raw Browser",
+  "description": "Drives the Chrome or Edge you are already signed into: 16 tools for tabs, navigation, reading, clicking, filling, screenshots and cookies. Read-only tools inherit normal policy; navigation and input are reviewed; raw_screenshot is reviewed because it writes a PNG; raw_visit, raw_cookies, raw_eval and raw_call are blocked. On Windows, install with npm install -g raw-browser, run the bridge installer, and load its unpacked extension with Developer mode before starting raw-mcp. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.liutingqiu",
+    "displayName": "liutingqiu",
+    "url": "https://github.com/liutingqiu"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniGlobeAlt", "background": "#C2410C" },
+  "homepage": "https://github.com/liutingqiu/raw-browser",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "raw-mcp"
+  },
+  "riskClasses": [
+    "external-browser-control",
+    "external-network-read",
+    "external-content-ingestion",
+    "external-credential-read",
+    "external-script-execution",
+    "external-filesystem-write"
+  ],
+  "tools": [
+    { "name": "raw_use", "state": "inherit" },
+    { "name": "raw_status", "state": "inherit" },
+    { "name": "raw_tabs", "state": "inherit" },
+    { "name": "raw_new", "state": "review" },
+    { "name": "raw_goto", "state": "review" },
+    { "name": "raw_text", "state": "inherit" },
+    { "name": "raw_html", "state": "inherit" },
+    { "name": "raw_eval", "state": "block" },
+    { "name": "raw_snapshot", "state": "inherit" },
+    { "name": "raw_click", "state": "review" },
+    { "name": "raw_fill", "state": "review" },
+    { "name": "raw_visit", "state": "block" },
+    { "name": "raw_screenshot", "state": "review" },
+    { "name": "raw_cookies", "state": "block" },
+    { "name": "raw_frames", "state": "inherit" },
+    { "name": "raw_call", "state": "block" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/liutingqiu/raw-browser",
+    "https://www.npmjs.com/package/raw-browser",
+    "https://github.com/liutingqiu/raw-browser/blob/v0.6.2/mcp/raw-browser-mcp.mjs",
+    "https://github.com/liutingqiu/raw-browser/blob/v0.6.2/SECURITY.md"
+  ],
+  "saferAlternatives": [
+    "Prefer raw_status, raw_tabs, raw_text, raw_html, raw_snapshot and raw_frames; they read the current tab without changing it.",
+    "raw_screenshot also reads the tab, but it writes a PNG to the working directory or the caller's out path. Review it before approving and point it at a dedicated output directory.",
+    "raw_eval, raw_visit and raw_call are blocked: raw_eval and raw_visit run arbitrary page JavaScript, and raw_call can invoke any Raw.* / CDP method. Use the typed tool that performs the same action.",
+    "raw_cookies is blocked because it returns live session cookie values. Use a browser profile dedicated to the agent and keep cookie values out of model context.",
+    "raw_click, raw_fill, raw_goto and raw_new can submit forms, start purchases, or carry data in a URL. Read every argument before approving.",
+    "The bridge listens only on 127.0.0.1 and requires the per-browser token; keep the token local and do not expose the port."
+  ]
+}

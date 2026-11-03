@@ -1,4 +1,4 @@
-//! Parity vectors recorded from the daemon's Python prompt notice
+//! Parity vectors recorded from Guard's Python prompt copy
 //! (`scripts/record_claude_prompt_notice_vectors.py`).
 
 use serde_json::{json, Value};

@@ -12,9 +12,6 @@ import hashlib
 from dataclasses import replace
 from pathlib import Path
 
-import pytest
-
-from codex_plugin_scanner.guard.native_github_workflow import GitHubWorkflowDescriptor
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.github_workflow_approval_record import (
     GITHUB_WORKFLOW_APPROVAL_RECORD_SCHEMA,
@@ -23,8 +20,8 @@ from codex_plugin_scanner.guard.runtime.github_workflow_approval_record import (
 from codex_plugin_scanner.guard.workflow_capabilities import (
     WorkflowCapabilityBinding,
     WorkflowCapabilityRuleBinding,
-    canonical_framed_payload,
 )
+from tests.workflow_capability_frame_support import canonical_framed_payload
 
 REPOSITORY = "example/repo"
 LOCK_COMMAND = f"gh issue lock 17 --repo {REPOSITORY}"
@@ -70,16 +67,16 @@ def binding(
     return replace(base, **changes)  # type: ignore[arg-type]
 
 
-def descriptor(
+def approval_record(
     command: str = LOCK_COMMAND,
     *,
     operation: str = "lock-issue",
     resource_type: str = "github-issue",
     resource: str = "17",
     **binding_changes: object,
-) -> GitHubWorkflowDescriptor:
+) -> GitHubWorkflowApprovalRecord:
     identity = parse_shell_command(command).security_identity
-    record = GitHubWorkflowApprovalRecord(
+    return GitHubWorkflowApprovalRecord(
         schema_version=GITHUB_WORKFLOW_APPROVAL_RECORD_SCHEMA,
         operation_kind=operation,
         resource_type=resource_type,
@@ -87,16 +84,3 @@ def descriptor(
         operation_digest_sha256=framed_digest("github-workflow-operation-digest", f"{identity}:{resource}"),
         binding=binding(operation=operation, resource_type=resource_type, resource=resource, **binding_changes),
     )
-    return GitHubWorkflowDescriptor(record=record, command_identity=identity)
-
-
-def with_binding(source: GitHubWorkflowDescriptor, **changes: object) -> GitHubWorkflowDescriptor:
-    return replace(source, record=replace(source.record, binding=replace(source.record.binding, **changes)))  # type: ignore[arg-type]
-
-
-@pytest.fixture
-def native_lineage_verified(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stand in for the resident's persisted-command re-derivation (covered by Rust vectors)."""
-    import codex_plugin_scanner.guard.runtime.github_workflow_runtime as runtime_module
-
-    monkeypatch.setattr(runtime_module, "github_workflow_persisted_command_matches", lambda *_a, **_k: True)

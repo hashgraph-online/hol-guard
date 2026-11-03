@@ -18,17 +18,12 @@ import pytest
 from codex_plugin_scanner.guard.daemon.hook_request_parsing import (
     HookPayloadReferenceError,
     hook_payload_reference_size,
-    payload_kind,
 )
 
 
 def test_hook_payload_reference_size_ignores_inline_payloads(tmp_path: Path) -> None:
     assert hook_payload_reference_size({"tool_response": "x"}, guard_home=tmp_path) is None
     assert hook_payload_reference_size({"guard_payload_ref": "not-an-object"}, guard_home=tmp_path) is None
-
-
-def test_hook_payload_reference_classifies_encrypted_ref_kind() -> None:
-    assert payload_kind({"guard_payload_ref": {"version": 1}}) == "encrypted_payload_ref"
 
 
 def test_hook_payload_reference_rejects_bad_digest(tmp_path: Path) -> None:

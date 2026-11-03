@@ -2,7 +2,7 @@
 
 PyPI does not carry every native wheel. Alpha publication uploads only the
 pure ``py3-none-any`` wheel, and stable publication keeps the platforms with
-few users (Intel macOS and Windows ARM64) off PyPI to stay inside the project
+few users (Intel macOS, Windows ARM64 and Linux ARM64) off PyPI to stay inside the project
 storage quota. A pure wheel has no bundled ``_native/hol-guard-runtime``, so
 this module picks the platform wheel that matches the running interpreter,
 downloads it from the ``v<version>`` release (``alpha/v<version>`` for
@@ -61,13 +61,14 @@ PUBLISHED_PLATFORM_TAGS = frozenset(
     {
         "macosx_11_0_arm64",
         "macosx_13_0_x86_64",
+        "manylinux_2_17_aarch64",
         "manylinux_2_17_x86_64",
         "win_amd64",
         "win_arm64",
     }
 )
 # Stable native wheels for these platforms are attached to the GitHub release and never uploaded to PyPI.
-GITHUB_ONLY_PLATFORM_TAGS = frozenset({"macosx_13_0_x86_64", "win_arm64"})
+GITHUB_ONLY_PLATFORM_TAGS = frozenset({"macosx_13_0_x86_64", "manylinux_2_17_aarch64", "win_arm64"})
 # The marker keeps its alpha-era name so installs recorded by earlier updaters stay managed.
 _MARKER_NAME = "alpha-native-wheel.json"
 _MARKER_SCHEMA_VERSION = 1
@@ -166,12 +167,49 @@ def _windows_short_path(path: str) -> str:
     return buffer.value if 0 < length < len(buffer) else path
 
 
+def _account_free_executable(executable: str) -> str:
+    """``executable`` with the user's home written as ``$HOME``, already quoted.
+
+    This command is printed by ``hol-guard doctor`` and pasted into issues and
+    support requests, and an interpreter inside the home directory spells out
+    the account name of whoever ran it. ``"$HOME/..."`` is expanded by every
+    POSIX shell, and the quotes carry a path with spaces as well, so the
+    command still runs where the original did. Returns the path unchanged when
+    it is not under the home directory, or when there is no home to find.
+    """
+
+    # The rewritten command expands ``$HOME`` in the reader's shell, so the
+    # directory the path must match is the one that variable names, not the
+    # password-database home ``expanduser`` falls back to when ``HOME`` is
+    # unset. Matching against the fallback would print ``"$HOME/..."`` for a
+    # reader whose shell expands ``$HOME`` to nothing, naming an interpreter
+    # under ``/`` that is not there.
+    home = os.environ.get("HOME", "").rstrip(os.sep)
+    if not home or home == executable:
+        return executable
+    prefix = home + os.sep
+    if not executable.startswith(prefix):
+        return executable
+    return f'"$HOME/{executable[len(prefix) :]}"'
+
+
 def _manual_installer_prefix(installer: str) -> str:
     # Point the command at the environment running Guard, not whichever Python is first on PATH.
     if installer == "pipx":
         return "pipx runpip hol-guard install"
     executable = sys.executable or "python"
-    if any(character.isspace() for character in executable) and os.name == "nt":
+    if os.name != "nt":
+        executable = _account_free_executable(executable)
+        if any(character.isspace() for character in executable) and not executable.startswith('"'):
+            executable = f'"{executable}"'
+        if installer == "uv":
+            return f"uv pip install --python {executable}"
+        return f"{executable} -m pip install"
+    # Windows keeps the literal path. The command is written to paste into
+    # PowerShell, cmd.exe and Git Bash alike, and no one spelling of the home
+    # directory expands in all three; the short path below at least shortens
+    # the account name rather than leaving it in full.
+    if any(character.isspace() for character in executable):
         # The 8.3 short path has no spaces, so the command pastes into PowerShell, cmd.exe and Git Bash alike.
         executable = _windows_short_path(executable)
     if any(character.isspace() for character in executable):

@@ -14,6 +14,29 @@ ROOT = Path(__file__).resolve().parents[1]
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="quality job requires Bash")
 
 
+@pytest.mark.parametrize("name", ["Lint production sources", "Check formatting for production sources"])
+def test_quality_preserves_existing_paths_and_checks_cleanup_diagnostics(name):
+    action = yaml.safe_load((ROOT / ".github/actions/ci-job-quality/action.yml").read_text())
+    step = next(item for item in action["runs"]["steps"] if item.get("name") == name)
+    paths = set(step["run"].split())
+    assert {
+        "src/",
+        "tests/test_guard_durable_io.py",
+        "tests/test_guard_managed_install_context.py",
+        "tests/test_guard_private_file_io.py",
+        "tests/test_native_offline_cache.py",
+        "tests/test_native_policy_test_support.py",
+        "tests/test_ci_native_evaluator_cache.py",
+        "tests/test_cursor_native_bridge.py",
+        "tests/test_grok_native_bridge.py",
+        "tests/test_frozen_windows_daemon_bootstrap.py",
+        "tests/test_frozen_windows_daemon_cleanup_diagnostics.py",
+        "tests/test_native_approval_gate_bridge.py",
+        "tests/test_native_review_allow_hint.py",
+        "tests/test_ci_quality_marker_scan.py",
+    } <= paths
+
+
 def _scan(root: Path, content: str | None) -> subprocess.CompletedProcess[str]:
     """Run the actual quality action with its Bash flags against the supplied fixture tree."""
     if content is not None:

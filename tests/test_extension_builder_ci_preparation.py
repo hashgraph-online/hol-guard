@@ -52,7 +52,7 @@ def checkout(tmp_path, monkeypatch):
         {
             "schemaVersion": "guard.extension-trust-class-map.v1",
             "publishers": {
-                "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+                "hol": {"id": "hol", "displayName": "HOL"},
                 "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
             },
             "classes": {
@@ -275,7 +275,7 @@ def test_builder_stages_trust_before_dependency_install_and_native_build():
     run = steps[prepare]["run"]
     assert run.count("scripts/prepare_extension_contribution.py") == 2
     assert "scripts/prepare_extension_contribution.py --check" in run
-    assert "scripts/render_command_extension_directory.py --check" in run
+    assert 'scripts/prepare_extension_contribution.py --check "${arguments[@]}"' in run
     assert "verify_native_command_program.py" not in run  # Do not compile/verify the same projections twice.
     for path in (
         "test_guard_extension_trust.py",

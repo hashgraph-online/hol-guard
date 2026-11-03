@@ -42,12 +42,16 @@ class SubprocessCaseWorker:
         workdir: Path,
         command: list[str] | None = None,
         pass_fds: tuple[int, ...] = (),
+        label: str | None = None,
     ):
+        # A re-run of the same case passes its own ``label`` so the earlier run's
+        # result, group ledger and worker logs are not overwritten by this one.
+        label = label or scenario_id
         self.scenario_id = scenario_id
-        self._result = _result_path(workdir, scenario_id)
-        self._groups = workdir / f"{scenario_id}.groups"
-        out = (workdir / f"{scenario_id}.stdout.txt").open("wb")
-        err = (workdir / f"{scenario_id}.stderr.txt").open("wb")
+        self._result = _result_path(workdir, label)
+        self._groups = workdir / f"{label}.groups"
+        out = (workdir / f"{label}.stdout.txt").open("wb")
+        err = (workdir / f"{label}.stderr.txt").open("wb")
         self._files = (out, err)
         try:
             self.process = subprocess.Popen(
@@ -201,6 +205,7 @@ def main() -> int:
             identity=identity,
             provider=spec["provider"],
             timeout=float(spec["timeout"]),
+            attempt=int(spec.get("attempt", 1)),
         )
     result = Path(spec["result"])
     temporary = result.with_suffix(".tmp")

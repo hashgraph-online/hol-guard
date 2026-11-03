@@ -19,6 +19,7 @@ from .aibom_collection import collect_aibom_snapshots as collect_aibom_snapshots
 from .aibom_commands import build_aibom_export_payload as build_aibom_export_payload
 from .aibom_commands import build_aibom_status_payload as build_aibom_status_payload
 from .aibom_commands import build_inventory_json_payload as build_inventory_json_payload
+from .aibom_commands import remember_user_inventory_if_due as remember_user_inventory_if_due
 from .aibom_commands import sync_aibom_snapshots_if_due as sync_aibom_snapshots_if_due
 from .aibom_content_upload import GuardAibomPrimaryContentSource as GuardAibomPrimaryContentSource
 from .aibom_content_upload import empty_content_upload_summary as empty_content_upload_summary
@@ -42,9 +43,7 @@ from .aibom_reporting import _redact_inventory_store_item as _redact_inventory_s
 from .aibom_reporting import _render_aibom_markdown as _render_aibom_markdown
 from .aibom_reporting import _store_only_artifact_metadata_extensions as _store_only_artifact_metadata_extensions
 from .aibom_reporting import _store_row_config_path as _store_row_config_path
-from .aibom_reporting import summarize_aibom_drift as summarize_aibom_drift
 from .aibom_reporting import summarize_aibom_layers as summarize_aibom_layers
-from .aibom_reporting import summarize_aibom_trust as summarize_aibom_trust
 from .aibom_sync import _accepted_snapshot_ids as _accepted_snapshot_ids
 from .aibom_sync import _batch_inventory_events as _batch_inventory_events
 from .aibom_sync import _inventory_events_request_body as _inventory_events_request_body
@@ -174,6 +173,16 @@ def sync_aibom_snapshots(
         options=resolved_options,
         trust_attestation_context=trust_attestation_context,
         primary_content_sources=primary_content_sources,
+    )
+    # Fleet posture reports what this collection found; see runtime/fleet_posture_aibom.py.
+    from .runtime.fleet_posture_aibom import remember_aibom_items
+
+    remember_aibom_items(
+        store,
+        snapshots,
+        now=generated_at,
+        home_dir=context.home_dir,
+        workspace_dir=context.workspace_dir,
     )
     snapshots = cloud_syncable_snapshots(snapshots)
     cloud_snapshot_ids = {snapshot.snapshot_id for snapshot in snapshots}
@@ -361,8 +370,12 @@ def sync_aibom_snapshots(
     content_eligible = content_eligible_value if isinstance(content_eligible_value, int) else 0
     content_stored = content_stored_value if isinstance(content_stored_value, int) else 0
     content_upload_complete = content_stored == content_eligible
+    # A snapshot Cloud rejects never has its skill content uploaded, so the sync
+    # is not complete even when every accepted snapshot's content was stored.
+    # Oversized snapshots are skipped locally and reported as partial instead.
+    cloud_rejected = total_rejected - len(oversized_events)
     summary: dict[str, object] = {
-        "synced": content_upload_complete,
+        "synced": content_upload_complete and cloud_rejected == 0,
         "synced_at": synced_at,
         "snapshots": len(snapshots),
         "accepted": total_accepted,
@@ -377,5 +390,9 @@ def sync_aibom_snapshots(
     if not content_upload_complete:
         summary["partial"] = True
         summary["reason"] = "content_upload_incomplete"
+    if cloud_rejected > 0:
+        summary["partial"] = bool(summary.get("partial")) or total_accepted > 0
+        summary["reason"] = "snapshots_rejected"
+        summary["message"] = f"Guard Cloud rejected {cloud_rejected} of {len(snapshots)} inventory snapshots."
     store.set_sync_payload("aibom_sync_summary", summary, synced_at)
     return summary

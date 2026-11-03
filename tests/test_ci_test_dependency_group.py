@@ -72,11 +72,11 @@ def test_staged_evaluator_compiler_uses_a_fast_non_shipping_profile() -> None:
     job = workflow["jobs"]["staged-evaluator-wheel"]
     assert job["timeout-minutes"] == 15
     assert job["strategy"]["fail-fast"] is False
-    assert set(job["strategy"]["matrix"]["os"]) == {"ubuntu-latest", "macos-15"}
+    assert set(job["strategy"]["matrix"]["os"]) == {"ubuntu-24.04", "macos-15"}
     verification = next(step for step in job["steps"] if step.get("name", "").startswith("Verify installed"))
     assert "-I scripts/ci/check_evaluation_wheel.py" in verification["run"]
     assert not verification.get("continue-on-error", False)
-    # The distribution profile and its independent size gate remain authoritative.
+    # The distribution profile remains authoritative.
     release = (ROOT / "rust/Cargo.toml").read_text().split("[profile.release]", 1)[1].split("[", 1)[0]
     assert 'opt-level = "s"' in release
     assert 'lto = "fat"' in release
@@ -93,7 +93,8 @@ def test_coverage_cache_keeps_prebuilt_wheels_for_read_only_workers() -> None:
     assert action["inputs"]["save-cache"]["default"] == "false"
     jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]
     producer = next(
-        step for step in jobs["native-command-evaluators"]["steps"]
+        step
+        for step in jobs["native-command-evaluators"]["steps"]
         if step.get("uses") == "./.github/actions/setup-ci-python"
     )
     consumer = next(

@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.g-krusch",
+  "version": "1.0.0",
+  "name": "G-Krusch (Google Workspace Hub & Drive RAG)",
+  "description": "Reviews Google Drive writes/deletes, RAG index syncs, Calendar event creation, and Gmail draft/send actions on a local-first Google Workspace MCP server. Workspace reads, hybrid Drive RAG search, and status checks follow your normal Guard policy. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kruschdev",
+    "displayName": "Krusch (@kruschdev)",
+    "url": "https://github.com/kruschdev/G-krusch"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCloud",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://krusch.dev/articles/introducing-g-krusch.html",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "g-krusch"
+  },
+  "riskClasses": [
+    "external-cloud-workspace-write",
+    "account-calendar-write",
+    "account-mailbox-write",
+    "local-sqlite-index-write"
+  ],
+  "tools": [
+    {
+      "name": "get_agent_steering",
+      "state": "inherit"
+    },
+    {
+      "name": "get_workspace_status",
+      "state": "inherit"
+    },
+    {
+      "name": "search_drive_rag",
+      "state": "inherit"
+    },
+    {
+      "name": "read_drive_file",
+      "state": "inherit"
+    },
+    {
+      "name": "list_drive_workspace",
+      "state": "inherit"
+    },
+    {
+      "name": "list_calendar_events",
+      "state": "inherit"
+    },
+    {
+      "name": "search_gmail_messages",
+      "state": "inherit"
+    },
+    {
+      "name": "write_drive_file",
+      "state": "review"
+    },
+    {
+      "name": "delete_drive_file",
+      "state": "review"
+    },
+    {
+      "name": "sync_drive_rag",
+      "state": "review"
+    },
+    {
+      "name": "create_calendar_event",
+      "state": "review"
+    },
+    {
+      "name": "compose_gmail_message",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kruschdev/G-krusch",
+    "https://github.com/kruschdev/G-krusch/blob/main/CONTEXT.md",
+    "https://github.com/kruschdev/G-krusch/blob/main/src/mcp/tools.js",
+    "https://krusch.dev/articles/introducing-g-krusch.html"
+  ],
+  "saferAlternatives": [
+    "Use search_drive_rag, read_drive_file, list_drive_workspace, and get_agent_steering to inspect workspace documents without modifying Google Drive.",
+    "Keep compose_gmail_message on Review and leave send_immediately=false (the default) so outbound messages are staged as Gmail drafts rather than sent immediately.",
+    "Keep delete_drive_file and write_drive_file on Review: although G-Krusch enforces workspace ancestry checks (isFileInWorkspace), writes and deletes mutate files inside the configured G-Krusch Drive folder."
+  ]
+}

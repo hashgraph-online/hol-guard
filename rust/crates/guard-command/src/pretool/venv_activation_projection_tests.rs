@@ -1,4 +1,4 @@
-use super::project;
+use super::{project, verdict_target};
 use crate::pretool::PathContext;
 use std::path::{Path, PathBuf};
 
@@ -144,6 +144,96 @@ fn a_later_word_the_environment_holds_keeps_the_command_unprojected() {
     let root = root("later");
     environment(&root, true, &activation(&root), &["pytest", "tail"]);
     assert!(projected(&root, "source .venv/bin/activate && pytest -q | tail -5").is_none());
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A word the environment also holds, in argument position, names no program
+/// the shell looks up. `python -m pytest` runs the interpreter and hands it a
+/// module name; reading that name as a command cost every such run an
+/// approval.
+#[test]
+fn an_argument_the_environment_also_names_is_not_a_later_command() {
+    let root = root("argument");
+    environment(&root, true, &activation(&root), &["python", "pytest"]);
+    assert_eq!(
+        projected(&root, "source .venv/bin/activate && python -m pytest -q").as_deref(),
+        Some(".venv/bin/python -m pytest -q")
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// `shell_tokens` reads a newline as whitespace, so a command after one
+/// follows a plain word rather than a control token. The environment's own
+/// program would run there once the activation has set `PATH`, and the floor
+/// would read the bare name instead.
+#[test]
+fn a_command_after_a_newline_keeps_the_command_unprojected() {
+    let root = root("newline");
+    environment(&root, true, &activation(&root), &["python", "pytest"]);
+    assert!(projected(&root, "source .venv/bin/activate && python -V\npytest -q").is_none());
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A group, a negation, a keyword, an assignment prefix and a runner that
+/// executes its own argument each start a command with no control token
+/// before it, so the text keeps its own reading.
+#[test]
+fn a_command_position_this_scan_cannot_see_keeps_the_command_unprojected() {
+    let root = root("hidden");
+    environment(&root, true, &activation(&root), &["python", "pytest"]);
+    for command in [
+        "source .venv/bin/activate && { pytest -q; }",
+        "source .venv/bin/activate && ! pytest -q",
+        "source .venv/bin/activate && LC_ALL=C pytest -q",
+        "source .venv/bin/activate && time pytest -q",
+        "source .venv/bin/activate && env pytest -q",
+    ] {
+        assert!(projected(&root, command).is_none(), "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// An activation on its own exports the settings this scan has read and runs
+/// nothing else, so the floor reads it as the no-op it amounts to. Only the
+/// verdict asks that question: a caller that plans the call again runs the
+/// text it gets back, and running a no-op in place of the activation would
+/// leave the environment unset.
+#[test]
+fn an_activation_with_nothing_after_it_is_a_verdict_only_reading() {
+    let root = root("bare");
+    environment(&root, true, &activation(&root), &["pytest"]);
+    let home = root.to_str().unwrap().to_owned();
+    let cwd = root.join("project").to_str().unwrap().to_owned();
+    let context = PathContext {
+        home_dir: Some(&home),
+        cwd: Some(&cwd),
+        ..Default::default()
+    };
+    assert_eq!(
+        verdict_target("source .venv/bin/activate", context).as_deref(),
+        Some("true")
+    );
+    assert!(project("source .venv/bin/activate", context).is_none());
+    assert!(projected(&root, "source .venv/bin/activate").is_none());
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// An unmarked directory proves nothing, with or without a command after it.
+#[test]
+fn a_bare_activation_of_an_unmarked_directory_is_not_read() {
+    let root = root("bare-unmarked");
+    environment(&root, false, &activation(&root), &[]);
+    let home = root.to_str().unwrap().to_owned();
+    let cwd = root.join("project").to_str().unwrap().to_owned();
+    assert!(verdict_target(
+        "source .venv/bin/activate",
+        PathContext {
+            home_dir: Some(&home),
+            cwd: Some(&cwd),
+            ..Default::default()
+        }
+    )
+    .is_none());
     let _ = std::fs::remove_dir_all(&root);
 }
 

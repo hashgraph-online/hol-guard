@@ -12,6 +12,7 @@ type ReviewScopeControlsProps = {
   hasAllowScope: boolean;
   taskCapabilityCopy: string | null;
   exactActionPersistenceEligible: boolean;
+  versionBoundScript?: boolean;
   rememberExactAction: boolean;
   /** One-time approvals of this request never let the agent's next call through. */
   oneTimeRetryBlocked?: boolean;
@@ -51,6 +52,7 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
           onChange={props.onRememberExactActionChange}
           oneTimeRetryBlocked={props.oneTimeRetryBlocked === true}
           retryWindowMinutes={props.retryWindowMinutes ?? 15}
+          versionBoundScript={props.versionBoundScript === true}
         />
       )}
       {props.broaderScopeOptions.length > 0 && (
@@ -128,6 +130,7 @@ function ExactActionPersistenceChoice(props: {
   onChange: (checked: boolean) => void;
   oneTimeRetryBlocked: boolean;
   retryWindowMinutes: number;
+  versionBoundScript: boolean;
 }) {
   const handleOnce = useCallback(() => props.onChange(false), [props.onChange]);
   const handleAlways = useCallback(() => props.onChange(true), [props.onChange]);
@@ -145,7 +148,9 @@ function ExactActionPersistenceChoice(props: {
             onChange={handleOnce}
             className="sr-only"
           />
-          <span className="block text-sm font-semibold text-brand-dark">This time</span>
+          <span className="block text-sm font-semibold text-brand-dark">
+            {props.versionBoundScript ? "Run once" : "This time"}
+          </span>
           <span className="mt-0.5 block text-xs text-muted-foreground">
             {`Retry within ${props.retryWindowMinutes} minutes.`}
           </span>
@@ -159,8 +164,14 @@ function ExactActionPersistenceChoice(props: {
             onChange={handleAlways}
             className="sr-only"
           />
-          <span className="block text-sm font-semibold text-brand-dark">Always allow exact action</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">Changed commands still need review.</span>
+          <span className="block text-sm font-semibold text-brand-dark">
+            {props.versionBoundScript ? "Always allow this version in this project" : "Always allow exact action"}
+          </span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {props.versionBoundScript
+              ? "Guard checks code, arguments, dependencies, and policy before every run. Changes need review."
+              : "Changed commands still need review."}
+          </span>
         </label>
       </div>
     </fieldset>
@@ -198,8 +209,15 @@ function ScopeChoiceButton(props: {
   );
 }
 
-export function allowButtonLabel(scope: DecisionScope): string {
+export function allowButtonLabel(
+  scope: DecisionScope,
+  versionBoundScript = false,
+  persistExactAction = false,
+): string {
   if (scope === "artifact") {
+    if (versionBoundScript) {
+      return persistExactAction ? "Always allow this version in this project" : "Run once";
+    }
     return "Allow just this once";
   }
   if (scope === "workspace") {

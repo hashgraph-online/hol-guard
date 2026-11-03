@@ -62,10 +62,7 @@ fn checkout(
     let root = base.join(format!(
         "guard-nested-{name}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let cleanup = fixture::FixtureCleanup(root.clone());
     let home = root.join("home");

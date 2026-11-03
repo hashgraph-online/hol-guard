@@ -2,9 +2,10 @@
 
 The resident owns the package approval identity, the composed current policy
 action and the approval-context artifact hash. This module only hydrates facts
-the resident cannot read itself (the bound ``GuardConfig`` view, the Python
-execution context, the extension-control digest and the cached feed snapshot
-hash), transports one request, and strictly validates the reply. A missing,
+the resident cannot read itself (the configuration fields the bound policy
+view is built from, the Python execution context, the extension-control digest
+and the cached feed snapshot hash), transports one request, and strictly
+validates the reply. A missing,
 mismatched or malformed answer raises :class:`NativePackageApprovalHashError`;
 there is no Python fallback, so an unavailable resident can never produce a
 weaker action or a forgeable hash.
@@ -17,7 +18,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from .action_lattice import GuardAction
-from .config import GuardConfig, resolve_risk_action
+from .config import GuardConfig, risk_action_config_facts
 from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
 from .native_package_authority import _REQUEST_SCHEMA, _RESULT_SCHEMA, _request_id, _resident_request
 
@@ -43,40 +44,26 @@ class NativePackageApprovalHashError(RuntimeError):
     """No authoritative native approval-hash result was available."""
 
 
-def package_config_policy_context(*, artifact: Any, config: GuardConfig | None) -> dict[str, object]:
-    """Hydrate the bound ``GuardConfig`` view the resident folds into policy."""
+def package_config_facts(config: GuardConfig | None) -> dict[str, object] | None:
+    """The configuration fields the resident builds the bound policy view from.
+
+    Sent instead of the finished view so the ``package_script`` action and the
+    artifact/publisher/harness override folded into the composed action are
+    resolved by the resident. The override maps and the managed-policy pair go
+    over as they were loaded; ``None`` means no configuration is bound, and the
+    caller sends ``{"available": False}`` as the view itself.
+    """
 
     if config is None:
-        return {"available": False}
-    harness_package_script_action = (config.harness_risk_actions or {}).get(artifact.harness, {}).get("package_script")
-    artifact_override = (config.artifact_actions or {}).get(artifact.artifact_id)
-    publisher_override = (
-        (config.publisher_actions or {}).get(artifact.publisher) if artifact.publisher is not None else None
-    )
-    harness_override = (config.harness_actions or {}).get(artifact.harness)
+        return None
     return {
-        "artifact_override": artifact_override,
-        "available": True,
-        "effective_package_script_action": resolve_risk_action(
-            config,
-            "package_script",
-            harness=artifact.harness,
-        ),
-        "global_package_script_action": resolve_risk_action(config, "package_script", harness=None),
-        "harness": artifact.harness,
-        "harness_override": harness_override,
-        "harness_package_script_action": harness_package_script_action,
-        "managed_locked_settings": list(config.managed_locked_settings),
+        **risk_action_config_facts(config),
+        "artifact_actions": dict(config.artifact_actions) if config.artifact_actions is not None else None,
+        "harness_actions": dict(config.harness_actions) if config.harness_actions is not None else None,
         "managed_policy_hash": config.managed_policy_hash,
         "managed_policy_status": config.managed_policy_status,
         "mode": config.mode,
-        "publisher_override": publisher_override,
-        "resolved_override": config.resolve_action_override(
-            artifact.harness,
-            artifact.artifact_id,
-            artifact.publisher,
-        ),
-        "security_level": config.security_level,
+        "publisher_actions": dict(config.publisher_actions) if config.publisher_actions is not None else None,
     }
 
 
@@ -171,7 +158,6 @@ def native_package_approval_hash(
         "kind": "artifact_hash",
         "artifact": artifact.to_dict(),
         "evaluation": _evaluation_view(evaluation),
-        "config_policy": package_config_policy_context(artifact=artifact, config=config),
         "sandbox_analysis": config.sandbox_analysis if config is not None else "unknown",
         "store_path": str(store.path),
         "workspace_dir": str(workspace_dir),
@@ -184,6 +170,11 @@ def native_package_approval_hash(
         },
         "extension_control_digest": current_extension_control_binding_digest(),
     }
+    config_facts = package_config_facts(config)
+    if config_facts is None:
+        request["config_policy"] = {"available": False}
+    else:
+        request["config_facts"] = config_facts
     feed_snapshot_hash = _feed_snapshot_hash(store)
     for key, value in (
         ("additional_current_action", additional_current_action),

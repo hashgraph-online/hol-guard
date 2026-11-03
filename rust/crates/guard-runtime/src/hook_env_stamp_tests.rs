@@ -134,6 +134,36 @@ fn remaining_hint_matches_python() {
 }
 
 #[test]
+fn only_a_heap_or_diagnostics_node_options_is_marked() {
+    let marked = |value: &str| {
+        let environment = environment_of(&[("PATH", "/bin"), ("NODE_OPTIONS", value)]);
+        match collect_hook_execution_environment(&environment) {
+            PyVal::Dict(entries) => entries
+                .iter()
+                .any(|entry| entry == &("node_options_inert".to_owned(), PyVal::Bool(true))),
+            _ => panic!("stamp must be an object"),
+        }
+    };
+    assert!(marked("--max-old-space-size=12288"));
+    assert!(marked("--no-warnings --max_old_space_size=4096"));
+    for value in [
+        "",
+        "--require=./hook.js",
+        "--max-old-space-size=8192 --inspect",
+    ] {
+        assert!(!marked(value), "{value:?}");
+    }
+    let unset = environment_of(&[("PATH", "/bin")]);
+    let PyVal::Dict(entries) = collect_hook_execution_environment(&unset) else {
+        panic!("stamp must be an object");
+    };
+    assert_eq!(
+        entries.last().map(|(key, _)| key.as_str()),
+        Some("environment_digest")
+    );
+}
+
+#[test]
 fn first_duplicate_environment_name_wins() {
     let duplicated = environment_of(&[("PATH", "/first"), ("PATH", "/second"), ("HOME", "/h")]);
     let single = environment_of(&[("PATH", "/first"), ("HOME", "/h")]);
@@ -209,4 +239,35 @@ fn oversized_stamp_and_hint_forward_input_unchanged() {
             &fits[..fits.len() - 1]
         ))
     );
+}
+
+#[test]
+fn the_hand_off_marker_is_never_stamped_as_a_harness_variable() {
+    let variables = [
+        (OsString::from("PATH"), OsString::from("/bin")),
+        (OsString::from(HOOK_HANDED_OFF_ENV), OsString::from("1")),
+    ];
+
+    let kept: Vec<_> = harness_variables(variables).collect();
+
+    assert_eq!(kept, [(OsString::from("PATH"), OsString::from("/bin"))]);
+}
+
+#[test]
+fn only_a_default_cargo_home_is_marked() {
+    let marked = |home: &str, cargo_home: &str| {
+        let environment =
+            environment_of(&[("PATH", "/bin"), ("HOME", home), ("CARGO_HOME", cargo_home)]);
+        match collect_hook_execution_environment(&environment) {
+            PyVal::Dict(entries) => entries
+                .iter()
+                .any(|entry| entry == &("cargo_home_default".to_owned(), PyVal::Bool(true))),
+            _ => panic!("stamp must be an object"),
+        }
+    };
+    assert!(marked("/Users/dev", "/Users/dev/.cargo"));
+    assert!(marked("/Users/dev", "/Users/dev/.cargo/"));
+    for cargo_home in ["/opt/cargo", ".cargo", "", "/Users/dev/.cargo/vendor"] {
+        assert!(!marked("/Users/dev", cargo_home), "{cargo_home:?}");
+    }
 }

@@ -26,7 +26,14 @@ _RESULT_SCHEMA = "guard-mcp-tool-call-identity-result.v1"
 _OPERATION = "mcp_tool_call_identity"
 _UNAVAILABLE = "native_mcp_tool_approval_hash_unavailable"
 _PROVIDER_HASH_CODE = "native_mcp_tool_call_identity_provider_hash_invalid"
-_MAX_REQUEST_BYTES = 8 * 1024 * 1024
+# The largest envelope this bridge will frame. It is not
+# ``MCP_TOOL_CALL_IDENTITY_MAX_BYTES``: the op measures its own canonical
+# request and this measures the envelope carrying it, which is the larger of
+# the two, so holding the envelope to the op's number would refuse calls the op
+# would have accepted -- and refuse them as a bare unavailable, with none of the
+# reason the op would have given. Held under the transport's frame limit so a
+# request past it is refused for its size rather than as a malformed frame.
+_MAX_REQUEST_BYTES = 6 * 1024 * 1024 - 64 * 1024
 _TIMEOUT_SECONDS = 5.0
 _TOKEN_PREFIX = "guard-approval-context:v1:"
 _ARTIFACT_KEYS = frozenset(

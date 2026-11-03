@@ -20,7 +20,7 @@ def _load():
     return load_generated_command_catalog_bytes(CATALOG.read_bytes(), PROGRAM.read_bytes())
 
 
-def test_generated_catalog_is_immutable_metadata_bound_to_native_program() -> None:
+def test_generated_catalog_is_immutable_metadata_bound_to_native_program(authored_command_catalog) -> None:
     catalog = _load()
 
     program = json.loads(PROGRAM.read_bytes())
@@ -44,7 +44,9 @@ def test_generated_catalog_is_immutable_metadata_bound_to_native_program() -> No
     assert rule is not None
     assert not hasattr(rule, "matcher")
     assert catalog.permission_for_rule_id(rule.rule_id).extension_id == "command.api-gateway"
-    assert catalog.get("command.mcp-filesystem").surface == "mcp"
+    # Optional MCP metadata belongs to the authored catalog, not resident core.
+    assert catalog.get("command.mcp-filesystem") is None
+    assert authored_command_catalog.get("command.mcp-filesystem").surface == "mcp"
     with pytest.raises(FrozenInstanceError):
         rule.title = "changed"  # type: ignore[misc]
 

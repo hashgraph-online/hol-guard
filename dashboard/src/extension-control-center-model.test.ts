@@ -78,7 +78,7 @@ const extension: ExtensionCatalogItem = {
   required: false,
   trust_class: "first-party",
   activation: "default-on",
-  publisher: { id: "hol", displayName: "Hashgraph Online" },
+  publisher: { id: "hol", displayName: "HOL" },
   icon: { kind: "none" },
   source: "built-in",
   version: "1.2.3",

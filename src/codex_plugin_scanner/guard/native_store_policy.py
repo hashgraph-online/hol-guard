@@ -100,7 +100,11 @@ def claim_evidence_binding(
 
 
 def _payload(
-    response: dict[str, object] | None, request: dict[str, object], guard_home: Path
+    response: dict[str, object] | None,
+    request: dict[str, object],
+    guard_home: Path,
+    *,
+    failure_reason: str = "native_store_policy_binding",
 ) -> dict[str, object] | None:
     """The ``ok`` payload of a reply bound to ``request``, else ``None``.
 
@@ -109,7 +113,9 @@ def _payload(
     digest) is the resident's real answer and counts as a success, including a
     bound ``error`` such as store contention, which still yields ``None``. An
     unbound reply or an ``ok`` reply with a malformed payload counts as a
-    failure.
+    failure, recorded under ``failure_reason`` so resident health names the
+    bridge that saw it instead of blaming the store-policy ops for every
+    caller that shares this helper.
     """
 
     if response is None:
@@ -128,7 +134,7 @@ def _payload(
         if healthy:
             native_record_resident_success(identity.sha256, guard_home)
         else:
-            native_record_resident_failure(identity.sha256, guard_home, reason="native_store_policy_binding")
+            native_record_resident_failure(identity.sha256, guard_home, reason=failure_reason)
     return payload if bound and usable and isinstance(payload, dict) else None
 
 
@@ -171,7 +177,7 @@ def native_claim_approval_reuse_decisions(
     return payload is not None and payload.get("claimed") is True
 
 
-def native_approval_reuse_diagnostic(
+def native_approval_reuse_miss(
     *,
     store_path: Path | str,
     guard_home: Path,
@@ -202,6 +208,7 @@ def native_approval_reuse_diagnostic(
         "publisher": publisher,
         "now": now,
     }
+    status = native_runtime_status()
     for _attempt in range(2):
         try:
             response = _resident_request(
@@ -212,6 +219,7 @@ def native_approval_reuse_diagnostic(
                 required_feature=APPROVAL_REUSE_DIAGNOSTIC_FEATURE,
                 response_schema=_DIAGNOSTIC_RESULT_SCHEMA,
                 record_success=False,
+                status=status,
             )
         except (TypeError, ValueError):
             break

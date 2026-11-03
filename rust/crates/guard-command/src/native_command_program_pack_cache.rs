@@ -41,10 +41,19 @@ fn read(path: &Path) -> Result<Vec<u8>, &'static str> {
 }
 
 impl NativeCommandProgram {
-    pub(crate) fn from_pack_cache(
+    pub fn from_pack_cache(
         directory: &Path,
         expected_program: &str,
         budget: PackAdmissionBudget,
+    ) -> Result<Self, &'static str> {
+        Self::from_pack_cache_catalog(directory, expected_program, budget, None)
+    }
+
+    pub(crate) fn from_pack_cache_catalog(
+        directory: &Path,
+        expected_program: &str,
+        budget: PackAdmissionBudget,
+        catalog: Option<&mut Vec<crate::native_command_catalog::CatalogExtension>>,
     ) -> Result<Self, &'static str> {
         if !valid_digest(expected_program) {
             return Err("native_command_pack_cache_identity_invalid");
@@ -107,8 +116,14 @@ impl NativeCommandProgram {
             return Err("native_command_required_pack_missing");
         }
         let root = source::read_pack_blob(&set.release, &mut fetch)?;
-        let program =
-            Self::from_integrity_bound_packs(&root, &set.release.sha256, &selected, budget, fetch)?;
+        let program = Self::from_integrity_bound_packs_catalog(
+            &root,
+            &set.release.sha256,
+            &selected,
+            budget,
+            fetch,
+            catalog,
+        )?;
         if program.program_digest != expected_program {
             return Err("native_command_program_binding_mismatch");
         }

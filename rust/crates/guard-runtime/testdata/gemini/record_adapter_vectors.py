@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Record Gemini, Antigravity, Devin, Grok, Kimi, OpenCode and Cursor detection
-vectors from the ORIGINAL Python implementation.
+"""Record Gemini, Antigravity, Devin, Grok, Kimi, OpenCode, Cursor and Cline
+detection vectors from the ORIGINAL Python implementation.
 
 Run against a checkout that still holds the original helper `ORIGINALS` names
 for the harness (the base of the commit that introduced its native
@@ -19,7 +19,11 @@ recorded as a refusal. Workspace AIBOM discovery is not part of the port and
 is switched off; so are the Grok executable lookup, version probe and stale
 managed-entry check, which stay in Python, and the OpenCode and Cursor MCP
 firewall, Cursor managed hook and CLI lookups and the OpenCode command lookup,
-which the ports keep in Python around the native call. An OpenCode case with
+which the ports keep in Python around the native call. The Cline CLI lookup,
+managed transport state and MCP firewall stay in Python too, so the Cline
+cases record the VS Code and JetBrains hosts, the MCP servers (with the
+unredacted `runtime_private_metadata` the managed-proxy install reads), the
+config paths and the JetBrains warning. An OpenCode case with
 `snapshot` records `load_opencode_install_snapshot` instead of `detect`. The Grok system policy files are
 read from `<ROOT>/etc/grok`. `<ROOT>` stands for the fixture root, in paths, in
 file contents and in a case's environment.
@@ -42,6 +46,9 @@ from adapter_vector_cases import cases
 from codex_plugin_scanner.ecosystems.opencode import _load_json_or_jsonc
 from codex_plugin_scanner.guard.adapters import (
     antigravity,
+    cline,
+    cline_detection,
+    cline_mcp,
     cursor,
     devin,
     gemini,
@@ -50,8 +57,8 @@ from codex_plugin_scanner.guard.adapters import (
     kimi,
     opencode,
     opencode_artifacts,
-    opencode_install_snapshot,
 )
+from codex_plugin_scanner.guard.adapters._modules.opencode import opencode_install_snapshot
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.grok_executable import GrokExecutableResolution
 from codex_plugin_scanner.guard.models import GuardArtifact
@@ -64,6 +71,7 @@ ADAPTERS = {
     "kimi": kimi.KimiHarnessAdapter,
     "opencode": opencode.OpenCodeHarnessAdapter,
     "cursor": cursor.CursorHarnessAdapter,
+    "cline": cline.ClineHarnessAdapter,
 }
 # The original helper each port removed; its presence proves the source is
 # the original Python.
@@ -75,6 +83,7 @@ ORIGINALS = {
     "kimi": (kimi.KimiHarnessAdapter, "_append_mcp_artifacts"),
     "opencode": (opencode_artifacts, "append_config_artifacts"),
     "cursor": (cursor, "enrich_mcp_server_metadata"),
+    "cline": (cline_mcp, "detect_cline_mcp"),
 }
 
 for module in (gemini, devin, grok, kimi, opencode, opencode_install_snapshot, cursor):
@@ -84,6 +93,10 @@ cursor.enrich_artifact_with_mcp_skill_firewall = lambda artifact: artifact
 cursor.detect_managed_cursor_hook_artifact = lambda _path, _payload: None
 cursor.cursor_cli_command_available = lambda _context: False
 opencode._command_available = lambda _executable: False
+cline_mcp.enrich_artifact_with_mcp_skill_firewall = lambda artifact: artifact
+cline_detection._resolve_command = lambda *_args, **_kwargs: None
+cline.cline_native_hook_state = lambda _context: {}
+cline.cline_plugin_state = lambda _context: {}
 grok.resolve_trusted_grok_executable = lambda _context: GrokExecutableResolution(None)
 grok.GrokHarnessAdapter._version_probe = staticmethod(lambda _context, _resolution: {})
 grok.GrokHarnessAdapter._has_stale_guard_entries = lambda _self, _context: False
@@ -116,7 +129,9 @@ def provision_native(guard_home: Path) -> None:
 
 def artifact_dict(artifact: GuardArtifact) -> dict:
     payload = dataclasses.asdict(artifact)
-    payload.pop("runtime_private_metadata", None)
+    private = payload.pop("runtime_private_metadata", None)
+    if artifact.harness == "cline" and private:
+        payload["runtime_private_metadata"] = private
     payload["args"] = list(artifact.args)
     return payload
 
@@ -217,7 +232,10 @@ def facade_args(harness: str, context: HarnessContext, root: Path, snapshot: boo
             for path in cursor.CursorHarnessAdapter._editor_config_paths(context)
             if (payload := cursor._json_payload(path))
         ]
-    if not home.is_absolute() or (workspace is not None and not workspace.is_absolute()):
+    if harness == "cline":
+        request["mcp_settings"] = [str(path) for path in cline_mcp.cline_mcp_settings_candidates(context)]
+    relative_settings = any(not Path(path).is_absolute() for path in request.get("mcp_settings", []))
+    if not home.is_absolute() or (workspace is not None and not workspace.is_absolute()) or relative_settings:
         request["cwd"] = os.getcwd()
     if harness == "devin":
         request["config_dir"] = str(devin.DevinHarnessAdapter._devin_config_dir(context))

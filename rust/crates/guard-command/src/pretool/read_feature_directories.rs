@@ -28,7 +28,10 @@ const MAX_POINTER_BYTES: u64 = 4 * 1024;
 /// True when the only reason `canonical` reads as credential-named is a
 /// feature directory below a repository root, and what is read is a directory
 /// or a document. The caller still applies every other path screen.
-pub(super) fn feature_only_credential_name(canonical: &Path, home_dir: Option<&str>) -> bool {
+pub(in crate::pretool) fn feature_only_credential_name(
+    canonical: &Path,
+    home_dir: Option<&str>,
+) -> bool {
     let is_directory = canonical.is_dir();
     if !is_directory && !document_or_manifest(canonical) {
         return false;

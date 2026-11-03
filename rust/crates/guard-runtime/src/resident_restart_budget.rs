@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-#[cfg(not(windows))]
-use std::fs::{self, OpenOptions};
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::path::Path;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+#[cfg(windows)]
+use super::private_file::recover_interrupted_replace;
+use super::private_file::{existing_private_file, read_private_bytes, write_private};
 
 const RESTART_WINDOW_MS: u64 = 60_000;
 // A crash loop is slowed by bounded exponential backoff, not stopped for a
@@ -19,9 +20,9 @@ const MAX_RESTARTS_PER_WINDOW: u32 = 3;
 /// every orderly cycle outlives this; a resident that reports success within
 /// milliseconds, over and over, is still a loop and keeps its charge.
 const HEALTHY_RUN_MIN_MS: u128 = 1_000;
-/// A supervisor records its exit while it is already shutting down, so it may
-/// wait for a concurrent spawn to finish with the budget instead of dropping
-/// the correction.
+/// Every budget update holds the lock for one small read and write, so a
+/// spawn, a reset and a supervisor recording its exit each wait briefly for
+/// one another instead of failing on an ordinary overlap.
 const BUDGET_LOCK_RETRY_DELAY: Duration = Duration::from_millis(25);
 const BUDGET_LOCK_RETRIES: u32 = 20;
 const BUDGET_SCHEMA: &str = "hol-guard-resident-restart-budget.v1";
@@ -66,7 +67,10 @@ fn acquire_budget_lock(scope: &Path) -> Result<RestartBudgetLock, String> {
     let file = crate::resident_state::private_lock_file(&path, &private_root)
         .map_err(|_| "native_resident_restart_budget_lock_failed".to_owned())?;
     fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::WouldBlock {
+        // Windows reports a held lock as ERROR_LOCK_VIOLATION, not WouldBlock.
+        // Treating that as a hard failure turned an ordinary race with the
+        // supervisor's exit bookkeeping into a failed resident spawn.
+        if crate::resident_state::is_lock_contention(&error) {
             "native_resident_restart_budget_busy".to_owned()
         } else {
             "native_resident_restart_budget_lock_failed".to_owned()
@@ -89,205 +93,13 @@ fn now_ms() -> Result<u64, String> {
     .map_err(|_| "native_resident_clock_invalid".to_owned())
 }
 
-fn write_private(path: &Path, bytes: &[u8], private_root: &Path) -> Result<(), String> {
-    let temporary = temporary_path(path)?;
-    if existing_private_file(&temporary, private_root)? {
-        #[cfg(windows)]
-        crate::resident_state::remove_windows_private_file(&temporary, private_root)
-            .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned())?;
-        #[cfg(not(windows))]
-        fs::remove_file(&temporary)
-            .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned())?;
-    }
-    #[cfg(not(windows))]
-    let mut options = OpenOptions::new();
-    #[cfg(not(windows))]
-    options.create_new(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
-    }
-    #[cfg(windows)]
-    let mut file = crate::resident_state::private_file(&temporary, true, private_root)
-        .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())?;
-    #[cfg(not(windows))]
-    let mut file = options
-        .open(&temporary)
-        .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())?;
-    let write_result = file
-        .write_all(bytes)
-        .and_then(|()| file.sync_all())
-        .map_err(|_| "native_resident_restart_budget_write_failed".to_owned());
-    drop(file);
-    if write_result.is_err() {
-        #[cfg(windows)]
-        let _ = crate::resident_state::remove_windows_private_file(&temporary, private_root);
-        #[cfg(not(windows))]
-        let _ = fs::remove_file(&temporary);
-        return write_result;
-    }
-    let replace_result = replace_temporary(&temporary, path, private_root);
-    if replace_result.is_err() {
-        #[cfg(windows)]
-        let _ = crate::resident_state::remove_windows_private_file(&temporary, private_root);
-        #[cfg(not(windows))]
-        let _ = fs::remove_file(&temporary);
-        return replace_result;
-    }
-    #[cfg(unix)]
-    File::open(
-        path.parent()
-            .ok_or_else(|| "native_resident_restart_budget_write_failed".to_owned())?,
-    )
-    .and_then(|directory| directory.sync_all())
-    .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())?;
-    Ok(())
-}
-
-fn existing_private_file(path: &Path, private_root: &Path) -> Result<bool, String> {
-    #[cfg(not(windows))]
-    let _ = private_root;
-
-    #[cfg(windows)]
-    {
-        // Existence and type are established by one validated handle.  Do
-        // not use pathname metadata here: a same-name replacement between a
-        // stat and the subsequent open must never be treated as our budget
-        // file, and foreign-owner/reparse objects must fail closed.
-        crate::resident_state::open_private_read(path, 4096, "restart_budget", private_root)
-            .map(|file| file.is_some())
-            .map_err(|_| "native_resident_restart_budget_invalid".to_owned())
-    }
-
-    #[cfg(not(windows))]
-    {
-        let metadata = match fs::symlink_metadata(path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-            Err(_) => return Err("native_resident_restart_budget_stat_failed".to_owned()),
-        };
-        if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > 4096 {
-            return Err("native_resident_restart_budget_invalid".to_owned());
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::{MetadataExt, PermissionsExt};
-            let owner = path
-                .parent()
-                .and_then(|parent| fs::symlink_metadata(parent).ok())
-                .map(|parent| parent.uid());
-            if owner != Some(metadata.uid()) || metadata.permissions().mode() & 0o077 != 0 {
-                return Err("native_resident_restart_budget_invalid".to_owned());
-            }
-        }
-        Ok(true)
-    }
-}
-
-#[cfg(not(windows))]
-fn replace_temporary(temporary: &Path, path: &Path, _private_root: &Path) -> Result<(), String> {
-    fs::rename(temporary, path).map_err(|_| {
-        let _ = fs::remove_file(temporary);
-        "native_resident_restart_budget_write_failed".to_owned()
-    })
-}
-
-#[cfg(windows)]
-fn replace_temporary(temporary: &Path, path: &Path, private_root: &Path) -> Result<(), String> {
-    crate::resident_state::replace_windows_private_file(temporary, path, private_root)
-        .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())
-}
-
-#[cfg(windows)]
-fn backup_path(path: &Path) -> PathBuf {
-    path.with_extension("json.previous")
-}
-
-#[cfg(windows)]
-fn recover_interrupted_replace(path: &Path, private_root: &Path) -> Result<(), String> {
-    let backup = backup_path(path);
-    let path_exists = existing_private_file(path, private_root)
-        .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned())?;
-    let backup_exists = existing_private_file(&backup, private_root)
-        .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned())?;
-    match (path_exists, backup_exists) {
-        (false, true) => {
-            crate::resident_state::replace_windows_private_file(&backup, path, private_root)
-                .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned())
-        }
-        (true, true) => crate::resident_state::remove_windows_private_file(&backup, private_root)
-            .map(|_| ())
-            .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned()),
-        _ => Ok(()),
-    }
-}
-
-fn temporary_path(path: &Path) -> Result<PathBuf, String> {
-    let name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or_else(|| "native_resident_restart_budget_write_failed".to_owned())?;
-    Ok(path.with_file_name(format!(".{name}.{}.tmp", std::process::id())))
-}
-
 /// Read this scope's budget when it already exists, validating the private
 /// file and its schema. Absent state is not an error: the first spawn in a
 /// home starts from a fresh budget.
 fn read_existing_budget(path: &Path, private_root: &Path) -> Result<Option<RestartBudget>, String> {
-    if !existing_private_file(path, private_root)? {
+    let Some(bytes) = read_private_bytes(path, private_root, "restart_budget")? else {
         return Ok(None);
-    }
-    let mut bytes = Vec::new();
-    let file = {
-        #[cfg(windows)]
-        {
-            crate::resident_state::open_private_read(path, 4096, "restart_budget", private_root)?
-                .ok_or_else(|| "native_resident_restart_budget_read_failed".to_owned())?
-        }
-        #[cfg(not(windows))]
-        {
-            let mut options = OpenOptions::new();
-            options.read(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-            }
-            options
-                .open(path)
-                .map_err(|_| "native_resident_restart_budget_read_failed".to_owned())?
-        }
     };
-    let metadata = file
-        .metadata()
-        .map_err(|_| "native_resident_restart_budget_stat_failed".to_owned())?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > 4096 {
-        return Err("native_resident_restart_budget_invalid".to_owned());
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        let path_metadata = fs::symlink_metadata(path)
-            .map_err(|_| "native_resident_restart_budget_stat_failed".to_owned())?;
-        if path_metadata.file_type().is_symlink()
-            || !path_metadata.is_file()
-            || path_metadata.dev() != metadata.dev()
-            || path_metadata.ino() != metadata.ino()
-            || metadata.nlink() != 1
-            || path
-                .parent()
-                .and_then(|parent| fs::symlink_metadata(parent).ok())
-                .map(|parent| parent.uid())
-                != Some(metadata.uid())
-            || metadata.permissions().mode() & 0o077 != 0
-        {
-            return Err("native_resident_restart_budget_invalid".to_owned());
-        }
-    }
-    file.take(4097)
-        .read_to_end(&mut bytes)
-        .map_err(|_| "native_resident_restart_budget_read_failed".to_owned())?;
     let value = crate::strict_json_value(&bytes)
         .map_err(|_| "native_resident_restart_budget_invalid".to_owned())?;
     let budget = serde_json::from_value::<RestartBudget>(value)
@@ -298,7 +110,45 @@ fn read_existing_budget(path: &Path, private_root: &Path) -> Result<Option<Resta
     Ok(Some(budget))
 }
 
-pub(super) fn consume_for_spawn(state_base: &Path, scope: &Path) -> Result<(), String> {
+/// How many of a window's restarts a speculative spawn may leave behind. A
+/// prewarm is an optimisation: it must never be the reason the spawn a user is
+/// waiting on is refused, so it stops one restart short of the free ones and
+/// leaves that one for a real request.
+const SPECULATIVE_RESTART_CEILING: u32 = MAX_RESTARTS_PER_WINDOW - 1;
+
+/// Whether a spawn nobody is waiting on may run now.
+///
+/// This reads the budget and charges nothing: the spawn it admits is charged
+/// the ordinary way, so a prewarm that crash-loops still opens the circuit.
+/// What it stops is the opposite failure, where a run of failed prewarms
+/// spends the window and the session's first real hook meets a circuit that
+/// no request of its own opened.
+pub(super) fn speculative_spawn_allowed(scope: &Path) -> Result<bool, String> {
+    let private_root = crate::resident_state::private_root_for_scope(scope)?;
+    let _lock = acquire_budget_lock_waiting(scope, None)?;
+    let path = scope.join("restart-budget.json");
+    #[cfg(windows)]
+    recover_interrupted_replace(&path, &private_root)?;
+    let Some(budget) = read_existing_budget(&path, &private_root)? else {
+        return Ok(true);
+    };
+    let now = now_ms()?;
+    if budget.circuit_until_ms > now {
+        return Ok(false);
+    }
+    // A window that has already closed is reset by the next spawn, so its
+    // attempts are not attempts against the restart this would take.
+    if now.saturating_sub(budget.window_start_ms) >= RESTART_WINDOW_MS {
+        return Ok(true);
+    }
+    Ok(budget.attempts < SPECULATIVE_RESTART_CEILING)
+}
+
+pub(super) fn consume_for_spawn(
+    state_base: &Path,
+    scope: &Path,
+    deadline: Instant,
+) -> Result<(), String> {
     let verifier_key = state_base.join(crate::policy_store::VERIFIER_KEY_FILE_NAME);
     match std::fs::symlink_metadata(&verifier_key) {
         Ok(metadata)
@@ -314,16 +164,60 @@ pub(super) fn consume_for_spawn(state_base: &Path, scope: &Path) -> Result<(), S
         }
         Err(_) => return Err("native_policy_verifier_key_stat_failed".to_owned()),
     }
-    consume(scope)
+    let charged = consume_before(scope, Some(deadline));
+    // Recorded after the charge, so the journal's lock is never held inside
+    // this module's own. A start the budget refused is the one event a
+    // one-shot client would otherwise leave no trace of at all, and the only
+    // one that makes the journal read `critical`, so this waits briefly for a
+    // contended lock rather than dropping it. The wait costs this caller
+    // nothing a spawn needs: it has already been refused and returns an error
+    // the moment this returns. The contended case is exactly the one worth
+    // waiting through, because a supervisor recording an exit holds the lock
+    // while the circuit it just opened is refusing clients.
+    //
+    // A charge is not a start: the caller still has to mint a generation, a
+    // token and a process, and any of those can fail. The started event is
+    // recorded by the spawn path once there is something running, so a failed
+    // spawn never reads back as a healthy one.
+    if let Err(reason) = &charged {
+        if reason.as_str() == "native_resident_restart_circuit_open" {
+            super::lifecycle_journal::record(scope, super::lifecycle_journal::Event::StartRefused);
+        }
+    }
+    charged
 }
 
+#[cfg(test)]
 pub(super) fn consume(scope: &Path) -> Result<(), String> {
+    consume_before(scope, None)
+}
+
+/// Charge one spawn. A request that runs out of time while it waits for the
+/// lock charges nothing, so a resident is never started for an answer the
+/// client can no longer wait for.
+fn consume_before(scope: &Path, deadline: Option<Instant>) -> Result<(), String> {
+    consume_at(scope, deadline, None)
+}
+
+/// The same charge against a clock the caller names, so a test can play out a
+/// crash loop that takes minutes without waiting for them. `at_ms` is read
+/// where the real clock would be read, after the lock is held, so a simulated
+/// run goes through the same window rollovers and backoff steps a real one does.
+#[cfg(test)]
+fn consume_simulated(scope: &Path, at_ms: u64) -> Result<(), String> {
+    consume_at(scope, None, Some(at_ms))
+}
+
+fn consume_at(scope: &Path, deadline: Option<Instant>, at_ms: Option<u64>) -> Result<(), String> {
     let private_root = crate::resident_state::private_root_for_scope(scope)?;
-    let _lock = acquire_budget_lock(scope)?;
+    let _lock = acquire_budget_lock_waiting(scope, deadline)?;
     let path = scope.join("restart-budget.json");
     #[cfg(windows)]
     recover_interrupted_replace(&path, &private_root)?;
-    let now = now_ms()?;
+    let now = match at_ms {
+        Some(simulated) => simulated,
+        None => now_ms()?,
+    };
     let mut budget = read_existing_budget(&path, &private_root)?.unwrap_or_else(|| RestartBudget {
         schema: BUDGET_SCHEMA.to_owned(),
         window_start_ms: now,
@@ -359,20 +253,31 @@ pub(super) fn consume(scope: &Path) -> Result<(), String> {
     write_private(&path, &encoded, &private_root)
 }
 
-/// Whether a finished resident run was an orderly start-serve-exit cycle.
+/// Whether a finished resident run was an orderly lifecycle rather than a
+/// restart.
 ///
-/// A one-shot `hol-guard hook` call owns the resident it spawns: the resident
-/// starts, answers, and shuts itself down a second after the call's lease
-/// drops. That is a complete lifecycle, not a restart, and charging it to the
-/// crash-loop budget made four ordinary tool calls inside a minute open the
-/// circuit. Only a run that failed -- a non-zero exit, a signal, or a
-/// success reported so fast the resident cannot have served anything -- keeps
-/// the charge its spawn took.
-pub(super) fn healthy_exit(success: bool, ran_for: Duration) -> bool {
-    success && ran_for.as_millis() >= HEALTHY_RUN_MIN_MS
+/// A run that was asked to stop is orderly however briefly it lived. Asking
+/// it to live a second first is not a test of health. A `shutdown` operation
+/// reaches a resident from exactly two places: a runtime of a different
+/// digest retiring it to take the home-wide owner lock, and an explicit
+/// `resident-stop`. Two builds installed against one guard home -- a desktop
+/// bundle and a package install, say -- therefore stop each other's resident
+/// within milliseconds, over and over. Scoring those stops as crashes opened
+/// the circuit after three of them in a minute, and from there no resident
+/// could start, no policy could be published, and every prompt was refused
+/// with `native_policy_not_ready`.
+///
+/// Only a run that failed -- a non-zero exit, a signal, or a success reported
+/// so fast the resident cannot have served anything and nobody asked it to
+/// stop -- keeps the charge its spawn took.
+pub(super) fn orderly_exit(success: bool, ran_for: Duration, stop_requested: bool) -> bool {
+    success && (stop_requested || ran_for.as_millis() >= HEALTHY_RUN_MIN_MS)
 }
 
-fn acquire_budget_lock_waiting(scope: &Path) -> Result<RestartBudgetLock, String> {
+fn acquire_budget_lock_waiting(
+    scope: &Path,
+    deadline: Option<Instant>,
+) -> Result<RestartBudgetLock, String> {
     let mut waited = 0;
     loop {
         match acquire_budget_lock(scope) {
@@ -380,8 +285,16 @@ fn acquire_budget_lock_waiting(scope: &Path) -> Result<RestartBudgetLock, String
                 if error == "native_resident_restart_budget_busy"
                     && waited < BUDGET_LOCK_RETRIES =>
             {
+                if deadline
+                    .is_some_and(|deadline| Instant::now() + BUDGET_LOCK_RETRY_DELAY >= deadline)
+                {
+                    return Err("native_client_deadline_exceeded".to_owned());
+                }
                 waited += 1;
                 std::thread::sleep(BUDGET_LOCK_RETRY_DELAY);
+            }
+            Ok(_) if deadline.is_some_and(|deadline| Instant::now() >= deadline) => {
+                return Err("native_client_deadline_exceeded".to_owned());
             }
             result => return result,
         }
@@ -399,14 +312,14 @@ fn acquire_budget_lock_waiting(scope: &Path) -> Result<RestartBudgetLock, String
 /// `MAX_RESTARTS_PER_WINDOW` of them.
 pub(super) fn release_after_exit(
     scope: &Path,
-    success: bool,
+    orderly: bool,
     ran_for: Duration,
 ) -> Result<(), String> {
-    if !healthy_exit(success, ran_for) {
+    if !orderly {
         return Ok(());
     }
     let private_root = crate::resident_state::private_root_for_scope(scope)?;
-    let _lock = acquire_budget_lock_waiting(scope)?;
+    let _lock = acquire_budget_lock_waiting(scope, None)?;
     let path = scope.join("restart-budget.json");
     #[cfg(windows)]
     recover_interrupted_replace(&path, &private_root)?;
@@ -438,7 +351,7 @@ pub(super) fn release_after_exit(
 
 pub(super) fn clear(scope: &Path) -> Result<(), String> {
     let private_root = crate::resident_state::private_root_for_scope(scope)?;
-    let _lock = acquire_budget_lock(scope)?;
+    let _lock = acquire_budget_lock_waiting(scope, None)?;
     let path = scope.join("restart-budget.json");
     if !existing_private_file(&path, &private_root)? {
         return Ok(());
@@ -457,3 +370,7 @@ pub(super) fn clear(scope: &Path) -> Result<(), String> {
 #[cfg(test)]
 #[path = "resident_restart_budget_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "resident_restart_budget_flood_tests.rs"]
+mod flood_tests;

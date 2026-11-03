@@ -7,6 +7,11 @@
 //! exactly like the same `bash` call made directly. Its output then meets the
 //! same scans and installed floors as that call's output, instead of the
 //! unknown-action floor every unproved eval falls to.
+//!
+//! A `github` lookup is proved the same way. The native authority already
+//! reads one of the tool's read-only operations as a request to GitHub, so
+//! after the call its result is a network read's output and takes the
+//! installed network floor, not the floor for a tool nothing recognizes.
 use guard_contracts::{NativeHookRequestV1, PreToolActionTypeV1};
 use serde_json::Value;
 
@@ -15,7 +20,7 @@ pub(super) fn bounded_output_action(request: &NativeHookRequestV1) -> Option<Pre
     let tool = root.get("tool_name").and_then(Value::as_str)?;
     // Pi ships the same `find` and `ls` built-ins and gets the same listing proof.
     let proved_tool = match request.harness.as_str() {
-        "omp" => matches!(tool, "eval" | "yield" | "find" | "ls" | "lsp"),
+        "omp" => matches!(tool, "eval" | "yield" | "find" | "ls" | "lsp" | "github"),
         "pi" => matches!(tool, "find" | "ls"),
         _ => false,
     };
@@ -56,6 +61,7 @@ pub(super) fn bounded_output_action(request: &NativeHookRequestV1) -> Option<Pre
         ("native_omp_eval_bounded_tools", PreToolActionTypeV1::Command) => {
             Some(PreToolActionTypeV1::Command)
         }
+        ("native_github_read", PreToolActionTypeV1::Network) => Some(PreToolActionTypeV1::Network),
         (
             "native_omp_yield_metadata"
             | "native_omp_eval_pure_compute"

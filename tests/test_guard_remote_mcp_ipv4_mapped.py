@@ -7,11 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
-    load_mcp_contribution_payloads,
-    normalized_remote_mcp_url,
-    remote_mcp_endpoint_identity,
-)
+from codex_plugin_scanner.guard.runtime.mcp_server_contribution import normalized_remote_mcp_url
+from tests.mcp_contribution_loader import load_mcp_contribution_payloads, remote_mcp_endpoint_identity
 
 _NATIVE_URL = "https://93.184.216.34/mcp"
 _MAPPED_URL = "https://[::ffff:93.184.216.34]/mcp"

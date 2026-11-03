@@ -63,7 +63,7 @@ def install_harness(
 ) -> dict[str, Any]:
     """Run the shipped install command for ``harness`` into a lane-owned home."""
 
-    environment = isolated_environment(home=home, guard_home=guard_home)
+    environment = isolated_environment(home=home, guard_home=guard_home, native_runtime=runtime.native_runtime)
     completed = run_guard(
         runtime,
         [
@@ -194,13 +194,19 @@ def read_config(path: Path) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def hook_groups(config: dict[str, Any] | None, expectation: dict[str, Any]) -> dict[str, Any]:
+    hooks = config.get(expectation.get("hooks_key", "hooks")) if isinstance(config, dict) else None
+    if isinstance(hooks, dict) and expectation.get("events_key"):
+        hooks = hooks.get(expectation["events_key"])
+    return hooks if isinstance(hooks, dict) else {}
+
+
 def assess_claude(home: Path, expectation: dict[str, Any]) -> dict[str, Any]:
     """Every required Claude hook event must carry at least one Guard handler."""
 
     config_path = home / expectation["config"]
     config = read_config(config_path)
-    hooks = config.get(expectation["hooks_key"]) if isinstance(config, dict) else None
-    hooks = hooks if isinstance(hooks, dict) else {}
+    hooks = hook_groups(config, expectation)
     events: dict[str, int] = {}
     failures: list[str] = []
     dangling: dict[str, list[str]] = {}

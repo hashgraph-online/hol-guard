@@ -1,0 +1,320 @@
+{
+  "schema": "guard.core-defaults.v1",
+  "entries": [
+    {
+      "extension_id": "command.api-gateway",
+      "source": "contributions/command-sources/command.api-gateway.json",
+      "trust": "contracts/extensions/trust/command.api-gateway.v1.json"
+    },
+    {
+      "extension_id": "command.backup.borg",
+      "source": "contributions/command-sources/command.backup.borg.json",
+      "trust": "contracts/extensions/trust/command.backup.borg.v1.json"
+    },
+    {
+      "extension_id": "command.backup.rclone",
+      "source": "contributions/command-sources/command.backup.rclone.json",
+      "trust": "contracts/extensions/trust/command.backup.rclone.v1.json"
+    },
+    {
+      "extension_id": "command.backup.restic",
+      "source": "contributions/command-sources/command.backup.restic.json",
+      "trust": "contracts/extensions/trust/command.backup.restic.v1.json"
+    },
+    {
+      "extension_id": "command.backup.velero",
+      "source": "contributions/command-sources/command.backup.velero.json",
+      "trust": "contracts/extensions/trust/command.backup.velero.v1.json"
+    },
+    {
+      "extension_id": "command.cdn",
+      "source": "contributions/command-sources/command.cdn.json",
+      "trust": "contracts/extensions/trust/command.cdn.v1.json"
+    },
+    {
+      "extension_id": "command.cicd.circleci",
+      "source": "contributions/command-sources/command.cicd.circleci.json",
+      "trust": "contracts/extensions/trust/command.cicd.circleci.v1.json"
+    },
+    {
+      "extension_id": "command.cicd.github",
+      "source": "contributions/command-sources/command.cicd.github.json",
+      "trust": "contracts/extensions/trust/command.cicd.github.v1.json"
+    },
+    {
+      "extension_id": "command.cicd.gitlab",
+      "source": "contributions/command-sources/command.cicd.gitlab.json",
+      "trust": "contracts/extensions/trust/command.cicd.gitlab.v1.json"
+    },
+    {
+      "extension_id": "command.cloud.aws",
+      "source": "contributions/command-sources/command.cloud.aws.json",
+      "trust": "contracts/extensions/trust/command.cloud.aws.v1.json"
+    },
+    {
+      "extension_id": "command.cloud.azure",
+      "source": "contributions/command-sources/command.cloud.azure.json",
+      "trust": "contracts/extensions/trust/command.cloud.azure.v1.json"
+    },
+    {
+      "extension_id": "command.cloud.digitalocean",
+      "source": "contributions/command-sources/command.cloud.digitalocean.json",
+      "trust": "contracts/extensions/trust/command.cloud.digitalocean.v1.json"
+    },
+    {
+      "extension_id": "command.cloud.gcp",
+      "source": "contributions/command-sources/command.cloud.gcp.json",
+      "trust": "contracts/extensions/trust/command.cloud.gcp.v1.json"
+    },
+    {
+      "extension_id": "command.container-runtime",
+      "source": "contributions/command-sources/command.container-runtime.json",
+      "trust": "contracts/extensions/trust/command.container-runtime.v1.json"
+    },
+    {
+      "extension_id": "command.data-protection",
+      "source": "contributions/command-sources/command.data-protection.json",
+      "trust": "contracts/extensions/trust/command.data-protection.v1.json"
+    },
+    {
+      "extension_id": "command.database.mongodb",
+      "source": "contributions/command-sources/command.database.mongodb.json",
+      "trust": "contracts/extensions/trust/command.database.mongodb.v1.json"
+    },
+    {
+      "extension_id": "command.database.mysql",
+      "source": "contributions/command-sources/command.database.mysql.json",
+      "trust": "contracts/extensions/trust/command.database.mysql.v1.json"
+    },
+    {
+      "extension_id": "command.database.postgresql",
+      "source": "contributions/command-sources/command.database.postgresql.json",
+      "trust": "contracts/extensions/trust/command.database.postgresql.v1.json"
+    },
+    {
+      "extension_id": "command.database.redis",
+      "source": "contributions/command-sources/command.database.redis.json",
+      "trust": "contracts/extensions/trust/command.database.redis.v1.json"
+    },
+    {
+      "extension_id": "command.database.sqlite",
+      "source": "contributions/command-sources/command.database.sqlite.json",
+      "trust": "contracts/extensions/trust/command.database.sqlite.v1.json"
+    },
+    {
+      "extension_id": "command.database.supabase",
+      "source": "contributions/command-sources/command.database.supabase.json",
+      "trust": "contracts/extensions/trust/command.database.supabase.v1.json"
+    },
+    {
+      "extension_id": "command.dns.aws",
+      "source": "contributions/command-sources/command.dns.aws.json",
+      "trust": "contracts/extensions/trust/command.dns.aws.v1.json"
+    },
+    {
+      "extension_id": "command.dns.azure",
+      "source": "contributions/command-sources/command.dns.azure.json",
+      "trust": "contracts/extensions/trust/command.dns.azure.v1.json"
+    },
+    {
+      "extension_id": "command.dns.gcp",
+      "source": "contributions/command-sources/command.dns.gcp.json",
+      "trust": "contracts/extensions/trust/command.dns.gcp.v1.json"
+    },
+    {
+      "extension_id": "command.email",
+      "source": "contributions/command-sources/command.email.json",
+      "trust": "contracts/extensions/trust/command.email.v1.json"
+    },
+    {
+      "extension_id": "command.encoded-execution",
+      "source": "contributions/command-sources/command.encoded-execution.json",
+      "trust": "contracts/extensions/trust/command.encoded-execution.v1.json"
+    },
+    {
+      "extension_id": "command.feature-flags",
+      "source": "contributions/command-sources/command.feature-flags.json",
+      "trust": "contracts/extensions/trust/command.feature-flags.v1.json"
+    },
+    {
+      "extension_id": "command.filesystem",
+      "source": "contributions/command-sources/command.filesystem.json",
+      "trust": "contracts/extensions/trust/command.filesystem.v1.json"
+    },
+    {
+      "extension_id": "command.framework.laravel",
+      "source": "contributions/command-sources/command.framework.laravel.json",
+      "trust": "contracts/extensions/trust/command.framework.laravel.v1.json"
+    },
+    {
+      "extension_id": "command.git",
+      "source": "contributions/command-sources/command.git.json",
+      "trust": "contracts/extensions/trust/command.git.v1.json"
+    },
+    {
+      "extension_id": "command.github",
+      "source": "contributions/command-sources/command.github.json",
+      "trust": "contracts/extensions/trust/command.github.v1.json"
+    },
+    {
+      "extension_id": "command.guard-self-protection",
+      "source": "contributions/command-sources/command.guard-self-protection.json",
+      "trust": "contracts/extensions/trust/command.guard-self-protection.v1.json"
+    },
+    {
+      "extension_id": "command.infrastructure-as-code",
+      "source": "contributions/command-sources/command.infrastructure-as-code.json",
+      "trust": "contracts/extensions/trust/command.infrastructure-as-code.v1.json"
+    },
+    {
+      "extension_id": "command.kubernetes-operations",
+      "source": "contributions/command-sources/command.kubernetes-operations.json",
+      "trust": "contracts/extensions/trust/command.kubernetes-operations.v1.json"
+    },
+    {
+      "extension_id": "command.kubernetes-secrets",
+      "source": "contributions/command-sources/command.kubernetes-secrets.json",
+      "trust": "contracts/extensions/trust/command.kubernetes-secrets.v1.json"
+    },
+    {
+      "extension_id": "command.load-balancer",
+      "source": "contributions/command-sources/command.load-balancer.json",
+      "trust": "contracts/extensions/trust/command.load-balancer.v1.json"
+    },
+    {
+      "extension_id": "command.messaging.kafka",
+      "source": "contributions/command-sources/command.messaging.kafka.json",
+      "trust": "contracts/extensions/trust/command.messaging.kafka.v1.json"
+    },
+    {
+      "extension_id": "command.messaging.nats",
+      "source": "contributions/command-sources/command.messaging.nats.json",
+      "trust": "contracts/extensions/trust/command.messaging.nats.v1.json"
+    },
+    {
+      "extension_id": "command.messaging.rabbitmq",
+      "source": "contributions/command-sources/command.messaging.rabbitmq.json",
+      "trust": "contracts/extensions/trust/command.messaging.rabbitmq.v1.json"
+    },
+    {
+      "extension_id": "command.monitoring",
+      "source": "contributions/command-sources/command.monitoring.json",
+      "trust": "contracts/extensions/trust/command.monitoring.v1.json"
+    },
+    {
+      "extension_id": "command.package.go",
+      "source": "contributions/command-sources/command.package.go.json",
+      "trust": "contracts/extensions/trust/command.package.go.v1.json"
+    },
+    {
+      "extension_id": "command.package.jvm",
+      "source": "contributions/command-sources/command.package.jvm.json",
+      "trust": "contracts/extensions/trust/command.package.jvm.v1.json"
+    },
+    {
+      "extension_id": "command.package.node",
+      "source": "contributions/command-sources/command.package.node.json",
+      "trust": "contracts/extensions/trust/command.package.node.v1.json"
+    },
+    {
+      "extension_id": "command.package.php",
+      "source": "contributions/command-sources/command.package.php.json",
+      "trust": "contracts/extensions/trust/command.package.php.v1.json"
+    },
+    {
+      "extension_id": "command.package.python",
+      "source": "contributions/command-sources/command.package.python.json",
+      "trust": "contracts/extensions/trust/command.package.python.v1.json"
+    },
+    {
+      "extension_id": "command.package.ruby",
+      "source": "contributions/command-sources/command.package.ruby.json",
+      "trust": "contracts/extensions/trust/command.package.ruby.v1.json"
+    },
+    {
+      "extension_id": "command.package.rust",
+      "source": "contributions/command-sources/command.package.rust.json",
+      "trust": "contracts/extensions/trust/command.package.rust.v1.json"
+    },
+    {
+      "extension_id": "command.package.system",
+      "source": "contributions/command-sources/command.package.system.json",
+      "trust": "contracts/extensions/trust/command.package.system.v1.json"
+    },
+    {
+      "extension_id": "command.payment",
+      "source": "contributions/command-sources/command.payment.json",
+      "trust": "contracts/extensions/trust/command.payment.v1.json"
+    },
+    {
+      "extension_id": "command.platform.heroku",
+      "source": "contributions/command-sources/command.platform.heroku.json",
+      "trust": "contracts/extensions/trust/command.platform.heroku.v1.json"
+    },
+    {
+      "extension_id": "command.platform.netlify",
+      "source": "contributions/command-sources/command.platform.netlify.json",
+      "trust": "contracts/extensions/trust/command.platform.netlify.v1.json"
+    },
+    {
+      "extension_id": "command.platform.vercel",
+      "source": "contributions/command-sources/command.platform.vercel.json",
+      "trust": "contracts/extensions/trust/command.platform.vercel.v1.json"
+    },
+    {
+      "extension_id": "command.remote.rsync",
+      "source": "contributions/command-sources/command.remote.rsync.json",
+      "trust": "contracts/extensions/trust/command.remote.rsync.v1.json"
+    },
+    {
+      "extension_id": "command.remote.scp",
+      "source": "contributions/command-sources/command.remote.scp.json",
+      "trust": "contracts/extensions/trust/command.remote.scp.v1.json"
+    },
+    {
+      "extension_id": "command.remote.ssh",
+      "source": "contributions/command-sources/command.remote.ssh.json",
+      "trust": "contracts/extensions/trust/command.remote.ssh.v1.json"
+    },
+    {
+      "extension_id": "command.search.elasticsearch",
+      "source": "contributions/command-sources/command.search.elasticsearch.json",
+      "trust": "contracts/extensions/trust/command.search.elasticsearch.v1.json"
+    },
+    {
+      "extension_id": "command.shell-mutations",
+      "source": "contributions/command-sources/command.shell-mutations.json",
+      "trust": "contracts/extensions/trust/command.shell-mutations.v1.json"
+    },
+    {
+      "extension_id": "command.storage.aws-s3",
+      "source": "contributions/command-sources/command.storage.aws-s3.json",
+      "trust": "contracts/extensions/trust/command.storage.aws-s3.v1.json"
+    },
+    {
+      "extension_id": "command.storage.azure-blob",
+      "source": "contributions/command-sources/command.storage.azure-blob.json",
+      "trust": "contracts/extensions/trust/command.storage.azure-blob.v1.json"
+    },
+    {
+      "extension_id": "command.storage.google-cloud",
+      "source": "contributions/command-sources/command.storage.google-cloud.json",
+      "trust": "contracts/extensions/trust/command.storage.google-cloud.v1.json"
+    },
+    {
+      "extension_id": "command.storage.minio",
+      "source": "contributions/command-sources/command.storage.minio.json",
+      "trust": "contracts/extensions/trust/command.storage.minio.v1.json"
+    },
+    {
+      "extension_id": "command.system",
+      "source": "contributions/command-sources/command.system.json",
+      "trust": "contracts/extensions/trust/command.system.v1.json"
+    },
+    {
+      "extension_id": "command.windows",
+      "source": "contributions/command-sources/command.windows.json",
+      "trust": "contracts/extensions/trust/command.windows.v1.json"
+    }
+  ]
+}

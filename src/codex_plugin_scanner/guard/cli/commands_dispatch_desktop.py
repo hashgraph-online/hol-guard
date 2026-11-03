@@ -569,7 +569,12 @@ def _run_guard_desktop_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
-    del workspace, input_text
+    del input_text
+    if getattr(args, "desktop_command", None) == "converge" and context is not None and store is not None:
+        from .desktop_converge import run_desktop_converge
+
+        out = output_stream or sys.stdout
+        return run_desktop_converge(args, context=context, store=store, workspace=workspace, output_stream=out)
     if getattr(args, "desktop_command", None) == "qualify-owned":
         from .desktop_owned_qualification import run_desktop_owned_qualification
 
@@ -610,16 +615,8 @@ def _run_guard_desktop_command(
         if resolved_home is None:
             print("Guard dashboard update requires --guard-home.", file=sys.stderr)
             return 2
-        argv = [
-            "--guard-home",
-            str(resolved_home),
-            "--daemon-pid",
-            str(args.daemon_pid),
-            "--daemon-port",
-            str(args.daemon_port),
-            "--update-token",
-            str(args.update_token),
-        ]
+        argv = ["--guard-home", str(resolved_home), "--daemon-pid", str(args.daemon_pid)]
+        argv += ["--daemon-port", str(args.daemon_port), "--update-token", str(args.update_token)]
         if bool(getattr(args, "force_pypi_reinstall", False)):
             argv.append("--force-pypi-reinstall")
         if bool(getattr(args, "alpha", False)):

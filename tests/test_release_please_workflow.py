@@ -119,7 +119,11 @@ def test_stable_jobs_accept_the_release_please_tag_ref() -> None:
     jobs = load_workflow(PUBLISH_WORKFLOW)["jobs"]
     tag_ref = "github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)"
     for job_name in (
-        "build-native-guard-wheels",
+        "build-native-guard-wheel-linux-x64",
+        "build-native-guard-wheel-macos-x64",
+        "build-native-guard-wheel-macos-arm64",
+        "build-native-guard-wheel-windows-x64",
+        "build-native-guard-wheel-windows-arm64",
         "publish-main-testpypi",
         "reserve-main-tag",
         "publish-main-pypi",

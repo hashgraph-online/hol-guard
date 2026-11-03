@@ -3,16 +3,17 @@ import { HiMiniArrowPath, HiMiniCloudArrowUp } from "react-icons/hi2";
 import { ActionButton, Badge } from "./approval-center-primitives";
 import { ConnectGuardCloudButton } from "./connect-guard-cloud-button";
 import type { GuardRuntimeSnapshot } from "./guard-types";
-import { resolvePolicyViewLabel, type PolicyPageView } from "./policy-workspace";
+import { resolvePolicyViewHint, resolvePolicyViewLabel, type PolicyPageView } from "./policy-workspace";
 
 const POLICY_VIEWS: PolicyPageView[] = ["rules", "exceptions", "strict"];
 
 type PolicyUnderlineTabBarProps = {
   activeView: PolicyPageView;
   onViewChange: (view: PolicyPageView) => void;
+  counts?: Partial<Record<PolicyPageView, number>>;
 };
 
-export function PolicyUnderlineTabBar({ activeView, onViewChange }: PolicyUnderlineTabBarProps) {
+export function PolicyUnderlineTabBar({ activeView, onViewChange, counts }: PolicyUnderlineTabBarProps) {
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLButtonElement>, view: PolicyPageView) => {
       const index = POLICY_VIEWS.indexOf(view);
@@ -53,13 +54,23 @@ export function PolicyUnderlineTabBar({ activeView, onViewChange }: PolicyUnderl
             tabIndex={selected ? 0 : -1}
             onClick={() => onViewChange(view)}
             onKeyDown={(event) => handleKeyDown(event, view)}
-            className={`-mb-px min-h-11 shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
+            className={`-mb-px min-h-11 shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-left text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
               selected
                 ? "border-brand-blue text-brand-blue"
                 : "border-transparent text-slate-500 hover:border-slate-300 hover:text-brand-dark"
             }`}
           >
-            {resolvePolicyViewLabel(view)}
+            <span className="inline-flex items-center gap-1.5">
+              {resolvePolicyViewLabel(view)}
+              {counts?.[view] !== undefined ? (
+                <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${selected ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-100 text-slate-500"}`}>
+                  {counts[view]}
+                </span>
+              ) : null}
+            </span>
+            <span className={`mt-0.5 block text-xs font-normal ${selected ? "text-brand-blue/80" : "text-slate-400"}`}>
+              {resolvePolicyViewHint(view)}
+            </span>
           </button>
         );
       })}
@@ -110,9 +121,14 @@ export function PolicyExceptionsToolbar({
 }: PolicyExceptionsToolbarProps) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <ActionButton variant="primary" onClick={onRequestException} disabled={!cloudConnected}>
-        + Request cloud exception
-      </ActionButton>
+      <span title={cloudConnected ? undefined : "Connect Guard Cloud first — exceptions are approved there, then synced to this device."} className="inline-flex">
+        <ActionButton variant="primary" onClick={onRequestException} disabled={!cloudConnected}>
+          + Request cloud exception
+        </ActionButton>
+      </span>
+      {!cloudConnected ? (
+        <span className="w-full text-right text-xs text-slate-500">Connect Guard Cloud to request an exception.</span>
+      ) : null}
       {cloudConnected && cloudControlsUrl ? (
         <ActionButton href={cloudControlsUrl} variant="secondary">
           <HiMiniCloudArrowUp className="mr-1.5 h-4 w-4" aria-hidden="true" />

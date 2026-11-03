@@ -9,20 +9,6 @@ const VECTORS: &str = include_str!("../../../../tests/fixtures/portable-project-
 #[cfg(unix)]
 const SCHEMA: &str = "guard.portable-project-identity.vectors.v1";
 
-/// The vectors whose Python identity this resolver answers `Unknown`, each
-/// with the reason the Python outcome is not reproduced.
-#[cfg(unix)]
-const UNKNOWN_ALLOWLIST: [(&str, &str); 2] = [
-    (
-        "remote_ipv6_explicit_port",
-        "a bracketed IPv6 host is validated by version-specific urlsplit code",
-    ),
-    (
-        "remote_ipv6_address_suffix",
-        "a bracketed IPv6 host is validated by version-specific urlsplit code",
-    ),
-];
-
 /// A fresh canonical directory (`/var` is a link on macOS).
 #[cfg(unix)]
 fn scratch(label: &str) -> PathBuf {
@@ -68,7 +54,7 @@ fn materialize(case: &Value, root: &Path) -> String {
 
 #[cfg(unix)]
 #[test]
-fn every_vector_matches_the_python_resolver_or_is_allowlisted() {
+fn every_vector_resolves_to_its_recorded_identity() {
     let vectors: Value = serde_json::from_str(VECTORS).expect("vectors");
     assert_eq!(vectors["schema"], SCHEMA);
     let base = scratch("vectors");
@@ -82,19 +68,12 @@ fn every_vector_matches_the_python_resolver_or_is_allowlisted() {
             (PortableIdentity::Identity(got), Some(want)) if got == want => {}
             (PortableIdentity::Absent, None) => {}
             (PortableIdentity::Unknown, _) => unknown.push(id.to_owned()),
-            (got, want) => failures.push(format!("{id}: resolved {got:?}, Python {want:?}")),
+            (got, want) => failures.push(format!("{id}: resolved {got:?}, recorded {want:?}")),
         }
     }
     fs::remove_dir_all(&base).ok();
     assert!(failures.is_empty(), "{failures:#?}");
-    let allowed: Vec<String> = UNKNOWN_ALLOWLIST
-        .iter()
-        .map(|(id, _)| (*id).to_owned())
-        .collect();
-    assert_eq!(
-        unknown, allowed,
-        "unknown outcomes must be exactly the allowlist"
-    );
+    assert!(unknown.is_empty(), "unsettled vectors: {unknown:#?}");
 }
 
 #[test]
@@ -181,18 +160,19 @@ fn workspaces_resolve_rewrites_read_as_the_directory_they_name() {
     );
     assert_eq!(
         resolve(&format!("{canonical}/./")),
-        PortableIdentity::Identity(identity)
+        PortableIdentity::Identity(identity.clone())
     );
     // `expanduser` rewrites a `~` name and a relative name resolves against
     // the reader's own directory, neither of which is reproduced here.
     assert_eq!(resolve("~/repository"), PortableIdentity::Unknown);
     assert_eq!(resolve("relative/repository"), PortableIdentity::Unknown);
-    // A name that does not exist is resolved by Python without reading it,
-    // and would be discovered against the repository above it.
-    assert_eq!(
-        resolve(&format!("{canonical}/missing")),
-        PortableIdentity::Unknown
-    );
+    // `resolve(strict=False)` appends a name that does not exist to the part
+    // that does, so it is read as a workspace under this repository rather
+    // than left unsettled, and it is not the repository itself.
+    let PortableIdentity::Identity(missing) = resolve(&format!("{canonical}/missing")) else {
+        panic!("an absent name under a repository has an identity");
+    };
+    assert_ne!(missing, identity);
     assert_eq!(resolve("   "), PortableIdentity::Absent);
     fs::remove_dir_all(&root).ok();
 }
@@ -341,27 +321,119 @@ fn a_relative_workspace_python_would_rewrite_is_unknown() {
     let cwd = root.to_str().expect("utf-8").to_owned();
     let token = format!("package-request-workspace-exact:v1:{}", "d".repeat(64));
 
-    // A directory `resolve` would rewrite, a relative directory and a name
-    // carrying a separator, a dot segment or a home prefix are each a
-    // resolution this reader does not reproduce.
-    assert_eq!(
-        resolve_relative(&token, &format!("{cwd}/")),
-        PortableIdentity::Unknown
-    );
+    // `expanduser` reads a home prefix from an environment this reader does
+    // not read, and a directory that is not absolute is resolved against the
+    // reader's own directory rather than the one the caller reported.
+    assert_eq!(resolve_relative("~token", &cwd), PortableIdentity::Unknown);
     assert_eq!(
         resolve_relative(&token, "relative"),
         PortableIdentity::Unknown
     );
-    for name in ["a/token", "./token", "../token", "~token"] {
+    assert_eq!(resolve_relative(&token, ""), PortableIdentity::Unknown);
+
+    // A link whose target is gone is followed by `resolve` to that target,
+    // which this reader does not reproduce.
+    std::os::unix::fs::symlink(root.join("gone"), root.join("dangling")).expect("link");
+    assert_eq!(
+        resolve_relative("dangling", &cwd),
+        PortableIdentity::Unknown
+    );
+    fs::remove_dir_all(&root).ok();
+}
+
+/// A relative name carrying a separator or a dot segment, a name that
+/// already exists and a reported directory `resolve` would rewrite are each
+/// read rather than left unsettled, so an ordinary nested workspace still
+/// reaches its project's policy.
+#[cfg(unix)]
+#[test]
+fn relative_workspaces_resolve_reads_are_settled() {
+    let root = scratch("relative-settled");
+    repository(&root);
+    let cwd = root.to_str().expect("utf-8").to_owned();
+    let token = format!("package-request-workspace-exact:v1:{}", "e".repeat(64));
+    let nested = root.join("a");
+    fs::create_dir_all(&nested).expect("nested dir");
+
+    let PortableIdentity::Identity(expected) = resolve_relative(&token, &cwd) else {
+        panic!("the reported directory resolves");
+    };
+    // A trailing separator names the same directory.
+    assert_eq!(
+        resolve_relative(&token, &format!("{cwd}/")),
+        PortableIdentity::Identity(expected.clone())
+    );
+    // `./<name>` and `<dir>/../<name>` resolve to that same name.
+    for name in [format!("./{token}"), format!("a/../{token}")] {
         assert_eq!(
-            resolve_relative(name, &cwd),
-            PortableIdentity::Unknown,
+            resolve_relative(&name, &cwd),
+            PortableIdentity::Identity(expected.clone()),
             "{name}"
         );
     }
-
-    // A name that already exists may be a link `resolve` follows.
+    // A name carrying a separator is read under the reported directory, and
+    // names a workspace of its own.
+    let PortableIdentity::Identity(under) = resolve_relative(&format!("a/{token}"), &cwd) else {
+        panic!("a nested name resolves");
+    };
+    assert_ne!(under, expected);
+    // A name that already exists is read as the directory it resolves to.
     fs::create_dir_all(root.join(&token)).expect("token dir");
-    assert_eq!(resolve_relative(&token, &cwd), PortableIdentity::Unknown);
+    assert_eq!(
+        resolve_relative(&token, &cwd),
+        PortableIdentity::Identity(expected)
+    );
+    fs::remove_dir_all(&root).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_workspace_that_is_gone_reads_the_repository_above_it() {
+    let root = scratch("absent-workspace");
+    repository(&root);
+    let present = root.join("apps/first");
+    fs::create_dir_all(&present).expect("present dir");
+
+    // `resolve(strict=False)` appends the names that do not exist to the
+    // part that does, so a workspace under a directory that was removed is
+    // read under the repository above it rather than left unsettled.
+    let absent = root.join("apps/second/deeper");
+    let PortableIdentity::Identity(derived) = resolve(absent.to_str().expect("utf-8")) else {
+        panic!("an absent workspace under a repository has an identity");
+    };
+    let PortableIdentity::Identity(sibling) = resolve(present.to_str().expect("utf-8")) else {
+        panic!("a present workspace under a repository has an identity");
+    };
+    assert_ne!(derived, sibling);
+
+    // A name that exists nowhere near a repository is still no identity.
+    assert_eq!(
+        resolve("/guard-no-such-root/workspace"),
+        PortableIdentity::Absent
+    );
+    fs::remove_dir_all(&root).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_workspace_this_reader_cannot_read_is_unknown() {
+    let root = scratch("unreadable-workspace");
+    repository(&root);
+
+    // A link that names itself answers `ELOOP`, which is not absence.
+    let loop_path = root.join("loop");
+    std::os::unix::fs::symlink(&loop_path, &loop_path).expect("link loop");
+    assert_eq!(
+        resolve(loop_path.to_str().expect("utf-8")),
+        PortableIdentity::Unknown
+    );
+
+    // `..` below the part that exists is rewritten against what that part
+    // resolved to, which this reader does not reproduce.
+    let traversal = root.join("gone/../apps");
+    assert_eq!(
+        resolve(traversal.to_str().expect("utf-8")),
+        PortableIdentity::Unknown
+    );
     fs::remove_dir_all(&root).ok();
 }

@@ -36,7 +36,10 @@ fn request_digest(request: &McpToolPolicyDecideRequestV1) -> Result<String, &'st
     ))
 }
 
-fn decide(request: &McpToolPolicyDecideRequestV1) -> Flow<Decision> {
+fn decide(
+    request: &McpToolPolicyDecideRequestV1,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+) -> Flow<Decision> {
     if request.schema != MCP_TOOL_POLICY_DECIDE_REQUEST_SCHEMA {
         return Err(Stop::Fail(ERR_SCHEMA));
     }
@@ -47,6 +50,7 @@ fn decide(request: &McpToolPolicyDecideRequestV1) -> Flow<Decision> {
         observations: &request.observations,
         lookup: request.lookup.as_ref(),
         memo: None,
+        catalog,
     };
     match evaluate_pass(
         &ctx,
@@ -76,8 +80,38 @@ fn result(
     })
 }
 
+#[cfg(test)]
 pub(crate) fn evaluate_mcp_tool_policy_decide_request(
     request: &McpToolPolicyDecideRequestV1,
+) -> Result<Vec<u8>, String> {
+    evaluate_with_catalog(request, None)
+}
+
+pub(crate) fn evaluate_with_store(
+    request: &McpToolPolicyDecideRequestV1,
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> Result<Vec<u8>, String> {
+    if let Some(extension) = &request.subject.extension {
+        crate::contributed_mcp_decision_op::with_catalog(store, &extension.guard_home, |catalog| {
+            evaluate_with_catalog(request, Some(catalog))
+        })
+    } else {
+        // A refreshed subject may introduce extension evidence after an
+        // approval claim. Capture authority even when the initial subject
+        // carries none, so revalidation cannot fall back to the core catalog.
+        let store = store.ok_or("native_contributed_mcp_authority_unavailable")?;
+        let guard_home = crate::resident_state::private_root_for_state_base(store.state_base())?;
+        crate::contributed_mcp_decision_op::with_catalog(
+            Some(store),
+            &guard_home.to_string_lossy(),
+            |catalog| evaluate_with_catalog(request, Some(catalog)),
+        )
+    }
+}
+
+fn evaluate_with_catalog(
+    request: &McpToolPolicyDecideRequestV1,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
 ) -> Result<Vec<u8>, String> {
     // Digest failures are this op's own typed error result, not a transport
     // error (which the resident would redact to invalid-json).
@@ -85,11 +119,14 @@ pub(crate) fn evaluate_mcp_tool_policy_decide_request(
         Ok(digest) => digest,
         Err(code) => return result(request, String::new(), "error", code, None),
     };
-    match decide(request) {
+    match decide(request, catalog) {
         Ok(decision) => {
             let mut payload = decision.to_value();
-            let connector =
-                crate::mcp_tool_policy_connector::connector_setup(&request.subject, &decision);
+            let connector = crate::mcp_tool_policy_connector::connector_setup_with_catalog(
+                &request.subject,
+                &decision,
+                catalog,
+            );
             if let (Some(connector), Some(object)) = (connector, payload.as_object_mut()) {
                 // Present only for a non-recognition review; every other
                 // payload is byte-for-byte what it was.

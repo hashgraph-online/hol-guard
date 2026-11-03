@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.legwork",
+  "version": "1.0.0",
+  "name": "Legwork",
+  "description": "Lets an agent find an open-source tool on GitHub and install it as an MCP tool on this machine. find_tools only searches; install_tool clones, scans and builds a repo in an OS sandbox (sandbox-exec on macOS, bubblewrap on Linux); use_tool and the exported <repo>__<tool> tools run it with only the folders and network the user granted. Installs run third-party code with network on. External, opt-in, off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kumarganduri",
+    "displayName": "Kumar Ganduri",
+    "url": "https://github.com/kumarganduri"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://github.com/kumarganduri/legwork",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "legwork-mcp"
+  },
+  "riskClasses": [
+    "package-or-source-installation",
+    "external-third-party-code-install",
+    "external-command-execution",
+    "external-network-read",
+    "local-file-read"
+  ],
+  "tools": [
+    {
+      "name": "find_tools",
+      "state": "review"
+    },
+    {
+      "name": "install_tool",
+      "state": "review"
+    },
+    {
+      "name": "install_status",
+      "state": "review"
+    },
+    {
+      "name": "list_installed_tools",
+      "state": "review"
+    },
+    {
+      "name": "use_tool",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kumarganduri/legwork",
+    "https://github.com/kumarganduri/legwork#readme",
+    "https://github.com/kumarganduri/legwork/blob/main/THREAT_MODEL.md",
+    "https://github.com/kumarganduri/legwork/blob/main/legwork/hub.py",
+    "https://pypi.org/project/legwork-mcp/"
+  ],
+  "saferAlternatives": [
+    "Start the hub with only the folders tools need (--allow-read ~/Downloads, read-only) and without --allow-net; an install can ask for those grants or fewer, never more.",
+    "Call install_tool with preview: true first, then with commit set to the full SHA it reports, so the approval names the exact commit that is built.",
+    "For a repo not in the Legwork cache, read the model-written install command the build stops to show; none of it runs until that exact text is approved.",
+    "Prefer repos find_tools marks as in the Legwork cache: their install command is pinned and reviewed, and each passes a known-answer test.",
+    "Pin the package (uvx legwork-mcp==<version>) so only a release you have reviewed runs; legwork show and legwork log print what each tool was built from and what it reached."
+  ]
+}

@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_reque
 from codex_plugin_scanner.guard.stable_digest import stable_digest_hex
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_workspace import bind_workspace
+from tests.package_review_settings import review_package_signals
 from tests.test_guard_js_supply_chain_phase11 import (
     WORKSPACE_ID,
     _artifact_from_command,
@@ -95,6 +96,7 @@ def test_incomplete_lockfile_evidence_contains_hash_and_reason_without_contents(
     malformed_lockfile = '{"lockfileVersion":3,"packages":{"node_modules/secret-fixture":'
     _write_text(workspace_dir / "package-lock.json", malformed_lockfile)
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     result = evaluate_package_request_artifact(
         artifact=_artifact_from_command("npm install minimist@^1.2.0", workspace=workspace_dir),
@@ -118,6 +120,7 @@ def test_incomplete_lockfile_without_direct_package_target_still_fails_closed(tm
     workspace_dir.mkdir()
     _write_text(workspace_dir / "package-lock.json", '{"lockfileVersion":3,"packages":')
     store = GuardStore(tmp_path / "home")
+    review_package_signals(tmp_path / "home")
 
     result = evaluate_package_request_artifact(
         artifact=_artifact_from_command("npm install", workspace=workspace_dir),

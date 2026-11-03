@@ -124,6 +124,12 @@ fn portable_identity(
         Value::Object(map) => {
             let mut normalized = crate::hook_adapter_value::OMap::new();
             for (key, item) in map {
+                // An `env` shebang records the PATH it searched. The resolved
+                // interpreter's path and digest already pin the result, so the
+                // raw PATH digest is left out, as in `executable_material`.
+                if key == "search_path_sha256" {
+                    continue;
+                }
                 let tracked = matches!(key.as_str(), "path" | "launch_cwd" | "command");
                 if let (true, Value::String(raw)) = (tracked, item) {
                     let replacement = if PyPath::new(raw).is_absolute() {
@@ -217,6 +223,10 @@ pub(super) fn executable_material(
             Some(LAUNCH_UNAVAILABLE),
         ));
     }
+    // PATH itself is not bound. `location` and `content_digest` already pin the
+    // binary a bare name resolved to, so a different executable earlier in PATH
+    // still changes this material, while an unrelated directory added to PATH
+    // (agent shims, version managers) leaves a saved approval valid.
     let mut material = vec![
         ("content_digest", text(&content_digest)),
         (
@@ -227,10 +237,6 @@ pub(super) fn executable_material(
         ("manager", text(manager)),
         ("requested", text(&path_name(requested))),
     ];
-    if !(requested.contains('/') || requested.contains('\\')) {
-        let digest = ports.opaque_digest(search_path.unwrap_or(""));
-        material.push(("search_path_digest", text(&digest)));
-    }
     if !ports.launch_identity_reusable(&identity) {
         material.push(("status", text(LAUNCH_UNAVAILABLE)));
         return Ok((object(material), Some(LAUNCH_UNAVAILABLE)));

@@ -66,10 +66,20 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
         joined.as_path()
     };
     let canonical = std::fs::canonicalize(supplied).ok()?;
+    // The user's private macOS temporary directory is as much theirs as
+    // home, and agents put worktrees there, so a directory below it is a
+    // target like one below home. Every other location check still applies.
+    let temporary =
+        super::read_paths::inside_private_temporary_directory(&canonical, context.home_dir);
     // Non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
     if !absolute_path_spelling_matches(supplied, &canonical, anchored)
         || !canonical.is_dir()
-        || !super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
+        || !super::read_paths::resolved_path_allowed_in_scope(
+            &canonical,
+            context.home_dir,
+            context.cwd,
+            temporary,
+        )
     {
         return None;
     }
@@ -79,11 +89,36 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     canonical.to_str().map(str::to_owned)
 }
 
+/// A `cd` operand that climbs out of the cwd, such as `cd ..` or
+/// `cd ../app`, proved for read-only steps only (see `sibling::climbed`). It
+/// must name its canonical directory exactly and clear the read screens an
+/// absolute `cd` does. Write, Git write and contained-run routes keep
+/// [`verified_cwd_target`], which proves `..` only into a linked worktree.
+pub(crate) fn verified_climb_target(
+    value: &str,
+    context: super::PathContext<'_>,
+) -> Option<String> {
+    if context.home_dir.is_none() || !safe_directory_target(value) {
+        return None;
+    }
+    let supplied = sibling::climbed(value, std::path::Path::new(context.cwd?))?;
+    let canonical = std::fs::canonicalize(&supplied).ok()?;
+    if canonical != supplied
+        || !canonical.is_dir()
+        || !super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
+    {
+        return None;
+    }
+    canonical.to_str().map(str::to_owned)
+}
+
 /// POSIX `cd` skips the CDPATH search for operands that begin with `.` or
 /// `..`; any other relative operand needs proof that CDPATH is unset. The
 /// lexical join is what a logical `cd` reaches, so the caller's spelling
-/// check rejects symlinked components. `..` is proved only into a linked
-/// worktree of the session's repository (see `sibling`): elsewhere the
+/// check rejects symlinked components. `..` is proved here only into a
+/// linked worktree of the session's repository (see `sibling`); read-only
+/// steps may also follow a plain climb (see `verified_climb_target`).
+/// Elsewhere the
 /// shell resolves it against its logical `$PWD`, which may name a symlinked
 /// parent the reported cwd does not show. On Windows a `:` can name a
 /// drive-relative path (`C:src`) or an alternate data stream, and Git Bash
@@ -178,6 +213,18 @@ pub(crate) fn home_targets_unquoted(segment: &crate::CommandSegmentV1) -> bool {
         .arguments
         .iter()
         .any(|argument| argument.starts_with('~'))
+        || !shell_keeps_tilde_literal(&segment.text)
+}
+
+/// Whether a `~`-spelled executable reaches the shell as the home path the
+/// path proofs resolve it to. A quoted or escaped `~` stays a literal
+/// relative name, which the shell looks for under the working directory —
+/// the one place the agent writes without review.
+pub(crate) fn home_executable_unquoted(segment: &crate::CommandSegmentV1) -> bool {
+    !segment
+        .executable
+        .as_deref()
+        .is_some_and(|executable| executable.starts_with('~'))
         || !shell_keeps_tilde_literal(&segment.text)
 }
 
@@ -321,6 +368,49 @@ pub(crate) fn exact_existing_drive_target(target: &str) -> bool {
     std::fs::canonicalize(target).is_ok_and(|canonical| exact_drive_spelling(target, &canonical))
 }
 
+/// `exact_drive_spelling` for a drive-absolute target whose deepest names
+/// need not be there yet.
+///
+/// Exact spelling exists to keep a differently cased name, an 8.3 short name
+/// and a junction from standing in for the directory the route proved. None
+/// of those is a name that is not there: a path Windows cannot resolve has no
+/// canonical spelling to differ from, and it names nothing until whoever owns
+/// the directory above it creates it. So the part that exists is held to its
+/// canonical spelling, and the names below it only have to be ordinary ones.
+#[cfg(windows)]
+pub(crate) fn exact_drive_target_with_absent_tail(target: &str) -> bool {
+    let spelled = drive_separators(target);
+    let mut probe = std::path::Path::new(&spelled);
+    let mut absent = 0usize;
+    loop {
+        if let Ok(canonical) = std::fs::canonicalize(probe) {
+            return probe
+                .to_str()
+                .is_some_and(|text| exact_drive_spelling(text, &canonical));
+        }
+        // A name Windows cannot resolve is still read as a name, so only a
+        // plain one may stand below the part that was proved.
+        let Some(name) = probe.components().next_back() else {
+            return false;
+        };
+        if !matches!(name, std::path::Component::Normal(_)) {
+            return false;
+        }
+        absent += 1;
+        if absent > MAX_ABSENT_NAMES {
+            return false;
+        }
+        let Some(parent) = probe.parent() else {
+            return false;
+        };
+        probe = parent;
+    }
+}
+
+/// A `-C` to a directory names the one above it, not a tree to create.
+#[cfg(windows)]
+const MAX_ABSENT_NAMES: usize = 32;
+
 impl<'a> super::PathContext<'a> {
     /// `cdpath_unset` is set only from a harness-stamped environment that
     /// declares no CDPATH, so a bare relative `cd` operand cannot be
@@ -351,12 +441,36 @@ impl<'a> super::PathContext<'a> {
             None => !std::env::vars_os()
                 .any(|(name, value)| !value.is_empty() && rustup_selector(&name.to_string_lossy())),
         };
+        // Cargo reads its configuration from the environment too, including
+        // the default registry, a named registry's index and the credential
+        // provider it starts for an index that asks for a token, and
+        // `CARGO_HOME` moves the configuration file those settings live in --
+        // unless it names the directory Cargo would read anyway, which
+        // continuous-integration images and devcontainers export as a matter
+        // of course.
+        let cargo_config_inert = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment.environment_names.iter().any(|name| {
+                        cargo_selector(name)
+                            && !(name.eq_ignore_ascii_case("CARGO_HOME")
+                                && environment.cargo_home_default)
+                    })
+            }
+            None => !std::env::vars_os().any(|(name, value)| {
+                let name = name.to_string_lossy();
+                !value.is_empty()
+                    && cargo_selector(&name)
+                    && !(name.eq_ignore_ascii_case("CARGO_HOME")
+                        && guard_contracts::cargo_home_default(home_dir, value.to_str()))
+            }),
+        };
         let npm_config_inert = match execution_environment {
             Some(environment) => {
                 environment.has_valid_shape()
                     && !environment.environment_names.iter().any(|name| {
                         npm_selector(name)
-                            && !super::npm_environment::inert_npm_config_name(name)
+                            && !super::npm_environment::inert_stamped_name(environment, name)
                             && !super::npm_environment::trusted_stamped_loader(
                                 environment,
                                 name,
@@ -369,25 +483,15 @@ impl<'a> super::PathContext<'a> {
                 let name = name.to_string_lossy();
                 !value.is_empty()
                     && npm_selector(&name)
-                    && !super::npm_environment::inert_npm_config_name(&name)
+                    && !super::npm_environment::inert_inherited(&name, &value)
             }),
         };
-        // pip reads `PIP_<OPTION>` for every option the running subcommand
-        // takes, so an inherited variable can add the index query or the log
-        // file the command itself leaves out. `XDG_CONFIG_HOME` moves the
-        // user configuration file that does the same, out of the directory
-        // the file check below can see.
-        let pip_config_inert = match execution_environment {
-            Some(environment) => {
-                environment.has_valid_shape()
-                    && !environment
-                        .environment_names
-                        .iter()
-                        .any(|name| pip_selector(name))
-            }
-            None => !std::env::vars_os()
-                .any(|(name, value)| !value.is_empty() && pip_selector(&name.to_string_lossy())),
-        };
+        // pip reads a configuration file and a variable for every option
+        // the running subcommand takes, each of which can add the index query
+        // or the log file the command itself leaves out. What counts as inert
+        // is pip's own surface, so [`super::pip_reads`] reads it.
+        let pip_config_inert =
+            super::pip_reads::environment_configuration_inert(execution_environment);
         // ripgrep reads RIPGREP_CONFIG_PATH unless the command passes
         // `--no-config`, and ignores it only when it is empty. A stamped
         // environment carries names without values, so any name counts.
@@ -400,6 +504,77 @@ impl<'a> super::PathContext<'a> {
                         .any(|name| name.eq_ignore_ascii_case(RIPGREP_CONFIG_NAME))
             }
             None => std::env::var_os(RIPGREP_CONFIG_NAME).is_none_or(|value| value.is_empty()),
+        };
+        // RubyGems reads a second configuration file from `GEMRC`, and `gem`
+        // is itself a Ruby program: `RUBYOPT=-r<file>` and `RUBYLIB` load
+        // code before the query starts, and `RUBYGEMS_GEMDEPS` activates the
+        // gems a dependency file names. `GEM_HOME` and `GEM_PATH` are left
+        // out on the ground the Node version managers are left out next
+        // door: every rbenv, rvm and chruby shell exports them, and the gems
+        // they select are ones the user installed. A stamped environment
+        // carries names without values, so any name counts.
+        //
+        // `XDG_CONFIG_HOME` moves the user `gemrc` the same way: RubyGems
+        // falls back to `<config home>/gem/gemrc` when `~/.gemrc` is absent,
+        // and its config home is that variable before it is `~/.config`. Its
+        // value is stamped rather than only named, so the session that spells
+        // out the default path keeps the reading and every other directory
+        // loses it.
+        let gem_config_absent = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment.environment_names.iter().any(|name| {
+                        GEM_CONFIG_NAMES
+                            .iter()
+                            .any(|known| name.eq_ignore_ascii_case(known))
+                    })
+                    && xdg_config_is_default(
+                        environment.xdg_config_home.as_deref(),
+                        environment.home.as_deref(),
+                    )
+            }
+            None => {
+                GEM_CONFIG_NAMES
+                    .iter()
+                    .all(|name| std::env::var_os(name).is_none_or(|value| value.is_empty()))
+                    && xdg_config_is_default(
+                        std::env::var("XDG_CONFIG_HOME").ok().as_deref(),
+                        std::env::var("HOME").ok().as_deref(),
+                    )
+            }
+        };
+        // HTTPie and xh read a `config.json` whose `default_options` are
+        // prepended to every request, and each takes a variable that moves
+        // the directory it is read from. A stamped environment carries names
+        // without values, so any name counts.
+        //
+        // `XDG_CONFIG_HOME` moves the same file: HTTPie reads its directory
+        // under that base before falling back to `~/.config`, and `xh` reaches
+        // the platform directory through it on Linux. Its value is stamped
+        // rather than only named, so the session that spells out the default
+        // path keeps the reading and every other directory loses it.
+        let http_config_absent = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment.environment_names.iter().any(|name| {
+                        HTTP_CONFIG_NAMES
+                            .iter()
+                            .any(|known| name.eq_ignore_ascii_case(known))
+                    })
+                    && xdg_config_is_default(
+                        environment.xdg_config_home.as_deref(),
+                        environment.home.as_deref(),
+                    )
+            }
+            None => {
+                HTTP_CONFIG_NAMES
+                    .iter()
+                    .all(|name| std::env::var_os(name).is_none_or(|value| value.is_empty()))
+                    && xdg_config_is_default(
+                        std::env::var("XDG_CONFIG_HOME").ok().as_deref(),
+                        std::env::var("HOME").ok().as_deref(),
+                    )
+            }
         };
         // The shell expands `~` from its own HOME: the stamped one, or the
         // runtime's when no environment was stamped.
@@ -424,10 +599,17 @@ impl<'a> super::PathContext<'a> {
             cwd,
             cdpath_unset,
             rustup_override_absent,
+            cargo_config_inert,
             npm_config_inert,
             pip_config_inert,
             shell_home_matches,
             ripgrep_config_absent,
+            gem_config_absent,
+            http_config_absent,
+            // A session knows its environment, not the command, so the
+            // proof that no step creates a filesystem entry is set where a
+            // command model is in hand.
+            creates_nothing: false,
             psql_environment,
         }
     }
@@ -435,8 +617,76 @@ impl<'a> super::PathContext<'a> {
 
 const RIPGREP_CONFIG_NAME: &str = "RIPGREP_CONFIG_PATH";
 
+/// The variables that hand a RubyGems query configuration or code.
+const GEM_CONFIG_NAMES: [&str; 4] = ["GEMRC", "RUBYOPT", "RUBYLIB", "RUBYGEMS_GEMDEPS"];
+
+/// The variables HTTPie and `xh` read their configuration directory from.
+const HTTP_CONFIG_NAMES: [&str; 2] = ["HTTPIE_CONFIG_DIR", "XH_CONFIG_DIR"];
+
+/// Whether an inherited `XDG_CONFIG_HOME` still names the directory
+/// [`super::http_reads`] and [`super::gem_reads`] open.
+///
+/// An absent or empty value leaves each of those programs on `~/.config`,
+/// and a value that spells that same directory out names it too. Anywhere
+/// else is a configuration this proof never read, and a home it cannot place
+/// leaves nothing to compare the value against.
+fn xdg_config_is_default(value: Option<&str>, home: Option<&str>) -> bool {
+    let Some(value) = value.filter(|value| !value.is_empty()) else {
+        return true;
+    };
+    let Some(home) = home else {
+        return false;
+    };
+    let default = std::path::Path::new(home).join(".config");
+    let value = std::path::Path::new(value);
+    value == default
+        || std::fs::canonicalize(value)
+            .ok()
+            .zip(std::fs::canonicalize(&default).ok())
+            .is_some_and(|(value, default)| value == default)
+}
+
 fn rustup_selector(name: &str) -> bool {
-    name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN") || name.eq_ignore_ascii_case("RUSTUP_HOME")
+    name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN")
+        || name.eq_ignore_ascii_case("RUSTUP_HOME")
+        // A channel a toolchain file names is downloaded on first use, and
+        // these two name where from.
+        || name.eq_ignore_ascii_case("RUSTUP_DIST_SERVER")
+        || name.eq_ignore_ascii_case("RUSTUP_UPDATE_ROOT")
+}
+
+/// The settings Cargo reads that can move where a query goes or what it runs.
+///
+/// Every setting a `.cargo/config.toml` carries has a variable spelling, so
+/// `CARGO_REGISTRY_DEFAULT` picks the registry a query contacts,
+/// `CARGO_REGISTRIES_<NAME>_INDEX` names its index and
+/// `CARGO_REGISTRIES_<NAME>_CREDENTIAL_PROVIDER` names the program Cargo runs
+/// when that index asks for a token. `CARGO_HTTP_*` and `CARGO_NET_*` decide
+/// the transport that reaches it, down to the proxy and the certificate
+/// store, and `CARGO_NET_GIT_FETCH_WITH_CLI` starts `git` to do the fetching.
+/// `CARGO_HOME` moves the file all of them also live in, `CARGO_UNSTABLE_*`
+/// turns on behaviour no stable setting describes, and an `[alias]` entry is
+/// read from the environment too.
+///
+/// The rest of the prefix is the build: `CARGO_PROFILE_*`, `CARGO_BUILD_*`,
+/// `CARGO_TERM_*`, `CARGO_TARGET_DIR`, `CARGO_INCREMENTAL`. A registry query
+/// compiles nothing, and continuous integration and ordinary shells export
+/// those freely, so reading them as configuration would take the whole
+/// reading away on most machines that have Rust installed at all.
+fn cargo_selector(name: &str) -> bool {
+    let name = name.to_ascii_uppercase();
+    name == "CARGO_HOME"
+        || [
+            "CARGO_ALIAS_",
+            "CARGO_CREDENTIAL_",
+            "CARGO_HTTP_",
+            "CARGO_NET_",
+            "CARGO_REGISTRIES_",
+            "CARGO_REGISTRY_",
+            "CARGO_UNSTABLE_",
+        ]
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
 }
 
 /// npm reads every `npm_config_*` variable as configuration, including the
@@ -446,38 +696,13 @@ fn rustup_selector(name: &str) -> bool {
 /// usually for a company's TLS-inspecting proxy that already sees all of the
 /// user's traffic; it leaves the registry where it was, and the agent's own
 /// command cannot set the hook's environment.
-/// Variables pip reads before any option on the command line, beyond the ones
-/// that only change how it prints.
-///
-/// pip asks platformdirs where its user and global configuration files live,
-/// so the four names platformdirs resolves those directories from move a
-/// `pip.conf` out of the directories the file check reads: the config names
-/// on Linux, and the data names on macOS, where a configuration directory is
-/// a data directory. The remaining `XDG_` names, `XDG_RUNTIME_DIR` among
-/// them, name no directory pip reads configuration from.
-fn pip_selector(name: &str) -> bool {
-    let upper = name.to_ascii_uppercase();
-    if matches!(
-        upper.as_str(),
-        "XDG_CONFIG_HOME" | "XDG_CONFIG_DIRS" | "XDG_DATA_HOME" | "XDG_DATA_DIRS"
-    ) {
-        return true;
-    }
-    upper.starts_with("PIP_")
-        && !matches!(
-            upper.as_str(),
-            "PIP_DISABLE_PIP_VERSION_CHECK"
-                | "PIP_REQUIRE_VIRTUALENV"
-                | "PIP_NO_COLOR"
-                | "PIP_NO_INPUT"
-                | "PIP_QUIET"
-                | "PIP_VERBOSE"
-        )
-}
-
 fn npm_selector(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
+    // pnpm no longer reads npm's spelling and takes `pnpm_config_*` for the
+    // same settings, so `pnpm_config_registry` moves the registry exactly as
+    // `npm_config_registry` does.
     upper.starts_with("NPM_CONFIG_")
+        || upper.starts_with("PNPM_CONFIG_")
         || matches!(
             upper.as_str(),
             "NODE_OPTIONS"
@@ -492,7 +717,7 @@ fn npm_selector(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{drive_separators, shell_alters_backslash};
+    use super::{drive_separators, shell_alters_backslash, xdg_config_is_default};
 
     #[test]
     fn repeated_drive_separators_spell_one_backslash() {
@@ -511,6 +736,108 @@ mod tests {
             drive_separators(r"c:\\users\\..\\PROGRA~1"),
             r"c:\users\..\PROGRA~1"
         );
+    }
+
+    /// A `git -C` into a directory that is not there can only print
+    /// `fatal:`, so the route is admitted, but the drive-absolute proof used
+    /// to demand a canonical spelling the path cannot have while it does not
+    /// exist. Every such route was reviewed on Windows and allowed on unix.
+    /// The part that does exist is still held to its canonical spelling.
+    #[cfg(windows)]
+    #[test]
+    fn an_absent_tail_keeps_the_proof_on_the_part_that_exists() {
+        use super::exact_drive_target_with_absent_tail as absent_tail;
+
+        let root = std::env::temp_dir().join(format!(
+            "guard-absent-tail-{}-{}",
+            std::process::id(),
+            crate::unique_nanos::unique_nanos()
+        ));
+        std::fs::create_dir_all(root.join("Code")).unwrap();
+        let canonical = std::fs::canonicalize(&root).unwrap();
+        let spelled = canonical
+            .to_str()
+            .unwrap()
+            .strip_prefix(r"\\?\")
+            .unwrap()
+            .to_owned();
+
+        assert!(absent_tail(&format!(r"{spelled}\Code")));
+        // The directory that is not there, which is the whole point.
+        assert!(absent_tail(&format!(r"{spelled}\Code\not-cloned-yet")));
+        assert!(absent_tail(&format!("{spelled}/Code/not-cloned-yet")));
+        assert!(absent_tail(&format!(r"{spelled}\Code\not-cloned-yet\web")));
+        // A name that is not there is still a name: nothing but a plain one
+        // may stand below the part that was proved.
+        assert!(!absent_tail(&format!(r"{spelled}\Code\..\Code")));
+        assert!(!absent_tail(&format!(r"{spelled}\Code\absent\..")));
+        // The part that does exist keeps its exact spelling.
+        assert!(!absent_tail(&format!(
+            r"{}\CODE\not-cloned-yet",
+            spelled.to_uppercase()
+        )));
+        // A `-C` names one directory, not a tree to create.
+        let deep = "\\absent".repeat(super::MAX_ABSENT_NAMES + 1);
+        assert!(!absent_tail(&format!("{spelled}{deep}")));
+        // A relative target never reaches this proof; it answers for nothing.
+        assert!(!absent_tail("Code/not-cloned-yet"));
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_moved_xdg_base_is_not_the_directory_the_http_proof_reads() {
+        let home = tempfile::tempdir().expect("temp home");
+        let home_text = home.path().to_str().expect("utf-8 home");
+        let default = home.path().join(".config");
+        std::fs::create_dir_all(&default).expect("default directory");
+
+        assert!(xdg_config_is_default(None, Some(home_text)));
+        assert!(xdg_config_is_default(Some(""), Some(home_text)));
+        assert!(xdg_config_is_default(default.to_str(), Some(home_text)));
+        // The same directory reached through a trailing component the shell
+        // leaves in the value.
+        assert!(xdg_config_is_default(
+            default.join("..").join(".config").to_str(),
+            Some(home_text)
+        ));
+
+        let moved = tempfile::tempdir().expect("temp config");
+        assert!(!xdg_config_is_default(
+            moved.path().to_str(),
+            Some(home_text)
+        ));
+        // A home the stamp does not carry leaves nothing to compare against.
+        assert!(!xdg_config_is_default(default.to_str(), None));
+    }
+
+    /// A session that moved `XDG_CONFIG_HOME` moved the `gemrc` RubyGems
+    /// falls back to when `~/.gemrc` is absent, so the RubyGems reading is
+    /// no longer proved. The gem field used to read only the four `GEM_`
+    /// and `RUBY` names, which left that redirect out.
+    #[test]
+    fn a_moved_config_home_takes_the_gem_reading_with_it() {
+        let home = tempfile::tempdir().expect("temp home");
+        let home_text = home.path().to_str().expect("home text").to_owned();
+        let moved = tempfile::tempdir().expect("temp config");
+        let environment = |xdg: Option<&str>| guard_contracts::GuardExecutionEnvironmentV1 {
+            path: "/usr/bin".to_owned(),
+            environment_names: vec!["HOME".to_owned(), "PATH".to_owned()],
+            environment_digest: "0".repeat(64),
+            home: Some(home_text.clone()),
+            xdg_config_home: xdg.map(str::to_owned),
+            ..Default::default()
+        };
+
+        let inherited = environment(None);
+        let context =
+            crate::pretool::PathContext::for_session(Some(&home_text), None, Some(&inherited));
+        assert!(context.gem_config_absent);
+
+        let redirected = environment(moved.path().to_str());
+        let context =
+            crate::pretool::PathContext::for_session(Some(&home_text), None, Some(&redirected));
+        assert!(!context.gem_config_absent);
     }
 
     #[test]

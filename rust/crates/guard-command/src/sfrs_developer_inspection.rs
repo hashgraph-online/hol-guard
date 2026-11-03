@@ -17,6 +17,9 @@ use crate::sfrs_constants::{
     FIND_EXEC_ACTION_FLAGS, FIND_EXEC_PLACEHOLDER_TARGET, FIND_EXEC_TERMINATOR_TOKENS,
     READ_ONLY_SEARCH_EXECUTION_FLAGS,
 };
+use crate::sfrs_path_word_lookups::{
+    read_only_lookup_path_word_args_are_safe, read_only_lookup_resolved_path_args_are_safe,
+};
 use crate::sfrs_patterns::FIND_PATH_VALUE_PREDICATES;
 use crate::sfrs_read_only_filters::{
     read_only_lookup_arg_is_redirection, read_only_lookup_head_tail_args_are_safe,
@@ -52,6 +55,10 @@ pub(crate) fn read_only_lookup_primary_segment_is_safe(
         "head" | "tail" => read_only_lookup_head_tail_args_are_safe(args, true, home_dir),
         "cat" => args == [".git"] || read_only_lookup_plain_targets_are_safe(args, false, home_dir),
         "ls" => read_only_lookup_plain_targets_are_safe(args, true, home_dir),
+        "basename" | "dirname" => read_only_lookup_path_word_args_are_safe(command, args),
+        "readlink" | "realpath" => {
+            read_only_lookup_resolved_path_args_are_safe(command, args, home_dir)
+        }
         "pwd" => args.iter().all(|arg| arg == "-L" || arg == "-P"),
         "date" => read_only_lookup_date_args_are_safe(args),
         "grep" | "egrep" | "fgrep" | "rg" => {

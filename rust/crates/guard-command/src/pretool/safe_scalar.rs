@@ -62,22 +62,36 @@ pub(super) fn safe_sleep_arguments(arguments: &[String]) -> bool {
 }
 
 /// Parse a bounded literal `sleep` duration in seconds.
+///
+/// A readiness loop is as often written `sleep 30s` or `sleep 5m` as
+/// `sleep 30`, and the suffix only says which unit the number counts. Each
+/// supported unit is multiplied out here so the same bound decides every
+/// spelling: `sleep 2h` is past it, exactly as `sleep 7200` is.
 pub(super) fn sleep_seconds(arguments: &[String]) -> Option<f64> {
     let [duration] = arguments else {
         return None;
     };
-    if duration.is_empty()
-        || duration.len() > 16
-        || !duration
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || byte == b'.')
-        || duration.bytes().filter(|byte| *byte == b'.').count() > 1
+    let (digits, multiplier) = match duration.as_bytes() {
+        [rest @ .., b's'] => (rest, 1.0),
+        [rest @ .., b'm'] => (rest, 60.0),
+        [rest @ .., b'h'] => (rest, 3600.0),
+        [rest @ .., b'd'] => (rest, 86_400.0),
+        rest => (rest, 1.0),
+    };
+    if digits.is_empty()
+        || digits.len() > 16
+        || !digits
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || *byte == b'.')
+        || digits.iter().filter(|byte| **byte == b'.').count() > 1
     {
         return None;
     }
-    duration
+    std::str::from_utf8(digits)
+        .ok()?
         .parse::<f64>()
         .ok()
+        .map(|count| count * multiplier)
         .filter(|seconds| (0.0..=MAX_SAFE_SLEEP_SECONDS).contains(seconds))
 }
 
@@ -108,10 +122,27 @@ pub(super) fn bounded_total_sleep(model: &crate::CanonicalCommandV1) -> bool {
 /// `pgrep` only lists matching process ids and names; admit read-only display
 /// and matching flags plus exactly one literal pattern. `-l` and `-a` print
 /// the matched process names or command lines, the same view `ps aux` gives.
+/// `-P 4120` keeps only the children of a parent id, and with it the pattern
+/// may be left out, as `pgrep -P 4120` lists every child.
 pub(super) fn safe_pgrep_arguments(arguments: &[String]) -> bool {
     let mut patterns = 0_usize;
-    for argument in arguments {
-        if let Some(flags) = argument.strip_prefix('-') {
+    let mut parents = false;
+    let mut index = 0;
+    while index < arguments.len() {
+        let argument = &arguments[index];
+        index += 1;
+        if let Some(value) = argument.strip_prefix("-P") {
+            let value = if value.is_empty() {
+                index += 1;
+                arguments.get(index - 1).map_or("", String::as_str)
+            } else {
+                value
+            };
+            if !process_id_list(value) {
+                return false;
+            }
+            parents = true;
+        } else if let Some(flags) = argument.strip_prefix('-') {
             if flags.is_empty()
                 || !flags.bytes().all(|flag| {
                     matches!(flag, b'f' | b'i' | b'x' | b'n' | b'o' | b'c' | b'l' | b'a')
@@ -119,14 +150,23 @@ pub(super) fn safe_pgrep_arguments(arguments: &[String]) -> bool {
             {
                 return false;
             }
+        } else if argument.len() > 256 || index != arguments.len() {
+            // The pattern is the last word, so no flag follows it.
+            return false;
         } else {
             patterns += 1;
         }
     }
-    patterns == 1
-        && arguments
-            .last()
-            .is_some_and(|pattern| !pattern.starts_with('-') && pattern.len() <= 256)
+    patterns == 1 || (patterns == 0 && parents)
+}
+
+/// `4120` or `4120,4121`: process ids, as `pgrep -P` and `ps -p` take them.
+fn process_id_list(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 256
+        && value
+            .split(',')
+            .all(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 /// `ps` lists processes and their arguments, the same view `pgrep -f`
@@ -179,7 +219,10 @@ fn ps_option_value(option: char, value: &str) -> bool {
         && value.len() <= 256
         && value.bytes().all(|byte| match option {
             'p' | 'q' => byte.is_ascii_digit() || byte == b',',
-            'o' | 'O' => byte.is_ascii_alphanumeric() || matches!(byte, b',' | b'_' | b'%' | b'='),
+            // `wchan:30` sets a column width, as procps `ps` reads it.
+            'o' | 'O' => {
+                byte.is_ascii_alphanumeric() || matches!(byte, b',' | b'_' | b'%' | b'=' | b':')
+            }
             _ => byte.is_ascii_alphanumeric() || matches!(byte, b',' | b'_' | b'-' | b'.'),
         })
 }
@@ -283,6 +326,56 @@ pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
 }
 
 #[cfg(test)]
+mod process_listing_tests {
+    fn arguments(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    #[test]
+    fn pgrep_reads_the_children_of_a_parent_id() {
+        for values in [
+            &["-P", "4120", "-fl", "."][..],
+            &["-P", "4120"],
+            &["-l", "-P4120,4121"],
+            &["-fl", "node"],
+        ] {
+            assert!(
+                super::safe_pgrep_arguments(&arguments(values)),
+                "{values:?}"
+            );
+        }
+        for values in [
+            &["-P"][..],
+            &["-P", "$PID"],
+            &["-P", "4120,"],
+            &["-Pf", "node"],
+            &["-F", "app.pid"],
+            &["-P", "4120", "node", "-l"],
+            &["node", "python"],
+            &[],
+        ] {
+            assert!(
+                !super::safe_pgrep_arguments(&arguments(values)),
+                "{values:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ps_reads_a_column_width() {
+        assert!(super::safe_ps_arguments(&arguments(&[
+            "-o",
+            "pid,etime,wchan:30,state",
+            "-p",
+            "4120",
+        ])));
+        assert!(!super::safe_ps_arguments(&arguments(&[
+            "-o", "pid;id", "-p", "4120",
+        ])));
+    }
+}
+
+#[cfg(test)]
 mod psql_environment_tests {
     fn stamped(names: &[&str]) -> guard_contracts::GuardExecutionEnvironmentV1 {
         guard_contracts::GuardExecutionEnvironmentV1 {
@@ -294,7 +387,7 @@ mod psql_environment_tests {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: true,
-            library_search_paths: Default::default(),
+            ..Default::default()
         }
     }
 
@@ -308,6 +401,50 @@ mod psql_environment_tests {
         for name in ["PSQLRC", "pgsysconfdir"] {
             let environment = super::psql_environment(Some(&stamped(&[name])), false);
             assert!(!environment.startup_files_absent, "{name}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod sleep_tests {
+    fn arguments(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    /// The unit a developer writes beside the number only says what the
+    /// number counts, so each spelling of the same wait reads as that wait.
+    #[test]
+    fn a_duration_carries_its_unit() {
+        for (values, seconds) in [
+            (&["30"][..], 30.0),
+            (&["30s"], 30.0),
+            (&["0.5s"], 0.5),
+            (&["5m"], 300.0),
+            (&["1h"], 3600.0),
+        ] {
+            assert_eq!(super::sleep_seconds(&arguments(values)), Some(seconds));
+        }
+    }
+
+    /// The bound is the same one in every unit, and a word that is not a
+    /// literal pause stays reviewed whichever letter it ends with.
+    #[test]
+    fn a_pause_past_the_bound_or_past_a_literal_stays_reviewed() {
+        for values in [
+            &["2h"][..],
+            &["1d"],
+            &["61m"],
+            &["3601"],
+            &["30x"],
+            &["s"],
+            &["-1s"],
+            &["$DELAY"],
+            &["1", "2"],
+        ] {
+            assert!(
+                super::sleep_seconds(&arguments(values)).is_none(),
+                "{values:?}"
+            );
         }
     }
 }

@@ -7,9 +7,9 @@ from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.runtime.custom_extension_continuity import (
     CUSTOM_EXTENSION_CONTINUITY_FIELD,
     CUSTOM_EXTENSION_CONTINUITY_SCHEMA,
-    apply_verified_custom_extension_continuity,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.custom_extension_continuity_client import apply_verified_custom_extension_continuity
 from tests.test_guard_harness_mcp_discovery import _artifact, _detection
 
 

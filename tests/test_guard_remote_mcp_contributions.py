@@ -7,10 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
-    _copilot_runtime_server_identity,
-    _CopilotMcpRuntimeServer,
-)
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
@@ -23,11 +19,12 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import (
     build_mcp_server_identity,
 )
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
-    load_mcp_contribution_payloads,
     normalized_remote_mcp_url,
     validate_mcp_contribution,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.mcp_contribution_loader import load_mcp_contribution_payloads
+from tests.runtime_wrapper_support import _copilot_runtime_server_identity, _CopilotMcpRuntimeServer
 
 from . import mcp_extension_driver as extension_driver
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
@@ -101,13 +98,15 @@ def test_remote_instapods_review_default_strengthens_allow() -> None:
 
 
 def test_remote_instapods_review_default_strengthens_allow_in_runtime_path(tmp_path: Path) -> None:
+    authority = _instapods_store()
+
     class _RuntimeStore(GuardStore):
         def read_extension_control_authority_for_registry(
             self, registry: object, **_kwargs
         ) -> ExtensionControlAuthorityView:
-            return _instapods_store().read_extension_control_authority_for_registry(registry)
+            return authority.read_extension_control_authority_for_registry(registry)
 
-    guard_home = tmp_path / "guard-home"
+    guard_home = authority.guard_home
     config = GuardConfig(guard_home=guard_home, workspace=tmp_path, mode="prompt", default_action="allow")
     artifact = _remote_artifact("change_plan")
     decision = evaluate_tool_call(

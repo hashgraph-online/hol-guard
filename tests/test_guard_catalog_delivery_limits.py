@@ -104,8 +104,15 @@ def test_client_rejects_unbounded_read_limits(max_bytes: object) -> None:
         _read(b"{}", max_bytes, read1=True)  # pyright: ignore[reportArgumentType]
 
 
-def _handshake(catalog: Mapping[str, object]) -> tuple[dict[str, object], object]:
+# The negotiation verdicts (budgets, downgrades, upload URL) live in the resident; their
+# decision tests are in rust/crates/guard-command/src/cloud_catalog_wire_v1_sync_tests.rs.
+# The tests below drive the real resident through the Python adapter, which builds the
+# catalog, measures its bytes and carries the verdict back.
+
+
+def _handshake(catalog: Mapping[str, object], guard_home: Path) -> tuple[dict[str, object], object]:
     return prepare_extension_catalog_handshake(
+        guard_home=guard_home,
         runtime_sync_url="https://cloud.example/api/guard/runtime/sync",
         runtime_response={
             "extensionCatalogSync": {
@@ -139,8 +146,8 @@ _DOWNGRADED = {
 }
 
 
-def test_upload_body_is_compact_utf8() -> None:
-    _, upload = _handshake({"catalogDigest": _DIGEST, "text": "café"})
+def test_upload_body_is_compact_utf8(tmp_path: Path) -> None:
+    _, upload = _handshake({"catalogDigest": _DIGEST, "text": "café"}, tmp_path)
     body = upload.body  # pyright: ignore[reportAttributeAccessIssue]
     assert (
         body
@@ -151,26 +158,26 @@ def test_upload_body_is_compact_utf8() -> None:
 
 
 @pytest.mark.parametrize("size", (CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES - 1, CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES))
-def test_catalog_at_or_below_cloud_cap_is_sent(size: int) -> None:
+def test_catalog_at_or_below_cloud_cap_is_sent(size: int, tmp_path: Path) -> None:
     catalog = _catalog_with_size(size)
     assert _compact_size(catalog) == size
-    status, upload = _handshake(catalog)
+    status, upload = _handshake(catalog, tmp_path)
     assert status["extension_catalog_sync_status"] == "uploaded"
     assert len(upload.body) <= CLOUD_V1_CATALOG_SYNC_MAX_BODY_BYTES  # pyright: ignore[reportAttributeAccessIssue]
 
 
-def test_catalog_over_cloud_cap_downgrades_even_when_its_body_fits() -> None:
+def test_catalog_over_cloud_cap_downgrades_even_when_its_body_fits(tmp_path: Path) -> None:
     catalog = _catalog_with_size(CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES + 1)
     assert _compact_size({"idempotencyKey": f"catalog:{_DIGEST}", "catalog": catalog}) < (
         CLOUD_V1_CATALOG_SYNC_MAX_BODY_BYTES
     )
-    status, upload = _handshake(catalog)
+    status, upload = _handshake(catalog, tmp_path)
     assert upload is None
     assert status == _DOWNGRADED
 
 
-def test_upload_body_over_cloud_cap_downgrades_without_sending() -> None:
-    status, upload = _handshake(_catalog_with_size(CLOUD_V1_CATALOG_SYNC_MAX_BODY_BYTES + 1))
+def test_upload_body_over_cloud_cap_downgrades_without_sending(tmp_path: Path) -> None:
+    status, upload = _handshake(_catalog_with_size(CLOUD_V1_CATALOG_SYNC_MAX_BODY_BYTES + 1), tmp_path)
     assert upload is None
     assert status == _DOWNGRADED
 
@@ -179,8 +186,9 @@ def _over_limit(_generated_at: str) -> Mapping[str, object]:
     raise ExtensionCatalogLimitError("Extension catalog payload limit exceeded")
 
 
-def test_builder_limit_failure_downgrades_a_requested_upload() -> None:
+def test_builder_limit_failure_downgrades_a_requested_upload(tmp_path: Path) -> None:
     status, upload = prepare_extension_catalog_handshake(
+        guard_home=tmp_path,
         runtime_sync_url="https://cloud.example/api/guard/runtime/sync",
         runtime_response={
             "extensionCatalogSync": {
@@ -199,9 +207,10 @@ def test_builder_limit_failure_downgrades_a_requested_upload() -> None:
 
 
 def _unadvertised(
-    session_payload: dict[str, object], factory: Callable[[str], Mapping[str, object]]
+    session_payload: dict[str, object], factory: Callable[[str], Mapping[str, object]], guard_home: Path
 ) -> tuple[dict[str, object], object]:
     return prepare_extension_catalog_handshake(
+        guard_home=guard_home,
         runtime_sync_url="https://cloud.example/api/guard/runtime/sync",
         runtime_response={},
         session_payload=session_payload,
@@ -210,33 +219,47 @@ def _unadvertised(
     )
 
 
-def test_posture_without_digest_reports_the_cloud_limit_reason() -> None:
-    assert _unadvertised({"managedControlsCapabilities": []}, _over_limit) == (_DOWNGRADED, None)
+def test_posture_without_digest_reports_the_cloud_limit_reason(tmp_path: Path) -> None:
+    assert _unadvertised({"managedControlsCapabilities": []}, _over_limit, tmp_path) == (_DOWNGRADED, None)
 
 
-def test_posture_without_digest_for_other_failures_reports_nothing() -> None:
+def test_posture_without_digest_for_other_failures_reports_nothing(tmp_path: Path) -> None:
     def broken(_generated_at: str) -> Mapping[str, object]:
         raise ValueError("Invalid Extension catalog source")
 
-    assert _unadvertised({"managedControlsCapabilities": []}, broken) == ({}, None)
+    assert _unadvertised({"managedControlsCapabilities": []}, broken, tmp_path) == ({}, None)
 
 
-def test_catalog_sync_disabled_never_builds_the_catalog() -> None:
+def test_catalog_sync_disabled_never_builds_the_catalog(tmp_path: Path) -> None:
     def factory(_generated_at: str) -> Mapping[str, object]:
         pytest.fail("catalog sync is disabled")
 
-    assert _unadvertised({}, factory) == ({}, None)
+    assert _unadvertised({}, factory, tmp_path) == ({}, None)
 
 
-def test_managed_posture_omits_the_digest_when_the_builder_hits_a_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_managed_posture_omits_the_digest_when_the_builder_hits_a_limit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.runtime import extension_catalog_pages
+    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+
     monkeypatch.setenv(GUARD_EXTENSION_CATALOG_SYNC_V1, "true")
 
-    def over_limit(**_kwargs: object) -> Mapping[str, object]:
+    attempted = []
+
+    def over_limit(_guard_home: Path, **_kwargs: object) -> Mapping[str, object]:
+        attempted.append(True)
         raise ExtensionCatalogLimitError("Extension catalog limit exceeded")
 
-    monkeypatch.setattr(managed_controls_sync, "build_builtin_extension_catalog_wire", over_limit)
-    posture = managed_controls_sync.managed_controls_runtime_sync_posture(None, generated_at="2026-10-09T00:00:00Z")  # pyright: ignore[reportArgumentType]
+    monkeypatch.setattr(
+        managed_controls_sync, "current_catalog_registry", lambda _store: BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    )
+    monkeypatch.setattr(extension_catalog_pages, "prepare_installed_catalog_view", over_limit)
+    posture = managed_controls_sync.managed_controls_runtime_sync_posture(
+        GuardStore(tmp_path / "guard-home"), generated_at="2026-10-09T00:00:00Z"
+    )
     assert posture == {"managedControlsCapabilities": []}
+    assert attempted == [True]
 
 
 def _packaged(name: str) -> bytes:
@@ -288,11 +311,12 @@ def test_valid_catalog_over_one_mebibyte_round_trips_real_daemon_and_client(tmp_
     assert isinstance(limits, dict) and limits["max_body_bytes"] == MAX_DAEMON_CATALOG_RESPONSE_BYTES
 
 
-def test_known_digest_never_builds_or_uploads_catalog() -> None:
+def test_known_digest_never_builds_or_uploads_catalog(tmp_path: Path) -> None:
     def factory(_generated_at: str) -> Mapping[str, object]:
         pytest.fail("a known catalog must not be built")
 
     status, upload = prepare_extension_catalog_handshake(
+        guard_home=tmp_path,
         runtime_sync_url="https://cloud.example/api/guard/runtime/sync",
         runtime_response={
             "extensionCatalogSync": {
@@ -310,11 +334,14 @@ def test_known_digest_never_builds_or_uploads_catalog() -> None:
     assert status == {"extension_catalog_sync_status": "already_known", "extension_catalog_sync_digest": _DIGEST}
 
 
-def test_runtime_sync_sends_nothing_when_upload_exceeds_cloud_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runtime_sync_sends_nothing_when_upload_exceeds_cloud_cap(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     oversized = _catalog_with_size(CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES + 1)
     monkeypatch.setattr(runner, "build_builtin_extension_catalog_wire", lambda **_kwargs: oversized)
     monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: pytest.fail("must not upload"))
     summary = runner._sync_extension_catalog_from_runtime_handshake(
+        guard_home=tmp_path,
         auth_context={},
         runtime_sync_url="https://cloud.example/api/guard/runtime/sessions/sync",
         runtime_response={

@@ -46,6 +46,33 @@ const MAX_SERIALIZED_RECORD_BYTES: usize = 16 * 1024 * 1024;
 /// wakeup gets, so a stop asking for no drain at all still collects a worker
 /// that had nothing to do.
 const WORKER_EXIT_GRACE: Duration = Duration::from_millis(250);
+/// A record whose store write failed waits this long before its next attempt,
+/// doubling with each further failure up to [`RETRY_BACKOFF_CAP`]: the
+/// `min(1.0, 0.05 * 2 ** (attempt - 1))` the Python writer waited.
+const RETRY_BACKOFF_BASE: Duration = Duration::from_millis(50);
+const RETRY_BACKOFF_CAP: Duration = Duration::from_secs(1);
+/// Store writes a record gets when the store refuses it for a reason other
+/// than a lock, before it is dropped. A write the store can never take, such
+/// as one that breaks a constraint or evidence that cannot be built, then
+/// leaves the queue and the journal instead of being replayed forever. A lock
+/// is waited out however long it lasts: see [`PersistOutcome::Busy`].
+const MAX_STORE_ATTEMPTS: u32 = 8;
+
+/// The wait before the attempt that follows failure number `attempt`.
+fn retry_backoff(attempt: u32) -> Duration {
+    RETRY_BACKOFF_BASE
+        .saturating_mul(1 << attempt.saturating_sub(1).min(5))
+        .min(RETRY_BACKOFF_CAP)
+}
+
+/// Whether `record` may be written now: it never failed, or its backoff is
+/// over.
+fn is_due(state: &EvidenceState, record: &EvidenceRecord, now: Instant) -> bool {
+    state
+        .retry_at
+        .get(&record.record_id())
+        .is_none_or(|at| *at <= now)
+}
 
 // ---------------------------------------------------------------------------
 // Dependency seams — traits replacing unported modules (see TODO(deps)).
@@ -192,6 +219,18 @@ pub trait EvidenceJournalApi {
     /// journal rather than leaving a record whose preview was never stored.
     /// `Err` = `OSError`.
     fn append_journal(&self, path: &Path, record: &EvidenceRecord) -> Result<(), io::Error>;
+    /// Preserve each record's append result; native journals may sync one
+    /// bounded batch atomically instead of syncing each record separately.
+    fn append_journal_batch(
+        &self,
+        path: &Path,
+        records: &[&EvidenceRecord],
+    ) -> Vec<Result<(), io::Error>> {
+        records
+            .iter()
+            .map(|record| self.append_journal(path, record))
+            .collect()
+    }
     /// `rewrite_journal(path, *, remove_record_id=, max_bytes=)` — returns
     /// the count of dropped invalid records; `Err` = `OSError`.
     fn rewrite_journal(
@@ -200,6 +239,19 @@ pub trait EvidenceJournalApi {
         remove_record_id: &str,
         max_bytes: usize,
     ) -> Result<u64, io::Error>;
+    /// Remove only records whose store outcome has settled. A failed rewrite
+    /// leaves replay/deduplication responsible for already persisted records.
+    fn rewrite_journal_batch(
+        &self,
+        path: &Path,
+        remove_record_ids: &[String],
+        max_bytes: usize,
+    ) -> Result<u64, io::Error> {
+        remove_record_ids.iter().try_fold(0, |invalid, id| {
+            self.rewrite_journal(path, id, max_bytes)
+                .map(|count| invalid + count)
+        })
+    }
     /// `recover_journal_records(path, *, max_bytes=)` — raw JSON objects plus
     /// invalid-line count; `Err` = `OSError` (caller handles `NotFound`).
     fn recover_journal_records(
@@ -925,8 +977,15 @@ struct EvidenceState {
     /// `_receipt_seen` OrderedDict (insertion-ordered dedupe + LRU eviction).
     receipt_seen: HashSet<String>,
     receipt_seen_order: VecDeque<String>,
-    /// `_retry_attempts` — `record_id` → attempt count.
+    /// `_retry_attempts` — `record_id` → failed attempts, which set the
+    /// backoff before the next one.
     retry_attempts: HashMap<String, u32>,
+    /// `record_id` → refusals other than a busy store, which alone count
+    /// toward [`MAX_STORE_ATTEMPTS`].
+    retry_refusals: HashMap<String, u32>,
+    /// `record_id` → when a record whose write failed may be tried again.
+    /// Records that are not due yet stay queued while the rest move on.
+    retry_at: HashMap<String, Instant>,
     /// `_in_flight`.
     in_flight: bool,
     /// `_stopping`.
@@ -1480,7 +1539,23 @@ impl RuntimeHookEvidenceWriter {
 pub(crate) enum PersistOutcome {
     Done,
     Deduped,
+    /// The write failed for a reason a later attempt may not fix. It is
+    /// retried at most [`MAX_STORE_ATTEMPTS`] times.
     Retry,
+    /// Another writer held the store past this one's lock budget. The record
+    /// stays journaled and is retried until the store frees up or a stop
+    /// leaves it for the next writer.
+    Busy,
+}
+
+/// How a store error is retried: a lock the store or its storage gate timed
+/// out on is waited out, anything else is retried a bounded number of times.
+pub(crate) fn store_refused(error: &io::Error) -> PersistOutcome {
+    if error.kind() == io::ErrorKind::TimedOut {
+        PersistOutcome::Busy
+    } else {
+        PersistOutcome::Retry
+    }
 }
 
 /// `hashlib.sha256(json.dumps([...]).encode("utf-8")).hexdigest()` over the
@@ -1552,31 +1627,13 @@ impl EvidenceWorker {
             if batch.is_empty() {
                 return;
             }
-            for record in batch {
-                self.lock_state().in_flight = true;
-                let already_durable = self.lock_state().durable.contains_key(&record.record_id());
-                if !already_durable {
-                    if self
-                        .deps
-                        .journal
-                        .append_journal(&self.journal_path, &record)
-                        .is_err()
-                    {
-                        let mut state = self.lock_state();
-                        state.dropped += 1;
-                        state.failures += 1;
-                        if record.is_receipt() {
-                            state.receipt_dropped += 1;
-                            state.receipt_failures += 1;
-                        }
-                        state.degraded = true;
-                        state.in_flight = false;
-                        continue;
-                    }
-                    self.lock_state()
-                        .durable
-                        .insert(record.record_id(), record.clone());
+            let ready = self.journal_batch(&batch);
+            let mut settled = Vec::new();
+            for (record, ready) in batch.into_iter().zip(ready) {
+                if !ready {
+                    continue;
                 }
+                self.lock_state().in_flight = true;
                 {
                     let mut state = self.lock_state();
                     if state.stopping
@@ -1605,87 +1662,126 @@ impl EvidenceWorker {
                     PersistOutcome::Done => {
                         let _ = state.durable.remove(&record.record_id());
                         state.retry_attempts.remove(&record.record_id());
+                        state.retry_at.remove(&record.record_id());
+                        state.retry_refusals.remove(&record.record_id());
                         if record.is_receipt() {
                             state.receipt_processed += 1;
                         }
                         state.processed += 1;
-                        match self.rewrite_journal(&record.record_id()) {
-                            Ok(invalid_records) => {
-                                if invalid_records > 0 {
-                                    state.failures += invalid_records;
-                                    state.degraded = true;
-                                }
-                            }
-                            Err(_) => {
-                                state.failures += 1;
-                                state.degraded = true;
-                            }
-                        }
+                        settled.push(record.record_id());
                     }
                     PersistOutcome::Deduped => {
                         let _ = state.durable.remove(&record.record_id());
                         state.retry_attempts.remove(&record.record_id());
+                        state.retry_at.remove(&record.record_id());
+                        state.retry_refusals.remove(&record.record_id());
                         if record.is_receipt() {
                             state.receipt_deduped += 1;
                         }
-                        match self.rewrite_journal(&record.record_id()) {
-                            Ok(invalid_records) => {
-                                if invalid_records > 0 {
-                                    state.failures += invalid_records;
-                                    state.degraded = true;
-                                }
-                            }
-                            Err(_) => {
-                                state.failures += 1;
-                                state.degraded = true;
-                            }
-                        }
+                        settled.push(record.record_id());
                     }
-                    PersistOutcome::Retry => {
+                    outcome @ (PersistOutcome::Retry | PersistOutcome::Busy) => {
+                        // A failed write is most often another writer holding
+                        // the store for longer than this one's short lock
+                        // budget. The record is already in the journal, so it
+                        // goes to the back of the queue and waits out a
+                        // backoff while the records behind it keep moving. A
+                        // stop that runs out of drain time leaves it for the
+                        // next writer to replay. Only a record the store
+                        // refused for another reason on every attempt is
+                        // dropped and cleared from the journal.
+                        let record_id = record.record_id();
                         let attempt = state
                             .retry_attempts
-                            .get(&record.record_id())
+                            .get(&record_id)
                             .copied()
                             .unwrap_or(0)
-                            + 1;
-                        state.retry_attempts.insert(record.record_id(), attempt);
-                        if attempt >= 3 {
-                            let _ = state.durable.remove(&record.record_id());
-                            state.retry_attempts.remove(&record.record_id());
+                            .saturating_add(1);
+                        state.failures += 1;
+                        if record.is_receipt() {
+                            state.receipt_failures += 1;
+                        }
+                        state.degraded = true;
+                        // Every failure lengthens the backoff, but only a
+                        // refusal other than a busy store spends an attempt.
+                        let refusals = state.retry_refusals.get(&record_id).copied().unwrap_or(0)
+                            + u32::from(matches!(outcome, PersistOutcome::Retry));
+                        if refusals >= MAX_STORE_ATTEMPTS {
+                            let _ = state.durable.remove(&record_id);
+                            state.retry_attempts.remove(&record_id);
+                            state.retry_at.remove(&record_id);
+                            state.retry_refusals.remove(&record_id);
                             state.dropped += 1;
-                            state.failures += 1;
                             if record.is_receipt() {
                                 state.receipt_dropped += 1;
-                                state.receipt_failures += 1;
                             }
-                            state.degraded = true;
-                            match self.rewrite_journal(&record.record_id()) {
-                                Ok(invalid_records) => state.failures += invalid_records,
-                                Err(_) => state.failures += 1,
-                            }
+                            settled.push(record_id);
                         } else {
+                            if refusals > 0 {
+                                state.retry_refusals.insert(record_id.clone(), refusals);
+                            }
+                            state.retry_attempts.insert(record_id.clone(), attempt);
+                            state
+                                .retry_at
+                                .insert(record_id, Instant::now() + retry_backoff(attempt));
                             state.queued_bytes += record.payload_bytes();
-                            state.records.push_front(record.clone());
+                            state.records.push_back(record.clone());
                         }
                     }
                 }
                 state.in_flight = false;
             }
+            self.settle_journal_batch(&settled);
+            self.lock_state().in_flight = false;
         }
     }
 
     /// `_next_batch` (:454-463).
+    ///
+    /// Only records that are due go into a batch: one waiting out a retry
+    /// backoff keeps its place in the queue. With nothing due the worker
+    /// sleeps until the first retry is due, a submission arrives or a stop
+    /// asks it to drain, and never past the stop's drain deadline.
     fn next_batch(&self) -> Vec<EvidenceRecord> {
         let mut state = self.lock_state();
         loop {
-            if !state.records.is_empty() || state.stopping {
+            let now = Instant::now();
+            let drain_over =
+                state.stopping && state.drain_deadline.is_none_or(|deadline| now >= deadline);
+            if drain_over
+                || state
+                    .records
+                    .iter()
+                    .any(|record| is_due(&state, record, now))
+            {
                 break;
             }
-            state = self
+            if state.records.is_empty() {
+                if state.stopping {
+                    break;
+                }
+                state = self
+                    .condition
+                    .1
+                    .wait(state)
+                    .unwrap_or_else(|e| e.into_inner());
+                continue;
+            }
+            let mut wake = state
+                .records
+                .iter()
+                .filter_map(|record| state.retry_at.get(&record.record_id()).copied())
+                .min()
+                .unwrap_or(now);
+            if let Some(deadline) = state.drain_deadline.filter(|_| state.stopping) {
+                wake = wake.min(deadline);
+            }
+            let (guard, _) = self
                 .condition
                 .1
-                .wait(state)
+                .wait_timeout(state, wake.saturating_duration_since(now))
                 .unwrap_or_else(|e| e.into_inner());
+            state = guard;
         }
         if state.records.is_empty() {
             return Vec::new();
@@ -1698,14 +1794,27 @@ impl EvidenceWorker {
                 .unwrap_or_else(|e| e.into_inner());
             state = guard;
         }
+        // Once a stop's drain time is over, every record is handed back so
+        // the worker can leave each one in the journal and exit.
+        let now = Instant::now();
+        let take_all =
+            state.stopping && state.drain_deadline.is_none_or(|deadline| now >= deadline);
         let mut batch = Vec::new();
+        let mut waiting = VecDeque::new();
         while let Some(record) = state.records.pop_front() {
             if batch.len() >= self.max_batch {
                 state.records.push_front(record);
                 break;
             }
+            if !take_all && !is_due(&state, &record, now) {
+                waiting.push_back(record);
+                continue;
+            }
             state.queued_bytes = state.queued_bytes.saturating_sub(record.payload_bytes());
             batch.push(record);
+        }
+        while let Some(record) = waiting.pop_back() {
+            state.records.push_front(record);
         }
         batch
     }
@@ -1764,14 +1873,14 @@ impl EvidenceWorker {
         match self.store.is_exact_command_activity_pre_replay(&evidence) {
             Ok(true) => return PersistOutcome::Done,
             Ok(false) => {}
-            Err(_) => return PersistOutcome::Retry,
+            Err(error) => return store_refused(&error),
         }
         match self
             .store
             .record_command_activity(&evidence, record.invocation_preview.as_deref())
         {
             Ok(_) => PersistOutcome::Done,
-            Err(_) => PersistOutcome::Retry,
+            Err(error) => store_refused(&error),
         }
     }
 
@@ -1795,7 +1904,7 @@ impl EvidenceWorker {
             &record.proposals,
         ) {
             Ok(()) => PersistOutcome::Done,
-            Err(_) => PersistOutcome::Retry,
+            Err(error) => store_refused(&error),
         }
     }
 
@@ -1811,23 +1920,8 @@ impl EvidenceWorker {
         match self.store.record_native_decision_receipt(&record.receipt) {
             Ok(true) => PersistOutcome::Done,
             Ok(false) => PersistOutcome::Deduped,
-            Err(_) => PersistOutcome::Retry,
+            Err(error) => store_refused(&error),
         }
-    }
-
-    /// `_rewrite_journal` (:496-502).
-    /// Rewrite the journal without the record, and report how many invalid
-    /// lines the rewrite dropped.
-    ///
-    /// The count is returned rather than recorded here. Every caller runs
-    /// inside the worker loop holding the shared state, and this lock is not
-    /// reentrant: taking it again on the same thread would wedge the worker
-    /// while it holds the lock a stop needs, and every request behind that
-    /// stop with it.
-    fn rewrite_journal(&self, remove_record_id: &str) -> Result<u64, io::Error> {
-        self.deps
-            .journal
-            .rewrite_journal(&self.journal_path, remove_record_id, self.max_bytes)
     }
 
     fn lock_state(&self) -> MutexGuard<'_, EvidenceState> {
@@ -1878,6 +1972,9 @@ pub const fn journal_file_mode() -> u32 {
 
 #[path = "hook_evidence_journal_fs.rs"]
 mod journal_fs;
+
+#[path = "hook_evidence_batch.rs"]
+mod batch;
 
 pub use journal_fs::NativeEvidenceJournal;
 

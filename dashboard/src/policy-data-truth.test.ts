@@ -75,7 +75,7 @@ assert(summary.pendingCount === 1, "summary counts pending requests");
 assert(resolvePersonDisplayLabel(null) === "Unknown", "missing owner falls back safely");
 assert(resolvePersonInitials(undefined) === "UN", "missing approver initials fall back safely");
 
-const viewsSource = readFileSync(join(here, "policy-workspace-views.tsx"), "utf8");
+const viewsSource = readFileSync(join(here, "policy-workspace-row.tsx"), "utf8");
 assert(viewsSource.includes("!cloudManaged"), "local remove action gated to non-cloud rules");
 assert(viewsSource.includes("canClear = onClear !== undefined && !cloudManaged"), "cloud exceptions cannot be removed locally");
 

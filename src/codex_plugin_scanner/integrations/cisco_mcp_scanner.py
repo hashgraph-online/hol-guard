@@ -677,6 +677,38 @@ async def _scan_targets_multi(
     return tuple(findings), targets_scanned, ordered_successful, failed_only
 
 
+def _not_installed_summary(mode: str) -> CiscoMcpScanSummary:
+    if mode == "on":
+        return _build_summary(
+            status=CiscoIntegrationStatus.UNAVAILABLE,
+            message="Cisco MCP scanner is required but not installed. Ensure package dependencies are installed.",
+        )
+    return _build_summary(
+        status=CiscoIntegrationStatus.UNAVAILABLE,
+        message="Cisco MCP scanner not installed; deep MCP scan skipped.",
+    )
+
+
+def _cisco_mcp_scanner_runnable() -> bool:
+    """Whether the isolated child could load the Cisco MCP scanner at all.
+
+    A packaged Guard cannot run ``-c`` code, and the child refuses a scanner
+    without installed distribution metadata, so either one means the scan
+    cannot happen.
+    """
+
+    if getattr(sys, "frozen", False):
+        return False
+    try:
+        importlib_metadata.distribution("cisco-ai-mcp-scanner")
+    except importlib_metadata.PackageNotFoundError:
+        return False
+    except Exception:
+        # Any other lookup failure is the child's to report as a failed scan.
+        return True
+    return True
+
+
 def _run_cisco_mcp_scan_in_process(
     plugin_dir: Path,
     mode: str = "auto",
@@ -712,15 +744,7 @@ def _run_cisco_mcp_scan_in_process(
                 raise
             components = _load_mcp_scanner_components()
     except ImportError:
-        if mode == "on":
-            return _build_summary(
-                status=CiscoIntegrationStatus.UNAVAILABLE,
-                message="Cisco MCP scanner is required but not installed. Ensure package dependencies are installed.",
-            )
-        return _build_summary(
-            status=CiscoIntegrationStatus.UNAVAILABLE,
-            message="Cisco MCP scanner not installed; deep MCP scan skipped.",
-        )
+        return _not_installed_summary(mode)
     except Exception as exc:
         return _build_summary(
             status=CiscoIntegrationStatus.FAILED,
@@ -803,6 +827,19 @@ def run_cisco_mcp_scan(
         )
     resolved_plugin_dir = plugin_dir.resolve()
     resolved_config_path = config_path.resolve() if config_path is not None else None
+    # The isolated child starts a whole interpreter (in a packaged Guard, the
+    # onefile runtime extracts itself again), so settle the outcomes it would
+    # reach before loading Cisco code here, where they cost nothing.
+    if (
+        _safe_resolved_static_target(resolved_plugin_dir, resolved_config_path or resolved_plugin_dir / ".mcp.json")
+        is None
+    ):
+        return _build_summary(
+            status=CiscoIntegrationStatus.SKIPPED,
+            message="No MCP configuration found; Cisco MCP scan skipped.",
+        )
+    if not _cisco_mcp_scanner_runnable():
+        return _not_installed_summary(mode)
     effective_timeout = DEFAULT_CISCO_MCP_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
     return _run_cisco_mcp_scan_isolated(
         resolved_plugin_dir,

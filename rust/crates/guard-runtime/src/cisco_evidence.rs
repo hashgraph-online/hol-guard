@@ -1,6 +1,7 @@
 //! Maps Cisco scanner findings to runtime risk signals and resolves the
 //! policy action those signals carry.
 
+use std::collections::HashSet;
 use std::sync::OnceLock;
 
 use guard_contracts::{
@@ -162,14 +163,28 @@ pub(crate) fn finding_signal(
     })
 }
 
+/// Report a signal unless it was already reported.
+///
+/// Objects keep their keys sorted, so two signals render to the same text
+/// exactly when they are equal; the set keeps this lookup constant-time.
+fn report(signals: &mut Vec<Value>, seen: &mut HashSet<String>, signal: Value) {
+    if seen.insert(signal.to_string()) {
+        signals.push(signal);
+    }
+}
+
 /// Final signals of a plan whose scan steps carry the analyzers' results.
+///
+/// A plan may reach one finding from more than one of the workspaces it was
+/// planned against, so a signal already reported is not reported again.
 pub(crate) fn evidence(steps: &[CiscoStepV1]) -> Result<Value, &'static str> {
-    let mut signals = Vec::new();
+    let mut signals: Vec<Value> = Vec::new();
+    let mut seen = HashSet::new();
     for step in steps {
         match step {
             CiscoStepV1::Signal { signal } => {
                 GuardRiskSignalV3::decode(signal).map_err(|_| "invalid signal step")?;
-                signals.push(signal.clone());
+                report(&mut signals, &mut seen, signal.clone());
             }
             CiscoStepV1::Scan {
                 kind,
@@ -188,7 +203,11 @@ pub(crate) fn evidence(steps: &[CiscoStepV1]) -> Result<Value, &'static str> {
                         .map_err(|_| "unknown scanner status")?,
                 };
                 for finding in findings {
-                    signals.push(finding_signal(finding, status, name)?.to_value());
+                    report(
+                        &mut signals,
+                        &mut seen,
+                        finding_signal(finding, status, name)?.to_value(),
+                    );
                 }
             }
         }
@@ -205,18 +224,40 @@ fn risk_class(source: &str) -> &'static str {
 }
 
 /// Most restrictive of the configured actions for the signals' sources.
+///
+/// Each source's risk class is resolved from the sent configuration here, so
+/// the caller sends what it loaded and never resolves a class of its own.
 pub(crate) fn policy_action(query: &CiscoPolicyQueryV1) -> Result<Value, &'static str> {
-    let mut resolved = vec![Value::String("allow".to_owned())];
+    let mut configured = std::collections::BTreeMap::new();
     for source in &query.signal_sources {
-        let configured = query
-            .configured_actions
+        let class = risk_class(source);
+        configured.entry(class.to_owned()).or_insert_with(|| {
+            crate::risk_action::configured_risk_action(
+                &query.guard_config,
+                class,
+                query.harness.as_deref(),
+            )
+        });
+    }
+    compose_policy_action(&query.signal_sources, &configured)
+}
+
+/// The composed effect of the signals' sources under already-resolved
+/// actions. `None` means nothing configures that class, which adds no floor.
+pub(crate) fn compose_policy_action(
+    signal_sources: &[String],
+    configured_actions: &std::collections::BTreeMap<String, Option<String>>,
+) -> Result<Value, &'static str> {
+    let mut resolved = vec![Value::String("allow".to_owned())];
+    for source in signal_sources {
+        let configured = configured_actions
             .get(risk_class(source))
             .ok_or("missing configured action")?;
         if let Some(action) = configured {
             resolved.push(Value::String(action.clone()));
         }
     }
-    let action = if query.signal_sources.is_empty() {
+    let action = if signal_sources.is_empty() {
         GuardAction::Allow
     } else {
         most_restrictive_guard_action(&resolved, GuardAction::Review)

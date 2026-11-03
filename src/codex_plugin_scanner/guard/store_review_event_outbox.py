@@ -84,6 +84,7 @@ class StoreReviewEventOutboxMixin:
                     method=method,
                     args=args,
                     deadline_monotonic=deadline,
+                    prerequisite_store=self,
                     busy_timeout_seconds=timeout_seconds
                     if busy_timeout_seconds is None
                     else min(timeout_seconds, busy_timeout_seconds),
@@ -227,9 +228,6 @@ class StoreReviewEventOutboxMixin:
                 _identity(oauth_subject_hash, workspace_id, machine_id, machine_installation_id),
             )
         )
-
-    def refresh_review_event_outbox_binding(self) -> int:
-        return int(self._native_store_call("refresh_review_event_outbox_binding", {}))
 
     def reassign_quarantined_review_events(
         self,

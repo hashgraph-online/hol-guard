@@ -1,7 +1,7 @@
 # Full-task Gauntlet image: the agent and the policy gateway run from this one image.
 # Everything is pinned: base images by digest, gh and Bun by checksum, Oh My Pi by the
 # repository lockfile in ci/pi-exact-continuation. Guard itself is supplied at run time.
-FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS node
+FROM node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS node
 
 FROM python:3.12-slim-trixie@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
 ARG TARGETARCH

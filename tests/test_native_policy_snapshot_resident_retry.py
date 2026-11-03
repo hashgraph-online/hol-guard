@@ -65,6 +65,7 @@ def test_resident_fingerprint_mismatch_enters_bounded_retry_backoff(
     [
         "native_policy_snapshot_resident_changed",
         "native_command_control_binding_changed",
+        "native_command_pack_projection_changed",
         "native_business_source_binding_changed",
         "native_local_cli_revision_changed",
         "native_provider_catalog_changed",

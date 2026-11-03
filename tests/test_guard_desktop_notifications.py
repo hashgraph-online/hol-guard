@@ -1,26 +1,27 @@
-"""Desktop notification tests for local Guard approvals."""
+"""Desktop notification tests for local Guard approvals.
+
+The notifier commands themselves are covered by the native runtime's
+`desktop_notification` tests.
+"""
 
 from __future__ import annotations
 
-import subprocess
+import time
+from pathlib import Path
 from typing import Any
 
+import pytest
+
+from codex_plugin_scanner.guard import desktop_notifications
 from codex_plugin_scanner.guard.desktop_notifications import (
     _NOTIFICATION_ATTEMPTS_IN_FLIGHT,
     _NOTIFIED_APPROVAL_IDS,
     _NOTIFIED_APPROVAL_IDS_LOCK,
-    WINDOWS_POWERSHELL_PATH,
     DesktopApprovalNotification,
-    _windows_powershell_path,
     ensure_desktop_notification_setup,
     notify_pending_approval_once,
     send_desktop_approval_notification,
 )
-
-
-class _Completed:
-    def __init__(self, returncode: int = 0) -> None:
-        self.returncode = returncode
 
 
 def _notification() -> DesktopApprovalNotification:
@@ -32,176 +33,133 @@ def _notification() -> DesktopApprovalNotification:
     )
 
 
-def test_macos_notification_uses_terminal_notifier_when_available() -> None:
-    calls: list[list[str]] = []
+class _Runtime:
+    def __init__(self, answer: dict[str, object] | None) -> None:
+        self.answer = answer
+        self.calls: list[tuple[str, str, dict[str, object]]] = []
+        self.options: list[dict[str, Any]] = []
 
-    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
-        calls.append(command)
-        return _Completed()  # type: ignore[return-value]
-
-    sent = send_desktop_approval_notification(
-        _notification(),
-        system_name="Darwin",
-        run=run,
-        which=lambda name: "/usr/local/bin/terminal-notifier" if name == "terminal-notifier" else None,
-    )
-
-    assert sent is True
-    assert calls[0][:2] == ["/usr/local/bin/terminal-notifier", "-title"]
-    assert "-open" in calls[0]
-    assert "-sound" in calls[0]
-    assert "default" in calls[0]
-    assert "-ignoreDnD" in calls[0]
-    assert any(str(item).startswith("hol-guard-req-native-") for item in calls[0])
-    assert "http://127.0.0.1:5474/approvals/req-native" in calls[0]
+    def __call__(
+        self, feature: str, command: str, request: dict[str, object], **options: Any
+    ) -> dict[str, object] | None:
+        self.calls.append((feature, command, request))
+        self.options.append(options)
+        return self.answer
 
 
-def test_macos_notification_falls_back_to_osascript() -> None:
-    calls: list[list[str]] = []
-
-    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
-        calls.append(command)
-        return _Completed()  # type: ignore[return-value]
-
-    sent = send_desktop_approval_notification(
-        _notification(),
-        system_name="Darwin",
-        run=run,
-        which=lambda _name: None,
-    )
-
-    assert sent is True
-    assert calls[0][0] == "/usr/bin/osascript"
-    assert "display notification" in calls[0][2]
-    assert "HOL Guard needs approval" in calls[0][2]
-    assert 'sound name "default"' in calls[0][2]
-    assert "http://127.0.0.1:5474/approvals/req-native" in calls[0][2]
+def _install(monkeypatch: pytest.MonkeyPatch, system: str, answer: dict[str, object] | None) -> _Runtime:
+    runtime = _Runtime(answer)
+    monkeypatch.setattr(desktop_notifications, "runtime_answer", runtime)
+    monkeypatch.setattr(desktop_notifications.platform, "system", lambda: system)
+    monkeypatch.delenv("HOL_GUARD_DESKTOP_NOTIFICATIONS", raising=False)
+    return runtime
 
 
-def test_macos_notification_rejects_untrusted_terminal_notifier_path() -> None:
-    calls: list[list[str]] = []
+@pytest.mark.parametrize("system", ["Darwin", "Windows"])
+def test_notification_is_sent_by_the_native_runtime(monkeypatch: pytest.MonkeyPatch, system: str) -> None:
+    runtime = _install(monkeypatch, system, {"sent": True})
 
-    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
-        calls.append(command)
-        return _Completed()  # type: ignore[return-value]
-
-    sent = send_desktop_approval_notification(
-        _notification(),
-        system_name="Darwin",
-        run=run,
-        which=lambda name: "/tmp/evil/terminal-notifier" if name == "terminal-notifier" else None,
-    )
-
-    assert sent is True
-    assert calls[0][0] == "/usr/bin/osascript"
-    assert "/tmp/evil/terminal-notifier" not in calls[0]
-
-
-def test_windows_notification_uses_powershell_toast() -> None:
-    calls: list[list[str]] = []
-
-    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
-        calls.append(command)
-        return _Completed()  # type: ignore[return-value]
-
-    sent = send_desktop_approval_notification(
-        _notification(),
-        system_name="Windows",
-        run=run,
-    )
-
-    assert sent is True
-    assert calls[0][:4] == [
-        WINDOWS_POWERSHELL_PATH,
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
+    assert send_desktop_approval_notification(_notification()) is True
+    assert runtime.calls == [
+        (
+            "native-desktop-notification-v1",
+            "desktop-notification",
+            {
+                "op": "send",
+                "schema": "desktop-notification.v1",
+                "notification": {
+                    "request_id": "req-native",
+                    "title": "HOL Guard needs approval",
+                    "message": "Codex wants approval: Bash shell command",
+                    "approval_url": "http://127.0.0.1:5474/approvals/req-native",
+                },
+            },
+        )
     ]
-    assert "ToastNotificationManager" in calls[0][-1]
-    assert "$OpenAction.SetAttribute('activationType', 'protocol')" in calls[0][-1]
-    assert "$OpenAction.SetAttribute('arguments', $Url)" in calls[0][-1]
-    assert "CreateToastNotifier()" in calls[0][-1]
-    assert "http://127.0.0.1:5474/approvals/req-native" in calls[0][-1]
 
 
-def test_windows_powershell_path_uses_valid_system_root() -> None:
-    assert _windows_powershell_path(r"D:\Windows") == (r"D:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
+def test_the_runtime_check_and_the_send_share_one_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A slow runtime check spends the send's time instead of adding its own.
+
+    With a timeout for the command alone, the status check before it had a
+    separate allowance, so a notification could stay in flight for nearly
+    twice the send timeout and hold back another attempt meanwhile.
+    """
+
+    runtime = _install(monkeypatch, "Darwin", {"sent": True})
+    before = time.monotonic()
+
+    assert send_desktop_approval_notification(_notification()) is True
+    [options] = runtime.options
+    assert "timeout_seconds" not in options
+    assert before < options["deadline"] <= time.monotonic() + desktop_notifications._SEND_TIMEOUT_SECONDS
 
 
-def test_windows_powershell_path_rejects_untrusted_system_root() -> None:
-    assert _windows_powershell_path(r"C:\Users\alice\Windows") == (
-        r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+@pytest.mark.parametrize("answer", [None, {"sent": False}, {"sent": "yes"}])
+def test_a_notification_the_runtime_did_not_show_is_not_sent(
+    monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None
+) -> None:
+    _install(monkeypatch, "Darwin", answer)
+
+    assert send_desktop_approval_notification(_notification()) is False
+
+
+def test_unsupported_platform_never_asks_the_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime = _install(monkeypatch, "Linux", {"sent": True, "supported": True})
+
+    assert send_desktop_approval_notification(_notification()) is False
+    result = ensure_desktop_notification_setup(tmp_path, approval_url="http://127.0.0.1:5474")
+    assert result.platform == "Linux"
+    assert result.supported is False
+    assert runtime.calls == []
+
+
+def test_setup_reports_the_runtime_answer(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime = _install(
+        monkeypatch,
+        "Darwin",
+        {
+            "supported": True,
+            "preview_sent": True,
+            "settings_opened": True,
+            "settings_url": "x-apple.systempreferences:example",
+            "already_prompted": False,
+            "notifier_path": "/opt/homebrew/bin/terminal-notifier",
+        },
     )
 
+    result = ensure_desktop_notification_setup(tmp_path, approval_url="http://127.0.0.1:5474", force=True)
 
-def test_unsupported_platform_is_noop() -> None:
-    calls: list[list[str]] = []
-
-    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
-        calls.append(command)
-        return _Completed()  # type: ignore[return-value]
-
-    sent = send_desktop_approval_notification(
-        _notification(),
-        system_name="Linux",
-        run=run,
-    )
-
-    assert sent is False
-    assert calls == []
-
-
-def test_notification_command_nonzero_exit_is_failure() -> None:
-    calls: list[list[str]] = []
-
-    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
-        calls.append(command)
-        return _Completed(returncode=1)  # type: ignore[return-value]
-
-    sent = send_desktop_approval_notification(
-        _notification(),
-        system_name="Darwin",
-        run=run,
-        which=lambda _name: None,
-    )
-
-    assert sent is False
-    assert calls[0][0] == "/usr/bin/osascript"
+    assert runtime.calls[0][2] == {
+        "op": "setup",
+        "schema": "desktop-notification.v1",
+        "guard_home": str(tmp_path),
+        "approval_url": "http://127.0.0.1:5474",
+        "force": True,
+    }
+    assert result.supported is True
+    assert result.preview_sent is True
+    assert result.settings_opened is True
+    assert result.settings_url == "x-apple.systempreferences:example"
+    assert result.already_prompted is False
+    assert result.notifier_path == "/opt/homebrew/bin/terminal-notifier"
 
 
-def test_notification_command_launch_failure_is_best_effort() -> None:
-    def run(_command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
-        raise FileNotFoundError("osascript")
+def test_setup_without_a_runtime_is_unsupported(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _install(monkeypatch, "Darwin", None)
 
-    sent = send_desktop_approval_notification(
-        _notification(),
-        system_name="Darwin",
-        run=run,
-        which=lambda _name: None,
-    )
+    result = ensure_desktop_notification_setup(tmp_path, approval_url="http://127.0.0.1:5474")
 
-    assert sent is False
+    assert result.supported is False
+    assert result.settings_url is None
 
 
-def test_macos_setup_command_timeout_does_not_raise(tmp_path) -> None:
-    calls: list[list[str]] = []
+def test_setup_disabled_by_environment_never_asks_the_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime = _install(monkeypatch, "Darwin", {"supported": True})
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_NOTIFICATIONS", "off")
 
-    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
-        calls.append(command)
-        raise subprocess.TimeoutExpired(command, timeout=3)
-
-    result = ensure_desktop_notification_setup(
-        tmp_path / "guard-home",
-        approval_url="http://127.0.0.1:5474/approvals/preview",
-        system_name="Darwin",
-        run=run,
-        which=lambda _name: "/usr/local/bin/terminal-notifier",
-    )
-
-    assert result.preview_sent is False
-    assert result.settings_opened is False
-    assert len(calls) == 2
-    assert not (tmp_path / "guard-home" / "desktop-notifications.json").exists()
+    assert ensure_desktop_notification_setup(tmp_path, approval_url="http://127.0.0.1:5474").supported is False
+    assert runtime.calls == []
 
 
 def test_failed_notification_attempt_can_retry(monkeypatch) -> None:
@@ -243,56 +201,3 @@ def test_thread_start_failure_clears_inflight(monkeypatch) -> None:
     assert notify_pending_approval_once(_notification()) is False
     with _NOTIFIED_APPROVAL_IDS_LOCK:
         assert not _NOTIFICATION_ATTEMPTS_IN_FLIGHT
-
-
-def test_macos_setup_sends_preview_opens_settings_and_records_state(tmp_path) -> None:
-    calls: list[list[str]] = []
-
-    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
-        calls.append(command)
-        return _Completed()  # type: ignore[return-value]
-
-    result = ensure_desktop_notification_setup(
-        tmp_path / "guard-home",
-        approval_url="http://127.0.0.1:5474/approvals/preview",
-        system_name="Darwin",
-        run=run,
-        which=lambda name: "/usr/local/bin/terminal-notifier" if name == "terminal-notifier" else None,
-    )
-
-    assert result.supported is True
-    assert result.preview_sent is True
-    assert result.settings_opened is True
-    assert result.already_prompted is False
-    assert result.notifier_path == "/usr/local/bin/terminal-notifier"
-    assert calls[0][0] == "/usr/local/bin/terminal-notifier"
-    assert calls[1] == [
-        "/usr/bin/open",
-        "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=fr.julienxx.oss.terminal-notifier",
-    ]
-    assert (tmp_path / "guard-home" / "desktop-notifications.json").exists()
-
-
-def test_macos_setup_does_not_reopen_after_prompt_marker(tmp_path) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    (guard_home / "desktop-notifications.json").write_text("{}", encoding="utf-8")
-    calls: list[list[str]] = []
-
-    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
-        calls.append(command)
-        return _Completed()  # type: ignore[return-value]
-
-    result = ensure_desktop_notification_setup(
-        guard_home,
-        approval_url="http://127.0.0.1:5474/approvals/preview",
-        system_name="Darwin",
-        run=run,
-        which=lambda _name: "/usr/local/bin/terminal-notifier",
-    )
-
-    assert result.supported is True
-    assert result.already_prompted is True
-    assert result.preview_sent is False
-    assert result.settings_opened is False
-    assert calls == []

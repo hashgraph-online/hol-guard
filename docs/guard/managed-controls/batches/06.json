@@ -1,8 +1,8 @@
 {
   "batch": 6,
   "evidence": [
-    "src/codex_plugin_scanner/guard/managed_controls/bundle.py",
-    "tests/managed_controls/test_bundle_extension_fields.py"
+    "src/codex_plugin_scanner/guard/managed_controls_policy_fields.py",
+    "tests/test_managed_controls_policy_fields.py"
   ],
   "repository": "hashgraph-online/hol-guard",
   "schema_version": 1,

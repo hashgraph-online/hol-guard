@@ -4,34 +4,13 @@
 
 use std::collections::BTreeMap;
 
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
+
+use guard_command::harness_identity::REGISTERED_HARNESS_COUNT;
 
 use crate::guard_config_iso::is_valid_iso_datetime;
 
-/// `(harness id, install aliases)` of every registered harness contract.
-const HARNESS_ALIASES: [(&str, &[&str]); 17] = [
-    ("codex", &["codex"]),
-    ("claude-code", &["claude-code", "claude"]),
-    ("opencode", &["opencode"]),
-    ("copilot", &["copilot"]),
-    ("cursor", &["cursor"]),
-    ("cline", &["cline", "cline-cli", "cline-vscode"]),
-    ("gemini", &["gemini"]),
-    ("hermes", &["hermes"]),
-    ("openclaw", &["openclaw"]),
-    ("antigravity", &["antigravity"]),
-    ("kimi", &["kimi", "kimi-code", "kimi-cli"]),
-    (
-        "grok",
-        &["grok", "grok-build", "grok-build-cli", "xai-grok"],
-    ),
-    ("pi", &["pi", "pi-agent", "pi-coding-agent"]),
-    ("omp", &["omp", "oh-my-pi"]),
-    ("zcode", &["zcode", "zai", "z-code", "zai-zcode"]),
-    ("devin", &["devin", "devin-cli", "cognition-devin"]),
-    ("paseo", &["paseo"]),
-];
-const MAX_HARNESS_POSTURES: usize = HARNESS_ALIASES.len() * 2;
+const MAX_HARNESS_POSTURES: usize = REGISTERED_HARNESS_COUNT * 2;
 const POSTURE_LOCK_KEYS: [&str; 4] = [
     "protection_posture",
     "mode",
@@ -40,13 +19,11 @@ const POSTURE_LOCK_KEYS: [&str; 4] = [
 ];
 
 /// `canonical_harness_id`: a registry id or install alias, else `None`.
-pub(crate) fn canonical_harness_id(value: &str) -> Option<&'static str> {
-    let key = value.trim().to_lowercase().replace('_', "-");
-    HARNESS_ALIASES
-        .iter()
-        .find(|(_, aliases)| aliases.contains(&key.as_str()))
-        .map(|(harness, _)| *harness)
-}
+/// The table itself lives in `guard-command` so the risk-action resolver can
+/// canonicalize without a second copy.
+pub(crate) use guard_command::harness_identity::canonical_harness_id;
+
+use guard_command::harness_identity::registered_harness_ids;
 
 /// `normalize_protection_posture`, shared with the package authority loader.
 pub(crate) fn normalize_posture(value: &Value) -> Option<&'static str> {
@@ -58,7 +35,7 @@ pub(crate) fn normalize_posture(value: &Value) -> Option<&'static str> {
     }
 }
 
-/// `coerce_loaded_harness_postures`: malformed entries are dropped.
+/// Stored per-harness postures; malformed entries are dropped.
 pub(crate) fn loaded_postures(value: Option<&Value>) -> BTreeMap<String, String> {
     let mut postures = BTreeMap::new();
     let Some(Value::Object(map)) = value else {
@@ -76,7 +53,7 @@ pub(crate) fn loaded_postures(value: Option<&Value>) -> BTreeMap<String, String>
     postures
 }
 
-/// `coerce_loaded_harness_watch_entered_at`: only watch overrides carry a stamp.
+/// Stored watch stamps; only watch overrides carry a stamp.
 pub(crate) fn loaded_watch_stamps(
     value: Option<&Value>,
     postures: &BTreeMap<String, String>,
@@ -120,4 +97,82 @@ pub(crate) fn managed_effective(
             .collect();
     }
     local
+}
+
+/// `_POSTURE_STRENGTH`: an unreadable posture ranks with `protected`, so a
+/// malformed value can neither weaken nor strengthen the baseline.
+fn strength(posture: &str) -> u8 {
+    match posture {
+        "watch" => 0,
+        "extra_careful" => 2,
+        _ => 1,
+    }
+}
+
+/// `global_effective_posture`: protection that is off reads as Watch.
+pub(crate) fn global_effective<'a>(posture: &'a str, mode: &str) -> &'a str {
+    if posture == "watch" || mode == "observe" {
+        "watch"
+    } else {
+        posture
+    }
+}
+
+/// `effective_harness_posture` for one override over a baseline.
+///
+/// Watch is always honored. A non-Watch override can turn protection back on
+/// under a global Watch, but never weakens a stricter global baseline.
+fn effective(baseline: &str, over: &str) -> String {
+    if over == "watch" || baseline == "watch" || strength(over) > strength(baseline) {
+        return over.to_owned();
+    }
+    baseline.to_owned()
+}
+
+/// `dual_write_from_posture`.
+fn dual_write(posture: &str, security_level: &str) -> (&'static str, String) {
+    match posture {
+        "watch" => ("observe", security_level.to_owned()),
+        "extra_careful" => ("enforce", "strict".to_owned()),
+        _ => ("enforce", "balanced".to_owned()),
+    }
+}
+
+/// `effective_harness_postures`: the posture governing every registered harness.
+pub(crate) fn effective_map(
+    baseline: &str,
+    postures: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut resolved: BTreeMap<String, String> = registered_harness_ids()
+        .map(|harness| (harness.to_owned(), baseline.to_owned()))
+        .collect();
+    // A stored override is always keyed canonically, but a caller may hold a
+    // configuration built by hand; an unregistered key still governs the
+    // harness that spells its name that way, so it is resolved too.
+    for (harness, over) in postures {
+        resolved.insert(harness.clone(), effective(baseline, over));
+    }
+    resolved
+}
+
+/// The `config_for_harness` fields of each harness that carries an override.
+///
+/// A harness without one reads the loaded configuration unchanged, so it is
+/// deliberately absent here rather than present with copied values.
+pub(crate) fn posture_views(
+    baseline: &str,
+    postures: &BTreeMap<String, String>,
+    security_level: &str,
+) -> Map<String, Value> {
+    postures
+        .iter()
+        .map(|(harness, over)| {
+            let posture = effective(baseline, over);
+            let (mode, level) = dual_write(&posture, security_level);
+            (
+                harness.clone(),
+                json!({"posture": posture, "mode": mode, "security_level": level}),
+            )
+        })
+        .collect()
 }

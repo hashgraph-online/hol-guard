@@ -21,6 +21,9 @@ use std::path::Path;
 #[path = "venv_activation_commands.rs"]
 mod commands;
 
+#[path = "venv_command_position.rs"]
+mod command_position;
+
 const MAX_PROJECTED_CHARS: usize = 8_192;
 
 /// Characters a plain, literal path is written with. An expansion, a glob or
@@ -351,15 +354,29 @@ fn activation_settings(
 }
 
 /// The command without its leading activation, or `None` when the activation
-/// is not one this scan can read through.
+/// is not one this scan can read through. Callers that plan the call again
+/// run this text, so an activation with nothing after it has no answer here:
+/// replacing it with a no-op would run the no-op in its place.
 pub(super) fn project(command: &str, context: PathContext<'_>) -> Option<String> {
+    projected(command, context, false)
+}
+
+/// The same reading, for a caller that only asks the floor about the text and
+/// never runs it. An activation with nothing after it reaches a verdict here,
+/// because the floor's answer for the shell's own no-op is the answer for a
+/// command whose whole effect is the settings this scan has just read.
+pub(super) fn verdict_target(command: &str, context: PathContext<'_>) -> Option<String> {
+    projected(command, context, true)
+}
+
+fn projected(command: &str, context: PathContext<'_>, settings_only: bool) -> Option<String> {
     let home = context.home_dir;
     if !command.is_ascii() || command.len() > MAX_PROJECTED_CHARS {
         return None;
     }
     let characters: Vec<char> = command.chars().collect();
     let tokens = shell_tokens(&characters)?;
-    let [sourcing, target, separator, rest @ ..] = tokens.as_slice() else {
+    let [sourcing, target, trailing @ ..] = tokens.as_slice() else {
         return None;
     };
     if sourcing.is_control || !matches!(sourcing.value.as_str(), "." | "source") {
@@ -370,11 +387,18 @@ pub(super) fn project(command: &str, context: PathContext<'_>) -> Option<String>
     }
     // `source x && y` hands the whole verdict to `y`. `source x; y` and
     // `source x | y` do not: the first runs `y` whatever the activation did,
-    // and the second carries the activation's own bytes into it.
-    if !separator.is_control || separator.value != "&&" {
+    // and the second carries the activation's own bytes into it. An
+    // activation with nothing after it hands the verdict to no one, and is
+    // read on its own below.
+    let rest: &[_] = match trailing {
+        [] => &[],
+        [separator, rest @ ..] if separator.is_control && separator.value == "&&" => rest,
+        _ => return None,
+    };
+    let first = rest.first().filter(|token| !token.is_control);
+    if first.is_none() && !(settings_only && trailing.is_empty()) {
         return None;
     }
-    let first = rest.first().filter(|token| !token.is_control)?;
     let (script, text) = crate::pretool::activation_script_text(&target.value, context)?;
     if !crate::native_command_controls::bounds_its_owners(&text, command) {
         return None;
@@ -396,16 +420,43 @@ pub(super) fn project(command: &str, context: PathContext<'_>) -> Option<String>
     if !commands::runs_settings_only(&text, &words) {
         return None;
     }
-    // Only the word the command runs next is rewritten. A later word the
+    // Only the word the command runs next is rewritten. A later command the
     // environment also holds would run a different program once the
     // activation has set `PATH`, and this projection does not answer for it.
-    if rest
-        .iter()
-        .skip(1)
-        .any(|token| !token.is_control && environment_program(binaries, &token.value))
+    // A word in argument position is not that: `python -m pytest` names the
+    // module the interpreter imports, and refusing it because the
+    // environment also ships a `pytest` console script read an argument as a
+    // program the shell never looks up.
+    //
+    // Telling the two apart needs the command positions, and this tokenizer
+    // marks only `| ; & < >` as control. A newline, a group, a negation, a
+    // keyword, an assignment prefix or a runner that executes its own
+    // argument each start a command without one, so a text holding any of
+    // them is one whose command positions this scan cannot see, and it keeps
+    // its own reading.
+    if first.is_some_and(|token| characters[token.start..].contains(&'\n'))
+        || rest.iter().any(|token| {
+            !token.is_control && command_position::hides_a_command_position(&token.value)
+        })
     {
         return None;
     }
+    let mut later = false;
+    for token in rest {
+        if token.is_control {
+            later = true;
+        } else if later && environment_program(binaries, &token.value) {
+            return None;
+        }
+    }
+    // `source .venv/bin/activate` on its own is the settings the script
+    // exports and nothing else, which the proof above has just read in full.
+    // The shell's own no-op is what the command amounts to once they are set,
+    // and it is what the floor reads in place of a nested command executor it
+    // models no part of.
+    let Some(first) = first else {
+        return settings_only.then(|| "true".to_owned());
+    };
     let remainder: String = characters[first.start..].iter().collect();
     if remainder.trim().is_empty() {
         return None;

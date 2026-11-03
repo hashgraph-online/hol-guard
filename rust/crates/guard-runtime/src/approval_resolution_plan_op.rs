@@ -8,7 +8,7 @@
 //! key, scope or expiry.
 
 mod execution;
-use execution::once_expires_at;
+use execution::{once_expires_at, wrapper_strings};
 
 use guard_contracts::{
     ApprovalResolutionPlanApprovalV1, ApprovalResolutionPlanBrowserIntentV1,
@@ -143,15 +143,6 @@ fn runtime_exact_key(artifact_id: &str, context: Option<&str>) -> Option<String>
 fn global_runtime_exact_key(artifact_id: &str, context: Option<&str>) -> Option<String> {
     let family = is_runtime_exact_family(artifact_id)?;
     runtime_exact_key(&format!("global:portable:{family}"), context)
-}
-
-fn wrapper_strings(chain: &[Option<String>]) -> Vec<Value> {
-    chain
-        .iter()
-        .filter_map(|item| item.as_deref())
-        .filter(|item| !item.is_empty())
-        .map(|item| json!(item))
-        .collect()
 }
 
 /// `runtime_tool_action_exact_match_context`.
@@ -356,6 +347,7 @@ fn evaluate(request: &ApprovalResolutionPlanRequestV1) -> Result<Value, String> 
         .clone()
         .filter(|hash| parse_context_token(&Value::String(hash.clone())).is_some());
     let exact_context_allow = allow && context_token.is_some();
+    let native_bash_operation_only = execution::operation_only(request, context_token.is_some());
     let persist = request.persist_policy;
     let mut scoped_id = if matches!(scope, "artifact" | "harness" | "global") {
         request_artifact_id.clone()
@@ -441,20 +433,29 @@ fn evaluate(request: &ApprovalResolutionPlanRequestV1) -> Result<Value, String> 
             let hash = native_once_hash.clone().or_else(|| scoped_hash.clone());
             local_once_row = local_once(&hash, once_expires_at(&request.resolved_at)?)?;
         }
-    } else if persist.is_none() && scope == "artifact" && !request.temporary_mcp {
+    } else if persist.is_none()
+        && scope == "artifact"
+        && !request.temporary_mcp
+        && !native_bash_operation_only
+    {
         persistence = "once";
         let expires_at = once_expires_at(&request.resolved_at)?;
         once_expiry = Some(expires_at.clone());
         if allow && request.requires_local_once {
             local_once_row = local_once(&scoped_hash, expires_at)?;
         }
-    } else if persist == Some(false)
-        && scope == "artifact"
-        && exact_context_allow
+    } else if scope == "artifact"
         && !request.temporary_mcp
         && !request.local_tool
+        && (((persist == Some(false) || native_bash_operation_only) && exact_context_allow)
+            || (persist == Some(false)
+                && allow
+                && request.requires_local_once
+                && !native_bash_operation_only))
     {
-        // "Do not remember" still authorizes the exact approved retry once.
+        // "Do not remember" still authorizes the exact approved retry once, and a
+        // request that can only run on a one-shot grant (such as a Codex hook still
+        // waiting on this decision) gets that grant instead of nothing.
         persistence = "exact_once";
         local_once_row = local_once(&scoped_hash, once_expires_at(&request.resolved_at)?)?;
     }
@@ -466,6 +467,7 @@ fn evaluate(request: &ApprovalResolutionPlanRequestV1) -> Result<Value, String> 
     let resolve_matching = !(!request.resolve_scope_matches
         || runtime_exact_scoped
         || exact_context_allow
+        || (native_bash_operation_only && persist != Some(true))
         || (allow && scope != "artifact"));
     let matching = if resolve_matching {
         let harness = if scope == "global" {

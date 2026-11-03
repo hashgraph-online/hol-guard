@@ -174,8 +174,23 @@ fn a_permitted_observed_action_forwards_as_itself_with_no_evidence() {
 }
 
 #[test]
+fn an_observed_call_under_ask_forwards_as_under_safe_alternative() {
+    // The shared route reaches `observe_forward` under `ask` only after the
+    // native and inline prompts fell through, and `_observe_tool_forward`
+    // never reads the blocked-request mode.
+    for action in [GuardAction::Review, GuardAction::Warn] {
+        let decided = decision(action);
+        assert_eq!(
+            forward(Some("ask"), &decided),
+            forward(Some("safe-alternative"), &decided),
+            "{action:?}"
+        );
+    }
+}
+
+#[test]
 fn an_observed_call_under_any_other_blocked_request_mode_defers() {
     let review = decision(GuardAction::Review);
-    assert_eq!(forward(Some("ask"), &review), Err(ROUTE_UNSUPPORTED));
+    assert_eq!(forward(Some("block"), &review), Err(ROUTE_UNSUPPORTED));
     assert_eq!(forward(None, &review), Err(ROUTE_UNSUPPORTED));
 }

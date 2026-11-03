@@ -1,5 +1,5 @@
-//! The origin URL `_read_origin_remote` (`project_identity.py`) reads from a
-//! Git config: `RawConfigParser(interpolation=None, strict=False,
+//! The origin URL the retired Python resolver's `_read_origin_remote` read
+//! from a Git config: `RawConfigParser(interpolation=None, strict=False,
 //! allow_no_value=True).read_string(content)` (CPython `_read`), then
 //! `get('remote "origin"', "url", fallback=None)`, stripped.
 //!
@@ -116,7 +116,7 @@ pub(crate) fn origin_url(content: &str) -> Mirror<Option<String>> {
         }
         let Some(sect) = cursor.clone() else {
             // MissingSectionHeaderError, a `configparser.Error`:
-            // project_identity.py:_read_origin_remote returns None.
+            // _read_origin_remote returns None.
             return Ok(None);
         };
         let (name, value) = option_line(stripped);
@@ -129,11 +129,11 @@ pub(crate) fn origin_url(content: &str) -> Mirror<Option<String>> {
     }
     if parse_error {
         // ParsingError, a `configparser.Error`:
-        // project_identity.py:_read_origin_remote returns None.
+        // _read_origin_remote returns None.
         return Ok(None);
     }
     let Some(origin) = parsed.sections.get(ORIGIN_SECTION) else {
-        // project_identity.py:_read_origin_remote: no origin section, so the
+        // _read_origin_remote: no origin section, so the
         // `fallback=None` answer.
         return Ok(None);
     };
@@ -141,13 +141,13 @@ pub(crate) fn origin_url(content: &str) -> Mirror<Option<String>> {
         .get(URL_OPTION)
         .or_else(|| parsed.defaults.get(URL_OPTION))
     else {
-        // project_identity.py:_read_origin_remote: a missing or valueless
+        // _read_origin_remote: a missing or valueless
         // url is not a string.
         return Ok(None);
     };
     let joined = lines.join("\n");
     let url = python_strip(joined.trim_end_matches(is_python_space));
-    // project_identity.py:_read_origin_remote: an empty url is None.
+    // _read_origin_remote: an empty url is None.
     Ok((!url.is_empty()).then(|| url.to_owned()))
 }
 

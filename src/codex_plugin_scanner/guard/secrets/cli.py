@@ -15,8 +15,6 @@ import threading
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from .public_rule_catalog import PUBLIC_RULES_JSON, PUBLIC_RULES_TEXT
-
 DEFAULT_MAX_FILES = 5_000
 DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024
 DEFAULT_MAX_TOTAL_BYTES = 128 * 1024 * 1024
@@ -242,7 +240,18 @@ def _run_scan(args: argparse.Namespace) -> int:
 
 
 def _run_rules(args: argparse.Namespace) -> int:
-    sys.stdout.write(PUBLIC_RULES_JSON if args.json else PUBLIC_RULES_TEXT)
+    payload = _call({"command": "rules"})
+    if payload is None:
+        return 2
+    if args.json:
+        sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        return 0
+    sys.stdout.write(f"HOL Guard Secrets detector {payload['detector_version']}\n")
+    for rule in payload["rules"]:
+        validation = rule["validation"]
+        detail = f"{rule['severity']}, validates via {validation}" if validation != "none" else rule["severity"]
+        sys.stdout.write(f"- {rule['family']} ({detail})\n")
+    sys.stdout.write("\n")
     return 0
 
 

@@ -41,6 +41,30 @@ fn action(controls: &CompiledNativeCommandControls, command: &str) -> String {
 }
 
 #[test]
+fn signed_in_user_shorthand_is_a_read_not_a_file() {
+    let controls = controls_with(&[]);
+    for command in [
+        "gh pr list --author @me",
+        "gh pr list --repo example-org/example-repo --state open --author @me --json number,title",
+        "gh issue list --assignee @me --state open",
+        "gh search prs --review-requested @me --state open",
+        "gh search issues --involves @me",
+    ] {
+        assert_eq!(action(&controls, command), "allow", "{command}");
+    }
+    // Only an option that takes a user makes `@me` the account; anywhere else
+    // an `@` value stays unproven, and the `api` file form still reads a file.
+    for command in [
+        "gh pr list @me",
+        "gh pr list --search @me",
+        "gh pr list -- --author @me",
+        "gh api repos/example-org/example-repo/issues/1/comments -F body=@me",
+    ] {
+        assert_ne!(action(&controls, command), "allow", "{command}");
+    }
+}
+
+#[test]
 fn read_only_graphql_queries_need_no_prompt_but_mutations_do() {
     let controls = controls_with(&[]);
     for endpoint in ["graphql", "/graphql"] {
@@ -179,6 +203,9 @@ fn docker_listings_and_loopback_port_probes_need_no_prompt() {
         "docker ps -a",
         "docker images",
         "docker container ls -q",
+        "docker context ls",
+        "docker context ls --format json",
+        "docker context show",
         "docker start app-test-pg",
         "docker start app-test-pg 2>&1 | tail -1",
         "nc -z 127.0.0.1 55433; echo \"probe-status:$?\"",
@@ -198,15 +225,20 @@ fn docker_listings_and_loopback_port_probes_need_no_prompt() {
         ),
         "allow"
     );
-    // Container state that prints environments or project secrets, other
-    // daemons, and network modes that move data keep the review.
+    // Container state that prints environments or project secrets, a log read
+    // that never ends, other daemons, and network modes that move data keep
+    // the review.
     for command in [
         "docker inspect web",
         "docker compose ps",
-        "docker logs web --tail 50",
+        "docker logs --follow web",
+        "docker -H tcp://build.example.com:2376 logs web",
         "docker exec web env",
         "docker -H tcp://build.example.com:2376 ps",
         "docker --context production ps",
+        "docker context use staging",
+        "docker context inspect default",
+        "docker context export prod",
         "DOCKER_HOST=tcp://build.example.com:2376 docker ps",
         "docker stop web",
         "docker restart web",

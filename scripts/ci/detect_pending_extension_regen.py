@@ -2,8 +2,8 @@
 
 Prints ``{"pending": ..., "pending_ids": [...]}`` (or a bare ``true``/``false``
 with ``--flag``) when any canonical contribution under ``contributions/``
-declares an extension id that the staged ``command-catalog.v1.json`` does
-not contain.
+declares an extension id absent from the staged resident catalog and public
+directory.
 That state means the source-only contribution is awaiting maintainer-owned
 projection regeneration, so generated-artifact freshness gates should stand
 down for that ref. Rust changes also require regeneration: the native compiler
@@ -82,11 +82,24 @@ def contribution_ids(*, include_legacy: bool = True) -> set[str]:
 
 
 def catalog_ids() -> set[str]:
-    """Read staged catalog identities; a clean checkout awaits generation."""
+    """Read resident and staged directory identities; optional policies stay outside core."""
     if not CATALOG.exists():
         return set()
     catalog = json.loads(CATALOG.read_text())
-    return {entry["extension_id"] for entry in catalog["catalog"]}
+    identities = {entry["extension_id"] for entry in catalog["catalog"]}
+    directory_path = ROOT / "docs/guard/extensions/catalog.v2.json"
+    if directory_path.is_file():
+        directory = json.loads(directory_path.read_text())
+        if directory.get("schemaVersion") != "guard.extension-directory.v2" or not isinstance(
+            directory.get("entries"), list
+        ):
+            raise ValueError("Staged extension directory is invalid")
+        for entry in directory["entries"]:
+            identity = entry.get("runtimeExtensionId") if isinstance(entry, dict) else None
+            if not isinstance(identity, str) or not re.fullmatch(r"command\.[a-z0-9]+(?:[.-][a-z0-9]+)*", identity):
+                raise ValueError("Staged extension directory identity is invalid")
+            identities.add(identity)
+    return identities
 
 
 def _contributions_changed(base_sha: str) -> list[str]:

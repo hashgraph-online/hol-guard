@@ -1,0 +1,57 @@
+{
+  "capabilities": {
+    "agents": 1,
+    "commands": 1,
+    "hooks": true,
+    "mcpServers": [
+      {
+        "name": "docs",
+        "transport": "http"
+      },
+      {
+        "name": "pdf",
+        "transport": "stdio"
+      }
+    ],
+    "skills": [
+      "pdf-tools"
+    ]
+  },
+  "description": "Fill PDF forms and extract text from PDFs.",
+  "homepage": "https://acme.example/pdf-tools",
+  "identity": {
+    "repository": "acme/pdf-tools",
+    "verified": false
+  },
+  "license": "MIT",
+  "links": {
+    "holCard": "https://hol.org/registry/plugins/acme%2Fpdf-tools/.well-known/card.json",
+    "listing": "https://hol.org/registry/plugins/acme%2Fpdf-tools",
+    "repository": "https://github.com/acme/pdf-tools"
+  },
+  "name": "pdf-tools",
+  "permissions": {
+    "environment": [
+      "PDF_API_KEY"
+    ],
+    "networkHosts": [
+      "mcp.acme.example"
+    ],
+    "runsHooks": true,
+    "startsPrograms": [
+      "npx"
+    ]
+  },
+  "runtimes": [
+    "claude-code",
+    "codex",
+    "gemini-cli",
+    "cursor",
+    "vscode",
+    "opencode",
+    "agent-skills",
+    "agent-plugins"
+  ],
+  "schema": "hol.plugin-card.v0-draft",
+  "version": "1.4.0"
+}

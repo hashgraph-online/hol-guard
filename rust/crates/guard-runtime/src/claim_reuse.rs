@@ -378,6 +378,74 @@ pub fn claim_approval_reuse_decisions_then<T>(
     consume_local_once: bool,
     after: &mut dyn FnMut(&Connection) -> rusqlite::Result<Option<T>>,
 ) -> rusqlite::Result<Option<T>> {
+    claim_with_clock(
+        connection,
+        decisions,
+        &|_| Ok(now.to_owned()),
+        evidence,
+        bound,
+        consume_local_once,
+        after,
+    )
+}
+
+/// Launch-time claim: sample the native store clock after acquiring its write
+/// lock, so contention cannot extend an expired approval's lifetime.
+pub(crate) fn claim_approval_reuse_decisions_now(
+    connection: &Connection,
+    decisions: &[Value],
+    evidence: &ClaimEvidence<'_>,
+    bound: &dyn Fn(&Connection, &[Member<'_>]) -> rusqlite::Result<bool>,
+    consume_local_once: bool,
+) -> rusqlite::Result<bool> {
+    claim_approval_reuse_decisions_now_then(
+        connection,
+        decisions,
+        evidence,
+        bound,
+        consume_local_once,
+        &mut |_| Ok(Some(())),
+    )
+    .map(|claimed| claimed.is_some())
+}
+
+/// Reserve an owning operation atomically with the launch-time grant claim.
+pub(crate) fn claim_approval_reuse_decisions_now_then<T>(
+    connection: &Connection,
+    decisions: &[Value],
+    evidence: &ClaimEvidence<'_>,
+    bound: &dyn Fn(&Connection, &[Member<'_>]) -> rusqlite::Result<bool>,
+    consume_local_once: bool,
+    after: &mut dyn FnMut(&Connection) -> rusqlite::Result<Option<T>>,
+) -> rusqlite::Result<Option<T>> {
+    claim_with_clock(
+        connection,
+        decisions,
+        &|connection| {
+            let timestamp: String = connection.query_row(
+                "select strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')",
+                [],
+                |row| row.get(0),
+            )?;
+            guard_contracts::canonical_utc_timestamp(&timestamp)
+                .ok_or(rusqlite::Error::InvalidQuery)
+        },
+        evidence,
+        bound,
+        consume_local_once,
+        after,
+    )
+}
+
+fn claim_with_clock<T>(
+    connection: &Connection,
+    decisions: &[Value],
+    clock: &dyn Fn(&Connection) -> rusqlite::Result<String>,
+    evidence: &ClaimEvidence<'_>,
+    bound: &dyn Fn(&Connection, &[Member<'_>]) -> rusqlite::Result<bool>,
+    consume_local_once: bool,
+    after: &mut dyn FnMut(&Connection) -> rusqlite::Result<Option<T>>,
+) -> rusqlite::Result<Option<T>> {
     let Ok((unique, expected_revision)) = unique_members(decisions) else {
         return Ok(None);
     };
@@ -399,15 +467,18 @@ pub fn claim_approval_reuse_decisions_then<T>(
         members.push((decision, disposition));
     }
     connection.execute_batch("BEGIN IMMEDIATE")?;
-    let claimed = claim_members(
-        connection,
-        &members,
-        expected_revision,
-        now,
-        evidence,
-        bound,
-    )
-    .and_then(|claimed| if claimed { after(connection) } else { Ok(None) });
+    let claimed = clock(connection)
+        .and_then(|now| {
+            claim_members(
+                connection,
+                &members,
+                expected_revision,
+                &now,
+                evidence,
+                bound,
+            )
+        })
+        .and_then(|claimed| if claimed { after(connection) } else { Ok(None) });
     match claimed {
         Ok(Some(value)) => {
             connection.execute_batch("COMMIT")?;
@@ -423,3 +494,7 @@ pub fn claim_approval_reuse_decisions_then<T>(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "claim_reuse_launch_clock_tests.rs"]
+mod launch_clock_tests;

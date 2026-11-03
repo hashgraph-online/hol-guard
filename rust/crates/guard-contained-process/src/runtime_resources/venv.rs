@@ -4,6 +4,7 @@ pub(super) struct Config {
     home: PathBuf,
     version: Option<String>,
     pub(super) include_system: bool,
+    pub(super) evidence: (PathBuf, String),
 }
 
 pub(super) fn read(
@@ -57,6 +58,7 @@ pub(super) fn read(
         home,
         version: fields.remove("version"),
         include_system,
+        evidence: (path, read.digest),
     }))
 }
 
@@ -143,6 +145,7 @@ mod tests {
             home: home.clone(),
             version: Some("3.11.9".into()),
             include_system: false,
+            evidence: (venv.join("pyvenv.cfg"), String::new()),
         };
         // Symlink venvs supply the canonical installation path; copied venvs
         // must skip the mismatched alias and reach the versioned candidate.

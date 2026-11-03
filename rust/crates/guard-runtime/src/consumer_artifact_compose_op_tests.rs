@@ -226,6 +226,35 @@ fn unscored_artifact_keeps_the_configured_default() {
 }
 
 #[test]
+fn low_trust_raises_a_fresh_unconfigured_artifact() {
+    let changed = json!({"changed": true, "config_changed_hash_action": "allow"});
+    for fresh in [json!({"first_seen": true}), changed] {
+        let mut overrides = fresh.clone();
+        overrides["low_trust_action"] = json!("require-reapproval");
+        let answer = current_action(&current_query(overrides));
+        assert_eq!(answer["current_action"], "require-reapproval", "{fresh}");
+    }
+}
+
+#[test]
+fn low_trust_leaves_settled_or_configured_artifacts_alone() {
+    let settled = current_action(&current_query(json!({"low_trust_action": "block"})));
+    assert_eq!(settled["current_action"], "warn");
+    let configured = current_action(&current_query(json!({
+        "first_seen": true,
+        "configured_action": "allow",
+        "low_trust_action": "block",
+    })));
+    assert_eq!(configured["current_action"], "allow");
+}
+
+#[test]
+fn omitted_low_trust_action_keeps_the_request_shape() {
+    let encoded = serde_json::to_value(current_query(json!({}))).expect("encode");
+    assert!(encoded.get("low_trust_action").is_none());
+}
+
+#[test]
 fn removed_artifact_uses_changed_hash_action_without_scoring() {
     let answer = current_action(&current_query(json!({
         "removed": true,

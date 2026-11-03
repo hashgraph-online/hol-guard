@@ -63,7 +63,9 @@ fn main() {
         }
         return;
     }
-    if !matches!(arguments.as_slice(), [operation] if matches!(operation.as_str(), "compiler-info" | "compile-bootstrap-stream" | "compile-packs" | "schema" | "descriptor-schema"))
+    // `bundle-metadata` only checks the JSON it is given (release defaults for
+    // policy delivery); it never reads or evaluates a packaged program.
+    if !matches!(arguments.as_slice(), [operation] if matches!(operation.as_str(), "compiler-info" | "compile-bootstrap-stream" | "compile-packs" | "schema" | "descriptor-schema" | "bundle-metadata"))
     {
         println!(
             "{}",

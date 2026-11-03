@@ -139,6 +139,8 @@ class StorePolicyIntegrityAdminMixin:
                 "artifact_hash": _optional_text(item.get("artifact_hash")),
                 "workspace": _optional_text(item.get("workspace")),
                 "reason": _optional_text(item.get("reason")),
+                "action": _optional_text(item.get("action")),
+                "updated_at": _optional_text(item.get("updated_at")),
             }
             for item in items
         ]
@@ -376,6 +378,7 @@ class StorePolicyIntegrityAdminMixin:
         self.add_event("policy_integrity.autorepair_failed", {"steps": attempts}, current_time)
         return final
 
+    @serialize_policy_integrity_generation
     def repair_policy_integrity(
         self,
         *,
@@ -450,6 +453,7 @@ class StorePolicyIntegrityAdminMixin:
             **({"items": invalid_items} if include_items else {}),
         }
 
+    @serialize_policy_integrity_generation
     def migrate_local_policy_integrity(
         self,
         *,
@@ -563,6 +567,7 @@ class StorePolicyIntegrityAdminMixin:
             "items": [item for item in items if item.get("integrity_status") != "valid"],
         }
 
+    @serialize_policy_integrity_generation
     def setup_policy_integrity(
         self,
         *,
@@ -637,6 +642,7 @@ class StorePolicyIntegrityAdminMixin:
             )
         return self.verify_policy_integrity(harness=harness)
 
+    @serialize_policy_integrity_generation
     def clear_policy_decisions(
         self,
         harness: str | None = None,

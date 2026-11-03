@@ -24,6 +24,7 @@ from tests.generated_command_catalog_test_support import generated_extension
 ROOT = Path(__file__).resolve().parents[1]
 LIMITS_PATH = ROOT / "contracts" / "managed-controls" / "v1" / "limits.json"
 API_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "extension_control_api.py"
+MUTATION_OP_PATH = ROOT / "rust" / "crates" / "guard-runtime" / "src" / "extension_control_mutation_op.rs"
 NAVIGATION_PATH = ROOT / "dashboard" / "src" / "shell-navigation-model.ts"
 RULES_PAGE_PATH = ROOT / "dashboard" / "src" / "policy-workspace-page.tsx"
 DASHBOARD_LIMITS_PATH = ROOT / "dashboard" / "src" / "extension-controls-normalize.ts"
@@ -121,10 +122,21 @@ def test_registry_permission_count_boundary_rejects_limit_plus_one() -> None:
 def test_daemon_api_uses_shared_limits_and_no_longer_advertises_4096_controls() -> None:
     source = API_PATH.read_text(encoding="utf-8")
     assert "advertised_extension_control_limits" in source
-    assert "MAX_CONTROLS_TOTAL" in source
+    # The draft's own bounds are the resident's; the API only maps its refusal.
+    assert "mutation_bounds" in source
     assert "MAX_DAEMON_CATALOG_RESPONSE_BYTES" in source
     assert "MAX_CATALOG_PAYLOAD_BYTES =" not in source
     assert "_MAX_CONTROLS = 4096" not in source
+
+
+def test_resident_mutation_bounds_match_the_shared_limits() -> None:
+    source = MUTATION_OP_PATH.read_text(encoding="utf-8")
+    assert f"const MAX_CONTROLS_PER_LAYER: usize = {MAX_CONTROLS_PER_LAYER};" in source
+    assert "MAX_CONTROLS_TOTAL: usize = MAX_CONTROL_LAYERS * MAX_CONTROLS_PER_LAYER;" in source
+    guard_command = (ROOT / "rust" / "crates" / "guard-command" / "src" / "extension_control.rs").read_text(
+        encoding="utf-8"
+    )
+    assert f"MAX_CONTROL_LAYERS: usize = {MAX_CONTROL_LAYERS};" in guard_command
 
 
 def test_dashboard_catalog_limits_match_shared_fixture() -> None:

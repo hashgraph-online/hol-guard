@@ -13,7 +13,11 @@ if TYPE_CHECKING:
     from .commands_support_interaction import _emit
     from .commands_support_prompts import _guard_approvals_command, _guard_diff_command, _guard_rerun_command
     from .commands_support_runtime_resolution import _run_hermes_mcp_proxy
-    from .commands_support_workspace import _package_firewall_block_payload, _package_firewall_cli_gate_input
+    from .commands_support_workspace import (
+        _package_firewall_authority_unavailable_payload,
+        _package_firewall_block_payload,
+        _package_firewall_cli_gate_input,
+    )
 
 
 from ._commands_shared import *
@@ -70,6 +74,37 @@ def _run_guard_cursor_mcp_proxy_command(
     store = _require_guard_store(store)
     config = _require_guard_config(config)
     proxy = CursorMcpGuardProxy(
+        server_name=args.server_name,
+        command=[args.server_command, *list(args.server_args)],
+        context=context,
+        store=store,
+        config=config,
+        source_scope=args.source_scope,
+        config_path=args.config_path,
+        transport=args.transport,
+        server_id=args.server_id,
+        server_env_keys=tuple(args.server_env_keys),
+        current_config_provider=lambda: _current_proxy_config(context, store),
+    )
+    return proxy.serve()
+
+
+def _run_guard_cline_mcp_proxy_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
+    proxy = ElicitationMcpGuardProxy(
+        harness="cline",
         server_name=args.server_name,
         command=[args.server_command, *list(args.server_args)],
         context=context,
@@ -250,10 +285,18 @@ def _run_guard_package_shims_command(
     current_status = package_shim_status(context)
     if shim_command == "status":
         payload = current_status
-        payload["actions"] = package_firewall_action_states(
-            entitlement,
-            has_installed_managers=bool(current_status.get("installed_managers")),
-        )
+        try:
+            access = package_firewall_access(
+                entitlement,
+                has_installed_managers=bool(current_status.get("installed_managers")),
+                guard_home=store.guard_home,
+            )
+        except NativeHookComposeError:
+            payload = _package_firewall_authority_unavailable_payload("status", entitlement)
+            payload["generated_at"] = _now()
+            _emit("package-shims", payload, getattr(args, "json", False))
+            return 2
+        payload["actions"] = access.action_states
         payload["entitlement"] = entitlement
         payload["generated_at"] = _now()
         _emit("package-shims", payload, getattr(args, "json", False))
@@ -263,6 +306,7 @@ def _run_guard_package_shims_command(
             entitlement=entitlement,
             has_installed_managers=bool(current_status.get("installed_managers")),
             operation="remove" if shim_command == "uninstall" else shim_command,
+            guard_home=store.guard_home,
         )
         payload["generated_at"] = _now()
         _emit("package-shims", payload, getattr(args, "json", False))
@@ -377,6 +421,7 @@ def _run_guard_run_command(
 
 
 __all__ = [
+    "_run_guard_cline_mcp_proxy_command",
     "_run_guard_codex_mcp_proxy_command",
     "_run_guard_copilot_mcp_proxy_command",
     "_run_guard_cursor_mcp_proxy_command",

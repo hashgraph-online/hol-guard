@@ -18,7 +18,6 @@ from codex_plugin_scanner.guard.cursor_hook_rebind import (
     rebind_stale_cursor_hooks,
 )
 from codex_plugin_scanner.guard.frozen_runtime_commands import frozen_daemon_recovery_command
-from codex_plugin_scanner.guard.stable_guard_cli import uses_top_level_hook_command
 
 
 def _managed_hook_source(*, argv0: str) -> str:
@@ -36,13 +35,6 @@ def _executable_file(path: Path, body: str = "#!/bin/sh\n") -> Path:
     path.write_text(body, encoding="utf-8")
     path.chmod(0o755)
     return path
-
-
-def test_uses_top_level_hook_command_for_stable_desktop_shim() -> None:
-    assert uses_top_level_hook_command(["/core/current-hol-guard"]) is True
-    assert uses_top_level_hook_command(["/core/current-hol-guard.cmd"]) is True
-    assert uses_top_level_hook_command(["/core/versions/3.0.57/hol-guard"]) is True
-    assert uses_top_level_hook_command(["/usr/bin/python3", "-m", "codex_plugin_scanner.cli"]) is False
 
 
 def test_cursor_hook_script_source_does_not_prefix_guard_for_stable_shim(tmp_path: Path) -> None:

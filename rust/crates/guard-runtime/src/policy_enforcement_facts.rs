@@ -269,24 +269,34 @@ fn codex_command_budget_input<'a>(
     Some(input)
 }
 
+/// `maps` carries every map of the payload and supplies the path selectors and
+/// the native `sensitive_target` verdict. `key_maps` is the subset whose key
+/// names are selectors rather than labels, so a filtered map keeps its path
+/// floor while its field names stop reading as credentials.
 pub(super) fn payload_sensitive_target(
     maps: &[&Map<String, Value>],
+    key_maps: &[&Map<String, Value>],
     codex_budget_input: Option<&Map<String, Value>>,
     codex_wait_process: Option<&Map<String, Value>>,
 ) -> Result<bool, String> {
     let mut sensitive = path_values_sensitive(maps)?;
+    // A native verdict is read wherever it appears, including inside a map
+    // whose names are labels.
+    for record in maps {
+        if let Some(value) = record.get("sensitive_target") {
+            sensitive |= value
+                .as_bool()
+                .ok_or_else(|| "native_policy_sensitive_target_invalid".to_owned())?;
+        }
+    }
     // Traversal borrows maps from the original JSON tree. Identity, rather
     // than value equality, excludes nested and sibling copies. Zero is also
     // numeric metadata; this does not interpret its budget semantics or relax
     // command, path, intrinsic or managed floors.
-    for record in maps {
+    for record in key_maps {
         for (key, value) in *record {
-            if key == "sensitive_target" {
-                let value = value
-                    .as_bool()
-                    .ok_or_else(|| "native_policy_sensitive_target_invalid".to_owned())?;
-                sensitive |= value;
-            } else if sensitive_key(key)
+            if key != "sensitive_target"
+                && sensitive_key(key)
                 && !((key == "max_output_tokens"
                     && value.as_u64().is_some()
                     && codex_budget_input.is_some_and(|input| std::ptr::eq(*record, input)))
@@ -493,8 +503,15 @@ pub(super) fn payload_facts(
     // is timing metadata. Nested copies, extra keys, credentials and command
     // floors retain ordinary enforcement. This grants no process authority.
     let wait_process = codex_browser_process_metadata(payload, harness);
-    // The field names of a `task` result schema are labels, not credentials.
-    let sensitive_target = payload_sensitive_target(&scanned, budget_input, wait_process)?
+    // The field names of a `task` result schema, and of the verified report
+    // that answers one, are labels, not credentials.
+    let named = policy_enforcement_facts_schema::without_result_labels(
+        &scanned,
+        payload,
+        harness,
+        reason_code,
+    );
+    let sensitive_target = payload_sensitive_target(&scanned, &named, budget_input, wait_process)?
         || reason_code.contains("secret")
         || reason_code.contains("credential")
         || reason_code.contains("exfiltration");

@@ -61,6 +61,7 @@ fn other_harnesses_and_homes_defer() {
         home_dir: Some(HOME.to_owned()),
         workspace: None,
         deadline_budget_ms: None,
+        emergency_safe_only: false,
         payload: allowed_payload(&lane),
     };
     let result: Value =
@@ -74,6 +75,22 @@ fn other_harnesses_and_homes_defer() {
 }
 
 #[test]
+fn a_binding_without_posture_overrides_still_answers() {
+    // `binding_with_harness_postures` leaves the map out when no harness
+    // carries an override, which is the common policy. That must read as no
+    // override and fall through to the snapshot mode, not as a truncated
+    // binding.
+    let lane = lane("no-postures", json!({}));
+    let mut bound = binding(&lane.fixture, &lane.workspace);
+    bound["home_dir"] = json!(HOME);
+    bound["local_cli_block_rules"] = json!(false);
+    bound["evidence_drain"] = json!(true);
+    bound.as_object_mut().unwrap().remove("harness_postures");
+    push(&lane.fixture, Some(bound)).unwrap();
+    assert_eq!(run(&lane, allowed_payload(&lane))["outcome"], "answer");
+}
+
+#[test]
 fn daemon_only_state_in_the_binding_defers() {
     // The daemon checks custom rules only against an allow floor, and this
     // fixture policy warns on commands.
@@ -81,7 +98,6 @@ fn daemon_only_state_in_the_binding_defers() {
     assert_eq!(run(&rules, allowed_payload(&rules))["outcome"], "answer");
     for (label, missing) in [
         ("no-home", "home_dir"),
-        ("no-postures", "harness_postures"),
         ("no-rules", "local_cli_block_rules"),
     ] {
         let lane = lane(label, json!({}));

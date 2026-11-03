@@ -73,15 +73,20 @@ fn rewrite_command_value(slot: &mut Value, original: &str, command: &str, depth:
     }
     match slot {
         Value::String(text) if encoded_json(text) => {
+            let before = slot.clone();
             rewrite_encoded(slot, |parsed| {
                 rewrite_command_value(parsed, original, command, depth.saturating_add(1));
             });
-        }
-        Value::String(text) => {
-            if text.trim() == original {
-                *slot = command.into();
+            // A shell command can open with the same character a JSON array
+            // or object does: `[ -f README.md ] && ...` runs the `[` builtin,
+            // and `{ cd src; make; }` groups commands. That text is not JSON,
+            // so nothing above rewrote it, and it is still the plain command
+            // string this pass replaces.
+            if *slot == before {
+                replace_literal(slot, original, command);
             }
         }
+        Value::String(_) => replace_literal(slot, original, command),
         Value::Array(items) => {
             for item in items {
                 rewrite_command_value(item, original, command, depth.saturating_add(1));
@@ -89,6 +94,13 @@ fn rewrite_command_value(slot: &mut Value, original: &str, command: &str, depth:
         }
         Value::Object(_) => rewrite_maps(slot, original, command, depth),
         Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
+/// Replace a string equal to the extracted command with its projection.
+fn replace_literal(slot: &mut Value, original: &str, command: &str) {
+    if slot.as_str().is_some_and(|text| text.trim() == original) {
+        *slot = command.into();
     }
 }
 
@@ -144,6 +156,27 @@ mod tests {
         let projected = payload_with_command(&payload, "ls > /dev/null", "ls");
         assert_eq!(projected["parameters"], "[\"ls\"]");
         assert_eq!(projected["arguments"], "[\"ls > /dev/null\"]");
+    }
+
+    #[test]
+    fn rewrites_a_command_that_opens_with_a_bracket() {
+        let original = r#"[ -f README.md ] && cat "$PWD/README.md""#;
+        let payload = json!({"tool_input": {"command": original}});
+        let projected =
+            payload_with_command(&payload, original, "[ -f README.md ] && cat /w/README.md");
+        assert_eq!(
+            projected["tool_input"]["command"],
+            "[ -f README.md ] && cat /w/README.md"
+        );
+    }
+
+    #[test]
+    fn rewrites_a_command_that_opens_with_a_brace() {
+        let original = r#"{ cat "$PWD/README.md"; }"#;
+        let payload = json!({"command": original, "toolInput": {"command": original}});
+        let projected = payload_with_command(&payload, original, "cat /w/README.md");
+        assert_eq!(projected["command"], "cat /w/README.md");
+        assert_eq!(projected["toolInput"]["command"], "cat /w/README.md");
     }
 
     #[test]

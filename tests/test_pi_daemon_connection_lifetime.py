@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_previous_source_body import build_previous_source_body
-from codex_plugin_scanner.guard.adapters.pi_extension_source_body import build_extension_source_body
+from tests.pi_extension_template import DUMMY_VALUES, render
 
 
 @pytest.mark.parametrize("harness,display_name", [("pi", "Pi"), ("omp", "Oh My Pi")])
 def test_current_daemon_review_declares_one_request_per_connection(harness, display_name):
     """Avoid stale pooled sockets without changing authentication, payload or deadlines."""
-    source = build_extension_source_body(harness=harness, display_name=display_name)
+    source = render("active", harness, {**DUMMY_VALUES, "display_name": display_name})
     start = source.index("    const response = await fetch(`http://127.0.0.1:")
     request = source[start : source.index("    });", start)]
     assert f"/v1/hooks/{harness}?" in request
@@ -27,5 +26,5 @@ def test_current_daemon_review_declares_one_request_per_connection(harness, disp
 @pytest.mark.parametrize("harness", ["pi", "omp"])
 def test_frozen_previous_extension_is_not_rewritten_by_transport_fix(harness):
     """Keep migration matching independent of the current transport implementation."""
-    previous = build_previous_source_body(harness=harness, display_name=harness)
+    previous = render("previous", harness, {**DUMMY_VALUES, "display_name": harness})
     assert "'Connection': 'close'" not in previous

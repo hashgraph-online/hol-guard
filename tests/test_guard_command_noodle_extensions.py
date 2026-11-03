@@ -6,7 +6,6 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    risk_classes_for_command_action,
 )
 from tests.command_extension_contracts import assert_safe_command_cases
 from tests.native_command_test_support import real_native_command_evaluation
@@ -60,7 +59,3 @@ def test_noodle_extension_publishes_reference_and_action_risks() -> None:
 
     assert extension is not None
     assert extension.reference_urls == ("https://github.com/wilfredinni/noodle",)
-    assert risk_classes_for_command_action("Noodle request execution command") == (
-        "execution",
-        "network_egress",
-    )

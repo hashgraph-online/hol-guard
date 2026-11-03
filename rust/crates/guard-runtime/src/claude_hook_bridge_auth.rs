@@ -1,7 +1,7 @@
 //! Daemon state authentication and identity-challenge verification for the
 //! native Claude hook bridge: a port of `_private_file_text`,
 //! `_authenticated_state` and `_verify_challenge_response` in
-//! `codex_daemon_hook_auth.py`. Every error string is the `ValueError`
+//! `scripts/daemon_hook_auth.py`. Every error string is the `ValueError`
 //! message CPython raises, because the bridge writes it into the hook reason.
 
 #[cfg(unix)]

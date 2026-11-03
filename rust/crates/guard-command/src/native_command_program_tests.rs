@@ -12,8 +12,9 @@ fn model(command: &str) -> CanonicalCommandV1 {
 }
 
 fn binding(controls: &[(&str, &str, &str)], managed: bool) -> NativeCommandControlBindingV1 {
-    let program = packaged_command_program().unwrap();
+    let program = crate::native_command_program::authored_test_support::full_program();
     let mut binding = NativeCommandControlBindingV1 {
+        active_security_digest: None,
         schema: NATIVE_COMMAND_CONTROL_BINDING_SCHEMA.into(),
         authority: None,
         program_digest: program.program_digest.clone(),
@@ -51,7 +52,7 @@ fn decision(
     command: &str,
     binding: &NativeCommandControlBindingV1,
 ) -> guard_contracts::PreToolResultV1 {
-    let controls = CompiledNativeCommandControls::new(binding).unwrap();
+    let controls = authored_controls(binding).unwrap();
     evaluate_pre_tool_envelope_with_extensions(
         "claude-code",
         "PreToolUse",
@@ -60,6 +61,15 @@ fn decision(
         }),
         Some(&controls),
         None,
+    )
+}
+
+fn authored_controls(
+    binding: &NativeCommandControlBindingV1,
+) -> Result<CompiledNativeCommandControls, &'static str> {
+    CompiledNativeCommandControls::for_program(
+        binding,
+        crate::native_command_program::authored_test_support::full_program(),
     )
 }
 
@@ -80,11 +90,8 @@ fn the_embedded_artifact_compiles_to_the_fully_admitted_program() {
 fn packaged_program_is_admitted_once_and_exposes_explicit_coverage() {
     let first = packaged_command_program().unwrap();
     assert!(Arc::ptr_eq(&first, &packaged_command_program().unwrap()));
-    let catalog: serde_json::Value = serde_json::from_slice(include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/command-catalog.v1.json"
-    )))
-    .unwrap();
+    let catalog: serde_json::Value =
+        serde_json::from_slice(guard_command_catalog_data::CATALOG_JSON).unwrap();
     let entries = catalog["catalog"].as_array().unwrap();
     let mut catalog_ids: Vec<&str> = entries
         .iter()
@@ -116,15 +123,18 @@ fn packaged_program_is_admitted_once_and_exposes_explicit_coverage() {
             .count(),
         expected_capability_rules
     );
-    assert!(first
-        .runtime_coverage()
-        .iter()
-        .any(|(id, supported)| *id == "command.ollama.push" && *supported));
+    // Optional coverage belongs to the full-library fixture, not core packaging.
+    assert!(
+        crate::native_command_program::authored_test_support::full_program()
+            .runtime_coverage()
+            .iter()
+            .any(|(id, supported)| *id == "command.ollama.push" && *supported)
+    );
 }
 
 #[test]
 fn complete_observations_match_independent_python_reference_models() {
-    let program = packaged_command_program().unwrap();
+    let program = crate::native_command_program::authored_test_support::full_program();
     let active = program
         .extensions
         .iter()
@@ -259,7 +269,7 @@ fn disabled_permission_and_failed_authority_cannot_become_allow() {
         false,
     );
     // Unknown targets are rejected during admission, never silently ignored.
-    assert!(CompiledNativeCommandControls::new(&enabled).is_err());
+    assert!(authored_controls(&enabled).is_err());
 }
 
 #[test]
@@ -316,8 +326,8 @@ fn controls_are_bound_to_program_and_both_independent_revisions() {
         second.binding.observations_digest
     );
     changed.program_digest = "f".repeat(64);
-    assert!(CompiledNativeCommandControls::new(&changed).is_err());
-    let controls = CompiledNativeCommandControls::new(&original).unwrap();
+    assert!(authored_controls(&changed).is_err());
+    let controls = authored_controls(&original).unwrap();
     let result = controls.apply(
         &model("ollama push model"),
         decision("gh api graphql -f query='{ viewer { login } }'", &original),

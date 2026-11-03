@@ -23,6 +23,12 @@ from ..codex_config import dump_toml, read_config_bytes, read_toml_payload
 from ..codex_hook_command_line import encode_hook_config_argument, render_hook_command
 from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND, NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
 from ..codex_hook_file_integrity import validate_regular_file
+from ..codex_hook_identity import (
+    CodexHookGroupQuestion,
+    CodexHookIdentityUnavailableError,
+    canonical_codex_hook_group_conflict_keys,
+    canonical_codex_hook_group_identities,
+)
 from ..codex_hook_integrity import (
     atomic_write_bytes,
     atomic_write_text,
@@ -38,8 +44,6 @@ from ..codex_hook_integrity import (
 from ..codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE,
     CodexHookInventory,
-    canonical_codex_hook_conflict_keys,
-    canonical_codex_hook_group_identity,
     enumerate_codex_hooks,
 )
 from ..codex_hook_launch_runtime import isolated_daemon_start_command, isolated_guard_cli_command
@@ -71,6 +75,9 @@ from ..codex_hook_registration import (
 from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
 )
+from ..codex_hook_registration import (
+    remove_unlaunchable_guard_hook_events as _remove_unlaunchable_guard_hook_events,
+)
 from ..codex_hook_rollback import require_unchanged_config_for_rollback, rollback_file_identity
 from ..codex_hook_self_binding import self_bound_hook_bindings
 from ..codex_hook_sources import parse_json_object, parse_toml_object
@@ -89,10 +96,17 @@ from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
 from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
+from ..native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
 from ..native_path_anchor import anchor_to_process_directory
 from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
 from ..stable_guard_cli import resolve_frozen_guard_cli
-from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _command_available
+from .base import (
+    HarnessAdapter,
+    HarnessContext,
+    PreparedHarnessInstall,
+    _command_available,
+    setup_failures_besides_missing_command,
+)
 from .codex_detect_sources import (
     json_payload_from_bytes,
     path_restorations,
@@ -401,7 +415,6 @@ def _hook_packaged_file_paths() -> tuple[tuple[str, Path], ...]:
     guard_root = Path(__file__).resolve().parents[1]
     return (
         ("bridge", Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()),
-        ("bridge_resume", Path(__file__).with_name("codex_daemon_hook_resume.py").resolve()),
         ("bridge_runtime", guard_root / "codex_hook_bridge_runtime.py"),
         ("hook_probe", guard_root / "runtime_transition_hook_probe.py"),
         ("native_receipt", guard_root / "native_decision_receipt.py"),
@@ -494,24 +507,6 @@ def _current_install_self_bindings(
     )
 
 
-def _wire_bindings(bindings: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:
-    """Ownership bindings the native request can carry.
-
-    A binding holding a value JSON cannot carry (a TOML date, a non-finite
-    float) is left out, so the hook it would have claimed stays reviewable as
-    unmanaged instead of failing the whole detection.
-    """
-
-    wire: list[dict[str, object]] = []
-    for binding in bindings:
-        try:
-            json.dumps(binding, allow_nan=False)
-        except (TypeError, ValueError):
-            continue
-        wire.append(dict(binding))
-    return wire
-
-
 def _legacy_wire_bindings(context: HarnessContext, payload: dict[str, object]) -> list[dict[str, object]]:
     hooks = payload.get("hooks")
     if not isinstance(hooks, dict):
@@ -521,6 +516,43 @@ def _legacy_wire_bindings(context: HarnessContext, payload: dict[str, object]) -
 
 _CODEX_HOOK_MIGRATION_CONFLICT = "codex_hook_migration_conflict"
 _CODEX_HOOK_MIGRATION_READBACK_MISMATCH = "codex_hook_migration_readback_mismatch"
+
+
+def _unidentified_migration(error: CodexHookIdentityUnavailableError) -> RuntimeError:
+    """The failure a migration reports when it has no identity to compare.
+
+    The error carries its own code, so a definition the resident will not read
+    stays distinguishable from a resident that could not answer at all.
+    """
+
+    return RuntimeError(
+        f"{error.code}: Guard's native runtime did not identify the Codex hooks this migration compares. "
+        "Repair whichever the code names, the Guard installation or the hook definition, before retrying "
+        "migration."
+    )
+
+
+def _group_identities(questions: Sequence[CodexHookGroupQuestion]) -> tuple[str, ...]:
+    """Ask the resident for each group's identity, failing the caller closed.
+
+    The resident owns hook identity, so a migration that cannot reach it has no
+    way to tell an incoming group from one already written. It stops with the
+    reason code rather than merging on a locally guessed identity.
+    """
+
+    try:
+        return canonical_codex_hook_group_identities(questions)
+    except CodexHookIdentityUnavailableError as error:
+        raise _unidentified_migration(error) from error
+
+
+def _group_conflict_keys(questions: Sequence[CodexHookGroupQuestion]) -> tuple[tuple[str, ...], ...]:
+    """Ask the resident for each group's conflict keys, failing the caller closed."""
+
+    try:
+        return canonical_codex_hook_group_conflict_keys(questions)
+    except CodexHookIdentityUnavailableError as error:
+        raise _unidentified_migration(error) from error
 
 
 def _append_unique_hook_groups(
@@ -534,48 +566,33 @@ def _append_unique_hook_groups(
     merged = list(existing_groups) if isinstance(existing_groups, list) else []
     if not isinstance(incoming_groups, list):
         return merged
-    identities = {
-        canonical_codex_hook_group_identity(
+    # Both sides are known before the first comparison, so the resident is
+    # asked about every group once rather than once per comparison.
+    settled = [group for group in merged if isinstance(group, Mapping)]
+    questions = [
+        _hook_group_question(
+            group,
+            event_name=event_name,
             source_scope=source_scope,
             source_hooks_enabled=source_hooks_enabled,
-            event_name=event_name,
-            group=group,
         )
-        for group in merged
-        if isinstance(group, Mapping)
-    }
-    conflict_keys = {
-        key
-        for group in merged
-        if isinstance(group, Mapping)
-        for key in canonical_codex_hook_conflict_keys(
-            source_scope=source_scope,
-            source_hooks_enabled=source_hooks_enabled,
-            event_name=event_name,
-            group=group,
-        )
-    }
+        for group in (*settled, *(group for group in incoming_groups if isinstance(group, Mapping)))
+    ]
+    group_identities = _group_identities(questions)
+    group_conflicts = _group_conflict_keys(questions)
+    identities = set(group_identities[: len(settled)])
+    conflict_keys = {key for keys in group_conflicts[: len(settled)] for key in keys}
+    position = len(settled)
     for group in incoming_groups:
         if not isinstance(group, Mapping):
             if group not in merged:
                 merged.append(group)
             continue
-        identity = canonical_codex_hook_group_identity(
-            source_scope=source_scope,
-            source_hooks_enabled=source_hooks_enabled,
-            event_name=event_name,
-            group=group,
-        )
+        identity = group_identities[position]
+        incoming_conflicts = set(group_conflicts[position])
+        position += 1
         if identity in identities:
             continue
-        incoming_conflicts = set(
-            canonical_codex_hook_conflict_keys(
-                source_scope=source_scope,
-                source_hooks_enabled=source_hooks_enabled,
-                event_name=event_name,
-                group=group,
-            )
-        )
         if incoming_conflicts & conflict_keys:
             raise RuntimeError(
                 f"{_CODEX_HOOK_MIGRATION_CONFLICT}: Codex hook sources define the same {event_name!r} "
@@ -605,6 +622,12 @@ def _migrate_hooks_json_into_config(
     cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(json_hooks, owned_bindings)
     legacy_bindings = _current_install_legacy_bindings(context, cleaned_json_hooks)
     cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(cleaned_json_hooks, legacy_bindings)
+    # A legacy registration whose launcher no longer exists is a leftover
+    # from an install that is gone, not a handler to adopt: folding it into
+    # the active config would leave the harness invoking a missing program.
+    cleaned_json_hooks, _ = _remove_unlaunchable_guard_hook_events(
+        cleaned_json_hooks, legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES
+    )
     # The manifest authenticates the config entries, not hooks.json, so no
     # recorded command holds a JSON handler back, matching its inventory.
     self_bindings = _current_install_self_bindings(context, cleaned_json_hooks)
@@ -638,21 +661,44 @@ def _canonical_hook_semantics(
     if not isinstance(hooks, Mapping):
         return {}
     source_hooks_enabled = _payload_has_hooks_feature_enabled(payload)
-    semantics: dict[str, tuple[str, ...]] = {}
+    counts: list[tuple[str, int]] = []
+    questions: list[CodexHookGroupQuestion] = []
     for event_name, groups in hooks.items():
         if not isinstance(event_name, str) or not isinstance(groups, list):
             continue
-        semantics[event_name] = tuple(
-            canonical_codex_hook_group_identity(
+        mappings = [group for group in groups if isinstance(group, Mapping)]
+        counts.append((event_name, len(mappings)))
+        questions.extend(
+            _hook_group_question(
+                group,
+                event_name=event_name,
                 source_scope=source_scope,
                 source_hooks_enabled=source_hooks_enabled,
-                event_name=event_name,
-                group=group,
             )
-            for group in groups
-            if isinstance(group, Mapping)
+            for group in mappings
         )
+    identities = _group_identities(questions)
+    semantics: dict[str, tuple[str, ...]] = {}
+    start = 0
+    for event_name, count in counts:
+        semantics[event_name] = identities[start : start + count]
+        start += count
     return semantics
+
+
+def _hook_group_question(
+    group: Mapping[str, object],
+    *,
+    event_name: str,
+    source_scope: str,
+    source_hooks_enabled: bool,
+) -> CodexHookGroupQuestion:
+    return CodexHookGroupQuestion(
+        source_scope=source_scope,
+        source_hooks_enabled=source_hooks_enabled,
+        event_name=event_name,
+        group=group,
+    )
 
 
 def _require_hook_semantics_readback(
@@ -682,18 +728,22 @@ def _migration_group_identities(
     hooks = payload.get("hooks")
     if not isinstance(hooks, Mapping):
         return set()
-    return {
-        canonical_codex_hook_group_identity(
-            source_scope=source_scope,
-            source_hooks_enabled=source_hooks_enabled,
-            event_name=event_name,
-            group=group,
+    return set(
+        _group_identities(
+            [
+                _hook_group_question(
+                    group,
+                    event_name=event_name,
+                    source_scope=source_scope,
+                    source_hooks_enabled=source_hooks_enabled,
+                )
+                for event_name, groups in hooks.items()
+                if isinstance(event_name, str) and isinstance(groups, list)
+                for group in groups
+                if isinstance(group, Mapping)
+            ]
         )
-        for event_name, groups in hooks.items()
-        if isinstance(event_name, str) and isinstance(groups, list)
-        for group in groups
-        if isinstance(group, Mapping)
-    }
+    )
 
 
 def _unmanaged_migration_payload(
@@ -708,6 +758,12 @@ def _unmanaged_migration_payload(
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
     legacy_bindings = _current_install_legacy_bindings(context, cleaned_hooks)
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, legacy_bindings)
+    # The migration prunes unlaunchable legacy launchers instead of adopting
+    # them, so the identities verification expects must be pruned by the same
+    # rule; otherwise verification rejects the migration it just produced.
+    cleaned_hooks, _ = _remove_unlaunchable_guard_hook_events(
+        cleaned_hooks, legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES
+    )
     self_bindings = _current_install_self_bindings(context, cleaned_hooks)
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, self_bindings)
     return {"hooks": cleaned_hooks} if cleaned_hooks else {}
@@ -1341,8 +1397,8 @@ class CodexHarnessAdapter(HarnessAdapter):
         )
         detection = HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or _command_available(self.executable),
-            command_available=_command_available(self.executable),
+            installed=bool(found_paths) or _command_available(self.executable, context.home_dir),
+            command_available=_command_available(self.executable, context.home_dir),
             config_paths=found_paths,
             artifacts=artifacts,
             warnings=warnings,
@@ -1761,7 +1817,17 @@ class CodexHarnessAdapter(HarnessAdapter):
         items = warning_items if isinstance(warning_items, list) else []
         warnings = finalize_codex_doctor_warnings([str(item) for item in items if isinstance(item, str)], hook_state)
         payload["warnings"] = warnings
-        payload["setup_status"] = finalize_codex_doctor_setup_status(payload.get("setup_status"), hook_state, warnings)
+        base_status = payload.get("setup_status")
+        setup_status = finalize_codex_doctor_setup_status(base_status, hook_state, warnings)
+        leftover_only = not setup_failures_besides_missing_command(warnings)
+        if setup_status == "not_found" and not leftover_only:
+            # Hook warnings are added after the base status, so recheck before calling it leftover config.
+            setup_status = "broken"
+        elif setup_status == "broken" and base_status == "not_found" and leftover_only:
+            # A managed hook that Codex is no longer there to run is part of the same
+            # leftover configuration, not a second fault to report as a broken setup.
+            setup_status = "not_found"
+        payload["setup_status"] = setup_status
         apply_codex_hook_trust_doctor(payload, hook_state)
         payload["native_hook_state"] = hook_state
         return payload

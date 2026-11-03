@@ -40,6 +40,7 @@ fn request(vector: &Value, with_evidence: bool) -> ApprovalReuseDiagnosticReques
             local_once_integrity_key_b64: text(&evidence["local_once_integrity_key_b64"]),
             local_once_integrity_key_id: text(&evidence["local_once_integrity_key_id"]),
         }),
+        current_action: None,
     }
 }
 

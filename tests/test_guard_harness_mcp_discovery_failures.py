@@ -83,3 +83,59 @@ def test_cli_id_collision_keeps_both_servers(tmp_path: Path) -> None:
     assert second_id.startswith("local-cli.mcp-")
     listed = {str(item["name"]): item.get("source_label") for item in store.list_local_cli_items()}
     assert listed == {"one": "Cursor", "two": "Codex"}
+
+
+def _recording_service(home: Path) -> tuple[LocalCliApiService, list[tuple[str, str | None]]]:
+    recorded: list[tuple[str, str | None]] = []
+
+    def record(event: str, *, detail: str | None = None, exc_info: object = None) -> bool:
+        # Mirrors `DaemonDiagnostics.record_exception`, whose `exc_info=False`
+        # asks for a record with no traceback.
+        recorded.append((event, detail))
+        return True
+
+    return LocalCliApiService(store=GuardStore(home), record_exception=record), recorded
+
+
+def test_observed_discovery_failure_reaches_the_daemon_log(tmp_path: Path, monkeypatch) -> None:
+    # A Desktop-launched daemon sends stderr to /dev/null, so the failure must
+    # reach the daemon.log recorder, naming the exception it raised.
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_observed_mcp_tools",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("native_local_mcp_observation_invalid")),
+    )
+    service, recorded = _recording_service(home)
+    payload = service.discover_items()
+    assert payload.get("discovery_issue") == "observed_provider_scan_failed"
+    assert ("local_cli_observed_discovery_failed", "ValueError") in recorded
+
+
+def test_configured_discovery_failure_reaches_the_daemon_log(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("detect failed")),
+    )
+    service, recorded = _recording_service(home)
+    payload = service.discover_items()
+    assert payload.get("discovery_issue") == "configured_host_scan_failed"
+    # Each failed scan names its cause, never the stage error that wraps it.
+    assert recorded
+    assert set(recorded) == {("local_cli_configured_discovery_failed", "RuntimeError")}
+
+
+def test_the_daemon_wires_its_log_recorder_into_discovery(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+
+    daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        server = daemon._server
+        assert server.local_cli_api._record_exception == server.diagnostics.record_exception
+    finally:
+        daemon.stop()

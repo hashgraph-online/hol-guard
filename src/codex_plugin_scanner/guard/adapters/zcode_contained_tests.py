@@ -2,116 +2,26 @@
 
 ZCode, Claude Code and Codex 0.131+ apply a hook's ``updatedInput``, so a contained test run is
 rewritten into Guard's execution sink instead of stopping for review.
+
+Whether a receipt is rewritten, and under which profile, is the resident's
+answer, and the edge writes the request snapshot and quotes the sink command
+(``edge_containment.rs``). This module only names the argv that starts
+Guard's CLI.
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-import shlex
-import stat
 import sys
-import tempfile
-import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 
 from ..codex_hook_launch_runtime import isolated_guard_cli_command
-
-_PROFILES = {
-    "native_pytest_readonly_containment_required": "pytest-readonly-v2",
-    "native_node_test_readonly_containment_required": "node-test-readonly-v1",
-    "native_vitest_readonly_containment_required": "vitest-readonly-v1",
-    "native_package_test_readonly_containment_required": "package-test-readonly-v1",
-    "native_python_eval_readonly_containment_required": "python-eval-readonly-v1",
-    "native_node_eval_readonly_containment_required": "node-eval-readonly-v1",
-    "native_bun_eval_readonly_containment_required": "node-eval-readonly-v1",
-    "native_git_readonly_containment_required": "git-readonly-v1",
-    "native_node_tool_readonly_containment_required": "node-tool-readonly-v1",
-    "native_node_build_output_containment_required": "node-build-output-v1",
-    "native_workspace_containment_required": "workspace-contained-v1",
-}
-_ROUTED_HARNESSES = frozenset({"zcode", "claude-code"})
-# Codex is routed by its hook bridge, which first confirms the running Codex applies updatedInput.
-_SINK_HARNESSES = _ROUTED_HARNESSES | {"codex"}
-_WINDOWS_SINK_HARNESSES = frozenset({"claude-code", "codex"})
-
-
-def cleanup_stale_zcode_requests() -> None:
-    """Reclaim abandoned private snapshots after a full day, never follow links."""
-    if os.name != "posix":
-        return
-    cutoff = time.time() - 86_400
-    try:
-        with os.scandir(tempfile.gettempdir()) as entries:
-            for index, entry in enumerate(entries):
-                if index >= 4096:
-                    break
-                if not entry.name.startswith("hol-guard-contained-test-"):
-                    continue
-                try:
-                    descriptor = os.open(entry.path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
-                    try:
-                        parent = os.fstat(descriptor)
-                        if (
-                            parent.st_uid != os.getuid()
-                            or stat.S_IMODE(parent.st_mode) != 0o700
-                            or parent.st_mtime > cutoff
-                        ):
-                            continue
-                        request = os.stat("request.json", dir_fd=descriptor, follow_symlinks=False)
-                        if (
-                            not stat.S_ISREG(request.st_mode)
-                            or request.st_uid != os.getuid()
-                            or stat.S_IMODE(request.st_mode) != 0o600
-                            or request.st_nlink != 1
-                            or request.st_mtime > cutoff
-                        ):
-                            continue
-                        os.unlink("request.json", dir_fd=descriptor)
-                    finally:
-                        os.close(descriptor)
-                    os.rmdir(entry.path)
-                except OSError:
-                    continue
-    except OSError:
-        pass
-
-
-def route_zcode_containment(
-    response: dict[str, object],
-    *,
-    harness: str,
-    payload: Mapping[str, object],
-    guard_home: Path,
-    home_dir: Path,
-    workspace: Path | None,
-) -> dict[str, object]:
-    """Rewrite at the authority edge so frozen/stdlib hook clients also work."""
-    # The execution sink needs the denial/profile receipt, not another rewrite.
-    # An untrusted caller setting this flag only keeps its original call denied.
-    if harness not in _ROUTED_HARNESSES or workspace is None or payload.get("guard_containment_receipt_only") is True:
-        return response
-    config = {
-        "harness": harness,
-        "guard_home": str(guard_home),
-        "python_executable": sys.executable,
-        "package_root": str(Path(__file__).resolve().parents[3]),
-    }
-    routed = contained_zcode_response(
-        response,
-        input_text=json.dumps({**payload, "cwd": str(workspace)}),
-        config=config,
-        cli_args=["--home", str(home_dir)],
-    )
-    return routed if routed is not None else response
 
 
 def contained_sink_command_prefix(
     python_executable: str | None = None, package_root: Path | None = None
 ) -> tuple[str, ...]:
-    """The argv prefix ``route_zcode_containment`` starts the sink with."""
+    """The argv prefix the contained sink starts with."""
     return _sink_command_prefix(
         {
             "python_executable": python_executable or sys.executable,
@@ -134,152 +44,3 @@ def _sink_command_prefix(config: Mapping[str, object]) -> tuple[str, ...]:
     # directory written with forward slashes needs no escaping.
     root = str(package_root.resolve())
     return (*command[:-1], command[-1].replace(repr(root), repr(root.replace("\\", "/")), 1))
-
-
-def _request_root() -> str | None:
-    """Where the sink looks for a snapshot; on Windows not TEMP, which the
-    harness shell may set differently from this hook."""
-    if sys.platform != "win32":
-        return None
-    from ..windows_paths import trusted_windows_local_temp
-
-    return str(trusted_windows_local_temp())
-
-
-_WINDOWS_PROFILES = frozenset(
-    {
-        "python-eval-readonly-v1",
-        "node-eval-readonly-v1",
-        "node-build-output-v1",
-        "node-tool-readonly-v1",
-    }
-)
-
-
-def platform_contains(response: Mapping[str, object]) -> bool:
-    """macOS runs every contained profile; Linux runs the workspace sandbox;
-    Windows runs installed Python and Node scripts, Vite builds and local
-    lint, typecheck and format checks in an AppContainer."""
-    profile = response.get("required_execution_profile")
-    return (
-        sys.platform == "darwin"
-        or (sys.platform == "linux" and profile == "workspace-contained-v1")
-        or (sys.platform == "win32" and profile in _WINDOWS_PROFILES)
-    )
-
-
-def contained_zcode_response(
-    response: Mapping[str, object],
-    *,
-    input_text: str,
-    config: Mapping[str, object],
-    cli_args: Sequence[str],
-) -> dict[str, object] | None:
-    """Allow only the rewritten sink; native authority is rechecked at execution."""
-    reason = response.get("reason_code")
-    if (
-        not platform_contains(response)
-        or config.get("harness") not in _SINK_HARNESSES
-        # The sink command is POSIX-quoted for Git Bash and the Pi shell; on
-        # Windows Codex gets a PowerShell command. Any other harness there
-        # keeps its single review.
-        or (sys.platform == "win32" and config.get("harness") not in _WINDOWS_SINK_HARNESSES)
-        or response.get("decision") != "deny"
-        or response.get("policy_action") != "sandbox-required"
-        or response.get("observe_mode") is True
-        or not isinstance(reason, str)
-        or reason not in _PROFILES
-        or response.get("required_execution_profile") != _PROFILES[reason]
-    ):
-        return None
-    directory: Path | None = None
-    try:
-        payload = json.loads(input_text)
-        if not isinstance(payload, dict):
-            return None
-        event = payload.get("hook_event_name", payload.get("hookEventName"))
-        tool = payload.get("tool_name", payload.get("toolName"))
-        original = payload.get("tool_input", payload.get("toolInput"))
-        if event not in {"PreToolUse", "pre_tool_use"} or tool not in {
-            "Bash",
-            "bash",
-            "run_terminal_command",
-            "run_command",
-        }:
-            return None
-        if not isinstance(original, dict) or not isinstance(original.get("command"), str):
-            return None
-        workspace_value = payload.get("cwd", payload.get("workspace"))
-        if workspace_value is None and "--workspace" in cli_args:
-            workspace_value = cli_args[cli_args.index("--workspace") + 1]
-        if not isinstance(workspace_value, str):
-            return None
-        workspace = Path(workspace_value).expanduser().resolve(strict=True)
-        if not workspace.is_dir():
-            return None
-        snapshot_payload = {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "bash",
-            "tool_input": original,
-            "cwd": str(workspace),
-            "session_id": payload.get("session_id", payload.get("sessionId")),
-            "tool_call_id": payload.get("tool_call_id", payload.get("toolCallId", payload.get("tool_use_id"))),
-        }
-        serialized = json.dumps(
-            {
-                "schema": "guard-contained-test-request.v1",
-                "workspace": str(workspace),
-                "payload": snapshot_payload,
-            }
-        ).encode()
-        if len(serialized) > 1_048_576:
-            return None
-        cleanup_stale_zcode_requests()
-        directory = Path(tempfile.mkdtemp(prefix="hol-guard-contained-test-", dir=_request_root()))
-        # mkdtemp creates an owner-only directory; do not widen its permissions.
-        request = directory / "request.json"
-        descriptor = os.open(request, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(serialized)
-        args = [
-            "guard",
-            "execute-contained-test",
-            "--harness",
-            str(config["harness"]),
-            "--guard-home",
-            str(config["guard_home"]),
-            "--workspace",
-            str(workspace),
-            "--request-file",
-            str(request),
-            "--request-sha256",
-            hashlib.sha256(serialized).hexdigest(),
-        ]
-        if "--home" in cli_args:
-            args.extend(["--home", cli_args[cli_args.index("--home") + 1]])
-        command = (*_sink_command_prefix(config), *args)
-        if sys.platform == "win32" and config.get("harness") == "codex":
-            from ..windows_powershell_quote import powershell_join
-
-            shell_command = powershell_join(command)
-        else:
-            shell_command = shlex.join(command)
-        if shell_command is None:
-            raise ValueError("sink command cannot be quoted for this shell")
-        return {
-            "policy_action": "allow",
-            "reason_code": "native_contained_execution_routed",
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-                "updatedInput": {**original, "command": shell_command},
-            },
-        }
-    except (OSError, ValueError, KeyError, IndexError, TypeError):
-        if directory is not None:
-            try:
-                (directory / "request.json").unlink(missing_ok=True)
-                directory.rmdir()
-            except OSError:
-                pass
-        return None

@@ -4,42 +4,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from functools import wraps
-from inspect import signature
-from typing import Any, Concatenate, ParamSpec
+from collections.abc import Mapping
+from typing import Any
 
 # ruff: noqa: F403,F405
 from .store_base import *
-from .store_resume import update_request_resume as _update_request_resume
-
-_P = ParamSpec("_P")
-
-
-def _with_resume_connection(
-    update: Callable[Concatenate[sqlite3.Connection, _P], None],
-) -> Callable[Concatenate[StoreSessionsMixin, _P], None]:
-    """Open the Guard store connection around a request-resume update."""
-
-    @wraps(update)
-    def _method(self: StoreSessionsMixin, /, *args: _P.args, **kwargs: _P.kwargs) -> None:
-        with self._connect() as connection:
-            update(connection, *args, **kwargs)
-
-    wrapped_signature = signature(update)
-    _method.__signature__ = wrapped_signature.replace(parameters=list(wrapped_signature.parameters.values())[1:])
-    return _method
 
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _aware_instant(now: str) -> str:
-    """Validate an ISO instant; a naive one means host-local time, as `datetime.timestamp()` reads it."""
-
-    parsed = datetime.fromisoformat(now)
-    return now if parsed.tzinfo is not None else parsed.astimezone().isoformat()
 
 
 def _guard_session_row(row: Mapping[str, Any]) -> dict[str, object]:
@@ -185,38 +158,11 @@ class StoreSessionsMixin:
         row = self._native_store_call("get_guard_operation_for_approval_request", {"request_id": request_id})
         return None if row is None else _guard_operation_row(row)
 
-    def seed_request_resume(
-        self,
-        *,
-        request_id: str,
-        operation_id: str | None,
-        harness: str,
-        strategy: str,
-        supported: bool,
-        thread_id: str | None,
-        now: str,
-    ) -> None:
-        with self._connect() as connection:
-            persist_request_resume_seed(
-                connection,
-                request_id=request_id,
-                operation_id=operation_id,
-                harness=harness,
-                strategy=strategy,
-                supported=supported,
-                thread_id=thread_id,
-                now=now,
-            )
-
     def get_request_resume(self, request_id: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            return load_request_resume(connection, request_id)
+        return self._native_store_call("get_request_resume", {"request_id": request_id})
 
     def get_latest_request_resume(self, *, harness: str | None = None) -> dict[str, object] | None:
-        with self._connect() as connection:
-            return load_latest_request_resume(connection, harness=harness)
-
-    update_request_resume = _with_resume_connection(_update_request_resume)
+        return self._native_store_call("get_latest_request_resume", {"harness": harness})
 
     def add_guard_operation_item(
         self,
@@ -240,54 +186,6 @@ class StoreSessionsMixin:
             },
         )
         return _guard_item_row(row)
-
-    def list_guard_operation_items(self, operation_id: str) -> list[dict[str, object]]:
-        rows = self._native_store_call("list_guard_operation_items", {"operation_id": operation_id})
-        return [_guard_item_row(row) for row in rows]
-
-    def attach_guard_client(
-        self,
-        *,
-        client_id: str,
-        surface: str,
-        session_id: str | None,
-        metadata: dict[str, object],
-        lease_seconds: int,
-        now: str,
-    ) -> dict[str, object]:
-        now = _aware_instant(now)
-        row = self._native_store_call(
-            "attach_guard_client",
-            {
-                "client_id": client_id,
-                "surface": surface,
-                "session_id": session_id,
-                "metadata_json": json.dumps(metadata),
-                "lease_id": uuid4().hex,
-                "lease_seconds": lease_seconds,
-                "now": now,
-            },
-        )
-        return _guard_attachment_row(row)
-
-    def renew_guard_client_attachment(
-        self,
-        *,
-        client_id: str,
-        lease_id: str,
-        lease_seconds: int,
-        now: str,
-    ) -> dict[str, object] | None:
-        now = _aware_instant(now)
-        row = self._native_store_call(
-            "renew_guard_client_attachment",
-            {"client_id": client_id, "lease_id": lease_id, "lease_seconds": lease_seconds, "now": now},
-        )
-        return None if row is None else _guard_attachment_row(row)
-
-    def get_guard_client_attachment(self, client_id: str) -> dict[str, object] | None:
-        row = self._native_store_call("get_guard_client_attachment", {"client_id": client_id})
-        return None if row is None else _guard_attachment_row(row)
 
     def list_guard_client_attachments(
         self,

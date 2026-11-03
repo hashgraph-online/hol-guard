@@ -1,21 +1,19 @@
-# pyright: reportPrivateUsage=false
-"""Private correlation-key lifecycle and proven request-ID adapters."""
+"""Read-only correlation-key access and proven request-ID adapters.
+
+The resident creates the per-install key on its first evidence write
+(``rust/crates/guard-runtime/src/hook_evidence_correlation.rs``). Python only
+reads an existing key and derives the request handle it pairs evidence by.
+"""
 
 from __future__ import annotations
 
 import base64
 import hashlib
 import json
-import os
-import secrets
-import stat
-import tempfile
 from collections.abc import Mapping
-from contextlib import suppress
 from pathlib import Path
 from typing import Final, cast
 
-from ..durable_io import fsync_directory as _fsync_directory
 from ..private_file_io import read_private_regular_bytes
 from .command_activity_contract import CorrelationHandle, CorrelationKind
 from .command_activity_privacy import (
@@ -26,9 +24,6 @@ from .command_activity_privacy import (
 
 COMMAND_ACTIVITY_CORRELATION_KEY_SCHEMA_VERSION: Final = "guard.command-activity-correlation-key.v1"
 COMMAND_ACTIVITY_CORRELATION_KEY_FILE: Final = "command-activity-correlation-key.json"
-_PRIVATE_FILE_MODE: Final = 0o600
-_PRIVATE_DIRECTORY_MODE: Final = 0o700
-_KEY_BYTES: Final = 32
 
 # Only native, top-level request identifiers documented by these hook adapters
 # can pair pre- and post-execution evidence. Content and session fields are absent.
@@ -53,46 +48,6 @@ _PROVEN_REQUEST_ID_FIELDS: Final[dict[tuple[str, str], str]] = {
     ("omp", "PreToolUse"): "tool_call_id",
     ("omp", "PostToolUse"): "tool_call_id",
 }
-
-
-def load_or_create_installation_correlation_key(guard_home: Path) -> InstallationCorrelationKey:
-    """Load one per-install key, creating it without exposing partial contents."""
-
-    key_path = _prepare_key_path(guard_home)
-    try:
-        return _read_key(key_path)
-    except FileNotFoundError:
-        pass
-
-    generated = _new_key()
-    temporary_path = _write_private_temporary(key_path, _serialize_key(generated))
-    try:
-        try:
-            os.link(temporary_path, key_path)
-            _set_private_mode(key_path)
-            _fsync_directory(key_path.parent)
-            return generated
-        except FileExistsError:
-            return _read_key(key_path)
-    finally:
-        with suppress(OSError):
-            temporary_path.unlink()
-
-
-def rotate_installation_correlation_key(guard_home: Path) -> InstallationCorrelationKey:
-    """Atomically replace the active key and return its new versioned identity."""
-
-    key_path = _prepare_key_path(guard_home)
-    generated = _new_key()
-    temporary_path = _write_private_temporary(key_path, _serialize_key(generated))
-    try:
-        os.replace(temporary_path, key_path)
-        _set_private_mode(key_path)
-        _fsync_directory(key_path.parent)
-    finally:
-        with suppress(OSError):
-            temporary_path.unlink()
-    return generated
 
 
 def derive_proven_request_correlation(
@@ -130,29 +85,6 @@ def derive_proven_request_correlation(
     return derive_correlation_handle(identifier, key)
 
 
-def _prepare_key_path(guard_home: Path) -> Path:
-    guard_home.mkdir(parents=True, exist_ok=True, mode=_PRIVATE_DIRECTORY_MODE)
-    if not guard_home.is_dir():
-        raise ValueError("guard_home must be a directory")
-    return guard_home / COMMAND_ACTIVITY_CORRELATION_KEY_FILE
-
-
-def _new_key() -> InstallationCorrelationKey:
-    material = secrets.token_bytes(_KEY_BYTES)
-    fingerprint = hashlib.sha256(material).hexdigest()[:16]
-    return InstallationCorrelationKey(key_id=f"correlation.v1.{fingerprint}", material=material)
-
-
-def _serialize_key(key: InstallationCorrelationKey) -> bytes:
-    material = key._material
-    payload = {
-        "schema_version": COMMAND_ACTIVITY_CORRELATION_KEY_SCHEMA_VERSION,
-        "key_id": key.key_id,
-        "material": base64.b64encode(material).decode("ascii"),
-    }
-    return (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode("ascii")
-
-
 def load_existing_installation_correlation_key(guard_home: Path) -> InstallationCorrelationKey | None:
     """Read existing private correlation material without creation or chmod.
 
@@ -167,18 +99,6 @@ def load_existing_installation_correlation_key(guard_home: Path) -> Installation
     if raw is None:
         return None
     return _parse_key(raw.decode("ascii"))
-
-
-def _read_key(path: Path) -> InstallationCorrelationKey:
-    file_stat = path.lstat()
-    if not stat.S_ISREG(file_stat.st_mode):
-        raise ValueError("command activity correlation key must be a regular file")
-    _set_private_mode(path)
-    try:
-        raw = path.read_text(encoding="ascii")
-    except (OSError, UnicodeError) as error:
-        raise ValueError("invalid command activity correlation key file") from error
-    return _parse_key(raw)
 
 
 def _parse_key(raw: str) -> InstallationCorrelationKey:
@@ -208,35 +128,9 @@ def _parse_key(raw: str) -> InstallationCorrelationKey:
     return key
 
 
-def _write_private_temporary(path: Path, payload: bytes) -> Path:
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    temporary_path = Path(temporary_name)
-    try:
-        if os.name != "nt":
-            os.fchmod(descriptor, _PRIVATE_FILE_MODE)
-        with os.fdopen(descriptor, "wb") as handle:
-            descriptor = -1
-            _ = handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        return temporary_path
-    except BaseException:
-        if descriptor >= 0:
-            os.close(descriptor)
-        with suppress(OSError):
-            temporary_path.unlink()
-        raise
-
-
-def _set_private_mode(path: Path) -> None:
-    if os.name != "nt":
-        os.chmod(path, _PRIVATE_FILE_MODE, follow_symlinks=False)
-
-
 __all__ = [
     "COMMAND_ACTIVITY_CORRELATION_KEY_FILE",
     "COMMAND_ACTIVITY_CORRELATION_KEY_SCHEMA_VERSION",
     "derive_proven_request_correlation",
-    "load_or_create_installation_correlation_key",
-    "rotate_installation_correlation_key",
+    "load_existing_installation_correlation_key",
 ]

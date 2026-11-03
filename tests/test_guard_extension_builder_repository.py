@@ -269,9 +269,12 @@ def test_ordinary_write_failure_rolls_back_completed_changes(tmp_path: Path, mon
 
     def fail_second(source: Path, destination: Path) -> None:
         nonlocal calls
-        calls += 1
-        if calls == 2:
-            raise OSError("Synthetic write failure")
+        # os.replace is process-wide; planning stages native packs through it
+        # before the write stage, so only replacements inside the repository count.
+        if Path(destination).is_relative_to(repository):
+            calls += 1
+            if calls == 2:
+                raise OSError("Synthetic write failure")
         real_replace(source, destination)
 
     monkeypatch.setattr(repository_write.os, "replace", fail_second)
@@ -295,7 +298,8 @@ def test_concurrent_human_edit_is_preserved_during_rollback(tmp_path: Path, monk
     def replace_then_edit(source: Path, destination: Path) -> None:
         nonlocal injected
         real_replace(source, destination)
-        if not injected:
+        # Planning stages native packs through the process-wide os.replace first.
+        if not injected and Path(destination).is_relative_to(repository):
             injected = True
             project.write_bytes(modified)
 

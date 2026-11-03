@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use guard_runtime_windows_process::{
-    handle_file_id, open_bound_regular_file, open_bound_replaceable_file, regular_file_id,
+    handle_file_id, handle_final_path, open_bound_regular_file, open_bound_replaceable_file,
+    regular_file_id,
 };
 
 struct Fixture(PathBuf);
@@ -61,6 +62,30 @@ fn bound_open_rejects_a_junction_ancestor() {
     assert!(status.success());
     let error = open_bound_regular_file(&junction.join("source.rs")).unwrap_err();
     assert_eq!(error.kind(), ErrorKind::InvalidData);
+}
+
+/// A handle opened through a junction reports the directory the junction
+/// points at, which is what a scope check must compare, not the path that
+/// was opened.
+#[test]
+fn a_handle_reports_where_it_points_not_how_it_was_opened() {
+    let fixture = Fixture::new("final-path");
+    let real = fixture.0.join("real");
+    fs::create_dir_all(&real).unwrap();
+    fs::write(real.join("source.rs"), b"fn main() {}\n").unwrap();
+    let junction = fixture.0.join("junction");
+    let status = Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(&junction)
+        .arg(&real)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let opened = fs::File::open(junction.join("source.rs")).unwrap();
+    let canonical_real = fs::canonicalize(&real).unwrap();
+    let final_path = handle_final_path(&opened).unwrap();
+    assert_eq!(final_path, canonical_real.join("source.rs"));
+    assert!(!final_path.starts_with(fs::canonicalize(&fixture.0).unwrap().join("junction")));
 }
 
 #[test]

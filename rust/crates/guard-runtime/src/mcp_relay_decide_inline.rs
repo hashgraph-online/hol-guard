@@ -57,7 +57,12 @@ impl Reply {
 
     /// Classify one `elicitation/create` response as the proxy does.
     pub(crate) fn classify(response: &Value) -> Reply {
-        let payload = approval_payload(response);
+        Reply::classify_payload(&approval_payload(response))
+    }
+
+    /// Classify an answer the caller already reduced to its payload, which the
+    /// proxy does for a prompt it timed out or saw no answer to at all.
+    pub(crate) fn classify_payload(payload: &Value) -> Reply {
         if payload.get("action").and_then(Value::as_str) != Some(ACCEPT) {
             // A cancel, a decline, an error or a timeout: `_approval_denies`
             // and `_approval_invalid` both read `accept` first, so the prompt

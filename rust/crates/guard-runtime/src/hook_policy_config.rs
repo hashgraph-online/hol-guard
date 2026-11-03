@@ -128,7 +128,7 @@ fn apply_explicit(
     events: &mut Vec<Value>,
 ) -> GuardAction {
     let resolved = typed(action).unwrap_or(GuardAction::RequireReapproval);
-    if !posture_stops(config, risk_class, Some(art), art.confidence_strong) {
+    if !posture_stops(config, risk_class, Some(art), art.confidence_strong()) {
         return resolved;
     }
     if resolved != GuardAction::Block {

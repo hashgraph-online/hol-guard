@@ -3,12 +3,33 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
+
+# The deny text for a native result that carries no reason of its own.
+# `blocked_request_mode::BLOCKED_REASON` in Rust is the same string.
+BLOCKED_REASON = "HOL Guard blocked this action."
 
 SAFE_ALTERNATIVE_GUIDANCE = (
     "This action remains blocked. Continue with a safe, permitted alternative that respects "
     "the same protection. Do not retry an equivalent command, bypass Guard, or seek permission "
     "to run it. If no safe alternative can complete the task, explain the limitation."
 )
+
+
+def approval_wait_hint(request_id: str, *, guard_home: Path, home_dir: Path | None = None) -> str:
+    """Transport the resident's read-only notification for this queued request."""
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        result = native_runner_authority(
+            "approval_wait_hint",
+            {"request_id": request_id, "guard_home": str(guard_home), "home_dir": str(home_dir or Path.home())},
+            guard_home=guard_home,
+        )
+    except NativeRunnerAuthorityError:
+        return ""
+    hint = result.get("hint")
+    return hint if isinstance(hint, str) else ""
 
 
 def asks_for_approval(config: object) -> bool:
@@ -80,14 +101,6 @@ def connector_setup_reason(
     return " ".join(part for part in (reason, redirect, SAFE_ALTERNATIVE_GUIDANCE) if part)
 
 
-def is_unlinked_connector_setup_reason(text: object) -> bool:
-    """Whether ``text`` carries a default-mode connector setup reason.
-
-    Harness renderers add no approval link and no approval step to it.
-    """
-    return isinstance(text, str) and CONNECTOR_SETUP_REASON_PREFIX in text and SAFE_ALTERNATIVE_GUIDANCE in text
-
-
 # Plain-language next steps keyed by the reason code Rust already returned.
 _REASON_CODE_HINTS = {
     "native_destructive_command": (
@@ -100,6 +113,12 @@ _REASON_CODE_HINTS = {
         "--ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci "
         "--ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this "
         "was already that form, reuse dependencies that are already installed where you can."
+    ),
+    # Cloud gave no verdict, so the lockfile-only advice above would be paused the same way.
+    "native_package_cloud_unavailable": (
+        "Guard Cloud could not check this package, so Guard paused the install instead of "
+        "treating it as safe. This is not a finding about the package, and another form of the "
+        "same install is paused the same way until Guard Cloud can check it."
     ),
     "native_network_review": "This makes a network request that Guard has not seen before.",
     "native_file_read_review": (

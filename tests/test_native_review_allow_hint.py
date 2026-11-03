@@ -1,188 +1,326 @@
-"""Native daemon reviews store an Extensions allow hint only when enabling it would really allow."""
+"""The daemon asks the resident for the Extensions hints instead of reviewing the command itself.
+
+The resident's ``extension_review_hint`` op owns the review, the all-or-nothing
+settlement gate and the coverage read-out (``hook_direct_review_hint_op.rs``).
+These tests pin what the daemon still decides: which command and launch
+directory it asks about, that an answer is shape-checked before it is stored,
+and that a failed or late answer never touches the review itself.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
-from codex_plugin_scanner.guard.daemon.native_review_allow_hint import hint_for_reviewed_command
-from codex_plugin_scanner.guard.hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+import pytest
+
+from codex_plugin_scanner.guard.daemon import native_review_allow_hint as module
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import validated_extension_allow_hint
-from codex_plugin_scanner.guard.runtime.extension_control_authority import (
-    AuthorityHealth,
-    ExtensionControlAuthorityView,
+from codex_plugin_scanner.guard.runtime.extension_coverage_hint import validated_extension_coverage_hint
+
+_ADMITTED = SimpleNamespace(authority_failure=None, awaiting_enrollment=False)
+
+
+def _record_asks(monkeypatch, answer: dict[str, object] | None = None) -> list[dict[str, Any]]:
+    asked: list[dict[str, Any]] = []
+
+    def ask(payload, **kwargs: Any) -> dict[str, object] | None:
+        asked.append({"payload": payload, **kwargs})
+        return answer
+
+    monkeypatch.setattr(module, "_ask_review_hint", ask)
+    return asked
+
+
+def _pending_shell(workspace: Path, cwd: str | None = None, **tool_input: object) -> dict[str, object]:
+    raw_payload: dict[str, object] = {
+        "tool_name": "Shell",
+        "tool_input": {"command": "git fetch origin main", **tool_input},
+    }
+    if cwd is not None:
+        raw_payload["cwd"] = cwd
+    return {
+        "status": "pending",
+        "workspace": str(workspace),
+        "raw_command_text": "git fetch origin main",
+        "action_envelope_json": {
+            "action_type": "shell_command",
+            "command": "git fetch origin main",
+            "raw_payload_redacted": raw_payload,
+        },
+    }
+
+
+def test_live_recovery_asks_about_the_command_alone_in_its_launch_directory(monkeypatch, tmp_path: Path) -> None:
+    asked = _record_asks(monkeypatch, answer=dict(_LIVE_ALLOW))
+    sub_cwd = tmp_path / "subdir"
+    sub_cwd.mkdir()
+
+    hint = module.live_approval_extension_hint(
+        _pending_shell(tmp_path, str(sub_cwd)), guard_home=tmp_path, snapshot=_ADMITTED
+    )
+
+    assert hint == _LIVE_ALLOW
+    assert asked[0]["payload"] == {"tool_input": {"command": "git fetch origin main"}, "cwd": str(sub_cwd.resolve())}
+    assert asked[0]["guard_home"] == tmp_path
+    assert asked[0]["workspace"] is None
+    assert asked[0].get("paused") is None
+    assert 0 < asked[0]["budget_seconds"] <= 1.2
+
+
+def test_live_recovery_skips_a_tool_call_that_carried_more_than_the_command(monkeypatch, tmp_path: Path) -> None:
+    asked = _record_asks(monkeypatch, answer=dict(_LIVE_ALLOW))
+
+    approval = _pending_shell(tmp_path, str(tmp_path), path=".env")
+
+    assert module.live_approval_extension_hint(approval, guard_home=tmp_path, snapshot=_ADMITTED) is None
+    assert asked == []
+
+
+def test_live_recovery_resolves_a_home_relative_launch_directory(monkeypatch, tmp_path: Path) -> None:
+    asked = _record_asks(monkeypatch, answer=dict(_LIVE_ALLOW))
+    home = tmp_path / "home"
+    project = home / "project"
+    project.mkdir(parents=True)
+    monkeypatch.setattr(module.Path, "home", classmethod(lambda _cls: home))
+
+    hint = module.live_approval_extension_hint(
+        _pending_shell(tmp_path, "~/project", working_directory="~/project"), guard_home=tmp_path, snapshot=_ADMITTED
+    )
+
+    assert hint is not None
+    assert asked[0]["payload"]["cwd"] == str(project.resolve())
+    assert asked[0]["home_dir"] == home
+
+
+def test_a_redacted_launch_directory_recovers_neither_hint(monkeypatch, tmp_path: Path) -> None:
+    """A review run somewhere else names neither the settlement nor the extension.
+
+    An approval queued from a directory outside the home directory stores
+    ``.../name``, so the command cannot be re-reviewed where it really ran.
+    Extension rules read the directory — Git matches a fetch differently inside
+    a repository than outside one — so a review run in the workspace can name
+    an extension that never governed the command. A step label pointing at a
+    permission to pre-configure is as wrong as a settlement promise when it
+    names the wrong extension, so this row asks nothing.
+    """
+
+    asked = _record_asks(monkeypatch, answer=dict(_LIVE_ALLOW))
+    home = tmp_path / "home"
+    (home / "project").mkdir(parents=True)
+    monkeypatch.setattr(module.Path, "home", classmethod(lambda _cls: home))
+
+    approval = _pending_shell(tmp_path, ".../project", working_directory=".../project")
+
+    assert module.live_approval_extension_hint(approval, guard_home=tmp_path, snapshot=_ADMITTED) is None
+    assert asked == []
+
+
+@pytest.mark.parametrize(
+    ("approval", "snapshot"),
+    [
+        ({"status": "approved", "raw_command_text": "git fetch origin main"}, _ADMITTED),
+        ({"status": "pending", "action_envelope_json": {"action_type": "file_write"}}, _ADMITTED),
+        ({"status": "pending", "raw_command_text": "  "}, _ADMITTED),
+        (
+            {"status": "pending", "raw_command_text": "git fetch origin main"},
+            SimpleNamespace(authority_failure="tampered", awaiting_enrollment=False),
+        ),
+    ],
 )
-from tests.native_command_test_support import project_native_review_fixture, real_native_review_fixture
+def test_live_recovery_asks_only_for_a_pending_shell_command_under_an_admitted_authority(
+    monkeypatch, tmp_path: Path, approval: dict[str, object], snapshot: object
+) -> None:
+    asked = _record_asks(monkeypatch, answer=dict(_LIVE_ALLOW))
 
-_UNSTAMPED = object()
-
-
-def _hint(command: str, tmp_path: Path, *, controls=(), native_result_override: dict[str, object] | None = None):
-    fixture = real_native_review_fixture(command, cwd=tmp_path, home_dir=tmp_path, controls=controls)
-    reviewed = project_native_review_fixture(fixture, cwd=tmp_path, home_dir=tmp_path)
-    native_result = {**fixture.payload, **(native_result_override or {})}
-    return fixture, hint_for_reviewed_command(
-        native_result=native_result,
-        reviewed=reviewed,
-        snapshot=fixture.snapshot,
-        command=command,
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
+    assert module.live_approval_extension_hint(approval, guard_home=tmp_path, snapshot=snapshot) is None
+    assert asked == []
 
 
-def test_plain_origin_fetch_hints_the_origin_refresh_permission(tmp_path: Path) -> None:
-    _fixture, hint = _hint("git fetch origin main", tmp_path)
+def test_a_never_enrolled_device_still_asks(monkeypatch, tmp_path: Path) -> None:
+    asked = _record_asks(monkeypatch, answer=dict(_LIVE_ALLOW))
+    snapshot = SimpleNamespace(authority_failure="unenrolled", awaiting_enrollment=True)
 
-    assert hint is not None
-    assert hint["permission_ids"] == ["command.git.permission.unverified-fetch"]
-    assert hint["rule_ids"] == ["command.git.unverified-fetch"]
-    assert hint["catalog_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    assert validated_extension_allow_hint(hint) == hint
-    assert "main" not in repr(hint)
-
-
-def test_uncertain_fetch_forms_store_no_hint(tmp_path: Path) -> None:
-    for command in (
-        "git -c core.sshCommand=payload fetch origin",
-        "git fetch origin --upload-pack=payload",
-        "git fetch https://example.invalid/project.git",
-    ):
-        _fixture, hint = _hint(command, tmp_path)
-        assert hint is None, command
-
-
-def test_no_hint_when_the_origin_refresh_permission_is_already_allowed(tmp_path: Path) -> None:
-    _fixture, hint = _hint(
-        "git fetch origin",
-        tmp_path,
-        controls=(("permission", "command.git.permission.unverified-fetch", "enabled"),),
-    )
-
-    assert hint is None
-
-
-def test_hint_requires_the_fresh_evidence_to_match_the_paused_decision(tmp_path: Path) -> None:
-    fixture, _hint_value = _hint("git fetch origin", tmp_path)
-    binding = dict(fixture.payload["command_extensions"]["binding"])  # type: ignore[index]
-    binding["observations_digest"] = "0" * 64
-
-    _fixture, hint = _hint(
-        "git fetch origin",
-        tmp_path,
-        native_result_override={"command_extensions": {**fixture.payload["command_extensions"], "binding": binding}},  # type: ignore[dict-item]
-    )
-
-    assert hint is None
-
-
-def test_no_hint_for_a_blocked_native_decision(tmp_path: Path) -> None:
-    _fixture, hint = _hint("git fetch origin", tmp_path, native_result_override={"minimum_action": "block"})
-
-    assert hint is None
-
-
-def test_no_hint_when_the_paused_reason_differs(tmp_path: Path) -> None:
-    _fixture, hint = _hint("git fetch origin", tmp_path, native_result_override={"reason_code": "native_other_floor"})
-
-    assert hint is None
-
-
-class _Store:
-    def __init__(self, guard_home: Path) -> None:
-        self.guard_home = guard_home
-
-    def read_extension_control_authority_for_registry(self, _registry, *, read_only: bool) -> object:
-        assert read_only is True
-        return ExtensionControlAuthorityView(
-            health=AuthorityHealth.PROTECTED, revision=1, catalog_digest="sha256:test", layers=()
+    assert (
+        module.live_approval_extension_hint(
+            {"status": "pending", "workspace": str(tmp_path), "raw_command_text": "git fetch origin main"},
+            guard_home=tmp_path,
+            snapshot=snapshot,
         )
+        == _LIVE_ALLOW
+    )
+    assert asked[0]["payload"] == {"tool_input": {"command": "git fetch origin main"}, "cwd": str(tmp_path.resolve())}
 
 
-def _queue_hint(
-    monkeypatch,
-    tmp_path: Path,
-    *,
-    tool_input: dict[str, object],
-    deadline: float | None = None,
-    stamp: object = _UNSTAMPED,
-):
-    import time
+def test_the_queue_time_ask_carries_only_a_budget_without_a_deadline() -> None:
+    assert module.native_review_hint_ask(None) == {"budget_ms": 5000}
 
-    from codex_plugin_scanner.guard.daemon import native_review_allow_hint as module
-    from codex_plugin_scanner.guard.native_route_receipt import native_hook_route, record_native_hook_route
 
-    fixture = real_native_review_fixture("git fetch origin main", cwd=tmp_path, home_dir=tmp_path)
-    reviewed = project_native_review_fixture(fixture, cwd=tmp_path, home_dir=tmp_path)
-    calls: list[dict[str, object]] = []
+def test_queue_time_hints_leave_the_hook_time_to_persist_the_review(monkeypatch) -> None:
+    monkeypatch.setattr(module.time, "monotonic", lambda: 100.0)
 
-    def review(_command: str, **kwargs: object):
-        calls.append(kwargs)
-        record_native_hook_route("native_fail_safe")
-        return reviewed
+    assert module.native_review_hint_ask(100.75) == {"budget_ms": 400}
+    # A short budget still asks: the resident decides whether it is enough for
+    # an extension hint, and a connector's setup hint needs no minimum.
+    assert module.native_review_hint_ask(100.45) == {"budget_ms": 100}
+    # Nothing left after the margin: the review is persisted without hints.
+    for deadline in (99.0, 100.0, 100.0 + module._SAFETY_MARGIN_SECONDS / 2):
+        assert module.native_review_hint_ask(deadline) is None
 
-    monkeypatch.setattr(module, "review_command_native", review)
+
+def _answering(monkeypatch, hint: object) -> list[dict[str, Any]]:
+    """Stand in for the resident: record the query and hand ``hint`` to the validator."""
+
+    queries: list[dict[str, Any]] = []
+
+    def decide(query, _guard_home, _fields, validate, **kwargs: Any) -> None:
+        queries.append({"query": query, **kwargs})
+        validate({"hint": hint})
+
+    monkeypatch.setattr(module, "_decide", decide)
+    return queries
+
+
+def test_the_query_sends_every_field_the_resident_digests(monkeypatch, tmp_path: Path) -> None:
+    queries = _answering(monkeypatch, None)
+    payload = {"tool_input": {"command": "git status"}}
+
+    assert (
+        module._ask_review_hint(payload, guard_home=tmp_path, workspace=None, home_dir=None, budget_seconds=30) is None
+    )
+
+    query = queries[0]["query"]
+    assert query == {"kind": "review_hint", "payload": payload, "workspace": "", "home_dir": "", "budget_ms": 10_000}
+    assert queries[0]["operation"].timeout_seconds == 10.0
+
+    module._ask_review_hint(payload, guard_home=tmp_path, workspace=tmp_path, home_dir=tmp_path, budget_seconds=0.5)
+    assert queries[1]["query"]["workspace"] == str(tmp_path)
+    assert queries[1]["query"]["budget_ms"] == 500
+
+
+def test_a_spent_budget_never_reaches_the_resident(monkeypatch, tmp_path: Path) -> None:
+    queries = _answering(monkeypatch, dict(_LIVE_ALLOW))
+
+    for budget in (0.0, 0.0004, -1.0):
+        assert (
+            module._ask_review_hint({}, guard_home=tmp_path, workspace=None, home_dir=None, budget_seconds=budget)
+            is None
+        )
+    assert queries == []
+
+
+def test_an_answer_is_shape_checked_before_it_is_stored(monkeypatch, tmp_path: Path) -> None:
+    carried = {**_LIVE_ALLOW, "coverage": _STORED_COVERAGE}
+    _answering(monkeypatch, carried)
+    hint = module._ask_review_hint({}, guard_home=tmp_path, workspace=None, home_dir=None, budget_seconds=1)
+    assert validated_extension_allow_hint(hint) == validated_extension_allow_hint(_LIVE_ALLOW)
+    assert validated_extension_coverage_hint(hint) == validated_extension_coverage_hint(_STORED_COVERAGE)
+
+    _answering(monkeypatch, {"schema": "guard.extension-allow-hint.v1", "permission_ids": ["../../etc"]})
+    assert module._ask_review_hint({}, guard_home=tmp_path, workspace=None, home_dir=None, budget_seconds=1) is None
+
+
+def test_a_resident_failure_never_reaches_the_review(monkeypatch, tmp_path: Path) -> None:
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("native_extension_review_hint_unavailable")
+
+    monkeypatch.setattr(module, "_decide", unavailable)
+
+    assert module._ask_review_hint({}, guard_home=tmp_path, workspace=None, home_dir=None, budget_seconds=1) is None
+
+
+_STORED_COVERAGE: dict[str, object] = {
+    "schema": "guard.extension-coverage-hint.v1",
+    "catalog_digest": "a" * 64,
+    "segments": [
+        {
+            "index": 0,
+            "executable": "git",
+            "extension_ids": ["command.git"],
+            "rule_ids": ["command.git.unverified-fetch"],
+            "permission_ids": [],
+        }
+    ],
+}
+_LIVE_ALLOW: dict[str, object] = {
+    "schema": "guard.extension-allow-hint.v1",
+    "permission_ids": ["command.git.permission.fetch"],
+    "rule_ids": ["command.git.unverified-fetch"],
+    "extension_ids": ["command.git"],
+    "relied_permission_ids": [],
+    "catalog_digest": "b" * 64,
+}
+
+
+def test_a_stored_coverage_only_hint_still_re_reviews_for_the_settlement(monkeypatch, tmp_path: Path) -> None:
+    """Coverage in the stored column must not read as "the settlement was decided".
+
+    A queue-time review that ran out of budget, missed the digest or found no
+    all-or-nothing settlement still stores the coverage it read out of evidence
+    it already had. Before coverage existed, that row stored nothing and the
+    read path re-reviewed it; a row that now carries coverage has to be
+    re-reviewed the same way or it silently loses its Always allow offer.
+    """
+
+    live_coverage = {**_STORED_COVERAGE, "catalog_digest": "c" * 64}
     monkeypatch.setattr(
-        module.ExtensionControlRuntimeSnapshot, "from_authority_view", staticmethod(lambda _view: fixture.snapshot)
-    )
-    payload: dict[str, object] = {"tool_name": "Bash", "tool_input": tool_input}
-    if stamp is not _UNSTAMPED:
-        payload[HOOK_EXECUTION_ENVIRONMENT_KEY] = stamp
-    record_native_hook_route("native_resident")
-    hint = module.native_review_extension_allow_hint(
-        _Store(tmp_path),
-        payload=payload,
-        native_result=fixture.payload,
-        workspace=tmp_path,
-        home_dir=tmp_path,
-        deadline=time.monotonic() + 5 if deadline is None else deadline,
-    )
-    return hint, calls, native_hook_route()
-
-
-def test_queue_hint_is_advisory_and_keeps_the_hook_route(monkeypatch, tmp_path: Path) -> None:
-    hint, calls, route = _queue_hint(monkeypatch, tmp_path, tool_input={"command": "git fetch origin main"})
-
-    assert hint is not None
-    assert hint["permission_ids"] == ["command.git.permission.unverified-fetch"]
-    assert route == "native_resident"
-    assert calls[0]["record_health"] is False
-    assert 0 < float(calls[0]["timeout_seconds"]) <= 0.5  # type: ignore[arg-type]
-
-
-def test_queue_hint_skips_tool_calls_with_extra_content(monkeypatch, tmp_path: Path) -> None:
-    hint, calls, _route = _queue_hint(
-        monkeypatch, tmp_path, tool_input={"command": "git fetch origin main", "path": ".env"}
+        module,
+        "live_approval_extension_hint",
+        lambda *_args, **_kwargs: {**_LIVE_ALLOW, "coverage": live_coverage},
     )
 
-    assert hint is None
-    assert calls == []
-
-
-def test_queue_hint_skips_when_the_hook_deadline_is_near(monkeypatch, tmp_path: Path) -> None:
-    import time
-
-    hint, calls, _route = _queue_hint(
-        monkeypatch, tmp_path, tool_input={"command": "git fetch origin main"}, deadline=time.monotonic() + 0.3
+    merged = module.recovered_approval_extension_hint(
+        _STORED_COVERAGE, {"status": "pending"}, guard_home=tmp_path, snapshot=object()
     )
 
-    assert hint is None
-    assert calls == []
+    assert validated_extension_allow_hint(merged) == validated_extension_allow_hint(_LIVE_ALLOW)
+    # The queue-time coverage saw the directory the command really ran in.
+    assert validated_extension_coverage_hint(merged) == validated_extension_coverage_hint(_STORED_COVERAGE)
 
 
-def test_queue_hint_reviews_with_the_shell_the_hook_was_stamped_from(monkeypatch, tmp_path: Path) -> None:
-    stamp = {"environment_names": ["PATH"], "home": str(tmp_path)}
-    _hint_value, calls, _route = _queue_hint(
-        monkeypatch, tmp_path, tool_input={"command": "git fetch origin main"}, stamp=stamp
-    )
+def test_a_stored_settlement_and_a_connector_hint_are_left_alone(monkeypatch, tmp_path: Path) -> None:
+    def refuse(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise AssertionError("a stored hint that answered the settlement must not be re-reviewed")
 
-    assert calls[0]["execution_environment"] == stamp
+    monkeypatch.setattr(module, "live_approval_extension_hint", refuse)
+    stored = {**_LIVE_ALLOW, "coverage": _STORED_COVERAGE}
+    connector = {"schema": "guard.connector-setup-hint.v1", "cli_id": "local-cli.gh"}
 
-
-def test_queue_hint_reviews_without_an_environment_a_worker_could_not_stamp(monkeypatch, tmp_path: Path) -> None:
-    for stamp in (None, "not-a-mapping"):
-        _hint_value, calls, _route = _queue_hint(
-            monkeypatch, tmp_path, tool_input={"command": "git fetch origin main"}, stamp=stamp
+    for hint in (stored, _LIVE_ALLOW, connector):
+        assert (
+            module.recovered_approval_extension_hint(
+                hint, {"status": "pending"}, guard_home=tmp_path, snapshot=object()
+            )
+            is hint
         )
 
-        assert calls[0]["execution_environment"] is None, stamp
+
+def test_a_row_with_nothing_stored_keeps_the_read_time_recovery(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(module, "live_approval_extension_hint", lambda *_args, **_kwargs: dict(_LIVE_ALLOW))
+    assert (
+        module.recovered_approval_extension_hint(None, {"status": "pending"}, guard_home=tmp_path, snapshot=object())
+        == _LIVE_ALLOW
+    )
+
+    monkeypatch.setattr(module, "live_approval_extension_hint", lambda *_args, **_kwargs: None)
+    assert (
+        module.recovered_approval_extension_hint(None, {"status": "pending"}, guard_home=tmp_path, snapshot=object())
+        is None
+    )
+
+
+def test_python_and_resident_command_only_keys_stay_identical() -> None:
+    import re
+
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "rust"
+        / "crates"
+        / "guard-runtime"
+        / "src"
+        / "hook_direct_review_request.rs"
+    ).read_text(encoding="utf-8")
+    block = re.search(r"const COMMAND_ONLY_INPUT_KEYS: \[&str; \d+\] = \[(.*?)\];", source, re.DOTALL)
+    assert block is not None
+    assert set(re.findall(r'"([^"]+)"', block.group(1))) == set(module._COMMAND_ONLY_INPUT_KEYS)

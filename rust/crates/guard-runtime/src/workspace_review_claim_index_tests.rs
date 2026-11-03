@@ -1,15 +1,11 @@
 use super::*;
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn root() -> PathBuf {
     let path = std::env::temp_dir().join(format!(
         "guard-claim-index-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     crate::resident_state::ensure_private_directory(&path, true).unwrap()
 }
@@ -24,7 +20,12 @@ fn claim(index: usize) -> WorkspaceReviewClaimV1 {
     }
 }
 
+// Building 1,100 claims writes every node through the owner-only directory
+// binding, which takes about half an hour on a Windows runner. The tree logic
+// this checks does not depend on the platform, and the smaller tests below
+// still store and read claims through the Windows binding.
 #[test]
+#[cfg_attr(windows, ignore = "the scale run is checked on Unix")]
 fn permanent_index_preserves_both_key_purposes_beyond_the_legacy_limit() {
     let base = root();
     let mut digest = None;

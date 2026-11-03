@@ -3,11 +3,13 @@
 //! replaces no untracked file, a non-forced branch rename, a plain stash push,
 //! `git stash apply` or `pop` of one entry, `git stash list`, a `git merge`
 //! or `git cherry-pick` (`git_local_writes_merge`) and a `git rebase` onto a
-//! local ref or `--continue` (`git_local_writes_rebase`), with Git reads the configuration
-//! probe proves helper-free around them.
-//! The workspace sandbox runs them in a main checkout, but a linked worktree
-//! keeps its index, refs and objects in the shared Git directory the sandbox
-//! cannot write, and some hosts have no sandbox, so they would stop at review.
+//! local ref or `--continue` (`git_local_writes_rebase`), a `git reset`
+//! that writes no file and a `git restore --staged`, with Git reads the
+//! configuration probe proves helper-free around them.
+//! On a host with a workspace sandbox the sandbox runs them contained, in a
+//! main checkout or in a linked worktree whose shared Git directory it grants,
+//! before this proof is asked. Some hosts have no sandbox, and a command the
+//! sandbox does not take would stop at review, so the proof still answers.
 //! Here the session's own Git is proven to start no program: no filter other
 //! than the user's Git LFS install, no fsmonitor, configured signing, diff
 //! program, lazy fetch, submodule recursion or configured hook, and none of
@@ -68,6 +70,8 @@ const RULES: &[&str] = &[
     "command.git.switch",
     "command.git.checkout",
     "command.git.stash",
+    "command.git.reset",
+    "command.git.restore",
     "command.git.merge",
     "command.git.cherry-pick",
     "command.git.rebase",
@@ -181,18 +185,32 @@ fn proven(
         return None;
     }
     // A `gh pr create`, or a GitHub read such as `gh pr list`, the user's
-    // GitHub permissions allow on its own. Nothing else may carry a permission
-    // observation, and a read still needs the read proof below.
+    // GitHub permissions allow on its own. A ruleless permission is the other
+    // form admitted: a Git plumbing read (`git rev-parse`, `git merge-base`)
+    // records one so a disabled extension or permission can still block it,
+    // and it declares no floor of its own. Either way the segment still needs
+    // the read proof below.
     let granted = controls
         .map(|controls| controls.github_granted_segments(&extensions.permission_observations))
         .unwrap_or_default();
     let allowed_alone = |observation: &NativeCommandPermissionObservationV1| {
-        let mut segments = observation.matcher_evidence.iter();
-        matches!(
+        if matches!(
             observation.permission_id.as_str(),
             PROPOSE_PERMISSION | READ_PERMISSION
-        ) && !observation.matcher_evidence.is_empty()
-            && segments.all(|evidence| granted.contains(&evidence.segment_index))
+        ) {
+            return !observation.matcher_evidence.is_empty()
+                && observation
+                    .matcher_evidence
+                    .iter()
+                    .all(|evidence| granted.contains(&evidence.segment_index));
+        }
+        observation.uncertainty_reasons.is_empty()
+            && controls.is_some_and(|controls| {
+                controls.permission_settles_at_allow(
+                    &observation.extension_id,
+                    &observation.permission_id,
+                )
+            })
     };
     if !extensions.permission_observations.iter().all(allowed_alone) {
         return None;

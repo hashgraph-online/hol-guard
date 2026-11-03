@@ -1,0 +1,87 @@
+use serde_json::{json, Value};
+
+use super::*;
+
+const VECTORS: &str = include_str!("../../../../tests/fixtures/redacted-command-tokens.v1.json");
+
+fn joined(parts: &Value) -> String {
+    parts
+        .as_array()
+        .expect("fragments")
+        .iter()
+        .map(|part| part.as_str().expect("fragment"))
+        .collect()
+}
+
+#[test]
+fn every_recorded_command_redacts_to_its_recorded_tokens() {
+    let vectors: Value = serde_json::from_str(VECTORS).expect("vectors");
+    let cases = vectors["cases"].as_array().expect("cases");
+    assert!(cases.len() >= 19);
+    for case in cases {
+        let command: Vec<String> = case["command"]
+            .as_array()
+            .expect("command")
+            .iter()
+            .map(joined)
+            .collect();
+        let redacted: Vec<String> =
+            serde_json::from_value(case["redacted"].clone()).expect("redacted");
+        assert_eq!(
+            dispatch(&json!({ "command": command })).expect("answer"),
+            json!({ "text": crate::mcp_proxy_shlex::join(&redacted) }),
+            "{}",
+            case["name"]
+        );
+    }
+}
+
+#[test]
+fn the_redacted_tokens_are_joined_as_shlex_joins_them() {
+    let secret = ["s3", "cr3t"].concat();
+    let source = format!("https://user:{secret}@registry.example.test/pkg.tgz");
+    let assignment = format!("NPM_TOKEN={secret}");
+    let answer = dispatch(&json!({
+        "command": ["npm", "install", source, assignment, "two words", ""],
+    }))
+    .expect("answer");
+    let text = answer["text"].as_str().expect("text");
+    assert!(!text.contains(&secret), "{text}");
+    assert_eq!(
+        text,
+        "npm install https://registry.example.test/pkg.tgz 'NPM_TOKEN=*****' 'two words' ''"
+    );
+}
+
+#[test]
+fn malformed_requests_are_invalid() {
+    for args in [
+        json!([]),
+        json!({}),
+        json!({ "command": "npm install" }),
+        json!({ "command": ["npm", 1] }),
+        json!({ "command": ["npm"], "extra": true }),
+    ] {
+        assert_eq!(
+            dispatch(&args),
+            Err("native_runner_authority_invalid"),
+            "{args}"
+        );
+    }
+    assert_eq!(
+        dispatch(&json!({ "command": [] })).expect("answer"),
+        json!({ "text": "" })
+    );
+}
+
+#[test]
+fn a_long_install_is_redacted_rather_than_refused() {
+    // The request-size bound already caps the argv; a count cap here would
+    // stop an install the protect parser accepted before it reached review.
+    let mut command = vec![json!("npm"), json!("install")];
+    command.extend((0..5000).map(|index| json!(format!("p{index}"))));
+    let answer = dispatch(&json!({ "command": command })).expect("answer");
+    let text = answer["text"].as_str().expect("text");
+    assert!(text.starts_with("npm install p0 p1 "), "{text}");
+    assert!(text.ends_with(" p4999"), "{text}");
+}

@@ -1,32 +1,37 @@
-"""An allowed local CLI grant widens the workspace sandbox; it never lifts it.
+"""An allowed local CLI grant widens a sandbox requirement; it never lifts one.
 
-Each hop is pinned: the client presents the resident's contained grant, the
-daemon and the direct CLI hook route an outside-roots review it covers into
-the sandbox sink, and the sink asks the store itself, admits only a plan
-widened by exactly that grant, and refuses one that changed before launch.
+Each hop is pinned: the client presents the resident's contained grant, and
+the sink asks the store itself, admits only a plan widened by exactly that
+grant, and refuses one that changed before launch. The resident's own answer
+for an outside-roots review is pinned in Rust: an allowed CLI lifts it.
 """
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard import local_cli_hook as client
-from codex_plugin_scanner.guard.adapters import zcode_contained_tests
-from codex_plugin_scanner.guard.cli import commands_hook_native_containment as cli_route
-from codex_plugin_scanner.guard.daemon import hook_contained_grant as routing
 from codex_plugin_scanner.guard.runtime import restricted_workspace as workspace_sink
 from codex_plugin_scanner.guard.runtime import restricted_workspace_grant_lookup as lookup
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
+from tests import runtime_wrapper_support
 from tests.test_guard_restricted_workspace import COMMAND, payload, plan, receipt
 
 HASH = "ab" * 32
 GRANT = {"cli_id": "local-cli.lanectl", "identity_hash": HASH, "name": "lanectl", "capabilities": ["loopback-network"]}
 CONTAINED = client.ContainedGrant("local-cli.lanectl", HASH, "lanectl", ("loopback-network",))
-OUTSIDE = routing.OUTSIDE_ROOTS_REASON
+OUTSIDE = "native_workspace_containment_executable_outside_roots"
+ROUTE = {
+    "decision": "deny",
+    "minimum_action": "sandbox-required",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_workspace_containment_required",
+    "reason": "HOL Guard runs this command in a protected workspace sandbox, widened only by the "
+    "local CLI access you approved on this device.",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -78,15 +83,17 @@ def _contained(tmp_path: Path, action: str = "review", reason: str | None = OUTS
 def test_client_sends_the_reason_and_presents_the_contained_grant(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    requests = _resident(monkeypatch, {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT})
-    assert _contained(tmp_path) == (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)
+    requests = _resident(
+        monkeypatch, {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT, "contained_route": ROUTE}
+    )
+    assert _contained(tmp_path) == (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE)
     assert requests[-1]["current_reason_code"] == OUTSIDE
-    assert _contained(tmp_path, "sandbox-required", None) == (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)
+    assert _contained(tmp_path, "sandbox-required", None) == (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE)
     # Rust omits an absent reason from the digest, so the request does too.
     assert "current_reason_code" not in requests[-1]
     assert CONTAINED.prepare_input() == {"identity_hash": HASH, "name": "lanectl", "capabilities": ["loopback-network"]}
     # Callers of the plain action keep the sandbox-bound action, never `allow`.
-    action = client.native_local_cli_hook(
+    action = runtime_wrapper_support.native_local_cli_hook(
         _store(tmp_path),  # type: ignore[arg-type]
         command="lanectl status",
         cwd=tmp_path,
@@ -101,14 +108,37 @@ def test_client_sends_the_reason_and_presents_the_contained_grant(
     "reply",
     [
         {"action": client.ALLOW_CONTAINED_WITH_GRANT},
-        {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT | {"identity_hash": "AB" * 32}},
-        {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT | {"capabilities": ["network"]}},
+        {
+            "action": client.ALLOW_CONTAINED_WITH_GRANT,
+            "contained_grant": GRANT | {"identity_hash": "AB" * 32},
+            "contained_route": ROUTE,
+        },
+        {
+            "action": client.ALLOW_CONTAINED_WITH_GRANT,
+            "contained_grant": GRANT | {"capabilities": ["network"]},
+            "contained_route": ROUTE,
+        },
         {
             "action": client.ALLOW_CONTAINED_WITH_GRANT,
             "contained_grant": GRANT | {"capabilities": ["state-dir-read", "loopback-network"]},
+            "contained_route": ROUTE,
         },
-        {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT | {"extra": 1}},
-        {"action": "review", "contained_grant": GRANT},
+        {
+            "action": client.ALLOW_CONTAINED_WITH_GRANT,
+            "contained_grant": GRANT | {"extra": 1},
+            "contained_route": ROUTE,
+        },
+        # A grant without the route the resident decides for it.
+        {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT},
+        {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT, "contained_route": {"reason": "x"}},
+        {
+            "action": client.ALLOW_CONTAINED_WITH_GRANT,
+            "contained_grant": GRANT,
+            "contained_route": ROUTE | {"reason_code": ""},
+        },
+        # A route on an answer no grant widened.
+        {"action": "review", "contained_route": ROUTE},
+        {"action": "review", "contained_grant": GRANT, "contained_route": ROUTE},
         {"action": "review", "other": 1},
     ],
 )
@@ -120,7 +150,9 @@ def test_client_refuses_a_malformed_contained_answer(
 
 
 def test_client_widens_only_a_sandbox_bound_action(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    _resident(monkeypatch, {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT})
+    _resident(
+        monkeypatch, {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT, "contained_route": ROUTE}
+    )
     assert _contained(tmp_path, "warn", None) is None
 
 
@@ -137,84 +169,6 @@ def _decides(monkeypatch: pytest.MonkeyPatch, *answers: object) -> list[dict[str
 
     monkeypatch.setattr(client, "local_cli_contained_grant", decide)
     return calls
-
-
-def _review(**changes: object) -> dict[str, object]:
-    return {"decision": "deny", "minimum_action": "review", "policy_action": "review", "reason_code": OUTSIDE} | changes
-
-
-def test_daemon_turns_a_granted_outside_roots_review_into_the_sandbox(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    calls = _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED))
-    granted = routing.granted_containment_result(
-        object(), _review(), payload=payload("lanectl status"), workspace=tmp_path, home_dir=tmp_path
-    )
-    assert granted is not None
-    assert granted["minimum_action"] == granted["policy_action"] == "sandbox-required"
-    assert granted["reason_code"] == "native_workspace_containment_required"
-    assert calls[0]["current_action"] == "review"
-    assert calls[0]["reason_code"] == OUTSIDE
-
-
-@pytest.mark.parametrize(
-    ("result", "answer"),
-    [
-        (_review(reason_code="native_policy_review"), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)),
-        (_review(minimum_action="allow"), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)),
-        (_review(policy_action="require-reapproval"), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)),
-        (_review(action={"action_type": "package"}), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)),
-        (_review(action={"action_type": "guard_control"}), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)),
-        (_review(), ("block", None)),
-        (_review(), ("review", None)),
-        (_review(), None),
-        (_review(), RuntimeError("store down")),
-    ],
-)
-def test_daemon_keeps_every_other_review(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, result: dict[str, object], answer: object
-) -> None:
-    _decides(monkeypatch, answer)
-    assert (
-        routing.granted_containment_result(
-            object(), result, payload=payload("lanectl status"), workspace=tmp_path, home_dir=tmp_path
-        )
-        is None
-    )
-
-
-def test_daemon_routes_the_grant_and_answers_the_sink_with_the_receipt(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED))
-    rendered: list[dict[str, object]] = []
-    monkeypatch.setattr(
-        routing, "render_pre_tool", lambda harness, verdict, **kwargs: rendered.append(dict(verdict)) or receipt()
-    )
-    monkeypatch.setattr(zcode_contained_tests, "route_zcode_containment", lambda response, **kwargs: {"routed": True})
-    common = {"harness": "omp", "guard_home": tmp_path, "home_dir": tmp_path, "workspace": tmp_path}
-    routed = routing.granted_containment_response(object(), _review(), payload=payload("lanectl status"), **common)
-    assert routed == {"routed": True}
-    assert rendered[0]["policy_action"] == "sandbox-required"
-    receipt_only = payload("lanectl status") | {"guard_containment_receipt_only": True}
-    assert routing.granted_containment_response(object(), _review(), payload=receipt_only, **common) == receipt()
-    # A call the sink cannot take keeps its review.
-    monkeypatch.setattr(zcode_contained_tests, "route_zcode_containment", lambda response, **kwargs: response)
-    assert (
-        routing.granted_containment_response(object(), _review(), payload=payload("lanectl status"), **common) is None
-    )
-
-
-def test_direct_cli_hook_routes_a_granted_review(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(cli_route, "granted_containment_response", lambda store, result, **kwargs: {"routed": True})
-    monkeypatch.setattr(cli_route, "record_pre_hook_command_activity_best_effort", lambda **kwargs: None)
-    edge = {"event_name": "PreToolUse", "harness": "omp", "result": _review()}
-    context = SimpleNamespace(guard_home=tmp_path, home_dir=tmp_path)
-    stream = io.StringIO()
-    assert cli_route.emit_native_containment_route(edge, payload(), context, tmp_path, stream, object()) == 0  # type: ignore[arg-type]
-    assert stream.getvalue().strip() == '{"routed":true}'
-    monkeypatch.setattr(cli_route, "granted_containment_response", lambda store, result, **kwargs: None)
-    assert cli_route.emit_native_containment_route(edge, payload(), context, tmp_path, io.StringIO(), object()) is None  # type: ignore[arg-type]
 
 
 def _granted_plan(workspace: Path, **changes: object) -> dict[str, object]:
@@ -262,7 +216,7 @@ def _run(tmp_path: Path) -> int:
 def test_sink_widens_by_the_store_grant_and_passes_capabilities_to_the_profile(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    calls = _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED))
+    calls = _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE))
     seen = _sink(monkeypatch, tmp_path, _granted_plan(tmp_path))
     assert _run(tmp_path) == 0
     prepare = seen["prepare_workspace_contained"]
@@ -282,16 +236,20 @@ def test_sink_widens_by_the_store_grant_and_passes_capabilities_to_the_profile(
 @pytest.mark.parametrize(
     "second",
     [
-        (client.ALLOW_CONTAINED_WITH_GRANT, client.ContainedGrant("local-cli.lanectl", "cd" * 32, "lanectl", ())),
-        (client.ALLOW_CONTAINED_WITH_GRANT, client.ContainedGrant("local-cli.lanectl", HASH, "lanectl", ())),
-        ("block", None),
-        ("sandbox-required", None),
+        (
+            client.ALLOW_CONTAINED_WITH_GRANT,
+            client.ContainedGrant("local-cli.lanectl", "cd" * 32, "lanectl", ()),
+            ROUTE,
+        ),
+        (client.ALLOW_CONTAINED_WITH_GRANT, client.ContainedGrant("local-cli.lanectl", HASH, "lanectl", ()), ROUTE),
+        ("block", None, None),
+        ("sandbox-required", None, None),
     ],
 )
 def test_sink_refuses_a_grant_that_changed_before_launch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, second: object
 ) -> None:
-    _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED), second)
+    _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE), second)
     seen = _sink(monkeypatch, tmp_path, _granted_plan(tmp_path))
     with pytest.raises(RestrictedPytestError, match=lookup.GRANT_CHANGED):
         _run(tmp_path)
@@ -305,7 +263,7 @@ def test_sink_refuses_a_grant_that_changed_before_launch(
 def test_sink_refuses_a_plan_widened_beyond_the_decided_grant(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, changes: dict[str, object]
 ) -> None:
-    _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED))
+    _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE))
     seen = _sink(monkeypatch, tmp_path, _granted_plan(tmp_path) | changes)
     with pytest.raises(RestrictedPytestError, match="Invalid workspace sandbox plan"):
         _run(tmp_path)
@@ -315,12 +273,12 @@ def test_sink_refuses_a_plan_widened_beyond_the_decided_grant(
 def test_sink_stops_a_blocked_cli_and_keeps_the_base_sandbox_without_a_grant(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    _decides(monkeypatch, ("block", None))
+    _decides(monkeypatch, ("block", None, None))
     seen = _sink(monkeypatch, tmp_path, plan(tmp_path))
     with pytest.raises(RestrictedPytestError, match=lookup.GRANT_BLOCKED):
         _run(tmp_path)
     assert "prepare_workspace_contained" not in seen
-    _decides(monkeypatch, ("sandbox-required", None))
+    _decides(monkeypatch, ("sandbox-required", None, None))
     seen = _sink(monkeypatch, tmp_path, plan(tmp_path))
     assert _run(tmp_path) == 0
     prepare = seen["prepare_workspace_contained"]

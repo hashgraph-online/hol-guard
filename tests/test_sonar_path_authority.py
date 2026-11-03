@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from codex_plugin_scanner.guard.adapters import copilot_state_paths
 from codex_plugin_scanner.guard.adapters import cursor_hooks as cursor_hooks_module
+from codex_plugin_scanner.guard.adapters._modules.copilot import copilot_state_paths
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor_hooks import (
@@ -315,7 +315,7 @@ def test_missing_protected_authority_key_is_treated_as_tampering(
 ) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
-        lambda _enrollment: None,
+        lambda _guard_home, _enrollment: None,
     )
     store = _store(tmp_path, MemorySecretStore())
     protected = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)

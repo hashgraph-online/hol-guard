@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 
+from codex_plugin_scanner.guard import native_resident_decision as resident
 from codex_plugin_scanner.guard import native_runner_authority as module
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from codex_plugin_scanner.guard.runtime import guard_run_receipts as guard_run_receipts
@@ -110,7 +111,7 @@ def test_adapters_present_resident_answers() -> None:
 
 def _force_available(monkeypatch: pytest.MonkeyPatch, *, keep_health: bool = False) -> None:
     class Features:
-        features = frozenset({module._FEATURE, module._RESIDENT_PROTOCOL_FEATURE})
+        features = frozenset({module._FEATURE, resident._RESIDENT_PROTOCOL_FEATURE})
 
     class Identity:
         path = "/bin/true"
@@ -124,10 +125,10 @@ def _force_available(monkeypatch: pytest.MonkeyPatch, *, keep_health: bool = Fal
         capabilities = Features()
 
     monkeypatch.setattr(module, "_native_runtime_status_memo", lambda: Status())
-    monkeypatch.setattr(module, "ensure_resident_prerequisite", lambda _home: True)
-    monkeypatch.setattr(module, "native_resident_client_ready", lambda *_a, **_k: True)
+    monkeypatch.setattr(resident, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(resident, "native_resident_client_ready", lambda *_a, **_k: True)
     if not keep_health:
-        monkeypatch.setattr(module, "native_record_resident_failure", lambda *a, **k: None)
+        monkeypatch.setattr(resident, "native_record_resident_failure", lambda *a, **k: None)
 
 
 def _call(tmp_path: Path) -> dict[str, Any]:
@@ -149,7 +150,7 @@ def test_unavailable_native_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
 def test_missing_feature_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     class Features:
-        features = frozenset({module._RESIDENT_PROTOCOL_FEATURE})
+        features = frozenset({resident._RESIDENT_PROTOCOL_FEATURE})
 
     class Identity:
         path = "/bin/true"
@@ -170,7 +171,7 @@ def test_missing_feature_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path:
 def test_mismatched_binding_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _force_available(monkeypatch)
     monkeypatch.setattr(
-        module,
+        resident,
         "native_resident_client_request",
         lambda **_: (
             b'{"schema":"guard-runner-authority-result.v1","request_id":"x","request_sha256":"y",'
@@ -184,7 +185,7 @@ def test_mismatched_binding_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_pa
 def test_malformed_or_absent_reply_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _force_available(monkeypatch)
     for reply in (None, b"not json", b"[]", b"{}", b'{"status":"error"}'):
-        monkeypatch.setattr(module, "native_resident_client_request", lambda reply=reply, **_: reply)
+        monkeypatch.setattr(resident, "native_resident_client_request", lambda reply=reply, **_: reply)
         with pytest.raises(NativeRunnerAuthorityError):
             _call(tmp_path)
 
@@ -202,13 +203,13 @@ def test_bound_refusals_never_open_the_availability_circuit(monkeypatch: pytest.
             {
                 "schema": module._RESULT_SCHEMA,
                 "request_id": request["request_id"],
-                "request_sha256": module._canonical_request_sha256(request),
+                "request_sha256": resident._canonical_request_sha256(request),
                 "status": "error",
                 "code": "native_runner_authority_invalid",
             }
         ).encode()
 
-    monkeypatch.setattr(module, "native_resident_client_request", refuse)
+    monkeypatch.setattr(resident, "native_resident_client_request", refuse)
     for _ in range(5):
         with pytest.raises(module.NativeRunnerAuthorityRefusalError, match="invalid"):
             _call(tmp_path)
@@ -229,20 +230,20 @@ def test_timeout_seconds_widens_the_bounded_deadline(monkeypatch: pytest.MonkeyP
             {
                 "schema": module._RESULT_SCHEMA,
                 "request_id": request["request_id"],
-                "request_sha256": module._canonical_request_sha256(request),
+                "request_sha256": resident._canonical_request_sha256(request),
                 "status": "ok",
                 "code": "ok",
                 "payload": {},
             }
         ).encode()
 
-    monkeypatch.setattr(module, "native_resident_client_request", capture)
+    monkeypatch.setattr(resident, "native_resident_client_request", capture)
     assert native_runner_authority("detector_composition", {"signals": []}, tmp_path) == {}
     assert native_runner_authority("detector_composition", {"signals": []}, tmp_path, timeout_seconds=8.0) == {}
     assert budgets == [5000, 8000]
     assert deadlines[1] > deadlines[0]
     native_runner_authority("detector_composition", {"signals": []}, tmp_path, timeout_seconds=60.0)
-    assert budgets[-1] == module._MAX_DEADLINE_BUDGET_MS
+    assert budgets[-1] == resident._MAX_DEADLINE_BUDGET_MS
 
 
 def test_oversized_request_is_refused_before_the_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -251,7 +252,7 @@ def test_oversized_request_is_refused_before_the_resident(monkeypatch: pytest.Mo
     def never(**_kwargs: object) -> bytes:
         raise AssertionError("resident must not be asked")
 
-    monkeypatch.setattr(module, "native_resident_client_request", never)
+    monkeypatch.setattr(resident, "native_resident_client_request", never)
     with pytest.raises(module.NativeRunnerAuthorityRefusalError, match="too_large"):
         native_runner_authority("detector_composition", {"signals": ["x" * (5 * 1024 * 1024)]}, tmp_path)
 
@@ -394,3 +395,49 @@ def test_receipt_projection_batches_under_the_envelope_cap(tmp_path: Path) -> No
     for row in rows:
         evidence = json.loads(row["scanner_evidence_json"])
         assert (evidence[-1] == _EVIDENCE) == (row["artifact_id"] == "wanted")
+
+
+def test_prerequisite_setup_does_not_shorten_the_resident_s_window(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Provisioning runs before the transport clock, as it did before the shared helper."""
+
+    class _Clock:
+        def __init__(self) -> None:
+            self.now = 1_000.0
+
+        def monotonic(self) -> float:
+            return self.now
+
+    clock = _Clock()
+    _force_available(monkeypatch)
+    monkeypatch.setattr(resident, "time", clock)
+
+    def slow_prerequisite(_home: object) -> bool:
+        clock.now += 0.75
+        return True
+
+    monkeypatch.setattr(resident, "ensure_resident_prerequisite", slow_prerequisite)
+    allowances: list[float] = []
+    budgets: list[int] = []
+
+    def capture(*, payload: bytes, deadline_monotonic: float, **_: object) -> bytes:
+        envelope = json.loads(payload)
+        budgets.append(envelope["deadline_budget_ms"])
+        allowances.append(deadline_monotonic - clock.now)
+        request = envelope["request"]
+        return json.dumps(
+            {
+                "schema": module._RESULT_SCHEMA,
+                "request_id": request["request_id"],
+                "request_sha256": resident._canonical_request_sha256(request),
+                "status": "ok",
+                "code": "ok",
+                "payload": {},
+            }
+        ).encode()
+
+    monkeypatch.setattr(resident, "native_resident_client_request", capture)
+    assert native_runner_authority("detector_composition", {"signals": []}, tmp_path) == {}
+    assert budgets == [5000]
+    assert allowances == [5.0]

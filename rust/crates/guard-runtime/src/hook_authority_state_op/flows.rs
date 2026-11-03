@@ -3,6 +3,24 @@
 
 use super::*;
 
+/// A `tool_call` notice keeps its command only to tie the notice to its
+/// pending row and to show it, never to bind an approval: that rides on
+/// `artifact_hash`. Both rows are stored with credentials masked, including
+/// the ones passed as arguments (`--api-key=…`). Other artifact types are
+/// returned as `None` and stored as sent.
+fn mask_tool_call_command(payload: &Value) -> Option<Value> {
+    if payload.get("artifact_type").and_then(Value::as_str) != Some("tool_call") {
+        return None;
+    }
+    let mut masked = payload.clone();
+    for field in ["command", "raw_command_text"] {
+        if let Some(Value::String(text)) = masked.get_mut(field) {
+            *text = guard_command::redacted_command_tokens::redact_command_text(text);
+        }
+    }
+    Some(masked)
+}
+
 impl Env<'_> {
     pub(super) fn claude_record_notice(
         &self,
@@ -15,6 +33,8 @@ impl Env<'_> {
         };
         let notice_key = notice_key(session_id, tool_name);
         let pending_key = claude_pending_key(session_id, artifact_id);
+        let masked = mask_tool_call_command(payload);
+        let payload = masked.as_ref().unwrap_or(payload);
         if !self.store_signed(&pending_key, payload, &CLAUDE_PENDING) {
             return;
         }
@@ -266,19 +286,26 @@ impl Env<'_> {
         &self,
         request: &HookAuthorityStateRequestV1,
     ) -> Result<bool, &'static str> {
-        let state_key = required(&request.state_key)?;
+        let conversation_id = required(&request.conversation_id)?;
+        let command = required(&request.command)?;
+        let state_key = cursor_target(
+            conversation_id,
+            Some(command),
+            request.state_key.as_ref(),
+            cursor_allow_key,
+        )?;
         let payload = json!({
             "state_key": state_key,
-            "conversation_id": required(&request.conversation_id)?,
+            "conversation_id": conversation_id,
             "saved_at": self.now,
             "action": "allow",
             "artifact_id": required(&request.artifact_id)?,
             "artifact_hash": required(&request.artifact_hash)?,
             "artifact_name": required(&request.artifact_name)?,
-            "command": required(&request.command)?,
+            "command": command,
             "native_source": "cursor-native",
         });
-        Ok(self.store_signed(state_key, &payload, &CURSOR_ALLOW))
+        Ok(self.store_signed(&state_key, &payload, &CURSOR_ALLOW))
     }
 
     pub(super) fn cursor_load_allowance(

@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_preflight, commands_router
 from codex_plugin_scanner.guard.cli.commands_preflight import _unsafe_broad_preflight_target
 from codex_plugin_scanner.guard.managed_install_proof import bind_managed_install_proof
-from codex_plugin_scanner.guard.package_firewall_entitlement import package_firewall_operation_allowed
 from codex_plugin_scanner.guard.shims import package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -73,17 +72,45 @@ def test_orphaned_package_shim_symlink_is_not_recovered(tmp_path: Path) -> None:
 
 
 def test_expired_cloud_entitlement_does_not_block_existing_local_repair() -> None:
-    entitlement = {
-        "allowed": False,
-        "reason": "guard_cloud_reconnect_required",
-        "tier": "pro",
+    """The lapsed-entitlement recovery rule is pinned where it is decided.
+
+    `package_firewall_access` asks the resident now, so the five
+    cases this regression covers live in the shared composition vectors as
+    `package_firewall_access_a_lapsed_entitlement_*`: repair and remove stay
+    available to a shimmed machine, and repair without shims, install and test
+    stay refused.
+    """
+
+    vectors = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "rust/crates/guard-runtime/tests/fixtures/hook_artifact_compose_vectors.json"
+        ).read_text(encoding="utf-8")
+    )
+    lapsed = {
+        vector["name"]: vector
+        for vector in vectors
+        if vector["name"].startswith("package_firewall_access_a_lapsed_entitlement_")
     }
 
-    assert package_firewall_operation_allowed(entitlement, "repair", has_installed_managers=True) is True
-    assert package_firewall_operation_allowed(entitlement, "remove", has_installed_managers=True) is True
-    assert package_firewall_operation_allowed(entitlement, "repair", has_installed_managers=False) is False
-    assert package_firewall_operation_allowed(entitlement, "install", has_installed_managers=True) is False
-    assert package_firewall_operation_allowed(entitlement, "test", has_installed_managers=True) is False
+    assert {
+        name: (
+            vector["query"]["operation"],
+            vector["query"]["has_installed_managers"],
+            vector["expected"]["operation_allowed"],
+        )
+        for name, vector in lapsed.items()
+    } == {
+        "package_firewall_access_a_lapsed_entitlement_still_repairs": ("repair", True, True),
+        "package_firewall_access_a_lapsed_entitlement_still_removes": ("remove", True, True),
+        "package_firewall_access_a_lapsed_entitlement_repairs_nothing_unshimmed": ("repair", False, False),
+        "package_firewall_access_a_lapsed_entitlement_installs_nothing": ("install", True, False),
+        "package_firewall_access_a_lapsed_entitlement_tests_nothing": ("test", True, False),
+    }
+    assert all(
+        vector["query"]["entitlement"] == {"allowed": False, "reason": "guard_cloud_reconnect_required", "tier": "pro"}
+        for vector in lapsed.values()
+    )
 
 
 def test_omp_managed_install_proof_is_recognized_as_live_hook(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

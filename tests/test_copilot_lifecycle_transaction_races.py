@@ -16,7 +16,7 @@ from typing import BinaryIO
 import pytest
 
 from codex_plugin_scanner.guard import codex_install_transaction as install_transaction
-from codex_plugin_scanner.guard.adapters import copilot_state_paths
+from codex_plugin_scanner.guard.adapters._modules.copilot import copilot_state_paths
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
 

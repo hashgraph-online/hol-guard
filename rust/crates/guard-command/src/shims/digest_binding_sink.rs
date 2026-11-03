@@ -93,7 +93,6 @@ fn resolve_existing(context: &ShimContext, path: &str) -> Option<String> {
 mod tests {
     use std::collections::BTreeMap;
     use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     use serde_json::json;
 
@@ -201,10 +200,7 @@ mod tests {
     #[test]
     fn a_path_that_is_not_there_resolves_to_nothing() {
         let context = context(false);
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
+        let stamp = crate::unique_nanos::unique_nanos();
         let root = std::env::temp_dir().join(format!("hol-guard-sink-{stamp}"));
         fs::create_dir_all(&root).expect("root");
         let present = root.join("uv");

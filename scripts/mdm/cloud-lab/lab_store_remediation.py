@@ -6,9 +6,7 @@ from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any
 
-from lab_support import _safe_identifier, _same_json, _validate_json_limits
-
-from codex_plugin_scanner.guard.mdm.cloud_control import (
+from cloud_control import (
     REMEDIATION_SCHEMA,
     ContractError,
     iso,
@@ -16,6 +14,7 @@ from codex_plugin_scanner.guard.mdm.cloud_control import (
     utcnow,
     validate_remediation,
 )
+from lab_support import _safe_identifier, _same_json, _validate_json_limits
 
 
 class StoreRemediationMixin:

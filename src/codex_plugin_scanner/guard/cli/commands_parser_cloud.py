@@ -11,6 +11,7 @@ from ...argparse_utils import FriendlyArgumentParser
 from ..models import GUARD_ACTION_VALUES
 from .commands_parser_constants import _SERVICE_RUNTIME_CHOICES, DEFAULT_GUARD_CONNECT_URL, DEFAULT_GUARD_SYNC_URL
 from .commands_parser_helpers import *
+from .codebase_commands import configure_codebases_parser
 from .inventory_list_commands import configure_inventory_list_parser
 
 def _add_cloud_review_connect_consent(parser: argparse.ArgumentParser) -> None:
@@ -343,6 +344,8 @@ def _configure_guard_cloud_parsers(
     _add_guard_common_args(service_status_parser)
     service_status_parser.add_argument("--json", action="store_true")
 
+    configure_codebases_parser(guard_subparsers)
+
     device_parser = guard_subparsers.add_parser("device", help="Manage local Guard installation identity")
     _add_guard_common_args(device_parser)
     device_parser.add_argument("--json", action="store_true")
@@ -408,6 +411,29 @@ def _configure_guard_cloud_parsers(
     _add_guard_common_args(ensure_p)
     ensure_p.add_argument("--wake-token")
     _add_daemon_recover_parser(daemon_subparsers)
+    recovery_p = daemon_subparsers.add_parser("recovery", help="Inspect or recover the local Guard service")
+    _add_guard_common_args(recovery_p)
+    recovery_subparsers = recovery_p.add_subparsers(dest="daemon_recovery_command", required=True)
+    recovery_inspect_p = recovery_subparsers.add_parser("inspect", help="Inspect recovery readiness")
+    _add_guard_common_args(recovery_inspect_p)
+    recovery_inspect_p.add_argument("--json", action="store_true")
+    recovery_restart_p = recovery_subparsers.add_parser("restart", help="Restart the selected Guard service")
+    _add_guard_common_args(recovery_restart_p)
+    recovery_restart_p.add_argument("--request-id")
+    recovery_restart_p.add_argument("--json-lines", action="store_true")
+    recovery_restart_p.add_argument("--approval-proof-stdin", action="store_true", help=argparse.SUPPRESS)
+    recovery_status_p = recovery_subparsers.add_parser("status", help="Show a recovery operation")
+    _add_guard_common_args(recovery_status_p)
+    recovery_status_p.add_argument("--operation-id", required=True)
+    recovery_status_p.add_argument("--json", action="store_true")
+    recovery_diagnostics_p = recovery_subparsers.add_parser(
+        "diagnostics",
+        aliases=["export"],
+        help="Export bounded local recovery diagnostics",
+    )
+    _add_guard_common_args(recovery_diagnostics_p)
+    recovery_diagnostics_p.add_argument("--operation-id", required=True)
+    recovery_diagnostics_p.add_argument("--json", action="store_true")
     status_p = daemon_subparsers.add_parser("status", help="Show local Guard daemon status")
     _add_guard_common_args(status_p)
     status_p.add_argument("--json", action="store_true")
@@ -461,10 +487,32 @@ def _configure_guard_cloud_parsers(
     cursor_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
     cursor_proxy_parser.add_argument("--server-env-key", dest="server_env_keys", action="append", default=[])
 
+    # Cline installs before this parser existed wrote ``guard mcp-proxy``.
+    cline_proxy_parser = guard_subparsers.add_parser(
+        "cline-mcp-proxy", aliases=["mcp-proxy"], help=argparse.SUPPRESS
+    )
+    _add_guard_common_args(cline_proxy_parser)
+    cline_proxy_parser.add_argument("--server-name", required=True)
+    cline_proxy_parser.add_argument("--server-id")
+    cline_proxy_parser.add_argument("--source-scope", default="project")
+    cline_proxy_parser.add_argument("--config-path", required=True)
+    cline_proxy_parser.add_argument("--transport", default="stdio")
+    cline_proxy_parser.add_argument("--command", dest="server_command", required=True)
+    cline_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+    cline_proxy_parser.add_argument("--server-env-key", dest="server_env_keys", action="append", default=[])
+
     hermes_mcp_proxy_parser = guard_subparsers.add_parser("hermes-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(hermes_mcp_proxy_parser)
-    hermes_mcp_proxy_parser.add_argument("--server", required=True)
+    hermes_mcp_proxy_parser.add_argument("--server")
     hermes_mcp_proxy_parser.add_argument("--stdio", action="store_true")
+    hermes_mcp_proxy_parser.add_argument("--server-name")
+    hermes_mcp_proxy_parser.add_argument("--server-id")
+    hermes_mcp_proxy_parser.add_argument("--source-scope", default="project")
+    hermes_mcp_proxy_parser.add_argument("--config-path")
+    hermes_mcp_proxy_parser.add_argument("--transport", default="stdio")
+    hermes_mcp_proxy_parser.add_argument("--command", dest="server_command")
+    hermes_mcp_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+    hermes_mcp_proxy_parser.add_argument("--server-env-key", dest="server_env_keys", action="append", default=[])
 
     mcp_parser = guard_subparsers.add_parser(
         "mcp",
@@ -494,6 +542,7 @@ def _configure_guard_cloud_parsers(
         "opencode-mcp-proxy",
         "copilot-mcp-proxy",
         "cursor-mcp-proxy",
+        "cline-mcp-proxy",
         "hermes-mcp-proxy",
     }
     guard_subparsers._choices_actions = [

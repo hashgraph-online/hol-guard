@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.synced_policy import (
     validated_synced_policy_bundle,
 )
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.policy_store_support import replace_remote_policies, resolve_policy
 
 _WORKSPACE_ID = "workspace-1"
 _INACTIVE_ARTIFACT_ID = "codex:project:inactive-signed-allow"
@@ -129,7 +130,8 @@ def test_apply_policy_bundle_authority_rolls_back_every_authority_surface(
     for state_key, payload in prior_state.items():
         store.set_sync_payload(state_key, payload, prior_now)
 
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="codex",
@@ -292,7 +294,8 @@ def test_upgrade_era_unsigned_remote_allow_cannot_resolve_or_be_claimed(
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = f"codex:project:legacy-{source}-allow"
     artifact_hash = f"hash-{source}"
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="codex",
@@ -317,7 +320,8 @@ def test_upgrade_era_unsigned_remote_allow_cannot_resolve_or_be_claimed(
     )
     assert lookup["decision"] is None
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             artifact_id,
             artifact_hash,
@@ -366,7 +370,8 @@ def test_signed_inactive_cached_bundle_cannot_enforce_defaults_or_rows(
     assert len(decisions) == 1
     assert decisions[0].artifact_id == _INACTIVE_ARTIFACT_ID
     assert decisions[0].action == "allow"
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         decisions,
         "2026-07-18T00:00:00Z",
         remote_write_authorized=True,
@@ -384,7 +389,8 @@ def test_signed_inactive_cached_bundle_cannot_enforce_defaults_or_rows(
     )
     assert lookup["decision"] is None
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             _INACTIVE_ARTIFACT_ID,
             now="2026-07-18T00:01:00Z",

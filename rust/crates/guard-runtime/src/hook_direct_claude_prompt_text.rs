@@ -1,9 +1,10 @@
 //! Guard's Claude Code notice on a reviewed `UserPromptSubmit`.
 //!
-//! Outside Watch the daemon overlays Claude's prompt response with a branded
+//! Outside Watch the edge overlays Claude's prompt response with a branded
 //! system message and, for a prompt that needs reapproval, a briefing for the
 //! model. The action and reason come from the native result; this only
-//! renders the daemon's copy for them.
+//! renders Guard's copy for them, so the direct lane and the daemon return
+//! the same notice.
 
 use serde_json::Value;
 
@@ -22,9 +23,9 @@ const SENSITIVE_BRIEFING: &str =
 
 /// Adds the daemon's notice to `response` for the native `result`.
 ///
-/// A reason the daemon would stringify from a non-text value defers, so the
-/// daemon keeps rendering that rare shape.
-pub(super) fn brand(response: &mut Value, result: &Value) -> Result<(), HookDirectDefer> {
+/// A reason that is not text, or a response that is not an object, leaves
+/// `response` unchanged and reports why.
+pub(crate) fn brand(response: &mut Value, result: &Value) -> Result<(), HookDirectDefer> {
     let action = match result.get("minimum_action") {
         Some(Value::String(action)) => action.as_str(),
         _ => return Ok(()),

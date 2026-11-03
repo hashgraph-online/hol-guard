@@ -188,7 +188,6 @@ def _run_exact(case: dict, root: Path) -> dict:
             hook_native_saved_approval, "native_review_policy_binding", _stub_binding(query["policy_binding"])
         ),
         mock.patch.object(hook_native_saved_approval, "build_approval_context_token", build_token),
-        mock.patch.object(hook_native_saved_approval, "parse_approval_context_token", lambda token: object()),
         mock.patch.object(hook_native_launch_identity, "build_runtime_launch_identity", _fake_launch),
         mock.patch.object(
             hook_native_launch_identity,

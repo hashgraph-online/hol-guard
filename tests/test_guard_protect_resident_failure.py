@@ -48,3 +48,24 @@ def test_protect_command_fails_closed_when_the_resident_refuses(
     assert payload["verdict"]["blocking"] is True
     assert payload["error"]["code"]
     assert "Traceback" not in captured.err
+
+
+def test_a_relative_workspace_reaches_the_resident_as_an_absolute_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import codex_plugin_scanner.guard.native_protect_request as module
+
+    sent: list[dict[str, object]] = []
+
+    def capture(**kwargs: object) -> None:
+        sent.append(kwargs["request"])  # type: ignore[arg-type]
+        return None
+
+    monkeypatch.setattr(module, "_resolve_digest_home", lambda _home: tmp_path)
+    monkeypatch.setattr(module, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(module.native_execution, "_resident_request", capture)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(NativeProtectRequestError):
+        module.native_protect_request(["bun", "tool.ts"], guard_home=None, store_path=None, cwd=Path("work"))
+    # The resident reads a relative script only against an absolute directory.
+    assert sent[0]["cwd"] == str(tmp_path / "work")

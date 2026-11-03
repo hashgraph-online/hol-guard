@@ -27,7 +27,17 @@ from pathlib import Path
 
 from hook_authority_state_vector_claude_scenarios import claude_scenarios
 from hook_authority_state_vector_cursor_scenarios import cursor_scenarios, freshness_scenario
-from hook_authority_state_vector_support import CODE, KEY, KEY_ID, OUT, T0, hook_state, key_b64
+from hook_authority_state_vector_support import (
+    CODE,
+    KEY,
+    KEY_ID,
+    OUT,
+    T0,
+    cursor_allow_key,
+    cursor_pending_key,
+    hook_state,
+    key_b64,
+)
 
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.store import GuardStore
@@ -179,6 +189,7 @@ def call_op(store: GuardStore, op: str, args: dict[str, object]) -> object:
                 payload=dict(args["payload"]),  # type: ignore[arg-type]
                 now=now,
             )
+            is not None
         }
     if op == "cursor_load_pending_state":
         return {
@@ -231,13 +242,13 @@ def wire_args(op: str, args: dict[str, object], result: object) -> dict[str, obj
     elif op == "cursor_store_pending_state":
         wire = {
             "conversation_id": args["conversation_id"],
-            "state_key": hook_state._cursor_pending_shell_state_key(str(args["conversation_id"]), str(args["command"])),
+            "state_key": cursor_pending_key(str(args["conversation_id"]), str(args["command"])),
             "payload": args["payload"],
             "now": args["now"],
         }
     elif op == "cursor_load_pending_state":
         normalized = normalize_cursor_shell_command(str(args["command"]))
-        expected = hook_state._cursor_pending_shell_state_key(str(args["conversation_id"]), normalized)
+        expected = cursor_pending_key(str(args["conversation_id"]), normalized)
         wire = {
             "conversation_id": args["conversation_id"],
             "command": normalized,
@@ -250,7 +261,7 @@ def wire_args(op: str, args: dict[str, object], result: object) -> dict[str, obj
         artifact = args["artifact"]
         wire = {
             "conversation_id": args["conversation_id"],
-            "state_key": hook_state._cursor_native_shell_allow_state_key(str(args["conversation_id"]), normalized),
+            "state_key": cursor_allow_key(str(args["conversation_id"]), normalized),
             "command": normalized,
             "artifact_id": artifact["artifact_id"],  # type: ignore[index]
             "artifact_hash": args["artifact_hash"],
@@ -262,7 +273,7 @@ def wire_args(op: str, args: dict[str, object], result: object) -> dict[str, obj
         wire = {
             "conversation_id": args["conversation_id"],
             "command": command,
-            "state_key": hook_state._cursor_native_shell_allow_state_key(str(args["conversation_id"]), str(command)),
+            "state_key": cursor_allow_key(str(args["conversation_id"]), str(command)),
             "now": args["now"],
         }
     return wire

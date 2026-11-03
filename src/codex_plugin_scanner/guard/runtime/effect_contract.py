@@ -1,22 +1,18 @@
-"""Pure contracts for Guard command effects, proof routes, and truthful states."""
+"""Pure contracts for Guard command effects, and proof routes."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from types import MappingProxyType
-from typing import Final, TypeVar, cast
+from typing import Final, cast
 
 from codex_plugin_scanner.guard.action_lattice import (
     guard_action_severity,
     is_guard_action,
-    most_restrictive_guard_action,
 )
 from codex_plugin_scanner.guard.models import GuardAction
 
 EFFECT_CONTRACT_SCHEMA_VERSION: Final = "1.0.0"
-_T = TypeVar("_T")
 
 
 class EffectKind(str, Enum):
@@ -148,27 +144,6 @@ class UncertaintyKind(str, Enum):
     ROLLBACK_BOUNDARY_VERSION = "rollback-boundary-version"
 
 
-UNCERTAINTY_FLOOR: Final[Mapping[UncertaintyKind, GuardAction]] = MappingProxyType(
-    {
-        UncertaintyKind.PARTIAL_PARSE: "review",
-        UncertaintyKind.DYNAMIC_INPUT: "review",
-        UncertaintyKind.UNSUPPORTED_INPUT: "review",
-        UncertaintyKind.MALFORMED_INPUT: "review",
-        UncertaintyKind.PARSER_BUDGET_EXHAUSTED: "require-reapproval",
-        UncertaintyKind.MATCHER_FAILURE: "block",
-        UncertaintyKind.PARSER_FAILURE: "block",
-        UncertaintyKind.UNRESOLVED_LAUNCH_IDENTITY: "require-reapproval",
-        UncertaintyKind.UNKNOWN_EFFECT: "require-reapproval",
-        UncertaintyKind.DEGRADED_CONTAINMENT: "block",
-        UncertaintyKind.PROTECTION_HEALTH_DEGRADED: "block",
-        UncertaintyKind.POLICY_VERSION_MISMATCH: "block",
-        UncertaintyKind.MALFORMED_BOUNDARY_VERSION: "block",
-        UncertaintyKind.UNKNOWN_BOUNDARY_VERSION: "block",
-        UncertaintyKind.ROLLBACK_BOUNDARY_VERSION: "block",
-    }
-)
-
-
 @dataclass(frozen=True, slots=True)
 class EffectAssessment:
     kind: EffectKind
@@ -217,48 +192,6 @@ class EffectAssessment:
             raise ValueError("required containment must bind containment identity")
 
 
-def maximum_action_floor(floors: Iterable[GuardAction]) -> GuardAction:
-    return most_restrictive_guard_action(*tuple(floors))
-
-
-class TruthfulState(str, Enum):
-    PROTECTED = "protected"
-    PARTIAL = "partial"
-    DEGRADED = "degraded"
-    CHECKED = "checked"
-    PERMITTED = "permitted"
-    ALLOWED_UNCONFIRMED = "allowed-unconfirmed"
-    CONFIRMED_SUCCESS = "confirmed-success"
-    CONFIRMED_FAILURE = "confirmed-failure"
-    INTERRUPTED = "interrupted"
-    BLOCKED = "blocked"
-
-
-@dataclass(frozen=True, slots=True)
-class ProtectionHealth:
-    required_hooks: bool
-    daemon_and_policy: bool
-    rules_and_containment: bool
-    tamper_checks: bool
-    evidence_health: bool
-
-    def __post_init__(self) -> None:
-        if any(type(cast(object, getattr(self, field))) is not bool for field in self.__slots__):
-            raise ValueError("ProtectionHealth fields must be booleans")
-
-
-def derive_protection_state(health: ProtectionHealth) -> TruthfulState:
-    health = _require_instance(health, ProtectionHealth, "health")
-    core_healthy = (
-        health.required_hooks and health.daemon_and_policy and health.rules_and_containment and health.tamper_checks
-    )
-    if not core_healthy:
-        return TruthfulState.DEGRADED
-    if not health.evidence_health:
-        return TruthfulState.PARTIAL
-    return TruthfulState.PROTECTED
-
-
 def _require_guard_action(value: object, label: str) -> GuardAction:
     if not is_guard_action(value):
         raise ValueError(f"{label} must be a canonical GuardAction")
@@ -268,12 +201,6 @@ def _require_guard_action(value: object, label: str) -> GuardAction:
 def _require_enum(value: object, enum_type: type[Enum], label: str) -> None:
     if not isinstance(value, enum_type):
         raise ValueError(f"{label} must be an exact {enum_type.__name__} value")
-
-
-def _require_instance(value: object, expected_type: type[_T], label: str) -> _T:
-    if not isinstance(value, expected_type):
-        raise ValueError(f"{label} must be a {expected_type.__name__}")
-    return value
 
 
 def _require_enum_frozenset(value: object, enum_type: type[Enum], label: str) -> None:

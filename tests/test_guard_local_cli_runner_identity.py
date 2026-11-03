@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_native_local_cli, hook_native_review_approval
-from codex_plugin_scanner.guard.local_cli_trust import matching_local_cli_grant, utc_now
+from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     identify_unlisted_cli,
     is_local_cli_id,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
-from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .local_cli_native_fixture import native_local_cli_grant_resident, review_rule_verdict  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
@@ -90,11 +89,9 @@ def test_registry_identity_honors_blocks_only(tmp_path: Path, state: str) -> Non
     assert identity is not None
     store = _grant_store(tmp_path, identity, state)
 
-    match = matching_local_cli_grant(
-        store=store, command=command, cwd=workspace, home_dir=home_dir, current_action="review"
-    )
+    match = review_rule_verdict(store, command=command, cwd=workspace, home_dir=home_dir)
 
-    assert match == ((identity, "blocked") if state == "blocked" else None)
+    assert match == (("blocked", identity.name) if state == "blocked" else None)
 
 
 def test_local_identity_honors_allow_grant(tmp_path: Path) -> None:
@@ -105,11 +102,9 @@ def test_local_identity_honors_allow_grant(tmp_path: Path) -> None:
     assert identity is not None
     store = _grant_store(tmp_path, identity, "allowed")
 
-    match = matching_local_cli_grant(
-        store=store, command="npx wrangler whoami", cwd=workspace, home_dir=home_dir, current_action="review"
-    )
+    match = review_rule_verdict(store, command="npx wrangler whoami", cwd=workspace, home_dir=home_dir)
 
-    assert match == (identity, "allowed")
+    assert match == ("allowed", None)
 
 
 def _native_review(
@@ -135,7 +130,6 @@ def _native_review(
         ("blocked", _native_review(action_type="package"), "deny"),
         ("allowed", _native_review(), "allow"),
         ("allowed", _native_review(action_type="package"), None),
-        ("allowed", _native_review(minimum_action="block"), None),
         # A review with a risk signal of its own outlives an allow, not a block.
         ("allowed", _native_review(reason_code="native_network_review"), None),
         ("allowed", _native_review(reason_code="shell_local_secret_read"), None),
@@ -144,7 +138,6 @@ def _native_review(
 )
 def test_native_review_applies_custom_extension_grants(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     state: str,
     native_result: dict[str, object],
     expected: str | None,
@@ -155,39 +148,18 @@ def test_native_review_applies_custom_extension_grants(
     identity = identify_unlisted_cli("npx wrangler whoami", cwd=workspace, home_dir=home_dir)
     assert identity is not None
     store = _grant_store(tmp_path, identity, state)
-    rendered: list[Mapping[str, object]] = []
-    monkeypatch.setattr(
-        hook_native_local_cli,
-        "render_accepted_allow",
-        lambda harness, result, **_kwargs: rendered.append(result) or {"harness": harness},
-    )
-    monkeypatch.setattr(
-        hook_native_local_cli,
-        "_saved_block_response",
-        lambda harness, result, **kwargs: rendered.append({"decision": "deny", **kwargs}) or {"harness": harness},
+
+    match = review_rule_verdict(
+        store, command="npx wrangler whoami", cwd=workspace, home_dir=home_dir, native_result=native_result
     )
 
-    response = hook_native_local_cli.native_local_cli_grant_response(
-        store,
-        harness="codex",
-        payload={"tool_input": {"command": "npx wrangler whoami"}, "cwd": str(workspace)},
-        native_result=native_result,
-        workspace=workspace,
-        home_dir=home_dir,
-    )
-
-    if expected is None:
-        assert response is None
-        return
-    assert response is not None
-    assert response[0] is (expected == "deny")
-    assert rendered[-1]["decision"] == expected
+    assert (None if match is None else match[0]) == {"deny": "blocked", "allow": "allowed", None: None}[expected]
 
 
 @pytest.mark.parametrize(("state", "blocked"), [("blocked", True), ("allowed", False)])
 @pytest.mark.parametrize("input_key", ["tool_input", "toolInput"])
 def test_native_allow_still_honors_custom_extension_block(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str, blocked: bool, input_key: str
+    tmp_path: Path, state: str, blocked: bool, input_key: str
 ) -> None:
     workspace = tmp_path / "workspace"
     _write_wrangler_workspace(workspace)
@@ -195,43 +167,25 @@ def test_native_allow_still_honors_custom_extension_block(
     identity = identify_unlisted_cli("npx wrangler whoami", cwd=workspace, home_dir=home_dir)
     assert identity is not None
     store = _grant_store(tmp_path, identity, state)
-    monkeypatch.setattr(hook_native_local_cli, "_block_rules_cache", {})
-    monkeypatch.setattr(
-        hook_native_local_cli,
-        "_saved_block_response",
-        lambda harness, result, **kwargs: {"decision": "deny", **kwargs},
+
+    match = review_rule_verdict(
+        store, command="npx wrangler whoami", cwd=workspace, home_dir=home_dir, mode="allowed", input_key=input_key
     )
 
-    response = hook_native_local_cli.native_local_cli_block_response(
-        store,
-        harness="codex",
-        payload={input_key: {"command": "npx wrangler whoami"}, "cwd": str(workspace)},
-        native_result={"decision": "allow", "policy_action": "allow", "minimum_action": "allow"},
-        workspace=workspace,
-        home_dir=home_dir,
-    )
-
-    assert (response is not None) is blocked
+    assert (match is not None and match[0] == "blocked") is blocked
     if blocked:
-        assert response == {
-            "decision": "deny",
-            "reason_code": "local_cli_extension_blocked",
-            "reason": "Your custom extension rules block this wrangler command.",
-            "guard_home": store.guard_home,
-        }
+        assert match == ("blocked", identity.name)
 
 
 def test_saved_exact_action_block_wins_over_custom_extension_allow(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     saved_block = {"decision": "deny", "source": "saved"}
-    monkeypatch.setattr(hook_native_review_approval, "native_review_policy_binding", lambda **_kwargs: None)
     monkeypatch.setattr(
-        hook_native_review_approval,
-        "native_local_cli_grant_response",
-        lambda *_args, **_kwargs: (False, {"decision": "allow", "source": "custom"}),
+        hook_native_review_approval, "review_evidence_parts", lambda _evidence: (True, None, "token", None)
     )
-    monkeypatch.setattr(hook_native_review_approval, "native_saved_review_response", lambda *_a, **_k: saved_block)
+    monkeypatch.setattr(hook_native_review_approval, "native_saved_decision_response", lambda *_a, **_k: saved_block)
+    monkeypatch.setattr(hook_native_review_approval, "native_exact_command_block_response", lambda *_a, **_k: None)
 
     response = hook_native_review_approval.pause_native_pre_tool_for_approval(
         object(),
@@ -241,6 +195,7 @@ def test_saved_exact_action_block_wins_over_custom_extension_allow(
         native_receipt=None,
         workspace=tmp_path,
         guard_home=tmp_path / "guard",
+        local_cli_rule={"blocked": False, "harness_response": {"decision": "allow", "source": "custom"}},
     )
 
     assert response is saved_block

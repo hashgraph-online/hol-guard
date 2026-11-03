@@ -15,7 +15,6 @@ from .native_policy_snapshot_constants import (
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_contract import _policy_snapshot_push_bytes_v3
-from .native_policy_snapshot_direct_lane import DIRECT_LANE_PUSH_FEATURE
 from .native_policy_snapshot_generation import native_policy_snapshot_v3
 
 
@@ -163,8 +162,7 @@ def _publish_snapshot_v3(
         encoded = _policy_snapshot_push_bytes_v3(
             snapshot,
             deadline_budget_ms=budget_ms,
-            # An older resident rejects unknown push fields.
-            direct_lane=direct_lane if DIRECT_LANE_PUSH_FEATURE in getattr(capabilities, "features", ()) else None,
+            direct_lane=direct_lane,
         )
         output = client(
             executable=identity.path,

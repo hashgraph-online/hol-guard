@@ -61,6 +61,123 @@ fn the_workspace_is_an_overlay_with_credentials_hidden() {
 }
 
 #[test]
+fn a_credential_inside_a_granted_package_tree_is_hidden_too() {
+    // A dependency tree is granted whole, so the rest of it comes with the
+    // tool directory that earned the grant. What it holds is withheld the
+    // way the workspace's own credentials are.
+    let root = root("package-tree");
+    let tree = root.join("node_modules");
+    let package = tree.join("harness-cli");
+    std::fs::create_dir_all(package.join(".ssh")).unwrap();
+    std::fs::write(package.join(".npmrc"), "//registry/:_authToken=x").unwrap();
+    std::fs::write(tree.join(".env"), "TOKEN=1").unwrap();
+    std::fs::write(package.join("index.js"), "").unwrap();
+    let mut request = input(&root, &["/bin/sh", "-c", "true"]);
+    request.exec_roots = vec![tree.clone(), PathBuf::from("/opt/tool")];
+    let argv = workspace_argv(&request).unwrap();
+    let text = |path: PathBuf| path.to_string_lossy().into_owned();
+    assert!(after(&argv, "--ro-bind-try", &text(tree.clone())));
+    assert!(after(&argv, "/dev/null", &text(package.join(".npmrc"))));
+    assert!(after(&argv, "/dev/null", &text(tree.join(".env"))));
+    assert!(after(&argv, "--tmpfs", &text(package.join(".ssh"))));
+    assert!(!argv.iter().any(|value| value.ends_with("index.js")));
+    // The grant is still read-only, and the masks mount over it.
+    let bound = argv
+        .windows(2)
+        .position(|pair| pair[0] == "--ro-bind-try" && pair[1] == text(tree.clone()))
+        .unwrap();
+    let masked = argv
+        .windows(2)
+        .position(|pair| pair[1] == text(package.join(".npmrc")))
+        .unwrap();
+    assert!(bound < masked, "{argv:?}");
+    // A narrow tool directory grant names no tree and is not walked.
+    let tools = root.join("tools/bin");
+    std::fs::create_dir_all(&tools).unwrap();
+    std::fs::write(tools.join(".npmrc"), "x").unwrap();
+    request.exec_roots = vec![tools.clone()];
+    let argv = workspace_argv(&request).unwrap();
+    assert!(!argv.iter().any(|value| value.ends_with("tools/bin/.npmrc")));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_directory_of_a_granted_tree_that_cannot_be_listed_is_hidden_not_refused() {
+    // An installed package may hold a directory this account cannot list.
+    // Refusing the launch over it would hand back the review the grant
+    // removes, so the directory is hidden whole and the run goes ahead.
+    if nix::unistd::geteuid().is_root() {
+        // Root lists a directory whatever its mode says.
+        return;
+    }
+    let root = root("tree-unreadable");
+    let tree = root.join("node_modules");
+    let closed = tree.join("harness-cli/fixtures");
+    std::fs::create_dir_all(&closed).unwrap();
+    std::fs::write(closed.join("signing.key"), "x").unwrap();
+    std::fs::write(tree.join(".npmrc"), "//registry/:_authToken=x").unwrap();
+    std::fs::set_permissions(&closed, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let mut request = input(&root, &["/bin/sh", "-c", "true"]);
+    request.exec_roots = vec![tree.clone()];
+    let argv = workspace_argv(&request).unwrap();
+    let text = |path: PathBuf| path.to_string_lossy().into_owned();
+    assert!(after(&argv, "--tmpfs", &text(closed.clone())));
+    // What the walk could read is still named file by file.
+    assert!(after(&argv, "/dev/null", &text(tree.join(".npmrc"))));
+    // Nothing is mounted under the hidden directory, which would fail bwrap.
+    assert!(!argv.iter().any(|value| value.ends_with("signing.key")));
+    std::fs::set_permissions(&closed, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn hidden_directories_count_against_the_mask_budget_too() {
+    // Hiding a directory mounts over it, so a tree full of directories that
+    // cannot be listed reaches the same cap a tree full of credentials does.
+    if nix::unistd::geteuid().is_root() {
+        return;
+    }
+    let root = root("tree-hidden-budget");
+    let tree = root.join("node_modules/harness-cli");
+    std::fs::create_dir_all(&tree).unwrap();
+    let closed: Vec<PathBuf> = (0..=MAX_MASKS)
+        .map(|n| tree.join(format!("f{n}")))
+        .collect();
+    for directory in &closed {
+        std::fs::create_dir(directory).unwrap();
+        std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o000)).unwrap();
+    }
+    let mut request = input(&root, &["/bin/sh", "-c", "true"]);
+    request.exec_roots = vec![root.join("node_modules")];
+    let error = workspace_argv(&request).unwrap_err();
+    assert_eq!(error.reason_code, PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE);
+    assert!(error.message.contains("package tree"), "{}", error.message);
+    for directory in &closed {
+        std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_tree_holding_more_credentials_than_the_budget_refuses_the_launch() {
+    // The masks are mount arguments, so their number is capped. A tree past
+    // the cap is refused with a reason of its own rather than bound with the
+    // credentials it holds left readable.
+    let root = root("tree-budget");
+    let tree = root.join("node_modules/harness-cli");
+    std::fs::create_dir_all(&tree).unwrap();
+    for index in 0..=MAX_MASKS {
+        std::fs::write(tree.join(format!("package-{index}.key")), "x").unwrap();
+    }
+    let mut request = input(&root, &["/bin/sh", "-c", "true"]);
+    request.exec_roots = vec![root.join("node_modules")];
+    let error = workspace_argv(&request).unwrap_err();
+    assert_eq!(error.reason_code, PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE);
+    assert!(error.message.contains("package tree"), "{}", error.message);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
 fn a_script_outside_the_workspace_is_bound_read_only_as_that_one_file() {
     let root = root("script");
     std::fs::create_dir_all(root.join("scratch")).unwrap();

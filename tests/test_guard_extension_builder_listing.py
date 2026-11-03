@@ -14,22 +14,29 @@ from jsonschema import Draft202012Validator
 
 from codex_plugin_scanner.guard.extension_builder.discover import discover
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
-from codex_plugin_scanner.guard.extension_builder.io import canonical_json
+from codex_plugin_scanner.guard.extension_builder.io import canonical_json, checked_path, parse_json, read_bytes
 from codex_plugin_scanner.guard.extension_builder.kit import build_kit, load_kit, write_kit
 from codex_plugin_scanner.guard.extension_builder.listing import (
     CATEGORY_LABELS,
     LISTING_SCHEMA_V1,
     LISTING_SCHEMA_V2,
+    MAX_LISTING_BYTES,
     MAX_TAGLINE_LENGTH,
     category_for_extension,
     listing_schema,
     listing_template,
-    load_listing,
     validate_listing,
 )
 from codex_plugin_scanner.guard.extension_builder.listing_cli import main
 from codex_plugin_scanner.guard.extension_builder.review import default_review
 from tests.extension_builder_support import REPOSITORY, cli_document, make_kit, metadata
+
+
+def load_listing(path: Path, *, expected_id: str) -> dict[str, object]:
+    path = checked_path(path)
+    if path.name != f"{expected_id}.json":
+        raise BuilderError("listing_identity", "Listing filename must match the native contribution ID.")
+    return validate_listing(parse_json(read_bytes(path, limit=MAX_LISTING_BYTES)), expected_id=expected_id)
 
 
 def listing() -> dict[str, object]:
@@ -137,6 +144,89 @@ def test_numeric_maintainers_and_exact_identity() -> None:
     assert validate_listing(row)["maintainerGithubIds"] == row["maintainerGithubIds"]
     with pytest.raises(BuilderError):
         validate_listing(row, expected_id="command.someone-else")
+
+
+def test_v2_contributor_profile_is_public_presentation_only() -> None:
+    row = listing()
+    profile = {
+        "description": "Writes bounded file-transfer coverage.",
+        "organization": "Example Labs",
+        "website": "https://example.com/tools",
+        "linkedin": "https://www.linkedin.com/in/example-author",
+        "x": "https://x.com/example",
+    }
+    row["contributors"] = [
+        {"githubId": "123", "githubLogin": "example-author", "roles": ["author"], "profile": profile}
+    ]
+    assert validate_listing(row)["contributors"] == row["contributors"]
+    assert "maintainerGithubIds" not in validate_listing(row)
+    row["contributors"] = [{"githubId": "123", "githubLogin": "example-author", "roles": ["author"], "profile": {}}]
+    with pytest.raises(BuilderError):
+        validate_listing(row)
+    row["contributors"] = [
+        {
+            "githubId": "123",
+            "githubLogin": "example-author",
+            "roles": ["author"],
+            "profile": {"website": "https://user:secret@example.com"},
+        }
+    ]
+    with pytest.raises(BuilderError):
+        validate_listing(row)
+    row["contributors"] = [
+        {
+            "githubId": "123",
+            "githubLogin": "example-author",
+            "roles": ["author"],
+            "profile": {"linkedin": "https://evil.example/in/example-author"},
+        }
+    ]
+    with pytest.raises(BuilderError):
+        validate_listing(row)
+    row["contributors"] = [
+        {
+            "githubId": "123",
+            "githubLogin": "example-author",
+            "roles": ["author"],
+            "profile": {"description": "line one\nline two here"},
+        }
+    ]
+    with pytest.raises(BuilderError):
+        validate_listing(row)
+
+
+def test_several_profiles_stay_inside_the_listing_budget(tmp_path: Path) -> None:
+    row = listing()
+    profile = {
+        "description": "Writes bounded file-transfer coverage.",
+        "organization": "Example Labs",
+        "website": "https://example.com/tools",
+        "linkedin": "https://www.linkedin.com/in/example-author",
+        "x": "https://x.com/example",
+    }
+    row["contributors"] = [
+        {
+            "githubId": str(1000 + index),
+            "githubLogin": f"author-{index}",
+            "roles": ["author"],
+            "profile": profile,
+        }
+        for index in range(8)
+    ]
+    assert validate_listing(row)["contributors"] == row["contributors"]
+    extension_id = str(row["extensionId"])
+    path = tmp_path / f"{extension_id}.json"
+    path.write_text(canonical_json(row), encoding="utf-8")
+    assert load_listing(path, expected_id=extension_id)["contributors"] == row["contributors"]
+    long_site = "https://example.com/" + ("a" * (1024 - len("https://example.com/")))
+    row["summary"] = "S" * 2048
+    row["documentationUrl"] = long_site
+    row["originalContributions"] = [{"kind": "pull-request", "url": f"{long_site[:-1]}{index}"} for index in range(8)]
+    row["contributors"] = [
+        {**contributor, "profile": {**profile, "website": long_site}} for contributor in row["contributors"]
+    ]
+    with pytest.raises(BuilderError, match="byte budget"):
+        validate_listing(row)
 
 
 def test_v2_credit_is_not_accepted_claim_authority() -> None:

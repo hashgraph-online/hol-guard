@@ -6,8 +6,9 @@ import json
 import sys
 from pathlib import Path
 
+from .adapters._modules.cursor.cursor_hook_command_line import split_cursor_hook_command
+from .adapters._modules.cursor.cursor_hook_native import NATIVE_CURSOR_HOOK_COMMAND, native_cursor_hook_bridge
 from .adapters.base import HarnessContext
-from .adapters.cursor_hook_command_line import split_cursor_hook_command
 from .adapters.cursor_hook_config import (
     _hooks_state_path,
     _is_managed_hook_script,
@@ -15,7 +16,6 @@ from .adapters.cursor_hook_config import (
     live_cursor_hooks_use_frozen_control_plane,
     managed_cursor_hook_commands,
 )
-from .adapters.cursor_hook_native import NATIVE_CURSOR_HOOK_COMMAND, native_cursor_hook_bridge
 from .adapters.cursor_hooks import (
     cursor_hook_script_path,
     cursor_hook_script_source,

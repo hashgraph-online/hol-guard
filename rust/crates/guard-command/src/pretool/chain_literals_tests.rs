@@ -168,6 +168,8 @@ fn a_command_naming_a_bound_variable_refuses_the_chain() {
     for command in [
         "X=build; zformat -f X /Users/me/.ssh; rm -rf $X",
         "X=build && zstyle -s ctx style X && rm -rf $X",
+        // `zstyle -e` stores code that a later lookup runs.
+        "x=/srv; c='x=/Users/me'; zstyle -e :x s 'eval $c'; zstyle -s :x s y; cat $x/.ssh/id_rsa",
         "X=build && strftime -s X %s 0 && rm -rf $X",
         "X=build && zstat -A X f && rm -rf $X",
         "X=build && sysread X && rm -rf $X",
@@ -385,20 +387,37 @@ mod envelope {
     }
 
     #[test]
+    fn a_parent_substitution_is_judged_as_the_parent_it_prints() {
+        let ws = workspace("parent", true);
+        let parent = ws.parent().unwrap().display().to_string();
+        let raw = "printf 'parent=%s\\n' \"$(dirname \"$PWD\")\"";
+        let literal = format!("printf 'parent=%s\\n' \"{parent}\"");
+        let producer = verdict(&format!("dirname {}", ws.display()), &ws);
+        let (literal_action, _) = verdict(&literal, &ws);
+        assert_eq!(literal_action, "allow", "{literal}");
+        // Allowed, or contained by the sandbox because no read rule names it.
+        if producer.0 == "allow" || (producer.0 == "sandbox-required" && producer.1 == CONTAINED) {
+            assert_eq!(verdict(raw, &ws), verdict(&literal, &ws), "{producer:?}");
+        } else {
+            assert_ne!(verdict(raw, &ws).0, "allow", "{producer:?}");
+        }
+    }
+
+    #[test]
     fn the_launcher_runs_only_the_raw_text_it_judged() {
         let ws = workspace("launcher", true);
         let raw = "export F=a.txt && touch $F && cat $F";
         let literal = "export F=a.txt && touch a.txt && cat a.txt";
-        let shape = crate::restricted_pytest::workspace_exact_shape(raw, &ws);
+        let shape = crate::pretool::workspace_exact_shape(raw, &ws);
         assert_eq!(
             shape.is_some(),
-            crate::restricted_pytest::workspace_exact_shape(literal, &ws).is_some()
+            crate::pretool::workspace_exact_shape(literal, &ws).is_some()
         );
         assert!(shape.is_none_or(|shape| shape.remainder.is_none() && shape.bootstrap.is_none()));
         // A bootstrapped `git init` would run a rewritten remainder, not the
         // raw text, so a substituted chain never gets that shape.
         let fresh = workspace("launcher-fresh", false);
-        assert!(crate::restricted_pytest::workspace_exact_shape(
+        assert!(crate::pretool::workspace_exact_shape(
             "git init && export F=a.txt && touch $F",
             &fresh
         )

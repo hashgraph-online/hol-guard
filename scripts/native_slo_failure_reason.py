@@ -22,6 +22,7 @@ _MAX_CHAIN = 8
 # A canonical reason is a fixed sentence.  Anything shaped like a filesystem
 # path is refused outright rather than slugged into a label.
 _PATH_LIKE = re.compile(r"[\\~]|/[^/\s]*/|[A-Za-z]:[\\/]")
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
 
 
 def contract_failure_reason(error: BaseException) -> str | None:
@@ -67,4 +68,22 @@ def annotate_failure_reason(result: MutableMapping[str, object], error: BaseExce
     return label
 
 
-__all__ = ["annotate_failure_reason", "contract_failure_reason"]
+def exception_chain_summary(error: BaseException) -> str:
+    """Name each exception in the chain by type and errno, never by message."""
+
+    parts: list[str] = []
+    current: BaseException | None = error
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen and len(seen) < _MAX_CHAIN:
+        seen.add(id(current))
+        name = type(current).__name__
+        part = name if _IDENTIFIER.fullmatch(name) else "Exception"
+        errno = getattr(current, "errno", None)
+        if type(errno) is int:
+            part += f"[errno={errno}]"
+        parts.append(part)
+        current = current.__cause__ or current.__context__
+    return "<-".join(parts)
+
+
+__all__ = ["annotate_failure_reason", "contract_failure_reason", "exception_chain_summary"]

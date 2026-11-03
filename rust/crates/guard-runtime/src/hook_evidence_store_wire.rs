@@ -17,8 +17,16 @@ use crate::guard_store_db::StoreError;
 /// `command_activity_display.INVOCATION_PREVIEW_MAX_CHARS`.
 const INVOCATION_PREVIEW_MAX_CHARS: usize = 4_096;
 
+/// A failed store call as the evidence writer sees it. A busy or locked
+/// database is a timeout, which the writer waits out rather than counting
+/// against the attempts it gives a write the store keeps refusing.
 pub(crate) fn store_failure(method: &str, error: &StoreError) -> io::Error {
-    io::Error::other(format!("{method}: {} ({})", error.code(), error.message()))
+    let message = format!("{method}: {} ({})", error.code(), error.message());
+    if error.code() == "native_guard_store_busy" {
+        io::Error::new(io::ErrorKind::TimedOut, message)
+    } else {
+        io::Error::other(message)
+    }
 }
 
 /// The failure codes `_recover_fatal_sqlite_store` acts on: a store whose

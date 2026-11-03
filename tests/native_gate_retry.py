@@ -16,8 +16,11 @@ where the clock ran out, not of what the policy decided, so both are retried.
 
 from __future__ import annotations
 
+import time
 import warnings
 from collections.abc import Callable
+
+from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
 
 UNAVAILABLE_REASON = "native_pre_tool_unavailable"
 REVIEW_DEADLINE_REASON = "native_review_deadline_exceeded"
@@ -29,19 +32,27 @@ class NativeUnavailableRetryWarning(UserWarning):
     """A gate case was re-run after the native review missed its budget."""
 
 
-def review_with_unavailable_retry(case_id: str, review: Callable[[], dict[str, object]]) -> dict[str, object]:
+def _timed(review: Callable[[], dict[str, object]]) -> tuple[dict[str, object], str]:
+    started = time.monotonic()
     result = review()
+    # The elapsed time and the client's failure code tell a missed budget from
+    # a refusal when a case fails.
+    return result, f"after {time.monotonic() - started:.2f}s, client failure {native_resident_client_failure_code()}"
+
+
+def review_with_unavailable_retry(case_id: str, review: Callable[[], dict[str, object]]) -> dict[str, object]:
+    result, detail = _timed(review)
     if result.get("reason_code") not in BUDGET_MISS_REASONS:
         return result
     warnings.warn(
-        f"{case_id}: native review unavailable at the hook budget; re-running once",
+        f"{case_id}: native review unavailable at the hook budget ({detail}); re-running once",
         NativeUnavailableRetryWarning,
         stacklevel=2,
     )
-    retried = review()
+    retried, detail = _timed(review)
     if retried.get("reason_code") in BUDGET_MISS_REASONS:
         warnings.warn(
-            f"{case_id}: native review unavailable on both attempts; the case fails",
+            f"{case_id}: native review unavailable on both attempts ({detail}); the case fails",
             NativeUnavailableRetryWarning,
             stacklevel=2,
         )

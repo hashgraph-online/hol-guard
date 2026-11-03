@@ -14,8 +14,14 @@ use std::time::Instant;
 pub mod bound_fs;
 #[cfg(unix)]
 pub mod bound_output;
+#[cfg(unix)]
+pub mod deferred_output;
+#[cfg(target_os = "macos")]
+pub mod host_owner;
 pub mod probe;
 pub use probe::main as probe_main;
+#[cfg(target_os = "macos")]
+mod macos_code_image;
 pub mod runtime_files;
 pub mod runtime_resources;
 #[cfg(unix)]
@@ -75,6 +81,10 @@ pub struct Isolation {
     pub node_virtual_address_space: bool,
     #[cfg(unix)]
     pub inherited_files: Vec<File>,
+    #[cfg(unix)]
+    pub deferred_outputs: Vec<deferred_output::DeferredOutput>,
+    #[cfg(unix)]
+    pub creation_mask: Option<u32>,
     #[cfg(windows)]
     pub app_container: Option<windows::AppContainer>,
     #[cfg(windows)]
@@ -96,6 +106,7 @@ pub struct PinnedCommand {
     selectors: Vec<runtime_resources::SourceBinding>,
     cwd: bound_fs::Directory,
     pub executable_digest: String,
+    argument_zero: OsString,
     arguments: Vec<OsString>,
     environment: Vec<(OsString, OsString)>,
     #[cfg(target_os = "macos")]
@@ -144,6 +155,7 @@ impl PinnedCommand {
         let _ = image_root;
         #[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
         let executable_file = source.try_clone()?;
+        let argument_zero = executable_path.as_os_str().to_os_string();
         Ok(Self {
             #[cfg(unix)]
             executable: executable_file,
@@ -154,6 +166,7 @@ impl PinnedCommand {
             cwd: bound_fs::Directory::open(cwd)?,
             executable_digest: digest,
             selectors,
+            argument_zero,
             arguments: args.iter().map(|arg| (*arg).to_os_string()).collect(),
             environment: env.to_vec(),
             #[cfg(target_os = "macos")]
@@ -183,6 +196,58 @@ impl PinnedCommand {
     pub fn cwd(&self) -> &Path {
         self.cwd.path()
     }
+
+    /// Set exact arguments and environment without resolving the executable
+    /// or working directory again. The held image and all bindings survive.
+    pub fn with_invocation(
+        mut self,
+        arguments: &[&OsStr],
+        environment: &[(OsString, OsString)],
+    ) -> io::Result<Self> {
+        self.verify_bindings()?;
+        self.arguments = arguments
+            .iter()
+            .map(|argument| argument.to_os_string())
+            .collect();
+        self.environment = environment.to_vec();
+        Ok(self)
+    }
+
+    /// Preserve a reviewed invocation spelling as argv[0] while retaining the
+    /// already pinned executable, cwd and runtime-resource bindings.
+    pub fn with_invocation_argv0(
+        mut self,
+        argument_zero: &OsStr,
+        arguments: &[&OsStr],
+        environment: &[(OsString, OsString)],
+    ) -> io::Result<Self> {
+        if argument_zero.is_empty() {
+            return Err(io::ErrorKind::InvalidInput.into());
+        }
+        self.verify_bindings()?;
+        self.argument_zero = argument_zero.to_os_string();
+        self.arguments = arguments
+            .iter()
+            .map(|argument| argument.to_os_string())
+            .collect();
+        self.environment = environment.to_vec();
+        Ok(self)
+    }
+
+    /// Validate the private macOS image snapshot used by hardened launch.
+    /// The original source path may have changed after capture; cwd and the
+    /// private image's exact digest and signature remain mandatory.
+    #[cfg(target_os = "macos")]
+    pub fn verify_hardened_image(&self) -> io::Result<()> {
+        self.hardened_binding().map(drop)
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn hardened_binding(&self) -> io::Result<macos_code_image::Binding> {
+        self.cwd.verify()?;
+        self.image.hardened_binding(&self.executable_digest)
+    }
+
     pub(crate) fn verify_bindings(&self) -> io::Result<()> {
         self.source_directory.verify()?;
         self.cwd.verify()?;
@@ -219,7 +284,15 @@ impl PinnedCommand {
             ));
         }
         #[cfg(unix)]
-        return unix::capture(self, input, cap, deadline, cancel, isolation, None);
+        return unix::capture(
+            self,
+            input,
+            cap,
+            deadline,
+            cancel,
+            isolation,
+            unix::CaptureMode::Standard(None),
+        );
         #[cfg(windows)]
         return windows::capture(self, input, cap, deadline, cancel, isolation);
         #[cfg(not(any(unix, windows)))]
@@ -227,6 +300,41 @@ impl PinnedCommand {
             io::ErrorKind::Unsupported,
             "no handle-bound process kernel",
         ))
+    }
+
+    /// Launch a signed macOS executable only after the kernel has suspended
+    /// the exact CodeDirectory reviewed from this pinned image. The sandbox is
+    /// mandatory and the signature must enable hardened runtime without any
+    /// entitlements.
+    #[cfg(target_os = "macos")]
+    pub fn capture_hardened_image(
+        self,
+        input: &[u8],
+        cap: usize,
+        deadline: Instant,
+        cancel: &AtomicBool,
+        isolation: Isolation,
+    ) -> io::Result<CapturedOutput> {
+        if cap == 0
+            || input.len() > 256 * 1024 * 1024
+            || isolation.seatbelt.is_none()
+            || !isolation.deferred_outputs.is_empty()
+            || isolation.creation_mask.is_some()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid hardened process isolation",
+            ));
+        }
+        unix::capture(
+            self,
+            input,
+            cap,
+            deadline,
+            cancel,
+            isolation,
+            unix::CaptureMode::Hardened,
+        )
     }
 }
 
@@ -251,5 +359,7 @@ pub use windows::readonly::{run_readonly_snapshot, BuildRun, ReadonlySnapshotRun
 #[cfg(windows)]
 pub use windows::AppContainer;
 
+#[cfg(all(test, target_os = "macos"))]
+mod macos_hardened_image_tests;
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests;

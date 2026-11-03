@@ -25,12 +25,14 @@ from ..local_supply_chain import (
 from ..native_daemon_handler import (
     native_supply_chain_error,
 )
+from ..native_hook_artifact_compose import NativeHookComposeError
+from ..native_runner_authority import NativeRunnerAuthorityError
 from ..package_firewall_entitlement import (
-    package_firewall_action_states,
-    package_firewall_available_actions,
-    package_firewall_block_details,
-    package_firewall_operation_allowed,
-    resolve_package_firewall_entitlement,
+    PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE,
+    PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE_MESSAGE,
+    PackageFirewallAccess,
+    package_firewall_access,
+    package_firewall_entitlement_or_denied,
 )
 from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..package_shim_status import record_package_shim_audit_result
@@ -70,20 +72,70 @@ from .server_control_connect_state import (
     _resolve_package_firewall_connect_flow,
 )
 
+SUPPLY_CHAIN_WORKSPACE_UNAVAILABLE = "supply_chain_workspace_unavailable"
+
 
 class _SupplyChainRoutes:
     """Handler methods for control-plane routes."""
 
+    def _guard_home(self) -> Path:
+        return Path(self.server.store.guard_home)  # type: ignore[attr-defined]
+
+    def _package_firewall_access(
+        self,
+        entitlement: dict[str, object],
+        *,
+        operation: str | None,
+        has_installed_managers: bool,
+        reported_operation: str,
+    ) -> PackageFirewallAccess | None:
+        """What the entitlement permits, or a fail-closed reply and ``None``.
+
+        The resident composes every projection this request needs in one
+        answer. When it cannot answer, the request is refused with an
+        unavailable reply rather than crashing the handler, and no action is
+        offered: an unanswered composition is not an allow.
+        """
+
+        try:
+            return package_firewall_access(
+                entitlement,
+                operation=operation,
+                has_installed_managers=has_installed_managers,
+                guard_home=self._guard_home(),
+            )
+        except NativeHookComposeError:
+            self._write_json(  # type: ignore[attr-defined]
+                {
+                    "available_actions": [],
+                    "entitlement": entitlement,
+                    "error": PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE,
+                    "message": PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE_MESSAGE,
+                    "operation": reported_operation,
+                },
+                status=503,
+            )
+            return None
+
     def _handle_supply_chain_package_firewall_status(self) -> None:
         entitlement = self._supply_chain_entitlement()
         status = package_shim_dashboard_status(self._harness_context({}))
-        audit_workspace_dir = self._resolve_supply_chain_workspace_dir({})
+        access = self._package_firewall_access(
+            entitlement,
+            operation=None,
+            has_installed_managers=bool(status.get("installed_managers")),
+            reported_operation="status",
+        )
+        if access is None:
+            return
+        try:
+            audit_workspace_dir = self._resolve_supply_chain_workspace_dir({})
+        except NativeRunnerAuthorityError:
+            self._write_supply_chain_workspace_unavailable("status")
+            return
         self._write_json(
             {
-                "actions": package_firewall_action_states(
-                    entitlement,
-                    has_installed_managers=bool(status.get("installed_managers")),
-                ),
+                "actions": access.action_states,
                 "audit_workspace_dir": (str(audit_workspace_dir) if audit_workspace_dir is not None else None),
                 "cli_fallback": {
                     "connect": "hol-guard connect",
@@ -105,14 +157,22 @@ class _SupplyChainRoutes:
             return
 
         entitlement = self._supply_chain_entitlement()
-        context = self._supply_chain_context(payload)
+        try:
+            context = self._supply_chain_context(payload)
+        except NativeRunnerAuthorityError:
+            self._write_supply_chain_workspace_unavailable("repair_all")
+            return
         current_status = package_shim_status(context)
-        if not package_firewall_operation_allowed(
+        access = self._package_firewall_access(
             entitlement,
-            "repair",
+            operation="repair",
             has_installed_managers=bool(current_status.get("installed_managers")),
-        ):
-            status, error_code, message = package_firewall_block_details(entitlement)
+            reported_operation="repair_all",
+        )
+        if access is None:
+            return
+        if not access.operation_allowed:
+            status, error_code, message = access.block
             self._write_json(
                 {
                     "entitlement": entitlement,
@@ -177,22 +237,26 @@ class _SupplyChainRoutes:
                 payload,
                 reject_invalid_explicit=operation == "audit",
             )
+        except NativeRunnerAuthorityError:
+            self._write_supply_chain_workspace_unavailable(operation)
+            return
         except ValueError as error:
             self._write_json(self._supply_chain_value_error_payload(operation, str(error)), status=400)
             return
         current_status = package_shim_status(context)
-        if not package_firewall_operation_allowed(
+        access = self._package_firewall_access(
             entitlement,
-            operation,
+            operation=operation,
             has_installed_managers=bool(current_status.get("installed_managers")),
-        ):
-            status, error_code, message = package_firewall_block_details(entitlement)
+            reported_operation=operation,
+        )
+        if access is None:
+            return
+        if not access.operation_allowed:
+            status, error_code, message = access.block
             self._write_json(
                 {
-                    "available_actions": package_firewall_available_actions(
-                        entitlement,
-                        has_installed_managers=bool(current_status.get("installed_managers")),
-                    ),
+                    "available_actions": access.available_actions,
                     "entitlement": entitlement,
                     "error": error_code,
                     "message": message,
@@ -353,6 +417,9 @@ class _SupplyChainRoutes:
                 {"workspace_dir": selected},
                 reject_invalid_explicit=True,
             )
+        except NativeRunnerAuthorityError:
+            self._write_supply_chain_workspace_unavailable("choose-folder")
+            return
         except ValueError as error:
             self._write_json(self._supply_chain_value_error_payload("choose-folder", str(error)), status=400)
             return
@@ -388,6 +455,7 @@ class _SupplyChainRoutes:
             allowed_roots=allowed_roots,
             managed_workspace_dirs=managed_workspace_dirs,
             reject_invalid_explicit=reject_invalid_explicit,
+            guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
         )
 
     def _supply_chain_context(
@@ -406,6 +474,18 @@ class _SupplyChainRoutes:
             guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
         )
 
+    def _write_supply_chain_workspace_unavailable(self, operation: str) -> None:
+        """The native runtime could not resolve the workspace; not a bad folder."""
+
+        self._write_json(
+            {
+                "error": SUPPLY_CHAIN_WORKSPACE_UNAVAILABLE,
+                "message": "Guard could not check the project folder right now. Try again in a moment.",
+                "operation": operation,
+            },
+            status=503,
+        )
+
     @staticmethod
     def _supply_chain_value_error_payload(operation: str, error_code: str) -> dict[str, object]:
         error_payload: dict[str, object] = {"error": error_code, "operation": operation}
@@ -416,7 +496,8 @@ class _SupplyChainRoutes:
             )
         elif error_code == "workspace_dir_invalid":
             error_payload["message"] = (
-                "Guard could not use the selected project folder. Choose an existing local folder and try again."
+                "Guard could not use the selected project folder. "
+                "Choose an existing folder inside your home folder and try again."
             )
         return error_payload
 
@@ -446,7 +527,7 @@ class _SupplyChainRoutes:
             if _guard_cloud_connect_state_is_in_flight(cloud_connect) or _guard_cloud_connect_state_is_in_flight(
                 package_connect
             ):
-                return resolve_package_firewall_entitlement(server.store)
+                return package_firewall_entitlement_or_denied(server.store)
             return resolve_package_firewall_entitlement_with_refresh(server.store)
 
     def _handle_get_supply_chain_bundle(self) -> None:

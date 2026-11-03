@@ -270,6 +270,28 @@ fn probe_env_locked_keys_filtered() {
 }
 
 #[test]
+fn probe_env_drops_malformed_names_and_nul_values() {
+    // A harness value may add a variable, but never one whose name could
+    // smuggle a second assignment or whose name or value holds a NUL.
+    let mut extra = BTreeMap::new();
+    extra.insert("Z_AI_API_KEY".to_owned(), "probe-key".to_owned());
+    extra.insert("BAD=NAME".to_owned(), "x".to_owned());
+    extra.insert("NULL".to_owned(), "a\0b".to_owned());
+    extra.insert("NUL\0NAME".to_owned(), "x".to_owned());
+    extra.insert("path".to_owned(), "evil-path".to_owned());
+    let env = probe_env("/tmp/probe", Some(&extra), None);
+    assert_eq!(
+        env.get("Z_AI_API_KEY").map(String::as_str),
+        Some("probe-key")
+    );
+    assert!(!env.contains_key("BAD=NAME"), "{env:?}");
+    assert!(!env.contains_key("NULL"), "{env:?}");
+    assert!(!env.contains_key("NUL\0NAME"), "{env:?}");
+    assert!(!env.contains_key("path"), "{env:?}");
+    assert_ne!(env.get("PATH").map(String::as_str), Some("evil-path"));
+}
+
+#[test]
 fn probe_env_keeps_windows_interpreter_and_temp_settings() {
     // A server config cannot redirect temporary files or the command
     // interpreter, in any letter case.

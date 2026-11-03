@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -56,3 +57,83 @@ def test_native_windows_process_inventory_finds_current_python() -> None:
     )
     assert inventory is not None
     assert any(pid == os.getpid() and command == command_line for pid, command in inventory)
+
+
+def _fake_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    answer: dict[str, object] | None,
+) -> list[dict[str, object]]:
+    requests: list[dict[str, object]] = []
+
+    def runtime_answer(request: dict[str, object], *, output_limit: int) -> dict[str, object] | None:
+        assert output_limit > 0
+        requests.append(request)
+        return answer
+
+    monkeypatch.setattr(windows_processes, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(windows_processes, "_runtime_answer", runtime_answer)
+    return requests
+
+
+def test_command_line_asks_the_runtime_for_one_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    requests = _fake_runtime(monkeypatch, {"command_lines": ["python.exe -m guard"]})
+
+    assert windows_processes.windows_process_command_line(42, max_command_line_bytes=512) == "python.exe -m guard"
+    assert requests == [{"op": "read", "pids": [42], "max_command_line_bytes": 512}]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [None, {}, {"command_lines": []}, {"command_lines": [None]}, {"command_lines": [""]}, {"command_lines": [7]}],
+)
+def test_command_line_reads_an_unusable_answer_as_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    answer: dict[str, object] | None,
+) -> None:
+    _ = _fake_runtime(monkeypatch, answer)
+
+    assert windows_processes.windows_process_command_line(42) is None
+
+
+def test_inventory_asks_the_runtime_for_candidate_images(monkeypatch: pytest.MonkeyPatch) -> None:
+    requests = _fake_runtime(monkeypatch, {"entries": [[10, "python.exe -m guard"], [30, "hol-guard.exe daemon"]]})
+
+    assert windows_processes.windows_process_command_line_inventory(
+        candidate_executable_names=frozenset({"python.exe", "hol-guard.exe", " "}),
+        max_processes=100,
+        max_command_line_bytes=4096,
+    ) == [(10, "python.exe -m guard"), (30, "hol-guard.exe daemon")]
+    assert requests == [
+        {
+            "op": "inventory",
+            "candidate_executable_names": ["hol-guard.exe", "python.exe"],
+            "max_processes": 100,
+            "max_command_line_bytes": 4096,
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        {"entries": None},
+        {"entries": [[10]]},
+        {"entries": [[0, "python.exe"]]},
+        {"entries": [[True, "python.exe"]]},
+        {"entries": [[10, ""]]},
+        {"entries": [["10", "python.exe"]]},
+    ],
+)
+def test_inventory_reads_an_unusable_answer_as_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    answer: dict[str, object] | None,
+) -> None:
+    _ = _fake_runtime(monkeypatch, answer)
+
+    assert (
+        windows_processes.windows_process_command_line_inventory(
+            candidate_executable_names=frozenset({"python.exe"}),
+        )
+        is None
+    )

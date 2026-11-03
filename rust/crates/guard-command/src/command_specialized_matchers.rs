@@ -17,10 +17,8 @@ use crate::command_ascii_comparison::{self as ascii_comparison, lowercase_for_as
 
 #[path = "command_curl_operations.rs"]
 mod curl;
-#[path = "command_reviewed_literal.rs"]
-mod literal;
 
-use literal::ReviewedLiteralConfig;
+use crate::command_reviewed_literal::ReviewedLiteralConfig;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]

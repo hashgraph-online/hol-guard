@@ -43,6 +43,12 @@ fn skill_content_risk_matches_python_vectors() {
 }
 
 #[test]
+fn a_long_run_of_dashes_is_read_in_linear_time() {
+    let content = "-".repeat(512 * 1024);
+    assert!(frontmatter_blocks(&content).is_empty());
+}
+
+#[test]
 fn base64_strictness() {
     assert!(b64decode_py("QUJD").is_some());
     assert!(b64decode_py("QUJDR").is_none());

@@ -2,15 +2,15 @@
 //!
 //! When no saved exact-action decision answers a review, the daemon spends a
 //! five-minute "allow once" the user gave the same request in the approval
-//! inbox: `native_review_matching_allow` (`hook_native_review_binding.py`)
+//! inbox: `native_review_settle` (`hook_native_review_binding.py`)
 //! with the review identity `native_review_binding`
 //! (`hook_native_exact_action.py`) derives and the launch target of
 //! `_native_review_launch_target` (`hook_native_review_approval.py`). The
-//! resident runs the same `consume_native_review_approval` store operation the
-//! daemon asks it for, under the same shared storage gate, and answers only
-//! when it spent an approval. With no approval to spend, the resident queues
-//! the review itself (`hook_direct_review_queue.rs`); every other outcome
-//! defers to the daemon.
+//! resident runs the same `settle_native_review_reuse` store operation the
+//! daemon asks it for, under the same shared storage gate: a matching Keep
+//! blocked answers with the refusal, a spent approval with the allow. With
+//! no approval to spend, the resident queues the review itself
+//! (`hook_direct_review_queue.rs`); every other outcome defers to the daemon.
 
 use super::query::{self, pre_tool_command, pre_tool_input, strip};
 use super::{render, Context, HookDirectDefer};
@@ -22,7 +22,8 @@ use serde_json::{json, Map, Value};
 use std::fs::File;
 use std::path::Path;
 
-const CONSUME_METHOD: &str = "consume_native_review_approval";
+/// The block check and the approve-once spend, in one store transaction.
+const SETTLE_METHOD: &str = "settle_native_review_reuse";
 /// The storage gate every daemon store call holds shared; maintenance that
 /// replaces the store holds it exclusively.
 const STORAGE_GATE_FILE_NAME: &str = "storage-access.lock";
@@ -76,7 +77,8 @@ pub(super) fn answer(
     }
     let now = super::super::lifecycle::utc_now_isoformat().ok_or(HookDirectDefer::SavedDecision)?;
     args.insert("now".to_owned(), json!(now));
-    let mut request = GuardStoreRequestV1 {
+    args.insert("spend".to_owned(), json!(true));
+    let request = GuardStoreRequestV1 {
         schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
         request_id: "direct-hook-review-consume".to_owned(),
         store_path: guard_home
@@ -84,7 +86,7 @@ pub(super) fn answer(
             .to_string_lossy()
             .into_owned(),
         guard_home: context.guard_home.to_owned(),
-        method: "matching_native_review_block".to_owned(),
+        method: SETTLE_METHOD.to_owned(),
         source: "default".to_owned(),
         busy_timeout_ms: BUSY_TIMEOUT_MS,
         args,
@@ -102,21 +104,12 @@ pub(super) fn answer(
         .as_object_mut()
         .ok_or(HookDirectDefer::SavedDecision)?
         .insert("prompted".to_owned(), json!(false));
-    let refused = crate::guard_store_op::evaluate(&request).map(|(payload, _)| payload);
-    match refused {
-        Ok(Value::Bool(true)) => {
-            repair_store_permissions(guard_home);
-            return Ok(Some(blocked_response));
-        }
-        Ok(Value::Bool(false)) => {}
-        _ => return Err(HookDirectDefer::SavedDecision),
-    }
-    request.method = CONSUME_METHOD.to_owned();
-    let spent = crate::guard_store_op::evaluate(&request).map(|(payload, _)| payload);
+    let settled = crate::guard_store_op::evaluate(&request).map(|(payload, _)| payload);
     repair_store_permissions(guard_home);
-    match spent {
-        Ok(Value::Bool(true)) => Ok(Some(response)),
-        Ok(Value::Bool(false)) => Ok(None),
+    match settled {
+        Ok(Value::Null) => Ok(None),
+        Ok(Value::String(outcome)) if outcome == "blocked" => Ok(Some(blocked_response)),
+        Ok(Value::String(outcome)) if outcome == "allowed" => Ok(Some(response)),
         _ => Err(HookDirectDefer::SavedDecision),
     }
 }

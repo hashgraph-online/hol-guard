@@ -13,7 +13,6 @@ use fancy_regex::Regex as FancyRegex;
 use regex::Regex;
 
 use crate::command_launcher_floors::shlex_split;
-use crate::home_path_text::expand_home;
 
 /// Python `str.isspace`: Unicode White_Space plus the ASCII separators
 /// U+001C..U+001F that Rust's `char::is_whitespace` omits.
@@ -453,6 +452,139 @@ fn realpath_text(path: &str) -> String {
         .unwrap_or_else(|_| normpath_text(path))
 }
 
+/// `os.path.expanduser` on the runtime platform, for every target the skill-doc
+/// grammar does not already resolve against the caller's `home_dir`.
+///
+/// This is deliberately not `home_path_text::expand_home`. That helper reads
+/// `~\` as a home prefix on every platform and leaves `~user` untouched, while
+/// `expanduser` expands `~\` only on Windows and resolves `~user` through the
+/// account database. Both differences decide whether a target lands inside a
+/// known skill-doc root, so the grammar needs `expanduser`'s exact answers.
+/// Like Python's, this reads the process environment and ignores `home_dir`.
+#[cfg(unix)]
+fn expanduser_text(path: &str) -> String {
+    // posixpath.expanduser.
+    if !path.starts_with('~') {
+        return path.to_owned();
+    }
+    let index = path[1..].find('/').map_or(path.len(), |offset| offset + 1);
+    let userhome = if index == 1 {
+        match std::env::var_os("HOME") {
+            Some(home) => home.to_string_lossy().into_owned(),
+            None => match nix::unistd::User::from_uid(nix::unistd::getuid()) {
+                Ok(Some(user)) => user.dir.to_string_lossy().into_owned(),
+                _ => return path.to_owned(),
+            },
+        }
+    } else {
+        match nix::unistd::User::from_name(&path[1..index]) {
+            Ok(Some(user)) => user.dir.to_string_lossy().into_owned(),
+            // `pwd.getpwnam` raised `KeyError`: the text stays as it is.
+            _ => return path.to_owned(),
+        }
+    };
+    let expanded = format!("{}{}", userhome.trim_end_matches('/'), &path[index..]);
+    if expanded.is_empty() {
+        "/".to_owned()
+    } else {
+        expanded
+    }
+}
+
+#[cfg(windows)]
+fn expanduser_text(path: &str) -> String {
+    expanduser_nt(
+        path,
+        std::env::var("USERPROFILE").ok().as_deref(),
+        std::env::var("HOMEDRIVE").ok().as_deref(),
+        std::env::var("HOMEPATH").ok().as_deref(),
+        std::env::var("USERNAME").ok().as_deref(),
+    )
+}
+
+/// `ntpath.expanduser` as plain text logic, so every host can test it.
+#[cfg(any(windows, test))]
+fn expanduser_nt(
+    path: &str,
+    user_profile: Option<&str>,
+    home_drive: Option<&str>,
+    home_path: Option<&str>,
+    username: Option<&str>,
+) -> String {
+    if !path.starts_with('~') {
+        return path.to_owned();
+    }
+    let index = path[1..]
+        .find(['\\', '/'])
+        .map_or(path.len(), |offset| offset + 1);
+    let userhome = match (user_profile, home_path) {
+        (Some(profile), _) => profile.to_owned(),
+        // Without `USERPROFILE` or `HOMEPATH` there is no home to expand to.
+        (None, None) => return path.to_owned(),
+        (None, Some(home_path)) => nt_join(home_drive.unwrap_or_default(), home_path),
+    };
+    let userhome = if index == 1 {
+        userhome
+    } else {
+        // `~user`: ntpath renames the sibling directory rather than consulting
+        // any account database, and gives up when the current user's name does
+        // not match the last component of their own home.
+        let target_user = &path[1..index];
+        if username == Some(target_user) {
+            userhome
+        } else {
+            let (head, tail) = nt_split(&userhome);
+            if username != Some(tail) {
+                return path.to_owned();
+            }
+            nt_join(&head, target_user)
+        }
+    };
+    format!("{userhome}{}", &path[index..])
+}
+
+/// `ntpath.split`: the drive stays on the head and its trailing separators go,
+/// unless the head is nothing but separators.
+#[cfg(any(windows, test))]
+fn nt_split(text: &str) -> (String, &str) {
+    let (drive, _, _) = crate::home_path_text::split_root_nt(text);
+    let rest = &text[drive.len()..];
+    let cut = rest.rfind(['\\', '/']).map_or(0, |index| index + 1);
+    let (head, tail) = rest.split_at(cut);
+    let trimmed = head.trim_end_matches(['\\', '/']);
+    let head = if trimmed.is_empty() { head } else { trimmed };
+    (format!("{drive}{head}"), tail)
+}
+
+/// `ntpath.join` for a head and one further component.
+#[cfg(any(windows, test))]
+fn nt_join(head: &str, tail: &str) -> String {
+    let (head_drive, head_root, head_rest) = crate::home_path_text::split_root_nt(head);
+    let (tail_drive, tail_root, tail_rest) = crate::home_path_text::split_root_nt(tail);
+    // A rooted tail replaces the head but keeps the head's drive when it
+    // brings none of its own; a tail on another drive replaces the head whole.
+    if !tail_root.is_empty() {
+        let drive = if tail_drive.is_empty() {
+            head_drive
+        } else {
+            tail_drive
+        };
+        return format!("{drive}{tail_root}{tail_rest}");
+    }
+    if !tail_drive.is_empty() && !tail_drive.eq_ignore_ascii_case(head_drive) {
+        return format!("{tail_drive}{tail_rest}");
+    }
+    let drive = if tail_drive.is_empty() {
+        head_drive
+    } else {
+        tail_drive
+    };
+    if head_rest.is_empty() || head_rest.ends_with(['\\', '/']) {
+        return format!("{drive}{head_root}{head_rest}{tail_rest}");
+    }
+    format!("{drive}{head_root}{head_rest}\\{tail_rest}")
+}
+
 fn is_link(path: &str) -> bool {
     std::fs::symlink_metadata(path)
         .map(|m| m.file_type().is_symlink())
@@ -507,7 +639,7 @@ pub fn target_is_known_skill_doc_path(target: &str, home_dir: Option<&Path>) -> 
     let expanded = if target == "~" || target.starts_with("~/") {
         format!("{}{}", home_text(home_dir), &target[1..])
     } else {
-        expand_home(target, home_dir)
+        expanduser_text(target)
     };
     let normalized = normpath_text(&expanded);
     let home = normpath_text(&home_text(home_dir));

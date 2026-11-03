@@ -12,6 +12,7 @@ import pytest
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_inline_eval as inline
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import READ_ONLY_TEST_PROFILES, RestrictedPytestError
+from tests.restricted_native_clients import is_inline_eval, python_runtime_args
 
 
 @pytest.mark.parametrize(
@@ -42,17 +43,17 @@ def test_other_execution_shapes_do_not_inherit_inline_profile(argv, tmp_path):
 
 
 def test_node_inline_eval_preserves_bounded_heap_option() -> None:
-    assert inline.is_inline_eval(["node", "--max-old-space-size=12288", "-e", "1+1"])
-    assert inline.is_inline_eval(["nodejs", "--max-old-space-size=12288", "--eval", "1+1"])
+    assert is_inline_eval(["node", "--max-old-space-size=12288", "-e", "1+1"])
+    assert is_inline_eval(["nodejs", "--max-old-space-size=12288", "--eval", "1+1"])
     with pytest.raises(RestrictedPytestError):
-        inline.is_inline_eval(["node", "--max-old-space-size=999999", "-e", "1+1"])
+        is_inline_eval(["node", "--max-old-space-size=999999", "-e", "1+1"])
 
 
 @pytest.mark.parametrize("flags", [[], ["-I"], ["-S"], ["-I", "-S"], ["-S", "-I"], ["-IS"], ["-SI"]])
 def test_python_inline_eval_accepts_only_bounded_isolation_flags(flags):
     argv = ["python3", *flags, "-c", "print(1)"]
-    assert inline.is_inline_eval(argv)
-    assert inline._python_runtime_args(argv) == tuple(flags)
+    assert is_inline_eval(argv)
+    assert python_runtime_args(argv) == tuple(flags)
 
 
 @pytest.mark.parametrize(
@@ -66,7 +67,7 @@ def test_python_inline_eval_accepts_only_bounded_isolation_flags(flags):
     ],
 )
 def test_test_named_python_scripts_share_the_inline_profile(argv):
-    assert inline.is_inline_eval(argv)
+    assert is_inline_eval(argv)
 
 
 @pytest.mark.parametrize(
@@ -79,7 +80,7 @@ def test_test_named_python_scripts_share_the_inline_profile(argv):
     ],
 )
 def test_unittest_shares_the_inline_profile(argv):
-    assert inline.is_inline_eval(argv)
+    assert is_inline_eval(argv)
 
 
 @pytest.mark.parametrize("target", ["missing", "outside", "directory"])

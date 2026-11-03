@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -27,25 +28,13 @@ _TIMEOUT_SECONDS = 10.0
 # The request carries the caller environment, as the identity call it replaces did.
 _MAX_REQUEST_BYTES = 2 * 1024 * 1024
 _GRANT_ACTIONS = frozenset({"allow", "block", "review"})
-_CONNECTOR_FIELDS = frozenset({"cli_id", "identity_hash", "name", "surface", "queue_group_id"})
-_CONNECTOR_SURFACES = frozenset({"cli", "package-scripts"})
 # A sandbox-bound action an allowed grant widens rather than lifts.
 ALLOW_CONTAINED_WITH_GRANT = "allow-contained-with-grant"
 _CONTAINED_FROM = frozenset({"sandbox-required", "review"})
+_CONTAINED_ROUTE_FIELDS = frozenset({"decision", "minimum_action", "policy_action", "reason_code", "reason"})
 _CONTAINED_GRANT_FIELDS = frozenset({"cli_id", "identity_hash", "name", "capabilities"})
 _GRANT_CAPABILITIES = ("loopback-network", "state-dir-read", "state-dir-write")
-_PAYLOAD_FIELDS = frozenset({"action", "connector", "contained_grant"})
-
-
-@dataclass(frozen=True, slots=True)
-class SetupConnector:
-    """A local CLI this device has no allow or block decision for."""
-
-    cli_id: str
-    identity_hash: str
-    name: str
-    surface: str
-    queue_group_id: str
+_PAYLOAD_FIELDS = frozenset({"action", "connector", "contained_grant", "contained_route"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,80 +54,8 @@ class ContainedGrant:
 @dataclass(frozen=True, slots=True)
 class _Reply:
     action: str
-    connector: SetupConnector | None
     contained_grant: ContainedGrant | None
-
-
-def local_cli_grant_action(
-    *,
-    store: GuardStore,
-    command: str | None,
-    cwd: Path,
-    home_dir: Path | None,
-    current_action: GuardAction,
-    grant_allowed: bool,
-    reason_code: str | None = None,
-    path: str | None = None,
-) -> GuardAction:
-    """Record the CLI the command launches and refine the action with its grant."""
-
-    if command is None:
-        return current_action
-    action = native_local_cli_hook(
-        store,
-        command=command,
-        cwd=cwd,
-        home_dir=home_dir,
-        current_action=current_action,
-        grant_allowed=grant_allowed,
-        reason_code=reason_code,
-        path=path,
-    )
-    if action is not None:
-        return action
-    return unverified_local_cli_action(store, current_action) if grant_allowed else current_action
-
-
-def observe_unlisted_cli(
-    *, store: GuardStore, command: str, cwd: Path, home_dir: Path | None, path: str | None = None
-) -> None:
-    """Record the CLIs a command launches without consulting any grant."""
-
-    native_local_cli_hook(
-        store, command=command, cwd=cwd, home_dir=home_dir, current_action="allow", grant_allowed=False, path=path
-    )
-
-
-def native_local_cli_hook(
-    store: GuardStore,
-    *,
-    command: str,
-    cwd: Path,
-    home_dir: Path | None,
-    current_action: GuardAction,
-    grant_allowed: bool,
-    reason_code: str | None = None,
-    path: str | None = None,
-) -> GuardAction | None:
-    """Return the resident's action, or ``None`` without a bound answer; a store failure raises.
-
-    A grant that only widens the sandbox keeps the action here: callers that
-    run the command contained ask ``local_cli_contained_grant`` instead.
-    """
-
-    reply = _native_local_cli_hook_reply(
-        store,
-        command=command,
-        cwd=cwd,
-        home_dir=home_dir,
-        current_action=current_action,
-        grant_allowed=grant_allowed,
-        reason_code=reason_code,
-        path=path,
-    )
-    if reply is None:
-        return None
-    return current_action if reply.action == ALLOW_CONTAINED_WITH_GRANT else cast(GuardAction, reply.action)
+    contained_route: Mapping[str, str] | None = None
 
 
 def local_cli_contained_grant(
@@ -150,8 +67,8 @@ def local_cli_contained_grant(
     current_action: GuardAction,
     reason_code: str | None,
     path: str | None = None,
-) -> tuple[str, ContainedGrant | None] | None:
-    """The refined action of a sandbox-bound command and the grant that widens it.
+) -> tuple[str, ContainedGrant | None, Mapping[str, str] | None] | None:
+    """The refined action of a sandbox-bound command, the grant that widens it, and its route.
 
     ``None`` is no bound answer. ``block`` means this device blocked the CLI.
     """
@@ -166,20 +83,7 @@ def local_cli_contained_grant(
         reason_code=reason_code,
         path=path,
     )
-    return None if reply is None else (reply.action, reply.contained_grant)
-
-
-def local_cli_setup_connector(
-    *, store: GuardStore, command: str, cwd: Path, home_dir: Path | None, path: str | None = None
-) -> SetupConnector | None:
-    """The connector a command review waits on, when Guard was never set up for it on this device."""
-
-    reply = _native_local_cli_hook_reply(
-        store, command=command, cwd=cwd, home_dir=home_dir, current_action="review", grant_allowed=True, path=path
-    )
-    if reply is None or reply.action != "review":
-        return None
-    return reply.connector
+    return None if reply is None else (reply.action, reply.contained_grant, reply.contained_route)
 
 
 def _native_local_cli_hook_reply(
@@ -218,7 +122,7 @@ def _native_local_cli_hook_reply(
         "cwd": str(cwd),
         "home_dir": None if home_dir is None else str(home_dir),
         "user_home": str(Path.home()),
-        "env": _launch_env(path),
+        "env": launch_env(path),
         "current_action": current_action,
         "grant_allowed": grant_allowed,
     }
@@ -260,21 +164,42 @@ def _native_local_cli_hook_reply(
     if action == ALLOW_CONTAINED_WITH_GRANT:
         # Only a sandbox-bound action is widened, and only by a well-formed grant.
         grant = _contained_grant(payload.get("contained_grant"))
-        if current_action not in _CONTAINED_FROM or grant is None or "connector" in payload:
+        route = _contained_route(payload.get("contained_route"))
+        if current_action not in _CONTAINED_FROM or grant is None or route is None or "connector" in payload:
             return None
-        return _Reply(action, None, grant)
+        return _Reply(action, grant, route)
     # Only a grant can change the action, and only to allow, block or review.
-    if "contained_grant" in payload or (action != current_action and action not in _GRANT_ACTIONS):
+    if (
+        "contained_grant" in payload
+        or "contained_route" in payload
+        or (action != current_action and action not in _GRANT_ACTIONS)
+    ):
         return None
-    connector = _setup_connector(payload.get("connector")) if action == "review" else None
-    return _Reply(action, connector, None)
+    return _Reply(action, None)
 
 
-def _launch_env(path: str | None) -> dict[str, str]:
+def launch_env(path: str | None) -> dict[str, str]:
+    """This process's environment with the agent's ``PATH``, as the resident resolves a launch."""
+
     env = dict(os.environ)
     if path is not None:
         env["PATH"] = path
     return env
+
+
+def _contained_route(value: object) -> Mapping[str, str] | None:
+    """The review fields the resident routes a granted outside-roots command to.
+
+    Every field is the resident's; this only refuses an answer that is not the
+    shape a route takes, so a malformed reply keeps the review it was holding.
+    """
+
+    if not isinstance(value, dict) or set(value) != _CONTAINED_ROUTE_FIELDS:
+        return None
+    fields = cast(dict[str, object], value)
+    if not all(isinstance(item, str) and item for item in fields.values()):
+        return None
+    return {key: cast(str, item) for key, item in fields.items()}
 
 
 def _contained_grant(value: object) -> ContainedGrant | None:
@@ -300,20 +225,6 @@ def _contained_grant(value: object) -> ContainedGrant | None:
     return ContainedGrant(cli_id, identity_hash, name, tuple(known))
 
 
-def _setup_connector(value: object) -> SetupConnector | None:
-    if not isinstance(value, dict) or set(value) != _CONNECTOR_FIELDS:
-        return None
-    fields = cast(dict[str, object], value)
-    if not all(isinstance(fields[key], str) and fields[key] for key in _CONNECTOR_FIELDS):
-        return None
-    connector = SetupConnector(**cast(dict[str, str], fields))
-    if connector.surface not in _CONNECTOR_SURFACES or not connector.queue_group_id.startswith(
-        f"connector:{connector.identity_hash}:"
-    ):
-        return None
-    return connector
-
-
 def _raise_store_failure(store: GuardStore, code: str) -> None:
     """Raise the store failure as a store call would, recovering the store first."""
 
@@ -327,16 +238,3 @@ def _raise_store_failure(store: GuardStore, code: str) -> None:
         except Exception as recovery_error:
             raise recovery_error from failure
         raise
-
-
-def unverified_local_cli_action(store: object, current_action: GuardAction) -> GuardAction:
-    """Hold an otherwise allowed command for review while a block rule might apply."""
-
-    if current_action not in {"allow", "warn"}:
-        return current_action
-    probe = getattr(store, "has_local_cli_block_rules", None)
-    try:
-        has_blocks = bool(probe()) if callable(probe) else False
-    except Exception:
-        has_blocks = True
-    return "review" if has_blocks else current_action

@@ -338,7 +338,7 @@ fn startup_code_the_proof_cannot_bind_keeps_the_launch_once_only() {
     ] {
         assert_eq!(
             bind_with(&project, &["-s", "tool.py"], &[], &executable),
-            Err("mutable_launcher"),
+            Err("python_runtime_module_unproven"),
             "{executable}"
         );
     }

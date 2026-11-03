@@ -124,3 +124,88 @@ fn rejects_malformed_requests() {
     bad_evaluation.evaluation = json!({"policy_action": "bogus", "reasons": [], "packages": []});
     assert!(run(&bad_evaluation).is_err());
 }
+
+fn token(content: &str) -> String {
+    crate::context_digest::build_context_token(&guard_contracts::ContextDigestComponentsV1 {
+        identity: json!("package-request:guard-proof"),
+        content: json!(content),
+        capabilities: json!({}),
+        policy: json!({}),
+        sandbox: json!({}),
+        extension_control_digest: "extension-control".to_owned(),
+    })
+    .unwrap()
+}
+
+/// The recorded `require-reapproval` package request with a retained allow saved
+/// under `scope` for `saved_content`, retried at `current_content`.
+fn retry(scope: &str, saved_content: &str, current_content: &str) -> (Value, Value) {
+    let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
+    let mut vector = vectors
+        .into_iter()
+        .find(|item| item["name"] == "durable_allow_require_reapproval")
+        .unwrap();
+    assert_eq!(vector["base"]["policy_action"], json!("require-reapproval"));
+    vector["request"]["artifact_hash"] = json!(token(current_content));
+    let decision = &mut vector["request"]["decision"];
+    decision["scope"] = json!(scope);
+    decision["artifact_hash"] = json!(token(saved_content));
+    if scope == "publisher" {
+        decision["artifact_id"] = Value::Null;
+        decision["publisher"] = json!("guard-publisher");
+    }
+    let payload = run(&request(&vector, None)).unwrap();
+    (applied(&vector, &payload), payload)
+}
+
+#[test]
+fn a_saved_allow_of_any_scope_lets_the_identical_require_reapproval_retry_run() {
+    for scope in ["artifact", "workspace", "publisher", "harness"] {
+        let (view, payload) = retry(scope, "1.0.0", "1.0.0");
+        assert_eq!(view["policy_action"], json!("allow"), "{scope}: action");
+        assert_eq!(payload["reused"], json!(true), "{scope}: reused");
+        assert_eq!(payload["claim"], json!("store"), "{scope}: claim");
+        assert_ne!(
+            payload["claim_disposition"],
+            json!("consumed"),
+            "{scope}: a retained rule is not a one-shot grant"
+        );
+    }
+}
+
+#[test]
+fn a_changed_artifact_is_reviewed_again_whatever_scope_saved_the_allow() {
+    for scope in ["artifact", "workspace", "publisher", "harness"] {
+        let (view, payload) = retry(scope, "1.0.0", "1.0.1");
+        assert_eq!(
+            view["policy_action"],
+            json!("require-reapproval"),
+            "{scope}: action"
+        );
+        assert_eq!(payload["reused"], json!(false), "{scope}: reused");
+        assert_eq!(payload["claim"], Value::Null, "{scope}: claim");
+        assert_eq!(
+            view["reasons"][0]["code"],
+            json!("approval_reuse_content_changed"),
+            "{scope}: reason"
+        );
+    }
+}
+
+#[test]
+fn a_saved_allow_naming_another_artifact_is_not_reused() {
+    let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
+    let mut vector = vectors
+        .into_iter()
+        .find(|item| item["name"] == "durable_allow_require_reapproval")
+        .unwrap();
+    vector["request"]["decision"]["scope"] = json!("workspace");
+    vector["request"]["decision"]["artifact_id"] = json!("command:another-install");
+    let payload = run(&request(&vector, None)).unwrap();
+    assert_eq!(payload["reused"], json!(false));
+    assert_eq!(payload["claim"], Value::Null);
+    assert_eq!(
+        applied(&vector, &payload)["policy_action"],
+        json!("require-reapproval")
+    );
+}

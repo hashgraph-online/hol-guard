@@ -60,7 +60,18 @@ keep their exact semantics. Example for `command.blitcp`:
   "documentationUrl": "https://github.com/hashgraph-online/hol-guard",
   "tags": ["file-transfer"],
   "contributors": [
-    {"githubId": "12345678", "githubLogin": "example-author", "roles": ["author"]}
+    {
+      "githubId": "12345678",
+      "githubLogin": "example-author",
+      "roles": ["author"],
+      "profile": {
+        "description": "Writes bounded file-transfer coverage for blitcp.",
+        "organization": "Example Labs",
+        "website": "https://example.com",
+        "linkedin": "https://www.linkedin.com/in/example-author",
+        "x": "https://x.com/example"
+      }
+    }
   ],
   "originalContributions": [
     {"kind": "pull-request", "url": "https://github.com/hashgraph-online/hol-guard/pull/3020"}
@@ -85,13 +96,25 @@ contribution contracts remain the only source of runtime behavior.
 ### Public credit and upstream references
 
 `contributors` is a bounded public credit list with stable numeric GitHub IDs,
-display logins, and attribution roles. `originalContributions` records public
-pull-request, issue, commit, or discussion URLs. `upstream` is an optional
-public project reference. These fields help a publisher profile prefill public
-attribution, but they are never claim authority, runtime behavior, or a reason
-to infer GitHub access. A credit can be present while `maintainerGithubIds` is
-explicitly empty; that extension stays unclaimable until maintainers change the
-reviewed override. Omitting the field permits verified introducing-author authority.
+display logins, and attribution roles. Each credit may include an optional
+`profile` with a short description, organization name, and public `website`,
+`linkedin`, and `x` links. Leave `profile` out when there is nothing to show.
+An empty profile is invalid. These links are references only; validation never
+fetches them, and they cannot contain credentials, private email addresses, or
+commands.
+
+`originalContributions` records public pull-request, issue, commit, or
+discussion URLs. `upstream` is an optional public project reference. These
+fields help a publisher profile prefill public attribution, but they are never
+claim authority, runtime behavior, or a reason to infer GitHub access. A credit
+can be present while `maintainerGithubIds` is explicitly empty; that extension
+stays unclaimable until maintainers change the reviewed override. Omitting the
+field permits verified introducing-author authority.
+
+Each listing publishes its own contributor profile with that extension. The same
+GitHub account can carry different profile copy on different extensions. The
+canonical listing, including every profile, must stay within 16,384 bytes.
+Profile text is display copy, not a certification.
 
 ### Reviewed claim authority
 

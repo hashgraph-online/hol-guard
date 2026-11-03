@@ -13,13 +13,33 @@ as before.
 | `client` | Guard version, release channel (`stable` or `alpha`), runtime, and auto-update status. |
 | `machine` | OS name, OS version, CPU architecture, and a keyed hash of the host name. |
 | `aiTools` | One row per supported AI tool: tool version when known, setup status, protection state, hook coverage, blind spots, posture override, artifact count, last activity, and an inventory digest. |
-| `inventory` | Installed skills, plugins, MCP servers and similar items, as full, delta or digest-only (see below). |
+| `inventory` | Installed skills, plugins, MCP servers and hooks, as full, delta or digest-only (see below). Items come from the local inventory (artifacts Guard scanned itself) and from the last AIBOM collection, so a machine protected only through hooks still reports what it carries. |
 | `policy` | Applied bundle version and hash, applied policy version number, status (`applied`, `validated`, `rejected` or `none`), error code and apply time. |
+| `runtimes` | The runtime executables configured MCP servers launch, as `hol-guard runtime posture` sees them: family, version, identity assurance, executable digest, OS, architecture, location state, the AI tools that launch each one, and advisory ids. Optional; see below. |
 
 Guard does not send file contents, prompts, command lines, environment values, user names or raw paths.
+Each sync also names the machine with its label. Until you set one with `hol-guard device label set <name>`,
+Guard sends the host name without its domain (`Ada-MacBook-Pro` for `Ada-MacBook-Pro.local`), so every machine in
+a fleet is not shown as the same "Local machine". Set a label to choose a different name.
 Item locations are sent as a keyed hash of the config path. The key is a random secret kept in the local Guard
 store and never sent, so the hashes cannot be reversed by guessing user names or paths. Reinstalling Guard on a
 machine creates a new key, which changes these hashes.
+
+## Runtimes
+
+The `runtimes` section reports what `hol-guard runtime posture` observes, without starting anything or
+enumerating running processes. Its `coverage` is always `observed_only` and `scopeComplete` is always
+`false`, so an empty list never means a machine runs nothing, and no runtime is reported safe. Unknown
+versions and families stay `unknown`.
+
+Each row names the executable by its content digest (`executableHash`) and its location by a keyed hash of
+the path (`locationHash`, under the same per-install key as `pathHash`). Server names, command lines and
+paths are not sent; `harnesses` lists only which AI tools launch the executable. A request carries at most
+64 rows; when more were observed, `candidateLimitReached` is `true` and `status` is `partial`. When the
+native runtime cannot inspect executables, `status` is `unavailable` with no rows.
+
+Hashing executables takes time, so Guard observes runtimes at most once an hour and reuses that section on
+other syncs. When a report would exceed the size limit, the section is dropped before any inventory row.
 
 ## Protection state
 
@@ -71,6 +91,7 @@ Cloud needs to show whether a machine is protected. The minimal report is:
   inventory digest), but with empty `blindSpots`.
 - `inventory`: the digest only, in `digest_only` mode. No item rows are sent.
 - `policy`: unchanged.
+- `runtimes`: left out.
 
 Turn the setting back on to resume full reporting.
 
@@ -111,8 +132,8 @@ hol-guard extensions list [--json]
 hol-guard mcp list [--json]
 ```
 
-`extensions list` prints the installed plugins and extensions from the same local inventory that fleet
-posture reads. It shows name, harness, type, scope, last policy verdict and last-seen time as a table, or the
+`extensions list` prints the installed plugins and extensions from the same local inventory and AIBOM items
+that fleet posture reads. It shows name, harness, type, scope, last policy verdict and last-seen time as a table, or the
 full records with `--json` (`generated_at`, `kind`, `count` and `items`, where each item also carries
 `config_path`, `artifact_hash`, and `first_seen_at`). It covers the items reported as the `plugin` kind
 (plugins, plugin files and extensions). Items Guard has marked removed, and items from tools that fleet

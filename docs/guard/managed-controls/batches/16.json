@@ -1,7 +1,7 @@
 {
   "batch": 16,
   "evidence": [
-    "src/codex_plugin_scanner/guard/managed_controls/operations.py",
+    "tests/managed_controls/operations.py",
     "tests/managed_controls/test_operations_performance.py"
   ],
   "repository": "hashgraph-online/hol-guard",

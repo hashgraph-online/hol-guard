@@ -4,6 +4,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { buildGuardDaemonCandidatePorts, normalizeGuardUpdateStatus, updateReconnectSucceeded } from "./guard-api";
 import { AlphaChannelDialog } from "./alpha-update-channel-dialog";
 import { GuardUpdatePanel } from "./guard-update-panel";
+import {
+  GuardUpdateBanner,
+  readDismissedDesktopUpdateVersion,
+  rememberDismissedDesktopUpdateVersion,
+} from "./guard-update-banner";
+import { desktopUpdateBannerModel } from "./guard-update-copy";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -483,6 +489,84 @@ assert(!reinstallMarkup.includes("Reinstall from PyPI"), "embedded dashboard mus
 assert(
   reinstallMarkup.includes("Check for Updates in the HOL Guard menu bar"),
   "embedded reinstall prompt should point at the app first",
+);
+
+// The embedded banner is the prominent announcement the sidebar panel
+// cannot be: it names the ready version and hands the update to the app.
+const bannerStatus = normalizeGuardUpdateStatus({
+  current_version: "3.53.0a4",
+  latest_version: "3.53.0a5",
+  installer: "desktop",
+  version_check: { source: "desktop_core", status: "stale", current_version: "3.53.0a4", latest_version: "3.53.0a5", update_available: true },
+  auto_updatable: true,
+  update_available: true,
+  blocked_reason: null,
+  release_channel: "alpha",
+});
+const bannerModel = desktopUpdateBannerModel(bannerStatus, true, null);
+if (bannerModel === null) {
+  throw new Error("embedded dashboard with a ready update should produce a banner model");
+}
+assert(bannerModel.title.includes("3.53.0a5 is ready"), "banner title should name the ready version");
+assert(
+  desktopUpdateBannerModel(bannerStatus, false, null) === null,
+  "standalone dashboard should not use the Desktop banner",
+);
+assert(
+  desktopUpdateBannerModel(bannerStatus, true, "3.53.0a5") === null,
+  "dismissing one version should hide its banner",
+);
+assert(
+  desktopUpdateBannerModel(bannerStatus, true, "3.53.0a4") !== null,
+  "dismissing an older version must not hide a newer banner",
+);
+assert(
+  desktopUpdateBannerModel({ ...bannerStatus, update_available: false }, true, null) === null,
+  "no banner without an available update",
+);
+assert(
+  desktopUpdateBannerModel({ ...bannerStatus, update_suppressed: true }, true, null) === null,
+  "a suppressed update stays quiet instead of re-announcing",
+);
+
+// Dismissal storage keeps one version: dismissing a newer release after an
+// older one must restore the newer version, not whichever key sorts first.
+const dismissalStore = new Map<string, string>();
+Object.assign(globalThis, {
+  window: {
+    location: { href: "http://127.0.0.1:5474/", search: "?desktop_embed=1", hash: "" },
+    sessionStorage: {
+      getItem: (key: string) => dismissalStore.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        dismissalStore.set(key, value);
+      },
+    },
+    localStorage: rememberedChannelStorage,
+  },
+});
+rememberDismissedDesktopUpdateVersion("3.53.0a5");
+rememberDismissedDesktopUpdateVersion("3.53.0a6");
+assert(
+  readDismissedDesktopUpdateVersion() === "3.53.0a6",
+  "dismissal should restore the most recently dismissed version",
+);
+assert(
+  desktopUpdateBannerModel({ ...bannerStatus, latest_version: "3.53.0a6" }, true, readDismissedDesktopUpdateVersion()) === null,
+  "a reloaded dashboard should keep the newest dismissal dismissed",
+);
+
+const bannerMarkup = renderToStaticMarkup(
+  createElement(GuardUpdateBanner, {
+    model: bannerModel,
+    onDismiss: () => undefined,
+  }),
+);
+assert(bannerMarkup.includes("HOL Guard 3.53.0a5 is ready"), "banner should announce the ready version");
+assert(bannerMarkup.includes("Update in the app"), "banner action should hand off to the app updater");
+assert(bannerMarkup.includes("Not now"), "banner should offer a per-version dismissal");
+assert(
+  bannerMarkup.includes("Your approvals and settings stay saved."),
+  "banner should reassure that approvals survive the update",
 );
 
 (globalThis as { window?: unknown }).window = priorWindow;

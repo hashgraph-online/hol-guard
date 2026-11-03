@@ -16,18 +16,16 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.native_policy_snapshot_windows_key import provision_native_policy_verifier_key
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_approvals import (
-    InvalidApprovalCursorError,
-    get_approval_request,
-    list_approval_requests,
-    resolve_request_with_queue_result,
-)
+from codex_plugin_scanner.guard.store_approvals import InvalidApprovalCursorError
 from tests.native_approval_writes import (
     _store_for,
     add_approval_request,
+    get_approval_request,
+    list_approval_requests,
     native_approval_connection,
     native_store,
     page_cursor,
+    resolve_request_with_queue_result,
 )
 
 

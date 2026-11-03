@@ -9,6 +9,7 @@ import pytest
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_tier2_phase13_support import artifact_from_command_fixture
+from tests.package_review_settings import review_package_signals
 from tests.test_guard_supply_chain_evaluator import (
     WORKSPACE_ID,
     _artifact_for_targets,
@@ -70,6 +71,7 @@ def test_unsupported_ecosystem_disclosure_reason(tmp_path: Path) -> None:
 
 
 def test_unidentified_package_reason_fires_for_supported_ecosystem(tmp_path: Path) -> None:
+    review_package_signals(tmp_path / "home")
     """A supported-ecosystem package with no registry match emits unidentified_package."""
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("unresolved-npm-pkg@1.0.0"),

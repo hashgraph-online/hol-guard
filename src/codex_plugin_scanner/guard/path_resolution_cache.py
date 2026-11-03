@@ -187,8 +187,3 @@ def identity_unchanged(witness: IdentityWitness) -> bool:
         if _component_identity(component) != identity:
             return False
     return True
-
-
-def clear_cached_realpaths() -> None:
-    with _lock:
-        _remembered.clear()

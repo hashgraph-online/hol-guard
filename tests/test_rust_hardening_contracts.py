@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -101,6 +102,64 @@ def test_emergency_safe_profile_is_default_deny_and_has_no_network_capability() 
         assert isinstance(operation, dict)
         argv = operation["exact_argv"]
         assert isinstance(argv, list) and all(isinstance(value, str) and value for value in argv)
+
+
+def _subparser_choices(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return dict(action.choices)
+    return {}
+
+
+def _resolve(parser: argparse.ArgumentParser, argv: list[str]) -> argparse.ArgumentParser:
+    """Walk the subcommand chain an argv selects and return the parser that owns its options."""
+
+    current = parser
+    for token in argv:
+        if token.startswith("-"):
+            break
+        choices = _subparser_choices(current)
+        if token not in choices:
+            break
+        current = choices[token]
+    return current
+
+
+def test_emergency_safe_profile_names_commands_this_cli_actually_accepts() -> None:
+    """The profile is the only thing a native runtime may run while the daemon is down.
+
+    An operation naming an argv the CLI rejects would be allowed through and then fail,
+    so pin every hol-guard argv in the profile to the real parser. Long options are
+    checked against the owning subparser's registered option strings as well, because
+    argparse accepts unique abbreviations and would otherwise hide a renamed flag.
+    """
+
+    from codex_plugin_scanner import cli
+
+    parser = cli._build_parser("hol-guard", program_mode="hol-guard")
+    operations = _load("rust-emergency-safe-profile.v1.json")["allowed_operations"]
+    assert isinstance(operations, list)
+
+    checked = 0
+    for operation in operations:
+        assert isinstance(operation, dict)
+        argv = operation["exact_argv"]
+        assert isinstance(argv, list)
+        if argv[0] != "hol-guard":
+            continue
+        checked += 1
+        tail = [str(value) for value in argv[1:]]
+        parser.parse_args(tail)
+
+        owner = _resolve(parser, tail)
+        registered = {option for action in owner._actions for option in action.option_strings}
+        for token in tail:
+            if not token.startswith("--"):
+                continue
+            name = token.split("=", 1)[0]
+            assert name in registered, f"{operation['id']}: {name} is not an option of {owner.prog}"
+
+    assert checked >= 3
 
 
 def test_native_reason_codes_are_unique_and_privacy_safe() -> None:

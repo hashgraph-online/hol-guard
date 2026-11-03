@@ -1,7 +1,7 @@
 {
   "batch": 9,
   "evidence": [
-    "src/codex_plugin_scanner/guard/managed_controls/delegation.py",
+    "tests/managed_controls/delegation.py",
     "tests/managed_controls/test_delegated_package_firewall.py"
   ],
   "repository": "hashgraph-online/hol-guard",

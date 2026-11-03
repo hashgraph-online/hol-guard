@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, TypeGuard
+from typing import Any, TypeGuard, cast
 
 from .directory_path_authority import canonical_guard_home_path
 from .fork_safety import forget_in_child
@@ -34,7 +34,6 @@ from .native_resident_client import (
     native_resident_client_failure_code,
     native_resident_client_ready,
     native_resident_client_request,
-    native_resident_client_transport,
 )
 from .native_resident_prerequisite_reason import (
     clear_prerequisite_failure,
@@ -60,12 +59,15 @@ _RESULT_OPTIONAL_KEYS = {
     "token",
     "digest",
     "validation_reason",
+    "approval_context_token_well_formed",
     "package_context",
     "mcp_server_identity",
     "mcp_tool_identity",
     "browser_mcp",
     "mcp_launch_environment",
     "mcp_redacted_value",
+    "native_bash_reply_valid",
+    "native_decision_receipt_valid",
     "runtime_identity",
     "runtime_identity_match",
     "runtime_identity_reusable",
@@ -80,6 +82,8 @@ _RESULT_OPTIONAL_KEYS = {
     "managed_controls_policy_fields",
     "claude_guard_question",
     "memory_pattern",
+    "guard_run_launch",
+    "package_runner_target",
 }
 _RESULT_CODES = {
     "ok",
@@ -108,6 +112,11 @@ _RESULT_CODES = {
 _UNCACHEABLE_DIGEST_KINDS = frozenset(
     {
         "generic_hook_approval_context",
+        # Builds a launch identity per previewed argv, so it reads the
+        # executable's bytes, and it carries the prepared launch
+        # environment: a cached reply would both hide an executable that
+        # changed between two calls and retain granted credentials.
+        "guard_run_launch_plans",
         "mcp_launch_environment",
         "runtime_executable_identity",
         "runtime_hook_approval_context",
@@ -278,7 +287,7 @@ def _resolve_existing_digest_home(guard_home: Path | None) -> Path:
     return _resolve_digest_home(None)
 
 
-def ensure_resident_prerequisite(guard_home: Path) -> bool:
+def ensure_resident_prerequisite(guard_home: Path, *, store: Any | None = None) -> bool:
     """Establish the resident's on-disk prerequisite for ``guard_home``.
 
     The resident refuses every request until the owner-private verifier key
@@ -295,6 +304,13 @@ def ensure_resident_prerequisite(guard_home: Path) -> bool:
     secret-store master that their guard home was never given.  Returns
     ``False`` when a missing prerequisite cannot be created, which callers
     report as an unavailable runtime rather than a crash.
+
+    ``store`` is the already-open store the caller is about to use.  The
+    verifier key is derived from the policy-integrity master, so it has to come
+    from the same secret store that signs the home's rows: opening a second
+    store here would read whatever secret store that new instance resolves,
+    which is not necessarily the caller's.  Callers that hold a store pass it;
+    the rest still get one opened for them.
     """
 
     try:
@@ -320,9 +336,9 @@ def ensure_resident_prerequisite(guard_home: Path) -> bool:
 
         # Provisioning the resident key must not prime policy decisions or
         # refresh signed store state on the evaluation hot path.
-        store = GuardStore(guard_home, prime_policy_integrity=False)
+        owner = GuardStore(guard_home, prime_policy_integrity=False) if store is None else store
         phase = "provision_key"
-        provision_native_verifier_key_for_store(store)
+        provision_native_verifier_key_for_store(owner)
     except Exception as error:
         # Nothing to fall back to: the resident is the only authority for these
         # digests, so an unprovisionable home is an unavailable runtime. The
@@ -430,14 +446,23 @@ def _decode_result(
     return payload
 
 
+def _capped_deadline(budget_seconds: float, hard_deadline_monotonic: float | None) -> float:
+    deadline = time.monotonic() + budget_seconds
+    return deadline if hard_deadline_monotonic is None else min(deadline, hard_deadline_monotonic)
+
+
 def native_context_digest(
     kind: str,
     kind_fields: dict[str, Any],
     *,
     guard_home: Path,
     timeout_seconds: float = _TIMEOUT_SECONDS,
+    hard_deadline_monotonic: float | None = None,
 ) -> dict[str, Any] | None:
     """Run one ``context_digest`` sub-operation and return its typed result.
+
+    ``hard_deadline_monotonic`` caps every attempt, cold-start allowance and
+    retry included, for a caller that must answer by an absolute deadline.
 
     Returns ``None`` when the native runtime is unavailable, incompatible,
     overloaded, or the result fails strict binding checks.  A returned result
@@ -486,8 +511,10 @@ def native_context_digest(
     # answer exactly that again.  The client's deadline is what keeps the steady
     # state cheap.
     retry_budget_seconds = timeout_seconds + _RETRY_ALLOWANCE_MULTIPLIER * _COLD_START_ALLOWANCE_SECONDS
+    if hard_deadline_monotonic is not None:
+        retry_budget_seconds = min(retry_budget_seconds, hard_deadline_monotonic - time.monotonic())
     resident_budget_ms = max(1, min(9_000, int(retry_budget_seconds * 1_000)))
-    deadline_monotonic = time.monotonic() + budget_seconds
+    deadline_monotonic = _capped_deadline(budget_seconds, hard_deadline_monotonic)
     request_id = uuid.uuid4().hex
     request: dict[str, Any] = {
         "schema": _REQUEST_SCHEMA,
@@ -549,7 +576,7 @@ def native_context_digest(
         return _digest_failed("native_context_digest_request_too_large")
     output = None
     attempts = 0
-    while attempts < _DIGEST_ATTEMPTS:
+    while attempts < _DIGEST_ATTEMPTS and time.monotonic() < deadline_monotonic:
         attempts += 1
         output = native_resident_client_request(
             executable=status.identity.path,
@@ -567,13 +594,18 @@ def native_context_digest(
         # not help" is true only of a resident that is gone, which the failure
         # code distinguishes after the retry.
         budget_seconds = retry_budget_seconds
-        deadline_monotonic = time.monotonic() + budget_seconds
+        deadline_monotonic = _capped_deadline(budget_seconds, hard_deadline_monotonic)
+    if output is None and attempts == 0:
+        # The caller's hard deadline ran out before the resident was asked: no
+        # client call happened, so neither its failure code nor a resident
+        # failure record describes this.
+        return _digest_failed("native_context_digest_deadline_spent")
     if output is None:
         # The client's own code ("native_client_timed_out",
         # "native_client_pool_exhausted", ...) is the actionable half of this.
         _digest_failed(
             f"{native_resident_client_failure_code() or 'native_context_digest_resident_unavailable'}"
-            f"[{native_resident_client_transport()},{attempts} attempt(s),"
+            f"[{attempts} attempt(s),"
             f"allowance={'granted' if cold_start else 'none'},budget={budget_seconds:.2f}s]"
         )
         native_record_resident_failure(
@@ -625,55 +657,6 @@ def native_context_digest(
 _UNBOUND_PREFIX = "guard-context-unbound:"
 
 
-def is_unbound_context_digest(value: object) -> bool:
-    """``True`` for degraded digests emitted when the resident is unavailable."""
-    return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
-
-
-def _unbound_material_digest(material: object) -> str:
-    # Integrity digest over guard material (env values / launch identity / PATH), not a
-    # password hash — parity-pinned to the pre-migration hashlib baseline for byte-identical
-    # persisted approval rows. codeql[py/weak-sensitive-data-hashing] false positive.
-    return hashlib.sha256(_canonical_material_bytes(material)).hexdigest()  # codeql[py/weak-sensitive-data-hashing]
-
-
-def _canonical_material_bytes(material: object) -> bytes:
-    return json.dumps(
-        material,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-        default=str,
-    ).encode("utf-8")
-
-
-def context_sha256_digest(
-    material: object,
-    *,
-    prefix: str | None = None,
-    guard_home: Path | None = None,
-    unbound_label: str = "canonical-sha256",
-) -> str:
-    """Canonical-JSON SHA-256 via the resident op.
-
-    The resident owns the digest.  Without one, this returns a
-    ``guard-context-unbound:`` value that fails every equality and validation
-    check against a worker-issued digest, so an absent resident can never pass
-    for a bound one.
-    """
-
-    home = _resolve_digest_home(guard_home)
-    result = native_context_digest(
-        "canonical_sha256",
-        {"material": material, "prefix": prefix},
-        guard_home=home,
-    )
-    digest = result.get("digest") if isinstance(result, dict) else None
-    if isinstance(digest, str) and digest:
-        return digest
-    return f"{_UNBOUND_PREFIX}{unbound_label}:{_unbound_material_digest(material)}"
-
-
 def context_mcp_launch_environment(
     inherited: Mapping[str, str],
     configured: Mapping[str, str],
@@ -715,7 +698,7 @@ def context_runtime_executable_identity(
     require_executable: bool = True,
     guard_home: Path | None = None,
 ) -> dict[str, Any]:
-    """Transport `build_runtime_executable_identity` inputs to native authority; no fallback."""
+    """Resolve and content-bind an executable through native authority; no fallback."""
     result = native_context_digest(
         "runtime_executable_identity",
         {
@@ -734,6 +717,77 @@ def context_runtime_executable_identity(
     if not isinstance(result, dict) or result.get("status") != "ok" or not isinstance(identity, dict):
         raise _unavailable("native_runtime_executable_identity_unavailable")
     return identity
+
+
+def context_guard_run_launch_plans(
+    adapter_commands: Sequence[Sequence[str]],
+    *,
+    environment: Mapping[str, str],
+    launch_cwd: Path,
+    guard_home: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Content-bind every previewed guard-run launch argv in one native call.
+
+    The native kind resolves each launch identity against the prepared
+    environment and cwd, hashes that environment once, stamps reusability and
+    drops duplicate adapter commands, so Python transports the preview rather
+    than rebuilding launch authority per command.
+    """
+
+    result = native_context_digest(
+        "guard_run_launch_plans",
+        {
+            "adapter_commands": [list(command) for command in adapter_commands],
+            "environment": dict(environment),
+            "launch_cwd": str(launch_cwd),
+        },
+        guard_home=_resolve_digest_home(guard_home),
+    )
+    payload = result.get("guard_run_launch") if isinstance(result, dict) else None
+    plans = payload.get("plans") if isinstance(payload, dict) else None
+    if not isinstance(result, dict) or result.get("status") != "ok" or not isinstance(plans, list):
+        raise _unavailable("native_guard_run_launch_plans_unavailable")
+    if any(not isinstance(plan, dict) for plan in plans):
+        raise _unavailable("native_guard_run_launch_plans_unavailable")
+    return cast("list[dict[str, Any]]", plans)
+
+
+def context_guard_run_authorized_prefixes(
+    plans: Sequence[Mapping[str, Any]],
+    *,
+    guard_home: Path | None = None,
+) -> tuple[tuple[str, ...], ...] | None:
+    """Recover the authorized executable prefixes for previously bound plans.
+
+    ``None`` is the native verdict that the authorized set does not bind — a
+    non-reusable plan, plans spanning more than one prepared environment, or a
+    plan whose execution command does not extend its adapter command.
+    """
+
+    result = native_context_digest(
+        "guard_run_authorized_prefixes",
+        {
+            "plans": [
+                {
+                    "adapter_command": list(plan["adapter_command"]),
+                    "execution_command": list(plan["execution_command"]),
+                    "environment_sha256": str(plan["environment_sha256"]),
+                    "reusable": bool(plan["reusable"]),
+                }
+                for plan in plans
+            ]
+        },
+        guard_home=_resolve_digest_home(guard_home),
+    )
+    if not isinstance(result, dict) or result.get("status") != "ok" or "guard_run_launch" not in result:
+        raise _unavailable("native_guard_run_authorized_prefixes_unavailable")
+    payload = result.get("guard_run_launch")
+    if payload is None:
+        return None
+    prefixes = payload.get("prefixes") if isinstance(payload, dict) else None
+    if not isinstance(prefixes, list):
+        raise _unavailable("native_guard_run_authorized_prefixes_unavailable")
+    return tuple(tuple(str(part) for part in prefix) for prefix in prefixes)
 
 
 def context_runtime_launch_identity(
@@ -938,19 +992,6 @@ _MCP_RISK_CATEGORIES = frozenset(
 )
 
 
-def context_browser_mcp(request: dict[str, Any]) -> dict[str, Any]:
-    """Project native browser semantics; native absence is not a negative match."""
-    result = native_context_digest(
-        "browser_mcp",
-        {"request": request},
-        guard_home=_resolve_digest_home(None),
-    )
-    browser = result.get("browser_mcp") if isinstance(result, dict) and result.get("status") == "ok" else None
-    if not isinstance(browser, dict) or browser.get("operation") != request.get("operation"):
-        raise _unavailable("native_browser_mcp_intent_unavailable")
-    return browser
-
-
 def context_mcp_redact_json(value: object) -> object:
     """stdio `_redact_json` parity for recorded MCP traffic; terminal on failure."""
     fields = json.loads(json.dumps({"material": value}))
@@ -968,7 +1009,6 @@ __all__ = [
     "bind_context_digest_home",
     "bind_context_digest_lifecycle_budget",
     "bound_context_digest_home",
-    "context_browser_mcp",
     "context_digest_guard_home",
     "context_mcp_identity",
     "context_mcp_redact_json",
@@ -978,8 +1018,6 @@ __all__ = [
     "context_runtime_launch_identity",
     "context_runtime_launch_identity_matches",
     "context_runtime_launch_identity_projection",
-    "context_sha256_digest",
-    "is_unbound_context_digest",
     "native_context_digest",
     "reset_context_digest_budget",
     "reset_context_digest_home",

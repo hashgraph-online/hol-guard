@@ -27,6 +27,7 @@ from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_packa
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_archive_fakes import install_download, install_inspection
+from tests.package_review_settings import review_package_signals
 
 pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
 
@@ -105,6 +106,7 @@ def test_package_firewall_reuses_one_review_to_inspect_then_launch(
     fake_npm.chmod(0o755)
     monkeypatch.setenv("PATH", str(fake_bin))
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     command = ["npm", "install", "demo@https://packages.example.com/demo.tgz"]
     archive_buffer = io.BytesIO()
     package_json = json.dumps({"name": "demo", "version": "1.0.0"}).encode()

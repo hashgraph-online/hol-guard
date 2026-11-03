@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn security_routing_uses_compiler_hints_instead_of_author_executables() {
+    let mut program =
+        NativeCommandProgram::from_packaged_bytes(packaged_command_program_bytes()).unwrap();
+    let git = program
+        .extensions
+        .iter_mut()
+        .find(|e| e.extension_id == "command.git")
+        .unwrap();
+    git.executables = vec!["author-declared-decoy".into()];
+    let index =
+        CommandCandidateIndex::for_active(&program, &BTreeSet::from(["command.git".into()]));
+    let command = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: "git push origin main".into(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "guard-shell".into(),
+    })
+    .unwrap();
+    assert!(!index.candidates(&command).is_empty());
+}
+
+#[test]
 fn active_dispatch_matches_exhaustive_observations_for_every_fixture_and_control_set() {
     let program = packaged_command_program().unwrap();
     let fixture: Value = serde_json::from_str(include_str!(
@@ -100,4 +122,70 @@ fn owner_and_default_floor_indexes_preserve_the_admitted_program() {
         }
     }
     assert!(!program.permission_baseline_allows("unknown.permission"));
+}
+
+#[test]
+fn work_stats_report_the_candidates_a_pass_considered_and_ran() {
+    let program = packaged_command_program().unwrap();
+    let active = BTreeSet::from(["command.git".to_owned()]);
+    let dispatch = CommandCandidateIndex::for_active(&program, &active);
+    let command = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: "git push origin main".into(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "guard-shell".into(),
+    })
+    .unwrap();
+    let candidates = dispatch.candidates(&command);
+    assert!(!candidates.is_empty());
+    let evaluated = candidates
+        .iter()
+        .filter(|index| {
+            let rule = &program.rules[**index];
+            rule.matcher.is_some()
+                && active.contains(&program.extensions[rule.extension_index].extension_id)
+        })
+        .count();
+    program
+        .observe_declarative_memo(
+            &command,
+            &active,
+            None,
+            candidates.clone(),
+            Some(Arc::clone(&dispatch.memo_layout)),
+        )
+        .unwrap();
+    let stats = work_stats::snapshot();
+    assert_eq!(stats.last_candidates, candidates.len());
+    assert_eq!(stats.last_evaluated, evaluated);
+    assert!(stats.max_candidates >= candidates.len());
+
+    // A full scan considers every rule, so the count separates indexed
+    // dispatch from catalog-sized work.
+    program
+        .observe_declarative_selected(&command, &active, None, 0..program.rules.len())
+        .unwrap();
+    let stats = work_stats::snapshot();
+    assert_eq!(stats.last_candidates, program.rules.len());
+    assert!(stats.last_candidates > candidates.len());
+}
+
+/// A request that compiles no controls and runs no declarative pass must
+/// report its own absence of work. Without the reset it inherits the counts
+/// an earlier request left on the same worker thread.
+#[test]
+fn a_request_with_no_pass_reports_no_candidates_of_its_own() {
+    work_stats::record_active(7);
+    work_stats::record_pass(42, 11);
+    let carried = work_stats::snapshot();
+    assert_eq!(carried.active_extensions, Some(7));
+    assert_eq!(carried.last_candidates, 42);
+
+    work_stats::begin_request();
+    let fresh = work_stats::snapshot();
+    assert_eq!(fresh.active_extensions, None);
+    assert_eq!(fresh.last_candidates, 0);
+    assert_eq!(fresh.last_evaluated, 0);
+    // The process-wide maximum is deliberately not per request.
+    assert!(fresh.max_candidates >= 42);
 }

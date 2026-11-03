@@ -1,6 +1,41 @@
 """Executable layouts owned by HOL Guard Desktop."""
 
+import plistlib
 from pathlib import Path
+
+from packaging.version import InvalidVersion, Version
+
+_DESKTOP_BUNDLE_ID = "org.hol.guard.desktop"
+_DESKTOP_APP_NAME = "HOL Guard.app"
+
+
+def desktop_app_bundles() -> tuple[Path, ...]:
+    return (Path("/Applications") / _DESKTOP_APP_NAME, Path.home() / "Applications" / _DESKTOP_APP_NAME)
+
+
+def installed_desktop_app_version() -> Version | None:
+    """Version of the installed macOS Desktop app, or None when there is none.
+
+    With more than one copy installed, the oldest decides: any of them may be
+    the one that launches the Core next.
+    """
+    versions: list[Version] = []
+    for bundle in desktop_app_bundles():
+        try:
+            with (bundle / "Contents" / "Info.plist").open("rb") as handle:
+                info = plistlib.load(handle)
+        except (OSError, plistlib.InvalidFileException, ValueError):
+            continue
+        if not isinstance(info, dict) or info.get("CFBundleIdentifier") != _DESKTOP_BUNDLE_ID:
+            continue
+        raw = info.get("CFBundleShortVersionString")
+        if not isinstance(raw, str):
+            continue
+        try:
+            versions.append(Version(raw))
+        except InvalidVersion:
+            continue
+    return min(versions) if versions else None
 
 
 def executable_is_desktop_core(executable: Path) -> bool:

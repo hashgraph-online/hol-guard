@@ -15,6 +15,8 @@ use serde_json::{json, Map, Value};
 #[path = "managed_controls_policy_projection.rs"]
 mod projection;
 use projection::{control_json, parse_layer, parse_rule_targets, target_json};
+#[path = "managed_controls_cloud_projection.rs"]
+mod cloud_projection;
 
 const CONTROLS_FIELD: &str = "x-hol-extension-controls";
 const TARGETS_FIELD: &str = "x-hol-extension-targets";
@@ -92,7 +94,6 @@ struct Control {
 
 pub(crate) fn evaluate(request: &Value) -> Result<Value, &'static str> {
     let request = request.as_object().ok_or(ERR_REQUEST)?;
-    let catalog = catalog(request.get("catalog")).ok_or(ERR_REQUEST)?;
     let capabilities = request
         .get("capabilities")
         .and_then(Value::as_array)
@@ -102,7 +103,38 @@ pub(crate) fn evaluate(request: &Value) -> Result<Value, &'static str> {
         .collect::<Option<BTreeSet<String>>>()
         .ok_or(ERR_REQUEST)?;
     let document = request.get("document").ok_or(ERR_REQUEST)?;
-    Ok(match parse(document, &capabilities, &catalog) {
+    if !request.contains_key("catalog") {
+        return Ok(match parse(document, &capabilities, None) {
+            Ok(parsed) => json!({"ok": parsed}),
+            Err(refusal) if refusal.code == "catalog_required" => json!({"catalog_required": true}),
+            Err(refusal) => json!({"error": {"code": refusal.code, "message": refusal.message}}),
+        });
+    }
+    let mut catalog = catalog(request.get("catalog")).ok_or(ERR_REQUEST)?;
+    let metadata = if request.get("projection").is_some_and(|p| p["version"] == 2) {
+        match cloud_projection::selected(request, document) {
+            Ok(metadata) => {
+                cloud_projection::extend_catalog(&mut catalog, &metadata)?;
+                Some(metadata)
+            }
+            Err(code) => {
+                return Ok(
+                    json!({"error":{"code":code,"message":"Cloud policy observation is unavailable."}}),
+                )
+            }
+        }
+    } else {
+        None
+    };
+    Ok(match parse(document, &capabilities, Some(&catalog)) {
+        Ok(parsed) if request.contains_key("projection") => {
+            match cloud_projection::evaluate(request, document, parsed, metadata.as_deref()) {
+                Ok(answer) => answer,
+                Err(code) => {
+                    json!({"error":{"code":code,"message":"Cloud policy projection could not be authenticated."}})
+                }
+            }
+        }
         Ok(parsed) => json!({ "ok": parsed }),
         Err(refusal) => json!({ "error": { "code": refusal.code, "message": refusal.message } }),
     })
@@ -302,7 +334,7 @@ fn unknown_owner() -> Refusal {
 fn parse(
     document: &Value,
     capabilities: &BTreeSet<String>,
-    catalog: &Catalog,
+    catalog: Option<&Catalog>,
 ) -> Result<Value, Refusal> {
     let document = mapping(Some(document), "invalid_policy_document", "GuardPolicy")?;
     validate_presence(document)?;
@@ -332,6 +364,8 @@ fn parse(
         ));
     }
     let package_firewall = negotiated.contains(PACKAGE_FIREWALL_CAP);
+    let catalog =
+        catalog.ok_or_else(|| refuse("catalog_required", "Extension catalog required."))?;
     let mut answer = json!({
         "authority_mode": null,
         "signed_cloud_layer": null,

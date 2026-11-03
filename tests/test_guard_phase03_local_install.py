@@ -295,7 +295,11 @@ def test_daemon_refresh_retains_verified_newer_desktop_runtime(
         assert policy.proxy_url is None
         return Response()
 
-    monkeypatch.setattr(live_identity, "_proxy_disabled_health_details", lambda _url, _token: {**state, "ok": True})
+    monkeypatch.setattr(
+        live_identity,
+        "_proxy_disabled_health_details",
+        lambda _url, _token, **_kwargs: {**state, "ok": True},
+    )
 
     payload, note = update_commands.refresh_guard_daemon_after_update(
         context,
@@ -346,7 +350,11 @@ def test_daemon_refresh_restarts_runtime_older_than_installed_target(
             assert limit == 65_537
             return json.dumps({**state, "ok": True}).encode("utf-8")
 
-    monkeypatch.setattr(live_identity, "_proxy_disabled_health_details", lambda _url, _token: {**state, "ok": True})
+    monkeypatch.setattr(
+        live_identity,
+        "_proxy_disabled_health_details",
+        lambda _url, _token, **_kwargs: {**state, "ok": True},
+    )
     restart = SimpleNamespace(
         returncode=0,
         stdout='{"status":"restarted","runtime_verified":true}',
@@ -409,7 +417,7 @@ def test_daemon_refresh_does_not_trust_newer_state_when_live_identity_differs(
     monkeypatch.setattr(
         live_identity,
         "_proxy_disabled_health_details",
-        lambda _url, _token: {**state, "ok": True, "runtime_fingerprint": "different-live-fingerprint"},
+        lambda _url, _token, **_kwargs: {**state, "ok": True, "runtime_fingerprint": "different-live-fingerprint"},
     )
     restart = SimpleNamespace(
         returncode=0,
@@ -618,7 +626,7 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard.daemon import manager, runtime_peer
 
     context = _context(tmp_path)
     context.home_dir.mkdir(parents=True)
@@ -651,6 +659,7 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     monkeypatch.setattr(manager, "publish_approval_center_locator", lambda _home, _url: None)
     monkeypatch.setattr(manager, "ensure_guard_daemon_after_update", fake_ensure)
     monkeypatch.setattr(manager, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(runtime_peer, "live_desktop_owned_daemon", lambda _home: None)
     clock = SimpleNamespace(monotonic=lambda: next(monotonic_values), sleep=lambda _seconds: None)
     script_globals = {
         "__builtins__": {

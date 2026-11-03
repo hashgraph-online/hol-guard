@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.extension_builder.bundle_baseline import authoring_request
+
 ROOT = Path(__file__).resolve().parents[1]
 _EXAMPLE_SOURCE = ROOT / "rust/crates/guard-command/tests/fixtures/command-source-example.v1.json"
 _BEHAVIOR_FIXTURES = ROOT / "rust/crates/guard-command/tests/fixtures/command-source-behavior.v1.json"
@@ -70,18 +72,27 @@ def _assert_same(
 
 
 @pytest.fixture(scope="module")
-def build_request(compiler: Path) -> dict[str, object]:
+def build_request(compiler: Path, tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
     # The trust map is a generated artifact; ask the compiler to export the
     # exact bytes it embeds instead of reading the checkout.
     code, stdout, stderr = _invoke(compiler, ["export-trust"], b"")
     assert code == 0, stderr
-    return {
+    request = {
         "schema": "guard.command-extension-build.v1",
         "sources": [json.loads(_EXAMPLE_SOURCE.read_text(encoding="utf-8"))],
         "mcp_sources": [],
         "trust": json.loads(stdout),
         "base": "packaged",
     }
+    # Use the Builder's native admission context, keeping its metadata index
+    # alive for every direct CLI invocation that consumes this request.
+    return authoring_request(
+        "compile",
+        request,
+        compiler,
+        installed=False,
+        cache_directory=tmp_path_factory.mktemp("runtime-hosted-authoring").resolve(),
+    )
 
 
 @pytest.mark.parametrize(
@@ -112,15 +123,18 @@ def test_runtime_check_accepts_the_compiled_program_digest(
     code, stdout, _ = _assert_same(runtime, compiler, ["compile"], payload)
     assert code == 0
     digest = json.loads(stdout)["program"]["program_digest"]
-    _assert_same(runtime, compiler, ["check", digest], payload)
+    code, _, _ = _assert_same(runtime, compiler, ["check", digest], payload)
+    assert code == 0
 
 
 def test_runtime_hosts_fixture_simulation(runtime: Path, compiler: Path, build_request: dict[str, object]) -> None:
     fixtures = json.loads(_BEHAVIOR_FIXTURES.read_text(encoding="utf-8"))
     fixtures["build"] = build_request
-    _assert_same(runtime, compiler, ["test"], json.dumps(fixtures).encode())
+    code, _, _ = _assert_same(runtime, compiler, ["test"], json.dumps(fixtures).encode())
+    assert code == 0
     fixtures["cases"][0]["expected_action"] = "allow"
-    _assert_same(runtime, compiler, ["test"], json.dumps(fixtures).encode())
+    code, _, _ = _assert_same(runtime, compiler, ["test"], json.dumps(fixtures).encode())
+    assert code == 1
 
 
 def test_runtime_hosts_program_parity(runtime: Path, compiler: Path, build_request: dict[str, object]) -> None:
@@ -133,7 +147,8 @@ def test_runtime_hosts_program_parity(runtime: Path, compiler: Path, build_reque
         "build": build,
         "cases": [{"id": "one", "payload": {"tool_input": {"command": "git status"}}, "controls": []}],
     }
-    _assert_same(runtime, compiler, ["compare"], json.dumps(request).encode())
+    code, _, _ = _assert_same(runtime, compiler, ["compare"], json.dumps(request).encode())
+    assert code == 0
 
 
 def test_runtime_hosts_evaluation_batch(runtime: Path, compiler: Path) -> None:

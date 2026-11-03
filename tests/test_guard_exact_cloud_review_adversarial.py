@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import store_exact_cloud_review as exact_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.runtime import command_executors as command_executor_module
@@ -68,10 +67,7 @@ def test_exact_cloud_review_uses_local_time_not_forged_queue_admission(tmp_path:
     assert row is not None and row["status"] == "pending"
 
 
-def test_exact_cloud_review_receipt_expiry_boundary_and_strict_wire(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_exact_cloud_review_receipt_expiry_boundary_and_strict_wire(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
     current = datetime.now(timezone.utc).replace(microsecond=0)
     accepted = _request("exact-boundary-accepted")
@@ -118,11 +114,10 @@ def test_exact_cloud_review_receipt_expiry_boundary_and_strict_wire(
                 decision="allow",
             ),
         )
-    monkeypatch.setattr(
-        exact_store_module.StoreExactCloudReviewMixin,
-        "_exact_transaction_now",
-        staticmethod(lambda: expires_at.isoformat()),
-    )
+    # Expiry is judged against the clock the write transaction reads, not the
+    # time the caller hands in. A receipt the caller still reads as live is
+    # refused once the row lock is actually held.
+    stale_issued_at = current - timedelta(hours=2)
     with pytest.raises(ExactCloudReviewError, match="remote_approval_expired"):
         apply_exact_cloud_review(
             store,
@@ -130,18 +125,14 @@ def test_exact_cloud_review_receipt_expiry_boundary_and_strict_wire(
                 store,
                 transaction_expired.request_id,
                 receipt_id="exact-transaction-expired",
-                issued_at=current,
-                expires_at=expires_at,
+                issued_at=stale_issued_at,
+                expires_at=stale_issued_at + timedelta(minutes=1),
             ),
-            now=(current + timedelta(seconds=1)).isoformat(),
+            now=(stale_issued_at + timedelta(seconds=1)).isoformat(),
         )
-    capability_expires_at = current + timedelta(minutes=5)
-    monkeypatch.setattr(
-        exact_store_module.StoreExactCloudReviewMixin,
-        "_exact_transaction_now",
-        staticmethod(lambda: capability_expires_at.isoformat()),
-    )
-    enable_exact_cloud_review(store, now=current.isoformat(), ttl_seconds=300)
+    # The consent capability behind the receipt is rechecked against that same
+    # clock, so a capability whose window closed cannot carry a live receipt.
+    enable_exact_cloud_review(store, now=stale_issued_at.isoformat(), ttl_seconds=300)
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_expired"):
         apply_exact_cloud_review(
             store,
@@ -152,7 +143,7 @@ def test_exact_cloud_review_receipt_expiry_boundary_and_strict_wire(
                 issued_at=current,
                 expires_at=current + timedelta(minutes=10),
             ),
-            now=(current + timedelta(seconds=1)).isoformat(),
+            now=(stale_issued_at + timedelta(seconds=1)).isoformat(),
         )
 
 

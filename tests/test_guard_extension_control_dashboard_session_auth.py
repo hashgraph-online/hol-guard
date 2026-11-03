@@ -68,21 +68,20 @@ def test_dashboard_session_authorizes_new_extension_control_routes(tmp_path: Pat
         ) as response:
             test_payload = json.loads(response.read().decode("utf-8"))
 
-        # A brand-new authority store has no validated history anchor yet, so this
-        # route may legitimately return 409. The important auth regression is that
-        # a valid signed dashboard session reaches the API instead of being rejected
-        # with 401 by the daemon's dashboard-session path allowlist.
-        with pytest.raises(urllib.error.HTTPError) as history_error:
-            urllib.request.urlopen(
-                _request(
-                    daemon,
-                    "/v1/extension-controls/history",
-                    session_token=session_token,
-                    origin=local_origin,
-                ),
-                timeout=5,
-            )
-        assert history_error.value.code == 409
+        # The daemon enrolls a fresh home at startup, so history is readable. The
+        # auth regression is that a valid signed dashboard session reaches the API
+        # instead of being rejected with 401 by the dashboard-session path allowlist.
+        with urllib.request.urlopen(
+            _request(
+                daemon,
+                "/v1/extension-controls/history",
+                session_token=session_token,
+                origin=local_origin,
+            ),
+            timeout=5,
+        ) as history_response:
+            assert history_response.status == 200
+            json.loads(history_response.read().decode("utf-8"))
 
         # A healthy fresh authority is not in degraded mode. Reaching this 409 also
         # proves the signed session was accepted for the new acknowledge route.

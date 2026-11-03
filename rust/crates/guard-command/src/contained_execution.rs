@@ -4,7 +4,7 @@
 //! (`runtime/containment_contract.py`, `runtime/containment_executor.py`,
 //! `runtime/containment_health.py`, `runtime/containment_outputs.py`,
 //! `runtime/contained_execution_common.py`, `runtime/contained_test_hook.py`,
-//! `runtime/workspace_snapshot_inputs.py`, `runtime/typescript_snapshot_inputs.py`,
+//! the retired `runtime/workspace_snapshot_inputs.py`, `runtime/typescript_snapshot_inputs.py`,
 //! `runtime/local_node_runner_evidence.py`, `runtime/local_package_script_evidence.py`,
 //! `runtime/local_node_runner_options.py`, `runtime/package_evidence_common.py`,
 //! `runtime/protection_health.py`, `file_identity.py`) — consolidating the
@@ -250,8 +250,10 @@ pub struct ContainmentInput {
     pub kind: String,
 }
 
-/// `HealthSeverity` / `ProtectionCheckStatus` / `ProtectionSignal`
-/// (protection_health.py :17-66).
+/// The status vocabulary `$GUARD_HOME/protection/containment.json` records
+/// (`containment_health.py`). These are not `protection_health.py`'s check
+/// statuses, which this comment used to cite: that module reports
+/// `pass`/`unknown`/`fail` per check and is ported in `protection_health.rs`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ProtectionCheckStatus {
     Ok,
@@ -662,21 +664,6 @@ pub(crate) fn _platform() -> &'static str {
     } else {
         "other"
     }
-}
-
-/// `file_sha256` (containment_executor.py :37-44).
-pub fn file_sha256(path: &Path) -> Option<String> {
-    let mut file = File::open(path).ok()?;
-    let mut hasher = Sha256::new();
-    let mut buf = [0u8; 1024 * 1024];
-    loop {
-        let read = file.read(&mut buf).ok()?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buf[..read]);
-    }
-    Some(format!("sha256:{}", hex::encode(hasher.finalize())))
 }
 
 /// `write_manifest_atomically` (containment_executor.py :47-58).

@@ -24,18 +24,148 @@ from ci.gauntlet.installed_registration import (
     install_harness,
     load_contract,
 )
-from ci.gauntlet.installed_replay import handler_argv, replay_case
+from ci.gauntlet.installed_replay import NON_DECISION_REASONS, handler_argv, registered_argv, replay_case
 from ci.gauntlet.installed_runtime import (
     FROZEN_ONEDIR,
     SCRIPT,
     SHIM,
     InstalledRuntimeError,
     classify,
+    isolated_environment,
     resolve_runtime,
 )
 from ci.gauntlet.installed_store import STALE_COMMAND
 
+
+@pytest.mark.parametrize(
+    "reason_code",
+    sorted(NON_DECISION_REASONS),
+)
+def test_infrastructure_denials_do_not_count_as_attack_protection(tmp_path, monkeypatch, reason_code):
+    import subprocess
+
+    response = {
+        "policy_action": "block",
+        "reason_code": reason_code,
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": "HOL Guard could not prepare the native policy safely.",
+        },
+    }
+    monkeypatch.setattr(
+        subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(args, 2, json.dumps(response), "")
+    )
+    result = replay_case(
+        ["registered-hook"],
+        {"id": "attack", "expect": "not-allow", "payload": {}},
+        home=tmp_path,
+        guard_home=tmp_path / ".hol-guard",
+        workspace=tmp_path,
+        repeat=2,
+    )
+    assert any("infrastructure failed" in failure for failure in result["failures"])
+    assert result["runs"][0]["reason_code"] == reason_code
+
+
 HARNESSES = ["claude-code"]
+
+
+def test_lane_owned_infrastructure_codes_cover_product_availability_failures():
+    review_cannot_finish_codes = frozenset(
+        {
+            "native_policy_not_ready",
+            "native_policy_update_in_progress",
+            "native_hook_event_unavailable",
+            "native_pre_tool_unavailable",
+            "native_post_tool_unavailable",
+            "native_overloaded",
+            "native_hook_worker_unavailable",
+            "native_hook_worker_unavailable_before_compatibility",
+            "native_hook_worker_unsupported",
+            "native_hook_worker_exception",
+            "native_hook_compatibility_disabled",
+            "native_hook_edge_invalid_response",
+            "native_hook_edge_unavailable",
+            "python_hook_oracle_unavailable",
+            "python_oracle_exception",
+            "watch_recording_only",
+            "daemon_hook_queue_capacity",
+            "daemon_hook_deadline_exhausted",
+            "daemon_hook_process_deadline_exhausted",
+            "daemon_hook_process_not_ready",
+            "daemon_hook_process_failed",
+            "daemon_hook_process_invalid_request",
+            "daemon_hook_process_guard_home_mismatch",
+            "daemon_worker_exception",
+            "harness_not_managed",
+        }
+    )
+    integrity_fail_closed_codes = frozenset(
+        {
+            "invalid_hook_payload_reference",
+            "daemon_hook_queue_bytes",
+        }
+    )
+
+    # The oracle stays lane-owned; adding a product outage code cannot silently
+    # make that denial qualify as policy protection.
+    assert (integrity_fail_closed_codes | review_cannot_finish_codes) <= NON_DECISION_REASONS
+
+
+def test_registered_hook_percentiles_include_timeouts(tmp_path, monkeypatch):
+    import subprocess
+
+    clock = iter([0.0, 0.001, 1.0, 1.005, 2.0, 2.009])
+    monkeypatch.setattr("ci.gauntlet.installed_replay.time.monotonic", lambda: next(clock))
+    outcomes = iter([True, False, True])
+
+    def respond(*args, **kwargs):
+        if not next(outcomes):
+            raise subprocess.TimeoutExpired(args, 120)
+        return subprocess.CompletedProcess(args, 0, '{"decision":"allow"}', "")
+
+    monkeypatch.setattr(subprocess, "run", respond)
+    result = replay_case(
+        ["registered-hook"],
+        {"id": "timed", "expect": "allow", "payload": {}},
+        home=tmp_path,
+        guard_home=tmp_path / ".hol-guard",
+        workspace=tmp_path,
+        repeat=3,
+    )
+    assert result["latency"] == {
+        "method": "nearest-rank",
+        "scope": "registered-hook-process-round-trip",
+        "samples": 3,
+        "missing_samples": 0,
+        "timeouts": 1,
+        "p50_ms": 5.0,
+        "p90_ms": 9.0,
+        "p95_ms": 9.0,
+        "p99_ms": 9.0,
+        "max_ms": 9.0,
+        "mean_ms": 5.0,
+    }
+    assert result["failures"]
+
+
+@pytest.mark.parametrize("nested", [True, False])
+def test_zcode_requires_current_events_layout_and_replays_its_registered_command(tmp_path, nested):
+    expectation = load_contract()["harnesses"]["zcode"]
+    hook = tmp_path / "hol-guard-hook"
+    hook.write_text("#!/bin/sh\nexit 0\n")
+    hook.chmod(0o700)
+    handler = {"type": "command", "command": str(hook)}
+    events = {event: [{"matcher": "*", "hooks": [handler]}] for event in expectation["required_events"]}
+    config = {"hooks": {"events": events} if nested else events}
+    path = tmp_path / expectation["config"]
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(config))
+    result = assess_harness(tmp_path, "zcode", expectation)
+    assert result["registered"] is nested
+    assert registered_argv(tmp_path, expectation, config) == ([str(hook)] if nested else None)
+
 
 _CLAUDE_EVENTS = ("PreToolUse", "PermissionRequest", "PostToolUse", "Notification", "Stop", "SessionStart")
 
@@ -330,11 +460,69 @@ def test_a_hook_that_falls_over_on_an_attack_payload_is_not_a_denial(tmp_path: P
     assert any("never answered an attack payload" in failure for failure in result["failures"])
 
 
+_MUSE_EVENTS = ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse", "SessionStart", "Stop")
+
+
 def test_the_contract_is_the_lanes_own_and_covers_every_claude_event() -> None:
     """Asserting against the product's contract would let an emptied one pass."""
 
     contract = load_contract()
     assert set(contract["harnesses"]["claude-code"]["required_events"]) == set(_CLAUDE_EVENTS)
+
+
+def test_classify_reports_the_runtime_a_native_wheel_sealed(tmp_path: Path) -> None:
+    """A platform wheel carries its runtime inside the package, beside the script."""
+
+    site = tmp_path / "site-packages"
+    package = site / "codex_plugin_scanner"
+    (package / "_native").mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    sealed = package / "_native" / "hol-guard-runtime"
+    sealed.write_bytes(b"runtime")
+    shim = tmp_path / "interp"
+    shim.write_text(
+        f"#!{sys.executable}\nimport sys\nsys.path.insert(0, {str(site)!r})\n"
+        "sys.argv = [sys.argv[0]] + [a for a in sys.argv[1:] if a != '-I']\n"
+        "exec(compile(sys.argv[sys.argv.index('-c') + 1], '<probe>', 'exec'))\n",
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    script = tmp_path / "hol-guard"
+    script.write_text(f"#!{shim}\nprint('hol-guard 0.0.0-stub')\n", encoding="utf-8")
+    script.chmod(0o755)
+
+    kind, native = classify(script)
+    assert kind == SCRIPT
+    assert native == sealed
+
+
+def test_isolated_environment_pins_the_resolved_native_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HOL_GUARD_NATIVE_BINARY", raising=False)
+    sealed = tmp_path / "hol-guard-runtime"
+    pinned = isolated_environment(home=tmp_path / "h", guard_home=tmp_path / "g", native_runtime=sealed)
+    assert pinned["HOL_GUARD_NATIVE_BINARY"] == str(sealed)
+    assert pinned["HOL_GUARD_NATIVE"] == "force"
+    unpinned = isolated_environment(home=tmp_path / "h", guard_home=tmp_path / "g")
+    assert "HOL_GUARD_NATIVE_BINARY" not in unpinned
+
+
+def test_the_contract_matches_zcodes_managed_events() -> None:
+    """ZCode's adapter manages exactly two hook events; the contract must not demand more."""
+
+    contract = load_contract()
+    assert contract["harnesses"]["zcode"]["required_events"] == ["PreToolUse", "UserPromptSubmit"]
+
+
+def test_the_contract_covers_every_muse_event() -> None:
+    """Muse registers the same hook family under its own config home."""
+
+    contract = load_contract()
+    muse = contract["harnesses"]["muse"]
+    assert muse["config"] == ".config/muse/settings.json"
+    assert set(muse["required_events"]) == set(_MUSE_EVENTS)
+    assert muse["replay"] is True
+    assert muse["replay_event"] == "PreToolUse"
+    assert muse["replay_events"] == ["UserPromptSubmit"]
     assert contract["harnesses"]["omp"]["replay"] is False
     assert contract["harnesses"]["omp"]["replay_gap"]
     expectations = [case["expect"] for case in contract["replay_cases"]]
@@ -404,11 +592,19 @@ def test_a_real_gate_refusal_names_what_the_install_printed(tmp_path: Path) -> N
         )
 
 
-def test_the_lane_never_touches_the_operators_own_home(tmp_path: Path) -> None:
+def test_the_lane_never_touches_the_operators_own_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sdk = str(tmp_path / "host-python-sdk")
+    monkeypatch.setenv("LD_LIBRARY_PATH", sdk)
     runtime = _stub(tmp_path / "hol-guard", register=True, verdicts=["allow"])
+    runtime.write_text(
+        runtime.read_text().replace(
+            "import json, os, sys", "import json, os, sys\nassert 'LD_LIBRARY_PATH' not in os.environ"
+        )
+    )
     before = os.environ.get("HOME")
     _run(tmp_path, runtime, repeat=1)
     assert os.environ.get("HOME") == before
+    assert os.environ["LD_LIBRARY_PATH"] == sdk
     for relative in (".claude/settings.json", ".codex/config.toml"):
         assert not (tmp_path / "work" / relative).exists()
 
@@ -512,3 +708,182 @@ def test_an_argv_list_command_is_left_alone() -> None:
 
 def test_an_unbalanced_quote_registers_no_argv_rather_than_an_invented_one() -> None:
     assert handler_argv({"command": "/opt/guard/hol-guard --flag 'unterminated"}) == []
+
+
+_ZCODE_STUB = """#!/usr/bin/env python3
+import json, sys
+from pathlib import Path
+
+EVENTS = {events!r}
+REGISTER_PROMPT = {register_prompt!r}
+PROMPT_DECISION = {prompt_decision!r}
+
+
+def value(flag, default=None):
+    argv = sys.argv
+    return argv[argv.index(flag) + 1] if flag in argv else default
+
+
+def install():
+    home = Path(value("--home"))
+    config = home / ".zcode" / "cli" / "config.json"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    handler = {{"type": "command", "command": sys.argv[0], "args": ["hook"]}}
+    events = {{
+        event: [{{"matcher": "*", "hooks": [handler]}}]
+        for event in EVENTS
+        if REGISTER_PROMPT or event != "UserPromptSubmit"
+    }}
+    config.write_text(json.dumps({{"hooks": {{"events": events}}}}, indent=2))
+    print(json.dumps({{"installed": True, "harness": "zcode"}}))
+    return 0
+
+
+def hook():
+    payload = json.loads(sys.stdin.read() or "{{}}")
+    if payload.get("hook_event_name") == "UserPromptSubmit":
+        if PROMPT_DECISION == "allow":
+            print(json.dumps({{"decision": "allow"}}))
+        else:
+            print(
+                json.dumps(
+                    {{
+                        "decision": "block",
+                        "policy_action": "block",
+                        "reason_code": "native_active_pack_quarantine",
+                        "reason": "An active policy pack is quarantined.",
+                    }}
+                )
+            )
+        return 0
+    # The tool hook of a healthy build: ordinary work through, the decoy
+    # credential paths the contract's attack cases name denied.
+    text = json.dumps(payload)
+    harmful = ".ssh/id_rsa" in text or ".aws/credentials" in text
+    print(json.dumps({{"hookSpecificOutput": {{"permissionDecision": "deny" if harmful else "allow"}}}}))
+    return 0
+
+
+if "--version" in sys.argv:
+    print("hol-guard 0.0.0-stub")
+    raise SystemExit(0)
+raise SystemExit(install() if sys.argv[1] == "install" else hook())
+"""
+
+
+def _zcode_stub(path: Path, *, prompt_decision: str, register_prompt: bool = True) -> Path:
+    expectation = load_contract()["harnesses"]["zcode"]
+    path.write_text(
+        _ZCODE_STUB.format(
+            events=list(expectation["required_events"]),
+            register_prompt=register_prompt,
+            prompt_decision=prompt_decision,
+        ),
+        encoding="utf-8",
+    )
+    path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    return path
+
+
+def _run_zcode(tmp_path: Path, runtime: Path, *, repeat: int = 2) -> dict:
+    return run_lane(
+        runtime_path=runtime,
+        harnesses=["zcode"],
+        repeat=repeat,
+        require_frozen=False,
+        aged_store=False,
+        output=tmp_path / "evidence",
+        work_root=tmp_path / "work",
+    )
+
+
+def test_a_build_that_blocks_every_prompt_fails_the_lane(tmp_path: Path) -> None:
+    """3.58.0a7 answered tool calls and blocked every prompt: a session lockout.
+
+    The lane drove one argv per harness with PreToolUse payloads only, so that
+    build passed installed acceptance while the operator could not type into
+    their own session. The tool hook here is correct in every respect; only
+    the prompt hook blocks.
+    """
+
+    runtime = _zcode_stub(tmp_path / "hol-guard", prompt_decision="block")
+    evidence = _run_zcode(tmp_path, runtime)
+    assert evidence["accepted"] is False
+    assert any(
+        "benign-prompt-submit" in failure and "not allowed quietly" in failure for failure in evidence["failures"]
+    )
+    assert all("attack" not in failure for failure in evidence["failures"])
+
+
+def test_a_build_that_answers_prompts_and_tool_calls_passes(tmp_path: Path) -> None:
+    """The same stub with a working prompt hook, so the failure above is the prompt."""
+
+    runtime = _zcode_stub(tmp_path / "hol-guard", prompt_decision="allow")
+    evidence = _run_zcode(tmp_path, runtime)
+    assert evidence["failures"] == []
+    assert evidence["accepted"] is True
+    replay = evidence["harnesses"]["zcode"]["replay"]
+    assert [case["id"] for case in replay["cases"]] == [case["id"] for case in load_contract()["replay_cases"]]
+    assert replay["skipped"] == []
+
+
+def test_a_declared_prompt_hook_the_install_never_registered_is_a_failure() -> None:
+    """Codex's registration check counts entries, so a missing event reaches replay."""
+
+    from ci.gauntlet.installed_replay import replay_harness
+
+    result = replay_harness(
+        "codex",
+        ["registered-hook"],
+        [{"id": "benign-prompt-submit", "event": "UserPromptSubmit", "expect": "allow", "payload": {}}],
+        home=Path("/nonexistent"),
+        guard_home=Path("/nonexistent"),
+        workspace=Path("/nonexistent"),
+        repeat=1,
+        argv_by_event={"UserPromptSubmit": None},
+    )
+    assert result["cases"] == []
+    assert any("no runnable UserPromptSubmit hook" in failure for failure in result["failures"])
+
+
+def test_a_harness_with_no_prompt_hook_skips_the_prompt_cases_rather_than_failing(tmp_path: Path) -> None:
+    """Guard prunes Claude Code's UserPromptSubmit group on purpose.
+
+    There is no prompt hook there to replay, so the cases must be recorded as
+    skipped against the contract rather than counted against the build.
+    """
+
+    runtime = _stub(tmp_path / "hol-guard", register=True, verdicts=["allow", "allow"])
+    evidence = _run(tmp_path, runtime)
+    replay = evidence["harnesses"]["claude-code"]["replay"]
+    assert [entry["id"] for entry in replay["skipped"]] == [
+        "benign-prompt-submit",
+        "benign-prompt-submit-names-a-file",
+        "benign-prompt-submit-wire-encoding",
+    ]
+    assert all("prompt" not in failure for failure in evidence["failures"])
+
+
+def test_a_case_no_harness_replays_refuses_to_run() -> None:
+    """A case every harness skips is coverage the lane does not have."""
+
+    from ci.gauntlet.installed_lane import undeclared_case_events
+
+    assert undeclared_case_events(load_contract()) == []
+    assert undeclared_case_events(
+        {
+            "harnesses": {"zcode": {"replay": True, "replay_events": ["UserPromptSubmit"]}},
+            "replay_cases": [{"id": "stop", "event": "Stop"}],
+        }
+    ) == ["Stop"]
+
+
+def test_the_contract_declares_the_prompt_hook_for_the_harnesses_that_have_one() -> None:
+    """zcode and Codex register UserPromptSubmit; Claude Code deliberately does not."""
+
+    contract = load_contract()
+    assert "UserPromptSubmit" in contract["harnesses"]["zcode"]["replay_events"]
+    assert "UserPromptSubmit" in contract["harnesses"]["codex"]["replay_events"]
+    assert "replay_events" not in contract["harnesses"]["claude-code"]
+    prompt_cases = [case for case in contract["replay_cases"] if case.get("event") == "UserPromptSubmit"]
+    assert prompt_cases and all(case["expect"] == "allow" for case in prompt_cases)

@@ -35,6 +35,10 @@ _HOOK_ENVIRONMENT_KEYS = frozenset(
         "HOL_GUARD_HOOK_FAILURE_KIND",
         "HOL_GUARD_NATIVE",
         "HOL_GUARD_NATIVE_BINARY",
+        # A source checkout names its source compiler; the compiler refuses
+        # either override when a packaged compiler is present.
+        "HOL_GUARD_NATIVE_SOURCE_COMPILER",
+        "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER",
         # Test-mode and non-production diagnostic markers forwarded so a
         # contained hook process keeps the same boundary as its parent.
         "HOL_GUARD_TEST_MODE",
@@ -88,6 +92,9 @@ class BoundedHookProcessResult:
     timed_out: bool
     containment_failed: bool = False
     stderr: str = ""
+    capture_incomplete: bool = False
+    stdout_bytes: bytes = b""
+    stderr_bytes: bytes = b""
 
 
 @dataclass(slots=True)
@@ -363,34 +370,42 @@ def run_isolated_hook_process(
         )
     except OSError:
         return BoundedHookProcessResult(None, "", False, False)
-    stdout_bytes, stderr_bytes, output_limit_exceeded, output_lock, io_threads = start_hook_io(
-        process,
-        input_text=input_text,
-        output_limit=output_limit,
-    )
-    returncode, timed_out, containment_confirmed, termination_requested = wait_for_hook_process(
-        process,
-        windows_job,
-        deadline=deadline,
-        stop_event=stop_event,
-        output_limit_exceeded=output_limit_exceeded,
-        terminate=_kill_hook_process,
-    )
-    windows_job, containment_confirmed, job_cleanup_failed = join_and_cleanup_hook_process(
-        process,
-        windows_job,
-        io_threads,
-        containment_confirmed=containment_confirmed,
-        termination_requested=termination_requested,
-        terminate=_kill_hook_process,
-        quarantine=_quarantine_hook_process,
-        close_streams=_close_process_streams,
-        close_job=close_windows_hook_job,
-    )
-    if liveness_write_fd is not None:
-        os.close(liveness_write_fd)
+    try:
+        stdout_bytes, stderr_bytes, output_limit_exceeded, capture_error, output_lock, io_threads = start_hook_io(
+            process,
+            input_text=input_text,
+            output_limit=output_limit,
+        )
+        returncode, timed_out, containment_confirmed, termination_requested = wait_for_hook_process(
+            process,
+            windows_job,
+            deadline=deadline,
+            stop_event=stop_event,
+            output_limit_exceeded=output_limit_exceeded,
+            terminate=_kill_hook_process,
+        )
+        windows_job, containment_confirmed, job_cleanup_failed = join_and_cleanup_hook_process(
+            process,
+            windows_job,
+            io_threads,
+            containment_confirmed=containment_confirmed,
+            termination_requested=termination_requested,
+            terminate=_kill_hook_process,
+            quarantine=_quarantine_hook_process,
+            close_streams=_close_process_streams,
+            close_job=close_windows_hook_job,
+        )
+    except BaseException:
+        # An interrupt (Ctrl-C) must not leave the child's group running with
+        # nobody enforcing its deadline; the child is in its own session.
+        _ = _kill_hook_process(process, windows_job)
+        raise
+    finally:
+        if liveness_write_fd is not None:
+            os.close(liveness_write_fd)
     with output_lock:
         stdout_decoded, stderr_decoded = _decode_combined_output(stdout_bytes, stderr_bytes, output_limit)
+        stdout_raw, stderr_raw = bytes(stdout_bytes), bytes(stderr_bytes)
     return BoundedHookProcessResult(
         returncode=None if job_cleanup_failed or not containment_confirmed else returncode,
         stdout=stdout_decoded,
@@ -398,6 +413,9 @@ def run_isolated_hook_process(
         timed_out=timed_out,
         containment_failed=not containment_confirmed,
         stderr=stderr_decoded,
+        capture_incomplete=capture_error.is_set(),
+        stdout_bytes=stdout_raw,
+        stderr_bytes=stderr_raw,
     )
 
 

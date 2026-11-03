@@ -21,6 +21,6 @@ pub(super) const PROMPT_RISK_CLASSES: [(&str, &str); 7] = [
     ),
     (
         "prompt_injection_intent",
-        "Prompt asks to override trusted instructions.",
+        "Prompt asks to override or reveal trusted instructions.",
     ),
 ];

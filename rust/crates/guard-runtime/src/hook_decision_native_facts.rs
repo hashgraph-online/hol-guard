@@ -18,7 +18,7 @@ use guard_command::command_evaluation_controls::{
 use guard_command::Ctx;
 use guard_contracts::{CodexToolOutputFactsV1, HookCompositionInputsV1};
 
-use crate::codex_tool_output_op::ResidentInspectionHost;
+use crate::resident_inspection_host::ResidentInspectionHost;
 
 const MAX_TEXT_BYTES: usize = 64 * 1024;
 const MAX_ENVIRONMENT: usize = 128;
@@ -131,7 +131,7 @@ static RECORDED_VERDICT: Mutex<Option<(String, Instant, bool)>> = Mutex::new(Non
 
 /// Whether the slot holds a verdict for `inputs`, without taking it. For
 /// tests that assert what the handoff holds rather than time what it saves.
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn verdict_is_recorded_after(inputs: &HookCompositionInputsV1, after: Duration) -> bool {
     let Some(key) = verdict_key(inputs) else {
         return false;
@@ -145,7 +145,7 @@ pub(crate) fn verdict_is_recorded_after(inputs: &HookCompositionInputsV1, after:
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn verdict_is_recorded(inputs: &HookCompositionInputsV1) -> bool {
     verdict_is_recorded_after(inputs, Duration::ZERO)
 }
@@ -182,6 +182,46 @@ fn record_verdict(key: Option<String>, now: Instant, verdict: bool) {
         return;
     };
     *slot = key.map(|key| (key, now, verdict));
+}
+
+/// Whether the hook's tool call can be a verified non-sensitive Codex patch.
+///
+/// This is the structural half of
+/// `runtime_artifact_verified_non_sensitive_apply_patch`: the harness, the
+/// artifact check, the tool name, and the patch text itself, all of which the
+/// resident reads off the request it was given. Only when every one of them
+/// holds is the transport asked whether the patch's target paths are
+/// non-sensitive, which is the half that needs the host's filesystem. A patch
+/// that deletes or moves a file is never verified here, and a request the
+/// transport could not observe is not a patch that can be verified.
+pub(crate) fn apply_patch_may_be_verified(inputs: &HookCompositionInputsV1) -> bool {
+    if !inputs.runtime_artifact_checked || inputs.canonical_harness != "codex" {
+        return false;
+    }
+    let Some(request) = &inputs.native_request else {
+        return false;
+    };
+    if request
+        .tool_name
+        .as_str()
+        .map(|name| name.trim().to_ascii_lowercase())
+        .as_deref()
+        != Some("apply_patch")
+    {
+        return false;
+    }
+    let Some(tool_input) = request.tool_input.as_object() else {
+        return false;
+    };
+    let texts: Vec<&str> = ["patch", "input", "command"]
+        .into_iter()
+        .filter_map(|key| tool_input.get(key).and_then(|value| value.as_str()))
+        .filter(|text| !text.trim().is_empty())
+        .collect();
+    !texts.is_empty()
+        && !texts
+            .iter()
+            .any(|text| text.contains("*** Delete File:") || text.contains("*** Move to:"))
 }
 
 /// `is_explicitly_benign_tool_action_request` for the hook's tool call.

@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import sqlite3
 import sys
 from typing import TYPE_CHECKING
 
@@ -183,6 +184,71 @@ def _run_guard_execute_contained_test_command(
                 request_file.unlink(missing_ok=True)
                 request_file.parent.rmdir()
 
+def _run_guard_ack_bound_bash_command(
+    args: argparse.Namespace, *, guard_home: Path | None = None,
+    workspace: Path | None = None, store: GuardStore | None = None, **_kwargs: object,
+) -> int:
+    from ..native_bash_ack import acknowledge
+    from ..native_bash_protocol import NativeBashError
+
+    if guard_home is None or workspace is None or store is None:
+        return 126
+    try:
+        recorded = acknowledge(
+            guard_home=guard_home, store_path=store.path, project=workspace,
+            base_id=str(args.operation_id), harness=str(args.harness),
+            tool_call_id=str(args.tool_call_id), exit_code=args.exit_code,
+        )
+        if recorded:
+            return 0
+        print("native_bash_ack_not_recorded", file=sys.stderr)
+        return 125
+    except (NativeBashError, OSError, RuntimeError, ValueError, sqlite3.Error):
+        print("native_bash_ack_unavailable", file=sys.stderr)
+        return 125
+
+
+def _run_guard_execute_bound_bash_command(
+    args: argparse.Namespace, *, guard_home: Path | None = None,
+    workspace: Path | None = None, context: HarnessContext | None = None,
+    store: GuardStore | None = None, **_kwargs: object,
+) -> int:
+    from ..native_bash_protocol import NativeBashError
+    from ..runtime.bound_bash_sink import run_bound_bash
+    from ..runtime.contained_test_hook import read_contained_test_request
+    from ..runtime.restricted_pytest import RestrictedPytestError
+
+    if guard_home is None or workspace is None or context is None or store is None:
+        return 126
+    validated = False
+    try:
+        payload = read_contained_test_request(Path(args.request_file), str(args.request_sha256), workspace=workspace)
+        validated = True
+        return run_bound_bash(
+            payload, store=store, workspace=workspace, harness=str(args.harness),
+            operation_id=str(args.operation_id), timeout_seconds=args.timeout_seconds,
+            host_owner_pid=getattr(args, "host_owner_pid", None),
+            tool_call_id=getattr(args, "tool_call_id", None),
+        )
+    except NativeBashError as error:
+        print(error.code, file=sys.stderr)
+        return 125
+    except RestrictedPytestError as error:
+        print(error.reason_code, file=sys.stderr)
+        return error.exit_code
+    except (OSError, RuntimeError, ValueError, sqlite3.Error):
+        # A missing policy/store answer cannot select an alternate executor.
+        # Do not expose request contents or integrity-provider diagnostics.
+        print("native_bash_sink_unavailable", file=sys.stderr)
+        return 125
+    finally:
+        if validated:
+            with suppress(OSError):
+                request_file = Path(args.request_file)
+                request_file.unlink(missing_ok=True)
+                request_file.parent.rmdir()
+
+
 def _run_guard_command_inspection_command(
     args: argparse.Namespace,
     *,
@@ -195,7 +261,7 @@ def _run_guard_command_inspection_command(
         guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
         return run_extension_controls_command(args, guard_home=guard_home, output_stream=output_stream)
     from ..daemon.client import GuardDaemonRequestError
-    from ..runtime.command_inspection import command_extensions_payload, unavailable_command_inspection
+    from ..runtime.command_inspection import unavailable_command_inspection
     from .extension_controls_commands import _client
 
     command_command = str(getattr(args, "command_command", ""))
@@ -211,7 +277,10 @@ def _run_guard_command_inspection_command(
             _emit("command-setup", payload, bool(getattr(args, "json", False)))
             return 0
         if command_command == "extensions":
-            payload = command_extensions_payload(getattr(args, "extension_id", None))
+            from .command_extension_listing import command_extensions_listing
+
+            guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
+            payload = command_extensions_listing(guard_home, getattr(args, "extension_id", None))
             _emit("command-extensions", payload, bool(getattr(args, "json", False)))
             return 0
         if command_command not in {"test", "explain"}:
@@ -417,24 +486,34 @@ def _run_guard_protect_command(
             harness=harness,
         ),
     )
+    wait_result: dict[str, object] | None = None
     if (
         bool(getattr(args, "package_shim_ui", False))
         and not bool(getattr(args, "json", False))
         and config.approval_wait_timeout_seconds > 0
     ):
+        from .protect_inline_approval import inline_package_approval
+
+        wait_result = inline_package_approval(
+            payload,
+            store=store,
+            workspace=protect_workspace,
+            timeout_seconds=config.approval_wait_timeout_seconds,
+        )
         approval_request_ids = payload.get("approval_request_ids")
         request_ids = [
             str(item)
             for item in (approval_request_ids if isinstance(approval_request_ids, list) else [])
             if isinstance(item, str) and item
         ]
-        if request_ids:
+        if wait_result is None and request_ids:
             _emit_package_shim_pending_approval_status()
             wait_result = wait_for_approval_requests(
                 store=store,
                 request_ids=request_ids,
                 timeout_seconds=config.approval_wait_timeout_seconds,
             )
+        if wait_result is not None:
             payload["approval_wait"] = wait_result
             wait_items = wait_result.get("items")
             resolved_items = [
@@ -445,7 +524,6 @@ def _run_guard_protect_command(
             if bool(wait_result.get("resolved")) and not any(
                 str(item.get("resolution_action")) == "block" for item in resolved_items
             ):
-                initial_payload = payload
                 try:
                     fresh_payload, fresh_exit_code = build_protect_payload(
                         command=protect_command,
@@ -460,38 +538,14 @@ def _run_guard_protect_command(
                 except NativeProtectRequestError as error:
                     return _emit_protect_resident_failure(error)
                 if fresh_exit_code == 0:
-                    payload, exit_code = fresh_payload, fresh_exit_code
-                elif _package_shim_approval_matches_fresh_request(initial_payload, fresh_payload):
-                    fresh_verdict = fresh_payload.get("verdict")
-                    if isinstance(fresh_verdict, dict):
-                        fresh_verdict["action"] = "allow"
-                        fresh_verdict["blocking"] = False
-                    fresh_payload["policy_action"] = "allow"
                     fresh_payload["approval_wait"] = wait_result
-                    payload, exit_code = fresh_payload, 0
+                    payload, exit_code = fresh_payload, fresh_exit_code
     if not _suppress_package_shim_allow_output(args, payload):
         as_json = bool(getattr(args, "json", False))
         output_payload = payload if as_json else _protect_payload_for_human_output(payload, guard_home=guard_home)
         _emit("protect", output_payload, as_json)
     return exit_code
 
-
-def _package_shim_approval_matches_fresh_request(
-    initial_payload: dict[str, object],
-    fresh_payload: dict[str, object],
-) -> bool:
-    """Resume only when the full package request and execution context are unchanged."""
-    initial_request = initial_payload.get("request")
-    fresh_request = fresh_payload.get("request")
-    fresh_verdict = fresh_payload.get("verdict")
-    if not isinstance(initial_request, dict) or not isinstance(fresh_request, dict):
-        return False
-    if not isinstance(fresh_verdict, dict):
-        return False
-    fresh_action = str(fresh_verdict.get("action") or "")
-    if fresh_action not in {"review", "require-reapproval"}:
-        return False
-    return initial_request == fresh_request
 
 def _run_guard_start_command(
     args: argparse.Namespace,
@@ -542,12 +596,51 @@ def _run_guard_network_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    from ..runtime.network_protection_bundle import NETWORK_PROTECTION_SYNC_STATE_KEY, network_protection_status
+
     command = getattr(args, "network_command", None) or "status"
+    if command == "sync":
+        store = _require_guard_store(store)
+        try:
+            summary = sync_network_protection_bundle(store)
+        except (RuntimeError, ValueError) as error:
+            from .commands_support_service import _guard_sync_failure_message
+
+            message = str(error)
+            if isinstance(error, GuardSyncNotConfiguredError):
+                message = _guard_sync_failure_message(error)
+            _emit("network-sync", {"synced": False, "error": message}, getattr(args, "json", False))
+            return 1
+        _emit("network-sync", {"synced": True, **summary}, getattr(args, "json", False))
+        return 0
+    if command == "check":
+        return _run_guard_network_check(args, guard_home=guard_home)
     if command != "status":
         raise ValueError(f"unsupported network command: {command}")
-    payload = load_network_status_payload(guard_home=guard_home, config=config)
+    payload = dict(load_network_status_payload(guard_home=guard_home, config=config))
+    if store is not None:
+        payload["protection_bundle"] = network_protection_status(
+            store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
+        )
     _emit("network", payload, getattr(args, "json", False))
     return 0
+
+def _run_guard_network_check(args: argparse.Namespace, *, guard_home: Path | None) -> int:
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    url = str(getattr(args, "url", "") or "").strip()
+    home = guard_home if guard_home is not None else resolve_guard_home(None)
+    try:
+        verdict = native_runner_authority("network_check", {"guard_home": str(home), "url": url})
+    except NativeRunnerAuthorityError as error:
+        _emit("network-check", {"url": url, "error": str(error)}, getattr(args, "json", False))
+        return 1
+    payload: dict[str, object] = {"url": url, **verdict}
+    _emit("network-check", payload, getattr(args, "json", False))
+    if not verdict.get("valid_url", False):
+        return 2
+    return 0
+
 
 def _run_guard_init_command(
     args: argparse.Namespace,
@@ -755,11 +848,13 @@ def _run_guard_mcp_command(
 
 
 __all__ = [
+    "_run_guard_ack_bound_bash_command",
     "_run_guard_apps_command",
     "_run_guard_bootstrap_command",
     "_run_guard_command_inspection_command",
     "_run_guard_dashboard_command",
     "_run_guard_detect_command",
+    "_run_guard_execute_bound_bash_command",
     "_run_guard_execute_contained_test_command",
     "_run_guard_init_command",
     "_run_guard_install_command",

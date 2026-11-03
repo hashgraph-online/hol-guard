@@ -129,9 +129,6 @@ class StoreReceiptsRuntimeMixin:
             },
         )
 
-    def reconcile_receipt_events(self) -> None:
-        self._native_store_call("reconcile_receipt_events", {})
-
     def list_receipts(self, limit: int = 50, harness: str | None = None) -> list[dict[str, object]]:
         return list(self._native_store_call("list_receipts", {"limit": limit, "harness": harness}))
 

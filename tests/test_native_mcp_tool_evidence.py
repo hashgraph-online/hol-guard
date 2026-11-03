@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_mcp_tool_evidence as module
+from codex_plugin_scanner.guard import native_resident_decision as resident
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.native_mcp_tool_evidence import (
     NativeMcpToolEvidenceError,
@@ -69,7 +70,7 @@ _ARTIFACT_FIREWALL = sorted(name for name, case in _FIREWALL.items() if not _is_
 
 def _force_available(monkeypatch: pytest.MonkeyPatch) -> None:
     class Features:
-        features = frozenset({module._FEATURE, module._RESIDENT_PROTOCOL_FEATURE})
+        features = frozenset({module._FEATURE, resident._RESIDENT_PROTOCOL_FEATURE})
 
     class Identity:
         path = "/bin/true"
@@ -83,8 +84,8 @@ def _force_available(monkeypatch: pytest.MonkeyPatch) -> None:
         capabilities = Features()
 
     monkeypatch.setattr(module, "_native_runtime_status_memo", lambda: Status())
-    monkeypatch.setattr(module, "ensure_resident_prerequisite", lambda _home: True)
-    monkeypatch.setattr(module, "native_record_resident_failure", lambda *a, **k: None)
+    monkeypatch.setattr(resident, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(resident, "native_record_resident_failure", lambda *a, **k: None)
 
 
 @pytest.mark.parametrize("name", sorted(_RISK))
@@ -141,7 +142,7 @@ def test_client_exceptions_become_typed_errors(monkeypatch: pytest.MonkeyPatch) 
         def client(error: Exception = error, **_kwargs: object) -> bytes:
             raise error
 
-        monkeypatch.setattr(module, "native_resident_client_request", client)
+        monkeypatch.setattr(resident, "native_resident_client_request", client)
         with pytest.raises(NativeMcpToolEvidenceError, match="resident_unavailable"):
             native_firewall_metadata_patch(_firewall_artifact(case["source"]))
 
@@ -149,7 +150,7 @@ def test_client_exceptions_become_typed_errors(monkeypatch: pytest.MonkeyPatch) 
 def test_mismatched_binding_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     _force_available(monkeypatch)
     monkeypatch.setattr(
-        module,
+        resident,
         "native_resident_client_request",
         lambda **_: (
             b'{"schema":"guard-mcp-tool-evidence-result.v1","request_id":"x","request_sha256":"y",'
@@ -175,8 +176,8 @@ def test_malformed_operation_payload_counts_as_a_resident_failure(
     _force_available(monkeypatch)
     failures: list[str] = []
     successes: list[object] = []
-    monkeypatch.setattr(module, "native_record_resident_failure", lambda *a, **k: failures.append(k["reason"]))
-    monkeypatch.setattr(module, "native_record_resident_success", lambda *a, **k: successes.append(a))
+    monkeypatch.setattr(resident, "native_record_resident_failure", lambda *a, **k: failures.append(k["reason"]))
+    monkeypatch.setattr(resident, "native_record_resident_success", lambda *a, **k: successes.append(a))
 
     def client(*, payload: bytes, **_kwargs: object) -> bytes:
         request = json.loads(payload)["request"]
@@ -184,14 +185,14 @@ def test_malformed_operation_payload_counts_as_a_resident_failure(
             {
                 "schema": module._RESULT_SCHEMA,
                 "request_id": request["request_id"],
-                "request_sha256": module._canonical_request_sha256(request),
+                "request_sha256": resident._canonical_request_sha256(request),
                 "status": "ok",
                 "code": "ok",
                 "payload": json.loads(raw_payload),
             }
         ).encode()
 
-    monkeypatch.setattr(module, "native_resident_client_request", client)
+    monkeypatch.setattr(resident, "native_resident_client_request", client)
     case = _FIREWALL[_ARTIFACT_FIREWALL[0]]
     with pytest.raises(NativeMcpToolEvidenceError, match="result_invalid"):
         native_firewall_metadata_patch(_firewall_artifact(case["source"]))

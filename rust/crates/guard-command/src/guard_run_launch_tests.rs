@@ -67,14 +67,20 @@ fn executable_prefix_recovers_prepended_wrapper() {
     );
     assert_eq!(
         guard_run_executable_prefix(&p),
-        Some(vec!["/usr/local/bin/npm".to_string()])
+        Some(vec!["/usr/local/bin/npm".to_string(), "npm".to_string()])
     );
 }
 
 #[test]
-fn executable_prefix_none_when_same_or_shorter_or_mismatched_tail() {
+fn executable_prefix_none_when_shorter_or_mismatched_tail() {
+    // No argument tail: the whole execution command is the resolved prefix.
     assert_eq!(
         guard_run_executable_prefix(&plan(&["a"], &["a"], "s", true)),
+        Some(vec!["a".to_string()])
+    );
+    // One argument and a one-element execution command leaves no prefix.
+    assert_eq!(
+        guard_run_executable_prefix(&plan(&["a", "b"], &["b"], "s", true)),
         None
     );
     assert_eq!(
@@ -121,4 +127,52 @@ fn is_guard_action_canonical_lattice_only() {
     }
     assert!(!guard_run_is_guard_action(&json!(1)));
     assert!(!guard_run_is_guard_action(&Value::Null));
+}
+
+#[test]
+fn authorized_prefixes_dedupe_in_first_seen_order() {
+    let plans = vec![
+        plan(&["cli", "--go"], &["/usr/bin/cli", "--go"], "s", true),
+        plan(&["cli", "--other"], &["/usr/bin/cli", "--other"], "s", true),
+        plan(&["cli", "--third"], &["/opt/cli", "--third"], "s", true),
+    ];
+    assert_eq!(
+        guard_run_authorized_executable_prefixes(&plans),
+        Some(vec![
+            vec!["/usr/bin/cli".to_string()],
+            vec!["/opt/cli".to_string()],
+        ])
+    );
+}
+
+#[test]
+fn authorized_prefixes_reject_empty_unreusable_or_split_environment() {
+    assert_eq!(guard_run_authorized_executable_prefixes(&[]), None);
+    assert_eq!(
+        guard_run_authorized_executable_prefixes(&[plan(
+            &["cli"],
+            &["/usr/bin/cli", "cli"],
+            "s",
+            false
+        )]),
+        None
+    );
+    assert_eq!(
+        guard_run_authorized_executable_prefixes(&[
+            plan(&["cli"], &["/usr/bin/cli", "cli"], "s", true),
+            plan(&["cli"], &["/usr/bin/cli", "cli"], "other", true),
+        ]),
+        None
+    );
+}
+
+#[test]
+fn authorized_prefixes_reject_a_plan_without_a_recoverable_prefix() {
+    assert_eq!(
+        guard_run_authorized_executable_prefixes(&[
+            plan(&["cli"], &["/usr/bin/cli", "cli"], "s", true),
+            plan(&["cli", "--go"], &["--go"], "s", true),
+        ]),
+        None
+    );
 }

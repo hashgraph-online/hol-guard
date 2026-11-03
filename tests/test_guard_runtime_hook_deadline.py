@@ -50,7 +50,6 @@ def test_predictive_dispatch_rejects_when_secure_review_cannot_fit() -> None:
         client_key="stable-fingerprint",
         lane="decision",
         payload_bytes=2,
-        normalized_payload=b"{}",
         deadline=deadline,
     )
 
@@ -66,7 +65,6 @@ def test_scheduler_health_dimensions_are_bounded() -> None:
         client_key="high-cardinality-session",
         lane="decision",
         payload_bytes=2,
-        normalized_payload=b"{}",
         deadline=200.0,
     )
     assert admission.permit is not None
@@ -87,7 +85,6 @@ def _record_slow_reviews(scheduler: RuntimeHookScheduler, clock: FakeClock, *, c
             client_key=f"stalled-{index}",
             lane="decision",
             payload_bytes=2,
-            normalized_payload=b"{}",
             deadline=clock.value + 30.0,
         )
         assert admission.permit is not None
@@ -108,7 +105,6 @@ def test_slow_samples_from_an_ended_stall_do_not_refuse_the_next_idle_hook() -> 
         client_key="agent",
         lane="decision",
         payload_bytes=2,
-        normalized_payload=b"{}",
         deadline=RuntimeHookDeadline(expires_at=clock.value + 2.0),
     )
 
@@ -126,7 +122,6 @@ def test_slow_samples_still_shed_hooks_while_other_reviews_are_in_flight() -> No
         client_key="running",
         lane="decision",
         payload_bytes=2,
-        normalized_payload=b"{}",
         deadline=clock.value + 30.0,
     )
     assert running.permit is not None
@@ -136,7 +131,6 @@ def test_slow_samples_still_shed_hooks_while_other_reviews_are_in_flight() -> No
         client_key="agent",
         lane="decision",
         payload_bytes=2,
-        normalized_payload=b"{}",
         deadline=RuntimeHookDeadline(expires_at=clock.value + 2.0),
     )
 

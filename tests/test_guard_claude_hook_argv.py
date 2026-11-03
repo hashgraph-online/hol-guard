@@ -290,9 +290,10 @@ def test_exec_hook_does_not_run_marker_embedded_in_workspace_path(tmp_path: Path
     )
 
     assert result.returncode == 0
-    # The resident writes phase timing when it answers the prompt. Those lines
+    # The resident writes phase timing and discovery counts when it answers the prompt. Those lines
     # are not the injected command. Anything else on stderr still fails.
-    unexpected = [line for line in result.stderr.splitlines() if not line.startswith("native_resident_phase ")]
+    diagnostic_prefixes = ("native_resident_phase ", "native_resident_note ")
+    unexpected = [line for line in result.stderr.splitlines() if not line.startswith(diagnostic_prefixes)]
     assert unexpected == []
     assert not marker_path.exists()
 

@@ -73,6 +73,7 @@ fn dispatch(request: &ShimAdminRequestV2) -> Result<Value, Failure> {
     let value = match request.subop.as_str() {
         "status" => shims::package_shim_status(&context, path_env).map(object),
         "dashboard_status" => shims::package_shim_dashboard_status(&context).map(object),
+        "protection_projection" => shims::package_shim_protection(&context).map(object),
         "cloud_coverage" => {
             shims::package_shim_cloud_coverage(&context, request.generated_at.as_deref())
         }
@@ -312,9 +313,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_install_and_status_run_through_the_op() {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |elapsed| elapsed.as_nanos());
+        let nanos = crate::unique_nanos::unique_nanos();
         let base = std::env::temp_dir().join(format!("hol-shim-op-{}-{nanos}", std::process::id()));
         let guard_home = base.join("guard");
         let home = base.join("home");

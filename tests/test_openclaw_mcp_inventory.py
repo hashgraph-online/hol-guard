@@ -7,7 +7,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
-from codex_plugin_scanner.guard.risk import artifact_risk_signals
+from tests.artifact_risk_support import artifact_risk_signals
 from tests.openclaw_test_support import mcp_artifact
 
 

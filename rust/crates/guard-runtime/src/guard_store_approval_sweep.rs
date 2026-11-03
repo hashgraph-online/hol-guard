@@ -4,7 +4,6 @@
 //! resolution and resolves them in the caller's write transaction. The
 //! approval gate stays with the caller, which checks it before the sweep.
 
-use guard_contracts::{normalize_guard_action_result, GuardAction};
 use rusqlite::Connection;
 use serde_json::Value;
 
@@ -225,23 +224,13 @@ pub(crate) fn resolvable_ids(rows: &[Row], guard_home: &str) -> StoreResult<Vec<
     Ok(ids)
 }
 
-/// `approval_resolution_block_reason` for a projected row: a contract error
-/// or an unrecognized action is inconsistent, and a terminal action cannot
-/// be resolved by the user.
+/// `approval_resolution_block_reason` for a projected row, answered by the
+/// one contract function the resident op answers with.
 pub(crate) fn resolution_block_reason(projection: &Value) -> Option<&'static str> {
-    if !projection["contract_error"].is_null() {
-        return Some("authoritative_decision_inconsistent");
-    }
-    let normalized =
-        normalize_guard_action_result(&projection["policy_action"], GuardAction::RequireReapproval);
-    if !normalized.recognized() {
-        return Some("authoritative_decision_inconsistent");
-    }
-    matches!(
-        normalized.action,
-        GuardAction::Block | GuardAction::SandboxRequired
+    guard_contracts::approval_resolution_block_reason(
+        &projection["contract_error"],
+        &projection["policy_action"],
     )
-    .then_some("terminal_policy_action_not_resolvable")
 }
 
 /// `_path_within_workspace`.

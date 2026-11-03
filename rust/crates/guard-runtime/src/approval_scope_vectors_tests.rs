@@ -127,6 +127,40 @@ fn unbound_native_reviews_cannot_offer_execution_approval() {
 }
 
 #[test]
+fn script_delivery_refusal_survives_a_valid_legacy_retry_binding() {
+    let item = ApprovalScopeItemV1 {
+        artifact_id: Some(json!("omp:native-pretool:bash")),
+        artifact_type: Some(json!("tool_call")),
+        artifact_hash: Some(json!(format!(
+            "native-review-v4:{}:deny:review:review:test",
+            "a".repeat(64)
+        ))),
+        policy_action: Some(json!("review")),
+        raw_command_text: Some(json!("python3 report.py")),
+        action_envelope_json: Some(json!({
+            "once_only_reason": "script_execution_binding_unavailable"
+        })),
+        ..Default::default()
+    };
+    let actual = evaluate_one(item);
+    assert_eq!(actual["allowed_scopes_by_action"]["allow"], json!([]));
+    assert_eq!(
+        actual["allowed_scopes_by_action"]["block"],
+        json!(["artifact"])
+    );
+    assert_eq!(
+        actual["once_only_reason"],
+        "script_execution_binding_unavailable"
+    );
+    assert_eq!(actual["execution_approval"]["can_run_once"], false);
+    assert_eq!(
+        actual["execution_approval"]["can_persist_exact_version"],
+        false
+    );
+    assert_eq!(actual["execution_approval"]["can_record_decision"], true);
+}
+
+#[test]
 fn malformed_native_binding_never_advertises_once_delivery() {
     for hash in ["native-review-v4:", "native-review-v4:not-a-binding"] {
         let item = ApprovalScopeItemV1 {

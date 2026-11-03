@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.keepawake",
+  "version": "1.0.0",
+  "name": "keepAwake",
+  "description": "Lets coding agents keep a Mac awake during long builds, test runs and downloads, then let it sleep again. Holds are time-limited and end with the agent session. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.mikespineu",
+    "displayName": "Michał Kręcisz",
+    "url": "https://github.com/mikespineu/keepAwake"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniBolt", "background": "#0F172A" },
+  "homepage": "https://github.com/mikespineu/keepAwake",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "keepawake"
+  },
+  "riskClasses": ["local-power-state-change"],
+  "tools": [
+    { "name": "keep_awake", "state": "inherit" },
+    { "name": "allow_sleep", "state": "inherit" },
+    { "name": "keep_awake_status", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/mikespineu/keepAwake",
+    "https://github.com/mikespineu/keepAwake#use-with-ai-agents",
+    "https://github.com/mikespineu/keepAwake/blob/main/Sources/KeepAwake/MCPServer.swift"
+  ],
+  "saferAlternatives": [
+    "Turn off agent control in the keepAwake menu; the MCP tools then refuse new holds.",
+    "keep_awake is capped at 1440 minutes and every hold ends when the agent session ends, so a forgotten hold cannot keep the Mac awake indefinitely.",
+    "Use keep_awake_status to see which agent holds the Mac awake before granting more time."
+  ]
+}

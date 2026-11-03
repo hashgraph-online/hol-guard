@@ -78,17 +78,22 @@ pub(crate) fn load_or_create_correlation_key(
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
+    create_key(&key_path)
+}
 
+/// Write a new key at `key_path`, or read the one another writer linked there
+/// first.
+fn create_key(key_path: &Path) -> io::Result<InstallationCorrelationKey> {
     let (key_id, material) = new_key();
-    let temporary = write_private_temporary(&key_path, &serialize_key(&key_id, &material))?;
-    let created = match fs::hard_link(&temporary, &key_path) {
+    let temporary = write_private_temporary(key_path, &serialize_key(&key_id, &material))?;
+    let created = match fs::hard_link(&temporary, key_path) {
         Ok(()) => {
-            set_private_mode(&key_path);
+            set_private_mode(key_path);
             fsync_directory(key_path.parent());
             InstallationCorrelationKey::new(&key_id, &material)
         }
         // Another process created the key between the read and the link.
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => read_key(&key_path),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => read_key(key_path),
         Err(error) => Err(error),
     };
     let _ = fs::remove_file(&temporary);

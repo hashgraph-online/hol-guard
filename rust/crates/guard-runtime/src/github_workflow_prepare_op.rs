@@ -2,9 +2,16 @@
 //! approval record for one hook command (`describe`) and re-verifies a
 //! persisted record against its command text (`verify`).
 //!
-//! Ports `runtime/github_workflow_context.py::build_github_workflow_descriptor`
-//! and `github_workflow_runtime.py::_persisted_command_matches_record`. Any
-//! context-collection failure is "no descriptor", never an op error.
+//! `lineage` mode decides whether a persisted approval request, the Guard
+//! operation it resolved and that operation's session are one unbroken
+//! workflow lineage.
+//!
+//! Ports `runtime/github_workflow_context.py::build_github_workflow_descriptor`,
+//! `github_workflow_runtime.py::_persisted_command_matches_record` and
+//! `github_workflow_runtime.py::_validated_lineage`. Any context-collection
+//! failure is "no descriptor", never an op error; a broken lineage is likewise
+//! "no lineage" rather than an error, since the host's only use for it is to
+//! refuse the retry.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -20,6 +27,7 @@ use guard_command::github_workflow_descriptor::{
     repository_from_remote, review_thread_location, viewer_from_user_payload,
     workspace_files_digest, GITHUB_WORKFLOW_LOCATOR_QUERY,
 };
+use guard_command::github_workflow_lineage::validated_workflow_lineage;
 use guard_command::github_workflow_operations::parse_github_workflow_operation;
 use guard_contracts::{
     GithubWorkflowPrepareRequestV1, GithubWorkflowPrepareResultV1, WorkflowCapabilityRuleBinding,
@@ -40,6 +48,7 @@ const LOCKFILES: [&str; 3] = ["uv.lock", "bun.lock", "bun.lockb"];
 enum Outcome {
     Describe(Option<(String, Value)>),
     Verify(bool),
+    Lineage(Option<Value>),
 }
 
 pub(crate) fn evaluate_github_workflow_prepare_request(
@@ -56,6 +65,7 @@ pub(crate) fn evaluate_github_workflow_prepare_request(
         command_identity: None,
         record: None,
         verified: None,
+        lineage: None,
     };
     match evaluate(request) {
         Ok(Outcome::Describe(Some((identity, record)))) => {
@@ -64,6 +74,8 @@ pub(crate) fn evaluate_github_workflow_prepare_request(
         }
         Ok(Outcome::Describe(None)) => "none".clone_into(&mut result.code),
         Ok(Outcome::Verify(verified)) => result.verified = Some(verified),
+        Ok(Outcome::Lineage(Some(lineage))) => result.lineage = Some(lineage),
+        Ok(Outcome::Lineage(None)) => "none".clone_into(&mut result.code),
         Err(code) => {
             "error".clone_into(&mut result.status);
             result.code = code.to_owned();
@@ -79,6 +91,7 @@ fn evaluate(request: &GithubWorkflowPrepareRequestV1) -> Result<Outcome, &'stati
     match request.mode.as_str() {
         "describe" => describe(request).map(Outcome::Describe),
         "verify" => verify(request).map(Outcome::Verify),
+        "lineage" => lineage(request).map(Outcome::Lineage),
         _ => Err("native_github_workflow_prepare_mode_invalid"),
     }
 }
@@ -241,6 +254,36 @@ fn verify(request: &GithubWorkflowPrepareRequestV1) -> Result<bool, &'static str
         .ok_or("native_github_workflow_prepare_invalid")?;
     Ok(GitHubWorkflowApprovalRecord::decode(record_value)
         .is_ok_and(|record| persisted_matches(&request.command_text, &record)))
+}
+
+/// `lineage` mode. The three store rows arrive already read; the only work
+/// left that needs the filesystem is resolving the workspace and re-deriving
+/// the persisted command, both of which the validator asks for by closure.
+fn lineage(request: &GithubWorkflowPrepareRequestV1) -> Result<Option<Value>, &'static str> {
+    const INVALID: &str = "native_github_workflow_prepare_invalid";
+    let approval_request = request.approval_request.as_ref().ok_or(INVALID)?;
+    let operation = request.operation.as_ref().ok_or(INVALID)?;
+    let session = request.session.as_ref().ok_or(INVALID)?;
+    let resolve_workspace = |workspace: &str| {
+        canonical_path(Path::new(workspace)).and_then(|path| path.to_str().map(str::to_owned))
+    };
+    let validated = validated_workflow_lineage(
+        approval_request,
+        operation,
+        session,
+        &resolve_workspace,
+        &persisted_matches,
+    );
+    Ok(validated.ok().map(|lineage| {
+        json!({
+            "request_id": lineage.request_id,
+            "operation_id": lineage.operation_id,
+            "session_id": lineage.session_id,
+            "record": lineage.record.to_value(),
+            "capability_id": lineage.capability_id,
+            "nonce": lineage.nonce,
+        })
+    }))
 }
 
 fn persisted_matches(command_text: &str, record: &GitHubWorkflowApprovalRecord) -> bool {

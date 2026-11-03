@@ -63,7 +63,15 @@ def test_packaged_bridge_accepts_files_under_imported_package_root(
     fake_package = type(sys)("codex_plugin_scanner")
     fake_package.__file__ = str(package_init)
     monkeypatch.setitem(sys.modules, "codex_plugin_scanner", fake_package)
-    monkeypatch.setattr(integrity.sysconfig, "get_paths", lambda: {})
+    # `sysconfig` is one module for the whole process, so a stub that takes no
+    # scheme also fails the named-scheme call coverage makes while this test
+    # runs. Only the integrity check's own schemeless call is answered here.
+    real_get_paths = integrity.sysconfig.get_paths
+    monkeypatch.setattr(
+        integrity.sysconfig,
+        "get_paths",
+        lambda *scheme, **named: real_get_paths(*scheme, **named) if scheme or named else {},
+    )
     monkeypatch.setattr(integrity.sys, "prefix", str(tmp_path / "other-prefix"))
     monkeypatch.setattr(integrity.sys, "exec_prefix", str(tmp_path / "other-prefix"))
     import site as site_module
@@ -163,7 +171,6 @@ def test_manifest_build_accepts_private_group_pipx_style_packaged_files(
     scanner_root = package_root / "codex_plugin_scanner"
     roles = (
         "bridge",
-        "bridge_resume",
         "bridge_runtime",
         "fallback_entrypoint",
         "daemon_entrypoint",

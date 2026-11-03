@@ -15,14 +15,14 @@ from codex_plugin_scanner.guard.cli.commands_dispatch_records import (
 )
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
-from codex_plugin_scanner.guard.runtime.embedded_script_evidence import (
-    EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE,
-    command_has_embedded_script,
-    embedded_script_evidence_entries,
-)
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_shell_helpers_client import call
 
 _MAX_EMBEDDED_SCRIPT_EVIDENCE_ENTRIES = 8
+
+
+def embedded_script_evidence_entries(command: str) -> list[dict[str, object]]:
+    return list(call("embedded_script_evidence", command))
 
 
 def _store_with_command_receipt(tmp_path: Path, command: str, receipt_id: str) -> GuardStore:
@@ -106,14 +106,6 @@ def test_multiple_heredocs_are_each_indexed() -> None:
     assert entries[0]["index"] == 0
     assert entries[1]["index"] == 1
     assert entries[1]["executed"] is True
-
-
-def test_no_heredoc_produces_no_entries() -> None:
-    assert embedded_script_evidence_entries("ls -la /tmp") == []
-    assert embedded_script_evidence_entries("") == []
-    assert embedded_script_evidence_entries(None) == []
-    assert command_has_embedded_script("ls -la") is False
-    assert command_has_embedded_script(None) is False
 
 
 def test_evidence_entries_are_bounded() -> None:
@@ -246,8 +238,3 @@ def test_history_explain_missing_receipt_returns_error(tmp_path: Path, capsys: A
     assert result == 1
     payload = json.loads(capsys.readouterr().out)
     assert "error" in payload
-
-
-def test_remediation_guidance_is_actionable() -> None:
-    assert "workspace file" in EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE
-    assert "audit" in EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE.lower()

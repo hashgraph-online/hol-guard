@@ -14,6 +14,8 @@ const MARKER_SCHEMA: &str = "guard.native-command-control-authority.v1";
 const PACK_MARKER_SCHEMA: &str = "guard.native-command-control-authority.v2";
 const MARKER_DOMAIN: &[u8] = b"hol-guard.native-command-control-authority.v1\0";
 const PACK_MARKER_DOMAIN: &[u8] = b"hol-guard.native-command-control-authority.v2\0";
+const SECURITY_MARKER_SCHEMA: &str = "guard.native-command-control-authority.v3";
+const SECURITY_MARKER_DOMAIN: &[u8] = b"hol-guard.native-command-control-authority.v3\0";
 const MAX_MARKER_BYTES: u64 = 4_096;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -29,6 +31,8 @@ struct CommandAuthorityMarker {
     mac: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pack_program_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    active_security_digest: Option<String>,
 }
 
 pub(crate) struct CommandAuthorityLease {
@@ -79,8 +83,16 @@ impl PolicySnapshotStore {
         let object = value
             .as_object()
             .ok_or_else(|| "native_command_control_authority_invalid".to_owned())?;
-        let pack_mode = value["schema"] == PACK_MARKER_SCHEMA;
-        if object.len() != if pack_mode { 9 } else { 8 }
+        let security_mode = value["schema"] == SECURITY_MARKER_SCHEMA;
+        let pack_mode = value["schema"] == PACK_MARKER_SCHEMA || security_mode;
+        if object.len()
+            != if security_mode {
+                10
+            } else if pack_mode {
+                9
+            } else {
+                8
+            }
             || (pack_mode && !object.contains_key("pack_program_digest"))
             || [
                 "schema",
@@ -114,7 +126,11 @@ impl PolicySnapshotStore {
                     == guard_command::native_command_program::PACKAGED_COMMAND_PROGRAM_ID
         };
         if !program_bound
-            || (marker.schema != MARKER_SCHEMA && marker.schema != PACK_MARKER_SCHEMA)
+            || (marker.schema != MARKER_SCHEMA
+                && marker.schema != PACK_MARKER_SCHEMA
+                && marker.schema != SECURITY_MARKER_SCHEMA)
+            || marker.active_security_digest != binding.active_security_digest
+            || security_mode != binding.active_security_digest.is_some()
             || marker.phase != "committed"
             || marker.effective_digest.as_deref() != Some(binding.effective_digest.as_str())
             || &authority != expected
@@ -127,7 +143,9 @@ impl PolicySnapshotStore {
             .remove("mac");
         let body = canonical_json_bytes(&value)
             .map_err(|_| "native_command_control_authority_invalid".to_owned())?;
-        let domain = if pack_mode {
+        let domain = if security_mode {
+            SECURITY_MARKER_DOMAIN
+        } else if pack_mode {
             PACK_MARKER_DOMAIN
         } else {
             MARKER_DOMAIN

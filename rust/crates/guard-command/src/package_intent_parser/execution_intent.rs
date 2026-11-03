@@ -241,12 +241,8 @@ pub(super) fn exec_package_spec(tokens: &[String]) -> Option<String> {
     if matches!(command.as_str(), "pnpm" | "yarn") && tokens.len() >= 2 && tokens[1] == "dlx" {
         return first_positional(&tokens[2..], &[]);
     }
-    if command == "npx" {
-        return option_value(tokens, "--package")
-            .or_else(|| first_positional(&tokens[1..], &["--package", "-p"]));
-    }
-    if command == "bunx" {
-        return first_positional(&tokens[1..], &["--bun"]);
+    if matches!(command.as_str(), "npx" | "bunx") {
+        return runner_package_spec(tokens);
     }
     if command == "uvx" {
         return uvx_arguments(tokens).find_map(|argument| match argument {
@@ -257,4 +253,62 @@ pub(super) fn exec_package_spec(tokens: &[String]) -> Option<String> {
         });
     }
     None
+}
+
+/// The package an `npx` or `bunx` launch fetches; the first of
+/// [`runner_packages`].
+fn runner_package_spec(tokens: &[String]) -> Option<String> {
+    runner_packages(tokens).into_iter().next()
+}
+
+/// Runner options whose value names a place to fetch from or install into,
+/// never the package itself. `-c` and `--call` on `npx` hand it a command,
+/// which is read as before.
+fn runner_value_options(command: &str) -> &'static [&'static str] {
+    match command {
+        "npx" => &[
+            "--registry",
+            "--cache",
+            "--userconfig",
+            "--prefix",
+            "-w",
+            "--workspace",
+        ],
+        "bunx" => &["-c", "--config", "--cwd", "--registry", "--cache-dir"],
+        _ => &[],
+    }
+}
+
+/// Every package an `npx` or `bunx` launch fetches: each `--package` or `-p`
+/// value, else the executable. Only the options before the executable belong
+/// to the runner, so `npx tsc -p tsconfig.json` fetches `tsc`, `--bun` takes
+/// no value, and a value such as `--registry`'s is never read as a package.
+/// A selector or option left without its value fetches nothing.
+pub fn runner_packages(tokens: &[String]) -> Vec<String> {
+    let Some(first) = tokens.first() else {
+        return Vec::new();
+    };
+    let value_options = runner_value_options(&command_name(first));
+    let mut packages = Vec::new();
+    let mut rest = tokens.iter().skip(1);
+    while let Some(token) = rest.next() {
+        if matches!(token.as_str(), "--package" | "-p") {
+            let Some(spec) = rest.next() else {
+                return Vec::new();
+            };
+            packages.push(spec.clone());
+        } else if let Some(spec) = token.strip_prefix("--package=") {
+            packages.push(spec.to_owned());
+        } else if value_options.contains(&token.as_str()) {
+            if rest.next().is_none() {
+                return Vec::new();
+            }
+        } else if !token.starts_with('-') {
+            if packages.is_empty() {
+                packages.push(token.clone());
+            }
+            break;
+        }
+    }
+    packages
 }

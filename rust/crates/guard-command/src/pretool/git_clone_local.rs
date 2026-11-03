@@ -71,7 +71,11 @@ fn proven(
     }
     let spec = parse(segment)?;
     let source = resolved_source(spec.source, context)?;
-    let destination = super::worktree_add::fresh_destination(spec.destination, context)?;
+    let destination = super::worktree_add::fresh_destination(
+        spec.destination,
+        context,
+        super::worktree_add::MissingParents::Required,
+    )?;
     // Git reads the configuration, hooks and attributes of the repository
     // being copied, so the proof runs there rather than in the agent's cwd.
     let source_context = super::PathContext {
@@ -88,9 +92,10 @@ fn proven(
     let (effective, _repository) = probe.config()?;
     // A configured template directory hands the new repository hooks that
     // later commands in it would run; a conditional include could set one.
+    let git_dir = destination.join(".git");
     let templated = effective.keys().any(|key| {
-        let key = key.to_ascii_lowercase();
-        key == "init.templatedir" || key.starts_with("includeif.")
+        key.eq_ignore_ascii_case("init.templatedir")
+            || super::git_conditional_include::could_apply(key, &git_dir, context.home_dir)
     });
     if templated {
         return None;
@@ -110,6 +115,7 @@ fn proven(
         source_context,
         deadline,
         execution_environment,
+        &mut None,
     )?
     .then_some(destination)
 }

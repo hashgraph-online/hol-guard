@@ -9,26 +9,34 @@ import zipfile
 from pathlib import Path
 
 from extension_artifact_bundle import source_sha
+from extension_delivery_containers import MAX_MEMBERS, METADATA_BYTES, POLICY_BYTES
 
-from codex_plugin_scanner.guard.catalog_delivery.containers import (
-    MAX_MEMBERS,
-    METADATA_BYTES,
-    POLICY_BYTES,
-    location,
-)
+from codex_plugin_scanner.guard.catalog_delivery.containers import location
 
-ASSETS_PER_RELEASE = 256
+# Two slots of the 256-asset release inventory are reserved for the signed
+# distribution root and its provenance bundle, which every data release
+# carries so the release itself can be verified.
+ASSETS_PER_RELEASE = 254
 PUBLICATION = re.compile(r"[0-9]{1,20}\.[0-9]{1,10}")
 
 
 class AssetPlan:
     """Existing member locations come only from a separately verified root."""
 
-    def __init__(self, directory: Path, commit: str, existing: dict | None = None, *, publication_id="0.0"):
+    def __init__(
+        self,
+        directory: Path,
+        commit: str,
+        existing: dict | None = None,
+        *,
+        publication_id="0.0",
+        standalone_policy=False,
+    ):
         self.commit = source_sha(commit)
         if not isinstance(publication_id, str) or PUBLICATION.fullmatch(publication_id) is None:
             raise ValueError("delivery publication identity invalid")
         self.publication_id = publication_id
+        self.standalone_policy = standalone_policy
         self.directory = directory
         self.existing = existing or {}
         self.locations = {}
@@ -95,7 +103,7 @@ class AssetPlan:
             maximum = METADATA_BYTES if kind == "object" else POLICY_BYTES
             # A maximal valid pack remains a standalone asset. Its existing
             # 32 MiB contract is not reduced to make room for a ZIP envelope.
-            if len(data) + overhead + 22 > maximum:
+            if (kind == "pack" and self.standalone_policy) or len(data) + overhead + 22 > maximum:
                 result, path = self._destination(lambda _: name)
                 with path.open("xb") as stream:
                     stream.write(data)

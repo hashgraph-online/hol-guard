@@ -10,7 +10,7 @@ mod pager;
 #[path = "git_config_textconv.rs"]
 mod textconv;
 
-pub(super) use super::git_config_trust::{clean_environment, trusted_command};
+pub(super) use super::git_config_trust::{clean_environment, trusted_command, trusted_launch};
 
 const CONFIG_LIMIT: u64 = 65_536;
 
@@ -58,13 +58,38 @@ pub(super) fn execution_free_paging(
             stdout_piped,
         );
     }
+    // `git notes show` hands the note to `git show`, which pages under
+    // `pager.show` where `pager.notes` left the choice open, so the proof runs
+    // under both keys. A listing runs nothing else.
+    if operation == "notes"
+        && pager_operation.is_none()
+        && super::git_side_record_reads::shows_a_note(&remaining[1..])
+    {
+        let prove = |pager: &str| {
+            execution_free_paging(
+                executable,
+                arguments,
+                Some(pager),
+                context,
+                deadline,
+                execution_environment,
+                stdout_piped,
+            )
+        };
+        return Some(prove("notes")? && prove("show")?);
+    }
     if !matches!(
         operation,
         "status"
+            | "cherry"
             | "diff"
+            | "diff-files"
+            | "diff-index"
+            | "diff-tree"
             | "log"
             | "show"
             | "blame"
+            | "annotate"
             | "describe"
             | "reflog"
             | "grep"
@@ -81,7 +106,25 @@ pub(super) fn execution_free_paging(
             | "rev-list"
             | "shortlog"
             | "check-ignore"
+            | "count-objects"
+            | "check-attr"
+            | "sparse-checkout"
+            | "rev-parse"
+            | "ls-files"
             | "apply"
+            | "bisect"
+            | "notes"
+            | "replace"
+            | "submodule"
+            | "name-rev"
+            | "show-branch"
+            | "check-ref-format"
+            | "symbolic-ref"
+            | "var"
+            | "patch-id"
+            | "stripspace"
+            | "check-mailmap"
+            | "interpret-trailers"
     ) {
         return None;
     }
@@ -99,14 +142,32 @@ pub(super) fn execution_free_paging(
     if operation == "rev-list" && !super::git_rev_list::read_form(&remaining[1..]) {
         return None;
     }
-    if matches!(operation, "blame" | "describe" | "reflog")
+    if matches!(operation, "blame" | "annotate" | "describe" | "reflog")
         && !super::git_history_reads::read_form(operation, &remaining[1..])
     {
         return None;
     }
-    if matches!(operation, "shortlog" | "check-ignore")
-        && !super::git_listing_reads::read_form(operation, &remaining[1..])
+    if matches!(
+        operation,
+        "shortlog"
+            | "check-ignore"
+            | "count-objects"
+            | "check-attr"
+            | "sparse-checkout"
+            | "rev-parse"
+            | "ls-files"
+    ) && !super::git_listing_reads::read_form(operation, &remaining[1..])
     {
+        return None;
+    }
+    if matches!(operation, "bisect" | "notes" | "replace")
+        && !super::git_side_record_reads::read_form(operation, &remaining[1..])
+    {
+        return None;
+    }
+    // Only the status form prints; every other submodule verb moves work,
+    // and the recursive walk reads configuration this probe never saw.
+    if operation == "submodule" && !super::git_submodule_reads::read_form(&remaining[1..]) {
         return None;
     }
     // Only the patch check reads; every other apply writes, and its own
@@ -130,22 +191,32 @@ pub(super) fn execution_free_paging(
         context.cwd.map(str::to_owned),
         stdout_piped,
     );
+    // Every other operation reaches this probe because nothing else proves
+    // it, so a probe that cannot answer leaves it unproven and it keeps its
+    // review. `rev-parse` and `ls-files` are plumbing already proven as exact
+    // safe reads without this probe; they run it only to settle what a later
+    // read in the same chain depends on. Collapsing an unanswerable probe
+    // into a refusal for those two would withdraw a proof they already hold,
+    // so it leaves that proof standing and settles nothing instead.
+    let keeps_its_own_proof = matches!(operation, "rev-parse" | "ls-files");
     super::git_probe::memoized(key, || {
-        Some(
-            probe(
-                executable,
-                arguments,
-                remaining,
-                Paging {
-                    operation: &pager_operation,
-                    stdout_piped,
-                },
-                context,
-                deadline,
-                execution_environment,
-            )
-            .unwrap_or(false),
-        )
+        let answer = probe(
+            executable,
+            arguments,
+            remaining,
+            Paging {
+                operation: &pager_operation,
+                stdout_piped,
+            },
+            context,
+            deadline,
+            execution_environment,
+        );
+        match answer {
+            Some(proven) => Some(proven),
+            None if keeps_its_own_proof => None,
+            None => Some(false),
+        }
     })
 }
 
@@ -220,6 +291,16 @@ fn probe(
         stdout_piped,
     } = paging;
     let operation = remaining.first()?.as_str();
+    // `git notes show` execs `git show <note>`. A note is a blob when Git
+    // wrote it, but a notes tree names whatever object it was built with, so a
+    // commit there is rendered with the patch, diff driver and signature
+    // settings of `git show`. A listing prints names and object ids only.
+    let rendering =
+        if operation == "notes" && super::git_side_record_reads::shows_a_note(&remaining[1..]) {
+            "show"
+        } else {
+            operation
+        };
     // Configuration plus root, path and attribute inspection share this budget.
     // The caller's overall deadline remains the upper bound.
     let inspection_deadline = Instant::now() + super::git_probe::PROBE_BUDGET;
@@ -295,7 +376,7 @@ fn probe(
             "config",
             "--null",
             "--get-regexp",
-            "^(core\\.fsmonitor|core\\.excludesfile|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
+            "^(core\\.fsmonitor|core\\.excludesfile|core\\.attributesfile|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
         ])
 ,
         deadline, CONFIG_LIMIT,
@@ -313,7 +394,7 @@ fn probe(
     // claim to prove the complete signature-format/helper option grammar.
     if options.clone().any(|value| {
         value.as_str() == "--show-signature"
-            || (super::git_history_reads::verifies_signatures(operation) && value.contains("%G"))
+            || (super::git_history_reads::verifies_signatures(rendering) && value.contains("%G"))
             || value.starts_with("--remerge-diff")
             || value == "--diff-merges=remerge"
             || value == "--submodule=diff"
@@ -343,11 +424,14 @@ fn probe(
         .map(String::as_str)
         .filter(|value| value.starts_with('-'))
         .collect::<Vec<_>>();
-    let textconv_runs = !no_textconv && textconv::may_run(operation, &option_flags);
+    let textconv_runs = !no_textconv && textconv::may_run(rendering, &option_flags);
     // An external driver renders a diff, so only a read that renders one can
     // start it. A tag listing, a clean preview, a ref listing or an ignore
     // check prints names, and a configured driver leaves all of them alone.
-    let renders_diff = matches!(operation, "diff" | "log" | "show" | "reflog" | "stash");
+    let renders_diff = matches!(
+        rendering,
+        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" | "reflog" | "stash"
+    );
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
         let (key, value) = record.split_once('\n')?;
@@ -359,9 +443,15 @@ fn probe(
     // config pages by default only for its listing forms.
     let pages_by_default = match operation {
         // `clean` prints its preview, and `apply` its check report, without
-        // a pager.
+        // a pager. `rev-parse`, `ls-files` and the two index comparisons are
+        // plumbing: Git starts no pager for any of them, so only their own
+        // `pager.*` key can ask for one.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
-        | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" => false,
+        | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
+        | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
+        | "diff-index" | "diff-files" | "name-rev" | "show-branch" | "check-ref-format"
+        | "symbolic-ref" | "var" | "patch-id" | "stripspace" | "check-mailmap"
+        | "interpret-trailers" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };
@@ -399,7 +489,8 @@ fn probe(
         .then(|| super::git_hash_object::read_operands(&remaining[1..]))
         .flatten()
         .filter(|_| !super::git_hash_object::filters_disabled(&remaining[1..]));
-    let filtered = matches!(operation, "status" | "diff")
+    let filtered = matches!(operation, "status" | "diff" | "diff-files")
+        || (operation == "diff-index" && compares_working_tree(&remaining[1..]))
         || super::git_history_reads::cleans_working_tree(operation, &remaining[1..])
         || hashed.is_some();
     let has_filters = filtered
@@ -425,10 +516,20 @@ fn probe(
             // Reading the index can start the monitor; grep reads it too, a
             // clean preview refreshes the index before it walks the untracked
             // tree, and a patch check refreshes it before it reads the files
-            // the patch names.
+            // the patch names. A scripted index comparison loads the index
+            // whether or not `--cached` keeps the working tree out of it.
             "core.fsmonitor" => {
-                (matches!(operation, "status" | "diff" | "grep" | "clean" | "apply")
-                    || super::git_listing_reads::reads_index(operation, &remaining[1..])
+                (matches!(
+                    operation,
+                    "status"
+                        | "diff"
+                        | "diff-files"
+                        | "diff-index"
+                        | "grep"
+                        | "clean"
+                        | "apply"
+                        | "submodule"
+                ) || super::git_listing_reads::reads_index(operation, &remaining[1..])
                     || super::git_history_reads::cleans_working_tree(operation, &remaining[1..]))
                     && !disabled
             }
@@ -440,6 +541,14 @@ fn probe(
                 !value.is_empty()
                     && super::git_listing_reads::prints_rule_source(operation, &remaining[1..])
             }
+            // An attribute check prints the attribute names and values of
+            // every rule that matches the paths it was given, and a configured
+            // attributes file names anything. Git splits each of its lines on
+            // whitespace and reads the first word as a pattern and the rest as
+            // attributes, so a file of credentials becomes attributes the
+            // check prints. The check keeps its review until someone reads
+            // that setting.
+            "core.attributesfile" => !value.is_empty() && operation == "check-attr",
             "core.pager" => {
                 configured_paging
                     && !git_pager_disabled
@@ -468,13 +577,13 @@ fn probe(
             }
             key if key.starts_with("filter.") => filtered && !value.is_empty() && !filters_unused,
             "format.pretty" => {
-                super::git_history_reads::verifies_signatures(operation) && value.contains("%G")
+                super::git_history_reads::verifies_signatures(rendering) && value.contains("%G")
             }
             key if key.starts_with("pretty.") => {
-                super::git_history_reads::verifies_signatures(operation) && value.contains("%G")
+                super::git_history_reads::verifies_signatures(rendering) && value.contains("%G")
             }
             "log.showsignature" => {
-                super::git_history_reads::verifies_signatures(operation) && !disabled
+                super::git_history_reads::verifies_signatures(rendering) && !disabled
             }
             // Outside a repository grep would search every file under cwd.
             "grep.fallbacktonoindex" => operation == "grep" && !disabled,
@@ -495,10 +604,45 @@ fn probe(
     if operation == "config" {
         return super::git_config_reads::credential_free(&command, &remaining[1..], deadline);
     }
+    if operation == "bisect" && !super::git_probe::bisect_log_inert(&command, deadline)? {
+        return Some(false);
+    }
     if !super::git_probe::repository_inert(&command, operation, remaining, deadline)? {
         return Some(false);
     }
     Some(true)
+}
+
+/// The switches that change how Git reads a pathspec. The probe spells its
+/// own index query as `:/`, the magic naming the repository root, so a probe
+/// that inherited `--literal-pathspecs` from the agent's command would read
+/// that word as a literal path, match no entry under it and report a
+/// repository holding no gitlinks. Only `--literal-pathspecs` reaches a
+/// routed read today; the other three are refused with the rest of the
+/// unrecognised spellings. The family is dropped together so widening that
+/// admission cannot reopen the hole, and none of them names the
+/// configuration, hook path or index the probe asks about.
+const PATHSPEC_MAGIC: [&str; 4] = [
+    "--literal-pathspecs",
+    "--glob-pathspecs",
+    "--noglob-pathspecs",
+    "--icase-pathspecs",
+];
+
+/// Whether the index comparison also reads the files on disk.
+///
+/// `git diff-index HEAD` compares the index against the working tree, so Git
+/// runs a configured clean filter over every file it has to re-examine.
+/// `--cached` compares the index against the named tree alone and never opens
+/// a working-tree file, so that spelling consumes no filter. `diff-files`
+/// always compares the index against the working tree and has no such
+/// spelling, so it is screened without asking here. `diff-tree` compares two
+/// trees and reaches neither the index nor the working tree.
+fn compares_working_tree(rest: &[String]) -> bool {
+    !rest
+        .iter()
+        .take_while(|argument| argument.as_str() != "--")
+        .any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
 }
 
 /// The probe runs Git without a shell, so a `-C ~/repo` target the shell
@@ -507,6 +651,10 @@ fn expand_home_targets(leading: &[String], home: &Path) -> Vec<String> {
     let mut expanded = Vec::with_capacity(leading.len());
     let mut directory_next = false;
     for argument in leading {
+        if PATHSPEC_MAGIC.contains(&argument.as_str()) {
+            directory_next = false;
+            continue;
+        }
         let value = if directory_next {
             match argument.strip_prefix('~') {
                 Some("") => home.to_string_lossy().into_owned(),
@@ -524,7 +672,7 @@ fn expand_home_targets(leading: &[String], home: &Path) -> Vec<String> {
     expanded
 }
 
-fn disabled_boolean(value: &str) -> bool {
+pub(super) fn disabled_boolean(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
         "0" | "false" | "no" | "off"

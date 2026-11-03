@@ -135,10 +135,7 @@ fn init_of_a_fresh_owned_temporary_directory_is_quiet() {
     let parent = std::fs::canonicalize("/tmp").unwrap().join(format!(
         "guard-init-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let _cleanup = FixtureCleanup(parent.clone());
     std::fs::create_dir(&parent).unwrap();
@@ -249,10 +246,7 @@ fn init_of_a_fresh_leaf_directly_in_a_temporary_root_is_quiet() {
     let unique = format!(
         "guard-init-root-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     );
     let mut roots = vec![std::fs::canonicalize("/tmp").unwrap()];
     let private = std::fs::canonicalize(std::env::temp_dir()).unwrap();
@@ -334,10 +328,7 @@ fn a_clone_from_a_repository_other_users_can_rewrite_keeps_review() {
     let leaf = std::fs::canonicalize("/tmp").unwrap().join(format!(
         "guard-clone-temp-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let _cleanup = FixtureCleanup(leaf.clone());
     for source in [leaf.clone(), leaf.join("nested")] {

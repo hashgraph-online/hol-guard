@@ -4,6 +4,8 @@ mod command_sequences;
 mod jq_filter;
 #[path = "read_globs.rs"]
 mod read_globs;
+#[path = "test_predicates.rs"]
+mod test_predicates;
 pub(super) use super::directory_targets::verified_cwd_target;
 pub(super) use super::read_paths::{
     bounded_file_read_target, bounded_omp_directory_read_target, bounded_omp_file_read_target,
@@ -18,13 +20,19 @@ pub(super) use super::safe_writes::{
 };
 pub(crate) use command_sequences::proven_created_file_removal;
 pub(super) use command_sequences::{exact_safe_sequence, leading_and_cd, leading_semicolon_cd};
+pub(crate) use jq_filter::rendering_format as jq_rendering_format;
+pub(crate) use jq_filter::variables_bound as jq_variables_bound;
 pub(super) use read_globs::glob_file_matches;
 
 pub(super) fn safe_file_predicate_arguments(
     arguments: &[String],
+    text: &str,
     context: super::PathContext<'_>,
 ) -> bool {
-    let [predicate, target] = arguments else {
+    if test_predicates::answers_from_operands(arguments, text) {
+        return true;
+    }
+    let [predicate, target] = test_predicates::without_negation(arguments) else {
         return false;
     };
     // Each predicate reads only the target's metadata: its type, permission
@@ -80,7 +88,7 @@ pub(super) fn safe_listing_arguments(
                 context.cwd,
             )
             || super::read_paths::home_hidden_directory(argument, context.home_dir, context.cwd)
-            || (super::search::skill_listing_root(argument, context)
+            || (super::search::skill_listing_root(argument, context, false)
                 && !super::search::skill_link_resolves_over_home(argument, context))
             || super::listing_reads::absent_listing_operand(argument, context)
             || super::tool_bin_listing::tool_bin_listing_operand(argument, context)
@@ -120,6 +128,17 @@ pub(super) fn command_read_target(
             // guessed inside the workspace.
             || (!allow_directory
                 && super::search::sibling_repository_named_file(value, context, true))
+            // A read of an absolute path with nothing at it prints the same
+            // error the workspace-relative spelling already prints, as long
+            // as no step of the command can put a file or a link there
+            // first.
+            || (!allow_directory
+                && context.creates_nothing
+                && super::read_paths::bounded_missing_absolute_read_target(
+                    value,
+                    context.home_dir,
+                    context.cwd,
+                ))
     } else {
         safe_read_target(value)
     }
@@ -459,37 +478,60 @@ pub(super) fn jq_filter_position(arguments: &[String], piped_input: bool) -> Opt
     } else {
         last.checked_sub(1)?
     };
-    if piped_input && !arguments[index].starts_with('.') {
-        return None;
-    }
     jq_filter::safe_filter(&arguments[index]).then_some(index)
 }
 
+/// `... | jq <filter>` reads the value the pipeline already produced.
+///
+/// Stdin may come from a network read the sandbox cannot contain, so the
+/// filter still has to clear the grammar in full. It no longer has to open
+/// with a projection: `length`, `map(.name)` and `select(.draft)` read the
+/// same value `.items | length` does, and the grammar — not the leading
+/// character — is what keeps a filter from reaching the environment, further
+/// input, files or modules.
 pub(super) fn safe_jq_stdin_arguments(arguments: &[String]) -> bool {
-    // Stdin may come from a network/API command, so retain the pre-existing
-    // projection-first requirement. Standalone builtins and object output are
-    // admitted only when jq reads a separately screened file operand.
-    arguments
-        .last()
-        .is_some_and(|filter| filter.starts_with('.'))
-        && safe_jq_filter_arguments(arguments)
+    safe_jq_filter_arguments(arguments)
+}
+
+/// jq's options that only shape how the value read is parsed and printed.
+/// Every option that names a file, a module directory or a variable binding
+/// — `-f`, `--from-file`, `-L`, `--library-path`, `--argfile`, `--rawfile`,
+/// `--slurpfile`, `--arg`, `--args`, `--jsonargs` — is absent, so one of
+/// those is read as the filter instead and fails the grammar.
+const READ_ONLY_LONG_OPTIONS: &[&str] = &[
+    "--ascii-output",
+    "--compact-output",
+    "--exit-status",
+    "--join-output",
+    "--monochrome-output",
+    "--null-input",
+    "--raw-input",
+    "--raw-output",
+    "--slurp",
+    "--sort-keys",
+    "--tab",
+];
+
+/// The short spellings of those options. jq accepts them clustered, as in
+/// `jq -rc`, so each letter of a cluster is checked against this set.
+const READ_ONLY_SHORT_OPTIONS: &str = "acejMnrRsS";
+
+fn read_only_option(argument: &str) -> bool {
+    match argument.strip_prefix('-') {
+        Some(cluster) if !cluster.starts_with('-') => {
+            !cluster.is_empty()
+                && cluster
+                    .chars()
+                    .all(|flag| READ_ONLY_SHORT_OPTIONS.contains(flag))
+        }
+        _ => READ_ONLY_LONG_OPTIONS.contains(&argument),
+    }
 }
 
 fn safe_jq_filter_arguments(arguments: &[String]) -> bool {
     let mut filter = None;
     for argument in arguments {
-        if filter.is_none()
-            && matches!(
-                argument.as_str(),
-                "-r" | "-c"
-                    | "-e"
-                    | "-M"
-                    | "--raw-output"
-                    | "--compact-output"
-                    | "--exit-status"
-                    | "--monochrome-output"
-            )
-        {
+        if filter.is_none() && read_only_option(argument) {
             continue;
         }
         if filter.replace(argument.as_str()).is_some() {
@@ -576,22 +618,8 @@ fn safe_head_tail_with_targets(
 }
 
 #[cfg(test)]
-mod jq_stdin_boundary_tests {
-    use super::{jq_filter_position, safe_jq_filter_arguments, safe_jq_stdin_arguments};
-
-    #[test]
-    fn object_filters_and_bare_builtins_do_not_expand_stdin_authority() {
-        for filter in ["keys", "length", "{tests: .tests, total: .total}"] {
-            let args = vec!["-r".to_owned(), filter.to_owned()];
-            assert!(safe_jq_filter_arguments(&args), "{filter}");
-            assert!(!safe_jq_stdin_arguments(&args), "{filter}");
-            assert_eq!(jq_filter_position(&args, true), None, "{filter}");
-        }
-        let projection = vec!["-r".to_owned(), ".tests | keys".to_owned()];
-        assert!(safe_jq_stdin_arguments(&projection));
-        assert_eq!(jq_filter_position(&projection, true), Some(1));
-    }
-}
+#[path = "safe_reads_jq_tests.rs"]
+mod jq_stdin_boundary_tests;
 
 #[cfg(test)]
 mod head_tail_plus_filename_tests {

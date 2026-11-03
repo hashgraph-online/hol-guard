@@ -43,9 +43,8 @@
 //! bound receipt redaction level, which the daemon publishes together — plus
 //! the approval-context token the request hashed to.
 
-use guard_command::decisions::{decision_from_legacy_policy_action, parse_signals};
 use guard_command::package_intent_common::GuardArtifact;
-use guard_contracts::{GuardAction, McpCallProjectionQueryV1, McpPackageReasonSignalsQueryV1};
+use guard_contracts::{GuardAction, McpCallProjectionQueryV1};
 use serde_json::{json, Map, Value};
 
 use super::ask;
@@ -209,39 +208,15 @@ fn launch_target(request: &McpRelayDecideRequestV1) -> Result<String, &'static s
         .to_owned())
 }
 
-/// `_package_decision_v2`: the decision the reasons' own V2 signals compose,
-/// with the evaluation's user copy written over its text.
+/// The queued package decision the proxy's `package_answer` check gives: what
+/// the reasons' own V2 signals compose, with the evaluation's user copy
+/// written over its text.
 pub(super) fn decision_v2(
     answer: &PackageAnswer,
     action: GuardAction,
 ) -> Result<Value, &'static str> {
-    let reasons = answer
-        .evaluation
-        .get("reasons")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let projected =
-        crate::mcp_proxy_signals::reason_signals(&McpPackageReasonSignalsQueryV1 { reasons });
-    let signals = parse_signals(&projected["signals"]).map_err(|_| PACKAGE_ASK_FAILED)?;
-    let mut payload =
-        decision_from_legacy_policy_action(action, action.as_str(), &signals).to_value();
-    let user_copy = answer
-        .evaluation
-        .get("user_copy")
-        .and_then(Value::as_object);
-    let copy = |key: &str| {
-        user_copy
-            .and_then(|copy| copy.get(key))
-            .cloned()
-            .unwrap_or(Value::Null)
-    };
-    let fields = payload.as_object_mut().ok_or(PACKAGE_ASK_FAILED)?;
-    fields.insert("user_title".to_owned(), copy("title"));
-    fields.insert("user_body".to_owned(), copy("summary"));
-    fields.insert("harness_message".to_owned(), copy("harness_message"));
-    fields.insert("dashboard_primary_detail".to_owned(), copy("summary"));
-    Ok(payload)
+    crate::mcp_proxy_package_answer::package_decision_v2(&answer.evaluation, action)
+        .map_err(|_| PACKAGE_ASK_FAILED)
 }
 
 /// `_queue_artifact` for a package-request artifact: the projection wire the

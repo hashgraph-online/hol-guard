@@ -164,6 +164,33 @@ fn node_runner_evidence_matches_python() {
 }
 
 #[test]
+fn every_alternate_lock_makes_package_script_evidence_ambiguous() {
+    let complete = section("package_script_evidence")
+        .iter()
+        .find(|case| case["id"] == "test-complete")
+        .expect("test-complete vector");
+    for name in [
+        "bun.lock",
+        "bun.lockb",
+        "npm-shrinkwrap.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+    ] {
+        let workspace = Workspace::with_fixture(fixture_of(complete));
+        std::fs::write(workspace.path.join(name), "untrusted-lock").expect("write lock");
+        let evidence = build_local_package_script_evidence(
+            "bun",
+            &strings(&complete["argv"]),
+            &workspace.path,
+        )
+        .expect("evidence")
+        .unwrap_or_else(|| panic!("{name}: missing evidence"));
+        assert!(!evidence.complete, "{name}");
+        assert_eq!(evidence.reasons, ["lock_source_ambiguous"], "{name}");
+    }
+}
+
+#[test]
 fn package_script_evidence_matches_python() {
     for case in section("package_script_evidence") {
         let id = text(case, "id");
@@ -225,5 +252,28 @@ fn package_script_evidence_matches_python() {
         );
         let encoded = workspace.expand(&text(expected, "binding_encoded"));
         assert_eq!(evidence.binding_digest, framed(b"", &encoded), "{id}");
+    }
+}
+
+/// The resident answers `_bounded_local_runner_chain_is_safe`'s one question
+/// through this predicate, so it has to agree with the evidence these vectors
+/// recorded from Python — including the Bun shapes that yield no evidence at
+/// all. The predicate always evaluates the fixture as Bun, so a vector recorded
+/// for another manager says nothing about it.
+#[test]
+fn the_bun_script_predicate_agrees_with_the_recorded_evidence() {
+    for case in section("package_script_evidence") {
+        if text(case, "manager") != "bun" {
+            continue;
+        }
+        let id = text(case, "id");
+        let workspace = Workspace::with_fixture(fixture_of(case));
+        let expected = &case["expected"];
+        let complete = !expected.is_null() && expected["status"] == "complete";
+        assert_eq!(
+            super::bun_script_evidence_complete(&strings(&case["argv"]), &workspace.path),
+            complete,
+            "{id}"
+        );
     }
 }

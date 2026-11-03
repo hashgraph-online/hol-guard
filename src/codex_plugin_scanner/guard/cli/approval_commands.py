@@ -26,6 +26,7 @@ from ..runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from ..runtime.self_approval import SELF_APPROVAL_REASON, approval_resolution_invoked_from_agent
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
+from ..trusted_local_tools import LocalToolGrantUnavailableError
 from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
 from .commands_parser_approvals import add_approval_parser as add_approval_parser
 
@@ -235,6 +236,12 @@ def run_approval_command(
         return {
             "resolved": False,
             "error": "already_resolved",
+            "exit_code": 4,
+        }
+    except LocalToolGrantUnavailableError as error:
+        return {
+            "resolved": False,
+            "error": str(error),
             "exit_code": 4,
         }
     except ValueError as error:

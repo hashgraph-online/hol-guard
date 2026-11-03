@@ -18,11 +18,11 @@ from urllib.parse import urlparse
 import requests
 
 from ..daemon.manager import load_guard_daemon_auth_token
-from ..mdm.network import managed_requests_session
+from ..mdm.network import managed_requests_session, refuse_encoded_responses
 from ..store import GuardStore
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
-_DAEMON_SESSION = requests.Session()
+_DAEMON_SESSION = refuse_encoded_responses(requests.Session())
 _DAEMON_SESSION.trust_env = False
 
 

@@ -9,8 +9,11 @@ import pytest
 
 from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.adapters import claude_hook_argv
+from codex_plugin_scanner.guard.adapters._modules.claude.claude_frozen_hook import (
+    FROZEN_CLAUDE_HOOK_COMMAND,
+    run_frozen_claude_hook,
+)
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_frozen_hook import FROZEN_CLAUDE_HOOK_COMMAND, run_frozen_claude_hook
 from codex_plugin_scanner.guard.adapters.claude_hook_config import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
     CLAUDE_GUARD_SESSION_START_HOOK_MARKER,
@@ -139,7 +142,7 @@ def test_frozen_dispatch_routes_claude_hook(monkeypatch: pytest.MonkeyPatch) -> 
     _frozen(monkeypatch)
     seen: list[list[str]] = []
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.claude_frozen_hook.run_frozen_claude_hook",
+        "codex_plugin_scanner.guard.adapters._modules.claude.claude_frozen_hook.run_frozen_claude_hook",
         lambda argv: seen.append(list(argv)) or 7,
     )
     assert cli._run_frozen_early_dispatch(["__guard-claude-hook", "M", "x"]) == 7

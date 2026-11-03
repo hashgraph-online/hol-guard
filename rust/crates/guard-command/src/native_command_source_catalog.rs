@@ -33,9 +33,13 @@ pub struct CompiledSourceCatalog {
     pub implementation_digest: String,
     pub catalog_projection_kind: String,
     pub base_program_digest: Option<String>,
+    /// The cloud action binding artifact, present only when the build input
+    /// carried binding contributions. Legacy output is unchanged without them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cloud_bindings: Option<Value>,
 }
 
-fn digest(domain: &[u8], value: &Value) -> Result<String, &'static str> {
+pub(super) fn digest(domain: &[u8], value: &Value) -> Result<String, &'static str> {
     let bytes = canonical_json_bytes(value).map_err(|_| "command_source_encoding_failed")?;
     Ok(digest_canonical_bytes(domain, &bytes))
 }
@@ -78,6 +82,18 @@ pub(super) fn validate_trust(bytes: &[u8]) -> Result<(), &'static str> {
     trust_rows(bytes).map(|_| ())
 }
 
+/// The first-party publisher label shipped in existing pack trust digests.
+/// Catalog `displayName` can change; this preimage stays so a rename does not
+/// quarantine selected packs. External publishers keep the declared label in
+/// the digest, including a source that claims the `hol` id.
+fn trust_identity(trust_class: &str, publisher: &Value) -> Value {
+    let mut identity = publisher.clone();
+    if trust_class == "first-party" && identity.get("id").and_then(Value::as_str) == Some("hol") {
+        identity["displayName"] = Value::String("Hashgraph Online".to_owned());
+    }
+    identity
+}
+
 /// Existing MCP JSON remains canonical and is lowered alongside command sources.
 pub(super) fn lower_catalog(
     sources: &[&[u8]],
@@ -87,7 +103,7 @@ pub(super) fn lower_catalog(
     lower_catalog_inner(sources, mcp_sources, trust, true)
 }
 
-fn lower_catalog_inner(
+pub(super) fn lower_catalog_inner(
     sources: &[&[u8]],
     mcp_sources: &[&[u8]],
     trust: &[u8],
@@ -225,7 +241,7 @@ fn lower_catalog_inner(
             }));
         }
         let trust_record = serde_json::json!({"extension_id":extension.extension_id,
-            "trust_class":class, "activation":activation, "publisher":publisher});
+            "trust_class":class, "activation":activation, "publisher":trust_identity(class, &publisher)});
         trusts.push(trust_record);
         let mut native_permissions = Vec::new();
         for (index, permission) in extension.permissions.iter().enumerate() {
@@ -366,6 +382,7 @@ fn lower_catalog_inner(
         implementation_digest,
         catalog_projection_kind: "complete".to_owned(),
         base_program_digest: None,
+        cloud_bindings: None,
     })
 }
 
@@ -413,7 +430,7 @@ pub(super) fn compile_pack(
 }
 
 #[path = "native_command_source_addition.rs"]
-mod addition;
+pub(super) mod addition;
 pub use addition::{compile_addition, compile_addition_with_mcp};
 
 #[cfg(test)]
@@ -422,7 +439,7 @@ mod tests {
 
     const EXAMPLE_SOURCE: &[u8] =
         include_bytes!("../tests/fixtures/command-source-example.v1.json");
-    const TRUST_MAP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/trust-class-map.v1.json"));
+    const TRUST_MAP: &[u8] = guard_command_catalog_data::TRUST_MAP_JSON;
 
     #[test]
     fn source_catalog_between_program_and_source_limits_compiles() {

@@ -2,25 +2,21 @@
 from __future__ import annotations
 
 from dataclasses import is_dataclass
-from datetime import date, datetime, timezone
 from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_activity_contract import CorrelationKind
+from codex_plugin_scanner.guard.runtime.command_activity_contract import (
+    COMMAND_ACTIVITY_FIELDS,
+    COMMAND_ACTIVITY_MATCH_FIELDS,
+    CorrelationKind,
+)
 from codex_plugin_scanner.guard.runtime.command_activity_privacy import (
-    COMMAND_ACTIVITY_CLOUD_SCHEMA_VERSION,
-    DEFAULT_COMMAND_ACTIVITY_PRIVACY_POLICY,
-    MIN_CLOUD_AGGREGATE_COUNT,
-    ActivityEgressMode,
-    CloudAggregateDimension,
-    CloudCommandActivityAggregate,
-    CommandActivityPrivacyPolicy,
     InstallationCorrelationKey,
     StrongHarnessIdentifier,
     derive_correlation_handle,
-    validate_activity_schema_privacy,
 )
+from tests.command_activity_privacy_support import FORBIDDEN_ACTIVITY_FIELD_NAMES
 
 
 def _identifier(
@@ -34,68 +30,6 @@ def _identifier(
 
 def _key(*, key_id: str = "correlation.v1", byte: int = 7) -> InstallationCorrelationKey:
     return InstallationCorrelationKey(key_id=key_id, material=bytes([byte]) * 32)
-
-
-def _aggregate(count: int = MIN_CLOUD_AGGREGATE_COUNT) -> CloudCommandActivityAggregate:
-    return CloudCommandActivityAggregate(
-        day=date(2026, 7, 18),
-        dimension=CloudAggregateDimension.TOTAL,
-        dimension_value="all",
-        count=count,
-    )
-
-
-def test_activity_detail_is_local_only_by_default() -> None:
-    assert DEFAULT_COMMAND_ACTIVITY_PRIVACY_POLICY.egress_mode is ActivityEgressMode.LOCAL_ONLY
-    with pytest.raises(ValueError, match="local-only"):
-        _aggregate().to_cloud_payload(DEFAULT_COMMAND_ACTIVITY_PRIVACY_POLICY)
-
-
-def test_cloud_aggregate_requires_explicit_opt_in_and_exact_allowlist() -> None:
-    policy = CommandActivityPrivacyPolicy(ActivityEgressMode.AGGREGATE_ONLY)
-    payload = _aggregate().to_cloud_payload(policy)
-
-    assert payload == {
-        "day": "2026-07-18",
-        "dimension": "total",
-        "dimension_value": "all",
-        "count": 10,
-        "schema_version": COMMAND_ACTIVITY_CLOUD_SCHEMA_VERSION,
-    }
-
-
-def test_cloud_aggregate_suppresses_rare_cells_and_arbitrary_dimension_tuples() -> None:
-    with pytest.raises(ValueError, match="rare cloud aggregate"):
-        _aggregate(MIN_CLOUD_AGGREGATE_COUNT - 1)
-    with pytest.raises(ValueError, match="bounded aggregate dimension"):
-        CloudCommandActivityAggregate(
-            day=date(2026, 7, 18),
-            dimension=CloudAggregateDimension.TOTAL,
-            dimension_value="codex",
-            count=MIN_CLOUD_AGGREGATE_COUNT,
-        )
-    with pytest.raises(ValueError, match="UTC calendar date"):
-        CloudCommandActivityAggregate(
-            day=cast(date, datetime(2026, 7, 18, 12, 0, tzinfo=timezone.utc)),
-            dimension=CloudAggregateDimension.TOTAL,
-            dimension_value="all",
-            count=MIN_CLOUD_AGGREGATE_COUNT,
-        )
-    with pytest.raises(ValueError, match="bounded aggregate dimension"):
-        CloudCommandActivityAggregate(
-            day=date(2026, 7, 18),
-            dimension=CloudAggregateDimension.EXECUTION_STATUS,
-            dimension_value="repository.secret",
-            count=MIN_CLOUD_AGGREGATE_COUNT,
-        )
-    with pytest.raises(ValueError, match="schema version"):
-        CloudCommandActivityAggregate(
-            day=date(2026, 7, 18),
-            dimension=CloudAggregateDimension.HARNESS,
-            dimension_value="codex",
-            count=MIN_CLOUD_AGGREGATE_COUNT,
-            schema_version="guard.command-activity-aggregate.v2",
-        )
 
 
 def test_correlation_hmac_is_deterministic_and_domain_separated() -> None:
@@ -170,4 +104,7 @@ def test_short_keys_and_untyped_correlation_inputs_are_rejected() -> None:
 
 
 def test_frozen_activity_schema_contains_no_forbidden_fields() -> None:
-    validate_activity_schema_privacy()
+    names = frozenset((*COMMAND_ACTIVITY_FIELDS, *COMMAND_ACTIVITY_MATCH_FIELDS))
+
+    assert names.isdisjoint(FORBIDDEN_ACTIVITY_FIELD_NAMES)
+    assert names.isdisjoint({"raw_request_id", "raw_session_id", "installation_id"})

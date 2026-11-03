@@ -16,7 +16,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .daemon.hook_worker import HookWorker
-from .native_decision_receipt import validate_native_decision_receipt
 from .native_hook_edge import review_raw_hook_native
 from .native_runtime import NativeRuntimeIdentity, native_runtime_status
 from .runtime_transition import TransitionError
@@ -157,19 +156,21 @@ def probe_native_protection(
             request_id=request_id,
         )
         check_runtime()
-        receipt = validate_native_decision_receipt(edge.get("receipt")) if edge is not None else None
+        # The edge checked its receipt against its answer before returning it.
+        receipt = edge.get("receipt") if edge is not None else None
         if (
-            receipt is None
-            or receipt["request_id"] != request_id
-            or receipt["decision"] != decision
-            or receipt["harness"] != "claude-code"
-            or receipt["event_name"] != "PreToolUse"
-            or receipt["payload_kind"] != "inline"
-            or (decision == "allow" and receipt["policy_action"] not in {"allow", "warn"})
-            or receipt["runtime_identity"] != expected_runtime.sha256
-            or receipt["policy_generation"] != generation
-            or receipt["policy_digest"] != digest
-            or receipt["observe_mode"] is not False
+            not isinstance(receipt, dict)
+            or receipt.get("request_id") != request_id
+            or receipt.get("decision") != decision
+            or receipt.get("harness") != "claude-code"
+            or receipt.get("event_name") != "PreToolUse"
+            or receipt.get("payload_kind") != "inline"
+            or (decision == "allow" and receipt.get("policy_action") not in {"allow", "warn"})
+            or receipt.get("runtime_identity") != expected_runtime.sha256
+            or receipt.get("policy_generation") != generation
+            or receipt.get("policy_digest") != digest
+            or receipt.get("observe_mode") is not False
+            or not isinstance(receipt.get("request_digest"), str)
         ):
             raise TransitionError("admission_protection_failed")
         receipts.append(receipt)

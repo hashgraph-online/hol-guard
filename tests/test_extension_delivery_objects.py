@@ -118,7 +118,10 @@ def test_archive_splits_at_fixed_member_budget(delivery, tmp_path):
 
 def test_located_metadata_fetches_only_verified_pages_and_reuses_assets(delivery, tmp_path):
     from extension_delivery_assets import AssetPlan
+    from extension_delivery_containers import member
     from extension_delivery_located_store import LocatedStore
+
+    from codex_plugin_scanner.guard.catalog_delivery.located_store import LocatedStore as ClientStore
 
     objects, _ = delivery
     plan = AssetPlan(tmp_path / "assets", "1" * 40)
@@ -134,13 +137,11 @@ def test_located_metadata_fetches_only_verified_pages_and_reuses_assets(delivery
         reads.append(target)
         data = (plan.directory / target["tag"] / target["asset"]).read_bytes()
         if "member" in target:
-            from codex_plugin_scanner.guard.catalog_delivery.containers import member
-
             data = member(data, target["asset"], target["member"], length)
         assert len(data) == length
         return data
 
-    client = LocatedStore(tmp_path / "client", fetch=fetch)
+    client = ClientStore(tmp_path / "client", fetch=fetch)
     assert client.json(first) == expected
     assert all(target != second["location"] for target in reads)
     previous = len(reads)
@@ -162,25 +163,44 @@ def test_corrupt_fetched_metadata_is_not_cached(delivery, tmp_path):
     from extension_delivery_assets import AssetPlan
     from extension_delivery_located_store import LocatedStore
 
+    from codex_plugin_scanner.guard.catalog_delivery.located_store import LocatedStore as ClientStore
+
     plan = AssetPlan(tmp_path / "assets", "1" * 40)
     store = LocatedStore(tmp_path / "objects", publisher=plan)
     reference = store.put_json({"test": True})
-    client = LocatedStore(tmp_path / "client", fetch=lambda *args: b"corrupt")
+    client = ClientStore(tmp_path / "client", fetch=lambda *args: b"corrupt")
     with pytest.raises(ValueError, match="integrity"):
         client.json(reference)
     assert not list(client.directory.iterdir())
 
 
-def test_single_pack_public_entries_match_existing_directory(delivery):
-    import json
-
+def test_single_pack_public_entries_match_existing_directory(delivery, tmp_path, monkeypatch):
     import export_extension_directory
     from extension_pack_directory import public_entry
+    from native_directory_inventory import catalog_rows, compiled_inventory
+
+    from tests.support.extension_directory import bounded_extensions, copy_projected_contribution_sources
 
     root = Path(__file__).resolve().parents[1]
-    current = export_extension_directory.export_directory_v2(root)
+    bounded = tmp_path / "bounded"
+    copy_projected_contribution_sources(root, bounded)
+    listings = bounded / "contributions/extension-listings"
+    listings.mkdir()
+    for extension in bounded_extensions():
+        identity = (
+            "mcp." + extension.extension_id.removeprefix("command.mcp-")
+            if extension.surface == "mcp"
+            else extension.extension_id
+        )
+        source = root / "contributions/extension-listings" / f"{identity}.json"
+        if source.exists():
+            (listings / source.name).write_bytes(source.read_bytes())
+    monkeypatch.setattr(export_extension_directory, "native_extensions", bounded_extensions)
+    current = export_extension_directory.export_directory_v2(bounded)
     expected = {entry["runtimeExtensionId"]: entry for entry in current["entries"]}
-    catalog = json.loads((root / "contracts/extensions/command-catalog.v1.json").read_bytes())["catalog"]
+    with compiled_inventory() as (_, reader, release):
+        catalog = [row for _, _, row in catalog_rows(reader, release) if row["extension_id"] in expected]
+    assert {row["extension_id"] for row in catalog} == set(expected)
     for row in catalog:
         assert public_entry(root, [row]) == expected[row["extension_id"]]
 
@@ -200,8 +220,11 @@ def test_pack_directory_import_does_not_load_aggregate_catalog(delivery, tmp_pat
 def test_policy_lookup_verifies_native_path_without_downloading_pack_payloads(delivery, tmp_path):
     from build_extension_delivery import policy_transport
     from extension_delivery_assets import AssetPlan
+    from extension_delivery_containers import member
     from extension_delivery_located_store import LocatedStore
     from extension_delivery_policy_lookup import lookup
+
+    from codex_plugin_scanner.guard.catalog_delivery.located_store import LocatedStore as ClientStore
 
     objects, _ = delivery
     native = objects.ObjectStore(tmp_path / "native")
@@ -236,13 +259,11 @@ def test_policy_lookup_verifies_native_path_without_downloading_pack_payloads(de
     def fetch(target, length):
         reads.append(target)
         assert target["asset"].startswith("objects-")
-        from codex_plugin_scanner.guard.catalog_delivery.containers import member
-
         return member(
             (plan.directory / target["tag"] / target["asset"]).read_bytes(), target["asset"], target["member"], length
         )
 
-    client = LocatedStore(tmp_path / "client", fetch=fetch)
+    client = ClientStore(tmp_path / "client", fetch=fetch)
     result = lookup(client, root, transport, "command.test-001")
     assert result["manifest"] == manifest
     assert len(reads) <= 7

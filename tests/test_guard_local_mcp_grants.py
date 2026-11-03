@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_mcp_catalog import tool_definition_authority_hash
+from tests.local_cli_store_support import upsert_local_cli_command_states
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .mcp_extension_driver import matching_local_mcp_grant
@@ -144,7 +145,7 @@ def test_explicit_empty_public_hash_cannot_use_private_catalog_authority(tmp_pat
         identity_hash=identity.identity_hash,
         seen_at=utc_now(),
     )
-    store.upsert_local_cli_command_states(f"local-cli.mcp-{identity.identity_hash[:8]}", {"read_file": "allow"})
+    upsert_local_cli_command_states(store, f"local-cli.mcp-{identity.identity_hash[:8]}", {"read_file": "allow"})
     artifact = _artifact(identity, "read_file")
     private_hash = tool_definition_authority_hash(definition)
     private_artifact = replace(artifact, runtime_private_metadata={"mcp_tool_authority_hash": private_hash})

@@ -29,7 +29,7 @@ fn every_bridge_harness_renders_both_modes_as_python_does() {
             assert_eq!(code, exit_code, "{case}");
             dump_object(&payload)
         } else {
-            let rendered = daemon_response_to_native(response, harness, "PreToolUse", false);
+            let rendered = daemon_response_to_native(response, harness, "PreToolUse", false, None);
             let expected = Rendered {
                 stdout: field(case, "stdout").to_owned(),
                 stderr: field(case, "stderr").to_owned(),

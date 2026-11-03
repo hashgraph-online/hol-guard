@@ -57,8 +57,11 @@ _PROBE_TIMEOUT_SECONDS = int(SQLITE_CONNECT_TIMEOUT_SECONDS) + 5
 # The environment keys the non-probe subops read; a probe forwards everything
 # because the shim it executes inherits the caller's environment. The Windows
 # path model also reads the profile and cwd-search keys from this map, so a
-# status or repair subop must see them too.
+# status or repair subop must see them too. ``HOL_GUARD_SHIM_TOOL_DIRS`` is the
+# daemon's request to search the well-known manager directories as well as its
+# own PATH; the resident reads it from this map, so the request schema is unchanged.
 _ENVIRONMENT_KEYS = (
+    "HOL_GUARD_SHIM_TOOL_DIRS",
     "HOME",
     "PATH",
     "PATHEXT",
@@ -318,40 +321,18 @@ def package_shim_status(context: HarnessContextLike, *, path_env: str | None = N
     return _object("status", context, path_env=path_env)
 
 
-def package_shim_digest_binding_sink(
-    context: HarnessContextLike,
-    *,
-    manager: str,
-    executable: str,
-    command: str | None,
-    workspace_dir: Path | None = None,
-    path_env: str | None = None,
-) -> bool:
-    """Does a healthy installed shim own this external-archive download?
-
-    The shim can bind an approval to a digest because it performs the download
-    itself, so it owns the approval only when the command is a bare launch of
-    that shim. The resident parses the command and resolves the paths; a caller
-    that cannot reach it leaves the approval with the user.
-    """
-
-    result = _object(
-        "digest_binding_sink",
-        context,
-        manager=manager,
-        executable=executable,
-        command=command,
-        workspace_dir=workspace_dir,
-        path_env=path_env,
-    )
-    bound = result.get("bound")
-    if not isinstance(bound, bool):
-        raise NativeShimAdminError("native_shim_admin_invalid_result")
-    return bound
-
-
 def package_shim_dashboard_status(context: HarnessContextLike) -> dict[str, object]:
     return _object("dashboard_status", context)
+
+
+def package_shim_protection(context: HarnessContextLike) -> dict[str, object]:
+    """The resident's package-manager protection projection.
+
+    The resident decides which detected managers count as unprotected; callers
+    present this block rather than recomputing it.
+    """
+
+    return _object("protection_projection", context)
 
 
 def package_shim_cloud_coverage(

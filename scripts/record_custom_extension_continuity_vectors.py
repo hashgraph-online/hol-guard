@@ -7,8 +7,10 @@ Usage: GUARD_PY_SNAPSHOT=<path to src dir of the reference snapshot> \
 The reference snapshot must predate the move of continuity planning to the
 native runtime. Each vector is one native request, built from a fake store
 snapshot exactly as the client builds it, and the reference answer. The Rust
-tests in rust/crates/guard-runtime replay them. Deterministic output. Shared
-fixtures live in custom_extension_continuity_vector_support.py.
+tests in rust/crates/guard-runtime replay them: the planner tests compare the
+recorded answer, and the commit tests derive the commit (writes, requirements)
+from it. Deterministic output. Shared fixtures live in
+custom_extension_continuity_vector_support.py.
 """
 
 from __future__ import annotations

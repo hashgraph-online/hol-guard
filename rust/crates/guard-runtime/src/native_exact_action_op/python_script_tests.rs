@@ -66,7 +66,18 @@ impl Project {
         std::fs::create_dir_all(&root).unwrap();
         let project = Self(root.canonicalize().unwrap());
         project.write("py/bin/python3.12", "");
-        project.write("py/lib/python3.12/os.py", "");
+        // Explicit source stubs for this synthetic interpreter, not a claim
+        // that a standard module name proves an installed implementation.
+        for name in [
+            "__future__",
+            "functools",
+            "json",
+            "os",
+            "pathlib",
+            "textwrap",
+        ] {
+            project.write(&format!("py/lib/python3.12/{name}.py"), "");
+        }
         std::fs::create_dir_all(project.0.join(SITE)).unwrap();
         std::fs::create_dir_all(project.0.join("home")).unwrap();
         project
@@ -121,7 +132,7 @@ fn bind_with(
         engines: &Fixed,
     };
     let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
-    python_script(&args, project.cwd(), &ctx, executable)
+    python_script(&args, project.cwd(), &ctx, executable, &[])
 }
 
 fn launch(project: &Project, command: &str) -> Result<Value, &'static str> {
@@ -151,7 +162,7 @@ fn report_project() -> Project {
     let project = Project::new();
     project.write(
         "scripts/report.py",
-        "#!/usr/bin/env python3\n\"\"\"Summarize rows; the system never evaluates input.\"\"\"\nfrom __future__ import annotations\n\nimport json, os.path\nfrom pathlib import Path\n\nimport helpers\nfrom lib import fmt\nfrom lib.totals import total\n\n\ndef main() -> None:\n    rows = json.loads(Path(os.path.join('data', 'rows.json')).read_text())\n    print(f\"{fmt.label(rows['name'])}: {total(rows['values'])}\", helpers.VERSION)\n\n\nif __name__ == '__main__':\n    main()\n",
+        "#!/usr/bin/env python3\n\"\"\"Summarize rows; the system never evaluates input.\"\"\"\nfrom __future__ import annotations\n\nimport json, os\nfrom pathlib import Path\n\nimport helpers\nfrom lib import fmt\nfrom lib.totals import total\n\n\ndef main() -> None:\n    rows = json.loads(Path(os.path.join('data', 'rows.json')).read_text())\n    print(f\"{fmt.label(rows['name'])}: {total(rows['values'])}\", helpers.VERSION)\n\n\nif __name__ == '__main__':\n    main()\n",
     );
     project.write("scripts/helpers.py", "VERSION = '1.0'\n");
     project.write("scripts/lib/__init__.py", "");
@@ -176,7 +187,7 @@ fn module_paths(bound: &Value) -> Vec<String> {
 }
 
 #[test]
-fn a_script_binds_its_local_modules_by_content_and_standard_modules_by_name() {
+fn a_script_binds_local_and_standard_modules_by_content() {
     let project = report_project();
     let bound = bind(&project, &["scripts/report.py"], &[]).unwrap();
     let root = project.cwd();
@@ -195,6 +206,18 @@ fn a_script_binds_its_local_modules_by_content_and_standard_modules_by_name() {
         bound["standard"],
         json!(["__future__", "json", "os", "pathlib", "textwrap"])
     );
+    assert_eq!(bound["runtime_modules"].as_array().unwrap().len(), 5);
+    project.write("py/lib/python3.12/json.py", "VERSION = 2\n");
+    let runtime_changed = bind(&project, &["scripts/report.py"], &[]).unwrap();
+    assert_ne!(runtime_changed["runtime_modules"], bound["runtime_modules"]);
+    project.write("py/lib/python3.12/json.py", "");
+    // A standard alias is not a source package. Preserve the old form as
+    // explicit uncertainty until its runtime alias can be proved.
+    project.write("alias.py", "import os.path\n");
+    assert_eq!(
+        bind(&project, &["alias.py"], &[]),
+        Err("python_runtime_module_unproven")
+    );
     assert_eq!(
         bind(&project, &["-u", "-B", "scripts/report.py"], &[]).unwrap()["modules"],
         bound["modules"]
@@ -203,6 +226,29 @@ fn a_script_binds_its_local_modules_by_content_and_standard_modules_by_name() {
     project.write("scripts/helpers.py", "VERSION = '2.0'\n");
     let edited = bind(&project, &["scripts/report.py"], &[]).unwrap();
     assert_ne!(edited["modules"], bound["modules"]);
+}
+
+#[test]
+fn runtime_imports_bind_both_startup_and_project_shadow_candidates() {
+    let project = Project::new();
+    project.write("tool.py", "import colorsys\n");
+    project.write("calendar.py", "VALUE = 'local'\n");
+    project.write("py/lib/python3.12/colorsys.py", "import calendar\n");
+    project.write("py/lib/python3.12/calendar.py", "VALUE = 'first'\n");
+    let before = bind(&project, &["tool.py"], &[]).unwrap();
+    assert!(module_paths(&before)
+        .iter()
+        .any(|path| path.ends_with("/calendar.py")));
+    assert_eq!(before["runtime_modules"].as_array().unwrap().len(), 2);
+    project.write("py/lib/python3.12/calendar.py", "VALUE = 'other'\n");
+    let installed_changed = bind(&project, &["tool.py"], &[]).unwrap();
+    assert_ne!(
+        before["runtime_modules"],
+        installed_changed["runtime_modules"]
+    );
+    project.write("calendar.py", "VALUE = 'other'\n");
+    let local_changed = bind(&project, &["tool.py"], &[]).unwrap();
+    assert_ne!(installed_changed["modules"], local_changed["modules"]);
 }
 
 #[test]
@@ -285,7 +331,7 @@ fn a_symlinked_script_imports_beside_its_target() {
 }
 
 #[test]
-fn a_single_file_script_that_writes_files_is_bound() {
+fn writes_cannot_replace_bound_runtime_modules() {
     let project = Project::new();
     project.write(
         "gen.py",
@@ -294,7 +340,12 @@ fn a_single_file_script_that_writes_files_is_bound() {
     // A script whose directory is on the module path could create a module
     // there that shadows a standard one.
     assert_eq!(bind(&project, &["gen.py"], &[]), Err("mutable_launcher"));
-    assert!(bind(&project, &["-P", "gen.py"], &[]).is_ok());
+    // Safe-path mode removes project shadowing, but cannot stop a write
+    // replacing a bound installed implementation before it is imported.
+    assert_eq!(
+        bind(&project, &["-P", "gen.py"], &[]),
+        Err("mutable_launcher")
+    );
     // Reading files is not writing them.
     project.write(
         "read.py",
@@ -417,12 +468,18 @@ fn code_the_graph_cannot_bind_keeps_the_launch_once_only() {
 }
 
 #[test]
-fn only_a_single_python_launch_gets_a_script_identity() {
+fn metadata_only_python_images_cannot_get_a_closed_launch_identity() {
     let project = report_project();
-    let launched = launch(&project, "python3 scripts/report.py").unwrap();
-    assert_eq!(launched["kind"], "python-script");
-    assert!(launch(&project, "python scripts/report.py").is_ok());
-    assert!(launch(&project, "python3.12 scripts/report.py").is_ok());
+    for command in [
+        "python3 scripts/report.py",
+        "python scripts/report.py",
+        "python3.12 scripts/report.py",
+    ] {
+        assert_eq!(
+            launch(&project, command),
+            Err("python_runtime_bootstrap_unproven")
+        );
+    }
     assert_eq!(launch(&project, "python3 -c 1"), Err("mutable_launcher"));
     assert_eq!(
         launch(&project, "cd scripts && python3 report.py"),

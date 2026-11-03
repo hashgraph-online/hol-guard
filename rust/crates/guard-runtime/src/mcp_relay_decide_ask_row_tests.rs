@@ -203,8 +203,14 @@ fn the_temporary_grant_hint_follows_the_intent_the_row_carries() {
     assert_eq!(hint["category"], json!("browser_navigation"));
     assert_eq!(hint["server_name"], json!("browser"));
     assert_eq!(hint["target_label"], json!("example.test"));
-    assert_eq!(hint["allowed_durations"], json!(GRANT_DURATIONS));
-    assert_eq!(hint["allowed_targets"], json!(GRANT_TARGETS));
+    assert_eq!(
+        hint["allowed_durations"],
+        json!(["once", "15m", "1h", "5h"])
+    );
+    assert_eq!(
+        hint["allowed_targets"],
+        json!(["exact", "category", "server"])
+    );
 
     // A category the intent does not claim, and a hard exclusion beside it.
     assert_eq!(temporary_mcp_approval(&intent(json!([]))), None);

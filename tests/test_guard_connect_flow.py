@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import package_firewall_entitlement as entitlement_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.cli.connect_flow import (
     GuardOAuthLoopbackCallback,
@@ -127,6 +128,29 @@ def _daemon_json_request(
         payload = json.loads(response.read().decode("utf-8"))
         assert isinstance(payload, dict)
         return response.status, payload
+
+
+@pytest.fixture
+def entitlement_resident(
+    native_hook_force: Path,
+    _native_context_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Path:
+    """Resolve package-firewall entitlements through the session's resident.
+
+    The entitlement is decided by the native runtime, and the stores these
+    tests build live in throwaway homes that never had a resident of their
+    own.  The resolution is a pure function of the rows the store hands over,
+    so the session's resident answers for them.
+    """
+
+    compose = entitlement_module.native_hook_compose
+    monkeypatch.setattr(
+        entitlement_module,
+        "native_hook_compose",
+        lambda kind, fields, *, guard_home: compose(kind, fields, guard_home=_native_context_home),
+    )
+    return _native_context_home
 
 
 def test_daemon_rejects_legacy_connect_pairing_endpoints(tmp_path: Path) -> None:
@@ -536,7 +560,7 @@ def test_background_sync_success_does_not_clear_newer_retry_required_connect_req
     assert latest_state["milestone"] == "first_sync_failed"
 
 
-def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path) -> None:
+def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path, entitlement_resident: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
 
     class _BrowserSession:
@@ -662,7 +686,9 @@ def test_browser_connect_persists_oauth_state_when_macos_keychain_readback_succe
     assert credentials["machine_id"] == "machine-1"
 
 
-def test_missing_cloud_connection_prefers_connect_over_false_paywall(tmp_path: Path) -> None:
+def test_missing_cloud_connection_prefers_connect_over_false_paywall(
+    tmp_path: Path, entitlement_resident: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
 
     entitlement = resolve_package_firewall_entitlement(store)
@@ -675,7 +701,9 @@ def test_missing_cloud_connection_prefers_connect_over_false_paywall(tmp_path: P
     }
 
 
-def test_paid_metadata_without_usable_local_auth_still_prefers_connect_over_upgrade(tmp_path: Path) -> None:
+def test_paid_metadata_without_usable_local_auth_still_prefers_connect_over_upgrade(
+    tmp_path: Path, entitlement_resident: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_payload(
         "oauth_local_credentials",
@@ -697,7 +725,9 @@ def test_paid_metadata_without_usable_local_auth_still_prefers_connect_over_upgr
     }
 
 
-def test_cached_paid_bundle_does_not_hide_retry_required_connect_state(tmp_path: Path) -> None:
+def test_cached_paid_bundle_does_not_hide_retry_required_connect_state(
+    tmp_path: Path, entitlement_resident: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_payload(
         "supply_chain_bundle_entitlement",
@@ -729,7 +759,9 @@ def test_cached_paid_bundle_does_not_hide_retry_required_connect_state(tmp_path:
     }
 
 
-def test_cached_paid_bundle_does_not_hide_missing_oauth_after_success(tmp_path: Path) -> None:
+def test_cached_paid_bundle_does_not_hide_missing_oauth_after_success(
+    tmp_path: Path, entitlement_resident: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_payload(
         "supply_chain_bundle_entitlement",
@@ -766,6 +798,7 @@ def test_cached_paid_bundle_does_not_hide_missing_oauth_after_success(tmp_path: 
 def test_sync_local_guard_cloud_proof_repairs_degraded_oauth_from_encrypted_fallback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    entitlement_resident: Path,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_oauth_local_credentials(
@@ -855,6 +888,7 @@ def test_sync_local_guard_cloud_proof_repairs_degraded_oauth_from_encrypted_fall
 def test_connect_status_recovers_missing_oauth_metadata_from_surviving_secret(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    entitlement_resident: Path,
 ) -> None:
     _install_fake_system_keyring(monkeypatch)
     monkeypatch.setattr(
@@ -1004,7 +1038,9 @@ def test_connect_status_recovers_missing_oauth_metadata_from_local_vault_on_maco
     assert isinstance(store.get_sync_payload("oauth_local_credentials"), dict)
 
 
-def test_retry_required_connect_state_prefers_reconnect_over_false_paywall(tmp_path: Path) -> None:
+def test_retry_required_connect_state_prefers_reconnect_over_false_paywall(
+    tmp_path: Path, entitlement_resident: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
@@ -1041,7 +1077,9 @@ def test_retry_required_connect_state_prefers_reconnect_over_false_paywall(tmp_p
     }
 
 
-def test_free_oauth_entitlement_does_not_turn_into_reconnect_prompt_when_expired(tmp_path: Path) -> None:
+def test_free_oauth_entitlement_does_not_turn_into_reconnect_prompt_when_expired(
+    tmp_path: Path, entitlement_resident: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
@@ -1095,7 +1133,9 @@ def _seed_oauth_entitlement(
     store.set_oauth_local_credentials(**kwargs)
 
 
-def test_paid_plan_with_missing_expiry_denied_claim_requires_reconnect(tmp_path: Path) -> None:
+def test_paid_plan_with_missing_expiry_denied_claim_requires_reconnect(
+    tmp_path: Path, entitlement_resident: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_oauth_entitlement(store, plan_id="team", firewall=False, expires_at=None)
 
@@ -1109,7 +1149,7 @@ def test_paid_plan_with_missing_expiry_denied_claim_requires_reconnect(tmp_path:
     }
 
 
-def test_paid_plan_with_expired_denied_claim_requires_reconnect(tmp_path: Path) -> None:
+def test_paid_plan_with_expired_denied_claim_requires_reconnect(tmp_path: Path, entitlement_resident: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_oauth_entitlement(store, plan_id="pro", firewall=False, expires_at="2026-06-01T00:00:00+00:00")
 
@@ -1119,7 +1159,7 @@ def test_paid_plan_with_expired_denied_claim_requires_reconnect(tmp_path: Path) 
     assert entitlement["tier"] == "pro"
 
 
-def test_paid_plan_with_fresh_denied_claim_reports_paid_required(tmp_path: Path) -> None:
+def test_paid_plan_with_fresh_denied_claim_reports_paid_required(tmp_path: Path, entitlement_resident: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_oauth_entitlement(store, plan_id="team", firewall=False, expires_at="2027-07-05T01:39:51+00:00")
 
@@ -1133,7 +1173,7 @@ def test_paid_plan_with_fresh_denied_claim_reports_paid_required(tmp_path: Path)
     }
 
 
-def test_unpaid_plan_with_denied_claim_reports_paid_required(tmp_path: Path) -> None:
+def test_unpaid_plan_with_denied_claim_reports_paid_required(tmp_path: Path, entitlement_resident: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_oauth_entitlement(store, plan_id="solo", firewall=False, expires_at="2027-07-05T01:39:51+00:00")
 
@@ -1143,7 +1183,7 @@ def test_unpaid_plan_with_denied_claim_reports_paid_required(tmp_path: Path) -> 
     assert entitlement["tier"] == "solo"
 
 
-def test_fresh_oauth_denied_claim_beats_stale_unpaid_bundle(tmp_path: Path) -> None:
+def test_fresh_oauth_denied_claim_beats_stale_unpaid_bundle(tmp_path: Path, entitlement_resident: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_oauth_entitlement(store, plan_id="team", firewall=False, expires_at="2027-07-05T01:39:51+00:00")
     store.set_sync_payload(
@@ -1158,7 +1198,7 @@ def test_fresh_oauth_denied_claim_beats_stale_unpaid_bundle(tmp_path: Path) -> N
     assert entitlement["tier"] == "team"
 
 
-def test_stale_oauth_denied_claim_overrides_unpaid_bundle(tmp_path: Path) -> None:
+def test_stale_oauth_denied_claim_overrides_unpaid_bundle(tmp_path: Path, entitlement_resident: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_oauth_entitlement(store, plan_id="team", firewall=False, expires_at=None)
     store.set_sync_payload(

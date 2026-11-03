@@ -13,7 +13,9 @@ def _patch(monkeypatch: pytest.MonkeyPatch, *, downloads: tuple[object, ...], re
     calls: list[dict] = []
     monkeypatch.setattr(runtime_mcp, "_external_archive_downloads", lambda _evaluation: downloads)
     monkeypatch.setattr(
-        runtime_mcp, "_package_evaluation_requires_external_archive_binding", lambda _evaluation: required
+        runtime_mcp,
+        "_package_evaluation_requires_external_archive_binding",
+        lambda _evaluation, **_kwargs: required,
     )
 
     def bind(params: object, sent: object, **kwargs: object) -> dict:

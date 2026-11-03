@@ -139,3 +139,31 @@ def test_workspace_write_invalid_timeout_never_reaches_the_resident(
         is None
     )
     assert called == []
+
+
+def test_workspace_write_waits_longer_than_the_budget_it_grants(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The transport deadline must outlast the write's own execution budget.
+
+    The resident still has to spawn the process, drain its output and frame a
+    reply after the write's budget is spent. A client that stops waiting at
+    exactly the budget turns a write that used all of it into a transport
+    failure, and three of those open the shared native-runtime circuit against
+    unrelated operations.
+    """
+    from codex_plugin_scanner.guard import native_execution
+
+    workspace, guard_home = _dirs(tmp_path)
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        native_execution,
+        "_resident_request",
+        lambda **kwargs: captured.update(kwargs) or None,
+    )
+    native_execution.contained_workspace_write_execute_native(
+        workspace, guard_home=guard_home, operation="patch-check", source="p.diff", timeout_seconds=120.0
+    )
+    assert captured["request"]["timeout_seconds"] == 120
+    assert captured["timeout_seconds"] == 120.0 + native_execution._CONTAINED_RUNNER_TRANSPORT_SLACK_SECONDS
+    assert captured["timeout_seconds"] > captured["request"]["timeout_seconds"]

@@ -8,6 +8,8 @@ const E2E_PORT = 4175;
 
 export default defineConfig({
   testDir: "./e2e",
+  // The integration suite drives a real daemon and has its own config.
+  testIgnore: ["integration/**"],
   fullyParallel: false,
   retries: 0,
   reporter: "list",

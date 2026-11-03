@@ -8,9 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
-from codex_plugin_scanner.guard.runtime.approval_context import (
-    build_runtime_executable_identity,
-)
+from codex_plugin_scanner.guard.native_context import context_runtime_executable_identity
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
@@ -263,12 +261,12 @@ def test_same_path_same_bytes_replacement_changes_file_identity(tmp_path: Path) 
     interpreter = workspace / "python"
     content = b"#!/bin/sh\nexit 0\n"
     _write_interpreter(interpreter, content)
-    first = build_runtime_executable_identity("./python", cwd=workspace)
+    first = context_runtime_executable_identity("./python", cwd=workspace)
     replacement = workspace / "replacement"
     _write_interpreter(replacement, content)
 
     os.replace(replacement, interpreter)
-    second = build_runtime_executable_identity("./python", cwd=workspace)
+    second = context_runtime_executable_identity("./python", cwd=workspace)
 
     assert first["sha256"] == second["sha256"]
     assert (first["device"], first["inode"]) != (second["device"], second["inode"])

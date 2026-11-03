@@ -13,9 +13,10 @@ on normal cached CI runners without changing the Rust release profile.
 The `native-gates` job retains the complete native contract group in shard 0
 and distributes every collected benign/Gauntlet/corpus replay test over eight
 required parallel shards. A failed shard fails `native-gates` and the required
-aggregate. Rust lint/tests do not delay artifact production or its 256-shard
-Python fan-out. The required `ci (3.12)` aggregate directly requires
-the complete Rust matrix as well as Python checks; failed, cancelled or skipped
+aggregate. Rust lint/tests do not delay artifact production or its configured
+Python fan-out. The `hol-guard / required` aggregate directly requires
+the complete Rust matrix as well as Python checks and validates the Python
+dependency results after evaluating the planned lanes. Failed, cancelled or skipped
 Rust validation cannot turn the aggregate green. No test failures are ignored.
 
 Specialized native workflows retain their own release builds, source-bound

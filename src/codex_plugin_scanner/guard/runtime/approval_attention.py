@@ -183,7 +183,7 @@ class ApprovalAttentionCoordinator:
             # An untrusted or swapped workspace fails closed for this operation
             # without terminating the attention loop.
             return
-        if config.approval_surface_policy != "attention-aware" or self._runtime.has_live_surface("approval-center"):
+        if config.approval_surface_policy != "attention-aware":
             return
         open_key = f"approval-request:{item.request_ids[0]}"
         if self._runtime.has_surface_opened("approval-center", open_key):

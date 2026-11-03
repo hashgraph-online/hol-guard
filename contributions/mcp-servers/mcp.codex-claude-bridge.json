@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.codex-claude-bridge",
+  "version": "1.0.0",
+  "name": "codex-claude-bridge",
+  "description": "Local stdio bridge that lets Claude Code delegate tasks and native image generation to the signed-in Codex CLI. Starting a task or an image job runs a Codex agent (writes inside the given folder; may request more, which the user approves in Claude Code by default) and answering such a request needs review. Status, wait and cancel inherit. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.ntd-consulting-ventures",
+    "displayName": "NTD Consulting Ventures",
+    "url": "https://github.com/NTD-Consulting-Ventures"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#10151F"
+  },
+  "homepage": "https://github.com/NTD-Consulting-Ventures/codex-claude-bridge",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "codex-claude-bridge"
+  },
+  "riskClasses": [
+    "external-agent-delegation",
+    "workspace-file-write",
+    "external-model-request",
+    "sandbox-escalation-approval",
+    "image-generation-quota"
+  ],
+  "tools": [
+    {
+      "name": "codex_status",
+      "state": "inherit"
+    },
+    {
+      "name": "codex_task_status",
+      "state": "inherit"
+    },
+    {
+      "name": "codex_task_wait",
+      "state": "inherit"
+    },
+    {
+      "name": "codex_task_cancel",
+      "state": "inherit"
+    },
+    {
+      "name": "codex_task_start",
+      "state": "review"
+    },
+    {
+      "name": "codex_image_generate",
+      "state": "review"
+    },
+    {
+      "name": "codex_task_approve",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/NTD-Consulting-Ventures/codex-claude-bridge",
+    "https://github.com/NTD-Consulting-Ventures/codex-claude-bridge/blob/main/docs/reference.md",
+    "https://github.com/NTD-Consulting-Ventures/codex-claude-bridge/blob/main/docs/approvals.md",
+    "https://github.com/NTD-Consulting-Ventures/codex-claude-bridge/blob/main/docs/image-only.md"
+  ],
+  "saferAlternatives": [
+    "Keep codex_task_start and codex_image_generate on Review: each call runs a Codex agent with your normal Codex config, plugins and MCP servers under a workspace-write sandbox bounded to the given folder.",
+    "Register with CODEX_BRIDGE_MODE=image-only when you only need images; it hides codex_task_start and refuses direct calls to it.",
+    "Keep the default approval mode ask (or deny): Codex requests outside the sandbox then pause for your decision in Claude Code. CODEX_APPROVAL_MODE=bypass approves every such request.",
+    "Use codex_task_status, codex_task_wait and codex_status to follow jobs; they start nothing."
+  ]
+}

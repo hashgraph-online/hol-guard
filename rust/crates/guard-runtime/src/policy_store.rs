@@ -1,5 +1,10 @@
 #![forbid(unsafe_code)]
 
+#[path = "context_assistance_registry.rs"]
+pub(crate) mod context_assistance_registry;
+#[path = "policy_store_services.rs"]
+mod services;
+
 use guard_policy_snapshot::{
     snapshot_bytes, validate_v3, PolicySnapshotAckV1, PolicySnapshotPushV1, PolicySnapshotV3,
     POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION, POLICY_SNAPSHOT_MAX_BYTES,
@@ -27,8 +32,10 @@ pub(crate) mod approval_v4_enrollment;
 pub(crate) mod approval_v4_secure_state;
 #[path = "native_review_origin.rs"]
 pub(crate) mod native_review_origin;
+#[path = "policy_snapshot_materialize.rs"]
+pub(crate) mod policy_snapshot_materialize;
 #[path = "policy_store_approval.rs"]
-mod policy_store_approval;
+pub(crate) mod policy_store_approval;
 #[path = "policy_store_authority.rs"]
 mod policy_store_authority;
 #[path = "policy_store_business_floor.rs"]
@@ -47,6 +54,8 @@ pub(crate) mod policy_store_direct_lane;
 mod policy_store_migration;
 #[path = "policy_store_persistence.rs"]
 mod policy_store_persistence;
+#[path = "policy_store_publisher_binding.rs"]
+mod policy_store_publisher_binding;
 #[path = "policy_store_push.rs"]
 mod policy_store_push;
 #[path = "policy_store_request.rs"]
@@ -78,14 +87,15 @@ use approval_v4_authority::ApprovalV4Authority;
 pub(crate) use policy_store_approval::ApprovalPolicyFence;
 use policy_store_authority::*;
 use policy_store_persistence::*;
-use policy_store_validation::{read_verifier_key, validate_private_directory};
+pub(crate) use policy_store_validation::read_verifier_key;
+use policy_store_validation::validate_private_directory;
 
 #[cfg(test)]
 #[path = "policy_store_scope_tests.rs"]
 mod scope_tests;
 #[cfg(test)]
 #[path = "policy_store_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 const SNAPSHOT_FILE_NAME: &str = "policy-snapshot-v3.json";
 const GENERATION_FLOOR_FILE_NAME: &str = "policy-snapshot-generation-floor.json";
@@ -190,6 +200,7 @@ struct LoadedAuthority {
 }
 
 pub(crate) struct PolicySnapshotStore {
+    context_assistance: crate::context_assistance_service::Service,
     state_base: PathBuf,
     authority_path: PathBuf,
     expected_runtime_identity: String,
@@ -212,6 +223,8 @@ pub(crate) struct PolicySnapshotStore {
     mcp_relay_pending: crate::mcp_relay_pending::PendingRelayEvidence,
     mcp_relay_claims: crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::HeldClaim>,
     mcp_relay_servers: crate::mcp_relay_servers::RelayServers,
+    #[cfg(target_os = "macos")]
+    bash_launches: policy_store_approval::bash_cancellation::Launches,
 }
 
 impl PolicySnapshotStore {
@@ -290,7 +303,17 @@ impl PolicySnapshotStore {
             },
             None => (None, false),
         };
+        let context_assistance = crate::context_assistance_service::Service::default();
+        // Scope identity normalizes macOS aliases; it is not an I/O locator.
+        if let Some(home) = crate::resident_state::private_root_for_state_base(state_base)
+            .ok()
+            .and_then(|root| root.canonicalize().ok())
+        {
+            context_assistance.restore(&home);
+            context_assistance.startup_housekeeping(&home);
+        }
         Ok(Self {
+            context_assistance,
             state_base: state_base.to_owned(),
             authority_path,
             expected_runtime_identity: runtime_identity.to_owned(),
@@ -322,33 +345,13 @@ impl PolicySnapshotStore {
             mcp_relay_pending: crate::mcp_relay_pending::PendingRelayEvidence::default(),
             mcp_relay_claims: crate::mcp_relay_claims::HeldClaims::default(),
             mcp_relay_servers: crate::mcp_relay_servers::RelayServers::default(),
+            #[cfg(target_os = "macos")]
+            bash_launches: policy_store_approval::bash_cancellation::Launches::default(),
         })
     }
 
     pub(crate) fn state_base(&self) -> &Path {
         &self.state_base
-    }
-
-    /// Evidence of direct hook answers, waiting for the daemon to drain it.
-    pub(crate) fn direct_evidence(&self) -> &crate::hook_direct_evidence::DirectEvidenceQueue {
-        &self.direct_evidence
-    }
-
-    /// Relayed forwards' evidence, waiting for the relay to commit it.
-    pub(crate) fn mcp_relay_pending(&self) -> &crate::mcp_relay_pending::PendingRelayEvidence {
-        &self.mcp_relay_pending
-    }
-
-    /// Relayed decisions' saved-approval claims, waiting for the relay.
-    pub(crate) fn mcp_relay_claims(
-        &self,
-    ) -> &crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::HeldClaim> {
-        &self.mcp_relay_claims
-    }
-
-    /// The MCP servers whose relay sessions run under the proxy.
-    pub(crate) fn mcp_relay_servers(&self) -> &crate::mcp_relay_servers::RelayServers {
-        &self.mcp_relay_servers
     }
 
     /// Migrate legacy policy files only on an explicit upgrade command.

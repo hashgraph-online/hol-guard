@@ -8,14 +8,10 @@ import pytest
 
 from codex_plugin_scanner.guard import native_policy_snapshot_direct_lane_review as review
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_review import (
-    DIRECT_HOOK_REVIEW_FACTS_FEATURE,
     uniform_blocked_request_mode,
     with_review_facts,
 )
 from codex_plugin_scanner.guard.native_policy_snapshot_publication import NativePolicySnapshotPublicationMixin
-
-FEATURES = (DIRECT_HOOK_REVIEW_FACTS_FEATURE,)
-
 
 LISTENING = {"daemon_host": "127.0.0.1", "daemon_port": 4781}
 
@@ -35,16 +31,13 @@ def _cwd(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _bound(store: object, mode: str | None = "ask") -> dict[str, object]:
-    bound = with_review_facts({"generation": 1}, store=store, features=FEATURES, blocked_request_mode=mode)
+    bound = with_review_facts({"generation": 1}, store=store, blocked_request_mode=mode)
     assert bound is not None
     return bound
 
 
-def test_facts_bind_only_for_a_resident_that_accepts_them() -> None:
-    assert with_review_facts({"generation": 1}, store=_Store(), features=(), blocked_request_mode="ask") == {
-        "generation": 1
-    }
-    assert with_review_facts(None, store=_Store(), features=FEATURES, blocked_request_mode="ask") is None
+def test_facts_bind_to_the_binding() -> None:
+    assert with_review_facts(None, store=_Store(), blocked_request_mode="ask") is None
     assert _bound(_Store()) == {
         "generation": 1,
         "blocked_request_mode": "ask",

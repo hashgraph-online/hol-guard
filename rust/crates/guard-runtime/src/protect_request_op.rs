@@ -8,7 +8,7 @@
 use crate::local_store_read::{open_read_only, require_store_path, table_exists};
 use crate::package_authority_op::request_digest_with_limit;
 use guard_command::protect_request::{
-    evaluate_protect_request, parse_protect_command, ProtectParseError, ProtectRequest,
+    evaluate_protect_request_in, parse_protect_command, ProtectParseError, ProtectRequest,
     ProtectTarget,
 };
 use guard_contracts::{
@@ -112,7 +112,8 @@ fn evaluate(
         None => Vec::new(),
     };
     let advisories: Vec<Value> = rows.iter().map(|(_, advisory)| advisory.clone()).collect();
-    let verdict = evaluate_protect_request(&parsed, &advisories);
+    let cwd = request.cwd.as_deref().map(std::path::Path::new);
+    let verdict = evaluate_protect_request_in(&parsed, &advisories, cwd);
     let matched_advisories: Vec<ProtectCachedAdvisoryV1> = verdict
         .matched
         .iter()

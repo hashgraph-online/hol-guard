@@ -36,9 +36,9 @@ def probe_grok_version(
             "stdout": "",
             "stderr": f"trusted probe directory unavailable: {error}",
         }
-    return run_probe(
-        [str(executable.path), "--no-auto-update", "--version"],
-        timeout_seconds=8,
-        cwd=probe_cwd,
-        env=sanitize_environment(context, os.environ),
-    )
+    command = [str(executable.path), "--no-auto-update", "--version"]
+    try:
+        environment = sanitize_environment(context, os.environ)
+    except OSError as error:
+        return {"command": command, "ok": False, "return_code": None, "stdout": "", "stderr": str(error)}
+    return run_probe(command, timeout_seconds=8, cwd=probe_cwd, env=environment)

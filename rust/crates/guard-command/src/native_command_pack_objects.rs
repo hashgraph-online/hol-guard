@@ -85,7 +85,11 @@ impl<W: Write> ObjectWriter<W> {
                 .chunks(FANOUT)
                 .map(|parts| {
                     let expanded_length = parts.iter().map(|part| part.expanded_length).sum();
-                    let bytes = serde_json::to_vec(
+                    // A reader admits a concatenation only when its bytes are
+                    // the canonical encoding of what they parse to, so sort the
+                    // keys here instead of relying on serde_json's selected Map
+                    // implementation.
+                    let bytes = crate::native_command_program::canonical_json_bytes(
                         &json!({"schema":"guard.pack-concat.v1", "parts":parts}),
                     )
                     .map_err(|_| "command_pack_encoding_failed")?;
@@ -224,13 +228,9 @@ mod tests {
         assert_eq!(limits["index_leaf_entries"], FANOUT);
     }
 
-    #[test]
-    fn chunks_are_bounded_complete_and_authenticated() {
-        let mut output = Vec::new();
-        let mut writer = ObjectWriter::new(&mut output);
-        let value = json!({"text":"a".repeat(OBJECT_BYTES * 3 + 7)});
-        let reference = writer.json(&value).unwrap();
-        let mut objects: BTreeMap<String, Vec<u8>> = output
+    /// Every object the writer emitted, keyed by digest.
+    fn written(output: &[u8]) -> BTreeMap<String, Vec<u8>> {
+        output
             .split(|byte| *byte == b'\n')
             .filter(|line| !line.is_empty())
             .map(|line| {
@@ -240,7 +240,45 @@ mod tests {
                     STANDARD.decode(row["data"].as_str().unwrap()).unwrap(),
                 )
             })
+            .collect()
+    }
+
+    #[test]
+    fn concatenations_are_written_canonically() {
+        // A reader admits a concatenation only when its bytes are the canonical
+        // encoding of what they parse to. Key order in `json!` and in a derived
+        // struct follows serde_json's selected Map implementation, which a build
+        // dependency may switch to insertion order, so the writer sorts instead.
+        let mut output = Vec::new();
+        let mut writer = ObjectWriter::new(&mut output);
+        writer
+            .json(&json!({"text":"a".repeat(OBJECT_BYTES * 3 + 7)}))
+            .unwrap();
+        let concatenations: Vec<Vec<u8>> = written(&output)
+            .into_values()
+            .filter(|bytes| {
+                serde_json::from_slice::<Value>(bytes)
+                    .map(|value| value["schema"] == "guard.pack-concat.v1")
+                    .unwrap_or(false)
+            })
             .collect();
+        assert!(!concatenations.is_empty());
+        for bytes in concatenations {
+            let value: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(
+                bytes,
+                crate::native_command_program::canonical_json_bytes(&value).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn chunks_are_bounded_complete_and_authenticated() {
+        let mut output = Vec::new();
+        let mut writer = ObjectWriter::new(&mut output);
+        let value = json!({"text":"a".repeat(OBJECT_BYTES * 3 + 7)});
+        let reference = writer.json(&value).unwrap();
+        let mut objects = written(&output);
         assert!(objects.values().all(|bytes| bytes.len() <= OBJECT_BYTES));
         assert_eq!(
             read_blob(&reference, &mut |id| objects
@@ -291,17 +329,7 @@ mod tests {
             read_blob(&forged, &mut |_| panic!("do not fetch oversized content")).unwrap_err(),
             "command_pack_object_bounds_invalid"
         );
-        let mut objects: BTreeMap<String, Vec<u8>> = output
-            .split(|byte| *byte == b'\n')
-            .filter(|line| !line.is_empty())
-            .map(|line| {
-                let row: Value = serde_json::from_slice(line).unwrap();
-                (
-                    row["sha256"].as_str().unwrap().to_owned(),
-                    STANDARD.decode(row["data"].as_str().unwrap()).unwrap(),
-                )
-            })
-            .collect();
+        let mut objects = written(&output);
         let row: Value = serde_json::from_slice(objects.get(&reference.sha256).unwrap()).unwrap();
         let missing = row["parts"][0]["sha256"].as_str().unwrap();
         objects.remove(missing);
@@ -332,17 +360,7 @@ mod tests {
             writer.objects - before <= 3,
             "unrelated pages must remain immutable"
         );
-        let objects: BTreeMap<String, Vec<u8>> = output
-            .split(|byte| *byte == b'\n')
-            .filter(|line| !line.is_empty())
-            .map(|line| {
-                let row: Value = serde_json::from_slice(line).unwrap();
-                (
-                    row["sha256"].as_str().unwrap().to_owned(),
-                    STANDARD.decode(row["data"].as_str().unwrap()).unwrap(),
-                )
-            })
-            .collect();
+        let objects = written(&output);
         let mut reads = 0;
         let found = lookup(&next, entries.len(), "command.example-0250", &mut |id| {
             reads += 1;

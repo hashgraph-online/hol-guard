@@ -350,6 +350,156 @@ def test_daemon_update_schedule_route(tmp_path: Path, monkeypatch: pytest.Monkey
     assert isinstance(scheduled["daemon_port"], int)
 
 
+def _desktop_status_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "current_version": "3.53.0a4",
+        "latest_version": "3.53.0a5",
+        "installer": "desktop",
+        "version_check": {
+            "source": "desktop_core",
+            "status": "stale",
+            "current_version": "3.53.0a4",
+            "latest_version": "3.53.0a5",
+            "update_available": True,
+        },
+        "auto_updatable": True,
+        "update_available": True,
+        "blocked_reason": None,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_desktop_update_request_file_is_atomic_and_private(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    request_path = dashboard_update_module.write_desktop_update_request(guard_home, latest_version="3.53.0a5")
+
+    assert request_path == dashboard_update_module.desktop_update_request_path(guard_home)
+    payload = json.loads(request_path.read_text(encoding="utf-8"))
+    assert payload["schema"] == dashboard_update_module.DESKTOP_UPDATE_REQUEST_SCHEMA
+    assert payload["latestVersion"] == "3.53.0a5"
+    requested_at = datetime.fromisoformat(str(payload["requestedAt"]))
+    assert datetime.now(timezone.utc) - requested_at < timedelta(minutes=1)
+    if os.name != "nt":
+        assert stat.S_IMODE(request_path.stat().st_mode) == 0o600
+    assert list(guard_home.glob("*.tmp-*")) == []
+
+
+def test_daemon_desktop_handoff_writes_update_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _store(tmp_path)
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
+        lambda **_kwargs: _desktop_status_payload(),
+    )
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _post_json_body(daemon, "/v1/update", {"handoff_to_desktop": True})
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["handoff_requested"] is True
+    assert payload["latest_version"] == "3.53.0a5"
+    request_path = dashboard_update_module.desktop_update_request_path(store.guard_home)
+    written = json.loads(request_path.read_text(encoding="utf-8"))
+    assert written["latestVersion"] == "3.53.0a5"
+
+
+def test_desktop_update_request_concurrent_writes_stay_valid(tmp_path: Path) -> None:
+    import threading
+
+    guard_home = tmp_path / "guard-home"
+    errors: list[BaseException] = []
+
+    def write(version: str) -> None:
+        try:
+            dashboard_update_module.write_desktop_update_request(guard_home, latest_version=version)
+        except BaseException as error:  # noqa: BLE001 - collected and asserted below
+            errors.append(error)
+
+    threads = [threading.Thread(target=write, args=(f"3.53.0a{index}",)) for index in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    request_path = dashboard_update_module.desktop_update_request_path(guard_home)
+    payload = json.loads(request_path.read_text(encoding="utf-8"))
+    assert payload["schema"] == dashboard_update_module.DESKTOP_UPDATE_REQUEST_SCHEMA
+    assert list(guard_home.glob("*.tmp-*")) == []
+
+
+def test_daemon_desktop_handoff_reports_disk_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _store(tmp_path)
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
+        lambda **_kwargs: _desktop_status_payload(),
+    )
+
+    def failing_write(_guard_home: Path, *, latest_version: str) -> Path:
+        raise OSError("disk full")
+
+    patch_daemon_global(monkeypatch, "write_desktop_update_request", failing_write)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _post_json_body(daemon, "/v1/update", {"handoff_to_desktop": True})
+    finally:
+        daemon.stop()
+
+    assert status == 500
+    assert payload["error"] == "desktop_handoff_failed"
+    assert not dashboard_update_module.desktop_update_request_path(store.guard_home).exists()
+
+
+def test_daemon_desktop_handoff_rejects_non_desktop_installs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _store(tmp_path)
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
+        lambda **_kwargs: _desktop_status_payload(installer="pip"),
+    )
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _post_json_body(daemon, "/v1/update", {"handoff_to_desktop": True})
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "desktop_handoff_unavailable"
+    assert not dashboard_update_module.desktop_update_request_path(store.guard_home).exists()
+
+
+def test_daemon_desktop_handoff_rejects_when_no_update_is_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
+        lambda **_kwargs: _desktop_status_payload(update_available=False),
+    )
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _post_json_body(daemon, "/v1/update", {"handoff_to_desktop": True})
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "update_not_available"
+    assert not dashboard_update_module.desktop_update_request_path(store.guard_home).exists()
+
+
 def test_alpha_update_channel_persists_and_schedules_alpha(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
     scheduled: dict[str, object] = {}

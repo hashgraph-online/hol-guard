@@ -39,6 +39,7 @@ import {
   revokeApprovalGateCooldown,
 } from "./guard-api";
 import { commitDashboardLocation } from "./dashboard-location";
+import { navigateFromAnchor } from "./shell-navigation-link";
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
 import { GuardHookRemovalPanel } from "./guard-hook-removal-panel";
 import { GuardRepairControl } from "./guard-repair-control";
@@ -80,6 +81,7 @@ import {
 } from "./settings-save-proof-modal";
 import type {
   GuardApprovalGatePublicConfig,
+  GuardContextAssistanceConfig,
   GuardNotificationSetupResult,
   GuardRuntimeSnapshot,
   GuardProtectionCapability,
@@ -92,6 +94,11 @@ import { SettingsFormSection, SettingsSelectRow, SettingsToggleRow } from "./set
 import { isLocalSettingsTabKey, type LocalSettingsTabKey } from "./settings/settings-ia";
 import { ApprovalPasswordSection } from "./settings/approval-password-copy";
 import { CloudReviewSettings } from "./settings/cloud-review-settings";
+import { CloudActionsSettings } from "./settings/cloud-actions-settings";
+import { ContextAssistanceSettings } from "./context-assistance/settings-panel";
+import { ContextDataRepairPanel } from "./context-assistance/data-repair-panel";
+import { settingsWithContextOff } from "./context-assistance/settings-model";
+import { withCigarSelection } from "./context-assistance/selection-settings";
 export { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
 import {
   applyPresentationMode,
@@ -273,6 +280,13 @@ const riskControls = [
   { key: "guard_bypass", label: "Guard bypass", description: "Attempts to disable Guard hooks, policies, or approval flow.", consequence: RISK_CONTROL_CONSEQUENCES["guard_bypass"] },
   { key: "cloud_advisory", label: "Cloud advisories", description: "Team and Cloud guidance for known risky patterns.", consequence: RISK_CONTROL_CONSEQUENCES["cloud_advisory"] },
   { key: "encoded_exfiltration", label: "Encoded exfiltration", description: "Encoded payloads that hide secret extraction and network transfer.", consequence: RISK_CONTROL_CONSEQUENCES["encoded_exfiltration"] },
+  { key: "package_unknown", label: "Unrecognized packages", description: "Packages Guard cannot identify or find reputation for.", consequence: RISK_CONTROL_CONSEQUENCES["package_unknown"] },
+  { key: "package_lockfile_drift", label: "Lockfile bumps", description: "Manifest dependencies the lockfile does not pin yet.", consequence: RISK_CONTROL_CONSEQUENCES["package_lockfile_drift"] },
+  { key: "package_direct_source", label: "Direct package sources", description: "Git, URL, archive, local-path and replaced sources instead of the registry.", consequence: RISK_CONTROL_CONSEQUENCES["package_direct_source"] },
+  { key: "package_custom_registry", label: "Custom registries", description: "Installs that use a non-default package index or registry.", consequence: RISK_CONTROL_CONSEQUENCES["package_custom_registry"] },
+  { key: "package_install", label: "Every package install", description: "Every package install or update, even with no risk signal.", consequence: RISK_CONTROL_CONSEQUENCES["package_install"] },
+  { key: "low_trust_artifact", label: "Low trust scores", description: "Skills, MCP servers, and plugins scoring below 80 in the HOL Registry.", consequence: RISK_CONTROL_CONSEQUENCES["low_trust_artifact"] },
+  { key: "runtime_known_vulnerable", label: "Vulnerable runtimes", description: "Node.js builds with a known high or critical advisory, checked before launch.", consequence: RISK_CONTROL_CONSEQUENCES["runtime_known_vulnerable"] },
 ] as const;
 
 type RiskKey = (typeof riskControls)[number]["key"];
@@ -292,7 +306,14 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     persistence: "warn",
     guard_bypass: "warn",
     cloud_advisory: "allow",
-    encoded_exfiltration: "warn"
+    encoded_exfiltration: "warn",
+    package_unknown: "allow",
+    package_lockfile_drift: "allow",
+    package_direct_source: "allow",
+    package_custom_registry: "allow",
+    package_install: "allow",
+    low_trust_artifact: "warn",
+    runtime_known_vulnerable: "warn"
   },
   balanced: {
     local_secret_read: "require-reapproval",
@@ -308,7 +329,14 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     persistence: "require-reapproval",
     guard_bypass: "block",
     cloud_advisory: "warn",
-    encoded_exfiltration: "require-reapproval"
+    encoded_exfiltration: "require-reapproval",
+    package_unknown: "allow",
+    package_lockfile_drift: "allow",
+    package_direct_source: "allow",
+    package_custom_registry: "allow",
+    package_install: "allow",
+    low_trust_artifact: "require-reapproval",
+    runtime_known_vulnerable: "require-reapproval"
   },
   strict: {
     local_secret_read: "require-reapproval",
@@ -324,7 +352,14 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     persistence: "block",
     guard_bypass: "block",
     cloud_advisory: "require-reapproval",
-    encoded_exfiltration: "block"
+    encoded_exfiltration: "block",
+    package_unknown: "block",
+    package_lockfile_drift: "require-reapproval",
+    package_direct_source: "require-reapproval",
+    package_custom_registry: "allow",
+    package_install: "allow",
+    low_trust_artifact: "require-reapproval",
+    runtime_known_vulnerable: "block"
   },
   custom: {
     local_secret_read: "require-reapproval",
@@ -340,7 +375,14 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     persistence: "require-reapproval",
     guard_bypass: "block",
     cloud_advisory: "warn",
-    encoded_exfiltration: "require-reapproval"
+    encoded_exfiltration: "require-reapproval",
+    package_unknown: "allow",
+    package_lockfile_drift: "allow",
+    package_direct_source: "allow",
+    package_custom_registry: "allow",
+    package_install: "allow",
+    low_trust_artifact: "require-reapproval",
+    runtime_known_vulnerable: "require-reapproval"
   }
 };
 
@@ -481,14 +523,17 @@ function saveStatusText(saveSuccess: boolean, saveError: string | null): string 
 
 type SettingsWorkspaceProps = {
   onApprovalGateChange?: (gate: GuardApprovalGatePublicConfig) => void;
+  contextOnly?: boolean;
+  onNavigate?: (pathname: string) => void;
 };
 
-export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspaceProps) {
+export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, onNavigate }: SettingsWorkspaceProps) {
   const [returnToExtensions] = useState(() => new URLSearchParams(window.location.search).get("returnTo") === "extensions");
   const approvalSetupRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SettingsState>({ kind: "loading" });
   const [draft, setDraft] = useState<GuardSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [contextAssistanceBusy, setContextAssistanceBusy] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [clearingApprovals, setClearingApprovals] = useState(false);
@@ -852,6 +897,32 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       onApprovalGateChange?.(gate);
     }
   }, [onApprovalGateChange]);
+
+  const handleContextAssistanceChange = useCallback((config: GuardContextAssistanceConfig) => {
+    setDraft((current) => current ? { ...current, context_assistance: config } : current);
+    setSaveSuccess(false);
+  }, []);
+
+  const handleCigarSelectionChanged = useCallback((config: GuardContextAssistanceConfig, previous: GuardContextAssistanceConfig) => {
+    const saved = savedSettingsRef.current;
+    if (!saved) return;
+    const next = withCigarSelection(saved, config, previous);
+    if (next === saved) return;
+    savedSettingsRef.current = next;
+    setDraft((current) => current ? withCigarSelection(current, config, previous, true) : current);
+    setState((current) => current.kind === "ready" ? {
+      ...current, payload: { ...current.payload, settings: withCigarSelection(current.payload.settings, config, previous) },
+    } : current);
+  }, []);
+
+  const handleContextAssistanceStopped = useCallback((config: GuardContextAssistanceConfig) => {
+    const saved = savedSettingsRef.current;
+    if (saved) savedSettingsRef.current = settingsWithContextOff(saved, config);
+    setDraft((current) => current ? settingsWithContextOff(current, config) : current);
+    setState((current) => current.kind === "ready" ? {
+      ...current, payload: { ...current.payload, settings: settingsWithContextOff(current.payload.settings, config) },
+    } : current);
+  }, []);
 
   const openProofModal = useCallback((
     mode: SettingsSaveProofMode,
@@ -1504,6 +1575,16 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
   return (
     <div className="flex min-h-[calc(100dvh-11rem)] flex-col gap-6">
+      {contextOnly ? (
+        <ContextAssistanceSettings workspace value={draft.context_assistance} savedValue={state.payload.settings.context_assistance}
+          gate={state.payload.settings.approval_gate ?? null}
+          locked={(draft.managed_locked_settings ?? []).some((key) => key === "context_assistance" || key.startsWith("context_assistance."))}
+          disabled={saving || proofModalOpen} onChange={handleContextAssistanceChange}
+          onStopped={handleContextAssistanceStopped} onBusyChange={setContextAssistanceBusy}
+          onSelectionChanged={handleCigarSelectionChanged}
+          data={<ContextDataRepairPanel savedEnabled={Boolean(state.payload.settings.context_assistance?.enabled)}
+            disabled={saving || proofModalOpen} onStopped={handleContextAssistanceStopped} onBusyChange={setContextAssistanceBusy} />} />
+      ) : <>
       <WorkspacePageHeader
         eyebrow="This machine"
         title="Protection"
@@ -1618,6 +1699,14 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 />
               </SettingsFormSection>
             ) : null}
+
+            <SettingsFormSection title="CIGAR" description="Gives your AI app the project files that match what you ask.">
+              <div className="flex flex-wrap items-center justify-between gap-3 py-4">
+                <p className="max-w-xl text-sm text-slate-500">Turn it on, pick project folders and choose which AI apps use it on the CIGAR page.</p>
+                <a className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 px-4 text-sm font-semibold text-brand-dark hover:bg-slate-50"
+                  href={guardAwareHref("/cigar")} onClick={(event) => { if (onNavigate) navigateFromAnchor(event, "/cigar", { onNavigate }); }}>Open CIGAR</a>
+              </div>
+            </SettingsFormSection>
 
             <SettingsFormSection title="Timing and features">
               <div className="space-y-4 py-3">
@@ -1904,8 +1993,12 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           </div>
         )}
 
+        {activeTab === "cloud-actions" && <CloudActionsSettings />}
+
         {activeTab === "maintenance" && (
           <div className="flex min-h-0 flex-1 flex-col space-y-6">
+            <ContextDataRepairPanel savedEnabled={Boolean(state.payload.settings.context_assistance?.enabled)} disabled={saving || proofModalOpen}
+              onStopped={handleContextAssistanceStopped} onBusyChange={setContextAssistanceBusy} />
             <SettingsFormSection title="Keep this machine tidy" description="Export, reset, clear history, or fix a broken approval link.">
               <div className="space-y-4 py-3">
                 {perfSnapshot !== null ? <DiagnosticsPerfCard snapshot={perfSnapshot} /> : null}
@@ -2010,21 +2103,22 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         )}
       </SettingsSectionShell>
       </div>
+      </>}
 
-      <div
+      {(!contextOnly || hasUnsavedChanges(savedSettingsRef.current, draft) || saving || saveSuccess || saveError || proofModalOpen) ? <div
         className="sticky bottom-2 mt-auto rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:bottom-4 sm:p-4"
         role="region"
-        aria-label="Save settings"
+        aria-label={contextOnly ? "Save CIGAR preferences" : "Save settings"}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <ActionButton onClick={handleSave} disabled={saving || saveSuccess}>
+            <ActionButton onClick={handleSave} disabled={saving || saveSuccess || contextAssistanceBusy}>
               {saveSuccess ? (
                 <span className="flex items-center gap-2">
                   <HiMiniCheckCircle className="h-4 w-4" aria-hidden="true" />
                   Saved
                 </span>
-              ) : saving ? "Saving…" : "Save settings"}
+              ) : saving ? "Saving…" : contextOnly ? "Save CIGAR preferences" : "Save settings"}
             </ActionButton>
             {hasUnsavedChanges(savedSettingsRef.current, draft) && (
               <span className="ml-3 inline-flex items-center gap-1.5 text-xs font-medium text-brand-attention">
@@ -2038,13 +2132,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           ) : saveError ? (
             <p className="text-sm text-brand-purple">{saveError}</p>
           ) : (
-            <p className="hidden text-xs text-slate-500 sm:block">Use this for local tuning. Team policy from Guard Cloud may still override some decisions.</p>
+            <p className="hidden text-xs text-slate-500 sm:block">{contextOnly ? "Saving records your choices. Start the runtime after saving. Managed policy may restrict availability." : "Use this for local tuning. Team policy from Guard Cloud may still override some decisions."}</p>
           )}
           <div aria-live="polite" aria-atomic="true" className="sr-only">
             {saveStatusText(saveSuccess, saveError)}
           </div>
         </div>
-      </div>
+      </div> : null}
 
       {proofModalOpen && pendingProofAction !== null ? (
         <SettingsSaveProofModal

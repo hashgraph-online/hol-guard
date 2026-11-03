@@ -126,23 +126,3 @@ def should_force_reapproval(
     if not isinstance(result, bool):
         raise NativePromptAnalysisError("native_prompt_analysis_invalid_result")
     return result
-
-
-def trailing_secret_read_state(content: str, *, guard_home: Path | None = None) -> tuple[int, bool] | None:
-    result = analyze("trailing_secret_read_state", prompt_text=content, guard_home=guard_home)
-    if not isinstance(result, dict) or "state" not in result:
-        raise NativePromptAnalysisError("native_prompt_analysis_invalid_result")
-    state = result["state"]
-    if state is None:
-        return None
-    if not isinstance(state, list) or len(state) != 2:
-        raise NativePromptAnalysisError("native_prompt_analysis_invalid_result")
-    distance, positive = state
-    if (
-        isinstance(distance, bool)
-        or not isinstance(distance, int)
-        or distance not in (0, 1)
-        or not isinstance(positive, bool)
-    ):
-        raise NativePromptAnalysisError("native_prompt_analysis_invalid_result")
-    return distance, positive

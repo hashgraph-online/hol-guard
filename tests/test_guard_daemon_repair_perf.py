@@ -16,6 +16,7 @@ from tests.native_approval_writes import (
     native_approval_connection,
     seed_pending_approval_rows,
 )
+from tests.policy_store_support import resolve_policy
 
 
 def _make_conn() -> sqlite3.Connection:
@@ -181,7 +182,7 @@ class TestApproveOnceNoSecondPrompt:
             "2026-01-01T00:00:00Z",
         )
 
-        result = store.resolve_policy("codex", artifact_id, artifact_hash_val, workspace=None)
+        result = resolve_policy(store, "codex", artifact_id, artifact_hash_val, workspace=None)
         assert result == "allow", f"Canary must resolve to 'allow' immediately after approval, got {result!r}"
 
     def test_changed_artifact_hash_reprompts(self, tmp_path) -> None:
@@ -204,7 +205,7 @@ class TestApproveOnceNoSecondPrompt:
             "2026-01-01T00:00:00Z",
         )
 
-        result = store.resolve_policy("codex", artifact_id, "hash-canary-v2-changed", workspace=None)
+        result = resolve_policy(store, "codex", artifact_id, "hash-canary-v2-changed", workspace=None)
         assert result is None, f"Changed hash must not inherit prior approval, got {result!r}"
 
 

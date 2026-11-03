@@ -12,6 +12,8 @@ from typing import Protocol
 
 import pytest
 
+from codex_plugin_scanner.guard import native_supply_chain_egress as egress
+
 
 class _UrlopenCallback(Protocol):
     def __call__(self, request: object, timeout: float | None = None) -> object: ...
@@ -39,6 +41,25 @@ def stub_authenticated_urlopen(
         "build_opener",
         lambda *_handlers: _StubOpener(callback),
     )
+    # The double stands in for urllib, so the suite's loopback-only rule is lifted
+    # for HTTP in this process. Archive fetches and spawned helpers stay refused.
+    lift_test_loopback_rule(monkeypatch, egress.TEST_RULE_HTTP)
+
+
+def lift_test_loopback_rule(monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+    """Lift the suite's loopback-only egress rule for one class a test fakes.
+
+    Only this process is affected: helpers a test spawns inherit the flag and
+    keep refusing every class, and the other class here stays refused.
+    """
+
+    rule = egress.refused_by_test_loopback_rule
+
+    def lifted(url: str, *, kind: str) -> bool:
+        return kind != lifted_kind and rule(url, kind=kind)
+
+    lifted_kind = kind
+    monkeypatch.setattr(egress, "refused_by_test_loopback_rule", lifted)
 
 
 def urlopen_json(request: urllib.request.Request, *, timeout: float = 15, attempts: int = 3) -> dict[str, object]:

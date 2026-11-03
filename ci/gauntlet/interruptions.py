@@ -23,6 +23,7 @@ from typing import Any
 
 from .approval_rows import connector_coverage
 from .catalog import EXEMPT_ORACLES, Scenario, load_catalog
+from .codex_contained import is_routed_deny
 from .contained_core import is_contained_deny
 
 # Response keys whose non-empty string is shown to the harness or its user on any decision.
@@ -163,11 +164,16 @@ def case_interruptions(
     approval_delta: int,
     harness: str | None = None,
     contained: dict[str, dict[str, Any]] | None = None,
+    routed: set[str] | None = None,
 ) -> dict[str, Any]:
     """The compact interruption record stored on a case's assessment.
 
     ``contained`` names fully bound contained-test calls; only their by-design containment deny
     decision is exempt, never a rendered message or any other row.
+
+    ``routed`` names Codex calls that ``codex_contained`` bound to Guard's contained runner. The
+    tap records the resident's deny before Guard's hook replaces it with the allow that runs the
+    sink, so neither that deny nor its reason text reached the harness; only that row is exempt.
     """
     events: list[dict[str, Any]] = []
     decisions = quiet = 0
@@ -176,6 +182,8 @@ def case_interruptions(
         found = observation_interruptions(row, harness) if isinstance(row, dict) else [_unproven({}, "malformed row")]
         if contained and is_contained_deny(row, contained):
             found = [event for event in found if event["kind"] != "decision"]
+        elif routed and is_routed_deny(row, routed):
+            found = [event for event in found if event["kind"] not in ("decision", "rendered")]
         quiet += not found
         events.extend(found)
     rows = [row for row in approvals if isinstance(row, dict)]

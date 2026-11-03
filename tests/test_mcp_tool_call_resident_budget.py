@@ -18,13 +18,14 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.mcp_policy_native_fixture import admit_mcp_policy_home
 from tests.test_guard_runtime_mcp_saved_blocks import _child_command, _context, _messages
 
 pytestmark = [pytest.mark.usefixtures("bundle_first_cloud"), pytest.mark.usefixtures("package_intent_native")]
 
 # Resident ops one benign warm allow may spend, excluding the `tools/list` setup.
 # Includes the single `mcp_tool_call_identity` round trip; the stdio exchange fusion lowers it further.
-_TOTAL_BUDGET = 7
+_TOTAL_BUDGET = 8
 _CONNECTION_BUDGET = 2
 # `native_context_digest` calls (cached ones included) cost Python time even when no resident round
 # trip happens, so they are bounded too.
@@ -32,7 +33,8 @@ _DIGEST_BUDGET = 14
 _PER_OPERATION_BUDGET = {
     "mcp_tool_policy_decide": 1,
     "policy_decision_lookup": 0,
-    "mcp_proxy_decide": 0,
+    # The receipt's masked arguments (`call_projection`); no other check may re-enter the decide op.
+    "mcp_proxy_decide": 1,
     "guard_store": 1,
 }
 
@@ -58,6 +60,8 @@ def test_benign_tool_call_stays_within_the_resident_round_trip_budget(
     )
     monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
     monkeypatch.setattr(proxy, "_maybe_open_approval_center", lambda **_kwargs: None)
+    # Daemon publication is setup work, outside the warm tools/call budget.
+    admit_mcp_policy_home(context.guard_home)
     operations: collections.Counter[str] = collections.Counter()
     real = native_execution.native_resident_client_request
 
@@ -83,7 +87,10 @@ def test_benign_tool_call_stays_within_the_resident_round_trip_budget(
 
     monkeypatch.setattr(sqlite3, "connect", counting_connect)
     messages = _messages(tool_name="safe_echo", arguments={"value": "hello"}, elicitation=False)
-    proxy.run_session(messages[:2])  # initialize and tools/list
+    proxy.run_session(messages[:2])  # initialize and tools/list, cold
+    operations.clear()
+    # The baseline is the same setup run warm, so a cold-only setup cost cannot offset the call's own.
+    proxy.run_session(messages[:2])
     setup = collections.Counter(operations)
     operations.clear()
     connections.clear()

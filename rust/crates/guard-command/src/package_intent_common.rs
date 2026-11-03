@@ -283,6 +283,11 @@ pub struct PackageIntent {
     pub execution_context_hashes: Vec<String>,
     pub execution_context_cwds: Vec<String>,
     pub execution_context_reason_codes: Vec<String>,
+    /// Whether this is a routine local JS runner already bound to local
+    /// project state: declared, installed and locked at one version. Computed
+    /// by the parser beside the file reads it depends on; it is not a parsed
+    /// input.
+    pub routine_local_runner: bool,
 }
 
 impl PackageIntent {
@@ -325,6 +330,10 @@ impl PackageIntent {
         payload.insert(
             "execution_context_reason_codes".to_owned(),
             json!(self.execution_context_reason_codes),
+        );
+        payload.insert(
+            "routine_local_runner".to_owned(),
+            json!(self.routine_local_runner),
         );
         Value::Object(payload)
     }
@@ -395,6 +404,34 @@ impl GuardArtifact {
         payload.insert("publisher".to_owned(), json!(self.publisher));
         payload.insert("metadata".to_owned(), redact_metadata(&self.metadata, None));
         Value::Object(payload)
+    }
+
+    /// Every field, unredacted — the form a host rebuilds its own artifact
+    /// from.
+    ///
+    /// `to_dict` above is the public serialization: it drops
+    /// `runtime_private_metadata` and redacts args, url and metadata. A host
+    /// that rebuilt from it would hold a redacted copy of the metadata its own
+    /// builder used to hold, and would lose the exact targets ephemeral
+    /// enforcement needs. Redaction stays where it belongs — at the point the
+    /// artifact is serialized for the user — rather than moving onto the
+    /// private channel the request already crossed.
+    pub fn to_wire(&self) -> Value {
+        json!({
+            "artifact_id": self.artifact_id,
+            "name": self.name,
+            "harness": self.harness,
+            "artifact_type": self.artifact_type,
+            "source_scope": self.source_scope,
+            "config_path": self.config_path,
+            "command": self.command,
+            "args": self.args,
+            "url": self.url,
+            "transport": self.transport,
+            "publisher": self.publisher,
+            "metadata": self.metadata,
+            "runtime_private_metadata": self.runtime_private_metadata,
+        })
     }
 }
 
@@ -599,13 +636,16 @@ pub fn build_package_request_artifact(
     source_scope: &str,
 ) -> GuardArtifact {
     let (manifest_paths, lockfile_paths) = artifact_workspace_paths(intent);
-    let package_executable = if !intent.command_tokens.is_empty()
-        && !intent.command_tokens.iter().any(|t| t.contains(';'))
-    {
-        Some(intent.command_tokens[0].clone())
-    } else {
-        None
-    };
+    // `";" not in intent.command_tokens` (:148) is a membership test over the
+    // argv, not a substring search: a chained command contributes `;` as its
+    // own token, while a token that merely spells one (`echo a;b` quoted into a
+    // single argument) still names the executable Guard would launch.
+    let package_executable =
+        if !intent.command_tokens.is_empty() && !intent.command_tokens.iter().any(|t| t == ";") {
+            Some(intent.command_tokens[0].clone())
+        } else {
+            None
+        };
 
     let mut fingerprint_material = Map::new();
     fingerprint_material.insert("harness".to_owned(), json!(harness));
@@ -1344,6 +1384,19 @@ pub fn python_target(
             },
         );
     }
+    if let Some((distribution, version)) = python_distribution_file(spec) {
+        // The file names the distribution it holds, but its contents are
+        // whatever is on disk. Carrying the path as the target's source keeps
+        // the parsed identity out of registry matching: a policy entry for the
+        // published `distribution==version` must not admit an archive that
+        // merely spells that name.
+        return base(
+            Some(distribution),
+            Some(version),
+            Some(spec.to_owned()),
+            extras,
+        );
+    }
     let (normalized_name, requested_specifier) = split_python_specifier(spec);
     let (mut package_name, detected_extras) = split_python_extras(&normalized_name);
     if package_name.starts_with("./")
@@ -1495,6 +1548,35 @@ pub fn homebrew_target(spec: &str, cask: bool) -> PackageIntentTarget {
         extras: Vec::new(),
         editable: false,
     }
+}
+
+/// A local distribution file names its distribution and version in the file
+/// name, not in the path that reaches it. `Path::file_name` alone turns
+/// `dist/hol_guard-3.59.0-py3-none-any.whl` into a package named after the
+/// whole artifact, which matches no policy entry and never repeats.
+fn python_distribution_file(spec: &str) -> Option<(String, String)> {
+    let file_name = Path::new(spec).file_name()?.to_string_lossy().into_owned();
+    let versioned = |distribution: &str, version: &str| {
+        (!distribution.is_empty() && version.starts_with(|c: char| c.is_ascii_digit()))
+            .then(|| (distribution.to_owned(), version.to_owned()))
+    };
+    if let Some(stem) = file_name.strip_suffix(".whl") {
+        // PEP 427: `{distribution}-{version}(-{build})?-{python}-{abi}-{platform}`,
+        // where the distribution and version escape their own `-` as `_`.
+        let fields: Vec<&str> = stem.split('-').collect();
+        if fields.len() < 5 {
+            return None;
+        }
+        return versioned(fields[0], fields[1]);
+    }
+    for suffix in [".tar.gz", ".tar.bz2", ".tar.xz", ".zip"] {
+        let Some(stem) = file_name.strip_suffix(suffix) else {
+            continue;
+        };
+        let (distribution, version) = stem.rsplit_once('-')?;
+        return versioned(distribution, version);
+    }
+    None
 }
 
 /// `split_python_specifier` (:522-531).
@@ -2139,6 +2221,156 @@ pub(crate) const BUN_VALUE_OPTIONS: &[&str] = &[
 /// yarn's `--cwd <dir>`, which it also accepts after the subcommand.
 pub(crate) const YARN_VALUE_OPTIONS: &[&str] = &["--cwd"];
 
+/// `pip install` options that take a value (`pip install --help`), with the
+/// general options pip also reads after the subcommand. Their value is a path,
+/// URL, platform or setting, never a package to install. `-e`/`--editable`
+/// names a package and stays out of this list.
+pub(crate) const PIP_INSTALL_VALUE_OPTIONS: &[&str] = &[
+    "--abi",
+    "--cache-dir",
+    "--cert",
+    "--client-cert",
+    "--config-settings",
+    "--exists-action",
+    "--find-links",
+    "--global-option",
+    "--implementation",
+    "--keyring-provider",
+    "--log",
+    "--no-binary",
+    "--only-binary",
+    "--platform",
+    "--progress-bar",
+    "--proxy",
+    "--python",
+    "--python-version",
+    "--report",
+    "--retries",
+    "--root",
+    "--root-user-action",
+    "--src",
+    "--target",
+    "--timeout",
+    "--trusted-host",
+    "--upgrade-strategy",
+    "--use-deprecated",
+    "--use-feature",
+    "-C",
+    "-f",
+    "-i",
+    "-t",
+];
+
+/// `uv add` options that take a value (`uv help add`, uv 0.9), with uv's
+/// global options. Their value is an interpreter, path, URL, extra, group,
+/// setting or a package the option only tunes; the packages an upgrade or
+/// reinstall option names must already be requested. `--no-binary` is a
+/// switch here, unlike `uv pip install`.
+pub(crate) const UV_ADD_VALUE_OPTIONS: &[&str] = &[
+    "--allow-insecure-host",
+    "--bounds",
+    "--branch",
+    "--cache-dir",
+    "--color",
+    "--config-file",
+    "--config-setting",
+    "--config-settings-package",
+    "--constraints",
+    "--default-index",
+    "--directory",
+    "--exclude-newer",
+    "--exclude-newer-package",
+    "--extra",
+    "--find-links",
+    "--fork-strategy",
+    "--group",
+    "--index",
+    "--index-strategy",
+    "--keyring-provider",
+    "--link-mode",
+    "--marker",
+    "--no-binary-package",
+    "--no-build-isolation-package",
+    "--no-build-package",
+    "--no-install-package",
+    "--no-sources-package",
+    "--optional",
+    "--package",
+    "--prerelease",
+    "--project",
+    "--python",
+    "--refresh-package",
+    "--reinstall-package",
+    "--requirements",
+    "--resolution",
+    "--rev",
+    "--script",
+    "--tag",
+    "--upgrade-package",
+    "-C",
+    "-P",
+    "-c",
+    "-f",
+    "-i",
+    "-m",
+    "-p",
+];
+
+/// `uv pip install` options that take a value (`uv help pip install`, uv 0.9),
+/// with uv's global options and the hidden singular aliases `--constraint`,
+/// `--override` and `--build-constraint`. `-e`/`--editable` names the package
+/// being installed and stays out of this list.
+pub(crate) const UV_PIP_INSTALL_VALUE_OPTIONS: &[&str] = &[
+    "--allow-insecure-host",
+    "--build-constraint",
+    "--build-constraints",
+    "--cache-dir",
+    "--color",
+    "--config-file",
+    "--config-setting",
+    "--config-settings-package",
+    "--constraint",
+    "--constraints",
+    "--default-index",
+    "--directory",
+    "--exclude-newer",
+    "--exclude-newer-package",
+    "--excludes",
+    "--extra",
+    "--find-links",
+    "--fork-strategy",
+    "--group",
+    "--index",
+    "--index-strategy",
+    "--keyring-provider",
+    "--link-mode",
+    "--no-binary",
+    "--no-build-isolation-package",
+    "--no-sources-package",
+    "--only-binary",
+    "--override",
+    "--overrides",
+    "--prerelease",
+    "--project",
+    "--python",
+    "--python-platform",
+    "--python-version",
+    "--refresh-package",
+    "--reinstall-package",
+    "--requirements",
+    "--resolution",
+    "--target",
+    "--torch-backend",
+    "--upgrade-package",
+    "-C",
+    "-P",
+    "-b",
+    "-c",
+    "-f",
+    "-i",
+    "-p",
+];
+
 /// Bun or Yarn `--cwd` named a directory Guard cannot evaluate inside the
 /// workspace. An intent with this note must not take the empty-material allow.
 pub(crate) const PACKAGE_CWD_UNRESOLVED_NOTE: &str = "package_cwd_unresolved";
@@ -2391,6 +2623,216 @@ impl LocalPackageExecutionEvidence {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Exact decoders for an intent the host already holds.
+//
+// These read the `asdict` form of `PackageIntent` — the exact request values,
+// not the sanitized `to_dict` the public artifact metadata carries. Every
+// field below is hashed into the package request fingerprint, so a decoder
+// that repaired a malformed payload instead of refusing it would key the
+// review under an id no earlier approval was stored under, which reads to the
+// user as an approval that stopped working.
+// ---------------------------------------------------------------------------
+
+/// A list of strings. A missing or null key is the dataclass default — the
+/// empty list — but a present list holding a non-string is refused.
+fn _exact_string_vec(value: &Value, key: &str) -> Option<Vec<String>> {
+    match value.get(key) {
+        None | Some(Value::Null) => Some(Vec::new()),
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|item| item.as_str().map(str::to_owned))
+            .collect(),
+        Some(_) => None,
+    }
+}
+
+/// An optional string that must be a string whenever it is present and not
+/// null.
+fn _exact_opt_string(value: &Value, key: &str) -> Option<Option<String>> {
+    match value.get(key) {
+        None | Some(Value::Null) => Some(None),
+        Some(Value::String(text)) => Some(Some(text.clone())),
+        Some(_) => None,
+    }
+}
+
+fn _exact_bool(value: &Value, key: &str) -> Option<bool> {
+    match value.get(key) {
+        None => Some(false),
+        Some(Value::Bool(flag)) => Some(*flag),
+        Some(_) => None,
+    }
+}
+
+/// `PackageExecutionFileEvidence.to_dict` (`package_intent_common.py` :72)
+/// read back exactly.
+///
+/// `resolved_path` is deliberately not defaulted to `path`: a file Guard could
+/// not resolve carries a null, and the null is what the fingerprint hashed. A
+/// `status` outside `EvidenceStatus` (:17) is refused rather than relabelled.
+fn _exact_file_evidence(value: &Value) -> Option<PackageExecutionFileEvidence> {
+    if !value.is_object() {
+        return None;
+    }
+    let status: EvidenceStatus = match _string_field(value, "status")?.as_str() {
+        "available" => "available",
+        "missing" => "missing",
+        "not_regular" => "not_regular",
+        "unreadable" => "unreadable",
+        "unstable" => "unstable",
+        _ => return None,
+    };
+    Some(PackageExecutionFileEvidence {
+        path: _string_field(value, "path")?,
+        resolved_path: _exact_opt_string(value, "resolved_path")?,
+        status,
+        file_identity: _exact_opt_string(value, "file_identity")?,
+        content_hash: _exact_opt_string(value, "content_hash")?,
+    })
+}
+
+fn _exact_file_evidence_list(
+    value: &Value,
+    key: &str,
+) -> Option<Vec<PackageExecutionFileEvidence>> {
+    match value.get(key) {
+        None | Some(Value::Null) => Some(Vec::new()),
+        Some(Value::Array(items)) => items.iter().map(_exact_file_evidence).collect(),
+        Some(_) => None,
+    }
+}
+
+fn _exact_opt_file_evidence(
+    value: &Value,
+    key: &str,
+) -> Option<Option<PackageExecutionFileEvidence>> {
+    match value.get(key) {
+        None | Some(Value::Null) => Some(None),
+        Some(item) => _exact_file_evidence(item).map(Some),
+    }
+}
+
+impl LocalPackageExecutionEvidence {
+    /// `to_dict` (:96) read back exactly.
+    ///
+    /// The looser `from_dict` above decodes the contained runner's probe
+    /// shape, which spells its statuses differently and fills a missing
+    /// `resolved_path` in; neither is safe for a payload whose bytes decide an
+    /// artifact id.
+    pub fn from_exact_dict(value: &Value) -> Option<Self> {
+        if !value.is_object() {
+            return None;
+        }
+        Some(LocalPackageExecutionEvidence {
+            manager_name: _string_field(value, "manager_name")?,
+            path_source: _string_field(value, "path_source")?,
+            effective_cwd: _string_field(value, "effective_cwd")?,
+            cwd_source: _string_field(value, "cwd_source")?,
+            manager_is_guard_shim: _exact_bool(value, "manager_is_guard_shim")?,
+            local_only_requested: _exact_bool(value, "local_only_requested")?,
+            context_hash: _string_field(value, "context_hash")?,
+            package_name: _exact_opt_string(value, "package_name")?,
+            executable_name: _exact_opt_string(value, "executable_name")?,
+            declared_version: _exact_opt_string(value, "declared_version")?,
+            manager: _exact_opt_file_evidence(value, "manager")?,
+            local_executable: _exact_opt_file_evidence(value, "local_executable")?,
+            manifests: _exact_file_evidence_list(value, "manifests")?,
+            lockfiles: _exact_file_evidence_list(value, "lockfiles")?,
+            typescript_launch: value
+                .get("typescript_launch")
+                .filter(|item| !item.is_null())
+                .cloned(),
+        })
+    }
+}
+
+impl PackageIntentTarget {
+    /// Rebuild a target from `to_execution_dict` (:47) — the exact request
+    /// values, not the sanitized `to_dict` the public metadata carries. The
+    /// artifact's fingerprint hashes the exact `raw_spec` and `source_url`, so
+    /// a target rebuilt from redacted text would key the review under a
+    /// different id.
+    pub fn from_exact_dict(value: &Value) -> Option<Self> {
+        if !value.is_object() {
+            return None;
+        }
+        Some(PackageIntentTarget {
+            ecosystem: _string_field(value, "ecosystem")?,
+            package_name: _exact_opt_string(value, "package_name")?,
+            raw_spec: _string_field(value, "raw_spec")?,
+            requested_specifier: _exact_opt_string(value, "requested_specifier")?,
+            source_url: _exact_opt_string(value, "source_url")?,
+            source_kind: _exact_opt_string(value, "source_kind")?,
+            source_repository: _exact_opt_string(value, "source_repository")?,
+            source_revision_kind: _exact_opt_string(value, "source_revision_kind")?,
+            source_identity: _exact_opt_string(value, "source_identity")?,
+            source_invalid_reason: _exact_opt_string(value, "source_invalid_reason")?,
+            alias: _exact_opt_string(value, "alias")?,
+            dependency_group: _exact_opt_string(value, "dependency_group")?,
+            extras: _exact_string_vec(value, "extras")?,
+            editable: _exact_bool(value, "editable")?,
+        })
+    }
+}
+
+impl PackageIntent {
+    /// Rebuild an intent the host already holds, so the resident can name the
+    /// review it earns. `targets` carry the exact execution dicts and
+    /// `command_tokens` the exact argv: both feed the fingerprint, and the
+    /// redacted spellings would change it.
+    ///
+    /// A payload missing a required scalar, or carrying an intent kind Guard
+    /// does not define, is no intent at all rather than a partially rebuilt
+    /// one.
+    pub fn from_exact_dict(value: &Value) -> Option<Self> {
+        if !value.is_object() {
+            return None;
+        }
+        let intent_kind: IntentKind = match _string_field(value, "intent_kind")?.as_str() {
+            "install" => "install",
+            "execute" => "execute",
+            "sync" => "sync",
+            _ => return None,
+        };
+        let targets = match value.get("targets") {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::Array(items)) => items
+                .iter()
+                .map(PackageIntentTarget::from_exact_dict)
+                .collect::<Option<Vec<_>>>()?,
+            Some(_) => return None,
+        };
+        let local_executions = match value.get("local_executions") {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::Array(items)) => items
+                .iter()
+                .map(LocalPackageExecutionEvidence::from_exact_dict)
+                .collect::<Option<Vec<_>>>()?,
+            Some(_) => return None,
+        };
+        Some(PackageIntent {
+            package_manager: _string_field(value, "package_manager")?,
+            intent_kind,
+            command_tokens: _exact_string_vec(value, "command_tokens")?,
+            redacted_command: _string_field(value, "redacted_command")?,
+            targets,
+            manifest_paths: _exact_string_vec(value, "manifest_paths")?,
+            lockfile_paths: _exact_string_vec(value, "lockfile_paths")?,
+            flags: _exact_string_vec(value, "flags")?,
+            notes: _exact_string_vec(value, "notes")?,
+            local_executions,
+            execution_context_hashes: _exact_string_vec(value, "execution_context_hashes")?,
+            execution_context_cwds: _exact_string_vec(value, "execution_context_cwds")?,
+            execution_context_reason_codes: _exact_string_vec(
+                value,
+                "execution_context_reason_codes",
+            )?,
+            routine_local_runner: _exact_bool(value, "routine_local_runner")?,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2608,6 +3050,7 @@ mod tests {
             execution_context_hashes: Vec::new(),
             execution_context_cwds: Vec::new(),
             execution_context_reason_codes: Vec::new(),
+            routine_local_runner: false,
         };
         let artifact =
             build_package_request_artifact("claude", &intent, "settings.json", "workspace");

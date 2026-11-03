@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 from functools import lru_cache
 from importlib.resources import files
-from pathlib import Path
 from typing import cast
 from urllib.parse import urlsplit
 
@@ -14,7 +14,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError
 
 from .errors import BuilderError
-from .io import canonical_json, checked_path, parse_json, read_bytes
+from .io import canonical_json
 from .models import Metadata
 
 LISTING_SCHEMA_V1 = "guard.extension-listing.v1"
@@ -36,6 +36,8 @@ DEFAULT_LIMITATIONS = (
     "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
     "A maintainer profile is not a security certification or an official upstream endorsement.",
 )
+LINKEDIN_RE = re.compile(r"^https://(?:www\.)?linkedin\.com/(?:in|company)/[A-Za-z0-9][A-Za-z0-9-]{1,99}/?$")
+X_RE = re.compile(r"^https://(?:www\.)?(?:x\.com|twitter\.com)/[A-Za-z0-9_]{1,15}/?$")
 
 
 @lru_cache(maxsize=2)
@@ -48,6 +50,40 @@ def listing_schema(schema_version: str = LISTING_SCHEMA) -> dict[str, object]:
         raise BuilderError("listing_schema", "Listing uses an unsupported metadata schema version.")
     payload = files("codex_plugin_scanner.guard.extension_builder").joinpath(filename)
     return cast(dict[str, object], json.loads(payload.read_text(encoding="utf-8")))
+
+
+def _plain_listing_text(value: object) -> None:
+    if (
+        not isinstance(value, str)
+        or value != value.strip()
+        or any(ord(char) < 32 or ord(char) == 127 for char in value)
+    ):
+        raise BuilderError("listing_text", "Listing text must be trimmed, single-line plain text.")
+
+
+def _contributor_profile(profile: object) -> None:
+    """Public presentation only. A profile never selects a claimant."""
+
+    if not isinstance(profile, dict) or not profile:
+        raise BuilderError("listing_profile", "A contributor profile must name at least one public field.")
+    for field in ("description", "organization"):
+        if field in profile:
+            _plain_listing_text(profile[field])
+    website = profile.get("website")
+    if isinstance(website, str):
+        _public_https(website)
+    linkedin = profile.get("linkedin")
+    if linkedin is not None:
+        if not isinstance(linkedin, str) or LINKEDIN_RE.fullmatch(linkedin) is None:
+            raise BuilderError(
+                "listing_url", "Contributor LinkedIn links must use a public LinkedIn profile or company URL."
+            )
+        _public_https(linkedin)
+    x_url = profile.get("x")
+    if x_url is not None:
+        if not isinstance(x_url, str) or X_RE.fullmatch(x_url) is None:
+            raise BuilderError("listing_url", "Contributor X links must use a public x.com or twitter.com profile URL.")
+        _public_https(x_url)
 
 
 def _public_https(value: str) -> None:
@@ -100,12 +136,7 @@ def validate_listing(payload: object, *, expected_id: str | None = None) -> dict
             upstream = cast(dict[str, object], raw_upstream)
             text_values.append(cast(str, cast(dict[str, object], upstream)["name"]))
     for value in text_values:
-        if (
-            not isinstance(value, str)
-            or value != value.strip()
-            or any(ord(char) < 32 or ord(char) == 127 for char in value)
-        ):
-            raise BuilderError("listing_text", "Listing text must be trimmed, single-line plain text.")
+        _plain_listing_text(value)
     reference = row.get("documentationUrl")
     if isinstance(reference, str):
         _public_https(reference)
@@ -117,6 +148,8 @@ def validate_listing(payload: object, *, expected_id: str | None = None) -> dict
             roles = cast(list[str], contributor["roles"])
             if len(set(roles)) != len(roles):
                 raise BuilderError("listing_contributors", "Contributor credit roles must be unique.")
+            if "profile" in contributor:
+                _contributor_profile(contributor["profile"])
         references = cast(list[dict[str, object]], row["originalContributions"])
         if len({str(item["url"]) for item in references}) != len(references):
             raise BuilderError("listing_references", "Original contribution references must be unique.")
@@ -127,13 +160,6 @@ def validate_listing(payload: object, *, expected_id: str | None = None) -> dict
     if len(canonical_json(row).encode("utf-8")) > MAX_LISTING_BYTES:
         raise BuilderError("listing_limit", "Listing exceeds its byte budget.")
     return row
-
-
-def load_listing(path: Path, *, expected_id: str) -> dict[str, object]:
-    path = checked_path(path)
-    if path.name != f"{expected_id}.json":
-        raise BuilderError("listing_identity", "Listing filename must match the native contribution ID.")
-    return validate_listing(parse_json(read_bytes(path, limit=MAX_LISTING_BYTES)), expected_id=expected_id)
 
 
 def listing_template(metadata: Metadata) -> str:

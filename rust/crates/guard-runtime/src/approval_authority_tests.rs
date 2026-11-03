@@ -1,6 +1,5 @@
 use super::*;
 use serde_json::Value;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn test_root_is_only_a_test_fixture() {
@@ -21,10 +20,7 @@ fn test_record_contains_distinct_provenance_bindings() {
 
 #[test]
 fn fresh_private_state_without_public_authority_is_unenrolled() {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let suffix = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir().join(format!(
         "hol-guard-approval-authority-fresh-{}-{suffix}",
         std::process::id()

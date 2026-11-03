@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_resident_client as client_module
+from codex_plugin_scanner.guard import native_resident_revival as revival
 from codex_plugin_scanner.guard.native_resident_client import (
     _PersistentNativeClient,
     _PersistentNativeClientPool,
@@ -654,3 +655,121 @@ def test_pool_reports_readiness_only_for_live_idle_clients(tmp_path: Path) -> No
     pool._idle[:] = [alive]
     pool._closed = True
     assert pool.has_idle_client() is False
+
+
+class _Answering:
+    """A stream that answers every request with one fixed frame."""
+
+    def __init__(self, response: bytes) -> None:
+        self.response = response
+        self.closed = False
+
+    def request(self, _payload: bytes, *, deadline_monotonic: float) -> bytes:
+        return self.response
+
+    def close(self, *, deadline_monotonic: float) -> bool:
+        self.closed = True
+        return True
+
+
+def _answering_pool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, response: bytes
+) -> tuple[_PersistentNativeClientPool, list[_Answering]]:
+    streams: list[_Answering] = []
+
+    def build(**_kwargs: object) -> _Answering:
+        stream = _Answering(response)
+        streams.append(stream)
+        return stream
+
+    monkeypatch.setattr(client_module, "_PersistentNativeClient", build)
+    return _pool(tmp_path), streams
+
+
+def test_a_diagnostic_does_not_arm_the_restart_hold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Asking a crash-looping resident how it is must not open the circuit.
+
+    The refusal frame is still returned to the caller; what it must not do is
+    become the event that takes the hook path out of service.
+    """
+    pool, _ = _answering_pool(tmp_path, monkeypatch, revival.restart_blocked_frame())
+    armed: list[object] = []
+    monkeypatch.setattr(client_module, "arm_restart_hold", armed.append)
+
+    assert pool.request(b"{}", deadline_monotonic=time.monotonic() + 1, diagnostic=True) is not None
+    assert armed == []
+    assert not revival.restart_hold_active(pool._hold_key)
+
+
+def test_a_diagnostic_does_not_clear_a_held_restart(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A successful answer from a warm stream is not evidence the hold is over."""
+    pool, _ = _answering_pool(tmp_path, monkeypatch, b"answered")
+    cleared: list[object] = []
+    monkeypatch.setattr(client_module, "clear_restart_hold", cleared.append)
+
+    assert pool.request(b"{}", deadline_monotonic=time.monotonic() + 1, diagnostic=True) == b"answered"
+    assert cleared == []
+
+
+def test_a_diagnostic_retires_the_stream_it_borrowed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A question leaves no lease of its own parked in the pool."""
+    pool, streams = _answering_pool(tmp_path, monkeypatch, b"answered")
+
+    assert pool.request(b"{}", deadline_monotonic=time.monotonic() + 1, diagnostic=True) == b"answered"
+    assert len(streams) == 1
+    assert streams[0].closed
+    assert list(pool._idle) == []
+
+
+def test_ordinary_work_still_parks_its_stream(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pool, streams = _answering_pool(tmp_path, monkeypatch, b"answered")
+
+    assert pool.request(b"{}", deadline_monotonic=time.monotonic() + 1) == b"answered"
+    assert not streams[0].closed
+    assert list(pool._idle) == streams
+
+
+@pytest.mark.parametrize("payload", [b'{"operation":"resident_health"}', b""])
+def test_a_diagnostic_restores_the_failure_the_hook_path_left_behind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, payload: bytes
+) -> None:
+    """A question must not overwrite the failure a hook request recorded.
+
+    Both an answered question and a rejected one run through the same restore,
+    so the caller reads back exactly what it recorded before asking.
+    """
+
+    class Pool:
+        def request(self, _payload: bytes, *, deadline_monotonic: float, diagnostic: bool = False) -> bytes:
+            client_module._LAST_FAILURE_CODE.set("native_client_pool_exhausted")
+            return b"answered"
+
+    monkeypatch.setattr(client_module, "_client_pool_for", lambda *_args, **_kwargs: Pool())
+    client_module.record_native_resident_client_failure_code("native_resident_unavailable")
+    client_module.record_native_resident_client_failure_hold_key(("runtime", "state"))
+
+    client_module.native_resident_client_request(
+        executable=tmp_path / "runtime",
+        guard_home=tmp_path,
+        environment={},
+        payload=payload,
+        timeout_seconds=1.0,
+        diagnostic=True,
+    )
+
+    assert client_module.native_resident_client_failure_code() == "native_resident_unavailable"
+    assert client_module.native_resident_client_failure_hold_key() == ("runtime", "state")
+
+
+def test_ordinary_work_still_records_its_own_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    client_module.record_native_resident_client_failure_code("native_resident_unavailable")
+
+    client_module.native_resident_client_request(
+        executable=tmp_path / "runtime",
+        guard_home=tmp_path,
+        environment={},
+        payload=b"",
+        timeout_seconds=1.0,
+    )
+
+    assert client_module.native_resident_client_failure_code() == "native_client_request_invalid"

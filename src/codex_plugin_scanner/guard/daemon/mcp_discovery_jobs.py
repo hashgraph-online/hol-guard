@@ -11,7 +11,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from uuid import uuid4
 
+from .background_diagnostics import record_background_event
+
 _LOG = logging.getLogger(__name__)
+# Named here so a support bundle can be searched for a discovery job that died
+# outside any stage. The line carries a code and a type, never provider text.
+DISCOVERY_JOB_FAILED_EVENT = "discovery_job_failed"
 _JOB_ID = re.compile(r"[a-f0-9]{32}\Z")
 # Two slow providers can occupy half the pool while two other connections
 # still refresh. Four also caps concurrent job threads and their possible
@@ -22,6 +27,7 @@ _PUBLIC_FAILURE_CODES = frozenset(
         "mcp_refresh_unavailable",
         "catalog_revision_conflict",
         "configured_host_scan_failed",
+        "configured_host_persist_failed",
         "observed_provider_scan_failed",
         "catalog_limit_reached",
         "mcp_launch_failed",
@@ -29,6 +35,18 @@ _PUBLIC_FAILURE_CODES = frozenset(
         "mcp_initialize_failed",
         "mcp_protocol_unsupported",
         "mcp_capability_rejected",
+        # Codex host reads name the Codex problem to fix; without them every
+        # one of them reaches the page as the generic unexpected-error banner.
+        "codex_host_changed",
+        "codex_host_untrusted",
+        "codex_host_invalid",
+        "codex_host_limit",
+        "codex_host_timeout",
+        "codex_host_unavailable",
+        # A command-line tool's --help could not be read or parsed.
+        "cli_help_unreadable",
+        # The tool's stored identity changed while its --help was read.
+        "cli_identity_changed",
     }
 )
 
@@ -43,12 +61,47 @@ class DiscoveryStageError(ValueError):
         super().__init__(code)
 
 
+class DiscoveryCancel(threading.Event):
+    """A job's cancel flag that stops taking effect once the job starts writing.
+
+    A cancel that lands after a job began its writes would otherwise report a
+    job as cancelled whose results are already stored.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._commit_lock = threading.Lock()
+        self._committed = False
+
+    def set(self) -> None:
+        with self._commit_lock:
+            if not self._committed:
+                super().set()
+
+    def begin_commit(self) -> bool:
+        """Close the flag for good; False when a cancel already arrived."""
+
+        with self._commit_lock:
+            if self.is_set():
+                return False
+            self._committed = True
+            return True
+
+
+def begin_commit(cancel: threading.Event) -> bool:
+    """Start a job's writes unless it was cancelled first."""
+
+    if isinstance(cancel, DiscoveryCancel):
+        return cancel.begin_commit()
+    return not cancel.is_set()
+
+
 @dataclass
 class _Job:
     job_id: str
     cli_id: str
     started: float
-    cancel: threading.Event = field(default_factory=threading.Event)
+    cancel: threading.Event = field(default_factory=DiscoveryCancel)
     state: str = "running"
     code: str | None = None
     finished: float | None = None
@@ -136,7 +189,8 @@ class McpDiscoveryJobs:
                 raise DiscoveryJobError("discovery_job_unavailable")
             if cancel and job.finished is None:
                 job.cancel.set()
-                job.state = "cancelling"
+                if job.cancel.is_set():
+                    job.state = "cancelling"
             return job.public()
 
     def _run(self, job: _Job, run: Callable[[threading.Event], None]) -> None:
@@ -154,6 +208,13 @@ class McpDiscoveryJobs:
                 f"{frame.name}:{frame.lineno}" for frame in traceback.extract_tb(error.__traceback__, limit=8)
             )
             _LOG.warning("MCP discovery job %s failed (%s, %s) at %s", job.job_id, code, type(error).__name__, frames)
+            # Stages record themselves, but a job can also fail outside one -
+            # and the page tells the reader their failure is in Guard's log.
+            # One event per failed job keeps that promise true for every path.
+            # This branch catches every exception a provider can raise, so the
+            # message is provider-shaped text no redactor can bound. The code
+            # and the exception class name are enough to find the warning above.
+            record_background_event(DISCOVERY_JOB_FAILED_EVENT, f"code={code} error={type(error).__name__}")
         finally:
             with self._lock:
                 job.finished = time.monotonic()

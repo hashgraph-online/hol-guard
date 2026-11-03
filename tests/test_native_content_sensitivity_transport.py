@@ -6,7 +6,6 @@ import base64
 import gzip
 import json
 import time
-from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -152,65 +151,6 @@ def test_resident_faults_still_update_shared_health(monkeypatch, mutation):
     assert len(failures) == 1
 
 
-def test_state_only_snapshot_never_requires_native_classification(monkeypatch, tmp_path):
-    from codex_plugin_scanner.guard.runtime import workspace_snapshot_inputs as snapshots
-
-    entries = [SimpleNamespace(name=".git"), SimpleNamespace(name=".guard")]
-
-    @contextmanager
-    def bounded(*args):
-        yield iter(entries)
-
-    def unavailable(*args, **kwargs):
-        raise client.NativeContentSensitivityError("offline")
-
-    monkeypatch.setattr(snapshots, "_bounded_entries", bounded)
-    monkeypatch.setattr(snapshots, "classify_secret_paths_batch", unavailable)
-    monkeypatch.setattr(snapshots, "_check_discovery_budget", lambda *args: None)
-    assert list(snapshots._classified_entries(tmp_path, (0, 0), tmp_path, time.monotonic(), [0])) == [
-        (entry, False) for entry in entries
-    ]
-
-
-def test_mixed_snapshot_classifies_only_eligible_entries_in_original_order(monkeypatch, tmp_path):
-    from codex_plugin_scanner.guard.runtime import workspace_snapshot_inputs as snapshots
-
-    entries = [SimpleNamespace(name=name) for name in [".GIT", "ordinary", ".env", ".guard"]]
-
-    @contextmanager
-    def bounded(*args):
-        yield iter(entries)
-
-    calls = []
-
-    def classify(paths, **kwargs):
-        calls.append(paths)
-        return [None, object()]
-
-    monkeypatch.setattr(snapshots, "_bounded_entries", bounded)
-    monkeypatch.setattr(snapshots, "classify_secret_paths_batch", classify)
-    monkeypatch.setattr(snapshots, "_check_discovery_budget", lambda *args: None)
-    assert list(snapshots._classified_entries(tmp_path, (0, 0), tmp_path, time.monotonic(), [0])) == list(
-        zip(entries, [False, False, True, False], strict=True)
-    )
-    assert calls == [["ordinary", ".env"]]
-
-
-def test_partial_snapshot_batch_keeps_directory_descriptor_alive(monkeypatch, tmp_path):
-    from codex_plugin_scanner.guard.runtime import workspace_snapshot_inputs as snapshots
-
-    (tmp_path / "ordinary.txt").write_text("ordinary")
-    (tmp_path / "second.txt").write_text("second")
-    stat = tmp_path.stat()
-    monkeypatch.setattr(snapshots, "classify_secret_paths_batch", lambda paths, **kwargs: [None] * len(paths))
-    records = []
-    for entry, protected in snapshots._classified_entries(
-        tmp_path, (stat.st_dev, stat.st_ino), tmp_path, time.monotonic(), [0]
-    ):
-        records.append((entry.name, entry.stat(follow_symlinks=False).st_size, protected))
-    assert sorted(records) == [("ordinary.txt", 8, False), ("second.txt", 6, False)]
-
-
 @pytest.mark.parametrize("text", ["x" * (5 * 1024 * 1024), '\\"' * (5 * 512 * 1024), "界" * (5 * 1024 * 1024 // 3)])
 def test_large_output_wire_encoding_is_lossless_and_keeps_the_callers_deadline(monkeypatch, text):
     calls = _resident(monkeypatch)
@@ -226,95 +166,44 @@ def test_large_output_wire_encoding_is_lossless_and_keeps_the_callers_deadline(m
     assert json.loads(decoded) == body
 
 
-def test_unexpected_binding_recheck_logs_only_exception_class(monkeypatch, caplog):
-    from codex_plugin_scanner.guard.runtime import structured_output_mediation as mediation
-
-    calls = []
-
-    def query(query, body, **kwargs):
-        calls.append((query, body.copy()))
-        return {"recheck_required": True} if query == "mediate_prepare" else None
+def test_unexpected_binding_recheck_logs_only_exception_class(caplog):
+    from codex_plugin_scanner.guard.daemon import hook_worker_structured as structured
 
     def recheck():
         raise LookupError("private payload must never be logged")
 
-    monkeypatch.setattr(mediation, "content_query", query)
-    mediation.mediate_native_post_tool_content(
-        harness="pi",
-        event_name="PostToolUse",
-        native_result={},
-        validated_receipt=None,
-        structured_output_json=None,
-        binding=None,
-        recheck_binding=recheck,
-    )
-    assert calls[-1][1]["recheck_error"] is True
+    forward = {"structured_content_mediation": {"action": "forward"}}
+    withheld = structured.withhold_stale_forward(forward, view={}, load_config=recheck, deadline=None)
+    assert withheld["structured_content_mediation"]["reason_code"] == "structured_binding_recheck_failed"
     assert "LookupError" in caplog.text
     assert "private payload" not in caplog.text
 
 
 def test_harness_presentation_is_available_without_native_runtime(monkeypatch):
-    from codex_plugin_scanner.guard.runtime import structured_output_mediation as mediation
+    from codex_plugin_scanner.guard.daemon import hook_worker_structured as structured
 
     def unavailable(*args, **kwargs):
         raise client.NativeContentSensitivityError("offline")
 
-    monkeypatch.setattr(mediation, "content_query", unavailable)
-    assert mediation.canonical_harness_name(" Pi_Coding_Agent ") == "pi"
-    assert mediation.canonical_harness_name("oh-my-pi") == "omp"
+    monkeypatch.setattr(structured, "content_query", unavailable)
+    assert structured.withholds_structured_destination(harness=" Pi_Coding_Agent ", event_name="PostToolUse")
+    assert structured.withholds_structured_destination(harness="oh-my-pi", event_name="PostToolUse")
 
 
 def test_expired_mediation_projects_transport_failure_without_opening_a_client(monkeypatch):
-    from codex_plugin_scanner.guard.runtime import structured_output_mediation as mediation
+    from codex_plugin_scanner.guard.daemon import hook_worker_structured as structured
 
     calls = _resident(monkeypatch)
-    result = mediation.mediate_native_post_tool_content(
-        harness="pi",
-        event_name="PostToolUse",
-        native_result={"decision": "allow"},
-        validated_receipt=None,
-        structured_output_json="{}",
-        binding=None,
-        deadline_monotonic=0.0,
+    response = {"decision": "allow", "structured_content_mediation": {"action": "forward"}}
+    result = structured.withhold_stale_forward(
+        response,
+        view={},
+        load_config=lambda: pytest.fail("an expired deadline reads nothing"),
+        deadline=0.0,
     )
-    assert result.action == "withhold"
-    assert result.reason_code == "structured_review_deadline_exceeded"
+    assert result["structured_content_mediation"]["action"] == "withhold"
+    assert result["structured_content_mediation"]["reason_code"] == "structured_review_deadline_exceeded"
     assert not calls
-
-
-def test_path_batch_requires_exact_result_count(monkeypatch):
-    from codex_plugin_scanner.guard.runtime import secret_sensitivity as sensitivity
-
-    monkeypatch.setattr(sensitivity, "content_query", lambda *args, **kwargs: [None])
-    with pytest.raises(client.NativeContentSensitivityError):
-        sensitivity.classify_secret_paths_batch(["ordinary.txt", ".env"])
-
-
-def test_path_batch_presents_each_native_dto_in_order(monkeypatch):
-    from codex_plugin_scanner.guard.runtime import secret_sensitivity as sensitivity
-
-    calls = []
-
-    def native(query, body, **kwargs):
-        calls.append((query, body, kwargs))
-        return [
-            None,
-            {
-                "family": "local .env file",
-                "path": ".env",
-                "sensitivity": "critical",
-                "reason": "native fixture",
-                "requested_path": ".env",
-            },
-        ]
-
-    monkeypatch.setattr(sensitivity, "content_query", native)
-    result = sensitivity.classify_secret_paths_batch(["ordinary.txt", ".env"], deadline_monotonic=42)
-    assert result[0] is None
-    assert result[1].family == "local .env file"
-    assert len(calls) == 1
-    assert calls[0][0] == "path_batch"
-    assert calls[0][2] == {"deadline_monotonic": 42}
 
 
 def test_status_probe_has_request_deadline_and_memo_expires_on_binary_or_manifest_change(monkeypatch, tmp_path):

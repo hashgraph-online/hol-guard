@@ -132,14 +132,13 @@ def test_record_extraction_owner_never_propagates(
     assert not _marker(extraction2).exists()
 
 
-def test_entry_records_owner_before_bridge_and_guard_imports() -> None:
+def test_entry_records_owner_before_guard_imports() -> None:
     source = _ENTRY_SCRIPT.read_text(encoding="utf-8")
     main = source[source.index('if __name__ == "__main__":') :]
     bootstrap = main.index("_try_proxy_running_desktop_bootstrap()")
     record = main.index("_record_extraction_owner()\n")
-    bridge = main.index("_try_codex_daemon_bridge()")
     heavy = main.index("from codex_plugin_scanner.guard.frozen_daemon_runtime import")
-    assert record < bootstrap < bridge < heavy
+    assert record < bootstrap < heavy
 
 
 def test_entry_marker_literals_match_module_constants() -> None:

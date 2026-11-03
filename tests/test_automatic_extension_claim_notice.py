@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.test_guard_extension_claim_notice import (
+from tests.extension_claim_notice_harness import (
     MERGE_SHA,
     MODULE,
     FakeGitHub,

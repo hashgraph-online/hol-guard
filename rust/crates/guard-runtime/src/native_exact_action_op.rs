@@ -6,13 +6,50 @@
 //! judged it. A proof that fails is a successful reply carrying the once-only
 //! reason, so only a malformed request is an `error`.
 
-mod bash_capture;
+mod bash_ack;
+mod bash_activity;
+pub(crate) use bash_ack::evaluate as acknowledge_bash_request;
+#[cfg(target_os = "macos")]
+mod bash_broker;
+mod bash_cancel_route;
+pub(crate) mod bash_capture;
+#[cfg(target_os = "macos")]
+pub(crate) mod bash_context;
+mod bash_delivery;
+pub(crate) use bash_delivery::require_owner as require_bash_owner;
+#[cfg(target_os = "macos")]
+mod bash_curl_backend;
+#[cfg(target_os = "macos")]
+mod bash_dependency_artifact;
+#[cfg(target_os = "macos")]
+mod bash_grant;
+#[cfg(target_os = "macos")]
+mod bash_host;
+#[cfg(target_os = "macos")]
+mod bash_launch;
+#[cfg(target_os = "macos")]
+mod bash_network;
+#[cfg(target_os = "macos")]
+mod bash_policy;
+#[cfg(target_os = "macos")]
+mod bash_review;
+mod bash_review_check;
+mod bash_route;
+pub(crate) use bash_activity::evaluate as bash_activity_request;
+pub(crate) use bash_cancel_route::cancel_request as cancel_bash_request;
+pub(crate) use bash_review_check::check as check_bash_review;
+pub(crate) use bash_route::observe_host_bytes as observe_bash_host_bytes;
+pub(crate) use bash_route::{
+    execute_request as execute_bash_request, prepare_request as prepare_bash_request,
+};
 mod binding;
 pub(crate) mod context;
 mod env_launch;
 mod fs_path;
 #[cfg(windows)]
 mod fs_path_windows;
+#[cfg(not(windows))]
+mod runner_code;
 // Windows launches refuse git (`launch.rs`), so its config digest is unreached
 // there; `git_windows` still supplies the homes the loader binding reads.
 #[cfg_attr(windows, allow(dead_code))]
@@ -24,7 +61,11 @@ mod git_push;
 #[cfg(windows)]
 #[allow(dead_code)]
 mod git_windows;
+mod hook_review;
+pub(crate) use hook_review::policy_binding_holds;
 mod launch;
+mod launch_evidence;
+pub(crate) use launch::is_safe_single_invocation;
 #[cfg(windows)]
 mod launch_windows;
 mod launcher_sets;
@@ -50,9 +91,11 @@ mod tool_target;
 use std::time::{Duration, Instant};
 
 use guard_contracts::{
-    NativeExactActionPayloadV1, NativeExactActionQueryV1, NativeExactActionRequestV1,
-    NativeExactActionResultV1, NATIVE_EXACT_ACTION_MAX_BUDGET_MS, NATIVE_EXACT_ACTION_MAX_BYTES,
-    NATIVE_EXACT_ACTION_REQUEST_SCHEMA, NATIVE_EXACT_ACTION_RESULT_SCHEMA,
+    GuardHookReviewEvidenceV1, NativeExactActionPayloadV1, NativeExactActionQueryV1,
+    NativeExactActionRequestV1, NativeExactActionResultV1,
+    NATIVE_EXACT_ACTION_HOOK_REVIEW_MAX_BYTES, NATIVE_EXACT_ACTION_MAX_BUDGET_MS,
+    NATIVE_EXACT_ACTION_MAX_BYTES, NATIVE_EXACT_ACTION_REQUEST_SCHEMA,
+    NATIVE_EXACT_ACTION_RESULT_SCHEMA,
 };
 
 use crate::package_authority_op::request_digest_with_limit;
@@ -60,15 +103,22 @@ use context::{Engines, ResidentEngines};
 
 pub(crate) fn evaluate_native_exact_action_request(
     request: &NativeExactActionRequestV1,
+    guard_home: Option<&std::path::Path>,
 ) -> Result<Vec<u8>, String> {
-    evaluate_with(request, &ResidentEngines)
+    evaluate_with(request, &ResidentEngines { guard_home })
 }
 
 fn evaluate_with(
     request: &NativeExactActionRequestV1,
     engines: &dyn Engines,
 ) -> Result<Vec<u8>, String> {
-    let request_sha256 = request_digest_with_limit(request, NATIVE_EXACT_ACTION_MAX_BYTES)
+    // A hook review carries the whole hook payload; every other query is a
+    // few derived fields.
+    let limit = match request.query {
+        NativeExactActionQueryV1::HookReview { .. } => NATIVE_EXACT_ACTION_HOOK_REVIEW_MAX_BYTES,
+        _ => NATIVE_EXACT_ACTION_MAX_BYTES,
+    };
+    let request_sha256 = request_digest_with_limit(request, limit)
         .map_err(|_| "native_exact_action_too_large".to_owned())?;
     let (status, code, payload) = match decide(request, engines) {
         Ok(payload) => ("ok", "ok", Some(payload)),
@@ -84,25 +134,55 @@ fn evaluate_with(
     })
 }
 
-/// The proven exact-action token of `query`, or the reason Guard cannot
-/// prove what it runs, for a resident caller that already holds the query.
+/// The exact-action context token or its refusal for a resident caller.
+/// The separate delivery contract decides whether a once retry is executable.
 #[cfg(test)]
 pub(crate) fn exact_action_token(query: &NativeExactActionQueryV1) -> Result<String, &'static str> {
+    exact_action_token_with(query, &ResidentEngines { guard_home: None })
+}
+
+#[cfg(test)]
+fn exact_action_token_with(
+    query: &NativeExactActionQueryV1,
+    engines: &dyn Engines,
+) -> Result<String, &'static str> {
     let NativeExactActionQueryV1::ExactAction { budget_ms, .. } = query else {
         return Err("native_exact_action_query_invalid");
     };
     let budget = Duration::from_millis((*budget_ms).min(NATIVE_EXACT_ACTION_MAX_BUDGET_MS));
-    token::exact_action(query, Instant::now() + budget, &ResidentEngines)
+    token::exact_action(query, Instant::now() + budget, engines)
 }
 
 /// The token an approval of `query` is saved and matched under
 /// (`token::approval_token`), for a resident caller that holds the query.
 pub(crate) fn approval_token(query: &NativeExactActionQueryV1) -> Result<String, &'static str> {
+    approval_token_with(query, &ResidentEngines { guard_home: None })
+}
+
+pub(crate) fn approval_token_for_home(
+    query: &NativeExactActionQueryV1,
+    guard_home: &std::path::Path,
+) -> Result<String, &'static str> {
+    if !guard_home.is_absolute() {
+        return approval_token(query);
+    }
+    approval_token_with(
+        query,
+        &ResidentEngines {
+            guard_home: Some(guard_home),
+        },
+    )
+}
+
+fn approval_token_with(
+    query: &NativeExactActionQueryV1,
+    engines: &dyn Engines,
+) -> Result<String, &'static str> {
     let NativeExactActionQueryV1::ExactAction { budget_ms, .. } = query else {
         return Err("native_exact_action_query_invalid");
     };
     let budget = Duration::from_millis((*budget_ms).min(NATIVE_EXACT_ACTION_MAX_BUDGET_MS));
-    token::approval_token(query, Instant::now() + budget, &ResidentEngines)
+    token::approval_token(query, Instant::now() + budget, engines)
 }
 
 /// The review identity the daemon binds an approve-once retry of `query` to
@@ -131,7 +211,7 @@ pub(crate) fn review_binding_for(
             payload_cwd.as_deref(),
             workspace.as_deref(),
             execution_environment,
-            &ResidentEngines,
+            &ResidentEngines { guard_home: None },
         )
         .or(Some(reuse_shape::Reuse::Argv))
     };
@@ -148,6 +228,52 @@ pub(crate) fn review_binding_for(
         policy_binding,
         launcher,
     )
+}
+
+/// The `HookReview` answers of a reviewed `PreToolUse` the edge holds
+/// (`edge_review_evidence`), as the resident op would answer the query. A
+/// query the proofs reject still answers: its policy binding as checked, no
+/// binding and no token, with `unproven_launch` as the once-only reason.
+pub(crate) fn hook_review_evidence(
+    query: &NativeExactActionQueryV1,
+    guard_home: Option<&std::path::Path>,
+) -> GuardHookReviewEvidenceV1 {
+    match decide_query(
+        query,
+        &ResidentEngines { guard_home },
+        Fallback::CommandHash,
+    ) {
+        Ok(NativeExactActionPayloadV1::HookReview {
+            policy_binding_valid,
+            binding,
+            token,
+            once_only_reason,
+        }) => {
+            // Exactly one of a token and a once-only reason.
+            let (token, once_only_reason) = match (token, once_only_reason) {
+                (Some(token), None) => (Some(token), None),
+                (None, Some(reason)) => (None, Some(reason)),
+                _ => (None, Some(reasons::UNPROVEN_LAUNCH.to_owned())),
+            };
+            GuardHookReviewEvidenceV1 {
+                policy_binding_valid,
+                binding,
+                token,
+                once_only_reason,
+            }
+        }
+        _ => unproven_review_evidence(hook_review::policy_binding_valid(query)),
+    }
+}
+
+/// Review evidence that binds no retry and mints no token.
+pub(crate) fn unproven_review_evidence(policy_binding_valid: bool) -> GuardHookReviewEvidenceV1 {
+    GuardHookReviewEvidenceV1 {
+        policy_binding_valid,
+        binding: None,
+        token: None,
+        once_only_reason: Some(reasons::UNPROVEN_LAUNCH.to_owned()),
+    }
 }
 
 /// What an unprovable command falls back to (`CommandHash`), or the strict
@@ -195,7 +321,72 @@ fn decide_with(
     if request.schema != NATIVE_EXACT_ACTION_REQUEST_SCHEMA {
         return Err("native_exact_action_schema_mismatch");
     }
-    Ok(match &request.query {
+    decide_query(&request.query, engines, fallback)
+}
+
+fn decide_query(
+    query: &NativeExactActionQueryV1,
+    engines: &dyn Engines,
+    fallback: Fallback,
+) -> Result<NativeExactActionPayloadV1, &'static str> {
+    Ok(match query {
+        NativeExactActionQueryV1::ReviewEvidence { binding, action } => {
+            // Each half is answered exactly as its own query would be, so
+            // one ask can never bind or mint anything the two asks would not.
+            if !matches!(**binding, NativeExactActionQueryV1::ReviewBinding { .. })
+                || !matches!(**action, NativeExactActionQueryV1::ExactAction { .. })
+            {
+                return Err("native_exact_action_query_invalid");
+            }
+            let NativeExactActionPayloadV1::ReviewBinding { binding } =
+                decide_query(binding, engines, fallback)?
+            else {
+                return Err("native_exact_action_query_invalid");
+            };
+            let NativeExactActionPayloadV1::ExactAction {
+                token,
+                once_only_reason,
+            } = decide_query(action, engines, fallback)?
+            else {
+                return Err("native_exact_action_query_invalid");
+            };
+            NativeExactActionPayloadV1::ReviewEvidence {
+                binding,
+                token,
+                once_only_reason,
+            }
+        }
+        NativeExactActionQueryV1::HookReview { .. } => {
+            let review = hook_review::derive(query)?;
+            let NativeExactActionPayloadV1::ReviewEvidence {
+                binding,
+                token,
+                once_only_reason,
+            } = decide_query(
+                &NativeExactActionQueryV1::ReviewEvidence {
+                    binding: Box::new(review.binding),
+                    action: Box::new(review.action),
+                },
+                engines,
+                fallback,
+            )?
+            else {
+                return Err("native_exact_action_query_invalid");
+            };
+            NativeExactActionPayloadV1::HookReview {
+                policy_binding_valid: review.policy_binding_valid,
+                binding,
+                token,
+                once_only_reason,
+            }
+        }
+        NativeExactActionQueryV1::LaunchEvidence { action } => match &**action {
+            // A hook review is observed through the exact action it derives.
+            NativeExactActionQueryV1::HookReview { .. } => {
+                launch_evidence::observe(&hook_review::derive(action)?.action, engines)?
+            }
+            _ => launch_evidence::observe(action, engines)?,
+        },
         NativeExactActionQueryV1::BashSubject { capture } => match bash_capture::inspect(capture) {
             Ok(subject) => NativeExactActionPayloadV1::BashSubject {
                 subject: Some(Box::new(subject)),
@@ -241,9 +432,9 @@ fn decide_with(
             let budget = Duration::from_millis((*budget_ms).min(NATIVE_EXACT_ACTION_MAX_BUDGET_MS));
             let deadline = Instant::now() + budget;
             let minted = match fallback {
-                Fallback::CommandHash => token::approval_token(&request.query, deadline, engines),
+                Fallback::CommandHash => token::approval_token(query, deadline, engines),
                 #[cfg(test)]
-                Fallback::Strict => token::exact_action(&request.query, deadline, engines),
+                Fallback::Strict => token::exact_action(query, deadline, engines),
             };
             match minted {
                 Ok(token) => NativeExactActionPayloadV1::ExactAction {

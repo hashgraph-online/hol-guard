@@ -105,14 +105,15 @@ def _validate_receipt_decoder_and_handoff(root: Path) -> None:
     receipt = _read(root, "src/codex_plugin_scanner/guard/native_decision_receipt.py")
     _contains_all(
         receipt,
-        ("validate_native_decision_receipt", "canonical_receipt_bytes", "decision_id"),
-        "Python receipt validator",
+        ("validate_native_decision_receipt", "native_decision_receipt_validation"),
+        "Python receipt transport",
     )
-    required_start = receipt.find("_REQUIRED_FIELDS")
-    required_end = receipt.find(")", required_start)
-    required_fields = receipt[required_start:required_end] if required_start >= 0 and required_end >= 0 else ""
-    if any(f'"{field}"' in required_fields for field in FORBIDDEN_RECEIPT_FIELDS):
-        raise RuntimeError("Python receipt validator exposes a forbidden receipt field")
+    check = _read(root, "rust/crates/guard-runtime/src/edge_result_check.rs")
+    _contains_all(
+        check,
+        ("pub(crate) fn standalone_receipt", "native_decision_receipt::valid"),
+        "native receipt check",
+    )
     writer = _read(root, "rust/crates/guard-command/src/hook_evidence_writer.rs")
     _contains_all(
         writer,
@@ -165,7 +166,12 @@ def _validate_tests_and_provenance(root: Path) -> None:
             "a_repeated_receipt_is_deduplicated_rather_than_queued_twice",
             "a_full_receipt_queue_drops_the_overflow_instead_of_blocking",
             "a_receipt_left_in_the_journal_is_recovered_by_the_next_writer",
-            "a_store_that_keeps_failing_drops_a_receipt_after_bounded_retries",
+            "a_receipt_outlasts_a_briefly_locked_store",
+            "a_receipt_the_store_keeps_refusing_stays_journaled_for_the_next_writer",
+            "a_refused_receipt_does_not_hold_up_the_receipts_behind_it",
+            "a_receipt_the_store_never_takes_is_dropped_after_its_last_attempt",
+            "a_receipt_waits_out_a_store_locked_past_the_attempt_cap",
+            "a_long_lock_spends_none_of_the_attempts_other_refusals_get",
         ),
         "receipt fault tests",
     )

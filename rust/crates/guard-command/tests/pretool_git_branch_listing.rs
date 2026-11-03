@@ -53,7 +53,14 @@ fn branch_listing_is_allowed_and_mutation_stays_reviewed() {
         ("", "git branch --list 'feat/*'", "allow"),
         ("", "git --no-pager branch --list", "allow"),
         ("", "git branch --list | cat", "allow"),
-        ("", "git branch new-feature", "review"),
+        // Creating a branch writes one new ref. Unix hosts route it to the
+        // workspace sandbox, which carries a review floor of its own; Windows
+        // has no such sandbox, so the branch creation proof admits it.
+        (
+            "",
+            "git branch new-feature",
+            if cfg!(unix) { "review" } else { "allow" },
+        ),
         ("", "git branch -D main", "review"),
         ("", "git branch -d main", "review"),
         ("", "git branch -m old new", "allow"),

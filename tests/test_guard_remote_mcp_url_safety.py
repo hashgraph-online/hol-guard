@@ -6,19 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
-    _copilot_runtime_server_identity,
-    _CopilotMcpRuntimeServer,
-)
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
-    load_mcp_contribution_payloads,
-    mcp_tool_state,
     normalized_remote_mcp_url,
     validate_mcp_contribution,
 )
+from tests.mcp_contribution_loader import load_mcp_contribution_payloads
+from tests.runtime_wrapper_support import _copilot_runtime_server_identity, _CopilotMcpRuntimeServer
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .mcp_contribution_client import mcp_tool_state
 from .mcp_recorded_expectations import instapods_matches
 
 

@@ -219,6 +219,10 @@ def test_hook_worker_watch_native_allow_still_allows(
             "event_name": "PreToolUse",
             "harness": "codex",
             "result": _native_allow("pwd"),
+            "harness_response": {
+                "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"},
+                "policy_action": "allow",
+            },
         },
     )
     worker = HookWorker(store=GuardStore(guard_home))

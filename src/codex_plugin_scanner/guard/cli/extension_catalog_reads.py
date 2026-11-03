@@ -17,7 +17,7 @@ from ..daemon.catalog_v2_client import (
     extension_route,
     v1_extension_from_v2,
 )
-from ..daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
+from ..daemon.client import GuardDaemonRequestError, GuardDaemonResponseSchemaError, GuardSurfaceDaemonClient
 
 CATALOG_LIST_SCHEMA = "guard.cli.extension-catalog-list.v2"
 _NOT_FOUND = {"catalog_extension_not_found", "catalog_route_not_found"}
@@ -35,7 +35,9 @@ def catalog_reader(client: object) -> CatalogV2Client | None:
 def _v1_extensions(client: GuardSurfaceDaemonClient) -> list[dict[str, object]]:
     extensions = client.extension_control_catalog().get("extensions")
     if not isinstance(extensions, list):
-        raise ValueError("daemon returned an invalid catalog")
+        # A schema fault, not an absent extension: a caller that reads one
+        # extension must not report this as a name it has never heard of.
+        raise GuardDaemonResponseSchemaError("daemon returned an invalid catalog")
     return [extension for extension in extensions if isinstance(extension, dict)]
 
 

@@ -39,6 +39,10 @@ from .restricted_pytest_sandbox import (
     _macos_profile as _build_macos_profile,
 )
 
+# Copying the workspace and the virtual environment into the snapshot happens
+# before the contained deadline starts, so the outer wait allows for it.
+_WINDOWS_STAGING_GRACE_SECONDS = 120
+
 
 def prepare_restricted_pytest(
     command: Sequence[str],
@@ -97,6 +101,8 @@ def run_restricted_pytest(
         backend_executable=backend_executable,
         read_only_workspace=read_only_workspace,
     )
+    if plan.backend == "windows-appcontainer":
+        return _run_windows_pytest(plan, timeout_seconds=timeout_seconds, merge_stderr=merge_stderr)
     with tempfile.TemporaryDirectory(prefix="hol-guard-pytest-") as temporary_directory:
         private_root = Path(temporary_directory).resolve()
         private_home = private_root / "home"
@@ -126,6 +132,44 @@ def run_restricted_pytest(
             cwd=plan.cwd,
             merge_stderr=merge_stderr,
         )
+
+
+def _run_windows_pytest(plan: RestrictedPytestPlan, *, timeout_seconds: int, merge_stderr: bool) -> int:
+    """Run the plan inside the native LPAC snapshot runner.
+
+    The runner owns the whole containment on Windows: it copies the workspace
+    and the virtual environment into a credential-filtered read-only snapshot,
+    gives the run a private HOME and TEMP, withholds the network capability,
+    and discards the snapshot whole. Nothing is published back, so a read-only
+    pytest run leaves the live workspace untouched.
+    """
+    if (
+        sys.platform != "win32"
+        or plan.profile_version != PYTEST_READ_ONLY_PROFILE_VERSION
+        or not 0 < timeout_seconds <= 86400
+    ):
+        raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected contained pytest plan.")
+    argv = [
+        str(plan.backend_executable),
+        "contained-readonly-windows",
+        "--profile",
+        plan.profile_version,
+        "--workspace",
+        str(plan.workspace),
+        "--cwd",
+        str(plan.cwd),
+        "--timeout-seconds",
+        str(timeout_seconds),
+        "--",
+        *plan.command,
+    ]
+    return _run_backend_process(
+        argv,
+        env=os.environ,
+        timeout_seconds=timeout_seconds + _WINDOWS_STAGING_GRACE_SECONDS,
+        cwd=plan.cwd,
+        merge_stderr=merge_stderr,
+    )
 
 
 def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path, user_site_root: Path | None = None) -> list[str]:

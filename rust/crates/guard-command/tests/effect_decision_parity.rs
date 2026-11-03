@@ -1,9 +1,9 @@
 //! Byte-parity golden vectors for `evaluate_effect_decision` /
-//! `effect_decision_to_dict`, generated from the live Python oracle
-//! (effect_decision.py + command_decision_adapter.py) and committed as a
-//! fixture. Each case feeds the Python-built request JSON through the native
-//! `evaluate_effect_decision` and asserts the emitted `decision_plane` dict is
-//! identical to the Python `effect_decision_to_dict` output.
+//! `effect_decision_to_dict`, recorded from the Python oracle that owned this
+//! plane (effect_decision.py + command_decision_adapter.py) before it was
+//! retired, and committed as a frozen fixture. Each case feeds the recorded
+//! request JSON through the native `evaluate_effect_decision` and asserts the
+//! emitted `decision_plane` dict is identical to the recorded output.
 
 use guard_command::effect_decision::{
     effect_decision_to_payload, evaluate_effect_decision, EffectDecisionRequest,

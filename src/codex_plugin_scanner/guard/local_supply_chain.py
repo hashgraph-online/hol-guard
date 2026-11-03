@@ -13,7 +13,6 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,7 +26,11 @@ from .cloud_audit_request import build_cloud_workspace_audit_request
 from .config import GuardConfig
 from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact
-from .native_mcp_proxy_decision import NativeMcpProxyDecisionError, native_external_archive_bind
+from .native_mcp_proxy_decision import (
+    NativeMcpProxyDecisionError,
+    native_external_archive_bind,
+    native_external_archive_binding_required,
+)
 from .native_package_approval_hash import native_package_approval_hash
 from .native_package_audit_projection import (
     native_batch_url,
@@ -40,6 +43,8 @@ from .native_package_protect_projection import (
     NativePackageProtectProjection,
     native_package_protect_projection,
 )
+from .native_package_workspace_scope import NativePackageWorkspaceScopeError
+from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from .native_shim_admin import NativeShimAdminError
 from .native_supply_chain_posture import native_local_supply_chain_posture
 from .native_workspace_inventory import native_workspace_inventory
@@ -55,7 +60,6 @@ from .runtime.package_execution_policy import is_execution_permitted
 from .runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
-    redact_package_request_token,
 )
 from .runtime.package_protect_projection import (
     LOCAL_SUPPLY_CHAIN_HARNESS as _LOCAL_SUPPLY_CHAIN_HARNESS,
@@ -64,24 +68,10 @@ from .runtime.package_protect_projection import (
     resolve_local_supply_chain_harness as _resolve_local_supply_chain_harness,
 )
 from .runtime.restricted_archive_download import RestrictedArchiveDownload
-from .shims import package_shim_dashboard_status, package_shim_supported_managers
+from .shims import package_shim_protection, package_shim_supported_managers
 from .store import GuardStore
 from .store_guard_home_binding import binds_store_guard_home
 
-_MANIFEST_CANDIDATES = (
-    "package.json",
-    "requirements.txt",
-    "constraints.txt",
-    "pyproject.toml",
-    "Pipfile",
-    "Cargo.toml",
-    "go.mod",
-    "pom.xml",
-    "build.gradle",
-    "build.gradle.kts",
-    "composer.json",
-    "Gemfile",
-)
 _PACKAGE_MANAGER_BY_ECOSYSTEM = {
     "npm": "npm",
     "pypi": "pip",
@@ -113,8 +103,8 @@ _CLOUD_AUDIT_JOB_PAGE_SIZE = 1
 _CLOUD_AUDIT_JOB_POLL_INTERVAL_SECONDS = 0.5
 _CLOUD_AUDIT_JOB_POLL_TIMEOUT_SECONDS = 20
 _CLOUD_AUDIT_SYNC_PAGE_SIZE = 25
-_PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS = 300.0
-_PACKAGE_FIREWALL_REFRESH_STATE_FILE = "package-firewall-refresh.json"
+# The job fields the native summary reads; the rest of a cloud reply stays here.
+_AUDIT_JOB_SUMMARY_FIELDS = ("status", "totalPackages", "processedCount", "error")
 _PACKAGE_FIREWALL_REFRESH_LOCK = threading.Lock()
 
 
@@ -184,6 +174,7 @@ def evaluate_package_request_artifact(
     now: str | None = None,
     external_archive_network_authorized: bool = False,
     retain_external_archive_blob: bool = False,
+    record_evidence: bool = True,
 ):
     """Evaluate a package request in the resident, which owns every verdict.
 
@@ -200,6 +191,7 @@ def evaluate_package_request_artifact(
         now=now,
         external_archive_network_authorized=external_archive_network_authorized,
         retain_external_archive_blob=retain_external_archive_blob,
+        record_evidence=record_evidence,
     )
 
 
@@ -233,33 +225,16 @@ def _parse_package_intent_native(
     raise NativeProtectRequestError("native_package_intent_malformed")
 
 
-def _package_firewall_refresh_state_path(guard_home: Path) -> Path:
-    return guard_home / _PACKAGE_FIREWALL_REFRESH_STATE_FILE
-
-
-def _read_package_firewall_refresh_state(guard_home: Path) -> dict[str, object]:
-    path = _package_firewall_refresh_state_path(guard_home)
+def _claim_package_firewall_refresh(guard_home: Path, now: float) -> bool:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _write_package_firewall_refresh_state(guard_home: Path, last_attempt: float) -> None:
-    path = _package_firewall_refresh_state_path(guard_home)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        tmp_path.write_text(
-            json.dumps({"last_refresh_attempt_at": last_attempt}, sort_keys=True, separators=(",", ":")),
-            encoding="utf-8",
+        answer = native_runner_authority(
+            "package_firewall_refresh_claim",
+            {"now": now},
+            guard_home=guard_home,
         )
-        tmp_path.replace(path)
-    finally:
-        if tmp_path.exists():
-            with suppress(OSError):
-                tmp_path.unlink()
+    except NativeRunnerAuthorityError:
+        return False
+    return answer.get("refresh") is True
 
 
 def build_local_supply_chain_posture(
@@ -313,7 +288,7 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
     entitlement_module = _package_firewall_entitlement_module()
     runner = _runtime_runner_module()
 
-    entitlement = entitlement_module.resolve_package_firewall_entitlement(store)
+    entitlement = entitlement_module.package_firewall_entitlement_or_denied(store)
     if bool(entitlement.get("allowed")):
         return entitlement
     if store.get_cloud_sync_profile() is None:
@@ -327,14 +302,8 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
     now_iso = datetime.now(timezone.utc).isoformat()
     now = time.time()
     with _PACKAGE_FIREWALL_REFRESH_LOCK:
-        state = _read_package_firewall_refresh_state(store.guard_home)
-        last_refresh_at = state.get("last_refresh_attempt_at")
-        if (
-            isinstance(last_refresh_at, (int, float))
-            and (now - float(last_refresh_at)) < _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS
-        ):
+        if not _claim_package_firewall_refresh(store.guard_home, now):
             return entitlement
-        _write_package_firewall_refresh_state(store.guard_home, now)
     auth_context: dict[str, object] | None = None
     try:
         auth_context = _resolve_guard_sync_auth_context(store)
@@ -363,15 +332,7 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
             break
         except (runner.GuardSyncNotAvailableError, runner.GuardSyncNotConfiguredError, OSError, RuntimeError):
             continue
-    return entitlement_module.resolve_package_firewall_entitlement(store)
-
-
-def _workspace_has_project_markers(workspace_dir: Path) -> bool:
-    try:
-        resolved = workspace_dir.resolve()
-    except OSError:
-        return False
-    return any((resolved / marker).exists() for marker in _MANIFEST_CANDIDATES)
+    return entitlement_module.package_firewall_entitlement_or_denied(store)
 
 
 def managed_install_audit_workspace_dirs(store: Any) -> tuple[str, ...]:
@@ -417,29 +378,10 @@ def _cleanup_external_archive_downloads(evaluation: object) -> None:
         download.cleanup()
 
 
-def _package_evaluation_requires_external_archive_binding(evaluation: object) -> bool:
-    source_hashes = getattr(evaluation, "external_archive_source_hashes", ())
-    if isinstance(source_hashes, (list, tuple)) and any(
-        isinstance(item, str) and len(item) == 64 for item in source_hashes
-    ):
-        return True
-    reasons = getattr(evaluation, "reasons", ())
-    if isinstance(reasons, (list, tuple)) and any(
-        isinstance(reason, Mapping) and reason.get("code") == "external_tarball_source" for reason in reasons
-    ):
-        return True
-    packages = getattr(evaluation, "packages", ())
-    if not isinstance(packages, (list, tuple)):
-        return False
-    return any(
-        isinstance(package, Mapping)
-        and isinstance(package_reasons := package.get("reasons"), (list, tuple))
-        and any(
-            isinstance(reason, Mapping) and reason.get("code") == "external_tarball_source"
-            for reason in package_reasons
-        )
-        for package in packages
-    )
+def _package_evaluation_requires_external_archive_binding(evaluation: object, *, guard_home: Path) -> bool:
+    """Whether this evaluation only permits a request bound to its verified archives."""
+
+    return native_external_archive_binding_required(evaluation, guard_home=guard_home)
 
 
 def _bound_external_archive_launch_command(
@@ -451,7 +393,7 @@ def _bound_external_archive_launch_command(
     """The launch argv bound to the resident-verified archives, or ``None`` (deny)."""
 
     downloads = _external_archive_downloads(evaluation)
-    requires_binding = _package_evaluation_requires_external_archive_binding(evaluation)
+    requires_binding = _package_evaluation_requires_external_archive_binding(evaluation, guard_home=guard_home)
     if not downloads:
         return None if requires_binding else list(launch_command)
     try:
@@ -474,27 +416,26 @@ def _package_manager_launch_environment(
 ) -> dict[str, str]:
     """Exclude Guard's interception shim from the reviewed and executed package-manager path."""
 
-    launch_environment = dict(environment)
+    user_home = os.path.expanduser("~")
     try:
-        shim_dir = (guard_home / "package-shims" / "bin").expanduser().resolve()
-    except (OSError, RuntimeError, ValueError):
-        raise ValueError("Guard's package shim path could not be verified") from None
-    path_entries = environment.get("PATH", "").split(os.pathsep)
-    filtered_entries: list[str] = []
-    for entry in path_entries:
-        if not entry:
-            continue
-        try:
-            path_entry = Path(entry).expanduser()
-            if not path_entry.is_absolute():
-                path_entry = launch_cwd / path_entry
-            resolved_entry = path_entry.resolve()
-        except (OSError, RuntimeError, ValueError):
-            raise ValueError("package manager PATH could not be verified") from None
-        if resolved_entry != shim_dir:
-            filtered_entries.append(entry)
-    launch_environment["PATH"] = os.pathsep.join(filtered_entries)
-    return launch_environment
+        answer = native_runner_authority(
+            "package_manager_launch_path",
+            {
+                "guard_home": str(guard_home.expanduser().absolute()),
+                "launch_cwd": str(launch_cwd),
+                "user_home": user_home if os.path.isabs(user_home) else None,
+                "separator": os.pathsep,
+                "path": environment.get("PATH", ""),
+            },
+            guard_home=guard_home,
+        )
+    except NativeRunnerAuthorityError:
+        answer = {}
+    if answer.get("refused") == "shim_unverified":
+        raise ValueError("Guard's package shim path could not be verified")
+    if not isinstance(launch_path := answer.get("path"), str):
+        raise ValueError("package manager PATH could not be verified")
+    return {**environment, "PATH": launch_path}
 
 
 @binds_store_guard_home
@@ -509,6 +450,7 @@ def _build_package_protect_authority(
     additional_policy_context: dict[str, object] | None,
     external_archive_network_authorized: bool = False,
     invoking_harness: str | None = None,
+    redacted_command: str | None = None,
 ) -> _PackageProtectAuthority | None:
     try:
         launch_cwd = workspace_dir.expanduser().resolve(strict=True)
@@ -532,12 +474,23 @@ def _build_package_protect_authority(
     )
     if intent is None:
         return None
-    sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
+    if intent.routine_local_runner:
+        # A runner the project already pins locally fetches nothing: the native
+        # parser resolved the executable inside the installed package and read
+        # the lockfile entry that binds it to a published release. A package
+        # request reviews a fetch, and this command has none to review, so the
+        # cached install verdict the native parser already carries is the whole
+        # answer whichever route reached protect.
+        return None
+    if redacted_command is None:
+        redacted_command = redacted_command_text(command, guard_home=store.guard_home)
+    sanitized_intent = replace(intent, redacted_command=redacted_command)
     artifact = build_package_request_artifact(
         _LOCAL_SUPPLY_CHAIN_HARNESS,
         sanitized_intent,
         config_path="hol-guard.toml",
         source_scope="project",
+        guard_home=store.guard_home,
     )
     evaluation = evaluate_package_request_artifact(
         artifact=artifact,
@@ -693,6 +646,9 @@ def _final_package_protect_authority(
         additional_policy_context=additional_context,
         external_archive_network_authorized=saved_approval_claimed,
         invoking_harness=initial.invoking_harness,
+        # The same argv redacts to the same text; reusing it keeps a resident
+        # round-trip out of the window after a saved approval is claimed.
+        redacted_command=initial.intent.redacted_command,
     )
     stored_policy = None
     if (
@@ -712,6 +668,7 @@ def _final_package_protect_authority(
                 artifact_hash=current.artifact_hash,
                 workspace_dir=workspace_dir,
                 execution_context=current.execution_context,
+                guard_home=store.guard_home,
             ),
         )
     final_evaluation = native_finalize_package_protect(
@@ -912,33 +869,6 @@ def build_package_protect_payload(
     return (payload, int(execution.returncode))
 
 
-def apply_stored_package_policy_override(
-    evaluation: Any,
-    *,
-    store: Any,
-    artifact: GuardArtifact,
-    artifact_hash: str,
-    workspace_dir: Path,
-    now: str,
-    execution_context: PackageExecutionContext | None = None,
-    current_action: object | None = None,
-    claim_saved_approval: bool = True,
-) -> Any:
-    """Apply a saved package approval when the content hash still matches."""
-
-    return _resolve_stored_package_policy_override(
-        evaluation,
-        store=store,
-        artifact=artifact,
-        artifact_hash=artifact_hash,
-        workspace_dir=workspace_dir,
-        now=now,
-        execution_context=execution_context,
-        current_action=current_action,
-        claim_saved_approval=claim_saved_approval,
-    ).evaluation
-
-
 def _resolve_stored_package_policy_override(
     evaluation: Any,
     *,
@@ -950,19 +880,27 @@ def _resolve_stored_package_policy_override(
     execution_context: PackageExecutionContext | None = None,
     current_action: object | None = None,
     claim_saved_approval: bool = True,
+    policy_workspaces: tuple[str, ...] | None = None,
 ) -> _StoredPackagePolicyResolution:
-    """Hydrate saved-policy facts and let the resident decide the override."""
+    """Hydrate saved-policy facts and let the resident decide the override.
+
+    A caller that already holds the runtime workspace scope passes it as
+    ``policy_workspaces``; the scope comes from the resident, and deriving it a
+    second time here is a second round trip for an answer already in hand.
+    """
 
     resolved_context = execution_context or build_package_execution_context(
         workspace_dir=workspace_dir,
         artifact=artifact,
     )
-    policy_workspaces = _package_policy_workspace_candidates(
-        artifact=artifact,
-        artifact_hash=artifact_hash,
-        workspace_dir=workspace_dir,
-        execution_context=resolved_context,
-    )
+    if policy_workspaces is None:
+        policy_workspaces = _package_policy_workspace_candidates(
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            workspace_dir=workspace_dir,
+            execution_context=resolved_context,
+            guard_home=store.guard_home,
+        )
     resolved, claim_disposition, reused_decision = native_resolve_stored_package_policy(
         evaluation,
         store=store,
@@ -996,17 +934,35 @@ def _package_policy_workspace_candidates(
     artifact_hash: str,
     workspace_dir: Path,
     execution_context: PackageExecutionContext | None = None,
+    guard_home: Path | None = None,
 ) -> tuple[str, ...]:
+    """Return the workspace scopes a saved package approval may be matched under.
+
+    The resident owns the derivation.  When it cannot answer - the probe's own
+    guard home has no resident, for one - there is no scope to match against,
+    so no saved approval is reused and the request is decided as if none had
+    been saved.  That is the closed outcome; deriving a key here instead would
+    be the guess this module no longer makes.
+    """
+
     resolved_execution_context = execution_context or build_package_execution_context(
         workspace_dir=workspace_dir,
         artifact=artifact,
     )
-    runtime_workspace = package_request_runtime_workspace_scope(
-        artifact_id=artifact.artifact_id,
-        artifact_hash=artifact_hash,
-        artifact_type=artifact.artifact_type,
-        execution_context=resolved_execution_context,
-    )
+    try:
+        # The home is named rather than left to the bridge: without it the
+        # resident is reached through whichever home the process last bound,
+        # and a scope derived under another home is not the key this store
+        # saved.
+        runtime_workspace = package_request_runtime_workspace_scope(
+            artifact_id=artifact.artifact_id,
+            artifact_hash=artifact_hash,
+            artifact_type=artifact.artifact_type,
+            execution_context=resolved_execution_context,
+            guard_home=guard_home,
+        )
+    except NativePackageWorkspaceScopeError:
+        return ()
     return (runtime_workspace,) if runtime_workspace is not None else ()
 
 
@@ -1065,8 +1021,21 @@ def _evaluation_uses_saved_package_approval(evaluation: Any) -> bool:
     return any(reason.get("code") == "saved_package_approval" for reason in evaluation.reasons)
 
 
-def redacted_command_tokens(command: Sequence[str]) -> tuple[str, ...]:
-    return tuple(_redact_command_token(str(token)) for token in command)
+def redacted_command_text(command: Sequence[str], *, guard_home: Path) -> str:
+    """The command text a receipt stores, as the resident redacts and joins it."""
+
+    from .native_protect_request import NativeProtectRequestError
+
+    try:
+        answer = native_runner_authority(
+            "package_command_redaction", {"command": [str(token) for token in command]}, guard_home=guard_home
+        )
+    except NativeRunnerAuthorityError as error:
+        raise NativeProtectRequestError("native_package_command_redaction_unavailable") from error
+    text = answer.get("text")
+    if not isinstance(text, str):
+        raise NativeProtectRequestError("native_package_command_redaction_malformed")
+    return text
 
 
 def _build_command_execution_payload(
@@ -1104,6 +1073,33 @@ def _coerce_command_error_output(error: subprocess.TimeoutExpired | OSError) -> 
     return "\n".join(part for part in parts if part)
 
 
+def _unavailable_package_manager_protection(store: Any, code: str) -> dict[str, object]:
+    """The shape the posture renders when the resident cannot answer.
+
+    No manager is reported as protected or unprotected here; the block only
+    says the projection is unavailable and why.
+    """
+
+    return {
+        "path_status": "unavailable",
+        "error": code,
+        "path_contains_shim_dir": False,
+        "restart_shell_required": False,
+        "process_path_status": "missing",
+        "process_restart_required": False,
+        "shell_profile_configured": False,
+        "shell_profile_path": None,
+        "shim_dir": str(store.guard_home / "package-shims" / "bin"),
+        "supported_managers": list(package_shim_supported_managers(store.guard_home)),
+        "detected_managers": [],
+        "installed_managers": [],
+        "active_managers": [],
+        "missing_shims": [],
+        "protected_managers": [],
+        "unprotected_managers": [],
+    }
+
+
 def _build_package_manager_protection(store: Any) -> dict[str, object]:
     context = HarnessContext(
         home_dir=Path.home().resolve(),
@@ -1111,44 +1107,11 @@ def _build_package_manager_protection(store: Any) -> dict[str, object]:
         guard_home=store.guard_home,
     )
     try:
-        status = package_shim_dashboard_status(context)
+        return package_shim_protection(context)
     except NativeShimAdminError as error:
         # Posture still renders when the resident cannot answer; the shim
         # fields read as unavailable instead of failing the whole projection.
-        status = {"path_status": "unavailable", "error": error.code}
-    shim_dir = Path(str(status.get("shim_dir") or store.guard_home / "package-shims" / "bin"))
-    installed_managers = sorted(set(_string_items(status.get("installed_managers"))))
-    active_managers = sorted(set(_string_items(status.get("active_managers"))))
-    missing_shims = sorted(set(_string_items(status.get("missing_managers"))))
-    supported_managers = list(package_shim_supported_managers(store.guard_home))
-    detected_managers = sorted(set(_string_items(status.get("detected_managers"))))
-    protected_managers = sorted(set(_string_items(status.get("protected_managers"))))
-    protected_set = set(protected_managers)
-    path_status = str(status.get("path_status") or "missing_from_path")
-    coverage_managers = set(detected_managers)
-    staged_managers = (
-        set(installed_managers).intersection(coverage_managers) if path_status == "restart_required" else set()
-    )
-    unprotected_managers = [
-        manager for manager in detected_managers if manager not in protected_set and manager not in staged_managers
-    ]
-    return {
-        "path_status": path_status,
-        "path_contains_shim_dir": bool(status.get("path_contains_shim_dir")),
-        "restart_shell_required": bool(status.get("restart_shell_required")),
-        "process_path_status": str(status.get("process_path_status") or "missing"),
-        "process_restart_required": bool(status.get("process_restart_required")),
-        "shell_profile_configured": bool(status.get("shell_profile_configured")),
-        "shell_profile_path": status.get("shell_profile_path"),
-        "shim_dir": str(shim_dir),
-        "supported_managers": supported_managers,
-        "detected_managers": detected_managers,
-        "installed_managers": installed_managers,
-        "active_managers": active_managers,
-        "missing_shims": missing_shims,
-        "protected_managers": protected_managers,
-        "unprotected_managers": unprotected_managers,
-    }
+        return _unavailable_package_manager_protection(store, error.code)
 
 
 def _execute_cloud_workspace_audit_request(
@@ -1259,29 +1222,15 @@ def sync_managed_workspace_audits(
             "or use `hol-guard login` as a compatibility alias for the same browser flow."
         )
     synced_at = datetime.now(timezone.utc).isoformat()
-    workspaces_payload: list[dict[str, object]] = []
-    completed_jobs = 0
-    failed_jobs = 0
-    incomplete_jobs = 0
-    queued_jobs = 0
-    skipped_workspaces = 0
+    outcomes: list[dict[str, object]] = []
     for candidate_path in native_managed_workspaces(store, candidates=True, workspace_dir=workspace_dir):
         candidate = Path(candidate_path)
         workspace_label = candidate.name or str(candidate)
         try:
             workspace_inventory = native_workspace_inventory(store, candidate)
-            manifest_paths, lockfile_paths = workspace_inventory.manifest_paths, workspace_inventory.lockfile_paths
             inventory = workspace_inventory.inventory
             if not inventory:
-                skipped_workspaces += 1
-                workspaces_payload.append(
-                    {
-                        "workspace": workspace_label,
-                        "status": "skipped",
-                        "message": "No supported package inventory was detected for workspace audit sync.",
-                        "package_count": 0,
-                    }
-                )
+                outcomes.append({"outcome": "skipped", "workspace": workspace_label})
                 continue
             request_payload = native_cloud_audit_payload(
                 store,
@@ -1304,43 +1253,17 @@ def sync_managed_workspace_audits(
                 job_id=job_id,
                 workspace_id=workspace_id,
             )
-            final_status = (
-                str(final_response.get("status") or enqueue_response.get("status") or "queued").strip().lower()
-            )
-            cloud_visible_count = _int_value(final_response.get("totalPackages"))
-            cloud_processed_count = _int_value(final_response.get("processedCount"))
-            incomplete_cloud_projection = (
-                final_status == "completed" and cloud_visible_count is not None and cloud_visible_count < len(inventory)
-            )
-            if incomplete_cloud_projection:
-                incomplete_jobs += 1
-                workspace_status = "partial"
-            else:
-                workspace_status = final_status
-                if final_status == "completed":
-                    completed_jobs += 1
-                elif final_status == "failed":
-                    failed_jobs += 1
-                else:
-                    queued_jobs += 1
-            message = final_response.get("error")
-            if incomplete_cloud_projection:
-                message = (
-                    "Guard Cloud accepted fewer package rows than hol-guard discovered "
-                    f"({cloud_visible_count} of {len(inventory)} visible)."
-                )
-            workspaces_payload.append(
+            outcomes.append(
                 {
+                    "outcome": "job",
                     "workspace": workspace_label,
                     "workspace_fingerprint": request_payload.get("workspaceFingerprint"),
                     "job_id": job_id,
-                    "status": workspace_status,
                     "package_count": len(inventory),
-                    "cloud_processed_count": cloud_processed_count,
-                    "cloud_visible_count": cloud_visible_count,
-                    "manifest_paths": list(manifest_paths),
-                    "lockfile_paths": list(lockfile_paths),
-                    "message": message,
+                    "enqueue_status": enqueue_response.get("status"),
+                    "final": {key: final_response[key] for key in _AUDIT_JOB_SUMMARY_FIELDS if key in final_response},
+                    "manifest_paths": list(workspace_inventory.manifest_paths),
+                    "lockfile_paths": list(workspace_inventory.lockfile_paths),
                 }
             )
         except (
@@ -1350,34 +1273,17 @@ def sync_managed_workspace_audits(
         ):
             raise
         except (OSError, RuntimeError, ValueError) as error:
-            failed_jobs += 1
-            workspaces_payload.append(
-                {
-                    "workspace": workspace_label,
-                    "status": "failed",
-                    "message": str(error),
-                    "package_count": 0,
-                }
-            )
-    if failed_jobs > 0 and completed_jobs == 0 and queued_jobs == 0 and incomplete_jobs == 0:
-        status = "failed"
-    elif failed_jobs > 0 or incomplete_jobs > 0:
-        status = "partial"
-    elif completed_jobs > 0 or queued_jobs > 0:
-        status = "synced"
-    else:
-        status = "idle"
-    summary: dict[str, object] = {
-        "synced_at": synced_at,
-        "status": status,
-        "workspace_count": len(workspaces_payload),
-        "completed_jobs": completed_jobs,
-        "queued_jobs": queued_jobs,
-        "failed_jobs": failed_jobs,
-        "incomplete_jobs": incomplete_jobs,
-        "skipped_workspaces": skipped_workspaces,
-        "workspaces": workspaces_payload,
-    }
+            outcomes.append({"outcome": "failed", "workspace": workspace_label, "message": str(error)})
+    try:
+        summary = native_runner_authority(
+            "workspace_audit_sync",
+            {"synced_at": synced_at, "workspaces": outcomes},
+            guard_home=store.guard_home,
+        )
+    except NativeRunnerAuthorityError as error:
+        # Sync callers degrade on RuntimeError; the jobs already ran, only the
+        # summary is missing.
+        raise RuntimeError("Guard could not summarize the workspace audit sync.") from error
     store.set_sync_payload("workspace_audits_sync_summary", summary, synced_at)
     return summary
 
@@ -1389,11 +1295,20 @@ def sync_supply_chain_cloud_state(
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    bundle_summary = _call_sync_with_optional_auth_context(
-        sync_supply_chain_bundle,
-        store=store,
-        auth_context=resolved_auth_context,
-    )
+    try:
+        bundle_summary = _call_sync_with_optional_auth_context(
+            sync_supply_chain_bundle,
+            store=store,
+            auth_context=resolved_auth_context,
+        )
+    except Exception:
+        # The network bundle has its own endpoint; refresh it before the
+        # supply-chain failure propagates.
+        _runtime_runner_module().sync_network_protection_bundle_best_effort(
+            store,
+            auth_context=resolved_auth_context,
+        )
+        raise
     payload = dict(bundle_summary) if isinstance(bundle_summary, dict) else {}
     workspace_audits = sync_managed_workspace_audits(
         store,
@@ -1402,6 +1317,10 @@ def sync_supply_chain_cloud_state(
     )
     payload["workspace_audits"] = workspace_audits
     payload.setdefault("synced_at", workspace_audits.get("synced_at"))
+    payload["network_protection"] = _runtime_runner_module().sync_network_protection_bundle_best_effort(
+        store,
+        auth_context=resolved_auth_context,
+    )
     return payload
 
 
@@ -1415,25 +1334,6 @@ def _package_manager_for_scan(manifest_paths: Sequence[str]) -> str:
 
 def _protect_action_for_policy_action(policy_action: object) -> GuardAction:
     return normalize_guard_action(policy_action, unknown_action="block")
-
-
-def _redact_command_token(token: str) -> str:
-    token = redact_package_request_token(token)
-    if "=" in token:
-        key, _, _ = token.partition("=")
-        if any(fragment in key.lower() for fragment in ("token", "secret", "api_key", "api-key", "password")):
-            return f"{key}=*****"
-    if ":" in token:
-        key, _, _ = token.partition(":")
-        if any(fragment in key.lower() for fragment in ("token", "secret", "api_key", "api-key", "password")):
-            return f"{key}: *****"
-    return redact_text(token).text
-
-
-def _string_items(value: object) -> tuple[str, ...]:
-    if not isinstance(value, (list, tuple)):
-        return ()
-    return tuple(item for item in value if isinstance(item, str))
 
 
 def _int_value(value: object) -> int | None:

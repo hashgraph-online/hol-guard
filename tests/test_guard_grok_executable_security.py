@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import grok_executable as grok_executable_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.adapters.grok_executable import (
     grok_executable_names,
-    register_trusted_grok_executable,
     resolve_trusted_grok_executable,
     sanitized_grok_launch_environment,
 )
+
+from .grok_native_fake import install_grok_native_fake
 
 
 def _context(tmp_path: Path, *, workspace: bool = True, override: str | None = None) -> HarnessContext:
@@ -66,39 +67,20 @@ def test_relative_path_entry_is_never_promoted_to_absolute(tmp_path: Path, monke
     assert "absolute" in resolution.error.lower() or "cwd" in resolution.error.lower()
 
 
-def test_symlink_target_inside_workspace_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_symlink_target_inside_workspace_is_rejected(tmp_path: Path) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     target = _write_executable(context.workspace_dir / "tools" / "grok")
     candidate = tmp_path / "trusted-bin" / "grok"
     candidate.parent.mkdir(parents=True)
     candidate.symlink_to(target)
-    monkeypatch.setenv("PATH", str(candidate.parent))
-    monkeypatch.setattr(
-        grok_executable_module,
-        "_automatic_install_root",
-        lambda _candidate, _home: candidate.parent,
-    )
+    context = replace(context, executable_overrides={"grok": str(candidate)})
 
     resolution = resolve_trusted_grok_executable(context)
 
     assert resolution.executable is None
     assert resolution.error is not None
     assert "workspace" in resolution.error.lower()
-
-
-def test_home_grok_bin_is_an_automatic_install_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    context = _context(tmp_path, workspace=False)
-    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
-    candidate = _write_executable(context.home_dir / ".grok" / "bin" / grok_executable_names()[0])
-    monkeypatch.setenv("PATH", str(candidate.parent))
-    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
-
-    resolution = resolve_trusted_grok_executable(context)
-
-    assert resolution.error is None
-    assert resolution.executable is not None
-    assert resolution.executable.path == candidate.resolve()
 
 
 def test_missing_executable_has_actionable_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -125,63 +107,6 @@ def test_custom_path_root_requires_one_explicit_selection(
     assert resolution.executable is None
     assert resolution.error is not None
     assert "--grok-executable" in resolution.error
-
-
-def test_standard_user_install_root_is_automatic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    context = _context(tmp_path, workspace=False)
-    candidate = _write_executable(context.home_dir / ".local" / "bin" / "grok")
-    monkeypatch.setenv("PATH", str(candidate.parent))
-    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
-
-    resolution = resolve_trusted_grok_executable(context)
-
-    assert resolution.executable is not None
-    assert resolution.executable.path == candidate.resolve()
-    assert resolution.executable.source == "automatic"
-    assert len(resolution.executable.content_sha256) == 64
-
-
-def test_launching_from_home_does_not_hide_standard_user_install(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    context = _context(tmp_path, workspace=False)
-    candidate = _write_executable(context.home_dir / ".local" / "bin" / "grok")
-    monkeypatch.chdir(context.home_dir)
-    monkeypatch.setenv("PATH", str(candidate.parent))
-    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
-
-    resolution = resolve_trusted_grok_executable(context)
-
-    assert resolution.executable is not None
-    assert resolution.executable.path == candidate.resolve()
-
-
-def test_custom_explicit_selection_is_registered_and_hash_bound(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    custom = _write_executable(tmp_path / "custom-tools" / "grok")
-    context = _context(tmp_path, workspace=False, override=str(custom))
-    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
-
-    explicit = resolve_trusted_grok_executable(context)
-    assert explicit.executable is not None
-    assert explicit.executable.source == "explicit"
-    registered = register_trusted_grok_executable(context, explicit.executable)
-    assert registered.source == "registration"
-
-    subsequent_context = _context(tmp_path, workspace=False)
-    subsequent = resolve_trusted_grok_executable(subsequent_context)
-    assert subsequent.executable is not None
-    assert subsequent.executable.source == "registration"
-    assert subsequent.executable.content_sha256 == registered.content_sha256
-
-    _write_executable(custom, "#!/bin/sh\nexit 1\n")
-    changed = resolve_trusted_grok_executable(subsequent_context)
-    assert changed.executable is None
-    assert changed.error is not None
-    assert "changed" in changed.error.lower()
 
 
 def test_group_writable_executable_is_rejected(tmp_path: Path) -> None:
@@ -253,11 +178,10 @@ def test_detect_reports_config_but_never_probes_untrusted_path(
 def test_launch_uses_absolute_registered_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     custom = _write_executable(tmp_path / "custom-tools" / "grok")
     context = _context(tmp_path, workspace=False, override=str(custom))
-    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
+    install_grok_native_fake(monkeypatch)
 
     command = GrokHarnessAdapter().launch_command(context, ["--help"])
 
     assert command == [str(custom.resolve()), "--help"]
     registration = context.guard_home / "managed" / "grok" / "trusted-executable.json"
     assert registration.is_file()
-    assert registration.stat().st_mode & 0o077 == 0

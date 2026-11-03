@@ -50,10 +50,10 @@ def test_stale_page_is_detected(tmp_path: Path, monkeypatch, capsys) -> None:
 
 
 def test_every_starter_is_in_the_cross_reference() -> None:
-    from codex_plugin_scanner.guard.policy_starters import starter_ids
+    from codex_plugin_scanner.guard.policy_starters import POLICY_STARTERS
 
     page = (ROOT / "docs/policy/STARTERS.md").read_text(encoding="utf-8")
-    for identifier in starter_ids():
+    for identifier in (starter.id for starter in POLICY_STARTERS):
         assert f"`{identifier}`" in page
 
 

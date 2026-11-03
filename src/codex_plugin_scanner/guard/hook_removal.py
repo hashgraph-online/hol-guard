@@ -16,18 +16,20 @@ authorization; callers must have already passed step-up.
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .adapters import list_adapters
 from .adapters.base import HarnessContext
-from .hook_removal_sweep import harness_hook_files, sweep_harness
+from .hook_removal_sweep import (
+    BackupError,
+    SweepUnavailableError,
+    backup_harness_files,
+    finalize_backups,
+    harness_hook_files,
+    sweep_harness,
+)
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -66,7 +68,14 @@ def plan_hook_removal(context: HarnessContext, store: GuardStore) -> list[Harnes
         plan = HarnessPlan(harness=harness)
         if harness in active:
             plan.reasons.append("managed_install")
-        for result in sweep_harness(harness, context, dry_run=True).files:
+        try:
+            found = sweep_harness(harness, context, dry_run=True).files
+        except SweepUnavailableError:
+            # Without the scan nothing proves the app is clean, so it stays
+            # in the plan and removal reports why it could not finish.
+            plan.reasons.append("hook_scan_unavailable")
+            found = []
+        for result in found:
             if result.removed:
                 plan.files_with_hooks.append(str(result.path))
                 plan.hook_count += result.removed
@@ -79,92 +88,6 @@ def plan_hook_removal(context: HarnessContext, store: GuardStore) -> list[Harnes
 
 def _error_text(error: BaseException) -> str:
     return f"{type(error).__name__}: {str(error)[:_MAX_ERROR_CHARS]}".strip()
-
-
-class BackupError(OSError):
-    """A config file could not be backed up, so its harness must not be edited."""
-
-
-def _private_backup_dir(backup_dir: Path) -> None:
-    backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-    # mkdir's mode is masked by umask; force owner-only access explicitly.
-    # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
-    os.chmod(backup_dir, 0o700)
-
-
-def _backup_harness_files(
-    *,
-    backup_dir: Path,
-    harness: str,
-    files: tuple[Path, ...],
-    backed_up: dict[Path, dict[str, str]],
-) -> None:
-    """Copy each existing config file of ``harness`` before anything edits it.
-
-    Files already copied for an earlier harness keep that first (pre-edit)
-    copy. Raises ``BackupError`` when any file cannot be copied; files written
-    for this harness by the failed attempt are removed again.
-    """
-
-    written: list[Path] = []
-    added: list[Path] = []
-    try:
-        for path in files:
-            if path in backed_up or not path.exists():
-                continue
-            original = path.read_bytes()
-            _private_backup_dir(backup_dir)
-            digest = hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:8]
-            target = backup_dir / f"{harness}-{digest}-{path.name}"
-            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            written.append(target)
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(original)
-            added.append(path)
-            backed_up[path] = {
-                "harness": harness,
-                "original_path": str(path),
-                "backup_path": str(target),
-                "sha256": hashlib.sha256(original).hexdigest(),
-            }
-    except OSError as error:
-        for target in written:
-            with suppress(OSError):
-                target.unlink()
-        for path in added:
-            backed_up.pop(path, None)
-        raise BackupError(_error_text(error)) from error
-
-
-def _finalize_backups(
-    *,
-    backup_dir: Path,
-    backed_up: dict[Path, dict[str, str]],
-    stamp: str,
-) -> tuple[Path | None, list[dict[str, str]]]:
-    """Keep copies of files that actually changed; drop copies of untouched files."""
-
-    entries: list[dict[str, str]] = []
-    for path, entry in backed_up.items():
-        try:
-            current = hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
-        except OSError:
-            current = None
-        if current == entry["sha256"]:
-            with suppress(OSError):
-                Path(entry["backup_path"]).unlink()
-            continue
-        entries.append({key: entry[key] for key in ("harness", "original_path", "backup_path")})
-    if not entries:
-        with suppress(OSError):
-            backup_dir.rmdir()
-        return None, entries
-    manifest = backup_dir / "manifest.json"
-    with suppress(OSError):
-        descriptor = os.open(manifest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            json.dump({"created_at": stamp, "files": entries}, handle, indent=2)
-    return backup_dir, entries
 
 
 def remove_all_guard_hooks(
@@ -192,40 +115,48 @@ def remove_all_guard_hooks(
     from .cli.install_commands import apply_managed_install
 
     backup_dir = context.guard_home / "backups" / f"hook-removal-{stamp}"
-    backed_up: dict[Path, dict[str, str]] = {}
+    backed_up: dict[str, dict[str, str]] = {}
     workspace = str(context.workspace_dir) if context.workspace_dir is not None else None
     results: list[dict[str, object]] = []
     for plan in plans:
         entry: dict[str, object] = {"harness": plan.harness, "reasons": list(plan.reasons)}
         try:
-            _backup_harness_files(
-                backup_dir=backup_dir,
-                harness=plan.harness,
-                files=harness_hook_files(plan.harness, context),
-                backed_up=backed_up,
-            )
-        except BackupError as error:
+            files = harness_hook_files(plan.harness, context)
+            copies = backup_harness_files(backup_dir, plan.harness, files, skip=backed_up.keys())
+        except (BackupError, SweepUnavailableError) as error:
             # Never edit a config file we could not restore.
             entry["adapter_uninstall"] = "skipped"
             entry["backup_error"] = str(error)
             results.append(entry)
             continue
+        backed_up.update((copy["original_path"], copy) for copy in copies)
         try:
             apply_managed_install("uninstall", plan.harness, False, context, store, workspace, moment.isoformat())
             entry["adapter_uninstall"] = "ok"
         except Exception as error:  # one harness failing must not strand the others
             entry["adapter_uninstall"] = "error"
             entry["adapter_error"] = _error_text(error)
-        swept = sweep_harness(plan.harness, context, dry_run=False)
-        entry["swept_hook_count"] = swept.removed
-        entry["sweep_errors"] = [f"{item.path.name}:{item.error}" for item in swept.files if item.error]
+        try:
+            swept = sweep_harness(plan.harness, context, dry_run=False)
+        except SweepUnavailableError:
+            entry["swept_hook_count"] = 0
+            entry["sweep_errors"] = ["runtime_unavailable"]
+        else:
+            entry["swept_hook_count"] = swept.removed
+            entry["sweep_errors"] = [f"{item.path.name}:{item.error}" for item in swept.files if item.error]
         results.append(entry)
 
-    final_backup_dir, backups = _finalize_backups(backup_dir=backup_dir, backed_up=backed_up, stamp=stamp)
+    final_backup_dir, backups = finalize_backups(backup_dir, list(backed_up.values()), stamp=stamp)
     remaining: list[dict[str, object]] = []
     remaining_count = 0
     for plan in plans:
-        for item in sweep_harness(plan.harness, context, dry_run=True).files:
+        try:
+            rescanned = sweep_harness(plan.harness, context, dry_run=True).files
+        except SweepUnavailableError:
+            remaining.append({"harness": plan.harness, "path": "", "hook_count": plan.hook_count})
+            remaining_count += plan.hook_count
+            continue
+        for item in rescanned:
             if item.removed:
                 remaining.append({"harness": plan.harness, "path": str(item.path), "hook_count": item.removed})
                 remaining_count += item.removed

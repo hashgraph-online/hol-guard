@@ -377,6 +377,9 @@ function isPackageDependencyMutationRequest(request: GuardApprovalRequest): bool
 }
 
 export function plainEnglishRequestTitle(request: GuardApprovalRequest): string {
+  if (request.artifact_type === "native_bash_request") {
+    return "Run this script?";
+  }
   const category = detectCategory({
     ...request,
     timestamp: request.created_at,

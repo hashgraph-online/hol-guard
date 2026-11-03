@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.runtime.package_intent_common import build_packa
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_workspace import bind_workspace
+from tests.package_review_settings import review_package_signals
 
 pytestmark = pytest.mark.usefixtures("package_intent_native")
 
@@ -236,6 +237,7 @@ def test_evaluate_package_request_artifact_applies_js_source_heuristics(
     workspace_dir.mkdir()
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = _artifact_from_command(command, workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
@@ -269,6 +271,7 @@ def test_every_npm_git_source_form_requires_local_review_before_registry_or_clou
     workspace_dir.mkdir()
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     def fail_cloud_lookup() -> str:
         raise AssertionError("Git source must not reach registry/cloud evaluation")
@@ -337,6 +340,7 @@ def test_evaluate_package_request_artifact_uses_source_specific_risk_summary_for
     workspace_dir.mkdir()
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = _artifact_from_command(
         "npm install guard-query@https://example.com/guard.tgz?token=demo", workspace=workspace_dir
@@ -524,6 +528,86 @@ def test_evaluate_package_request_artifact_matches_transitive_js_lockfile_names_
     assert any(package["name"] == "left_pad" for package in result.packages)
 
 
+def test_an_older_yarn_lock_copy_of_a_direct_dependency_is_audited(tmp_path: Path) -> None:
+    # Another package pins lodash 3, so yarn.lock resolves it twice. Requesting
+    # lodash 4 does not make the installed lodash 3 copy a direct target.
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"lodash":"^4.17.21"}}\n')
+    _write_text(
+        workspace_dir / "yarn.lock",
+        """
+# yarn lockfile v1
+
+lodash@^3.10.0:
+  version "3.10.1"
+
+lodash@^4.17.21:
+  version "4.17.21"
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[
+                _package(name="lodash", version="3.10.1", default_action="block", recommended_fix_version="4.17.21")
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("yarn add lodash@4.17.21", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    blocked = [package for package in result.packages if package["decision"] == "block"]
+    assert [(package["name"], package["resolvedVersion"]) for package in blocked] == [("lodash", "3.10.1")]
+
+
+def test_an_older_yarn_lock_copy_listed_after_the_direct_one_is_audited(tmp_path: Path) -> None:
+    # The direct selector comes first in yarn.lock, so the lockfile's order
+    # does not say which lodash copy the request resolves to.
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"lodash":"^4.17.21"}}\n')
+    _write_text(
+        workspace_dir / "yarn.lock",
+        """
+# yarn lockfile v1
+
+lodash@^4.17.21:
+  version "4.17.21"
+
+lodash@~3.10.0:
+  version "3.10.1"
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[
+                _package(name="lodash", version="3.10.1", default_action="block", recommended_fix_version="4.17.21")
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("yarn add lodash@^4.17.21", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    blocked = [package for package in result.packages if package["decision"] == "block"]
+    assert [(package["name"], package["resolvedVersion"]) for package in blocked] == [("lodash", "3.10.1")]
+
+
 def test_evaluate_package_request_artifact_blocks_local_package_with_install_scripts(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -649,6 +733,7 @@ def test_evaluate_package_request_artifact_records_bun_lockb_binary_fallback(tmp
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     (workspace_dir / "bun.lockb").write_bytes(b"bunlock")
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = _artifact_from_command("bun add left-pad@1.3.0", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)

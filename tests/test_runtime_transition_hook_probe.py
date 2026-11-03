@@ -5,9 +5,7 @@ import uuid
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.codex_hook_response import codex_hook_response
 from codex_plugin_scanner.guard.runtime_transition_hook_probe import (
-    OBSERVATION_FIELD,
     PROBE_FIELD,
     PROBE_SCHEMA,
     transition_hook_observation,
@@ -65,13 +63,6 @@ def test_bridge_probe_sideband_requires_fresh_redacted_enforcing_receipt(fault):
     if fault == "secret":
         receipt["command"] = "private command must not be emitted"
     observation = transition_hook_observation(payload, receipt)
-    response = {"policy_action": "allow", "hookSpecificOutput": {"permissionDecision": "allow"}}
-    ordinary = codex_hook_response(response, event_name="PreToolUse")
-    if observation is not None:
-        response[OBSERVATION_FIELD] = observation
-    # The sideband is written by the native bridge; the field it adds must stay
-    # out of the hook response either way.
-    assert codex_hook_response(response, event_name="PreToolUse") == ordinary
     if fault is None:
         assert observation is not None and "private command must not be emitted" not in json.dumps(observation)
     else:

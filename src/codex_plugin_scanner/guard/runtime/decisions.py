@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.runtime.signals import (
 from ..native_decisions import decision_authority
 
 GuardDecisionAction = Literal["allow", "warn", "ask", "block"]
-AUTHORITATIVE_DECISION_SCHEMA_VERSION = 1
 AUTHORITATIVE_DECISION_INCONSISTENT = "authoritative_decision_inconsistent"
 
 
@@ -140,14 +139,6 @@ def _authoritative(payload: Mapping[str, Any]) -> AuthoritativeGuardDecision:
     return AuthoritativeGuardDecision(**values)
 
 
-def project_native_authoritative_decision(payload: dict[str, Any]) -> AuthoritativeGuardDecision:
-    """Project a decision already bound by another native operation, without RPC."""
-    from ..native_decisions import _shape
-
-    _shape(payload, "authoritative")
-    return _authoritative(payload)
-
-
 def build_authoritative_decision(
     action: GuardAction,
     *,
@@ -167,22 +158,6 @@ def build_authoritative_decision(
                 "signals": [signal.to_dict() for signal in signals],
                 "authority_finalized": authority_finalized,
                 "source": source,
-            },
-        )
-    )
-
-
-def authoritative_decision_from_artifact(
-    payload: Mapping[str, object],
-    *,
-    require_authoritative: bool = False,
-) -> AuthoritativeGuardDecision:
-    return _authoritative(
-        decision_authority(
-            "decision_artifact_decode",
-            {
-                "payload": dict(payload),
-                "require_authoritative": require_authoritative,
             },
         )
     )

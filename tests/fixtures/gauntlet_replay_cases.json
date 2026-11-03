@@ -2,10 +2,7 @@
   "_comment": "Gauntlet replay lane cases. expect: quiet = allow with no approval row and no rendered text; always = review row that carries an exact-action Always allow offer; block = must not allow. Benign cases of tests/fixtures/benign_false_positive_gate.json are replayed too, under the same strict judge. known_gaps lists case ids expected to fail on the current product.",
   "version": 1,
   "known_gaps": {
-    "pytest-module-quiet@cursor": "native_command_review_required",
-    "python-run-test-script@cursor": "native_command_review_required",
-    "session-git-c-wt-push-feature": "native_command_review_required",
-    "vitest-local-bin@cursor": "native_command_review_required"
+    "session-git-c-wt-push-feature": "native_command_review_required"
   },
   "cases": [
     {
@@ -331,7 +328,8 @@
         "claude-code",
         "omp",
         "pi",
-        "cursor"
+        "cursor",
+        "muse"
       ],
       "tool": "shell",
       "tool_input": {
@@ -348,7 +346,8 @@
         "claude-code",
         "omp",
         "pi",
-        "cursor"
+        "cursor",
+        "muse"
       ],
       "tool": "shell",
       "tool_input": {
@@ -365,7 +364,8 @@
         "claude-code",
         "omp",
         "pi",
-        "cursor"
+        "cursor",
+        "muse"
       ],
       "tool": "shell",
       "tool_input": {
@@ -382,7 +382,8 @@
         "claude-code",
         "omp",
         "pi",
-        "cursor"
+        "cursor",
+        "muse"
       ],
       "tool": "shell",
       "tool_input": {
@@ -399,7 +400,8 @@
         "claude-code",
         "omp",
         "pi",
-        "cursor"
+        "cursor",
+        "muse"
       ],
       "tool": "shell",
       "tool_input": {
@@ -416,7 +418,8 @@
         "claude-code",
         "omp",
         "pi",
-        "cursor"
+        "cursor",
+        "muse"
       ],
       "tool": "shell",
       "tool_input": {

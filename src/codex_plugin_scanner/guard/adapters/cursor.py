@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import json
-import sys
 from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
 from typing import cast
 
 from ..aibom_detection import extend_detection_with_workspace_aibom, native_adapter_detection
-from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 from ..shims import (
@@ -20,6 +18,7 @@ from ..shims import (
     prepare_guard_shim_shell_profile,
     remove_guard_shim,
 )
+from ..stable_guard_cli import guard_cli_launcher
 from .base import (
     HarnessAdapter,
     HarnessContext,
@@ -42,11 +41,9 @@ from .cursor_hooks import install_cursor_hooks, prepare_cursor_hooks, uninstall_
 from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (
     ManagedMcpServer,
-    is_guard_proxy_command,
     managed_stdio_servers,
     observable_stdio_servers_with_proxy,
-    proxy_cli_args,
-    proxy_process_env,
+    proxy_launcher_entry,
     skipped_stdio_server_names,
 )
 from .state_files import load_backup_payload
@@ -66,6 +63,9 @@ class CursorHarnessAdapter(HarnessAdapter):
     fallback_hint = "Resolve package-level trust in Guard and let Cursor keep its built-in tool approval flow."
     approval_prompt_channel = "native"
     approval_auto_open_browser = False
+    # The editor runs Guard's hooks on its own, so a missing `cursor-agent` says
+    # nothing about whether Cursor is installed.
+    command_absence_proves_uninstalled = False
 
     @staticmethod
     def _scope_for(context: HarnessContext, path) -> str:
@@ -206,64 +206,20 @@ class CursorHarnessAdapter(HarnessAdapter):
             raise RuntimeError(f"Guard refused to overwrite non-object Cursor editor config at {target}")
         detection = self.detect(context, config_contents=contents)
         managed_servers = managed_stdio_servers(detection)
-        previous = _json_payload(state_path)
-        previous_origins = previous.get("managed_origins")
-        origins = dict(cast(dict[str, list[str]], previous_origins)) if isinstance(previous_origins, dict) else {}
-        for server in observable_stdio_servers_with_proxy(detection):
-            if server.source_scope == "project":
-                origins[server.name] = [server.source_scope, server.config_path]
-        for server in managed_servers:
-            if server.source_scope == "project":
-                origins[server.name] = [server.source_scope, server.config_path]
-            else:
-                origins.pop(server.name, None)
-        servers = payload.get("mcpServers")
-        normalized = dict(servers) if isinstance(servers, dict) else {}
-        for name, config in tuple(normalized.items()):
-            if not isinstance(name, str) or not isinstance(config, dict):
-                continue
-            command = config.get("command")
-            args = tuple(str(value) for value in config.get("args", []) if isinstance(value, str))
-            if is_guard_proxy_command(command if isinstance(command, str) else None, args):
-                normalized[name] = self._refresh_guard_proxy_entry(config)
-        for server in managed_servers:
-            normalized[server.name] = self._proxy_server_entry(context, server)
-        payload["mcpServers"] = normalized
+        origins, refresh, notes = self._editor_plan(
+            context, detection, managed_servers, _json_payload(state_path), payload
+        )
+        self._apply_editor_servers(context, payload, refresh, managed_servers)
         hooks = prepare_cursor_hooks(context)
         files = list(hooks.files)
-        previous_state = _json_payload(state_path)
-        previous_origins = previous_state.get("managed_origins")
-        origins = dict(cast(dict[str, list[str]], previous_origins)) if isinstance(previous_origins, dict) else {}
-        for server in observable_stdio_servers_with_proxy(detection):
-            if server.source_scope == "project":
-                origins[server.name] = [server.source_scope, server.config_path]
-        for server in managed_servers:
-            if server.source_scope == "project":
-                origins[server.name] = [server.source_scope, server.config_path]
-            else:
-                origins.pop(server.name, None)
-        state: dict[str, object] = {
-            "managed_config_path": str(target),
-            "backup_path": str(backup),
-            "surface": "editor",
-            "workspace_dir": str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None,
-            "managed_origins": origins,
-        }
-        after = {
+        state = self._editor_state(context, target, backup, origins)
+        backup_data = contents[backup]
+        if backup_data is None:
+            backup_data = self._backup_document(None if original is None else original.decode("utf-8")).encode()
+        after: dict[Path, bytes | None] = {
             target: (json.dumps(payload, indent=2) + "\n").encode("utf-8"),
             state_path: (json.dumps(state, indent=2) + "\n").encode("utf-8"),
-            backup: contents[backup]
-            if contents[backup] is not None
-            else (
-                json.dumps(
-                    {
-                        "existed": original is not None,
-                        "content": original.decode("utf-8") if original is not None else None,
-                    },
-                    indent=2,
-                )
-                + "\n"
-            ).encode("utf-8"),
+            backup: backup_data,
         }
         for path in self._editor_config_paths(context):
             if path not in after:
@@ -275,30 +231,7 @@ class CursorHarnessAdapter(HarnessAdapter):
                     path.resolve(strict=False), contents[path], data, before_mode=mode, after_mode=mode, no_follow=True
                 )
             )
-        notes = [
-            "Guard Cursor editor MCP proxies added to the global Cursor mcp.json config.",
-            "Guard native Cursor hooks installed globally for shell, MCP, and file-read interception.",
-        ]
-        if context.workspace_dir is not None:
-            notes.append(
-                "Workspace policy context uses the detected project directory; "
-                "Guard does not write project-local hook files."
-            )
-        manifest = {
-            "harness": self.harness,
-            "active": True,
-            "surface": "editor",
-            "managed_config_path": str(target),
-            "backup_path": str(backup),
-            "state_path": str(state_path),
-            "managed_servers": [server.name for server in managed_servers],
-            "skipped_servers": list(skipped_stdio_server_names(detection)),
-            "managed_hooks_path": hooks.manifest.get("managed_hooks_path"),
-            "managed_hook_script_path": hooks.manifest.get("managed_hook_script_path"),
-            "guard_cli_identity": hooks.manifest.get("guard_cli_identity"),
-            "hook_script_sha256": hooks.manifest.get("hook_script_sha256"),
-            "notes": notes,
-        }
+        manifest = self._editor_manifest(target, backup, state_path, managed_servers, detection, hooks.manifest, notes)
         prepared = PreparedHarnessInstall(tuple(files), manifest)
         RuntimeTransition._compare({"files": [change.payload() for change in files]}, "before")
         return prepared
@@ -359,85 +292,159 @@ class CursorHarnessAdapter(HarnessAdapter):
     def _install_editor(self, context: HarnessContext) -> dict[str, object]:
         detection = self.detect(context)
         managed_servers = managed_stdio_servers(detection)
-        skipped_servers = skipped_stdio_server_names(detection)
         target_path = self._target_editor_config_path(context)
         _ensure_path_within_root(context.home_dir, target_path, label="Cursor editor")
         original_text = target_path.read_text(encoding="utf-8") if target_path.is_file() else None
         backup_path = self._backup_path(target_path, context)
         _ensure_path_within_root(context.guard_home, backup_path, label="Cursor backup")
-        if not backup_path.exists():
-            backup_path.parent.mkdir(parents=True, exist_ok=True)
-            backup_path.write_text(
-                json.dumps({"existed": original_text is not None, "content": original_text}, indent=2) + "\n",
-                encoding="utf-8",
-            )
         state_path = self._state_path(target_path, context)
         _ensure_path_within_root(context.guard_home, state_path, label="Cursor state")
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        workspace_dir = str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None
-        previous = _json_payload(state_path)
-        previous_origins = previous.get("managed_origins")
-        origins = dict(cast(dict[str, list[str]], previous_origins)) if isinstance(previous_origins, dict) else {}
-        for server in observable_stdio_servers_with_proxy(detection):
-            if server.source_scope == "project":
-                origins[server.name] = [server.source_scope, server.config_path]
-        for server in managed_servers:
-            if server.source_scope == "project":
-                origins[server.name] = [server.source_scope, server.config_path]
-            else:
-                origins.pop(server.name, None)
-        state = {
-            "managed_config_path": str(target_path),
-            "backup_path": str(backup_path),
-            "surface": "editor",
-            "workspace_dir": workspace_dir,
-            "managed_origins": origins,
-        }
-        state_path.write_text(
-            json.dumps(state, indent=2) + "\n",
-            encoding="utf-8",
+        # Parsed before any write so the native plan sees it; a parse error is
+        # still raised after the backup and state writes, as before.
+        parsed = self._editor_payload(target_path, original_text)
+        payload = parsed if isinstance(parsed, dict) else None
+        origins, refresh, notes = self._editor_plan(
+            context, detection, managed_servers, _json_payload(state_path), payload
         )
-        payload = self._strict_json_object(target_path, label="Cursor editor config", recover_missing=True)
-        servers_payload = payload.get("mcpServers")
-        normalized_servers = dict(servers_payload) if isinstance(servers_payload, dict) else {}
-        for name, server_config in tuple(normalized_servers.items()):
-            if not isinstance(name, str) or not isinstance(server_config, dict):
-                continue
-            command = server_config.get("command")
-            args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
-            if not is_guard_proxy_command(command if isinstance(command, str) else None, args):
-                continue
-            normalized_servers[name] = self._refresh_guard_proxy_entry(server_config)
-        for server in managed_servers:
-            normalized_servers[server.name] = self._proxy_server_entry(context, server)
-        payload["mcpServers"] = normalized_servers
+        if not backup_path.exists():
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            backup_path.write_text(self._backup_document(original_text), encoding="utf-8")
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state = self._editor_state(context, target_path, backup_path, origins)
+        state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+        if not isinstance(parsed, dict):
+            raise parsed
+        self._apply_editor_servers(context, parsed, refresh, managed_servers)
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        target_path.write_text(json.dumps(parsed, indent=2) + "\n", encoding="utf-8")
         hooks_manifest = install_cursor_hooks(context)
-        notes = [
-            "Guard Cursor editor MCP proxies added to the global Cursor mcp.json config.",
-            "Guard native Cursor hooks installed globally for shell, MCP, and file-read interception.",
-        ]
-        if context.workspace_dir is not None:
-            notes.append(
-                "Workspace policy context uses the detected project directory; "
-                "Guard does not write project-local hook files."
-            )
+        return self._editor_manifest(
+            target_path, backup_path, state_path, managed_servers, detection, hooks_manifest, notes
+        )
+
+    def _editor_manifest(
+        self,
+        target: Path,
+        backup: Path,
+        state_path: Path,
+        managed_servers: tuple[ManagedMcpServer, ...],
+        detection: HarnessDetection,
+        hooks: dict[str, object],
+        notes: list[str],
+    ) -> dict[str, object]:
         return {
             "harness": self.harness,
             "active": True,
             "surface": "editor",
-            "managed_config_path": str(target_path),
-            "backup_path": str(backup_path),
+            "managed_config_path": str(target),
+            "backup_path": str(backup),
             "state_path": str(state_path),
             "managed_servers": [server.name for server in managed_servers],
-            "skipped_servers": list(skipped_servers),
-            "managed_hooks_path": hooks_manifest.get("managed_hooks_path"),
-            "managed_hook_script_path": hooks_manifest.get("managed_hook_script_path"),
-            "guard_cli_identity": hooks_manifest.get("guard_cli_identity"),
-            "hook_script_sha256": hooks_manifest.get("hook_script_sha256"),
+            "skipped_servers": list(skipped_stdio_server_names(detection)),
+            "managed_hooks_path": hooks.get("managed_hooks_path"),
+            "managed_hook_script_path": hooks.get("managed_hook_script_path"),
+            "guard_cli_identity": hooks.get("guard_cli_identity"),
+            "hook_script_sha256": hooks.get("hook_script_sha256"),
             "notes": notes,
         }
+
+    @staticmethod
+    def _editor_state(
+        context: HarnessContext, target: Path, backup: Path, origins: dict[str, object]
+    ) -> dict[str, object]:
+        workspace = context.workspace_dir
+        return {
+            "managed_config_path": str(target),
+            "backup_path": str(backup),
+            "surface": "editor",
+            "workspace_dir": None if workspace is None else str(workspace.resolve()),
+            "managed_origins": origins,
+        }
+
+    @staticmethod
+    def _backup_document(original: str | None) -> str:
+        return json.dumps({"existed": original is not None, "content": original}, indent=2) + "\n"
+
+    @staticmethod
+    def _editor_payload(target: Path, text: str | None) -> dict[str, object] | Exception:
+        """The editor config object, or the error the install raises for it."""
+        try:
+            payload = {} if text is None else json.loads(text)
+        except json.JSONDecodeError as exc:
+            refusal = RuntimeError(f"Guard refused to overwrite unreadable Cursor editor config at {target}")
+            refusal.__cause__ = exc
+            return refusal
+        except RecursionError as exc:
+            return exc
+        if not isinstance(payload, dict):
+            return RuntimeError(f"Guard refused to overwrite non-object Cursor editor config at {target}")
+        return cast(dict[str, object], payload)
+
+    @staticmethod
+    def _editor_plan(
+        context: HarnessContext,
+        detection: HarnessDetection,
+        managed_servers: tuple[ManagedMcpServer, ...],
+        previous_state: dict[str, object],
+        payload: dict[str, object] | None,
+    ) -> tuple[dict[str, object], tuple[int, ...], list[str]]:
+        """Ask the native ``cursor_editor_plan`` kind for the state origins, the proxies to refresh and the notes."""
+        from ..native_runner_authority import native_runner_authority
+
+        def rows(servers: tuple[ManagedMcpServer, ...]) -> list[list[str]]:
+            return [[server.name, server.source_scope, server.config_path] for server in servers]
+
+        def launch(config: object) -> dict[str, object] | None:
+            # Only the launch fields cross to the resident, never env values.
+            if not isinstance(config, dict):
+                return None
+            return {key: value for key, value in cast(dict[str, object], config).items() if key in ("command", "args")}
+
+        servers = None if payload is None else payload.get("mcpServers")
+        configs = [launch(config) for config in servers.values()] if isinstance(servers, dict) else None
+        previous = previous_state.get("managed_origins")
+        request: dict[str, object] = {
+            "previous_origins": list(map(list, previous.items())) if isinstance(previous, dict) else None,
+            "observed": rows(observable_stdio_servers_with_proxy(detection)),
+            "managed": rows(managed_servers),
+            "servers": configs,
+            "workspace": context.workspace_dir is not None,
+        }
+        answer = native_runner_authority("cursor_editor_plan", request)
+        origins, refresh, notes = answer.get("origins"), answer.get("refresh"), answer.get("notes")
+        configs = configs or []
+        if (
+            set(answer) != {"origins", "refresh", "notes"}
+            or not isinstance(origins, list)
+            or not all(isinstance(row, list) and len(row) == 2 and isinstance(row[0], str) for row in origins)
+            or len({row[0] for row in origins}) != len(origins)
+            or not isinstance(refresh, list)
+            or not all(type(index) is int and 0 <= index < len(configs) for index in refresh)
+            or refresh != sorted(set(refresh))
+            or not all(isinstance(configs[index], dict) for index in refresh)
+            or not isinstance(notes, list)
+            or not all(isinstance(note, str) for note in notes)
+        ):
+            raise ValueError("Cursor editor plan answer is malformed")
+        return {row[0]: row[1] for row in origins}, tuple(refresh), notes
+
+    def _apply_editor_servers(
+        self,
+        context: HarnessContext,
+        payload: dict[str, object],
+        refresh: tuple[int, ...],
+        managed_servers: tuple[ManagedMcpServer, ...],
+    ) -> None:
+        servers = payload.get("mcpServers")
+        normalized = dict(cast(dict[str, object], servers)) if isinstance(servers, dict) else {}
+        names = list(normalized)
+        for index in refresh:
+            normalized[names[index]] = self._refresh_guard_proxy_entry(
+                cast(dict[str, object], normalized[names[index]])
+            )
+        for server in managed_servers:
+            normalized[server.name] = self._proxy_server_entry(context, server)
+        payload["mcpServers"] = normalized
 
     def _uninstall_editor(self, context: HarnessContext) -> dict[str, object]:
         target_path = self._target_editor_config_path(context)
@@ -533,6 +540,8 @@ class CursorHarnessAdapter(HarnessAdapter):
             notes.append("Prepended the Guard launcher shim directory to your shell profile.")
         elif profile.get("restart_shell_required"):
             notes.append("Restart your shell or open a new terminal so guard-cursor shims are on PATH.")
+        elif profile.get("manual_path_required"):
+            notes.append(f"Put {context.guard_home / 'bin'} first on your PATH so guard-cursor shims run.")
         return {
             "harness": self.harness,
             "active": True,
@@ -596,21 +605,10 @@ class CursorHarnessAdapter(HarnessAdapter):
         return warnings
 
     def _proxy_server_entry(self, context: HarnessContext, server: ManagedMcpServer) -> dict[str, object]:
-        args = proxy_cli_args(
-            proxy_command="cursor-mcp-proxy",
-            guard_home=str(context.guard_home),
-            server=server,
-            home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
-            workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
-        )
-        command, launch_args = mcp_proxy_launch(sys.executable, args)
-        entry: dict[str, object] = {
-            "command": command,
-            "args": launch_args,
-            "type": "stdio",
-        }
-        env = merge_guard_launcher_env(proxy_process_env(getattr(server, "env", {})))
-        if env:
+        entry = proxy_launcher_entry(proxy_command="cursor-mcp-proxy", context=context, server=server)
+        env = entry.pop("env", None)
+        entry["type"] = "stdio"
+        if env is not None:
             entry["env"] = env
         return entry
 
@@ -620,22 +618,8 @@ class CursorHarnessAdapter(HarnessAdapter):
         raw_args = server_config.get("args")
         args = tuple(str(value) for value in raw_args if isinstance(value, str)) if isinstance(raw_args, list) else ()
         _, python_args = python_proxy_launch(None, args)
-        refreshed["command"], refreshed["args"] = mcp_proxy_launch(sys.executable, python_args)
+        refreshed["command"], refreshed["args"] = mcp_proxy_launch(guard_cli_launcher(), python_args)
         return refreshed
-
-    @staticmethod
-    def _strict_json_object(path: Path, *, label: str, recover_missing: bool = False) -> dict[str, object]:
-        if not path.is_file():
-            if recover_missing:
-                return {}
-            raise RuntimeError(f"Guard refused to overwrite missing {label} at {path}")
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise RuntimeError(f"Guard refused to overwrite unreadable {label} at {path}") from exc
-        if not isinstance(payload, dict):
-            raise RuntimeError(f"Guard refused to overwrite non-object {label} at {path}")
-        return payload
 
     @staticmethod
     def _backup_path(target_path: Path, context: HarnessContext) -> Path:

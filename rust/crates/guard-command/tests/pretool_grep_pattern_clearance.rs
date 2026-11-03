@@ -350,3 +350,42 @@ fn a_hidden_folder_the_clearance_admits_is_searched_file_by_file() {
     write(f.repo.join(".cache/blob.bin"), "caf\u{e9} handler\n");
     assert!(!allowed(&shell(&f, "grep -rn other .")));
 }
+
+#[test]
+fn a_fan_out_that_prunes_a_vendored_tree_proceeds() {
+    let f = fixture("find-prune");
+    for command in [
+        "find . -name node_modules -prune -o -type f -name \"*.ts\" -exec grep -l handler {} +",
+        "find . -type d -name node_modules -prune -o -type f -name \"*.ts\" -exec cat {} +",
+        "find . \\( -name node_modules -o -name dist \\) -prune -o -type f -name \"*.ts\" -exec cat {} +",
+        "find . -name node_modules -prune -o -name .git -prune -o -type f -name \"*.ts\" -exec cat {} +",
+        // A negated test only takes names away from a bounded walk.
+        "find . -type f -name \"*.ts\" ! -name \"*.min.ts\" -exec cat {} +",
+        "find . -name node_modules -prune -o -type f -name \"*.ts\" -print0 | xargs -0 grep -l handler",
+    ] {
+        let result = shell(&f, command);
+        assert!(allowed(&result), "{command}: {}", result.reason);
+    }
+}
+
+#[test]
+fn a_fan_out_keeps_its_review_when_pruning_cannot_bound_what_the_child_reads() {
+    let f = fixture("find-prune-held");
+    for command in [
+        // An unparenthesized `-o` makes the whole expression a disjunction, so
+        // the extension pattern bounds only one of its branches.
+        "find . -name \".env.bak\" -o -type f -name \"*.ts\" -exec cat {} +",
+        // The pruned branch is the only one carrying a name, so the printing
+        // branch hands the child every regular file.
+        "find . -name node_modules -prune -o -type f -exec cat {} +",
+        // `-prune` outside the `-prune -o` idiom leaves the walk unread.
+        "find . -name node_modules -prune -type f -name \"*.ts\" -exec cat {} +",
+        // The extension pattern is negated, so it names what is left out.
+        "find . -type f ! -name \"*.ts\" -exec cat {} +",
+        // Without `-type f` the walk can still reach a link.
+        "find . -name node_modules -prune -o -name \"*.ts\" -exec cat {} +",
+    ] {
+        let result = shell(&f, command);
+        assert!(!allowed(&result), "{command}: {}", result.reason);
+    }
+}

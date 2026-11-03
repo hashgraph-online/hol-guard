@@ -48,6 +48,16 @@ fn source_catalog() -> Vec<Value> {
     envelope["catalog"].as_array().expect("array").clone()
 }
 
+fn authored_snapshot() -> &'static CatalogReadSnapshot {
+    static SNAPSHOT: std::sync::OnceLock<CatalogReadSnapshot> = std::sync::OnceLock::new();
+    SNAPSHOT.get_or_init(|| {
+        CatalogReadSnapshot::from_catalog_bytes(
+            &crate::native_command_program::authored_test_support::catalog_bytes(),
+        )
+        .unwrap()
+    })
+}
+
 /// A provenance-consistent catalog envelope (digest recomputed) for tests.
 fn synthetic(edit: impl FnOnce(&mut Vec<Value>)) -> CatalogReadSnapshot {
     let mut catalog = source_catalog();
@@ -113,7 +123,10 @@ fn packaged_snapshot_is_bound_to_native_program_and_budgeted() {
 
 #[test]
 fn projection_allowlists_cover_every_source_field() {
-    let catalog = source_catalog();
+    let catalog = crate::native_command_program::authored_test_support::full_catalog()
+        .catalog
+        .as_array()
+        .unwrap();
     let extension_keys: BTreeSet<&str> = catalog
         .iter()
         .flat_map(|ext| ext.as_object().unwrap().keys().map(String::as_str))
@@ -122,7 +135,7 @@ fn projection_allowlists_cover_every_source_field() {
         .iter()
         .map(|ext| {
             let route = format!("extensions/{}", ext["extension_id"].as_str().unwrap());
-            ok_body(&read(snapshot(), &route, ""))
+            ok_body(&read(authored_snapshot(), &route, ""))
         })
         .collect();
     let mut projected: BTreeSet<&str> = details
@@ -253,7 +266,7 @@ fn index_and_detail_values_match_source_catalog() {
 
 #[test]
 fn filters_are_bounded_and_exact() {
-    let snapshot = snapshot();
+    let snapshot = authored_snapshot();
     let all = traverse(snapshot, "index", "limit=100");
     let built_in = traverse(snapshot, "index", "source=built-in&limit=100");
     assert_eq!(

@@ -130,10 +130,7 @@ fn only_the_very_admission_a_decision_saw_is_unchanged() {
 
 #[test]
 fn an_unknown_or_spent_ticket_defers() {
-    let suffix = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let suffix = crate::unique_nanos::unique_nanos();
     let root =
         std::env::temp_dir().join(format!("guard-relay-claim-{}-{suffix}", std::process::id()));
     let root = crate::resident_state::ensure_private_directory(&root, true).unwrap();

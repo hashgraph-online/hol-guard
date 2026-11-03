@@ -7,23 +7,16 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.native_context import context_runtime_executable_identity
+from codex_plugin_scanner.guard.runtime import approval_context as approval_context_module
 from codex_plugin_scanner.guard.runtime.approval_context import (
     APPROVAL_CONTEXT_TOKEN_PREFIX,
-    ApprovalContextToken,
-    approval_context_tokens_validation_reason,
+    NativeContextDigestUnavailableError,
+    approval_context_token_is_well_formed,
     build_approval_context_token,
-    build_runtime_executable_identity,
     build_runtime_launch_identity,
-    parse_approval_context_token,
 )
-from codex_plugin_scanner.guard.runtime.extension_control_authority import (
-    AuthorityHealth,
-    ExtensionControlAuthorityView,
-)
-from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
-    ExtensionControlRuntimeSnapshot,
-    use_extension_control_snapshot,
-)
+from tests.resident_probe_support import approval_context_tokens_validation_reason
 
 
 def _context(**overrides: object) -> dict[str, object]:
@@ -47,6 +40,22 @@ def _encoded_payload(payload: object) -> str:
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
+def _decoded_payload(token: str) -> dict[str, object]:
+    """Decode a minted token here so the assertions can name its components.
+
+    Guard itself no longer decodes a token in Python — the native authority
+    owns the grammar — but these tests have to look inside one to show what it
+    does and does not carry, so the decode lives with the assertions that need
+    it rather than in the runtime.
+    """
+
+    encoded = token[len(APPROVAL_CONTEXT_TOKEN_PREFIX) :]
+    raw = base64.urlsafe_b64decode(f"{encoded}{'=' * (-len(encoded) % 4)}".encode("ascii"))
+    payload = json.loads(raw.decode("utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
 def test_token_is_deterministic_for_equivalent_structured_context(native_context_digest: Path) -> None:
     first = _token(
         identity={"workspace": "/private/workspace", "artifact_id": "codex:project:tool:read"},
@@ -56,7 +65,7 @@ def test_token_is_deterministic_for_equivalent_structured_context(native_context
 
     assert first == second
     assert first.startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
-    assert parse_approval_context_token(first) == parse_approval_context_token(second)
+    assert approval_context_token_is_well_formed(first)
 
 
 def test_runtime_launch_resolves_current_user_tilde_from_trusted_home(tmp_path) -> None:
@@ -151,37 +160,19 @@ def test_token_serializes_only_component_hashes_and_not_source_values(native_con
         "workspace-write",
     )
     token = _token()
-    parsed = parse_approval_context_token(token)
+    payload = _decoded_payload(token)
 
-    assert parsed is not None
+    assert approval_context_token_is_well_formed(token)
     assert all(source not in token for source in source_values)
+    assert set(payload) == {"version", "identity", "content", "capabilities", "policy", "sandbox"}
     assert all(
-        len(component_hash) == 64 and component_hash.isascii() and component_hash.isalnum()
-        for component_hash in (
-            parsed.identity_hash,
-            parsed.content_hash,
-            parsed.capabilities_hash,
-            parsed.policy_hash,
-            parsed.sandbox_hash,
-        )
+        isinstance(component_hash, str)
+        and len(component_hash) == 64
+        and component_hash.isascii()
+        and component_hash.isalnum()
+        for key, component_hash in payload.items()
+        if key != "version"
     )
-
-
-def test_token_is_invalidated_when_extension_control_snapshot_changes(native_context_digest: Path) -> None:
-    first_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 1, "a" * 64, ())
-    )
-    second_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 2, "a" * 64, ())
-    )
-
-    with use_extension_control_snapshot(first_snapshot):
-        saved = _token()
-    with use_extension_control_snapshot(second_snapshot):
-        current = _token()
-
-    assert saved != current
-    assert approval_context_tokens_validation_reason(saved, current) == "approval_reuse_policy_changed"
 
 
 def test_opaque_token_comparison_accepts_unchanged_context(native_context_digest: Path) -> None:
@@ -214,20 +205,57 @@ def test_even_equal_legacy_values_cannot_prove_structured_context_is_unchanged(n
     )
 
 
-def test_parser_rejects_payload_with_unexpected_fields(native_context_digest: Path) -> None:
-    parsed = parse_approval_context_token(_token())
-    assert isinstance(parsed, ApprovalContextToken)
-    payload = {
-        "version": 1,
-        "identity": parsed.identity_hash,
-        "content": parsed.content_hash,
-        "capabilities": parsed.capabilities_hash,
-        "policy": parsed.policy_hash,
-        "sandbox": parsed.sandbox_hash,
-        "raw_secret": "must-not-be-accepted",
-    }
+def test_token_with_an_extra_payload_field_is_not_well_formed(native_context_digest: Path) -> None:
+    payload = dict(_decoded_payload(_token()))
+    payload["raw_secret"] = "must-not-be-accepted"
 
-    assert parse_approval_context_token(f"{APPROVAL_CONTEXT_TOKEN_PREFIX}{_encoded_payload(payload)}") is None
+    assert not approval_context_token_is_well_formed(f"{APPROVAL_CONTEXT_TOKEN_PREFIX}{_encoded_payload(payload)}")
+
+
+@pytest.mark.parametrize(
+    "legacy_or_malformed",
+    (
+        None,
+        object(),
+        "",
+        "sha256:legacy-artifact-hash",
+        f"{APPROVAL_CONTEXT_TOKEN_PREFIX}not+base64url",
+        f"{APPROVAL_CONTEXT_TOKEN_PREFIX}{_encoded_payload({'version': 2})}",
+    ),
+)
+def test_only_a_minted_token_is_well_formed(legacy_or_malformed: object, native_context_digest: Path) -> None:
+    assert approval_context_token_is_well_formed(_token())
+    assert not approval_context_token_is_well_formed(legacy_or_malformed)
+
+
+@pytest.mark.parametrize(
+    "failure",
+    (NativeContextDigestUnavailableError("unreachable"), TypeError("rejected input")),
+)
+def test_token_is_not_well_formed_when_the_native_authority_cannot_answer(
+    failure: Exception, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    """A verdict Guard cannot obtain is not a token where reuse depends on it.
+
+    The stored approval key falls back to the exact-command form, and saved
+    evidence is treated as legacy rather than as a context binding, so those
+    callers get ``False``. A harness or global policy row is the exception:
+    it drops a hash that is not a token, so the policy-key site keeps any
+    prefixed value rather than widening the row to the artifact family.
+    """
+
+    from codex_plugin_scanner.guard.store_base import _is_approval_context_token
+
+    token = _token()
+
+    def _unavailable(kind: str, fields: dict[str, object]) -> dict[str, object]:
+        raise failure
+
+    monkeypatch.setattr(approval_context_module, "_context_digest_result", _unavailable)
+
+    assert not approval_context_token_is_well_formed(token)
+    assert _is_approval_context_token(token)
+    assert not _is_approval_context_token("sha256:legacy")
 
 
 def test_builder_rejects_non_json_context_without_leaking_its_value() -> None:
@@ -245,13 +273,13 @@ def test_runtime_executable_identity_changes_after_same_path_byte_replacement(tm
     executable = tmp_path / "guard-tool"
     executable.write_bytes(b"#!/bin/sh\necho first\n")
     executable.chmod(0o755)
-    first = build_runtime_executable_identity(str(executable))
+    first = context_runtime_executable_identity(str(executable))
 
     replacement = tmp_path / "replacement"
     replacement.write_bytes(b"#!/bin/sh\necho other\n")
     replacement.chmod(0o755)
     os.replace(replacement, executable)
-    second = build_runtime_executable_identity(str(executable))
+    second = context_runtime_executable_identity(str(executable))
 
     assert first["status"] == second["status"] == "verified"
     assert first["path"] == second["path"] == str(executable.resolve())
@@ -264,10 +292,10 @@ def test_runtime_executable_identity_binds_security_relevant_mode(tmp_path) -> N
     executable = tmp_path / "guard-tool"
     executable.write_bytes(b"#!/bin/sh\nexit 0\n")
     executable.chmod(0o755)
-    executable_identity = build_runtime_executable_identity(str(executable))
+    executable_identity = context_runtime_executable_identity(str(executable))
 
     executable.chmod(0o700)
-    restricted_identity = build_runtime_executable_identity(str(executable))
+    restricted_identity = context_runtime_executable_identity(str(executable))
 
     assert executable_identity["sha256"] == restricted_identity["sha256"]
     assert executable_identity["mode"] == 0o755
@@ -284,11 +312,11 @@ def test_runtime_executable_identity_binds_resolved_symlink_target(tmp_path) -> 
     second_target.chmod(0o755)
     executable_link = tmp_path / "guard-tool"
     executable_link.symlink_to(first_target.name)
-    first = build_runtime_executable_identity(str(executable_link))
+    first = context_runtime_executable_identity(str(executable_link))
 
     executable_link.unlink()
     executable_link.symlink_to(second_target.name)
-    second = build_runtime_executable_identity(str(executable_link))
+    second = context_runtime_executable_identity(str(executable_link))
 
     assert first["path"] == str(first_target.resolve())
     assert second["path"] == str(second_target.resolve())
@@ -308,9 +336,9 @@ def test_runtime_executable_identity_resolves_relative_path_from_launch_cwd(tmp_
     guard_executable.chmod(0o755)
     runtime_executable.chmod(0o755)
 
-    identity = build_runtime_executable_identity("./server", cwd=launch_cwd)
+    identity = context_runtime_executable_identity("./server", cwd=launch_cwd)
 
     assert identity["status"] == "verified"
     assert identity["path"] == str(runtime_executable.resolve())
     assert identity["launch_cwd"] == str(launch_cwd.resolve())
-    assert identity["sha256"] != build_runtime_executable_identity(str(guard_executable))["sha256"]
+    assert identity["sha256"] != context_runtime_executable_identity(str(guard_executable))["sha256"]

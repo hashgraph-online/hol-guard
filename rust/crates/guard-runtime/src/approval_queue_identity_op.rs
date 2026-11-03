@@ -21,9 +21,14 @@ use crate::package_authority_op::request_digest_with_limit;
 
 const INVALID: &str = "native_approval_queue_identity_invalid";
 const IDENTITY_VERSION: &str = "v1";
-const VOLATILE_PAYLOAD_KEY_TOKENS: [&str; 12] = [
+const VOLATILE_PAYLOAD_KEY_TOKENS: [&str; 14] = [
     "callid",
     "conversationid",
+    // The Codex bridge records which process waits on the review and for how
+    // long. A retry runs in a new bridge process, so keeping these would give
+    // every attempt at the same action its own inbox row.
+    "guardcodexbrowserwaitprocess",
+    "guardcodexbrowserwaittimeoutseconds",
     "messageid",
     "model",
     "requestid",

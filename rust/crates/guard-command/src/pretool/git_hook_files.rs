@@ -248,9 +248,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!(
             "guard-hook-files-{label}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |elapsed| elapsed.as_nanos())
+            crate::unique_nanos::unique_nanos()
         ));
         fs::create_dir_all(&root).expect("scratch");
         root

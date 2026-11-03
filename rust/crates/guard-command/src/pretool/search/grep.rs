@@ -10,7 +10,9 @@ struct AbsentOperands {
     recursive: bool,
 }
 
-/// The operand proof alone, as if `grep` were the whole command.
+/// The operand proof alone, as if `grep` were the whole command. Every caller
+/// outside this module reads a segment, so the bare form is a test vantage.
+#[cfg(test)]
 pub(super) fn safe_grep_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
     let absent = AbsentOperands {
         plain: true,
@@ -23,7 +25,7 @@ pub(super) fn safe_grep_arguments(arguments: &[String], context: ReadContext<'_>
 /// while it stays missing: no other segment may create a file, directory or
 /// link there (`ln -s <dir> <repo>/cfg && grep -rn . <repo>/cfg/` reads through
 /// the fresh link). A recursive search walks whatever appears at a missing
-/// root, so it accepts one only beside `cd` and downstream stdin filters.
+/// root, which is the same question, so both routes ask it the same way.
 pub(crate) fn safe_grep_segment(
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
@@ -34,17 +36,27 @@ pub(crate) fn safe_grep_segment(
         .iter()
         .filter(|other| other.span != segment.span)
         .collect();
+    // Both absent routes read an operand as the command spells it, so a
+    // drive path whose backslashes the shell drops before `grep` runs names
+    // a different directory to the program than to the proof.
+    let quoted = crate::pretool::directory_targets::drive_targets_quoted(segment);
+    let unplanted = quoted && others.iter().all(|other| creates_nothing(other));
     let absent = AbsentOperands {
-        plain: others.iter().all(|other| creates_nothing(other, false)),
-        recursive: others.iter().all(|other| creates_nothing(other, true)),
+        plain: unplanted,
+        recursive: unplanted,
     };
     safe_arguments(&segment.arguments, context, false, absent)
 }
 
 /// A peer that cannot create a filesystem entry: no output redirect beyond
-/// `/dev/null`, and a command that only prints, filters or changes directory.
-/// `strict` admits only `cd` and stdin filters after a pipe.
-pub(super) fn creates_nothing(segment: &crate::CommandSegmentV1, strict: bool) -> bool {
+/// `/dev/null`, and a program that only changes directory, prints, or opens
+/// paths to read them. `ln -s <dir> <repo>/cfg && grep -rn . <repo>/cfg/` is
+/// the shape this refuses, because `ln` puts a tree where the proof measured
+/// nothing. `grep -rln needle app; cat notes.md` is the shape it admits: an
+/// agent sweeps for a name it guessed at and prints a file it knows is there,
+/// and without the redirect already refused above, `cat` can no more create
+/// the missing root than `cd` or `echo` can.
+pub(in crate::pretool) fn creates_nothing(segment: &crate::CommandSegmentV1) -> bool {
     let text = ["2>&1", "2>/dev/null", ">/dev/null"]
         .iter()
         .fold(segment.text.clone(), |text, quiet| text.replace(quiet, ""));
@@ -53,32 +65,52 @@ pub(super) fn creates_nothing(segment: &crate::CommandSegmentV1, strict: bool) -
     }
     match segment.executable.as_deref() {
         Some("cd") => true,
-        Some(_) if strict => {
-            segment.pipeline_index > 0
-                && crate::pretool::segment_proof::stdin_filter_segment(segment)
+        Some(executable) => {
+            reads_only(executable)
+                || pathless_builtin(executable)
+                || (segment.pipeline_index > 0
+                    && crate::pretool::segment_proof::stdin_filter_segment(segment))
         }
-        Some(executable) => matches!(
-            executable,
-            "cat"
-                | "cut"
-                | "diff"
-                | "echo"
-                | "grep"
-                | "head"
-                | "jq"
-                | "ls"
-                | "nl"
-                | "printf"
-                | "pwd"
-                | "rg"
-                | "tail"
-                | "test"
-                | "tr"
-                | "true"
-                | "wc"
-        ),
         None => false,
     }
+}
+
+/// A program that opens the paths it is given only to read them, and writes
+/// what it finds to standard output. None of them takes an option that names
+/// a file to write, so the redirect screen above is the whole write surface.
+fn reads_only(executable: &str) -> bool {
+    matches!(
+        executable,
+        "cat"
+            | "cut"
+            | "diff"
+            | "echo"
+            | "egrep"
+            | "fgrep"
+            | "grep"
+            | "head"
+            | "jq"
+            | "ls"
+            | "nl"
+            | "printf"
+            | "pwd"
+            | "rg"
+            | "tail"
+            | "test"
+            | "tr"
+            | "true"
+            | "wc"
+    )
+}
+
+/// A program that writes nothing and opens no path: its operands are words it
+/// prints or compares, never names it creates. Without a redirect, which the
+/// caller has already refused, it cannot put an entry where a missing root is.
+fn pathless_builtin(executable: &str) -> bool {
+    matches!(
+        crate::pretool::executable_basename(executable),
+        "echo" | "printf" | "pwd" | "true" | "false" | ":"
+    )
 }
 
 pub(super) fn safe_stdin_arguments(arguments: &[String]) -> bool {
@@ -103,6 +135,7 @@ fn safe_arguments(
     arguments_pass(arguments, context, stdin_only, absent, false)
 }
 
+mod includes;
 mod reach;
 pub(in crate::pretool) use reach::sensitive_reach_reason;
 
@@ -190,6 +223,7 @@ fn scan_into(
     let mut excluded_directories = Vec::new();
     let mut pending_exclusion = None;
     let mut includes_present = false;
+    let mut includes = includes::Includes::default();
     let mut positional_started = false;
     for argument in arguments {
         if let Some(directory) = pending_exclusion.take() {
@@ -210,6 +244,9 @@ fn scan_into(
                 && argument.eq_ignore_ascii_case("recurse")
             {
                 recursive = true;
+                continue;
+            }
+            if includes.held(role, argument, context) {
                 continue;
             }
             if unsafe_search_value(role, argument, context) {
@@ -282,12 +319,15 @@ fn scan_into(
                 }
                 if attached.is_empty() {
                     pending_value = Some(role);
-                } else if unsafe_search_value(role, attached, context) {
-                    return false;
-                } else if matches!(role, SearchValueRole::Pattern) {
-                    pattern_supplied = true;
-                    pattern_option_seen = true;
-                    scan.patterns.push(attached.to_owned());
+                } else if !includes.held(role, attached, context) {
+                    if unsafe_search_value(role, attached, context) {
+                        return false;
+                    }
+                    if matches!(role, SearchValueRole::Pattern) {
+                        pattern_supplied = true;
+                        pattern_option_seen = true;
+                        scan.patterns.push(attached.to_owned());
+                    }
                 }
             }
             continue;
@@ -352,6 +392,12 @@ fn scan_into(
                 return false;
             }
         } else {
+            // The first positional is the pattern, and it meets the same
+            // screen a `-e` pattern does: a word the shell can still expand
+            // into a credential operand is not matching text yet.
+            if unsafe_search_value(SearchValueRole::Pattern, argument, context) {
+                return false;
+            }
             pattern_supplied = true;
             scan.patterns.push(argument.clone());
         }
@@ -381,6 +427,7 @@ fn scan_into(
         // Include/exclude precedence differs across grep implementations. Do not
         // use exclusions as proof when an include could re-enable a file.
         && (!includes_present || (excluded_files.is_empty() && excluded_directories.is_empty()))
+        && includes.scope_proven(&targets, context)
         && (!stdin_only || (pattern_supplied && !recursive))
         && (!recursive || {
             let proven = |target: &str| {
@@ -410,35 +457,44 @@ fn scan_into(
                             clearance,
                         )
                     })
+                    // An include opens only the files its globs select. This
+                    // walks the tree again, so it is asked last: every reading
+                    // above answers the same question without it.
+                    || (!dereference && includes.narrows(target, context))
             };
             recursive_targets_proven(&targets, proven, absent.recursive.then_some(context))
         })
 }
 
-/// Every recursive root is proven, or missing beside at least one proven
-/// root (`grep -rn x src tests` with no `tests`): a search whose only roots
-/// are missing (`grep -rn x src/missing.ts`) proves nothing it reads.
+/// Every recursive root is proven or missing (`grep -rn x src tests` with no
+/// `tests`, and `grep -rn x <absent>` on its own): a root that is not there
+/// opens nothing, so the walk reads no file. With no operand at all `grep -r`
+/// walks the working directory instead, which only a proven root admits.
 fn recursive_targets_proven(
     targets: &[&str],
     proven: impl Fn(&str) -> bool,
     absent: Option<ReadContext<'_>>,
 ) -> bool {
-    let mut real = false;
-    targets.iter().copied().all(|target| {
-        if proven(target) {
-            real = true;
-            return true;
-        }
-        absent.is_some_and(|context| absent_target(target, context))
-    }) && real
+    !targets.is_empty()
+        && targets.iter().copied().all(|target| {
+            proven(target) || absent.is_some_and(|context| absent_target(target, context))
+        })
 }
 
 /// A missing operand only prints an error, as a probe `ls` of the same path
 /// does: its nearest existing ancestor must be a readable directory and every
 /// missing name visible and clear of the sensitive screens. Agents pass a
 /// fixed list of roots (`src tests lib`) whether or not each one exists.
-fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
-    crate::pretool::listing_reads::absent_listing_operand(value, context)
+///
+/// The shell expands `~` from its own `HOME` while this screen reads the
+/// declared one, so a `~` root is proven absent only once `shell_home_matches`
+/// says the two name one directory. Without that, the search could open a tree
+/// that is there under the shell's home while the proof measured a name that
+/// is not there under the declared one. The recursive listing screen draws the
+/// same line.
+pub(super) fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
+    (!value.starts_with('~') || context.shell_home_matches)
+        && crate::pretool::listing_reads::absent_listing_operand(value, context)
 }
 
 /// A shell glob operand whose every expansion is screened, and whose matched

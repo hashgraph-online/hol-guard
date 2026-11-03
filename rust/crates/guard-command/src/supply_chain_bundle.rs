@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use base64ct::{Base64, Encoding};
-use guard_contracts::write_canonical_json;
+use guard_contracts::write_canonical_json_utf8;
 use rsa::pkcs1::DecodeRsaPublicKey;
 use rsa::pkcs8::DecodePublicKey;
 use rsa::pss::{Signature as RsaPssSignature, VerifyingKey as RsaPssVerifyingKey};
@@ -35,8 +35,8 @@ use crate::supply_chain_package_identity::{
 // `supply_chain_bundle_base` constants (:7-13).
 // ---------------------------------------------------------------------------
 
-const BUNDLE_MAX_AGE_SECONDS: f64 = 86_400.0 * 7.0;
-const BUNDLE_CLOCK_SKEW_SECONDS: f64 = 300.0;
+pub(crate) const BUNDLE_MAX_AGE_SECONDS: f64 = 86_400.0 * 7.0;
+pub(crate) const BUNDLE_CLOCK_SKEW_SECONDS: f64 = 300.0;
 
 const PACKAGE_ACTION_VALUES: &[&str] = &["allow", "monitor", "warn", "ask", "block"];
 const SEVERITY_VALUES: &[&str] = &["unknown", "low", "medium", "high", "critical"];
@@ -155,7 +155,7 @@ fn require_string_array(data: &Map<String, Value>, key: &str) -> BundleResult<Ve
 }
 
 /// `_parse_iso_timestamp` (:89) — naive values are UTC; returns unix seconds.
-fn parse_iso_timestamp(value: &str, field_name: &str) -> BundleResult<f64> {
+pub(crate) fn parse_iso_timestamp(value: &str, field_name: &str) -> BundleResult<f64> {
     parse_timestamp(value)
         .map(|t| t.unix_seconds() as f64)
         .ok_or_else(|| malformed(format!("Invalid ISO timestamp for {field_name:?}")))
@@ -829,7 +829,7 @@ pub struct OfflineSupplyChainDecision {
     pub emergency_deny: bool,
 }
 
-fn now_seconds() -> f64 {
+pub(crate) fn now_seconds() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs_f64())
@@ -837,11 +837,13 @@ fn now_seconds() -> f64 {
 }
 
 /// `canonical_supply_chain_bundle_payload` (:57) — `json.dumps` with
-/// `sort_keys=True`, `separators=(",", ":")`, `ensure_ascii=True` (CPython
-/// default), `allow_nan=True`.
+/// `sort_keys=True`, `separators=(",", ":")`, `ensure_ascii=False`. Non-ASCII
+/// text stays UTF-8 because that is how the signing side writes the bytes it
+/// signs; escaping it would make every bundle that carries such text fail the
+/// payload-hash check.
 pub fn canonical_supply_chain_bundle_payload(payload: &Map<String, Value>) -> Vec<u8> {
     let mut out = Vec::new();
-    let _ = write_canonical_json(&Value::Object(payload.clone()), &mut out);
+    let _ = write_canonical_json_utf8(&Value::Object(payload.clone()), &mut out);
     out
 }
 
@@ -978,7 +980,7 @@ fn validate_key_fingerprints(response: &SupplyChainBundleResponse) -> BundleResu
 }
 
 /// `_computed_key_fingerprint` (:155).
-fn computed_key_fingerprint(key: &SupplyChainVerificationKey) -> String {
+pub(crate) fn computed_key_fingerprint(key: &SupplyChainVerificationKey) -> String {
     let normalized_pem = key.public_key_pem.replace("\r\n", "\n").trim().to_string();
     hex::encode(Sha256::digest(normalized_pem.as_bytes()))
 }
@@ -1032,7 +1034,7 @@ impl RsaPssVerify for RingRsaPssVerify {
 }
 
 /// Extract DER + confirm the PEM carries an RSA public key.
-fn load_rsa_public_key_der(pem: &str) -> Result<Vec<u8>, SupplyChainBundleError> {
+pub(crate) fn load_rsa_public_key_der(pem: &str) -> Result<Vec<u8>, SupplyChainBundleError> {
     let normalized = pem.replace("\r\n", "\n");
     let mut label: Option<String> = None;
     let mut body_lines: Vec<String> = Vec::new();

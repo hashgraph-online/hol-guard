@@ -40,6 +40,7 @@ from .local_cli_native_fixture import (  # noqa: F401
     native_test_guard_home,
 )
 from .mcp_extension_driver import apply_local_mcp_extension_decision
+from .mcp_policy_catalog_fixture import admit_mcp_layers
 
 _CATALOG_ID = "command.mcp-mail-server"
 _DELETE_TOOLS = ("delete_message", "delete_messages")
@@ -95,6 +96,7 @@ class _AuthorityStore:
         self.layers = layers
         self.guard_home = native_test_guard_home()
         self.path = self.guard_home / "guard.db"
+        admit_mcp_layers(self, layers)
 
     def has_local_cli_grant_rules(self) -> bool:
         """No device grant rows exist, so an unavailable resident cannot hide one."""
@@ -299,8 +301,12 @@ def test_profile_preserves_stronger_requirements(tool: str, base_action: GuardAc
 
 @pytest.mark.parametrize("tool", _READ_TOOLS)
 def test_lockdown_suppresses_read_allow_defaults(tool: str) -> None:
-    assert (
-        apply_local_mcp_extension_decision(_AuthorityStore((_layer(lockdown=True),)), _artifact(tool), "review") is None
+    decision = apply_local_mcp_extension_decision(_AuthorityStore((_layer(lockdown=True),)), _artifact(tool), "review")
+    assert decision is not None
+    assert decision == (
+        "block",
+        "catalog-mcp-extension",
+        "This MCP tool is blocked by its authenticated extension authority.",
     )
 
 
@@ -376,12 +382,13 @@ def test_this_device_custom_grant_wins_over_enabled_delete_review(
 def test_offline_tool_call_evaluation_uses_enabled_profile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool: str, arguments: dict[str, object], expected: str
 ) -> None:
-    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace", mode="prompt")
+    authority = _AuthorityStore((_layer(),))
+    config = GuardConfig(guard_home=authority.guard_home, workspace=tmp_path / "workspace", mode="prompt")
     store = GuardStore(config.guard_home)
     monkeypatch.setattr(
         store,
         "read_extension_control_authority_for_registry",
-        _AuthorityStore((_layer(),)).read_extension_control_authority_for_registry,
+        authority.read_extension_control_authority_for_registry,
     )
     artifact = _artifact(tool)
     decision = evaluate_tool_call(
@@ -431,10 +438,13 @@ def test_offline_unreviewed_launch_retains_host_policy(
         arguments=arguments,
         claim_saved_approval=False,
     )
+    authority = _AuthorityStore((_layer(),))
+    store = GuardStore(authority.guard_home)
+    config = replace(config, guard_home=authority.guard_home)
     monkeypatch.setattr(
         store,
         "read_extension_control_authority_for_registry",
-        _AuthorityStore((_layer(),)).read_extension_control_authority_for_registry,
+        authority.read_extension_control_authority_for_registry,
     )
     decision = evaluate_tool_call(
         store=store,

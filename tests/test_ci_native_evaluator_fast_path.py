@@ -34,10 +34,11 @@ def test_native_evaluator_produces_verified_artifacts_before_python_gates() -> N
     uploaded = names.index("Upload matching native command projections")
     assert names.index("Verify generated native command catalogs before pytest fan-out") < generation < uploaded
     generated = producer[generation]["run"]
-    assert "export_extension_directory.py" in generated
-    assert "render_command_extension_directory.py" in generated
-    assert "export_extension_directory.py --check" in generated
-    assert "render_command_extension_directory.py --check" in generated
+    assert "prepare_extension_directory.py" in generated
+    assert generated.splitlines() == [
+        "uv run --no-sync python scripts/prepare_extension_directory.py "
+        "--compiler rust/target/release/guard-command-source --write-and-check"
+    ]
 
     # Native contract checks and replay cases do not delay the artifact producer.
     assert not any("uv run --no-sync pytest" in step.get("run", "") for step in producer)
@@ -49,8 +50,9 @@ def test_native_replay_shards_are_complete_and_required() -> None:
     job = jobs["native-gates"]
     assert job["needs"] == "native-command-evaluators"
     assert job["strategy"]["fail-fast"] is False
-    assert job["strategy"]["matrix"]["shard-index"] == list(range(8))
-    assert job["timeout-minutes"] == 5
+    shards = job["strategy"]["matrix"]["shard-index"]
+    assert shards == list(range(24))
+    assert job["timeout-minutes"] == 10
     steps = job["steps"]
     assert any(step.get("uses") == "./.github/actions/setup-ci-python" for step in steps)
 
@@ -63,20 +65,21 @@ def test_native_replay_shards_are_complete_and_required() -> None:
     assert any(step.get("uses") == "./.github/actions/restore-command-projections" for step in steps)
 
     contracts = next(
-        step for step in steps
-        if step.get("name") == "Check native contract groups after artifact fan-out"
+        step for step in steps if step.get("name") == "Check native contract groups after artifact fan-out"
     )
     assert contracts["if"] == "matrix.shard-index == 0"
-    assert "ci/package_size" in contracts["run"]
     assert "test_native_contract_validates_every_authored_signature" in contracts["run"]
     assert "test_install_writes_managed_extension_that_denies_on_hook_errors" in contracts["run"]
     assert "test_managed_extension_fails_safe_on_ambiguous_success_payloads" in contracts["run"]
 
     replay = next(
-        step for step in steps
+        step
+        for step in steps
         if step.get("name") == "Benign false-positive and Gauntlet replay gates (model-free, native path)"
     )
-    assert replay["env"]["SHARD_COUNT"] == 8
+    # A SHARD_COUNT that disagrees with the matrix silently drops gate cases
+    # or runs them twice, and the gate reports green either way.
+    assert replay["env"]["SHARD_COUNT"] == len(shards)
     assert "set -o pipefail" in replay["run"]
     assert "pytest --collect-only -q" in replay["run"]
     assert "sort gate-nodes.txt | awk" in replay["run"]

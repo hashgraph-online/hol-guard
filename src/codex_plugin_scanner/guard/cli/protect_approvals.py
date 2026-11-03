@@ -23,6 +23,9 @@ from ..runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from ..shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from ..store import GuardStore
 
+# Guard Cloud could not give a package verdict; a review carrying one of these is not about the package.
+_CLOUD_FAILURE_REASON_CODES = ("cloud_auth_error", "cloud_validation_error", "cloud_http_error", "cloud_timeout")
+
 
 def _queue_local_protect_approvals(
     response_payload: dict[str, object],
@@ -36,13 +39,14 @@ def _queue_local_protect_approvals(
 ) -> None:
     if not _should_queue_local_protect_approval(response_payload):
         return
-    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
+    from ..blocked_request_mode import approval_wait_hint, asks_for_approval, safe_alternative_reason
 
     try:
         config = load_guard_config(guard_home)
     except (OSError, RuntimeError, TypeError, ValueError):
         config = None
     if config is None or not asks_for_approval(config):
+        queued = []
         artifact = _protect_request_artifact(response_payload, workspace=workspace)
         approval_item = (
             _protect_approval_item(response_payload, workspace=workspace, artifact=artifact)
@@ -57,7 +61,7 @@ def _queue_local_protect_approvals(
                 store=store,
                 artifact_id=artifact.artifact_id,
             )
-            record_unprompted_review(
+            queued = record_unprompted_review(
                 detection=HarnessDetection(
                     harness=artifact.harness,
                     installed=True,
@@ -72,6 +76,18 @@ def _queue_local_protect_approvals(
         verdict = response_payload.get("verdict")
         reason = verdict.get("reason") if isinstance(verdict, dict) else None
         guidance = safe_alternative_reason(str(reason or "HOL Guard blocked this package request."))
+        if queued:
+            request_id = str(queued[0]["request_id"])
+            guidance = safe_alternative_reason(
+                str(reason or "HOL Guard blocked this package request."),
+                reason_code=_protect_review_reason_code(response_payload),
+                approval_queued=True,
+            )
+            guidance = f"{guidance} {approval_wait_hint(request_id, guard_home=guard_home)}".strip()
+            response_payload["approval_resume"] = {
+                "request_id": request_id,
+                "poll_path": f"/v1/requests/{request_id}",
+            }
         response_payload.update(policy_action="block", approval_requests=[], prompted=False, review_hint=guidance)
         evaluation = response_payload.get("supply_chain_evaluation")
         if isinstance(evaluation, dict):
@@ -241,7 +257,7 @@ def _protect_approval_item(
     reasons = supply_chain_evaluation.get("reasons")
     reason_items = reasons if isinstance(reasons, list) else []
     reason_codes = {str(reason.get("code") or "") for reason in reason_items if isinstance(reason, dict)}
-    for reason_code in ("cloud_auth_error", "cloud_validation_error", "cloud_http_error", "cloud_timeout"):
+    for reason_code in _CLOUD_FAILURE_REASON_CODES:
         if reason_code in reason_codes:
             decision_v2_payload["package_review_cloud_reason_code"] = reason_code
             break
@@ -404,6 +420,12 @@ def _normalize_protect_policy_action(value: object) -> GuardAction | None:
     return action if is_guard_action(action) else None
 
 
+def _protect_review_reason_code(response_payload: dict[str, object]) -> str:
+    if any(_protect_has_reason_code(response_payload, code) for code in _CLOUD_FAILURE_REASON_CODES):
+        return "native_package_cloud_unavailable"
+    return "native_package_review"
+
+
 def _protect_has_reason_code(response_payload: dict[str, object], reason_code: str) -> bool:
     supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
     if not isinstance(supply_chain_evaluation, dict):
@@ -420,6 +442,11 @@ def _bind_protect_receipt_approval(response_payload: dict[str, object], *, store
         return
     receipt_id = _optional_string(receipt.get("receipt_id"))
     approval_request_id = _optional_string(response_payload.get("primary_approval_request_id"))
+    queued_ids = response_payload.get("approval_request_ids")
+    if approval_request_id is None and isinstance(queued_ids, list) and len(queued_ids) == 1:
+        # This block queued exactly one request, so the receipt binds to it
+        # even when the display link could not be resolved.
+        approval_request_id = _optional_string(queued_ids[0])
     if receipt_id is None or approval_request_id is None:
         return
     receipt["approval_source"] = "approval-center"

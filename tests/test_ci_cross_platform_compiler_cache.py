@@ -27,12 +27,15 @@ def test_only_main_pushes_write_the_cross_platform_compiler_cache() -> None:
 def test_runtime_cache_preserves_the_optimized_profile_and_cold_build_allowance() -> None:
     workflow = load_ci_workflow()
     assert "CARGO_PROFILE_RELEASE_OPT_LEVEL" not in workflow["env"]
-    for name in ("macos-native-runtime", "windows-native-runtime"):
+    # Cold crate-graph builds on this stack measure ~19 min on macOS (PRs read
+    # the compiler cache read-only until main seeds new crates), so the macOS
+    # allowance is 25 while Windows still fits 15.
+    allowances = {"macos-native-runtime": 25, "windows-native-runtime": 15}
+    for name, allowance in allowances.items():
         job = workflow["jobs"][name]
-        assert job["timeout-minutes"] == 15
+        assert job["timeout-minutes"] == allowance
         assert "CARGO_PROFILE_RELEASE_OPT_LEVEL" not in job.get("env", {})
-    for name in ("native-release-size", "native-command-evaluators"):
-        assert "CARGO_PROFILE_RELEASE_OPT_LEVEL" not in workflow["jobs"][name].get("env", {})
+    assert "CARGO_PROFILE_RELEASE_OPT_LEVEL" not in workflow["jobs"]["native-command-evaluators"].get("env", {})
     assert "macos-native-runtime" in workflow["jobs"]["required"]["needs"]
     assert "windows-native-runtime" in workflow["jobs"]["required"]["needs"]
 

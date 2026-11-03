@@ -1,7 +1,7 @@
 use super::*;
 use crate::mcp_tool_policy_decision::Current;
 use guard_command::effect_decision::GuardAction;
-use serde_json::Map;
+use serde_json::{json, Map};
 
 const VECTORS: &str =
     include_str!("../../../../tests/fixtures/mcp_relay/safe_alternative_block_vectors.json");

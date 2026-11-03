@@ -3,6 +3,125 @@
 
 use crate::guard_store_json::py_strip;
 
+/// Read-only notification for a queued review whose identical retry is bound.
+pub(crate) fn approval_wait_hint(request_id: &str) -> String {
+    if request_id.is_empty()
+        || request_id.starts_with('-')
+        || request_id.len() > 64
+        || !request_id
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_'))
+    {
+        return String::new();
+    }
+    format!(
+        "Wait for the decision with `hol-guard approvals wait {request_id} --json` (bounded to 120 seconds). \
+         Only after an allow decision, retry the identical action through Guard. \
+         A timeout or a block is not approval."
+    )
+}
+
+pub(crate) fn approval_wait_hint_for_home(
+    request_id: &str,
+    guard_home: &str,
+    home_dir: &str,
+) -> String {
+    let hint = approval_wait_hint(request_id);
+    if hint.is_empty()
+        || std::path::Path::new(home_dir).join(".hol-guard") == std::path::Path::new(guard_home)
+    {
+        return hint;
+    }
+    let quoted = crate::mcp_proxy_shlex::quote(guard_home);
+    hint.replace(" --json`", &format!(" --json --home {quoted}`"))
+}
+
+/// The `blocked_request_mode` a silent block is recorded with.
+pub(crate) const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
+/// The silent block's reason when the review gave none.
+pub(crate) const BLOCKED_REASON: &str = "HOL Guard blocked this action.";
+
+/// `str(value or fallback)` for the values the resident reproduces: a string,
+/// or a falsy `None`, `False` or `""`. Anything else is `None`.
+pub(crate) fn falsy_or_text<'a>(
+    value: Option<&'a serde_json::Value>,
+    fallback: &'a str,
+) -> Option<&'a str> {
+    use serde_json::Value;
+    match value {
+        None | Some(Value::Null) | Some(Value::Bool(false)) => Some(fallback),
+        Some(Value::String(text)) if text.is_empty() => Some(fallback),
+        Some(Value::String(text)) => Some(text),
+        Some(_) => None,
+    }
+}
+
+/// The `safe-alternative` PreToolUse response that blocks `result` with
+/// `reason`: rendered for `harness`, never prompted.
+pub(crate) fn safe_alternative_block(
+    harness: &str,
+    result: &guard_command::hook_responses::Object,
+    reason: &str,
+) -> guard_command::hook_responses::Object {
+    use serde_json::json;
+    let mut blocked = result.clone();
+    blocked.insert("decision".to_owned(), json!("deny"));
+    blocked.insert("minimum_action".to_owned(), json!("block"));
+    blocked.insert("policy_action".to_owned(), json!("block"));
+    blocked.insert("reason".to_owned(), json!(reason));
+    let mut response = guard_command::hook_responses::pre_tool(harness, &blocked);
+    response.insert("prompted".to_owned(), json!(false));
+    response.insert(
+        "blocked_request_mode".to_owned(),
+        json!(SAFE_ALTERNATIVE_MODE),
+    );
+    response
+}
+
+pub(crate) fn wait_hint_projection(
+    args: &serde_json::Value,
+) -> crate::runner_authority_op::KindResult {
+    let id = args
+        .get("request_id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(crate::runner_authority_op::ERR_INVALID)?;
+    let guard_home = args
+        .get("guard_home")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(crate::runner_authority_op::ERR_INVALID)?;
+    let home_dir = args
+        .get("home_dir")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(crate::runner_authority_op::ERR_INVALID)?;
+    Ok(serde_json::json!({"hint": approval_wait_hint_for_home(id, guard_home, home_dir)}))
+}
+
+#[cfg(test)]
+mod wait_hint_tests {
+    use super::approval_wait_hint;
+
+    #[test]
+    fn only_a_literal_request_id_is_a_shell_wait_hint() {
+        assert!(approval_wait_hint("req-1").contains("approvals wait req-1 --json"));
+        for id in ["", "-x", "req;id", "$(id)", "req/1", "réq"] {
+            assert!(approval_wait_hint(id).is_empty(), "{id}");
+        }
+    }
+
+    #[test]
+    fn a_custom_home_wait_names_the_store_without_weakening_its_review_gate() {
+        let hint = super::approval_wait_hint_for_home("req-1", "/custom guard", "/user");
+        assert!(hint.contains("--json --home '/custom guard'"));
+        let default = super::approval_wait_hint_for_home("req-1", "/user/.hol-guard", "/user");
+        assert!(!default.contains("--home"));
+        let projected = super::wait_hint_projection(&serde_json::json!({
+            "request_id": "req-1", "guard_home": "/custom guard", "home_dir": "/user"
+        }))
+        .unwrap();
+        assert_eq!(projected["hint"], hint);
+    }
+}
+
 /// `SAFE_ALTERNATIVE_GUIDANCE`.
 const SAFE_ALTERNATIVE_GUIDANCE: &str = "This action remains blocked. Continue with a safe, \
      permitted alternative that respects the same protection. Do not retry an equivalent \
@@ -29,16 +148,13 @@ const INBOX_APPROVAL_OFFER: &str = " Approve it in the HOL Guard inbox (choose A
      repeated read-only command), or split it into simpler commands.";
 
 /// `_CONNECTOR_SETUP_WAIT`: an MCP server setup review is one decision for
-/// the server, not an approval of this action. Only the vector-checked
-/// `connector_setup_reason` reads it until the resident renders this text.
-#[cfg_attr(not(test), allow(dead_code))]
+/// the server, not an approval of this action.
 const CONNECTOR_SETUP_WAIT: &str = "Setting it up is a one-time decision for the user in the HOL \
      Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this \
      or another spelling, until it is set up; continue with other work meanwhile.";
 /// `_CONNECTOR_APPROVAL_WAIT`: a local CLI or script Guard has not been set
 /// up for is an ordinary review, which the user's Allow once or Always allow
 /// releases.
-#[cfg_attr(not(test), allow(dead_code))]
 const CONNECTOR_APPROVAL_WAIT: &str = "It is waiting for the user to approve it in the HOL Guard \
      inbox (`hol-guard approvals`), where Allow once or Always allow lets it run. Do not retry \
      the same action until it is approved; continue with other work meanwhile.";
@@ -52,9 +168,8 @@ const CONNECTOR_SETUP_REASON_PREFIX: &str = "HOL Guard has not been set up for `
 /// any) and appends `SAFE_ALTERNATIVE_GUIDANCE`, with no link and no request
 /// to ask the user; `ask` mode says it waits in the inbox, and the caller adds
 /// the link.
-/// The resident has no caller yet: the daemon renders this text and the vector
-/// test keeps the two byte-identical until the resident takes over rendering.
-#[cfg_attr(not(test), allow(dead_code))]
+/// The daemon and the resident's review queue both render this text; the
+/// vector test keeps the two byte-identical.
 pub(crate) fn connector_setup_reason(
     name: &str,
     surface: &str,
@@ -126,6 +241,12 @@ fn reason_code_hint(reason_code: &str) -> &'static str {
              --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked \
              the lockfile and settings. If this was already that form, reuse dependencies that \
              are already installed where you can."
+        }
+        // Cloud gave no verdict, so the lockfile-only advice above would be paused the same way.
+        "native_package_cloud_unavailable" => {
+            "Guard Cloud could not check this package, so Guard paused the install instead of \
+             treating it as safe. This is not a finding about the package, and another form of \
+             the same install is paused the same way until Guard Cloud can check it."
         }
         "native_network_review" => "This makes a network request that Guard has not seen before.",
         "native_file_read_review" => {
@@ -289,5 +410,19 @@ mod tests {
             Some(true),
         );
         assert!(install.contains("--ignore-scripts"), "{install}");
+    }
+
+    #[test]
+    fn a_cloud_outage_pause_does_not_offer_the_lockfile_form() {
+        let text = safe_alternative_reason(
+            "HOL Guard requires review before this package or script command can execute.",
+            Some("native_package_cloud_unavailable"),
+            Some(true),
+        );
+        assert!(
+            text.contains("Guard Cloud could not check this package"),
+            "{text}"
+        );
+        assert!(!text.contains("--ignore-scripts"), "{text}");
     }
 }

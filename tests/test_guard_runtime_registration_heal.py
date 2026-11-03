@@ -221,31 +221,24 @@ def test_protection_repair_all_restores_runtime_registration(
         daemon.stop()
 
 
-def test_protection_repair_all_reports_unavailable_native_probe_truthfully(
+def test_protection_repair_all_clears_degraded_evidence_without_a_native_probe(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     stub_supported_repair(monkeypatch, stub_evidence_health=False)
-    patch_daemon_global(monkeypatch, "current_extension_control_snapshot", lambda: None)
-    patch_daemon_global(
-        monkeypatch,
-        "evaluate_command_native",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("native evaluation unavailable")),
-    )
     store, daemon = start_daemon(tmp_path, monkeypatch)
+    store.record_command_activity_persistence_failure(
+        error_code="pre_record_failed",
+        occurred_at=datetime.now(timezone.utc),
+    )
     try:
-        before = store.get_command_activity_persistence_health().persistence_error_count
-        status, payload = post_repair(daemon, "all")
+        _status, payload = post_repair(daemon, "all")
     finally:
         daemon.stop()
 
-    assert status == 409
-    assert payload["error"] == "protection_repair_incomplete"
-    assert "decision_stream" in cast(list[str], payload["pending_check_ids"])
-    check_reasons = cast(dict[str, str], payload["check_reasons"])
-    assert check_reasons["decision_stream"] == "native_evaluation_unavailable"
-    after = store.get_command_activity_persistence_health().persistence_error_count
-    assert after == before
+    assert "decision_stream" in cast(list[str], payload["check_ids"])
+    assert "decision_stream" not in cast(dict[str, str], payload["check_reasons"])
+    assert store.get_command_activity_persistence_health().active_error_count == 0
 
 
 def test_containment_repair_outcome_reports_signal_reasons(monkeypatch: pytest.MonkeyPatch) -> None:

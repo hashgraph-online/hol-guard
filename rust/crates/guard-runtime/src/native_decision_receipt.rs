@@ -193,7 +193,7 @@ fn valid_binding(value: &PyVal) -> bool {
 
 /// `valid_prompt_risk_classes`: one to six known classes, each once, in
 /// their declared order.
-fn valid_prompt_risk_classes(value: &PyVal) -> bool {
+pub(crate) fn valid_prompt_risk_classes(value: &PyVal) -> bool {
     let Some(items) = value.as_list() else {
         return false;
     };
@@ -321,6 +321,12 @@ fn canonical_identity(receipt: &PyVal) -> String {
         }
     }
     dumps_sorted(&PyVal::Dict(identity), false)
+}
+
+/// The decision id `valid` expects of `receipt`, for tests that build one.
+#[cfg(test)]
+pub(crate) fn sealed_decision_id(receipt: &PyVal) -> String {
+    hex::encode(Sha256::digest(canonical_identity(receipt).as_bytes()))
 }
 
 /// `validate_native_decision_receipt(value) is not None`.

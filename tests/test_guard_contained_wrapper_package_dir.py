@@ -20,6 +20,11 @@ def org_home(tmp_path: Path) -> tuple[Path, Path, Path]:
     return home, workspace, sibling
 
 
+@pytest.fixture(autouse=True)
+def _peel_from_the_resident(native_contained_wrapper_runtime: Path) -> None:
+    """Every peel here is the classifier's answer, asked of the session resident."""
+
+
 @pytest.mark.parametrize(
     ("command", "core"),
     [
@@ -31,6 +36,10 @@ def org_home(tmp_path: Path) -> tuple[Path, Path, Path]:
         ("pnpm --dir={sibling} run test", "pnpm run test"),
         ("yarn --cwd {sibling} run build", "yarn run build"),
         ("bun run --cwd ../service-api test", "bun run test"),
+        # A script run spelled without `run` is the same call, so it peels too.
+        ("pnpm -C {sibling} build", "pnpm build"),
+        ("yarn --cwd {sibling} build", "yarn build"),
+        ("npm --prefix {sibling} test", "npm test"),
     ],
 )
 def test_package_directory_flag_peels_like_a_cd(tmp_path: Path, command: str, core: str) -> None:
@@ -78,10 +87,10 @@ def test_package_directory_outside_a_repository_is_not_peeled(tmp_path: Path, co
         "bun run --cwd ~/org/service-api build",
         "pnpm -C{sibling} run test",
         "bun run build",
-        # Tool runners keep the second node authorization. Rewriting them drops it.
-        "bun --cwd {sibling} x vitest run",
-        "npm --prefix {sibling} exec vitest",
-        "pnpm --dir {sibling} dlx vitest",
+        # A directory that is not there projects nothing, as on the native
+        # side; the manager is the one that reports it.
+        "bun run --cwd missing build",
+        "pnpm -C missing lint",
     ],
 )
 def test_other_package_directory_spellings_stay_unwrapped(tmp_path: Path, command: str) -> None:
@@ -89,3 +98,26 @@ def test_other_package_directory_spellings_stay_unwrapped(tmp_path: Path, comman
     assert (
         peel_contained_wrapper(command.format(sibling=sibling), workspace=workspace, home=home, cwd=workspace) is None
     )
+
+
+@pytest.mark.parametrize(
+    ("command", "core"),
+    [
+        ("bun --cwd {sibling} x vitest run", "bun x vitest run"),
+        ("npm --prefix {sibling} exec vitest", "npm exec vitest"),
+        ("pnpm --dir {sibling} dlx vitest", "pnpm dlx vitest"),
+    ],
+)
+def test_tool_runners_peel_like_every_other_rest(tmp_path: Path, command: str, core: str) -> None:
+    """A tool runner peels like every other rest, which drops no authorization.
+
+    Native authority reads `<manager> <flag> <dir> x <tool>` as
+    `cd <dir> && <manager> x <tool>` and answers for that form, and the core is
+    re-authorized in the resolved directory before it runs, so the tool runner
+    faces the same checks it faces when the `cd` is typed. Peeling in step with
+    the native projection is what keeps the two sides reading one command the
+    same way.
+    """
+    home, workspace, sibling = org_home(tmp_path)
+    peeled = peel_contained_wrapper(command.format(sibling=sibling), workspace=workspace, home=home, cwd=workspace)
+    assert peeled == (core, sibling.resolve(), None)

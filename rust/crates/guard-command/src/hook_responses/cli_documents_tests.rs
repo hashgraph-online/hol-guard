@@ -154,3 +154,48 @@ fn copilot_hook_response_forwards_reuse_and_evidence() {
     assert_eq!(payload["approval_reuse"], json!({"request_id": "abc"}));
     assert_eq!(payload["scanner_evidence"], json!([{"rule": "secret"}]));
 }
+
+fn hermes_params(event: &str, action: &str, reason: &str) -> Object {
+    let mut params = Object::new();
+    params.insert("canonical_harness".into(), json!("hermes"));
+    params.insert("event_name".into(), json!(event));
+    params.insert("policy_action".into(), json!(action));
+    params.insert("reason".into(), json!(reason));
+    params.insert("system_message".into(), json!("ignored by hermes"));
+    params
+}
+
+#[test]
+fn hermes_verdict_event_renders_a_decision_document() {
+    let allowed = cli_response("hermes", &hermes_params("PreToolUse", "allow", "ok"))
+        .expect("hermes allow document");
+    assert_eq!(
+        allowed,
+        json!({"decision": "allow", "reason": "ok"})
+            .as_object()
+            .cloned()
+            .unwrap()
+    );
+
+    let reviewed = cli_response(
+        "hermes",
+        &hermes_params("PreToolUse", "review", "needs review"),
+    )
+    .expect("hermes review document");
+    assert_eq!(
+        reviewed,
+        json!({"decision": "block", "reason": "needs review"})
+            .as_object()
+            .cloned()
+            .unwrap(),
+        "Hermes has no prompt of its own, so a review stops the call"
+    );
+}
+
+#[test]
+fn hermes_non_verdict_event_keeps_the_generic_document() {
+    let rendered = cli_response("hermes", &hermes_params("PostToolUse", "allow", "ok"))
+        .expect("hermes PostToolUse document");
+    assert_eq!(rendered["continue"], json!(true));
+    assert!(rendered.contains_key("hookSpecificOutput"));
+}

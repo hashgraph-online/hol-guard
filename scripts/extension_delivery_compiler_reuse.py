@@ -14,13 +14,13 @@ from pathlib import Path
 
 from build_native_command_packs import safe_directory
 from command_pack_store import durable_directory, publish_object, read_object
+from extension_delivery_fetch import cached_fetcher
 from extension_delivery_located_store import LocatedStore
 from extension_delivery_objects import encoded
 from extension_delivery_policy_lookup import read_transport_page, validate_record
 from extension_pack_archives import ingest
 
 from codex_plugin_scanner.guard.catalog_delivery.authority import VerifiedDistribution
-from codex_plugin_scanner.guard.catalog_delivery.transport import cached_fetcher
 
 
 @dataclass(frozen=True, init=False)

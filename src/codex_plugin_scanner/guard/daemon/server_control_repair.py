@@ -6,8 +6,11 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Mapping
+from contextlib import suppress
 from datetime import datetime, timezone
+from pathlib import Path
 
+from .. import native_context_assistance
 from ..approval_gate import (
     ApprovalGateError,
     require_high_risk,
@@ -31,8 +34,9 @@ from ..config import (
 from ..models import (
     GuardRuntimeRegistration,
 )
+from ..native_context_assistance import ContextAssistanceError
 from ..package_firewall_entitlement import (
-    resolve_package_firewall_entitlement,
+    package_firewall_entitlement_or_denied,
 )
 from ..runtime.runner import (
     _requeue_cloud_review_privacy_projection,
@@ -158,14 +162,17 @@ class _RepairSettingsRoutes:
                         containment_repaired,
                         containment_failed,
                         containment_reasons,
-                    ) = containment_repair_outcome(lambda: self._containment_health_payload(force_refresh=True))
+                    ) = containment_repair_outcome(
+                        lambda: self._containment_health_payload(force_refresh=True),
+                        guard_home=store.guard_home,
+                    )
                     repaired_check_ids.extend(containment_repaired)
                     failed_check_ids.extend(containment_failed)
                     for failed_check_id in containment_failed:
                         check_reasons[failed_check_id] = containment_reasons[failed_check_id]
                     try:
                         config = load_guard_config(store.guard_home)
-                        probe_reason = _repair_command_activity_persistence_health(store)
+                        _repair_command_activity_persistence_health(store)
                         store.maintain_command_activity(
                             now=datetime.now(timezone.utc),
                             detail_retain_days=config.evidence_retain_days,
@@ -174,9 +181,6 @@ class _RepairSettingsRoutes:
                         if evidence_health.active_error_count > 0:
                             failed_check_ids.append("decision_stream")
                             check_reasons["decision_stream"] = "decision_stream_degraded"
-                        elif probe_reason is not None:
-                            pending_check_ids.append("decision_stream")
-                            check_reasons["decision_stream"] = probe_reason
                         else:
                             repaired_check_ids.append("decision_stream")
                     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
@@ -227,7 +231,7 @@ class _RepairSettingsRoutes:
             check_reasons: dict[str, str] = {}
             try:
                 config = load_guard_config(store.guard_home)
-                probe_reason = _repair_command_activity_persistence_health(store)
+                _repair_command_activity_persistence_health(store)
             except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                 check_reasons["decision_stream"] = "decision_stream_health_unavailable"
                 self._record_incomplete_protection_repair(check_reasons)
@@ -236,24 +240,6 @@ class _RepairSettingsRoutes:
                         "error": "protection_repair_failed",
                         "message": "Guard could not verify the command evidence store.",
                         "check_reasons": check_reasons,
-                    },
-                    status=409,
-                )
-                return
-            if probe_reason is not None:
-                check_reasons["decision_stream"] = probe_reason
-                self._record_incomplete_protection_repair(check_reasons)
-                self._write_json(
-                    {
-                        "repaired": False,
-                        "repair_scope": "local_integrity",
-                        "check_ids": [],
-                        "pending_check_ids": ["decision_stream"],
-                        "check_reasons": check_reasons,
-                        "message": (
-                            "Guard could not run the native policy engine to prove command evidence. "
-                            "Existing evidence was not changed."
-                        ),
                     },
                     status=409,
                 )
@@ -366,7 +352,7 @@ class _RepairSettingsRoutes:
                     approval_gate_grant=approval_gate_grant,
                 )
             config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
-            entitlement = resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
+            entitlement = package_firewall_entitlement_or_denied(self.server.store)  # type: ignore[attr-defined]
             config = update_guard_settings(
                 guard_home,
                 config_settings,
@@ -393,6 +379,8 @@ class _RepairSettingsRoutes:
         except ValueError as error:
             self._write_json({"error": "invalid_settings", "message": str(error)}, status=400)
             return
+        if "context_assistance" in config_settings:
+            _hand_settings_to_cigar(guard_home)
         self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
 
     def _handle_update_channel(self, payload: dict[str, object]) -> None:
@@ -445,4 +433,16 @@ class _RepairSettingsRoutes:
         except ApprovalGateError as error:
             self._write_approval_gate_error(error)
             return
+        _hand_settings_to_cigar(guard_home)
         self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
+
+
+def _hand_settings_to_cigar(guard_home: Path) -> None:
+    """Give saved CIGAR settings to the native service right away.
+
+    Prompt hooks read the native copy, which otherwise refreshes only on the
+    next context call. Without this, turning project context back on leaves
+    every prompt without context until something asks for CIGAR's status.
+    """
+    with suppress(ContextAssistanceError):
+        native_context_assistance.control("status", guard_home=guard_home)

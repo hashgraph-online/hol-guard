@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 
 import pytest
@@ -76,6 +77,23 @@ def test_pipx_daemon_imports_shared_dependencies_without_running_startup_hooks(
     assert not customize_marker.exists()
 
 
+def _schemeless_paths(paths):
+    """Answer the daemon's own ``get_paths()`` and leave every other caller alone.
+
+    ``sysconfig`` is one module for the whole process, so replacing it here
+    also replaces it for anything else that runs while the test does: coverage
+    asks for a named scheme as it loads a module for the first time, and a
+    stub that took no scheme failed that call instead of the daemon's.
+    """
+
+    real = sysconfig.get_paths
+
+    def get_paths(*scheme, **named):
+        return real(*scheme, **named) if scheme or named else paths
+
+    return get_paths
+
+
 def test_daemon_does_not_add_shared_libraries_for_an_ordinary_venv(tmp_path, monkeypatch):
     prefix = tmp_path / "env"
     local_library = prefix / "lib" / "python3" / "site-packages"
@@ -83,7 +101,11 @@ def test_daemon_does_not_add_shared_libraries_for_an_ordinary_venv(tmp_path, mon
     local_library.mkdir(parents=True)
     shared_library.mkdir(parents=True)
     monkeypatch.setattr(daemon_manager_module.sys, "prefix", str(prefix))
-    monkeypatch.setattr(daemon_manager_module.sysconfig, "get_paths", lambda: {"purelib": str(local_library)})
+    monkeypatch.setattr(
+        daemon_manager_module.sysconfig,
+        "get_paths",
+        _schemeless_paths({"purelib": str(local_library)}),
+    )
     assert shared_library not in daemon_manager_module._trusted_daemon_import_paths()
 
 

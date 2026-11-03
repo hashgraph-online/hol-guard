@@ -12,12 +12,20 @@ use std::time::{Duration, Instant};
 
 #[path = "managed_resident_client_stream.rs"]
 mod client_stream;
+#[path = "managed_resident_client_timeout.rs"]
+mod client_timeout_policy;
+pub(crate) use client_timeout_policy::{client_timeout, DAEMON_LIFECYCLE_TIMEOUT_CEILING_MS};
 #[path = "managed_resident_containment.rs"]
 mod containment;
 #[path = "managed_resident_handoff.rs"]
 mod handoff;
+pub(crate) use handoff::answer_shutdown;
+#[path = "managed_resident_handoff_record.rs"]
+mod handoff_record;
 #[path = "managed_resident_lease.rs"]
 mod lease;
+#[path = "managed_resident_stop_snapshot.rs"]
+mod stop_snapshot;
 pub(crate) use lease::client_request;
 use lease::client_request_with_lease;
 #[path = "managed_resident_client_request.rs"]
@@ -29,11 +37,20 @@ mod managed_resident_transport;
 mod managed_resident_windows;
 #[path = "managed_resident_owner_lock.rs"]
 mod owner_lock;
+#[path = "managed_resident_prewarm.rs"]
+mod prewarm_lane;
 pub(crate) use owner_lock::ManagedOwnerLock;
 #[path = "managed_resident_exit.rs"]
 mod exit_record;
+#[path = "resident_lifecycle_journal.rs"]
+mod lifecycle_journal;
+#[path = "resident_private_file.rs"]
+pub(crate) mod private_file;
+#[path = "resident_requested_stop.rs"]
+mod requested_stop;
 #[path = "resident_failure_log.rs"]
 mod resident_failure_log;
+pub(crate) use lifecycle_journal::lifecycle_health;
 #[path = "resident_state_retirement.rs"]
 mod resident_state_retirement;
 #[path = "resident_restart_budget.rs"]
@@ -49,6 +66,13 @@ use crate::resident_state::{
 
 pub(crate) fn client_stream(state_base: &Path) -> Result<(), String> {
     client_stream::run(state_base)
+}
+
+/// Start this runtime's resident, if no client is already holding one, and
+/// keep it up for a bounded window so a session's first hook does not pay
+/// for the start. `managed_resident_prewarm.rs` has the whole contract.
+pub(crate) fn prewarm(state_base: &Path) -> Result<(), String> {
+    prewarm_lane::run(state_base)
 }
 
 const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
@@ -148,13 +172,11 @@ fn combine_liveness(
 }
 
 pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<(), String> {
-    // Materialize the current runtime scope even when no resident state is
-    // present.  This keeps the stop command's authenticated, private-home
-    // contract deterministic for callers that use it to initialize a fresh
-    // scope before publishing test or recovery state.
+    // Materialize the private runtime scope even without resident state, so
+    // stop can initialize it before publishing test or recovery state.
     let digest = runtime_digest()?;
-    let _ = state_scope(state_base, &digest)?;
-    let request = br#"{"operation":"shutdown","request":{}}"#;
+    let runtime_scope = state_scope(state_base, &digest)?;
+    let request = handoff::STOP_SHUTDOWN_REQUEST;
     let deadline = Instant::now() + MANAGED_STOP_TIMEOUT;
     let Some((scope, digest, state)) = discover_home_states_prefer(state_base, Some(&digest))?
         .into_iter()
@@ -163,12 +185,13 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
         if retire_clients {
             lease::retire_clients_for_update(state_base, &digest, deadline)?;
         }
+        exit_record::wait_for_scope_quiesce(&runtime_scope, deadline);
         return Err("native_resident_stop_unavailable".to_owned());
     };
     if retire_clients {
         lease::retire_clients_for_update(state_base, &digest, deadline)?;
     }
-    let process_ids = containment::state_process_identities(std::slice::from_ref(&state));
+    let stopped = stop_snapshot::capture_for_stop(&scope, &digest, &state, retire_clients)?;
     let token = token_from_state(&state)?;
     let identity = crate::resident_client::ExpectedProcessIdentity {
         process_id: state.process_id,
@@ -185,11 +208,13 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     )
     .is_ok()
     {
-        containment::wait_for_stop_containment(&scope, &digest, deadline, &process_ids)?;
+        stop_snapshot::wait_for_stop(&scope, &digest, deadline, &stopped, &state, retire_clients)?;
         // The children are gone; clear the budget only under the startup
         // lock, since a start that got there first has already charged it.
-        let startup = exit_record::quiesce_under_startup_lock(state_base, &digest, &scope)?;
-        if startup.is_some() {
+        let startup =
+            exit_record::quiesce_under_startup_lock(state_base, &digest, &scope, deadline)?;
+        if startup.is_some() && crate::resident_state::discover_states(&scope, &digest)?.is_empty()
+        {
             let _ = restart_budget::clear(&scope);
         }
         return Ok(());
@@ -197,6 +222,9 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     // Clean up after a resident that died without a shutdown request, so
     // the next stop reports an empty scope instead of a stale generation.
     containment::retire_exited_states(&scope, &digest)?;
+    // A resident that already exited on its own can leave its supervisor
+    // still writing in the scope; "nothing to stop" must not race it.
+    exit_record::wait_for_scope_quiesce(&scope, deadline);
     Err("native_resident_stop_unavailable".to_owned())
 }
 
@@ -229,11 +257,7 @@ pub(crate) fn serve_managed(
     let owner_start_marker = process_start_marker(owner_process_id)?;
     let scope = state_scope(state_base, expected_digest)?;
     let owner_lock = acquire_managed_owner_lock(state_base)?;
-    // Build the immutable catalog read snapshot off the request path so the
-    // first catalog_read does not pay for it; failures surface on that read.
-    thread::spawn(|| {
-        let _ = guard_command::catalog_read_model::packaged_catalog_read_snapshot();
-    });
+    // Discovery metadata is loaded in bounded pages only when requested.
     // Initialize before fallible policy startup so every client can see a
     // resident still starting. This guard drops before owner_lock on all exits.
     let _diagnostic_lifetime =
@@ -268,7 +292,7 @@ pub(crate) fn serve_managed(
         );
     }
     let (policy_store, token, owner_alive) = startup?;
-    if cfg!(unix) {
+    let served = if cfg!(unix) {
         managed_resident_transport::serve_unix_managed(
             (&scope, &owner_lock),
             policy_store,
@@ -288,7 +312,17 @@ pub(crate) fn serve_managed(
             token,
             owner_alive,
         )
+    };
+    // The serve loops end on a `shutdown` operation by returning, so a
+    // requested stop reaches the supervisor as a clean exit and nothing else.
+    // Leave the note here, where the reason is still known, named after this
+    // process so the supervisor that reaps it reads this run's note and no
+    // other, and does not charge a stop it was asked for to the crash-loop
+    // budget.
+    if served.is_ok() && shutdown_requested() {
+        let _ = requested_stop::record(&scope, std::process::id());
     }
+    served
 }
 
 pub(crate) fn supervise_managed(
@@ -348,6 +382,10 @@ pub(crate) fn supervise_managed_for_owner(
         let mut child = child
             .spawn()
             .map_err(|_| "native_resident_spawn_failed".to_owned())?;
+        // Held across the wait: it is how the exit record tells this child's
+        // requested-stop note from one left by a run this supervisor did not
+        // start.
+        let child_process_id = child.id();
         let stderr_record = exit_record::capture_resident_stderr(&mut child);
         let mut liveness_writer = child
             .stdin
@@ -373,7 +411,13 @@ pub(crate) fn supervise_managed_for_owner(
         let ran_for = started.elapsed();
         child_done.store(true, Ordering::Release);
         let _ = watcher.join();
-        exit_record::record_supervised_run(supervised, stderr_record, status, ran_for);
+        exit_record::record_supervised_run(
+            supervised,
+            stderr_record,
+            status,
+            ran_for,
+            child_process_id,
+        );
         if status.success() {
             Ok(())
         } else {
@@ -440,57 +484,6 @@ pub(crate) fn parse_process_id(value: &str) -> Result<u32, String> {
         .ok_or_else(|| "native_resident_owner_process_invalid".to_owned())
 }
 
-/// Upper bound on a caller-supplied deadline. Every operation is capped at nine
-/// seconds except the skill-directory scan, whose bounded tree walk may
-/// legitimately read hundreds of megabytes and is granted a longer ceiling.
-const CLIENT_TIMEOUT_CEILING_MS: u64 = 9_000;
-/// Cold daemon-lifecycle startup. Python grants `_TIMEOUT_SECONDS` (10s) plus
-/// `_COLD_START_ALLOWANCE_SECONDS` (20s) in `native_daemon_lifecycle.py`.
-/// A packaged Windows resident can spend most of that creating the process
-/// and scanning the binary before it answers; clamping the request to nine
-/// seconds reports `native_resident_start_timeout` while the resident is
-/// still starting.
-const DAEMON_LIFECYCLE_TIMEOUT_CEILING_MS: u64 = 30_000;
-const SKILL_SCAN_TIMEOUT_CEILING_MS: u64 = 60_000;
-/// Contained local runners honour the caller's process timeout (up to ten
-/// minutes) plus a minute of transport slack for the probe and snapshot, so their budget must not be clamped to the
-/// nine-second ceiling that would abort a legitimate test run mid-flight. The
-/// package-shim admin op shares it: a probe runs each installed shim under its
-/// own per-shim timeout.
-const CONTAINED_RUNNER_TIMEOUT_CEILING_MS: u64 = 670_000;
-/// A Codex resume retry waits up to a minute for the app server to accept
-/// the turn and up to its busy timeout for the store; the caller adds five
-/// seconds of transport grace.
-const CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS: u64 =
-    guard_contracts::CODEX_REQUEST_RESUME_MAX_TIMEOUT_MS
-        + guard_contracts::CODEX_REQUEST_RESUME_MAX_BUSY_TIMEOUT_MS
-        + 5_000;
-
-pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
-    let value = crate::strict_json_value(payload).ok();
-    let ceiling = match value
-        .as_ref()
-        .and_then(|value| value.get("operation")?.as_str())
-    {
-        Some("skill_directory_identity" | "package_context_build") => SKILL_SCAN_TIMEOUT_CEILING_MS,
-        Some(
-            "contained_node_execute"
-            | "contained_typescript_execute"
-            | "contained_package_script_execute"
-            | "shim_admin",
-        ) => CONTAINED_RUNNER_TIMEOUT_CEILING_MS,
-        Some("codex_request_resume") => CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS,
-        Some("daemon_lifecycle_decide") => DAEMON_LIFECYCLE_TIMEOUT_CEILING_MS,
-        _ => CLIENT_TIMEOUT_CEILING_MS,
-    };
-    let budget = value
-        .as_ref()
-        .and_then(|value| value.get("deadline_budget_ms")?.as_u64())
-        .unwrap_or(750)
-        .clamp(1, ceiling);
-    Duration::from_millis(budget)
-}
-
 #[cfg(test)]
 use client_stream::{
     read_frame as read_client_stream_frame, write_frame as write_client_stream_frame,
@@ -498,3 +491,10 @@ use client_stream::{
 #[cfg(test)]
 #[path = "managed_resident_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "managed_resident_client_timeout_tests.rs"]
+mod client_timeout_tests;
+#[cfg(test)]
+#[path = "managed_resident_identity_tests.rs"]
+mod identity_tests;

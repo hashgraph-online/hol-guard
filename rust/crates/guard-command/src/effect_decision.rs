@@ -1181,4 +1181,44 @@ mod tests {
             .collect::<BTreeSet<_>>(),
         );
     }
+
+    /// `benign_requests._NATIVE_EVIDENCE_UNAVAILABLE_DECISION`. That module
+    /// publishes a sensitive tool-action artifact before an authenticated
+    /// native result exists, so it cannot ask the resident for the floor and
+    /// holds a pinned record of this decision instead. If the evaluator's
+    /// answer for an empty request carrying `unsupported-input` ever moves,
+    /// the pinned record is stale and this test is where it is caught.
+    #[test]
+    fn pinned_unavailable_evidence_floor() {
+        let request = EffectDecisionRequest {
+            factors: Vec::new(),
+            uncertainties: vec![UncertaintyKind::UnsupportedInput],
+            schema_version: EFFECT_DECISION_SCHEMA_VERSION.to_owned(),
+        };
+        let decision = evaluate_effect_decision(&request).expect("evaluates");
+
+        assert_eq!(
+            effect_decision_to_payload(&decision),
+            json!({
+                "schema_version": "1.1.0",
+                "action": "review",
+                "disposition": "review",
+                "proof_routes": [],
+                "controlling_reasons": [{
+                    "source": "policy",
+                    "reason_code": "uncertainty.unsupported-input",
+                    "action_floor": "review",
+                    "segment_ref": null,
+                    "operation_ref": null,
+                }],
+                "reasons": [{
+                    "source": "policy",
+                    "reason_code": "uncertainty.unsupported-input",
+                    "action_floor": "review",
+                    "segment_ref": null,
+                    "operation_ref": null,
+                }],
+            }),
+        );
+    }
 }

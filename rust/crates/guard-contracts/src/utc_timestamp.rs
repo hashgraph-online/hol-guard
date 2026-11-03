@@ -192,6 +192,12 @@ pub fn sqlite_julianday(value: &str) -> Option<f64> {
 pub fn utc_timestamp_micros(value: &str) -> Option<i64> {
     let parsed = parse_iso8601(value)?;
     let days = days_from_civil(parsed.year, parsed.month, parsed.day);
+    // `days_from_civil` normalizes impossible dates (31 February becomes
+    // early March). A lease expiry must not gain that extra time: the
+    // previous parser rejected a civil date that does not round-trip.
+    if parsed.year == 0 || civil_from_days(days) != (parsed.year, parsed.month, parsed.day) {
+        return None;
+    }
     let mut micros = days
         .checked_mul(86_400)?
         .checked_add(

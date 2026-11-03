@@ -6,7 +6,6 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from tests.support.extension_freshness import requires_fresh_extension_directory
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -32,7 +31,7 @@ def test_extension_directory_matches_canonical_registry() -> None:
     current = DIRECTORY_PATH.read_text(encoding="utf-8")
 
     assert renderer.render_document(current) == current
-    for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions:
+    for extension in renderer.native_extensions():
         assert current.count(f"`{extension.extension_id}`") == 1
 
 

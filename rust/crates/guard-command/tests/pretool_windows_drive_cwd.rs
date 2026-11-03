@@ -11,10 +11,7 @@ fn windows_drive_cwd_targets_bind_only_the_exact_workspace_spelling() {
         .join(format!(
             "{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let _cleanup = fixture::FixtureCleanup(root.clone());
     std::fs::create_dir_all(&root).unwrap();

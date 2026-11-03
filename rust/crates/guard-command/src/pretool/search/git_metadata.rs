@@ -39,7 +39,7 @@ const CREDENTIAL_MARKERS: &[&str] = &[
 ];
 
 /// True when a recursive `grep` may read the `.git` entry at `path`.
-pub(super) fn safe_git_entry(path: &Path, metadata: &std::fs::Metadata) -> bool {
+pub(in crate::pretool) fn safe_git_entry(path: &Path, metadata: &std::fs::Metadata) -> bool {
     if metadata.is_file() {
         return gitdir_pointer(path, metadata);
     }

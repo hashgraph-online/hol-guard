@@ -5,7 +5,7 @@
 //! that truncates back on failure, the private preview sidecar, and the
 //! bounded reader that counts the lines it could not parse.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -68,21 +68,26 @@ impl NativeEvidenceJournal {
 
 impl EvidenceJournalApi for NativeEvidenceJournal {
     fn append_journal(&self, path: &Path, record: &EvidenceRecord) -> Result<(), io::Error> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+        self.append_records(path, &[record])
+    }
+
+    fn append_journal_batch(
+        &self,
+        path: &Path,
+        records: &[&EvidenceRecord],
+    ) -> Vec<Result<(), io::Error>> {
+        match self.append_records(path, records) {
+            Ok(()) => records.iter().map(|_| Ok(())).collect(),
+            Err(error) => records
+                .iter()
+                .map(|_| {
+                    Err(match error.raw_os_error() {
+                        Some(code) => io::Error::from_raw_os_error(code),
+                        None => io::Error::new(error.kind(), error.to_string()),
+                    })
+                })
+                .collect(),
         }
-        let _lock = JournalLock::acquire(path)?;
-        let mut file = open_journal_append(path)?;
-        let original_size = file.metadata()?.len();
-        let appended = file
-            .write_all(&record.serialized())
-            .and_then(|()| file.sync_all())
-            .and_then(|()| append_preview_sidecar(path, record));
-        if let Err(error) = appended {
-            file.set_len(original_size)?;
-            return Err(error);
-        }
-        Ok(())
     }
 
     fn rewrite_journal(
@@ -91,11 +96,24 @@ impl EvidenceJournalApi for NativeEvidenceJournal {
         remove_record_id: &str,
         max_bytes: usize,
     ) -> Result<u64, io::Error> {
+        self.rewrite_journal_batch(path, &[remove_record_id.to_owned()], max_bytes)
+    }
+
+    fn rewrite_journal_batch(
+        &self,
+        path: &Path,
+        remove_record_ids: &[String],
+        max_bytes: usize,
+    ) -> Result<u64, io::Error> {
+        if remove_record_ids.is_empty() {
+            return Ok(0);
+        }
         let _lock = JournalLock::acquire(path)?;
         let (records, invalid_records) = self.read_journal_records(path, max_bytes)?;
+        let remove: HashSet<&str> = remove_record_ids.iter().map(String::as_str).collect();
         let remaining: Vec<EvidenceRecord> = records
             .into_iter()
-            .filter(|record| record.record_id() != remove_record_id)
+            .filter(|record| !remove.contains(record.record_id().as_str()))
             .collect();
         let mut body = Vec::new();
         for record in &remaining {
@@ -257,23 +275,6 @@ fn sidecar_line(record_id: &str, preview: &str) -> Vec<u8> {
     line.into_bytes()
 }
 
-/// `_append_preview_sidecar` — only a command-activity record carries one.
-fn append_preview_sidecar(path: &Path, record: &EvidenceRecord) -> Result<(), io::Error> {
-    let EvidenceRecord::CommandActivity(activity) = record else {
-        return Ok(());
-    };
-    let Some(preview) = validated_sidecar_preview(activity.invocation_preview.as_deref()) else {
-        return Ok(());
-    };
-    let mut file = private_options()
-        .append(true)
-        .create(true)
-        .open(preview_sidecar_path(path))?;
-    require_private_regular_file(&file)?;
-    file.write_all(&sidecar_line(&activity.record_id, &preview))?;
-    file.sync_all()
-}
-
 /// `_read_preview_sidecar` — record id to preview, in file order.
 fn read_preview_sidecar(
     path: &Path,
@@ -413,3 +414,6 @@ fn private_options() -> OpenOptions {
 #[cfg(all(test, unix))]
 #[path = "hook_evidence_journal_fs_tests.rs"]
 mod tests;
+
+#[path = "hook_evidence_journal_batch.rs"]
+mod batch;

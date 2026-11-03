@@ -229,3 +229,243 @@ fn a_linked_worktree_runs_programs_from_its_main_checkout() {
     ));
     let _ = fs::remove_dir_all(root);
 }
+
+/// The sealed system directories beside `/usr/bin` hold the tools a session
+/// reads its own machine with. `/usr` cannot be taken whole on macOS because
+/// `/usr/local` is writable by an admin user, so each one is named; leaving
+/// `/usr/sbin` and `/sbin` out made `sysctl -n hw.ncpu` unreachable and sent
+/// a command that only reports the CPU count to review. Linux executes all of
+/// `/usr` and `/sbin`, and the sandbox PATH keeps those entries there too.
+#[test]
+fn the_sealed_system_program_directories_are_reachable() {
+    let root = scratch();
+    for program in ["sysctl", "ifconfig", "ping", "netstat"] {
+        if Path::new("/usr/sbin").join(program).exists()
+            || Path::new("/sbin").join(program).exists()
+        {
+            assert!(
+                !outside(&root, program, "/usr/bin:/bin:/usr/sbin:/sbin"),
+                "{program}"
+            );
+        }
+    }
+    // `/usr/local` is not a program root: an admin user writes there, so a
+    // command could run something it had just placed in it.
+    tool(&root.join("tools").join("planted"), "#!/bin/sh\nexit 0\n");
+    let tools = root.join("tools");
+    assert!(outside(&root, "planted", tools.to_str().unwrap()));
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// The mode every fixture directory of a sealed tree is given. A grant
+/// requires that no account but this user or root can write any directory
+/// involved, and `create_dir_all` applies the process umask, so under a
+/// group-writable umask such as `002` the fixtures would otherwise be
+/// rejected for a reason the test is not about.
+const SEALED_MODE: u32 = 0o755;
+
+/// `path`, created with every directory it adds at or below `base` writable
+/// by its owner alone.
+fn sealed_dirs(base: &Path, path: &Path) {
+    fs::create_dir_all(path).unwrap();
+    for ancestor in path.ancestors().take_while(|dir| dir.starts_with(base)) {
+        fs::set_permissions(ancestor, fs::Permissions::from_mode(SEALED_MODE)).unwrap();
+    }
+}
+
+/// A scratch root under the build directory rather than the shared temporary
+/// directory. A tool directory is only granted when every directory above it
+/// is this user's or root's and no other account can write it, and `/tmp` is
+/// world-writable, so a tree built there can never be accepted. The build
+/// directory itself is sealed too, since the umask cargo created it under is
+/// not this test's to choose.
+fn sealed_scratch() -> PathBuf {
+    let build = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
+    let root = build.join("guard-launch-roots-sealed").join(format!(
+        "{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    ));
+    let _ = fs::remove_dir_all(&root);
+    sealed_dirs(&build, &root.join("workspace"));
+    root.canonicalize().unwrap()
+}
+
+/// Whether `program` is unreachable with `root` as the caller's HOME, so the
+/// answer does not depend on the account the tests run under.
+fn outside_at_home(root: &Path, program: &str, search_path: &str) -> bool {
+    let workspace = root.join("workspace");
+    launches_outside_exec_roots(
+        [(program, vec![Some(workspace.clone())])],
+        search_path,
+        Some(root),
+        &workspace,
+    )
+}
+
+#[test]
+fn a_tool_directory_inside_an_installed_package_tree_is_reachable() {
+    // The layout a harness puts on the agent shell's PATH: a vendored
+    // directory inside a platform package, named by the harness rather than
+    // `bin` or `shims`, holding the tool it wants always found.
+    let root = sealed_scratch();
+    let vendored = root.join(
+        "node_modules/@vendor/harness-cli-linux-x64/vendor/x86_64-unknown-linux-gnu/cli-path",
+    );
+    sealed_dirs(&root, &vendored);
+    tool(&vendored.join("rg"), "#!/bin/sh\nexit 0\n");
+    let search_path = format!("{}:/usr/bin:/bin", vendored.display());
+
+    assert!(!outside_at_home(&root, "rg", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_link_directory_of_an_installed_package_tree_reaches_the_package_it_names() {
+    // `node_modules/.bin` holds links into the packages beside it, so the
+    // directory on PATH is not where the program it names actually lives.
+    let root = sealed_scratch();
+    let package = root.join("node_modules/harness-cli/bin");
+    let links = root.join("node_modules/.bin");
+    sealed_dirs(&root, &package);
+    sealed_dirs(&root, &links);
+    tool(&package.join("rg"), "#!/bin/sh\nexit 0\n");
+    std::os::unix::fs::symlink(package.join("rg"), links.join("rg")).unwrap();
+    let search_path = format!("{}:/usr/bin:/bin", links.display());
+
+    assert!(!outside_at_home(&root, "rg", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_package_another_account_can_write_grants_no_tree() {
+    // The links in a `.bin` directory resolve into the packages beside it,
+    // so those directories are where the run would execute from. Sealing the
+    // directory on PATH says nothing about them: when one is writable by
+    // another account, that account picks the program, and the tree is not
+    // granted at all.
+    let root = sealed_scratch();
+    let package = root.join("node_modules/harness-cli/bin");
+    let links = root.join("node_modules/.bin");
+    sealed_dirs(&root, &package);
+    sealed_dirs(&root, &links);
+    tool(&package.join("rg"), "#!/bin/sh\nexit 0\n");
+    std::os::unix::fs::symlink(package.join("rg"), links.join("rg")).unwrap();
+    let search_path = format!("{}:/usr/bin:/bin", links.display());
+    assert!(!outside_at_home(&root, "rg", &search_path));
+
+    fs::set_permissions(&package, fs::Permissions::from_mode(0o775)).unwrap();
+    assert!(outside_at_home(&root, "rg", &search_path));
+    // The package directory itself, not only the link target's own file.
+    fs::set_permissions(&package, fs::Permissions::from_mode(SEALED_MODE)).unwrap();
+    let parent = package.parent().unwrap().to_path_buf();
+    fs::set_permissions(&parent, fs::Permissions::from_mode(0o775)).unwrap();
+    assert!(outside_at_home(&root, "rg", &search_path));
+
+    fs::set_permissions(&parent, fs::Permissions::from_mode(SEALED_MODE)).unwrap();
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_directory_outside_any_package_tree_is_still_unreachable() {
+    // The grant is the installed dependency tree, not every sealed directory
+    // the caller happens to put on PATH.
+    let root = sealed_scratch();
+    let loose = root.join("vendor/cli-path");
+    sealed_dirs(&root, &loose);
+    tool(&loose.join("rg"), "#!/bin/sh\nexit 0\n");
+    let search_path = format!("{}:/usr/bin:/bin", loose.display());
+
+    assert!(outside_at_home(&root, "rg", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_package_tree_inside_the_workspace_grants_no_root_of_its_own() {
+    // The workspace is already executable inside the sandbox; a dependency
+    // tree below it must not widen the grant to anything above the workspace.
+    let root = sealed_scratch();
+    let links = root.join("workspace/node_modules/.bin");
+    let outer = root.join("node_modules/escaped/bin");
+    sealed_dirs(&root, &links);
+    sealed_dirs(&root, &outer);
+    tool(&outer.join("rg"), "#!/bin/sh\nexit 0\n");
+    std::os::unix::fs::symlink(outer.join("rg"), links.join("rg")).unwrap();
+    let search_path = format!("{}:/usr/bin:/bin", links.display());
+
+    assert!(outside_at_home(&root, "rg", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_package_manager_behind_guards_shim_is_reachable() {
+    // Guard's own package shims sit first on the PATH of every session it
+    // supervises, and the sandbox executes from none of them, so reading the
+    // shim as the program made `pnpm run build` unreachable on every machine
+    // the shims are installed on. The program behind the shim is the one the
+    // sandbox would run.
+    let root = sealed_scratch();
+    let shims = root.join(".hol-guard/package-shims/bin");
+    let node = root.join(".nvm/versions/node/v25.2.1/bin");
+    sealed_dirs(&root, &shims);
+    sealed_dirs(&root, &node);
+    tool(&shims.join("pnpm"), "#!/bin/sh\nexit 0\n");
+    tool(&node.join("pnpm"), "#!/bin/sh\nexit 0\n");
+    let search_path = format!("{}:{}:/usr/bin:/bin", shims.display(), node.display());
+
+    assert!(!outside_at_home(&root, "pnpm", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_program_only_a_shim_answers_for_is_unreachable() {
+    // Nothing stands behind the shim on this PATH, and the sandbox executes
+    // nothing from the shim directory, so containing the command would trade
+    // a review for a command the run cannot find.
+    let root = sealed_scratch();
+    let shims = root.join(".hol-guard/package-shims/bin");
+    sealed_dirs(&root, &shims);
+    tool(&shims.join("pnpm"), "#!/bin/sh\nexit 0\n");
+    // Only the fixture shim is on PATH. A host `pnpm` in `/usr/bin` or
+    // `/bin` would answer the retry and hide a shim that nothing stands
+    // behind.
+    let search_path = shims.display().to_string();
+
+    assert!(outside_at_home(&root, "pnpm", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_project_package_shim_directory_stays_reachable() {
+    // The two trailing names are how Guard lays its shims out, and they are
+    // also a directory a project is free to use. One inside the workspace is
+    // a path the sandbox already executes, so it is not the shim layer the
+    // retry strips.
+    let root = sealed_scratch();
+    let shims = root.join("workspace/package-shims/bin");
+    sealed_dirs(&root, &shims);
+    tool(&shims.join("pnpm"), "#!/bin/sh\nexit 0\n");
+    let search_path = shims.display().to_string();
+
+    assert!(!outside_at_home(&root, "pnpm", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// The macOS framework interpreter roots, in a file of their own.
+#[cfg(target_os = "macos")]
+#[path = "launch_roots_framework_tests.rs"]
+mod framework;
+
+#[test]
+fn a_developer_shim_stays_reachable_once_the_sandbox_finds_its_tool_first() {
+    // The sandbox PATH finds the tool a `/usr/bin` shim forwards to ahead of
+    // the shim, so the session's `/usr/bin/python3` and the sandbox's
+    // developer `python3` are the same program, not a mismatch to review.
+    if super::super::developer_shim::forwarded_tool(Path::new("/usr/bin/python3")).is_none() {
+        return;
+    }
+    let root = scratch();
+    assert!(!outside(&root, "python3", "/usr/bin:/bin"));
+    assert!(!outside(&root, "/usr/bin/python3", "/usr/bin:/bin"));
+    let _ = fs::remove_dir_all(root);
+}

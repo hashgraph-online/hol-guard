@@ -252,19 +252,27 @@ fn windows_paths_outside_the_workspace_are_broad() {
     let tree = Tree::new();
     let ws = tree.ws();
     let outside = tree.path("outside");
-    assert_eq!(
-        read(&tree, &tree.path("outside\\notes.txt")),
-        Err("broad_scope")
-    );
-    assert_eq!(read(&tree, "..\\outside\\notes.txt"), Err("broad_scope"));
+    // One existing file a read names beside the workspace is a scope the user
+    // can answer for, however the path is spelled.
+    let notes = read(&tree, &tree.path("outside\\notes.txt"))
+        .expect("one file a read names outside the workspace is nameable");
+    assert_eq!(read(&tree, "..\\outside\\notes.txt"), Ok(notes.clone()));
     assert_eq!(
         read(&tree, "src\\..\\..\\outside\\notes.txt"),
+        Ok(notes.clone())
+    );
+    // A directory, or a path whose parent does not exist, stays broad.
+    assert_eq!(read(&tree, &outside), Err("broad_scope"));
+    assert_eq!(
+        read(&tree, "..\\outside\\missing\\new.txt"),
         Err("broad_scope")
     );
-    // A junction inside the workspace is followed to where Windows opens it.
+    // A junction inside the workspace is followed to where Windows opens it,
+    // so a read through it binds the real file.
     cmd(&ws, &format!("mklink /J escape \"{outside}\""));
     assert!(Path::new(&format!("{ws}\\escape\\notes.txt")).is_file());
-    assert_eq!(read(&tree, "escape\\notes.txt"), Err("broad_scope"));
+    assert_eq!(read(&tree, "escape\\notes.txt"), Ok(notes));
+    assert_eq!(read(&tree, "escape"), Err("broad_scope"));
     for pattern in ["..\\*", "src\\..\\..\\*", "C:\\*", "\\*", "C:*"] {
         let input = json!({"pattern": pattern, "path": ws});
         assert_eq!(

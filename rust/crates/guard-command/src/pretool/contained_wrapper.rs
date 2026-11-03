@@ -4,7 +4,7 @@ use crate::{CanonicalCommandV1, CommandSegmentV1};
 pub(super) mod package_dir;
 
 #[path = "contained_output_filters.rs"]
-mod output_filters;
+pub(super) mod output_filters;
 
 /// The package-directory route keeps its single `| tail -N`/`| head -N` filter.
 fn output_filter(segment: &CommandSegmentV1) -> bool {
@@ -40,12 +40,23 @@ fn filter_chain(model: &CanonicalCommandV1, segments: &[CommandSegmentV1]) -> Op
     Some(filters.len())
 }
 
+/// The text one segment occupies in the command, as the sink lexes it.
+pub(super) fn segment_source(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+) -> Option<String> {
+    text(model, segment.span.start, segment.span.end)
+}
+
 /// A final `; echo "exit=$?"`: the sink prints the label and status itself.
 ///
 /// The shell prints a single-quoted or backslash-escaped `$?` literally, and
 /// the Python sink cannot peel those forms. Accept only the source syntax the
 /// sink peels, so those commands stay on the normal review path.
-fn status_echo(model: &CanonicalCommandV1, segment: &CommandSegmentV1) -> bool {
+pub(in crate::pretool) fn status_echo(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+) -> bool {
     segment.environment_names.is_empty()
         && segment.wrapper_chain.is_empty()
         && !segment.path_overridden
@@ -97,12 +108,46 @@ fn text(model: &CanonicalCommandV1, start: usize, end: usize) -> Option<String> 
     Some(text.trim().to_owned())
 }
 
+/// The path `target` resolves to when its own leaf need not exist yet, as a
+/// redirect sink does not: the nearest ancestor the filesystem resolves, with
+/// the names below it spelled on. `canonicalize` is strict, so asking it for
+/// the sink itself would answer "no root" for every file a redirect creates.
+/// A target no ancestor resolves is still no root.
+#[cfg(any(unix, windows))]
+fn resolved_spelling(target: &std::path::Path) -> Option<std::path::PathBuf> {
+    let mut below = Vec::new();
+    let mut directory = target;
+    loop {
+        if let Ok(resolved) = std::fs::canonicalize(directory) {
+            return Some(
+                below
+                    .iter()
+                    .rev()
+                    .fold(resolved, |path, name| path.join(name)),
+            );
+        }
+        below.push(directory.file_name()?);
+        directory = directory.parent()?;
+    }
+}
+
 /// The repository holding a `cd` target outside the hook workspace: the
-/// nearest ancestor with a `.git` entry, strictly below home or the system
-/// temporary directory, and owned by the agent's user. Agents step into a
+/// nearest ancestor with a `.git` entry, strictly below home, the system
+/// temporary directory or the user's private macOS one, and owned by the
+/// agent's user. Agents step into a
 /// sibling checkout or worktree this way; the execution sink rebases its
 /// approved root to the same directory, so the run is contained to that
 /// repository exactly as it would be from a session started there.
+///
+/// Containment is decided on resolved paths, as the retired Python lookup
+/// decided it after `Path.resolve()`: a target spelled through a link or
+/// through `/var/folders` on macOS lies below the base it resolves into, not
+/// below the one it reads like, and a target no ancestor resolves is no root.
+/// The leaf itself need not exist, because a redirect sink is the file the
+/// command creates. The walk then climbs the spelling the caller passed,
+/// which is the one its own boundary checks compare against, and stops as
+/// soon as an ancestor is no longer strictly inside the base, so a link under
+/// home cannot carry the walk out to a `.git` root outside it.
 #[cfg(unix)]
 pub(super) fn sibling_project_root(
     target: &std::path::Path,
@@ -110,14 +155,19 @@ pub(super) fn sibling_project_root(
 ) -> Option<std::path::PathBuf> {
     use std::os::unix::fs::MetadataExt;
     let uid = nix::unistd::getuid().as_raw();
+    let resolved = resolved_spelling(target)?;
     [std::path::Path::new(home), std::path::Path::new("/tmp")]
         .iter()
         .filter_map(|base| std::fs::canonicalize(base).ok())
-        .find(|base| target.starts_with(base) && target != base.as_path())
+        .chain(super::git_routes::private_temporary_base(&resolved, uid))
+        .find(|base| resolved.starts_with(base) && resolved != *base)
         .and_then(|base| {
             target
                 .ancestors()
-                .take_while(|directory| *directory != base)
+                .take_while(|directory| {
+                    resolved_spelling(directory)
+                        .is_some_and(|directory| directory.starts_with(&base) && directory != base)
+                })
                 .find(|directory| directory.join(".git").symlink_metadata().is_ok())
                 .filter(|root| std::fs::metadata(root).is_ok_and(|meta| meta.uid() == uid))
                 .map(std::path::Path::to_path_buf)
@@ -143,7 +193,49 @@ fn relative_inside_peeled(model: &CanonicalCommandV1, segments: &[CommandSegment
             if text(model, cd.span.end, next.span.start).as_deref() == Some("&&"))
 }
 
-#[cfg(not(unix))]
+/// [`sibling_project_root`] on Windows, where the same containment question is
+/// asked of the owner SID rather than the owning uid.
+///
+/// Home is the only base here. The per-user temporary directory is inside the
+/// profile, so it needs no base of its own, and `std::env::temp_dir` reads
+/// `TMP`/`TEMP` from the environment the agent hands us: a base taken from
+/// there would be the caller's to choose. A checkout in a temporary directory
+/// outside the profile keeps its review instead.
+///
+/// The target is reported in the harness's drive spelling while `canonicalize`
+/// answers in the `\\?\` form, so containment is decided on canonical paths
+/// and the root comes back in the spelling the caller passed in.
+#[cfg(windows)]
+pub(super) fn sibling_project_root(
+    target: &std::path::Path,
+    home: &str,
+) -> Option<std::path::PathBuf> {
+    use guard_runtime_windows_process::owned_by_current_user;
+    let resolved = resolved_spelling(target)?;
+    let base = std::fs::canonicalize(home).ok()?;
+    if !resolved.starts_with(&base) || resolved == base {
+        return None;
+    }
+    target
+        .ancestors()
+        .take_while(|directory| {
+            // Containment is decided on canonical paths while the walk climbs
+            // the spelling the caller passed, so an ancestor can leave the
+            // profile without ever equalling `base`: `C:/outside/link/sub`,
+            // where `C:\outside\link` is a junction into the profile,
+            // resolves inside home but climbs to `C:\outside`. Stopping only
+            // at `base` would keep walking there and could return a
+            // user-created `.git` root outside the profile. Stop as soon as an
+            // ancestor is no longer strictly inside it.
+            resolved_spelling(directory)
+                .is_some_and(|directory| directory.starts_with(&base) && directory != base)
+        })
+        .find(|directory| directory.join(".git").symlink_metadata().is_ok())
+        .filter(|root| owned_by_current_user(root))
+        .map(std::path::Path::to_path_buf)
+}
+
+#[cfg(not(any(unix, windows)))]
 pub(super) fn sibling_project_root(
     _target: &std::path::Path,
     _home: &str,

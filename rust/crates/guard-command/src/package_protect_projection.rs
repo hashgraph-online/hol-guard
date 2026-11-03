@@ -422,6 +422,7 @@ mod tests {
             execution_context_hashes: vec![],
             execution_context_cwds: vec![],
             execution_context_reason_codes: vec![],
+            routine_local_runner: false,
         }
     }
 

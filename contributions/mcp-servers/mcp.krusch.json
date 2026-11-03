@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.krusch",
+  "version": "1.0.0",
+  "name": "Krusch Harness MCP",
+  "description": "PostgreSQL-backed coding and staged execution harness that stages diffs, runs sandboxed verification, and commits working-tree writes via a two-phase commit (2PC) apply journal. Status, diff, and diagnostic reads inherit Guard policy; task execution, diff apply, rejection, and abort require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kruschdev",
+    "displayName": "Krusch (@kruschdev)",
+    "url": "https://github.com/kruschdev/krusch"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://krusch.dev/articles/krusch-coding-harness.html",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "krusch"
+  },
+  "riskClasses": [
+    "external-command-execution",
+    "local-file-write",
+    "external-shared-state-write"
+  ],
+  "tools": [
+    {
+      "name": "krusch_task_status",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_diff",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_explain",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_run",
+      "state": "review"
+    },
+    {
+      "name": "krusch_apply_diff",
+      "state": "review"
+    },
+    {
+      "name": "krusch_reject",
+      "state": "review"
+    },
+    {
+      "name": "krusch_abort",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kruschdev/krusch",
+    "https://github.com/kruschdev/krusch/blob/main/src/server/mcp-server.js",
+    "https://github.com/kruschdev/krusch/blob/main/README.md",
+    "https://krusch.dev/articles/krusch-coding-harness.html"
+  ],
+  "saferAlternatives": [
+    "Use krusch_task_status, krusch_diff, and krusch_explain to inspect staged unified diffs, verification runs, and blocker diagnostics before applying any changes.",
+    "Keep autoApprove=false on krusch_run so staged diffs pause at APPROVAL_GATE and require explicit review via krusch_apply_diff before touching the working tree.",
+    "Keep krusch_apply_diff, krusch_reject, and krusch_abort on Review: krusch_apply_diff writes staged modifications to disk via the 2PC apply journal."
+  ]
+}

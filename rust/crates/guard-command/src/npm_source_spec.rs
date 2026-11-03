@@ -746,4 +746,223 @@ mod tests {
         let bad = parse_npm_source_spec(Some("root@github.com:owner/repo")).unwrap();
         assert_eq!(bad.reason.as_deref(), Some("npm_source_ambiguous_userinfo"));
     }
+
+    const COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
+    const REPOSITORY: &str = "git:github.com/hashgraph-online/hol-guard";
+
+    /// Ported from `tests/test_npm_source_spec.py::test_equivalent_github_source_forms_share_canonical_identity`.
+    #[test]
+    fn equivalent_github_source_forms_share_canonical_identity() {
+        let forms = [
+            format!("github:Hashgraph-Online/hol-guard.git#{COMMIT}"),
+            format!("git+https://GITHUB.com:443/Hashgraph-Online/hol-guard.git#{COMMIT}"),
+            format!("git+ssh://git@github.com:22/hashgraph-online/hol-guard.git#{COMMIT}"),
+            format!("git://github.com:9418/hashgraph-online/hol-guard.git#{COMMIT}"),
+            format!("ssh://git@github.com/hashgraph-online/hol-guard.git#{COMMIT}"),
+            format!("git@github.com:hashgraph-online/hol-guard.git#{COMMIT}"),
+            format!("hashgraph-online/hol-guard#{COMMIT}"),
+            format!("https://github.com/hashgraph-online/hol-guard.git#{COMMIT}"),
+            format!("https://github.com/hashgraph-online/%68ol-guard.git#{COMMIT}"),
+        ];
+        for form in forms {
+            let spec = parse_npm_source_spec(Some(&form))
+                .unwrap_or_else(|| panic!("{form} should parse as a source spec"));
+            assert!(spec.valid, "{form}");
+            assert_eq!(spec.source_kind, SourceKind::Git, "{form}");
+            assert_eq!(
+                spec.canonical_repository.as_deref(),
+                Some(REPOSITORY),
+                "{form}"
+            );
+            assert_eq!(spec.revision.as_deref(), Some(COMMIT), "{form}");
+            assert_eq!(spec.revision_kind, RevisionKind::ImmutableCommit, "{form}");
+            assert_eq!(
+                spec.identity,
+                format!("{REPOSITORY}#commit:{COMMIT}"),
+                "{form}"
+            );
+        }
+    }
+
+    /// Ported from `test_git_revision_state_is_classified_conservatively`.
+    #[test]
+    fn git_revision_state_is_classified_conservatively() {
+        let upper = COMMIT.to_uppercase();
+        let cases: [(Option<&str>, RevisionKind); 6] = [
+            (None, RevisionKind::Missing),
+            (Some("main"), RevisionKind::MutableRef),
+            (Some("v2.1.0"), RevisionKind::MutableRef),
+            (Some("semver:^2.1.0"), RevisionKind::MutableRef),
+            (Some("pull/1748/head"), RevisionKind::MutableRef),
+            (Some(upper.as_str()), RevisionKind::ImmutableCommit),
+        ];
+        for (fragment, expected) in cases {
+            let suffix = fragment.map(|f| format!("#{f}")).unwrap_or_default();
+            let source = format!("github:hashgraph-online/hol-guard{suffix}");
+            let spec = parse_npm_source_spec(Some(&source))
+                .unwrap_or_else(|| panic!("{source} should parse as a source spec"));
+            assert_eq!(spec.revision_kind, expected, "{source}");
+            if expected == RevisionKind::ImmutableCommit {
+                assert_eq!(spec.revision.as_deref(), Some(COMMIT), "{source}");
+            }
+        }
+    }
+
+    /// Ported from `test_hosted_git_archive_urls_remain_repository_sources`.
+    #[test]
+    fn hosted_git_archive_urls_remain_repository_sources() {
+        let cases = [
+            (
+                "https://github.com/Hashgraph-Online/hol-guard/archive/refs/heads/main.tar.gz?token=secret",
+                REPOSITORY,
+                "refs/heads/main",
+            ),
+            (
+                "https://gitlab.com/Group/Subgroup/Repo/-/archive/release/v2.1/repo-release-v2.1.tar.gz",
+                "git:gitlab.com/group/subgroup/repo",
+                "release/v2.1",
+            ),
+            (
+                "https://bitbucket.org/Owner/Repo/get/main.zip",
+                "git:bitbucket.org/owner/repo",
+                "main",
+            ),
+        ];
+        for (source, repository, revision) in cases {
+            let spec = parse_npm_source_spec(Some(source))
+                .unwrap_or_else(|| panic!("{source} should parse as a source spec"));
+            assert!(spec.is_git(), "{source}");
+            assert_eq!(
+                spec.canonical_repository.as_deref(),
+                Some(repository),
+                "{source}"
+            );
+            assert_eq!(spec.revision.as_deref(), Some(revision), "{source}");
+            assert_eq!(spec.revision_kind, RevisionKind::MutableRef, "{source}");
+        }
+    }
+
+    /// Ported from
+    /// `test_idna_and_nondefault_ports_are_canonicalized_without_collapsing_distinct_hosts`.
+    #[test]
+    fn idna_and_nondefault_ports_do_not_collapse_distinct_hosts() {
+        let idna = parse_npm_source_spec(Some("git+https://BÜCHER.example/Owner/Repo.git#main"))
+            .expect("idna source should parse");
+        let nondefault_port =
+            parse_npm_source_spec(Some("git+https://github.com:8443/Owner/Repo.git#main"))
+                .expect("non-default port source should parse");
+        let default_port =
+            parse_npm_source_spec(Some("github:owner/repo#main")).expect("shorthand should parse");
+
+        assert_eq!(
+            idna.canonical_repository.as_deref(),
+            Some("git:xn--bcher-kva.example/Owner/Repo")
+        );
+        assert_eq!(
+            nondefault_port.canonical_repository.as_deref(),
+            Some("git:github.com:8443/owner/repo")
+        );
+        assert_ne!(nondefault_port.identity, default_port.identity);
+    }
+
+    /// Ported from `test_custom_git_hosts_support_root_level_repositories`.
+    #[test]
+    fn custom_git_hosts_support_root_level_repositories() {
+        let spec = parse_npm_source_spec(Some("git+https://example.com/Guard.GIT#main"))
+            .expect("root-level repository should parse");
+
+        assert_eq!(
+            spec.canonical_repository.as_deref(),
+            Some("git:example.com/Guard")
+        );
+        assert_eq!(spec.revision_kind, RevisionKind::MutableRef);
+    }
+
+    /// Ported from `test_ambiguous_or_malformed_sources_fail_with_stable_reasons`.
+    #[test]
+    fn ambiguous_or_malformed_sources_fail_with_stable_reasons() {
+        let cases = [
+            (
+                "https://user:password@github.com/owner/repo.git#main",
+                "npm_source_ambiguous_userinfo",
+            ),
+            (
+                "ssh://deploy@github.com/owner/repo.git#main",
+                "npm_source_ambiguous_userinfo",
+            ),
+            (
+                "deploy@github.com:owner/repo.git#main",
+                "npm_source_ambiguous_userinfo",
+            ),
+            (
+                "https://github.com/owner%2Frepo/project.git",
+                "npm_source_path_invalid",
+            ),
+            (
+                "https://github.com/owner/repo.git#refs%2Fheads%2Fmain",
+                "npm_source_revision_invalid",
+            ),
+            (
+                "git+https://github.com:bad/owner/repo.git",
+                "npm_source_malformed_port",
+            ),
+            (
+                "git+https://github.com:70000/owner/repo.git",
+                "npm_source_malformed_port",
+            ),
+            (
+                "git+file:///tmp/owner/repo.git",
+                "npm_source_protocol_unsupported",
+            ),
+            (
+                "file://server/share/owner/repo",
+                "npm_source_local_url_invalid",
+            ),
+            (
+                "ftp://github.com/owner/repo.git",
+                "npm_source_protocol_unsupported",
+            ),
+            (
+                "git+https://github.com/../owner/repo.git",
+                "npm_source_path_invalid",
+            ),
+        ];
+        for (source, reason) in cases {
+            let spec = parse_npm_source_spec(Some(source))
+                .unwrap_or_else(|| panic!("{source} should parse as a source spec"));
+            assert!(!spec.valid, "{source}");
+            assert_eq!(spec.source_kind, SourceKind::Invalid, "{source}");
+            assert_eq!(spec.reason.as_deref(), Some(reason), "{source}");
+            assert_eq!(spec.redacted, "<invalid-source>", "{source}");
+            assert!(!spec.identity.contains("password"), "{source}");
+        }
+    }
+
+    /// Ported from `test_query_credentials_are_redacted_without_changing_git_identity`.
+    #[test]
+    fn query_credentials_are_redacted_without_changing_git_identity() {
+        let plain = parse_npm_source_spec(Some("https://github.com/owner/repo.git#main"))
+            .expect("plain source should parse");
+        let secret = parse_npm_source_spec(Some(
+            "https://github.com/owner/repo.git?token=VERY_SECRET#main",
+        ))
+        .expect("credentialed source should parse");
+
+        assert_eq!(secret.identity, plain.identity);
+        assert!(!secret.redacted.contains("VERY_SECRET"));
+        assert_eq!(secret.redacted, "git:github.com/owner/repo#<mutable-ref>");
+    }
+
+    /// Ported from `test_deeply_nested_npm_aliases_fail_without_recursion`.
+    #[test]
+    fn deeply_nested_npm_aliases_fail_without_recursion() {
+        let source = format!("{}github:owner/repo", "npm:".repeat(1_000));
+        let spec = parse_npm_source_spec(Some(&source)).expect("alias chain should parse");
+
+        assert!(!spec.valid);
+        assert_eq!(
+            spec.reason.as_deref(),
+            Some("npm_source_alias_depth_exceeded")
+        );
+    }
 }

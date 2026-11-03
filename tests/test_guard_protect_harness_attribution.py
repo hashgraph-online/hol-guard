@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.harness_attribution_env import strip_harness_env_markers
+from tests.package_review_settings import review_package_signals
 from tests.test_guard_local_supply_chain_phase15 import _package, _seed_supply_chain_bundle
 
 
@@ -152,6 +153,7 @@ def test_guard_protect_attributes_package_requests_to_invoking_harness(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True)
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
     _seed_review_advisory(store)
     strip_harness_env_markers(monkeypatch)
     if origin == "environment":
@@ -506,6 +508,7 @@ def test_package_approval_reuses_under_policy_harness_after_invoking_harness_rev
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     baseline, baseline_rc = _package_payload(
         package_manager=package_manager,
         store=store,
@@ -627,6 +630,7 @@ def test_package_approval_does_not_reuse_after_package_context_changes(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     baseline, baseline_rc = _package_payload(
         package_manager=package_manager,
         store=store,
@@ -834,6 +838,7 @@ def test_package_once_lookup_filters_expiry_before_fresh_proof(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     baseline, baseline_rc = _package_payload(
         package_manager="npm",
         store=store,

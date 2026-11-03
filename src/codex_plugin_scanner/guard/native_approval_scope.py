@@ -50,6 +50,7 @@ REQUEST_FIELDS = (
 # the contract reads beside that digest. Anything else in the stored envelope
 # (tool bodies, file contents) is not authorization material.
 _ENVELOPE_KEYS = (
+    "native_bash",
     "schema_version",
     "harness",
     "event_name",
@@ -178,7 +179,8 @@ def native_approval_scopes(
     if not ensure_resident_prerequisite(home):
         raise ApprovalScopeUnavailableError
     results: list[NativeScope] = []
-    for chunk in _item_chunks([_prepared_item(item) for item in items]):
+    prepared = [_prepared_item(item) for item in items]
+    for chunk in _item_chunks(prepared):
         wire: dict[str, object] = {
             "schema": _REQUEST_SCHEMA,
             "request_id": f"approval-scope-{uuid4().hex}",

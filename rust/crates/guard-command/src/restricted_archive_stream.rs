@@ -95,12 +95,14 @@ pub(super) fn write_bounded_response(
     deadline: Instant,
     max_bytes: u64,
     temp_dir: Option<&Path>,
+    identity_only: bool,
 ) -> Result<RestrictedArchiveDownload, RestrictedDownloadError> {
+    // Managed content callers vetted the coding per hop and want the raw body.
     let content_encoding = response_header(response, "Content-Encoding")
         .unwrap_or_else(|| "identity".to_string())
         .trim()
         .to_ascii_lowercase();
-    if !content_encoding.is_empty() && content_encoding != "identity" {
+    if identity_only && !content_encoding.is_empty() && content_encoding != "identity" {
         return Err(RestrictedDownloadError::new(
             "external_archive_content_encoding_rejected",
             "External archive response used an unsupported content encoding.",

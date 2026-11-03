@@ -15,7 +15,12 @@ from ci.gauntlet.review_fixtures import (
     DELETE_COMMAND,
     EXPECTED_GH_CALLS,
     GITHUB_DELETE_CASE,
+    GITHUB_ENABLED_CASES,
+    GITHUB_GUARD_NAMED_REPOSITORY_CASE,
     GITHUB_REVIEW_CASE,
+    GITHUB_STUB_CASES,
+    GUARD_NAMED_REPOSITORY_CALLS,
+    GUARD_NAMED_REPOSITORY_COMMANDS,
     REVIEW_COMMANDS,
     WORKTREE_CASE,
     WORKTREE_NAME,
@@ -46,6 +51,22 @@ def test_stub_gh_records_exactly_the_expected_calls_offline(tmp_path: Path):
     assert required_checks(SCENARIOS[GITHUB_REVIEW_CASE]) >= {"github-stub-calls-exact"}
     # The delete protection case must see any stub execution as an executed extension.
     assert filesystem_checks(fixture, "blocked-extension", GITHUB_DELETE_CASE)["extension-executed-absent"] is False
+
+
+def test_guard_named_repository_case_records_its_calls(tmp_path: Path):
+    scenario = SCENARIOS[GITHUB_GUARD_NAMED_REPOSITORY_CASE]
+    assert scenario.commands == GUARD_NAMED_REPOSITORY_COMMANDS
+    assert scenario.expectation == "allow"
+    assert GITHUB_GUARD_NAMED_REPOSITORY_CASE in GITHUB_STUB_CASES & GITHUB_ENABLED_CASES
+    assert required_checks(scenario) >= {"github-guard-named-repository-call-exact"}
+    fixture = create_fixture(tmp_path / "case")
+    check = "github-guard-named-repository-call-exact"
+    assert filesystem_checks(fixture, "commands", GITHUB_GUARD_NAMED_REPOSITORY_CASE)[check] is False
+    path = f"{fixture.root / 'bin'}{os.pathsep}{os.environ['PATH']}"
+    for command in GUARD_NAMED_REPOSITORY_COMMANDS:
+        subprocess.run(["/bin/sh", "-c", command], env={"PATH": path}, capture_output=True, check=True, timeout=10)
+    assert len(GUARD_NAMED_REPOSITORY_CALLS) == 2
+    assert filesystem_checks(fixture, "commands", GITHUB_GUARD_NAMED_REPOSITORY_CASE)[check] is True
 
 
 def test_unrun_stub_leaves_the_delete_case_clean(tmp_path: Path):

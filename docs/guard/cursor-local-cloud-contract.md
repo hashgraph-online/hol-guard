@@ -32,9 +32,9 @@ Guard installs command hooks documented by Cursor:
 
 Cursor has no `beforeWriteFile` event, and it ignores the whole `hooks.json` when the file names an event it does not know. Earlier Guard releases wrote `beforeWriteFile`; reinstalling removes those entries while keeping hooks from other tools.
 
-Hooks call a managed bridge script (`.cursor/hooks/hol-guard-cursor-hook.py`) through the attested Guard Python interpreter, so a missing execute bit cannot freeze the IDE. The script forwards stdin JSON to the local daemon first, then `hol-guard hook --harness cursor --json`, and maps Guard policy results to Cursor `permission` responses (`allow`, `deny`, `ask`).
+Hooks call Guard's native runtime as `cursor-hook-bridge`, followed by the attested Guard Python interpreter and a managed client script (`.cursor/hooks/hol-guard-cursor-hook.py`), so a missing execute bit cannot freeze the IDE. The runtime reads the constants the client carries, answers the hook from the local daemon and maps Guard policy results to Cursor `permission` responses (`allow`, `deny`, `ask`). Guard writes the hook only when that runtime can answer, and `hol-guard doctor cursor` reports protection as missing when none can, so the client never runs on its own. A hook that reached it directly would let an `after*` observer continue and deny every other hook.
 
-When native review, daemon transport, or hook execution cannot complete, Guard keeps a schema-valid response on every path. PreToolUse continues so the session stays moving. Forged launchers, oversized input, unauthenticated hook payloads, and retained-byte limit failures still deny. Empty Cursor stdin with no baked event allows. A known shell event with unparseable input still denies unless Watch/observe is on.
+Behind that runtime, when native review, daemon transport, or hook execution cannot complete, Guard keeps a schema-valid response on every path. PreToolUse continues so the session stays moving. Forged launchers, oversized input, unauthenticated hook payloads, and retained-byte limit failures still deny. Empty Cursor stdin with no baked event allows. A known shell event with unparseable input still denies unless Watch/observe is on.
 
 Restart Cursor after install so hook config reloads.
 

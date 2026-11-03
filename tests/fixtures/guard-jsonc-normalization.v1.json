@@ -1,0 +1,187 @@
+{
+  "schema": "guard-jsonc-normalization-parity.v1",
+  "normalizations": [
+    {
+      "name": "plain-json",
+      "text": "{\"a\": 1}",
+      "normalized": "{\"a\": 1}"
+    },
+    {
+      "name": "line-comment",
+      "text": "{\n  // name\n  \"a\": 1\n}",
+      "normalized": "{\n         \n  \"a\": 1\n}"
+    },
+    {
+      "name": "line-comment-crlf",
+      "text": "{\r\n  // name\r\n  \"a\": 1\r\n}",
+      "normalized": "{\r\n         \r\n  \"a\": 1\r\n}"
+    },
+    {
+      "name": "line-comment-at-end-of-file",
+      "text": "{\"a\": 1} // trailing",
+      "normalized": "{\"a\": 1}            "
+    },
+    {
+      "name": "block-comment-one-line",
+      "text": "{/* note */ \"a\": 1}",
+      "normalized": "{           \"a\": 1}"
+    },
+    {
+      "name": "block-comment-spans-lines",
+      "text": "{\n/* first\n   second\n   third */\n\"a\": 1\n}",
+      "normalized": "{\n        \n         \n           \n\"a\": 1\n}"
+    },
+    {
+      "name": "block-comment-spans-lines-crlf",
+      "text": "{\r\n/* first\r\n   second */\r\n\"a\": 1\r\n}",
+      "normalized": "{\r\n        \r\n            \r\n\"a\": 1\r\n}"
+    },
+    {
+      "name": "block-comment-empty",
+      "text": "{/**/\"a\": 1}",
+      "normalized": "{    \"a\": 1}"
+    },
+    {
+      "name": "block-comment-star-run",
+      "text": "{/***/\"a\": 1}",
+      "normalized": "{     \"a\": 1}"
+    },
+    {
+      "name": "slash-that-opens-nothing",
+      "text": "{\"a\": 1 / 2}",
+      "normalized": "{\"a\": 1 / 2}"
+    },
+    {
+      "name": "slash-at-end-of-file",
+      "text": "{\"a\": 1}/",
+      "normalized": "{\"a\": 1}/"
+    },
+    {
+      "name": "comment-markers-inside-a-string",
+      "text": "{\"a\": \"// not a comment /* either */\"}",
+      "normalized": "{\"a\": \"// not a comment /* either */\"}"
+    },
+    {
+      "name": "escaped-quote-then-comment",
+      "text": "{\"a\": \"he said \\\"hi\\\"\" // after\n}",
+      "normalized": "{\"a\": \"he said \\\"hi\\\"\"         \n}"
+    },
+    {
+      "name": "escaped-backslash-ends-the-string",
+      "text": "{\"a\": \"c:\\\\\" // after\n}",
+      "normalized": "{\"a\": \"c:\\\\\"         \n}"
+    },
+    {
+      "name": "trailing-comma-object",
+      "text": "{\"a\": 1,}",
+      "normalized": "{\"a\": 1 }"
+    },
+    {
+      "name": "trailing-comma-array",
+      "text": "[1, 2,]",
+      "normalized": "[1, 2 ]"
+    },
+    {
+      "name": "trailing-comma-across-lines",
+      "text": "{\n  \"a\": 1,\n}",
+      "normalized": "{\n  \"a\": 1 \n}"
+    },
+    {
+      "name": "trailing-comma-then-comment",
+      "text": "{\"a\": 1, // last\n}",
+      "normalized": "{\"a\": 1         \n}"
+    },
+    {
+      "name": "comma-inside-a-string-is-kept",
+      "text": "{\"a\": \",]\"}",
+      "normalized": "{\"a\": \",]\"}"
+    },
+    {
+      "name": "comma-before-a-value-is-kept",
+      "text": "[1, 2]",
+      "normalized": "[1, 2]"
+    },
+    {
+      "name": "comma-then-file-separator",
+      "text": "[1,\u001c]",
+      "normalized": "[1 \u001c]"
+    },
+    {
+      "name": "comma-then-nbsp",
+      "text": "[1, ]",
+      "normalized": "[1  ]"
+    },
+    {
+      "name": "multibyte-inside-a-comment",
+      "text": "{// café résumé\n\"a\": 1}",
+      "normalized": "{              \n\"a\": 1}"
+    },
+    {
+      "name": "multibyte-inside-a-block-comment",
+      "text": "{/* café */ \"a\": 1}",
+      "normalized": "{           \"a\": 1}"
+    },
+    {
+      "name": "multibyte-inside-a-string",
+      "text": "{\"a\": \"café\"}",
+      "normalized": "{\"a\": \"café\"}"
+    },
+    {
+      "name": "nested-looking-block-comment",
+      "text": "{/* outer /* inner */ \"a\": 1}",
+      "normalized": "{                     \"a\": 1}"
+    },
+    {
+      "name": "empty-text",
+      "text": "",
+      "normalized": ""
+    },
+    {
+      "name": "only-a-line-comment",
+      "text": "// nothing",
+      "normalized": "          "
+    }
+  ],
+  "unterminated": [
+    {
+      "name": "unterminated-at-the-start",
+      "text": "/* never closed",
+      "message": "Unterminated block comment: line 1 column 1 (char 0)",
+      "lineno": 1,
+      "colno": 1,
+      "pos": 0
+    },
+    {
+      "name": "unterminated-on-a-later-line",
+      "text": "{\n  \"a\": 1,\n  /* never closed\n",
+      "message": "Unterminated block comment: line 3 column 3 (char 14)",
+      "lineno": 3,
+      "colno": 3,
+      "pos": 14
+    },
+    {
+      "name": "unterminated-bare-slash-star",
+      "text": "/*",
+      "message": "Unterminated block comment: line 1 column 1 (char 0)",
+      "lineno": 1,
+      "colno": 1,
+      "pos": 0
+    },
+    {
+      "name": "unterminated-slash-star-slash",
+      "text": "/*/",
+      "message": "Unterminated block comment: line 1 column 1 (char 0)",
+      "lineno": 1,
+      "colno": 1,
+      "pos": 0
+    },
+    {
+      "name": "unterminated-after-a-string",
+      "text": "{\"a\": \"/*\"} /* open",
+      "message": "Unterminated block comment: line 1 column 13 (char 12)",
+      "lineno": 1,
+      "colno": 13,
+      "pos": 12
+    }
+  ]
+}

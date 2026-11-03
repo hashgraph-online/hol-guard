@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import { TabBar } from "./approval-center-primitives";
 
 type WorkspacePageHeaderBase = {
-  eyebrow: string;
+  /** Omit when the title already names the page. */
+  eyebrow?: string;
   title: string;
   description?: string;
   actions?: ReactNode;
@@ -64,7 +65,9 @@ export function WorkspacePageHeader<T extends string>(props: WorkspacePageHeader
     <div className="guard-page-header">
       <div className="guard-page-header__layout">
         <div className="guard-page-header__copy space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{eyebrow}</p>
+          {eyebrow ? (
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{eyebrow}</p>
+          ) : null}
           <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">{title}</h1>
           {description ? <p className="text-sm text-slate-500">{description}</p> : null}
         </div>

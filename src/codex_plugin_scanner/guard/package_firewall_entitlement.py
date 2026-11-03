@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import cast
 
 from .cloud_entitlements import parse_guard_cloud_entitlements
+from .native_hook_artifact_compose import (
+    NativeHookComposeError,
+    NativeHookComposeValidationError,
+    native_hook_compose,
+)
 from .package_firewall_defaults import (
     PACKAGE_FIREWALL_PAID_TIERS,
     build_guard_local_entitlement_defaults,
 )
 from .store import GuardStore
 
-PACKAGE_FIREWALL_CONNECT_CTA = (
-    "Connect HOL Guard Cloud to check package firewall access and run package firewall actions."
-)
-PACKAGE_FIREWALL_RECONNECT_CTA = "Reconnect HOL Guard Cloud to refresh package firewall access."
-PACKAGE_FIREWALL_UPGRADE_CTA = "Upgrade to HOL Guard Cloud to run package firewall actions."
+
+def _dict_or_none(value: object) -> dict[str, object] | None:
+    return value if isinstance(value, dict) else None
 
 
 def _optional_string(value: object) -> str | None:
@@ -23,20 +29,6 @@ def _optional_string(value: object) -> str | None:
         return None
     normalized = value.strip()
     return normalized or None
-
-
-def _parse_iso_datetime(value: object) -> datetime | None:
-    text = _optional_string(value)
-    if text is None:
-        return None
-    normalized = f"{text[:-1]}+00:00" if text.endswith("Z") else text
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
 
 
 def build_oauth_package_firewall_entitlement(
@@ -65,22 +57,6 @@ def build_oauth_package_firewall_entitlement(
     return defaults
 
 
-def _bundle_entitlement(payload: object) -> dict[str, object] | None:
-    if not isinstance(payload, dict):
-        return None
-    tier = _optional_string(payload.get("tier"))
-    if tier is None:
-        return None
-    normalized_tier = tier.lower()
-    allowed = normalized_tier in PACKAGE_FIREWALL_PAID_TIERS
-    return {
-        "allowed": allowed,
-        "reason": "paid_entitlement_active" if allowed else "paid_guard_cloud_required",
-        "tier": normalized_tier,
-        "upgrade_cta": None if allowed else PACKAGE_FIREWALL_UPGRADE_CTA,
-    }
-
-
 def _oauth_entitlement_fields_from_sync_payload(payload: object) -> dict[str, object] | None:
     if not isinstance(payload, dict):
         return None
@@ -99,150 +75,6 @@ def _oauth_entitlement_fields_from_sync_payload(payload: object) -> dict[str, ob
     if _optional_string(fields.get("supply_chain_plan_id")) is None:
         return None
     return fields
-
-
-def _oauth_entitlement(credentials: dict[str, object] | None, *, now: datetime) -> dict[str, object] | None:
-    if not isinstance(credentials, dict):
-        return None
-    plan_id = _optional_string(credentials.get("supply_chain_plan_id"))
-    if plan_id is None:
-        return None
-    normalized_tier = plan_id.lower()
-    firewall_value = credentials.get("supply_chain_firewall")
-    firewall_allowed = (
-        firewall_value if isinstance(firewall_value, bool) else normalized_tier in PACKAGE_FIREWALL_PAID_TIERS
-    )
-    expires_at_raw = credentials.get("supply_chain_entitlement_expires_at")
-    expires_at = _parse_iso_datetime(expires_at_raw)
-    if firewall_allowed and expires_at is None:
-        return {
-            "allowed": False,
-            "reason": "guard_cloud_reconnect_required",
-            "tier": normalized_tier,
-            "upgrade_cta": PACKAGE_FIREWALL_RECONNECT_CTA,
-        }
-    if firewall_allowed and expires_at is not None and expires_at <= now:
-        return {
-            "allowed": False,
-            "reason": "guard_cloud_reconnect_required",
-            "tier": normalized_tier,
-            "upgrade_cta": PACKAGE_FIREWALL_RECONNECT_CTA,
-        }
-    if firewall_allowed:
-        return {
-            "allowed": True,
-            "reason": "paid_oauth_entitlement_active",
-            "tier": normalized_tier,
-            "upgrade_cta": None,
-        }
-    if normalized_tier in PACKAGE_FIREWALL_PAID_TIERS and (expires_at is None or expires_at <= now):
-        # A paid plan whose firewall claim is missing or past its validity is a
-        # stale record, not proof of an unpaid account. Reconnecting refreshes
-        # the entitlement; only a fresh claim may assert paid_guard_cloud_required.
-        return {
-            "allowed": False,
-            "reason": "guard_cloud_reconnect_required",
-            "tier": normalized_tier,
-            "upgrade_cta": PACKAGE_FIREWALL_RECONNECT_CTA,
-        }
-    return {
-        "allowed": False,
-        "reason": "paid_guard_cloud_required",
-        "tier": normalized_tier,
-        "upgrade_cta": PACKAGE_FIREWALL_UPGRADE_CTA,
-    }
-
-
-def _connect_state_entitlement(store: GuardStore, *, now: datetime) -> dict[str, object] | None:
-    oauth_payload = store.get_sync_payload("oauth_local_credentials")
-    oauth_fields = _oauth_entitlement_fields_from_sync_payload(oauth_payload)
-    if isinstance(oauth_fields, dict):
-        plan_id = _optional_string(oauth_fields.get("supply_chain_plan_id"))
-        if plan_id is not None and plan_id.lower() not in PACKAGE_FIREWALL_PAID_TIERS:
-            return None
-    latest_state = store.get_effective_guard_connect_state(now=now.isoformat())
-    if not isinstance(latest_state, dict):
-        return None
-    status = _optional_string(latest_state.get("status"))
-    milestone = _optional_string(latest_state.get("milestone"))
-    missing_oauth_after_success = (
-        status == "connected" and milestone == "first_sync_succeeded" and not isinstance(oauth_payload, dict)
-    )
-    if (
-        not missing_oauth_after_success
-        and status not in {"retry_required", "expired"}
-        and milestone
-        not in {
-            "first_sync_failed",
-            "expired",
-            "sync_not_available",
-        }
-    ):
-        return None
-    tier = "unknown"
-    if isinstance(oauth_fields, dict):
-        tier = _optional_string(oauth_fields.get("supply_chain_plan_id")) or tier
-    return {
-        "allowed": False,
-        "reason": "guard_cloud_reconnect_required",
-        "tier": tier,
-        "upgrade_cta": PACKAGE_FIREWALL_RECONNECT_CTA,
-    }
-
-
-def _reconnect_required_entitlement(
-    *,
-    bundle: dict[str, object] | None,
-    oauth: dict[str, object] | None,
-    oauth_payload: object,
-) -> dict[str, object]:
-    tier = "unknown"
-    if isinstance(oauth, dict):
-        tier = _optional_string(oauth.get("tier")) or tier
-    if tier == "unknown" and isinstance(bundle, dict):
-        tier = _optional_string(bundle.get("tier")) or tier
-    if tier == "unknown" and isinstance(oauth_payload, dict):
-        tier = _optional_string(oauth_payload.get("supply_chain_plan_id")) or tier
-    return {
-        "allowed": False,
-        "reason": "guard_cloud_reconnect_required",
-        "tier": tier.lower(),
-        "upgrade_cta": PACKAGE_FIREWALL_RECONNECT_CTA,
-    }
-
-
-def _connect_required_entitlement(store: GuardStore) -> dict[str, object]:
-    oauth_payload = store.get_sync_payload("oauth_local_credentials")
-    tier = "unknown"
-    if isinstance(oauth_payload, dict):
-        plan_id = _optional_string(oauth_payload.get("supply_chain_plan_id"))
-        if plan_id is not None:
-            tier = plan_id.lower()
-    return {
-        "allowed": False,
-        "reason": "guard_cloud_connect_required",
-        "tier": tier,
-        "upgrade_cta": PACKAGE_FIREWALL_CONNECT_CTA,
-    }
-
-
-def _requires_guard_cloud_connect(
-    store: GuardStore,
-    *,
-    bundle: dict[str, object] | None,
-    oauth: dict[str, object] | None,
-) -> bool:
-    oauth_health = store.get_oauth_local_credential_health()
-    oauth_configured = bool(oauth_health.get("configured")) if isinstance(oauth_health, dict) else False
-    oauth_state = _optional_string(oauth_health.get("state")) if isinstance(oauth_health, dict) else None
-    cloud_profile = store.get_cloud_sync_profile()
-    if oauth_configured and oauth_state == "healthy":
-        return False
-    if cloud_profile is not None:
-        return False
-    if oauth_configured:
-        return True
-    return not (bundle is not None and bool(bundle.get("allowed")))
 
 
 def reconcile_connect_state_with_oauth_entitlement(
@@ -277,124 +109,117 @@ def resolve_package_firewall_entitlement(
     *,
     now: datetime | None = None,
 ) -> dict[str, object]:
+    """What package-firewall access this home has proven, per the resident.
+
+    The store rows are read here; which entitlement they add up to — a proven
+    paid plan, a connect or reconnect that must happen first, or an unpaid
+    account — is decided by the resident, which runs the same resolver the
+    package authority edge runs. An unreachable resident raises rather than
+    letting this side read an allow out of the rows it just gathered.
+    """
+
     resolved_now = now or datetime.now(timezone.utc)
-    bundle = _bundle_entitlement(store.get_sync_payload("supply_chain_bundle_entitlement"))
-    oauth_health = store.get_oauth_local_credential_health()
-    oauth_payload = store.get_sync_payload("oauth_local_credentials")
-    oauth_fields = None
-    if isinstance(oauth_health, dict) and oauth_health.get("state") == "healthy":
-        oauth_fields = _oauth_entitlement_fields_from_sync_payload(oauth_payload)
-    oauth = _oauth_entitlement(oauth_fields, now=resolved_now)
-    connect_state = _connect_state_entitlement(store, now=resolved_now)
-    is_healthy_profile = isinstance(oauth_health, dict) and oauth_health.get("state") == "healthy"
-    has_profile_backed_bundle = bundle is not None and bool(bundle.get("allowed")) and is_healthy_profile
-    if connect_state is not None and not has_profile_backed_bundle:
-        return connect_state
-    if _requires_guard_cloud_connect(store, bundle=bundle, oauth=oauth):
-        if bundle is not None and bool(bundle.get("allowed")):
-            return _reconnect_required_entitlement(bundle=bundle, oauth=oauth, oauth_payload=oauth_payload)
-        return _connect_required_entitlement(store)
-    if bundle is not None and bool(bundle.get("allowed")):
-        return bundle
-    if oauth is not None and bool(oauth.get("allowed")):
-        return oauth
-    if oauth is not None and oauth.get("reason") == "guard_cloud_reconnect_required":
-        return oauth
-    if bundle is not None:
-        oauth_plan = _optional_string(
-            oauth_payload.get("supply_chain_plan_id") if isinstance(oauth_payload, dict) else None
-        )
-        if oauth is not None and oauth.get("reason") == "paid_guard_cloud_required":
-            # The fresh OAuth claim is authoritative for both verdict and tier.
-            return oauth
-        if oauth_plan is not None and oauth_plan.lower() in PACKAGE_FIREWALL_PAID_TIERS:
-            # A paid-plan OAuth record contradicting the bundle's unpaid tier is a
-            # stale claim pair, not proof the account is unpaid. Reconnect re-syncs both.
-            return _reconnect_required_entitlement(bundle=bundle, oauth=oauth, oauth_payload=oauth_payload)
-        return bundle
-    if oauth is not None:
-        return oauth
-    return _connect_required_entitlement(store)
+    answer = native_hook_compose(
+        "package_firewall_entitlement",
+        {
+            "bundle_payload": _dict_or_none(store.get_sync_payload("supply_chain_bundle_entitlement")),
+            "connect_state": _dict_or_none(store.get_effective_guard_connect_state(now=resolved_now.isoformat())),
+            "has_cloud_sync_profile": store.get_cloud_sync_profile() is not None,
+            "now": resolved_now.isoformat(),
+            "oauth_health": _dict_or_none(store.get_oauth_local_credential_health()),
+            "oauth_payload": _dict_or_none(store.get_sync_payload("oauth_local_credentials")),
+        },
+        guard_home=Path(store.guard_home),
+    )
+    return answer
 
 
-def package_firewall_action_states(
+# What the entitlement says when the resident cannot answer. Nothing is
+# entitled on a machine whose runtime will not say what it has proven, and no
+# caller reads an allow out of the rows it gathered for the question.
+PACKAGE_FIREWALL_RUNTIME_UNAVAILABLE_REASON = "guard_runtime_unavailable"
+# What a caller answers with when the resident cannot say what the
+# entitlement permits. No action is offered and nothing runs: the
+# composition is the authority, and an unanswered request is not an allow.
+PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE = "package_firewall_authority_unavailable"
+PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE_MESSAGE = (
+    "The HOL Guard runtime could not answer what package firewall access permits on this machine."
+)
+
+
+def package_firewall_entitlement_or_denied(
+    store: GuardStore,
+    *,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """The resolved entitlement, or the denial an unanswerable runtime means.
+
+    Callers that only need to know whether this home is entitled -- a settings
+    write recording ``cloud_sync_entitled``, a status page describing what is
+    offered -- have work of their own that an unreachable, unprovisioned or
+    too-old resident must not take down. They ask through here and read a
+    denial instead of a crash. The resident stays the only thing that can grant
+    access: this answers no, never yes.
+    """
+
+    try:
+        return resolve_package_firewall_entitlement(store, now=now)
+    except (NativeHookComposeError, NativeHookComposeValidationError):
+        return {
+            "allowed": False,
+            "reason": PACKAGE_FIREWALL_RUNTIME_UNAVAILABLE_REASON,
+            "tier": "unknown",
+            "upgrade_cta": None,
+        }
+
+
+@dataclass(frozen=True)
+class PackageFirewallAccess:
+    """What the resident says one entitlement permits on this machine.
+
+    Every projection a caller needs comes back in one answer, so a request
+    that has to report an action table, the actions still offered, the block
+    copy and one operation's verdict asks the resident once rather than once
+    per projection.
+    """
+
+    action_states: dict[str, str]
+    available_actions: list[str]
+    block: tuple[int, str, str]
+    operation_allowed: bool
+
+
+def package_firewall_access(
     entitlement: dict[str, object],
     *,
-    has_installed_managers: bool,
-) -> dict[str, str]:
-    allowed = bool(entitlement.get("allowed"))
-    reason = str(entitlement.get("reason") or "").strip().lower()
-    if allowed:
-        blocked_state = "available"
-    elif reason == "guard_cloud_connect_required":
-        blocked_state = "connect_required"
-    elif reason == "guard_cloud_reconnect_required":
-        blocked_state = "reconnect_required"
-    else:
-        blocked_state = "paid_required"
-    local_recovery_state = "available" if has_installed_managers else "disabled"
-    return {
-        "install": blocked_state,
-        "repair": "available" if allowed or has_installed_managers else blocked_state,
-        "test": blocked_state,
-        "audit": blocked_state,
-        "sync": blocked_state,
-        "remove": local_recovery_state,
-    }
+    operation: str | None = None,
+    has_installed_managers: bool = False,
+    guard_home: Path | None = None,
+) -> PackageFirewallAccess:
+    """Ask the resident what this entitlement permits.
 
+    The entitlement reports whether Cloud access is proven and, when it is
+    not, why. Which actions that leaves available, which the caller may still
+    offer, what the block says, and whether one named operation may run are
+    all composed by the resident. An unreachable resident raises
+    ``NativeHookComposeError``, so nothing here recomposes an allow from the
+    entitlement dict; callers answer with
+    ``PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE`` instead of guessing.
+    """
 
-def package_firewall_available_actions(
-    entitlement: dict[str, object],
-    *,
-    has_installed_managers: bool,
-) -> list[str]:
-    reason = str(entitlement.get("reason") or "").strip().lower()
-    actions = ["status"]
-    if reason in {"guard_cloud_connect_required", "guard_cloud_reconnect_required"}:
-        actions.append("connect")
-    if has_installed_managers:
-        actions.extend(["repair", "remove"])
-    actions.extend(["education", "cli_fallback"])
-    return actions
-
-
-def package_firewall_operation_allowed(
-    entitlement: dict[str, object],
-    operation: str,
-    *,
-    has_installed_managers: bool,
-) -> bool:
-    normalized_operation = operation.strip().lower()
-    if normalized_operation in {"status", "connect", "open-shell"}:
-        return True
-    # Existing local protection must remain repairable even when Cloud access
-    # needs reconnecting or the paid entitlement cannot currently be proven.
-    # This does not authorize new installs, tests, audits, or policy sync.
-    if normalized_operation == "repair":
-        return bool(entitlement.get("allowed")) or has_installed_managers
-    if normalized_operation == "remove":
-        return has_installed_managers
-    reason = str(entitlement.get("reason") or "").strip().lower()
-    if reason == "guard_cloud_reconnect_required":
-        return False
-    return bool(entitlement.get("allowed"))
-
-
-def package_firewall_block_details(entitlement: dict[str, object]) -> tuple[int, str, str]:
-    if entitlement.get("reason") == "guard_cloud_connect_required":
-        return (
-            403,
-            "guard_cloud_connect_required",
-            "Connect HOL Guard Cloud on this machine before running package firewall actions.",
-        )
-    if entitlement.get("reason") == "guard_cloud_reconnect_required":
-        return (
-            403,
-            "guard_cloud_reconnect_required",
-            "Reconnect HOL Guard Cloud to refresh package firewall access.",
-        )
-    return (
-        402,
-        "paid_guard_cloud_required",
-        "HOL Guard Cloud paid access is required to run package firewall actions.",
+    access = native_hook_compose(
+        "package_firewall_access",
+        {
+            "entitlement": dict(entitlement),
+            "has_installed_managers": has_installed_managers,
+            "operation": operation,
+        },
+        guard_home=guard_home,
+    )
+    block = cast("dict[str, object]", access["block"])
+    return PackageFirewallAccess(
+        action_states=cast("dict[str, str]", access["action_states"]),
+        available_actions=cast("list[str]", access["available_actions"]),
+        block=(int(cast(int, block["status"])), str(block["code"]), str(block["message"])),
+        operation_allowed=bool(access["operation_allowed"]),
     )

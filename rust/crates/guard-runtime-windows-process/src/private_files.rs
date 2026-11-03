@@ -285,22 +285,6 @@ fn invalid_object(directory: bool) -> io::Error {
     )
 }
 
-fn trusted_private_owner(applied: &Sid, current: &Sid) -> bool {
-    if applied == current {
-        return true;
-    }
-    let Ok(system) = "S-1-5-18".parse::<LocalBox<Sid>>() else {
-        return false;
-    };
-    if applied == system.as_ref() {
-        return true;
-    }
-    let Ok(administrators) = "S-1-5-32-544".parse::<LocalBox<Sid>>() else {
-        return false;
-    };
-    applied == administrators.as_ref()
-}
-
 /// Verify the exact owner-private file policy on an already-open handle.
 pub(super) fn verify_private_file(handle: &std::fs::File) -> io::Result<()> {
     let owner = current_process_sid()
@@ -317,7 +301,7 @@ pub(super) fn verify_private_file(handle: &std::fs::File) -> io::Result<()> {
             "private file owner is missing",
         ));
     };
-    if !trusted_private_owner(applied_owner, owner.as_ref()) {
+    if !crate::owner::trusted_owner(applied_owner, owner.as_ref()) {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "private file owner does not match the current SID",
@@ -410,6 +394,7 @@ pub(super) fn rename_into_directory(
     parent: &std::fs::File,
     source: &std::fs::File,
     destination: &OsStr,
+    replace_existing: bool,
 ) -> io::Result<()> {
     let name = destination.encode_wide().collect::<Vec<_>>();
     if name.is_empty() || name.contains(&0) {
@@ -433,8 +418,14 @@ pub(super) fn rename_into_directory(
     // UTF-16 payload expected by FILE_RENAME_INFO.
     unsafe {
         let info = buffer.as_mut_ptr() as *mut FILE_RENAME_INFO;
-        (*info).ReplaceIfExists =
-            (FILE_RENAME_REPLACE_IF_EXISTS | FILE_RENAME_POSIX_SEMANTICS) as BOOL;
+        // A publish that must not overwrite clears the replace bit: the
+        // rename then fails with ERROR_ALREADY_EXISTS instead of destroying
+        // the object already at the destination.
+        (*info).ReplaceIfExists = if replace_existing {
+            (FILE_RENAME_REPLACE_IF_EXISTS | FILE_RENAME_POSIX_SEMANTICS) as BOOL
+        } else {
+            FILE_RENAME_POSIX_SEMANTICS as BOOL
+        };
         (*info).RootDirectory = parent.as_raw_handle() as HANDLE;
         (*info).FileNameLength = byte_count as DWORD;
         std::ptr::copy_nonoverlapping(

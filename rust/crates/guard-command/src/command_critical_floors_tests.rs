@@ -205,3 +205,49 @@ fn explicitly_allowed_github_capabilities_pass_through() {
     let fired = command_critical_floor_factors(&command, None, &[]);
     assert!(fired.iter().any(|f| f.reason_code == "critical.github-cli"));
 }
+
+/// The `unknown` GitHub permission is the user's consent to unverified `gh`
+/// commands: with it explicitly allowed, the github-cli floor suppresses for
+/// an unmodeled command exactly as it does for a named capability.
+#[test]
+fn explicitly_allowed_unknown_github_capability_passes_through() {
+    let command = CanonicalCommand::from_v1(&crate::CanonicalCommandV1 {
+        exact_raw_text: true,
+        normalized_text: "gh some-unmodeled-command".to_owned(),
+        dialect: "posix".to_owned(),
+        transport: "shell_string".to_owned(),
+        extraction_provenance: "guard-shell".to_owned(),
+        wrapper_chain: vec![],
+        segments: vec![CommandSegmentV1 {
+            text: "gh some-unmodeled-command".to_owned(),
+            tokens: vec!["gh".to_owned(), "some-unmodeled-command".to_owned()],
+            executable: Some("gh".to_owned()),
+            arguments: vec!["some-unmodeled-command".to_owned()],
+            environment_names: vec![],
+            wrapper_chain: vec![],
+            path_overridden: false,
+            execution_context: "direct".to_owned(),
+            pipeline_index: 0,
+            span: CommandSpanV1 {
+                source: "normalized".to_owned(),
+                start: 0,
+                end: 25,
+            },
+        }],
+        confidence: "exact".to_owned(),
+        uncertainty_reason: None,
+        path_overridden: false,
+        parser_profile: "posix".to_owned(),
+        security_identity: String::new(),
+    });
+    let suppressed =
+        command_critical_floor_factors(&command, None, &[GitHubCommandCapability::Unknown]);
+    assert!(
+        suppressed
+            .iter()
+            .all(|f| f.reason_code != "critical.github-cli"),
+        "allowed unknown capability must suppress the github-cli floor: {suppressed:?}"
+    );
+    let fired = command_critical_floor_factors(&command, None, &[]);
+    assert!(fired.iter().any(|f| f.reason_code == "critical.github-cli"));
+}

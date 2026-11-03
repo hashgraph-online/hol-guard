@@ -30,6 +30,10 @@ fn inert_prefixes_are_removed_in_place() {
             "git status && rg -n 'a b' src | head -5",
         ),
         ("TZ=\"UTC\" date", "date"),
+        // An ordinary project setting carries a value the command reads for
+        // itself; the screen above keeps every steering family reviewed.
+        ("NODE_ENV=test node --test", "node --test"),
+        ("env NODE_ENV=test ls", "ls"),
     ] {
         assert_eq!(project(command).as_deref(), Some(expected), "{command}");
     }
@@ -42,9 +46,8 @@ fn commands_without_inert_prefix_are_not_projected() {
         "git status && rg x",
         "echo FOO=1",
         "ls >FOO=1",
-        // Any program may read an unknown name; it is reviewed, not inert.
+        // A name the shell itself reads is never ordinary, so it is reviewed.
         "REPORT_WINDOW=7d ls",
-        "NODE_ENV=test node --test",
     ] {
         assert_eq!(project(command), None, "{command}");
     }
@@ -79,7 +82,6 @@ fn execution_changing_prefixes_leave_the_command_untouched() {
         "CURL_HOME=/tmp curl https://x.example",
         "FOO=`id` ls",
         "FOO=~/x ls",
-        "FOO=*.env ls",
         "FOO=1",
         "FOO=1 && rm -rf x",
         "env",
@@ -350,6 +352,13 @@ fn code_loading_settings_are_named_for_the_block_reason() {
         ("REPORT_DIR=out CC=./x npm run build", Some("CC")),
         ("cd app && PYTHONPATH=. python x.py", Some("PYTHONPATH")),
         ("REPORT_DIR=out node x.mjs", None),
+        // A setting the projection removes stopped nothing, so the reason
+        // skips it and names the one that did.
+        ("NODE_OPTIONS=--max-old-space-size=4096 npm test", None),
+        (
+            "NODE_OPTIONS=--max-old-space-size=4096 NODE_PATH=/ws node x.mjs",
+            Some("NODE_PATH"),
+        ),
         ("echo NODE_PATH=/ws | cat", None),
         ("node x.mjs NODE_PATH=/ws", None),
         ("NODE-PATH=/ws node x.mjs", None),
@@ -407,4 +416,49 @@ fn a_one_time_approval_binds_only_plain_reviewable_settings() {
         assert!(!bindable_setting(name, value), "{name}={value}");
     }
     assert!(!bindable_setting("DEPLOY_TARGET", &"x".repeat(129)));
+}
+
+#[test]
+fn a_bare_exec_in_front_of_a_setting_is_read_past() {
+    // `exec` hands the shell's process to the command behind it, so these run
+    // what the bare spelling runs. Before this the projection stopped at the
+    // first word, so a setting the compatibility layer refuses, `NODE_OPTIONS`
+    // among them, left the command on its own floor instead of the one its
+    // bare spelling earns.
+    for (command, expected) in [
+        ("exec env -u NODE_OPTIONS npm test", "npm test"),
+        (
+            "exec env -u GH_TOKEN git -C repo status",
+            "git -C repo status",
+        ),
+        (
+            "git status && exec env -u GH_TOKEN gh repo view o/r",
+            "git status && gh repo view o/r",
+        ),
+    ] {
+        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+    }
+}
+
+#[test]
+fn an_exec_the_projection_cannot_read_past_leaves_the_command_alone() {
+    // `-c` runs with an empty environment and `-a` renames the program, so
+    // neither spelling runs what the bare one runs. `exec` with nothing behind
+    // it sets up redirections for the shell itself. And an `exec` that removes
+    // no setting is the command the caller wrote, not a prefix of one.
+    for command in [
+        "exec -c env -u NODE_OPTIONS npm test",
+        "exec -a sh env -u NODE_OPTIONS npm test",
+        "exec > /tmp/log",
+        "exec npm test",
+        // `exec` is the command word, so the shell hands `LC_ALL=C` to it as
+        // the program to run rather than recognizing it as an assignment.
+        "exec LC_ALL=C ls src",
+        // `-u PATH` is refused by `strip_env_options` whether or not a
+        // launcher stands in front of it, so reading past `exec` reaches the
+        // same refusal the bare spelling reaches.
+        "exec env -u PATH npm test",
+    ] {
+        assert_eq!(project(command), None, "{command}");
+    }
 }

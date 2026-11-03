@@ -23,7 +23,7 @@ from codex_plugin_scanner.guard.approval_gate import (
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.harness_disconnect_gate import require_harness_disconnect_gate
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.totp import totp_code_at_counter
+from tests.guard_totp_support import totp_code_at_counter
 
 PASSWORD = "correct horse battery staple"
 

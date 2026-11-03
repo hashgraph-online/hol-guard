@@ -14,6 +14,7 @@ fn offline_parity_compares_full_native_evidence_and_rejects_real_differences() {
         "baseline_program":baseline,
         "build":{"schema":"guard.command-extension-build.v1","base":"packaged",
             "sources":[serde_json::from_slice::<Value>(EXAMPLE).unwrap()],
+            "validation_base":{"catalog":serde_json::from_slice::<Value>(crate::native_command_catalog::embedded_catalog_bytes()).unwrap()["catalog"], "programs":[]},
             "trust":serde_json::from_slice::<Value>(TRUST).unwrap()},
         "cases":[{"id":"git-reset","payload":{"tool_name":"Bash","tool_input":{"command":"git reset --hard"}},
             "controls":[],"managed_controls":[]}]

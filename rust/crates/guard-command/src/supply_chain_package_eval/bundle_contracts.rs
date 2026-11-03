@@ -15,7 +15,7 @@ pub struct SupplyChainBundleResponse {
     pub signature_algorithm: String,
     /// `SupplyChainVerificationKey.to_dict()` payloads.
     pub verification_keys: Vec<Map<String, Value>>,
-    /// The typed response the seam already validated. Offline decisions reuse
+    /// The typed response the seam already decoded. Offline decisions reuse
     /// it instead of re-serialising and re-parsing the whole bundle per call;
     /// `None` means a caller must parse from `to_dict()`.
     pub parsed: Option<std::sync::Arc<crate::supply_chain_bundle::SupplyChainBundleResponse>>,
@@ -50,6 +50,38 @@ pub trait SupplyChainBundleApi {
         &self,
         raw_json: &Value,
     ) -> EvalResult<SupplyChainBundleResponse>;
+    /// Parsing a stored response is not proof that its cached verdict is current.
+    /// Use the native signature/key-state/freshness verifier and paired scope.
+    /// The boolean reports a matching recorded sync keyring, not a new trust
+    /// root. Missing sync context cannot establish a permissive cache hit.
+    fn validate_cached_supply_chain_bundle(
+        &self,
+        response: &SupplyChainBundleResponse,
+        workspace_id: &str,
+        now: Option<f64>,
+        sync_keyring: Option<&Value>,
+        synced_bundle_version: Option<&str>,
+    ) -> EvalResult<bool> {
+        let decoded;
+        let typed = match response.parsed.as_deref() {
+            Some(typed) => typed,
+            None => {
+                decoded = crate::supply_chain_bundle::load_supply_chain_bundle_response(
+                    &response.to_dict(),
+                )
+                .map_err(|error| EvalError::Validation(error.to_string()))?;
+                &decoded
+            }
+        };
+        crate::supply_chain_bundle_cache_trust::validate_cached_supply_chain_bundle(
+            typed,
+            workspace_id,
+            now,
+            sync_keyring,
+            synced_bundle_version,
+        )
+        .map_err(|error| EvalError::Validation(error.to_string()))
+    }
     /// `check_supply_chain_bundle_freshness(bundle, now=)` (:114). `now` is
     /// epoch seconds (`None` = wall clock). `EvalError::Validation` maps
     /// `SupplyChainBundleExpiredError`.

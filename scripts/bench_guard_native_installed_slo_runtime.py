@@ -13,6 +13,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 import codex_plugin_scanner  # noqa: E402
 from codex_plugin_scanner.guard.native_runtime import native_mode, native_runtime_status  # noqa: E402
+from scripts.native_slo_activity import SloActivity  # noqa: E402
 from scripts.native_slo_contract import (  # noqa: E402
     clear_proof_environment,
     proof_environment_violations,
@@ -56,6 +57,7 @@ def _readiness_samples(
     progress_submit: object = None,
     progress_attempt: object = None,
     progress_complete: object = None,
+    activity: SloActivity | None = None,
 ) -> list[float]:
     values: list[float] = []
     for _ in range(count):
@@ -63,8 +65,11 @@ def _readiness_samples(
             progress_submit("readiness")
         if callable(progress_attempt):
             progress_attempt("readiness")
-        with AdapterSession(runtime) as session:
+        with activity.session(runtime) if activity is not None else AdapterSession(runtime) as session:
             values.append(session.readiness_ms)
+            if activity is not None:
+                with activity.background("readiness", session.guard_home, session.workspace):
+                    pass
         if callable(progress_complete):
             progress_complete("readiness")
     return values

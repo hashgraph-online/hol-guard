@@ -8,7 +8,8 @@ import pytest
 
 from codex_plugin_scanner.guard.cli.protect_approvals import _protect_approval_item
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime.decisions import GuardDecisionV2, authoritative_decision_from_artifact
+from codex_plugin_scanner.guard.runtime.decisions import GuardDecisionV2
+from tests.authoritative_decision_client import authoritative_decision_from_artifact
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 

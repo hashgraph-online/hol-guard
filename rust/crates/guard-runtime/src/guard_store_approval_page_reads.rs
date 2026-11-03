@@ -247,6 +247,7 @@ pub(crate) fn get_next_pending_request(
     connection: &Connection,
     guard_home: &str,
     args: &Args<'_>,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     let excluded = args.strings("exclude_ids")?.unwrap_or_default();
     let rows = query_all(
@@ -258,7 +259,11 @@ pub(crate) fn get_next_pending_request(
         .iter()
         .map(|row| project(row, guard_home))
         .collect::<StoreResult<Vec<_>>>()?;
-    let candidates = payloads(rows.iter().zip(projections).collect(), args.opt_str("cwd")?)?;
+    let candidates = payloads(
+        rows.iter().zip(projections).collect(),
+        args.opt_str("cwd")?,
+        owner.map(|owner| (connection, owner)),
+    )?;
     Ok(candidates
         .into_iter()
         .find(|payload| {

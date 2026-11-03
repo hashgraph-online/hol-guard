@@ -78,23 +78,51 @@ pub(super) fn launch_cwd(payload_cwd: Option<&str>, workspace: Option<&str>) -> 
     fs_path::is_dir(&resolved).then_some(resolved)
 }
 
-/// `_exact_action_token`: the token, or the reason the action stays one-time.
+/// Context token or refusal. Script observations without an execution owner
+/// cannot become permission for either approval duration.
 pub(super) fn exact_action(
     query: &NativeExactActionQueryV1,
     deadline: Instant,
     engines: &dyn Engines,
 ) -> Proof<String> {
+    if let NativeExactActionQueryV1::ExactAction { facts, .. } = query {
+        check_facts(facts)?;
+    }
+    if super::launch_evidence::names_script_runtime(query) {
+        return Err(super::reasons::SCRIPT_DELIVERY);
+    }
     let components = exact_action_components(query, deadline, engines)?;
+    if super::launch_evidence::requires_owner(&components.identity["launch"]) {
+        return Err(super::reasons::SCRIPT_DELIVERY);
+    }
     let token = build_context_token(&components).map_err(|_| UNPROVEN_LAUNCH)?;
     parse_context_token(&Value::String(token.clone())).ok_or(UNPROVEN_LAUNCH)?;
     Ok(token)
 }
 
+fn check_facts(facts: &NativeReviewFactsV1) -> Proof<()> {
+    if !is_overridable(facts) {
+        return Err(non_overridable_reason(facts));
+    }
+    let reason_code = facts.reason_code.as_deref().unwrap_or("").to_lowercase();
+    if RISK_REASON_MARKERS
+        .iter()
+        .any(|marker| reason_code.contains(marker))
+    {
+        return Err(NON_OVERRIDABLE);
+    }
+    Ok(())
+}
+
 /// The token an approval of `query` is saved and matched under: the proven
 /// exact-action token when Guard can prove what the command runs, else the
 /// hash of the command itself (`command_hash`). Every review the user can
-/// answer gets one, so every review offers Always allow
-/// (`docs/guard/approval-invariant.md`).
+/// answer gets one, script launches included: `docs/guard/approval-invariant.md`
+/// requires Allow once and Always allow on every paused review, and taking the
+/// token away is not what holds a script to the bytes the user saw. The
+/// execution owner does that at its launch barrier, where a saved decision is
+/// matched against the captured artifact hash before any effect, so edited
+/// script bytes ask again instead of reusing the grant.
 pub(super) fn approval_token(
     query: &NativeExactActionQueryV1,
     deadline: Instant,
@@ -194,16 +222,7 @@ pub(super) fn exact_action_components(
     else {
         return Err(UNPROVEN_LAUNCH);
     };
-    if !is_overridable(facts) {
-        return Err(non_overridable_reason(facts));
-    }
-    let reason_code = facts.reason_code.as_deref().unwrap_or("").to_lowercase();
-    if RISK_REASON_MARKERS
-        .iter()
-        .any(|marker| reason_code.contains(marker))
-    {
-        return Err(NON_OVERRIDABLE);
-    }
+    check_facts(facts)?;
     let has_command = command
         .as_deref()
         .is_some_and(|text| !text.trim().is_empty());
@@ -259,9 +278,12 @@ pub(super) fn exact_action_components(
             "policy_action": facts.policy_action.as_deref().unwrap_or(""),
             "reason_code": facts.reason_code.as_deref().unwrap_or(""),
         }),
+        // The compiled `rule_digest` is not part of the token: a Guard upgrade
+        // that changes rule sources must not re-ask for every saved Always.
+        // The verdict facts above still bind it, and a saved approval never
+        // lowers a block or a sandbox requirement the new rules raise.
         policy: json!({
             "version": POLICY_VERSION,
-            "rule_digest": binding.get("rule_digest").cloned().unwrap_or(Value::Null),
             "command_extensions": binding.get("command_extensions").cloned().unwrap_or(Value::Null),
         }),
         sandbox: json!({"required": facts.minimum_action.as_deref() == Some("sandbox-required")}),

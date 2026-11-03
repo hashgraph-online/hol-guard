@@ -2,10 +2,7 @@ use super::*;
 use std::os::unix::fs::symlink;
 
 fn directory(tag: &str) -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root =
         std::env::temp_dir().join(format!("guard-launch-{tag}-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();

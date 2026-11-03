@@ -2,7 +2,12 @@
 
 Scope is a static import-graph closure (``ast``) from reviewed runtime root
 modules.  Edges are classified ``eager`` (executed at import time) or ``lazy``
-(inside a function/lambda, or a literal ``importlib.import_module`` call).
+(inside a function/lambda, or an ``importlib.import_module`` call).  A
+dynamic import resolves when its module argument is a string the source fixes:
+a literal, a conditional between literals, a name bound to one of those, a loop
+variable drawn from a module-level literal table, or the parameter of a
+module-private helper every caller passes a literal to.  Anything else is
+counted unresolved and must be declared in the scope contract.
 Imports under ``if TYPE_CHECKING`` are not runtime edges.  Reviewed exclusions
 prune a module and everything reachable only through it.  LOC counts physical
 lines holding at least one non-comment token (docstrings count).
@@ -17,17 +22,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from scripts.ci.runtime_majority_functions import ModulePlan, counted_lines, is_type_checking_test
-
-
-@dataclass
-class PythonModule:
-    """One module file under the package root."""
-
-    name: str
-    path: str
-    is_package: bool
-    loc: int
+from scripts.ci.runtime_majority_functions import ModulePlan, counted_lines
+from scripts.ci.runtime_majority_imports import ImportCollector, PythonModule, absolute_name
 
 
 @dataclass
@@ -69,87 +65,6 @@ def discover_modules(
     return modules
 
 
-def _literal_package(node: ast.expr, module: PythonModule) -> str | None:
-    """Package anchor of a relative ``import_module`` call, when statically known."""
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if isinstance(node, ast.Name) and node.id == "__package__":
-        return module.name if module.is_package else module.name.rpartition(".")[0]
-    if isinstance(node, ast.Name) and node.id == "__name__":
-        return module.name
-    return None
-
-
-def _absolute_name(name: str, package: str | None) -> str | None:
-    if not name.startswith("."):
-        return name
-    if not package:
-        return None
-    level = len(name) - len(name.lstrip("."))
-    base = package.split(".")
-    if level - 1 >= len(base):
-        return None
-    return ".".join([*base[: len(base) - (level - 1)], name.lstrip(".")]).rstrip(".")
-
-
-class _ImportCollector(ast.NodeVisitor):
-    def __init__(self, module: PythonModule, skip_linenos: set[int] | None = None) -> None:
-        self.module = module
-        self._skip_linenos = skip_linenos or set()
-        self.found: list[tuple[str, str, int, tuple[str, ...]]] = []
-        self.dynamic_unresolved = 0
-        self._function_depth = 0
-
-    def _mode(self) -> str:
-        return "lazy" if self._function_depth else "eager"
-
-    def visit(self, node: ast.AST) -> None:
-        """Skip statements removed by a reviewed function-level exclusion."""
-        if isinstance(node, ast.stmt) and node.lineno in self._skip_linenos:
-            return
-        super().visit(node)
-
-    def visit_If(self, node: ast.If) -> None:
-        if is_type_checking_test(node.test):
-            for child in node.orelse:
-                self.visit(child)
-            return
-        self.generic_visit(node)
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        self._function_depth += 1
-        self.generic_visit(node)
-        self._function_depth -= 1
-
-    visit_AsyncFunctionDef = visit_FunctionDef  # noqa: N815
-    visit_Lambda = visit_FunctionDef  # type: ignore[assignment]  # noqa: N815
-
-    def visit_Import(self, node: ast.Import) -> None:
-        for alias in node.names:
-            self.found.append((self._mode(), alias.name, 0, ()))
-
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        self.found.append((self._mode(), node.module or "", node.level, tuple(alias.name for alias in node.names)))
-
-    def visit_Call(self, node: ast.Call) -> None:
-        func = node.func
-        name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
-        if name in {"import_module", "__import__"} and node.args:
-            arg = node.args[0]
-            package_node = node.args[1] if len(node.args) > 1 else None
-            for keyword in node.keywords:
-                if keyword.arg == "package":
-                    package_node = keyword.value
-            package = _literal_package(package_node, self.module) if package_node is not None else None
-            literal = arg.value if isinstance(arg, ast.Constant) and isinstance(arg.value, str) else None
-            target = _absolute_name(literal, package) if literal is not None else None
-            if target:
-                self.found.append(("lazy", target, 0, ()))
-            else:
-                self.dynamic_unresolved += 1
-        self.generic_visit(node)
-
-
 def _expand(modules: dict[str, PythonModule], target: str) -> set[str]:
     """A module plus the parent packages whose ``__init__`` also executes."""
     result: set[str] = set()
@@ -185,11 +100,12 @@ def build_graph(repo: Path, package_root: str, plans: dict[str, ModulePlan] | No
     for name, module in modules.items():
         source = (repo / module.path).read_text(encoding="utf-8")
         plan = (plans or {}).get(module.path)
-        collector = _ImportCollector(module, plan.skip_linenos if plan else None)
         try:
-            collector.visit(ast.parse(source))
+            tree = ast.parse(source)
         except SyntaxError:
             continue
+        collector = ImportCollector(module, plan.skip_linenos if plan else None)
+        collector.visit(tree)
         graph.eager[name], graph.lazy[name] = set(), set()
         graph.dynamic_unresolved[name] = collector.dynamic_unresolved
         for found in collector.found:
@@ -247,7 +163,7 @@ def apply_dynamic_imports(graph: ImportGraph, entries: list[dict[str, Any]]) -> 
         package = module.name if module.is_package else module.name.rpartition(".")[0]
         edges = graph.eager if entry.get("mode") == "eager" else graph.lazy
         for target in entry["targets"]:
-            name = _absolute_name(target, package)
+            name = absolute_name(target, package)
             resolved = _expand(graph.modules, name) if name else set()
             if not resolved:
                 raise ValueError(f"dynamic import entry {entry['path']!r}: target {target!r} resolves to no module")

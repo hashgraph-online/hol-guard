@@ -134,6 +134,7 @@ impl State<'_, '_> {
             total_effects: self.total_effects,
             source_context: Some(context),
             exported_names: self.exported_names,
+            pipeline_input: self.pipeline_input,
         };
         child.walk(tree.root_node(), depth + 1)?;
         self.variables = std::mem::take(&mut child.variables);
@@ -162,6 +163,7 @@ impl State<'_, '_> {
             line: node.start_position().row + 1,
             command_start: name.start_byte(),
             command_end: name.end_byte(),
+            pipeline_input: self.pipeline_input,
         });
         Ok(())
     }

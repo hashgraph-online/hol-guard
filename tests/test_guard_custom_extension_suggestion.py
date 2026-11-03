@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.local_cli_hook import observe_unlisted_cli
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.custom_extension_suggestion import (
     common_utility_reject_message,
@@ -17,6 +16,7 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     recognize_operator_cli,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.runtime_wrapper_support import native_local_cli_hook
 
 _SCREENSHOT_JUNK = ("script", "rg", "whoami", "vitest.mjs")
 
@@ -96,11 +96,17 @@ def test_screenshot_junk_is_not_observed_or_suggested(tmp_path: Path) -> None:
     vitest = tmp_path / "vitest.mjs"
     vitest.write_text("export {}\n", encoding="utf-8")
     for command in ("rg pattern", "whoami", "script"):
-        observe_unlisted_cli(store=store, command=command, cwd=tmp_path, home_dir=tmp_path)
+        native_local_cli_hook(
+            store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow", grant_allowed=False
+        )
         assert identify_unlisted_cli(command, cwd=tmp_path, home_dir=tmp_path) is None
         assert is_common_shell_utility(command.split()[0])
-    observe_unlisted_cli(store=store, command=f"node {vitest}", cwd=tmp_path, home_dir=tmp_path)
-    observe_unlisted_cli(store=store, command=str(tool), cwd=tmp_path, home_dir=tmp_path)
+    native_local_cli_hook(
+        store, command=f"node {vitest}", cwd=tmp_path, home_dir=tmp_path, current_action="allow", grant_allowed=False
+    )
+    native_local_cli_hook(
+        store, command=str(tool), cwd=tmp_path, home_dir=tmp_path, current_action="allow", grant_allowed=False
+    )
     items = store.list_local_cli_items()
     names = {str(item["name"]) for item in items}
     assert "internal-deploy" in names
@@ -109,7 +115,10 @@ def test_screenshot_junk_is_not_observed_or_suggested(tmp_path: Path) -> None:
     assert suggestable == {"internal-deploy"}
     assert "vitest.mjs" not in suggestable
     deploy = next(item for item in items if item["name"] == "internal-deploy")
-    assert deploy["source_path"] == "user-tool"
+    # The hook keeps the launched file, so Load commands never asks for it;
+    # ranking still reads it as a user tool.
+    assert deploy["source_path"] == str(tool.resolve())
+    assert observation_path_class(str(deploy["source_path"])) == "user-tool"
     assert isinstance(deploy["suggestion_score"], int)
     assert int(deploy["suggestion_score"]) >= 15
 
@@ -145,11 +154,13 @@ def test_sourced_helper_in_compound_command_is_observed(tmp_path: Path) -> None:
     helper = tmp_path / "server-access.sh"
     helper.write_text("#!/bin/sh\necho access\n", encoding="utf-8")
     helper.chmod(0o755)
-    observe_unlisted_cli(
-        store=store,
+    native_local_cli_hook(
+        store,
         command=f"source {helper} && ssh -o BatchMode=yes host 'echo ok'",
         cwd=tmp_path,
         home_dir=tmp_path,
+        current_action="allow",
+        grant_allowed=False,
     )
     items = store.list_local_cli_items()
     names = {str(item["name"]) for item in items}

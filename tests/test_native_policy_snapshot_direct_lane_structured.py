@@ -6,7 +6,6 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_structured import (
-    DIRECT_HOOK_STRUCTURED_OUTPUT_FEATURE,
     STRUCTURED_OUTPUT_BINDING_KEY,
     bound_structured_output_view,
     structured_output_view,
@@ -15,7 +14,6 @@ from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_structured im
 )
 from codex_plugin_scanner.guard.native_policy_snapshot_publication import NativePolicySnapshotPublicationMixin
 
-FEATURES = (DIRECT_HOOK_STRUCTURED_OUTPUT_FEATURE,)
 HASH = "a" * 64
 SETTING = "data_control.structured_output"
 ABSENT = {
@@ -78,15 +76,13 @@ def test_the_view_binds_only_when_every_compiled_config_agrees() -> None:
 
 
 def test_the_view_binds_only_for_a_resident_that_accepts_it() -> None:
-    assert with_structured_output_view(None, features=FEATURES, view=ABSENT) is None
-    assert with_structured_output_view({"generation": 1}, features=(), view=ABSENT) == {"generation": 1}
-    assert with_structured_output_view({"generation": 1}, features=FEATURES, view=None) == {"generation": 1}
-    bound = with_structured_output_view({"generation": 1}, features=FEATURES, view=ABSENT)
+    assert with_structured_output_view(None, view=ABSENT) is None
+    assert with_structured_output_view({"generation": 1}, view=None) == {"generation": 1}
+    bound = with_structured_output_view({"generation": 1}, view=ABSENT)
     assert bound == {"generation": 1, STRUCTURED_OUTPUT_BINDING_KEY: ABSENT}
-    assert bound_structured_output_view(bound, FEATURES) == ABSENT
-    assert bound_structured_output_view(bound, ()) is None
-    assert bound_structured_output_view({"generation": 1}, FEATURES) is None
-    assert bound_structured_output_view(None, FEATURES) is None
+    assert bound_structured_output_view(bound) == ABSENT
+    assert bound_structured_output_view({"generation": 1}) is None
+    assert bound_structured_output_view(None) is None
 
 
 class _Publisher(NativePolicySnapshotPublicationMixin):

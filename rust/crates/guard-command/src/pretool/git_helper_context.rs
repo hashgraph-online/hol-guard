@@ -12,7 +12,7 @@ pub(super) fn git_helper_context_required(
     let rest = super::segment_proof::after_read_prefix(model, context);
     let model = rest.as_ref().unwrap_or(model);
     // A relative `-C` after a verified `cd` resolves against the destination.
-    let destination = super::segment_proof::verified_cwd_compound_context(model, context);
+    let destination = super::segment_proof::git_read_cwd_compound_context(model, context);
     let context = PathContext {
         cwd: destination.as_deref().or(context.cwd),
         ..context
@@ -23,10 +23,73 @@ pub(super) fn git_helper_context_required(
     })
 }
 
+/// Whether this segment's one `-C` route lands where Git discovers no
+/// repository.
+///
+/// Only the leading option block is read, so a `-C` that belongs to a
+/// subcommand (`git diff -C`, where it asks for copy detection) is never
+/// mistaken for a route, and a segment carrying more than one `-C` keeps the
+/// helper screen: the second is resolved against the first, which this does
+/// not model.
+///
+/// The route only says Git finds no repository. Git still reads its global
+/// and system configuration, and an inline `-c` adds to it, so the segment
+/// counts only when it carries no `-c` and its operation is one the
+/// inspection proof admits without a repository: `diff` on paths, `grep`,
+/// `apply` and `hash-object` keep running there and open files.
+pub(super) fn routes_to_no_repository(
+    segment: &crate::CommandSegmentV1,
+    context: PathContext<'_>,
+) -> bool {
+    segment
+        .executable
+        .as_deref()
+        .is_some_and(|executable| executable_basename(executable) == "git")
+        && arguments_route_to_no_repository(&segment.arguments, context)
+}
+
+/// [`routes_to_no_repository`] for a segment's arguments alone, for the
+/// proofs that already know the segment runs Git and hold its arguments.
+pub(super) fn arguments_route_to_no_repository(
+    arguments: &[String],
+    context: PathContext<'_>,
+) -> bool {
+    let mut index = 0;
+    let mut route = None;
+    while let Some(argument) = arguments.get(index) {
+        if argument == "-C" {
+            if route.is_some() {
+                return false;
+            }
+            let Some(target) = arguments.get(index + 1) else {
+                return false;
+            };
+            route = Some(target.as_str());
+            index += 2;
+            continue;
+        }
+        if argument == "-c" {
+            return false;
+        }
+        if !argument.starts_with('-') {
+            break;
+        }
+        index += 1;
+    }
+    route.is_some_and(|target| super::git_routes::git_route_without_repository(target, context))
+        && crate::command_compatibility::git_inspection_arguments(arguments, context).is_some()
+}
+
 /// Whether a Git segment's operation can start a configured helper.
 fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext<'_>) -> bool {
     let stripped = super::segment_proof::without_stderr_merge(original);
     let segment = stripped.as_ref().unwrap_or(original);
+    if routes_to_no_repository(segment, context) {
+        // Git's setup dies on a `-C` target that holds no repository, before
+        // it reads a pager, textconv, diff or filter setting, so there is no
+        // configuration to probe and nothing a helper could run in.
+        return false;
+    }
     segment.executable.as_deref().is_some_and(|executable| {
         executable_basename(executable) == "git"
             // Leading `-C`/`-P` options precede the subcommand.
@@ -38,12 +101,14 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         .unwrap_or(arguments.len());
                     let active_options = &arguments[1..option_end];
                     match arguments[0].as_str() {
-                        "diff" | "log" | "show" => !(active_options
-                            .iter()
-                            .any(|argument| argument == "--no-ext-diff")
-                            && active_options
+                        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" => {
+                            !(active_options
                                 .iter()
-                                .any(|argument| argument == "--no-textconv")),
+                                .any(|argument| argument == "--no-ext-diff")
+                                && active_options
+                                    .iter()
+                                    .any(|argument| argument == "--no-textconv"))
+                        }
                         // A clean filter is the only helper hash-object runs.
                         "hash-object" => {
                             !super::git_hash_object::filters_disabled(&arguments[1..])
@@ -52,25 +117,57 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         "config" => super::git_config_reads::read_form(&arguments[1..]).is_some(),
                         // These do not page by default, but pager.<name> can, and
                         // an object read can fetch from a partial clone's promisor.
-                        "merge-base" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref"
-                        | "rev-list" => true,
+                        // `cherry` prints commit names through no helper of its
+                        // own, so the pager is the whole of what it can start.
+                        "cherry" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
+                        | "for-each-ref" | "rev-list" => true,
                         // blame and reflog page by default; describe honors
                         // pager.describe when it is set.
-                        "blame" | "describe" | "reflog" => true,
+                        "blame" | "annotate" | "describe" | "reflog" => true,
                         // grep pages by default through pager.grep or core.pager.
                         "grep" => true,
+                        // None of these starts a pager of its own, runs a
+                        // configured driver or opens a working-tree file, but
+                        // an explicit pager.<name> key can still name a
+                        // program, so the probe clears that first. The
+                        // `symbolic-ref` spellings that write a ref never
+                        // reach here: the inspection proof screens them.
+                        "name-rev" | "show-branch" | "check-ref-format" | "symbolic-ref" => true,
+                        // The stdin filters and `var` print without opening a
+                        // working-tree file, but an explicit `pager.<name>`
+                        // key can still name a program, so the probe clears
+                        // that first. The `check-mailmap` and
+                        // `interpret-trailers` spellings that open a file the
+                        // caller names never reach here: the inspection proof
+                        // screens them.
+                        "var" | "patch-id" | "stripspace" | "check-mailmap"
+                        | "interpret-trailers" => true,
                         // A stash listing is a log that pages under
                         // pager.stash, and `stash show` runs the diff drivers.
                         "stash" => true,
-                        // A shortlog pages under pager.shortlog, and both
-                        // listings read the repository's configuration.
-                        "shortlog" | "check-ignore" => true,
+                        // A shortlog pages under pager.shortlog, a count and
+                        // an attribute check page under their own pager.<name>,
+                        // and every listing reads the repository's
+                        // configuration.
+                        "shortlog" | "check-ignore" | "count-objects" | "check-attr"
+                        | "sparse-checkout" => true,
+                        // A bisect log replays through the pager, a note
+                        // prints through it too, and a replacement listing
+                        // reads the repository's configuration to print the
+                        // refs; all three honor core.pager.
+                        "bisect" | "notes" | "replace" => true,
                         // Finding the untracked paths refreshes the index,
                         // which starts a configured core.fsmonitor.
                         "clean" => true,
                         // Reading the files the patch names refreshes the
                         // index, which starts a configured core.fsmonitor.
                         "apply" => true,
+                        // A status line is printed from the superproject,
+                        // whose index it reads, so a configured
+                        // core.fsmonitor there can start. The read forms are
+                        // the only ones that reach here, because the proof
+                        // that admits the subcommand screens them first.
+                        "submodule" => true,
                         _ => false,
                     }
                 })
@@ -112,7 +209,7 @@ pub(super) fn git_helpers_proven_inert(
     }
     // After a verified `cd`, the Git process reads configuration from the new
     // directory, so the probe must run there rather than in the reported cwd.
-    let destination = super::segment_proof::verified_cwd_compound_context(model, context);
+    let destination = super::segment_proof::git_read_cwd_compound_context(model, context);
     let context = PathContext {
         cwd: destination.as_deref().or(context.cwd),
         ..context
@@ -177,3 +274,7 @@ pub(super) fn stdout_piped(model: &CanonicalCommandV1, index: usize) -> bool {
         _ => false,
     }
 }
+
+#[cfg(test)]
+#[path = "git_helper_context_tests.rs"]
+mod tests;

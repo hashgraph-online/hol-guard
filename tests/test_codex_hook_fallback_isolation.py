@@ -149,7 +149,8 @@ def test_verified_fallback_ignores_workspace_and_ambient_python_imports(
     )
     fallback_stdout = trusted.run_fallback(fallback_command, data=payload, timeout_seconds=20)
 
-    assert fallback_stdout == ""
+    fallback_output = json.loads(fallback_stdout)
+    assert fallback_output["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert trusted.cwd == Path(str(config["manifest_path"])).parent.resolve(strict=True)
     assert trusted.cwd != workspace.resolve()
     assert {"PYTHONPATH", "PYTHONSTARTUP", "VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT"}.isdisjoint(trusted.environment)

@@ -13,6 +13,10 @@ from .guarded_repository_evidence import (
     guarded_repository_evidence_sha256,
 )
 
+# hol.org's edge refuses Python's default urllib User-Agent with a 403 before the
+# request reaches the verifier, so registrations name themselves.
+HOL_REGISTRATION_USER_AGENT = "hol-guard-attestation-registration"
+
 
 def _github_oidc_token(*, request_url: str, request_token: str, audience: str) -> str:
     if not request_url.startswith("https://"):
@@ -67,6 +71,7 @@ def register_guarded_repository_evidence(
             "Authorization": f"Bearer {oidc_token}",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "User-Agent": HOL_REGISTRATION_USER_AGENT,
         },
     )
     with urllib.request.urlopen(request, timeout=15) as response:

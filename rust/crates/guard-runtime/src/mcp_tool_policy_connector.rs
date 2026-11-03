@@ -74,14 +74,23 @@ fn display_name(subject: &McpToolPolicySubjectV1) -> Value {
 
 /// `{reason_code, identity_hash, surface, name, queue_group_id}` for a
 /// non-recognition review of a server with no answer on this device.
+#[cfg(test)]
 pub(crate) fn connector_setup(
     subject: &McpToolPolicySubjectV1,
     decision: &Decision,
 ) -> Option<Value> {
+    connector_setup_with_catalog(subject, decision, None)
+}
+
+pub(crate) fn connector_setup_with_catalog(
+    subject: &McpToolPolicySubjectV1,
+    decision: &Decision,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+) -> Option<Value> {
     if !non_recognition(subject, decision) {
         return None;
     }
-    let identity_hash = unset_connector(subject.extension.as_ref()?)?;
+    let identity_hash = unset_connector(subject.extension.as_ref()?, catalog)?;
     Some(json!({
         "reason_code": CONNECTOR_SETUP_REQUIRED,
         "identity_hash": identity_hash,

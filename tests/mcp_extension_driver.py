@@ -13,14 +13,17 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from codex_plugin_scanner.guard.local_cli_grant_decision import GRANT_REFINABLE_ACTIONS
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact
 from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
 from codex_plugin_scanner.guard.native_execution import _resident_request
-from codex_plugin_scanner.guard.native_local_cli_identity import LocalCliIdentityUnavailableError
 from codex_plugin_scanner.guard.native_mcp_extension_input import build_extension_input
 
+from .local_cli_command_id_client import LocalCliIdentityUnavailableError
 from .local_cli_native_fixture import ensure_keyed_home
+from .mcp_policy_native_fixture import admit_mcp_policy_home
+
+# Actions a matching grant may refine; a block or deny is never relaxed.
+GRANT_REFINABLE_ACTIONS = frozenset({"allow", "review", "require-reapproval", "warn"})
 
 _LOCAL = ("local_mcp_grant_decide", "local-mcp-grant-v1", "guard-local-mcp-grant")
 _CONTRIBUTED = ("contributed_mcp_decide", "contributed-mcp-decision-v1", "guard-contributed-mcp-decision")
@@ -38,6 +41,7 @@ def _decide(op: tuple[str, str, str], store: Any, request: dict[str, object]) ->
     operation, feature, schema = op
     guard_home = store.guard_home
     ensure_keyed_home(guard_home)
+    admit_mcp_policy_home(guard_home)
     if not ensure_resident_prerequisite(guard_home):
         raise LocalCliIdentityUnavailableError(f"{operation}_prerequisite_unavailable")
     response = _resident_request(

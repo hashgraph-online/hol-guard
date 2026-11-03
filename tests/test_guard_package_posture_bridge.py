@@ -21,6 +21,17 @@ _REPLY = {
 }
 
 
+_RISK_ACTION_CONFIG = {
+    "security_level": "balanced",
+    "protection_posture": "balanced",
+    "protection_posture_explicit": False,
+    "managed_locked_settings": [],
+    "risk_actions": {"cloud_advisory": "review", "package_script": "warn"},
+    "harness_risk_actions": {},
+    "harness_postures": {},
+}
+
+
 class _Store:
     guard_home = Path("/tmp/guard-home-posture")
 
@@ -49,7 +60,7 @@ def _call(
     monkeypatch.setattr(bridge, "_transport", transport)
     monkeypatch.setattr("codex_plugin_scanner.guard.synced_policy.synced_policy_payload", lambda _store: None)
     config = SimpleNamespace(security_level="balanced")
-    monkeypatch.setattr(bridge, "resolve_risk_action", lambda _config, risk, harness=None: f"{risk}-action")
+    monkeypatch.setattr(bridge, "risk_action_config_facts", lambda _config: _RISK_ACTION_CONFIG)
     posture = bridge.native_local_supply_chain_posture(
         _Store(),
         config,  # type: ignore[arg-type]
@@ -69,8 +80,10 @@ def test_hydrates_store_facts_and_returns_the_native_posture(monkeypatch: pytest
     assert request["entitlement"] == {}
     assert request["remote_policy"] == {}
     assert request["bundle_payload"] == {"bundleVersion": "b1"}
-    assert request["config_cloud_advisory_action"] == "cloud_advisory-action"
-    assert request["config_package_script_action"] == "package_script-action"
+    # The configuration itself goes over, not the two actions it resolves to.
+    assert request["risk_action_config"] == _RISK_ACTION_CONFIG
+    assert "config_cloud_advisory_action" not in request
+    assert "config_package_script_action" not in request
     assert request["package_manager_protection"] == {"managed": True}
 
 

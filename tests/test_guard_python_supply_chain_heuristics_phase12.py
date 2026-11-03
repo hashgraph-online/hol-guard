@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard import native_supply_chain_eval
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_workspace import bind_workspace
+from tests.package_review_settings import review_package_signals
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 from .guard_python_phase12_support import (
@@ -63,6 +64,7 @@ def test_evaluate_package_request_artifact_ignores_cross_ecosystem_bundle_matche
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
     bind_workspace(store, WORKSPACE_ID)
     npm_package = package_fixture(
         name="requests",
@@ -101,6 +103,7 @@ def test_evaluate_package_request_artifact_requires_review_for_python_vcs_and_di
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = artifact_from_command_fixture(command, workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
@@ -118,6 +121,7 @@ def test_evaluate_package_request_artifact_prefers_editable_vcs_urls_over_local_
         '[build-system]\nrequires=["setuptools>=68"]\nbuild-backend="setuptools.build_meta"\n',
     )
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
     artifact = artifact_from_command_fixture(
         'pip install -e "private-demo @ git+https://example.com/org/private-demo.git"', workspace=workspace_dir
     )
@@ -140,6 +144,7 @@ build-backend = "setuptools.build_meta"
         + "\n",
     )
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = artifact_from_command_fixture("pip install -e .", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
@@ -166,6 +171,7 @@ build-backend = "setuptools.build_meta"
         + "\n",
     )
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = artifact_from_command_fixture("pip install requests", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
@@ -194,6 +200,7 @@ build-backend = "setuptools.build_meta"
         + "\n",
     )
     store = GuardStore(home_dir / "guard-home")
+    review_package_signals(home_dir / "guard-home")
 
     artifact = artifact_from_command_fixture("pip install -e ~/local-demo", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
@@ -220,6 +227,7 @@ build-backend = "setuptools.build_meta"
         + "\n",
     )
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = artifact_from_command_fixture("pip install path/to/local-demo", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
@@ -244,6 +252,7 @@ build-backend = "setuptools.build_meta"
         + "\n",
     )
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = artifact_from_command_fixture("pip install .[pdf]", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
@@ -274,6 +283,7 @@ Repository = "https://example.com/demo.git"
         + "\n",
     )
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = artifact_from_command_fixture("pip install -e .", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
@@ -350,6 +360,7 @@ setup(name="local-demo", version="0.1.0")
         + "\n",
     )
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = artifact_from_command_fixture("uv pip install -e .", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)

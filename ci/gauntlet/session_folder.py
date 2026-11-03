@@ -19,6 +19,11 @@ CHECKOUT = "other-project"
 EDIT_CASE = "omp-native-edit-clone-beside-session-folder"
 SHELL_CASE = "omp-native-shell-writes-clone-beside-session-folder"
 CASES = frozenset({EDIT_CASE, SHELL_CASE})
+# Cases that need the staged files in place before their commands run: the
+# shell case copies one of them, and the listing case probes the directory
+# they sit in for names that are not there.
+LISTING_CASE = "omp-native-ls-temporary-scratch-probes"
+STAGED_CASES = frozenset({SHELL_CASE, LISTING_CASE})
 
 REPORT_BEFORE = "report-window-marker"
 REPORT_AFTER = "report-window-fixed"
@@ -35,11 +40,10 @@ def session_cwd(home: Path, workspace: Path, scenario_id: str) -> Path:
 
 
 def seed_session_folder(home: Path, stage: Path, scenario_id: str) -> None:
-    """Create the plain session folder and, for the shell case, the staged source files."""
-    if scenario_id not in CASES:
-        return
-    (home / SESSION_FOLDER).mkdir(mode=0o700, exist_ok=True)
-    if scenario_id != SHELL_CASE:
+    """Create the plain session folder, and the staged source files for the cases that need them."""
+    if scenario_id in CASES:
+        (home / SESSION_FOLDER).mkdir(mode=0o700, exist_ok=True)
+    if scenario_id not in STAGED_CASES:
         return
     stage.mkdir(mode=0o700, parents=True)
     for name, text in STAGED_FILES.items():

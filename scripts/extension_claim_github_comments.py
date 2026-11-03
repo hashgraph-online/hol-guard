@@ -21,7 +21,9 @@ def batched_pull_comments(client: Any, numbers: list[int]) -> dict[int, list[dic
         pulls = " ".join(f"p{i}: pullRequest(number:{number}) {{ {fields} }}" for i, number in enumerate(batch))
         query = f"query {{ repository(owner:{json.dumps(owner)},name:{json.dumps(repo)}) {{ {pulls} }} }}"
         try:
-            result = client._request("https://api.github.com/graphql", method="POST", payload={"query": query})
+            result = client._request(
+                "https://api.github.com/graphql", method="POST", payload={"query": query}, read_only=True,
+            )
             if not isinstance(result, dict) or result.get("errors"):
                 raise ValueError("Claim comment query is unavailable")
             repository = result.get("data", {}).get("repository")

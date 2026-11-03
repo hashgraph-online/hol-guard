@@ -25,6 +25,8 @@ from tests.guard_extension_control_authority_fixtures import (
 from tests.guard_extension_control_authority_fixtures import (
     _allow_local_terminal_confirmation as _allow_local_terminal_confirmation,
 )
+from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
+from tests.native_activation_support import seed
 from tests.test_extension_pack_preparation import delivery as delivery
 from tests.test_native_command_control_binding_publisher import (
     _pinned_integrity_material_and_resident_key as _pinned_integrity_material_and_resident_key,
@@ -36,6 +38,7 @@ def test_approved_control_commit_and_anchored_retry_install_the_same_pack_record
     delivery, tmp_path, monkeypatch, failure
 ):
     store = _store(tmp_path, MemorySecretStore())
+    seed(store)
     prepared = preparation.prepare(
         delivery.verified(),
         [],
@@ -44,9 +47,7 @@ def test_approved_control_commit_and_anchored_retry_install_the_same_pack_record
         now=1500,
         fetch=delivery.fetch,
     )
-    draft = activation_transition.stage(
-        None, prepared, verifier_key=_key(store), installed_source=prepared.source_sha, now=1500
-    )
+    draft = activation_transition.stage(None, prepared, verifier_key=_key(store), store=store, now=1500)
     # Reuse the strict production target metadata in this transaction-only
     # fixture; no fabricated matcher is installed or evaluated by this test.
     registry = GeneratedCommandCatalog(
@@ -171,4 +172,4 @@ def test_approved_control_commit_and_anchored_retry_install_the_same_pack_record
         assert active.metadata == prepared.metadata
     with store._connect() as connection:
         assert connection.execute("select count(*) from extension_command_pack_pending").fetchone()[0] == 0
-        assert connection.execute("select version from extension_control_schema_migration").fetchone()[0] == 5
+        assert connection.execute("select version from extension_control_schema_migration").fetchone()[0] == 6

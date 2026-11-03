@@ -1,6 +1,6 @@
 {
  "schema": "guard-direct-contained-route-vectors.v1",
- "source": "codex_plugin_scanner.guard.adapters.zcode_contained_tests.route_zcode_containment",
+ "source": "tests.containment_rewrite_client.route_zcode_containment",
  "cases": [
   {
    "name": "profile native_pytest_readonly_containment_required",
@@ -2088,7 +2088,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "profile native_node_test_readonly_containment_required",
@@ -2116,7 +2149,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "profile native_vitest_readonly_containment_required",
@@ -2144,7 +2210,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "profile native_package_test_readonly_containment_required",
@@ -2172,7 +2271,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "profile native_python_eval_readonly_containment_required",
@@ -2200,7 +2332,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "profile native_node_eval_readonly_containment_required",
@@ -2228,7 +2393,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "profile native_git_readonly_containment_required",
@@ -2256,7 +2454,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "profile native_node_tool_readonly_containment_required",
@@ -2284,7 +2515,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "profile native_node_build_output_containment_required",
@@ -2312,7 +2576,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "profile native_workspace_containment_required",
@@ -2486,7 +2783,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "observe mode false",
@@ -2515,7 +2845,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "decision block",
@@ -2712,7 +3075,40 @@
     "tool_use_id": "toolu_1",
     "guard_containment_receipt_only": "true"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "camel event",
@@ -2740,7 +3136,40 @@
     "tool_use_id": "toolu_1",
     "hookEventName": "PreToolUse"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "snake event",
@@ -2768,7 +3197,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "post event",
@@ -2880,7 +3342,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "terminal tool",
@@ -2908,7 +3403,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "lower bash tool",
@@ -2936,7 +3464,40 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "read tool",
@@ -2992,7 +3553,40 @@
     "tool_use_id": "toolu_1",
     "toolName": "Bash"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "camel input",
@@ -3018,7 +3612,35 @@
      "command": "npx vitest run"
     }
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "npx vitest run"
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {}
   },
   {
    "name": "input missing",
@@ -3148,7 +3770,40 @@
     "tool_use_id": "toolu_1",
     "sessionId": "camel"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": null,
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "camel session",
@@ -3176,7 +3831,40 @@
     "tool_use_id": "toolu_1",
     "sessionId": "camel"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "camel",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "camel call",
@@ -3204,7 +3892,40 @@
     "session_id": "session-1",
     "toolCallId": "call-camel"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "call-camel"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "call id wins",
@@ -3234,7 +3955,40 @@
     "tool_call_id": "call-1",
     "toolCallId": "call-2"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "call-1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "no ids",
@@ -3260,7 +4014,40 @@
      "timeout": 120
     }
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": null,
+    "tool_call_id": null
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
   },
   {
    "name": "quoted command",
@@ -3292,7 +4079,48 @@
     "session_id": "session-1",
     "tool_use_id": "toolu_1"
    },
-   "routed": false
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -k 'a and b' \"x\"",
+     "extra": {
+      "n": [
+       1,
+       null
+      ]
+     }
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "extra": {
+     "n": [
+      1,
+      null
+     ]
+    }
+   }
   },
   {
    "name": "profile native_pytest_readonly_containment_required",

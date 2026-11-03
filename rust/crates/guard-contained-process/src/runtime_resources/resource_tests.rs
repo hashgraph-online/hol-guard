@@ -23,10 +23,12 @@ fn capture_tree(root: &Path) -> io::Result<Resources> {
     };
     capture.tree(root, Path::new("site-packages"), false)?;
     let resources = Resources {
+        configuration: Vec::new(),
         files: capture.files.into_values().collect(),
         directories: capture.directories.into_iter().collect(),
         bindings: capture.bindings,
         python_version: None,
+        standard_library: None,
         total_bytes: capture.total,
     };
     resources.verify()?;

@@ -9,13 +9,14 @@ import pytest
 
 from codex_plugin_scanner.guard.catalog_delivery.preparation import PreparedCommandPacks
 from codex_plugin_scanner.guard.native_command_control_binding import NativeCommandProgramMetadata
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
 from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import _extension
 
 
-def test_prepared_metadata_index_keeps_legacy_count_cap_and_supports_independent_packs(monkeypatch):
-    template = json.dumps(BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.agentbridge").to_dict())
+def test_prepared_metadata_index_keeps_legacy_count_cap_and_supports_independent_packs(
+    monkeypatch, authored_command_catalog
+):
+    template = json.dumps(authored_command_catalog.get("command.agentbridge").to_dict())
     rows = [json.loads(re.sub("agentbridge", f"metadata-scale-{index}", template, flags=re.I)) for index in range(600)]
     extensions = tuple(_extension(row) for row in rows)
     with pytest.raises(ValueError, match="catalog extension limit"):

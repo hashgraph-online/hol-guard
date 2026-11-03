@@ -60,6 +60,13 @@ def linked_crates(graph: dict[str, tuple[Path, list[str], dict[str, Any]]], bina
 def crate_roots(directory: Path, manifest: dict[str, Any], *, binary: bool) -> list[Path]:
     if binary:
         roots = [directory / str(item.get("path", "src/main.rs")) for item in manifest.get("bin", [])]
-        return roots or [directory / "src/main.rs"]
+        roots = roots or [directory / "src/main.rs"]
+        # A binary that links its own library routes through both targets;
+        # walk each root once so identical code is counted exactly once.
+        lib = manifest.get("lib", {})
+        lib_path = directory / str(lib.get("path", "src/lib.rs"))
+        if lib_path.is_file() and lib_path not in roots:
+            roots.append(lib_path)
+        return roots
     lib = manifest.get("lib", {})
     return [directory / str(lib.get("path", "src/lib.rs"))]

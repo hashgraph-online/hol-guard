@@ -16,11 +16,21 @@ pub fn compile_addition_with_mcp(
     mcp_sources: &[&[u8]],
     trust: &[u8],
 ) -> Result<CompiledSourceCatalog, &'static str> {
-    let mut output = lower_catalog(sources, mcp_sources, trust)?;
+    compile_with_base(sources, mcp_sources, trust, None)
+}
+
+pub(in super::super) fn compile_with_base(
+    sources: &[&[u8]],
+    mcp_sources: &[&[u8]],
+    trust: &[u8],
+    baseline: Option<Value>,
+) -> Result<CompiledSourceCatalog, &'static str> {
+    let mut output = lower_catalog_inner(sources, mcp_sources, trust, baseline.is_none())?;
     NativeCommandProgram::from_packaged_bytes(packaged_command_program_bytes())?;
-    let mut base: Value = serde_json::from_slice(packaged_command_program_bytes())
+    let packaged: Value = serde_json::from_slice(packaged_command_program_bytes())
         .map_err(|_| "command_source_packaged_base_invalid")?;
-    let base_digest = base["program_digest"].as_str().unwrap().to_owned();
+    let base_digest = packaged["program_digest"].as_str().unwrap().to_owned();
+    let mut base = baseline.unwrap_or(packaged);
     let existing: BTreeSet<_> = base["extensions"]
         .as_array()
         .unwrap()
@@ -73,7 +83,7 @@ pub fn compile_addition_with_mcp(
         .map(|extension| {
             serde_json::json!({
                 "extension_id":extension["extension_id"],"trust_class":extension["trust_class"],
-                "activation":extension["activation"],"publisher":extension["publisher"],
+                "activation":extension["activation"],"publisher":super::trust_identity(extension["trust_class"].as_str().unwrap_or(""), &extension["publisher"]),
             })
         })
         .collect();

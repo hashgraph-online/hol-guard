@@ -154,3 +154,61 @@ def test_blocked_extension_catalog_rejects_commands_without_a_reviewed_adapter(c
     }
     with pytest.raises(ValueError):
         load_catalog_data({"schema": "hol.guard-gauntlet.scenarios.v1", "scenarios": [row]})
+
+
+def test_candidate_release_assets_answer_unpublished_extension_data(monkeypatch, tmp_path):
+    """Serve an unreleased candidate's exported pack only from the named directory."""
+    from ci.gauntlet import extension_adapters
+    from codex_plugin_scanner.guard.catalog_delivery import transport
+
+    tag = "extension-data-" + "a" * 40 + "-0.0-000001"
+    asset = "pack-" + "b" * 64 + ".zip"
+    (tmp_path / tag).mkdir()
+    (tmp_path / tag / asset).write_bytes(b"pack")
+    live = []
+    monkeypatch.setattr(transport, "download", lambda url, maximum: live.append(url) or b"live")
+    monkeypatch.setenv(extension_adapters.RELEASE_ASSETS_ENV, str(tmp_path))
+    extension_adapters._serve_candidate_release_assets.cache_clear()
+    try:
+        extension_adapters._serve_candidate_release_assets()
+        release = "https://github.com/hashgraph-online/hol-guard/releases/download/"
+        assert transport.download(f"{release}{tag}/{asset}", 16) == b"pack"
+        assert transport.download("https://example.invalid/root.json", 16) == b"live"
+        assert live == ["https://example.invalid/root.json"]
+        with pytest.raises(RuntimeError):
+            transport.download(f"{release}{tag}/pack-{'c' * 64}.zip", 16)
+    finally:
+        extension_adapters._serve_candidate_release_assets.cache_clear()
+
+
+def test_required_extension_controls_ask_only_for_permissions(monkeypatch):
+    """A required extension is already enabled; asking to enable it is refused.
+
+    `command.git` is required, so a local-admin layer that sets its extension
+    state is refused with `immutable_extension` and the case never reaches
+    inference. Its permissions stay configurable, so only those are committed.
+    An optional extension still gets its enable.
+    """
+    import types
+
+    from ci.gauntlet.extension_adapters import _commit_extension_controls, _required_extension_ids
+    from ci.native_runtime import probe_installed_native_extensions as probe
+    from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlTargetKind
+
+    assert "command.git" in _required_extension_ids()
+    assert "command.github" not in _required_extension_ids()
+
+    committed: list[tuple] = []
+    monkeypatch.setattr(probe, "commit_controls", lambda api, password, controls: committed.append(controls) or 1)
+    daemon = types.SimpleNamespace(_server=types.SimpleNamespace(extension_control_api=object()))
+
+    _commit_extension_controls(daemon, "secret", "command.git", (("command.git.permission.add", True),))
+    assert [item.target.kind for item in committed[-1]] == [ControlTargetKind.PERMISSION]
+
+    _commit_extension_controls(
+        daemon, "secret", "command.github", (("command.github.permission.delete-remote", False),)
+    )
+    assert committed[-1][0].target.kind == ControlTargetKind.EXTENSION
+
+    with pytest.raises(RuntimeError):
+        _commit_extension_controls(daemon, "secret", "command.git", ())

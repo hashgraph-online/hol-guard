@@ -27,13 +27,13 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControl,
     ExtensionControlLayer,
 )
-from codex_plugin_scanner.guard.runtime.extension_control_resolver import resolve_extension_controls
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.managed_controls_activation_support import CAPABILITIES as _CAPABILITIES
 from tests.managed_controls_activation_support import activate_managed_bundle as _activate
 from tests.managed_controls_activation_support import managed_bundle as _bundle
 from tests.managed_controls_activation_support import parse_managed_bundle as _parsed
+from tests.native_extension_control_support import resolve_extension_controls
 
 
 def test_atomic_activation_persists_complete_projection_and_runtime_composes_it(

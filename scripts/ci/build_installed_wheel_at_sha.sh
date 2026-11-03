@@ -28,6 +28,10 @@ mkdir -p native-build
 cp "$release_dir/hol-guard-runtime" "$release_dir/guard-command-source" native-build/
 runtime=native-build/hol-guard-runtime
 compiler=native-build/guard-command-source
+# The wheel build compiles this revision's command pack. Without this the
+# builder falls back to a debug binary in the shared target directory, which
+# belongs to the workspace rather than the revision being measured.
+export HOL_GUARD_BUILD_SOURCE_COMPILER="$PWD/$compiler"
 "$runtime" self-test --json > /dev/null
 
 # Derive the packaged command program the same way the container proof does, without the container.
@@ -37,9 +41,21 @@ if "$compiler" export-trust > native-build/trust-class-map.json 2> /dev/null; th
   trust=native-build/trust-class-map.json
   cp "$trust" contracts/extensions/build-trust-class-map.v1.json
 fi
+# Revisions that reject packaged-base authoring without a global validation
+# context need the catalog this binary embeds, with no installed packs; earlier
+# ones reject the field outright, so only send it when the revision requires it
+# and its compiler can export the embedded build.
+validation_arguments=()
+validation_filter='{}'
+if grep -q 'command_source_global_validation_required' rust/crates/guard-command/src/native_command_source.rs \
+  && "$compiler" export-built > native-build/exported-build.json 2> /dev/null; then
+  validation_arguments=(--slurpfile built native-build/exported-build.json)
+  validation_filter='{validation_base:{catalog:$built[0].catalog,programs:[]}}'
+fi
 jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
   --slurpfile trust "$trust" \
-  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
+  ${validation_arguments[@]+"${validation_arguments[@]}"} \
+  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"} + '"$validation_filter" \
   > source-build.json
 # Revisions whose wheel builder still embeds a standalone compiler predate the
 # runtime-hosted compiler; their runtime cannot answer `compile`.
@@ -53,7 +69,7 @@ fi
 
 uv build --wheel --out-dir pure-dist
 rule_digest=$("$runtime" capabilities --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
-HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" .venv/bin/python scripts/build_native_hol_guard_wheel.py \
+.venv/bin/python scripts/build_native_hol_guard_wheel.py \
   --wheel "pure-dist/hol_guard-${version}-py3-none-any.whl" \
   --runtime "$runtime" \
   --output-dir native-dist \

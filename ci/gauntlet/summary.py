@@ -10,27 +10,67 @@ from typing import Any
 USAGE_KEYS = ("prompt_tokens", "completion_tokens", "total_tokens", "cached_tokens", "reasoning_tokens")
 
 
-def inference_usage(case_dir: Path, case_ids: Iterable[str]) -> dict[str, int]:
-    """Sum the informational token counters the relay stored on each completed case."""
+def inference_usage(case_dir: Path, case_ids: Iterable[str], superseded: Path | None = None) -> dict[str, int]:
+    """Sum the informational token counters the relay stored on each completed case.
+
+    A case that was re-run billed every round it made, so its superseded attempts
+    count too; leaving them out would understate what the run actually cost.
+    """
     totals = {key: 0 for key in USAGE_KEYS}
     rounds = 0
     rounds_with_usage = 0
     for case_id in case_ids:
-        data = json.loads((case_dir / f"{case_id}.json").read_text(encoding="utf-8"))
-        inference = data.get("inference")
-        if not isinstance(inference, dict):
-            continue
-        for row in inference.get("live_rounds", []):
-            rounds += 1
-            usage = row.get("usage")
-            if not isinstance(usage, dict):
+        paths = [case_dir / f"{case_id}.json"]
+        if superseded is not None and superseded.is_dir():
+            paths.extend(sorted(superseded.glob(f"{case_id}.attempt-*.json")))
+        for path in paths:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            inference = data.get("inference")
+            if not isinstance(inference, dict):
                 continue
-            rounds_with_usage += 1
-            for key in USAGE_KEYS:
-                value = usage.get(key)
-                if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-                    totals[key] += value
+            for row in inference.get("live_rounds", []):
+                rounds += 1
+                usage = row.get("usage")
+                if not isinstance(usage, dict):
+                    continue
+                rounds_with_usage += 1
+                for key in USAGE_KEYS:
+                    value = usage.get(key)
+                    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                        totals[key] += value
     return {**totals, "rounds": rounds, "rounds_with_usage": rounds_with_usage}
+
+
+def _decision_lines(coverage: dict[str, Any]) -> list[str]:
+    """State the Guard decisions this run reached, declared or observed.
+
+    The declared lines cover only cases that name a decision; the observed line
+    aggregates every completed case, so a run also states the decisions it drove
+    that no case was written to reach.
+    """
+    declaring = coverage.get("declaring_cases") or []
+    exercised = coverage.get("exercised_cases") or []
+    unexercised = coverage.get("unexercised_cases") or []
+    observed = coverage.get("observed_decisions") or []
+    lines = []
+    if declaring:
+        # Count what ran and reached its decision, never what did not fail to. A run
+        # that stopped early leaves its remaining cases in neither list, so deriving
+        # the reached count from the unexercised ones credits every case that never
+        # ran with the coverage it was selected to drive.
+        lines.append(f"Declared decisions reached: {len(exercised)} of {len(declaring)} declaring cases")
+        if (never_ran := len(declaring) - len(exercised) - len(unexercised)) > 0:
+            lines.append(
+                f"Declared decisions never attempted: {never_ran} of {len(declaring)} declaring cases never ran"
+            )
+        lines.extend(
+            f"Declared decision not reached: {row['id']} ({', '.join(row['missing'])})"
+            for row in unexercised
+            if isinstance(row, dict)
+        )
+    if observed:
+        lines.append(f"Observed decisions: {', '.join(observed)}")
+    return lines
 
 
 def render_summary_markdown(report: dict[str, Any], binding: dict[str, Any], build_sha: str, version: str) -> str:
@@ -44,6 +84,16 @@ def render_summary_markdown(report: dict[str, Any], binding: dict[str, Any], bui
         f"Host: `{version}` / `{report['platform']}`",
         f"Full profile: {report['full_profile']}",
         f"Merge-qualified: {report['merge_qualified']}",
+        *(
+            [
+                f"Cases executed: {coverage['executed_cases']} of {coverage['selected_cases']} selected "
+                f"({coverage['catalog_cases']} in catalog)"
+            ]
+            + ([f"Never executed: {', '.join(coverage['unexecuted_cases'])}"] if coverage["unexecuted_cases"] else [])
+            + _decision_lines(coverage.get("decision_paths") or {})
+            if (coverage := report.get("case_coverage"))
+            else []
+        ),
         *(
             [
                 f"Inference tokens: input {usage['prompt_tokens']} (cached {usage['cached_tokens']}), "

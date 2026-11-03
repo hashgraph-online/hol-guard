@@ -1,4 +1,4 @@
-"""Pure, monotonic composition for Guard effect decisions."""
+"""Typed transport for the Guard effect decisions the native runtime composes."""
 
 from __future__ import annotations
 
@@ -7,18 +7,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final, cast
 
-from codex_plugin_scanner.guard.action_lattice import guard_action_severity, is_guard_action
 from codex_plugin_scanner.guard.models import GuardAction
 
 from .effect_contract import (
-    UNCERTAINTY_FLOOR,
     ContainmentRequirement,
     DecisionBasis,
     EffectAssessment,
     ProofRequirement,
     ProofRoute,
-    UncertaintyKind,
-    maximum_action_floor,
 )
 
 EFFECT_DECISION_SCHEMA_VERSION: Final = "1.1.0"
@@ -141,21 +137,6 @@ class DecisionFactor:
             ):
                 raise ValueError("containment-required effects require contained proof")
 
-    @property
-    def semantic_key(self) -> tuple[str, ...]:
-        return (
-            self.segment_ref or "",
-            self.operation_ref or "",
-            self.producer_ref or "",
-            self.evidence_digest or "",
-            self.source.value,
-            self.reason_code,
-            self.basis.action_floor,
-            self.basis.proof_route.value if self.basis.proof_route is not None else "",
-            *_assessment_key(self.assessment),
-            *_proof_key(self.proof),
-        )
-
 
 @dataclass(frozen=True, slots=True)
 class DecisionReason:
@@ -167,27 +148,6 @@ class DecisionReason:
 
 
 @dataclass(frozen=True, slots=True)
-class EffectDecisionRequest:
-    factors: tuple[DecisionFactor, ...]
-    uncertainties: tuple[UncertaintyKind, ...] = ()
-    schema_version: str = EFFECT_DECISION_SCHEMA_VERSION
-
-    def __post_init__(self) -> None:
-        if self.schema_version != EFFECT_DECISION_SCHEMA_VERSION:
-            raise ValueError("unsupported effect decision schema version")
-        factors = _require_factor_tuple(cast(object, self.factors))
-        uncertainties = _require_uncertainty_tuple(cast(object, self.uncertainties))
-        ordered = tuple(sorted(factors, key=lambda item: item.semantic_key))
-        keys = tuple(item.semantic_key for item in ordered)
-        if len(keys) != len(set(keys)):
-            raise ValueError("duplicate decision factors are not allowed")
-        if len(uncertainties) != len(set(uncertainties)):
-            raise ValueError("uncertainties cannot contain duplicates")
-        object.__setattr__(self, "factors", ordered)
-        object.__setattr__(self, "uncertainties", tuple(sorted(uncertainties, key=lambda item: item.value)))
-
-
-@dataclass(frozen=True, slots=True)
 class EffectDecision:
     action: GuardAction
     disposition: FinalDisposition
@@ -195,123 +155,3 @@ class EffectDecision:
     reasons: tuple[DecisionReason, ...]
     proof_routes: frozenset[ProofRoute]
     schema_version: str = EFFECT_DECISION_SCHEMA_VERSION
-
-
-def evaluate_effect_decision(request: EffectDecisionRequest) -> EffectDecision:
-    """Return the maximum floor from every factor and uncertainty."""
-
-    if not isinstance(cast(object, request), EffectDecisionRequest):
-        raise ValueError("request must be an EffectDecisionRequest")
-    reasons = [
-        DecisionReason(
-            item.source,
-            item.reason_code,
-            item.basis.action_floor,
-            item.segment_ref,
-            item.operation_ref,
-        )
-        for item in request.factors
-    ]
-    reasons.extend(
-        DecisionReason(
-            DecisionFactorSource.POLICY,
-            f"uncertainty.{uncertainty.value}",
-            UNCERTAINTY_FLOOR[uncertainty],
-            None,
-            None,
-        )
-        for uncertainty in request.uncertainties
-    )
-    for factor in request.factors:
-        if factor.assessment is None:
-            continue
-        reasons.extend(
-            DecisionReason(
-                DecisionFactorSource.EFFECT,
-                f"uncertainty.{uncertainty.value}",
-                UNCERTAINTY_FLOOR[uncertainty],
-                factor.segment_ref,
-                factor.operation_ref,
-            )
-            for uncertainty in factor.assessment.uncertainty_reasons
-        )
-    reasons.sort(key=_reason_key)
-    action = maximum_action_floor(reason.action_floor for reason in reasons)
-    controlling = tuple(reason for reason in reasons if reason.action_floor == action)
-    routes = frozenset(factor.proof.route for factor in request.factors if factor.proof is not None)
-    return EffectDecision(
-        action=action,
-        disposition=_disposition(action, routes),
-        controlling_reasons=controlling,
-        reasons=tuple(reasons),
-        proof_routes=routes,
-    )
-
-
-def _reason_key(reason: DecisionReason) -> tuple[str, str, str, str, int]:
-    return (
-        reason.segment_ref or "",
-        reason.operation_ref or "",
-        reason.source.value,
-        reason.reason_code,
-        guard_action_severity(reason.action_floor),
-    )
-
-
-def _disposition(action: GuardAction, routes: frozenset[ProofRoute]) -> FinalDisposition:
-    if not is_guard_action(action):  # pragma: no cover - typed defensive boundary
-        raise ValueError("action must be a canonical GuardAction")
-    if action == "allow":
-        if ProofRoute.WORKFLOW_AUTHORIZED in routes:
-            return FinalDisposition.WORKFLOW_AUTHORIZED
-        if ProofRoute.CONTAINED in routes:
-            return FinalDisposition.SILENT_CONTAINED
-        return FinalDisposition.SILENT_VERIFIED
-    return FinalDisposition(action)
-
-
-def _assessment_key(assessment: EffectAssessment | None) -> tuple[str, ...]:
-    if assessment is None:
-        return ("",) * 11
-    return (
-        assessment.kind.value,
-        assessment.target_scope.value,
-        assessment.reversibility.value,
-        assessment.blast_radius.value,
-        assessment.evidence_source.value,
-        assessment.confidence.value,
-        assessment.containment.value,
-        ",".join(sorted(item.value for item in assessment.proof_requirements)),
-        ",".join(sorted(item.value for item in assessment.uncertainty_reasons)),
-        assessment.schema_version,
-        "assessment",
-    )
-
-
-def _proof_key(proof: PositiveProof | None) -> tuple[str, ...]:
-    if proof is None:
-        return ("", "", "", "")
-    return (
-        proof.route.value,
-        proof.binding_digest,
-        ",".join(sorted(item.value for item in proof.satisfied_requirements)),
-        "enforced" if proof.enforced else "not-enforced",
-    )
-
-
-def _require_factor_tuple(value: object) -> tuple[DecisionFactor, ...]:
-    if not isinstance(value, tuple):
-        raise ValueError("factors must contain DecisionFactor values")
-    items = cast(tuple[object, ...], value)
-    if any(not isinstance(item, DecisionFactor) for item in items):
-        raise ValueError("factors must contain DecisionFactor values")
-    return cast(tuple[DecisionFactor, ...], items)
-
-
-def _require_uncertainty_tuple(value: object) -> tuple[UncertaintyKind, ...]:
-    if not isinstance(value, tuple):
-        raise ValueError("uncertainties must contain exact UncertaintyKind values")
-    items = cast(tuple[object, ...], value)
-    if any(not isinstance(item, UncertaintyKind) for item in items):
-        raise ValueError("uncertainties must contain exact UncertaintyKind values")
-    return cast(tuple[UncertaintyKind, ...], items)

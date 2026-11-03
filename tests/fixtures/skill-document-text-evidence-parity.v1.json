@@ -1,0 +1,518 @@
+{
+  "schema": "guard.skill-document-text-evidence-parity.v1",
+  "description": "Text-evidence vectors shared by the Rust analyzer and the Python scanner test so the two cannot drift.",
+  "cases": [
+    {
+      "id": "empty",
+      "text": "",
+      "lineCount": 0,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "plain-prose",
+      "text": "A skill that formats text.\nIt reads the buffer.\n",
+      "lineCount": 2,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "frontmatter-and-headings",
+      "text": "---\nname: demo\n---\n\n# Demo\n\nText.\n\n## Usage\n\n### Deep\n",
+      "lineCount": 11,
+      "headingCount": 3,
+      "frontmatterPresent": true,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "frontmatter-unclosed",
+      "text": "---\nname: demo\n",
+      "lineCount": 2,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "frontmatter-not-first",
+      "text": "# Title\n---\nname: demo\n---\n",
+      "lineCount": 4,
+      "headingCount": 1,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "heading-without-title",
+      "text": "#\n#no-space\n####### too deep\n###### deep enough\n",
+      "lineCount": 4,
+      "headingCount": 1,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "splitlines-separators",
+      "text": "one\rtwo\r\nthree\u000bfour\ffive\u001csix\u001dseven\u001eeightnine ten eleven",
+      "lineCount": 11,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-remote",
+      "text": "Run `curl https://api.example.com/v1/items` to list items.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "curl-localhost",
+      "text": "Run `curl http://localhost:8080/health` to check the daemon.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-loopback-ipv4",
+      "text": "Run `curl http://127.0.0.1:8080/health`.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-loopback-ipv6",
+      "text": "Run `curl http://[::1]:8080/health`.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-unspecified",
+      "text": "Run `curl http://0.0.0.0:8080/health`.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-trailing-dot-host",
+      "text": "Run `curl https://example.com./items`.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "curl-userinfo-host",
+      "text": "Run `curl https://user:pw@api.example.com/items`.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "curl-sub-localhost",
+      "text": "Run `curl http://app.localhost/items`.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-no-url",
+      "text": "Run `curl $ENDPOINT` to list items.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-negated",
+      "text": "This skill never calls `curl https://api.example.com/v1/items`.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-under-negated-heading",
+      "text": "## What it does not do\n\nRun `curl https://api.example.com/v1/items`.\n",
+      "lineCount": 3,
+      "headingCount": 1,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-counterexample-heading",
+      "text": "## Counterexample\n\nRun `curl https://api.example.com/v1/items`.\n",
+      "lineCount": 3,
+      "headingCount": 1,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-blockquote",
+      "text": "> Run `curl https://api.example.com/v1/items` to list items.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-example-prefix",
+      "text": "For example: curl https://api.example.com/v1/items\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-inside-prose-quote",
+      "text": "The docs say \"run curl https://api.example.com/v1/items\" and stop there.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "curl-after-closed-quote",
+      "text": "The docs say \"nothing useful\" then curl https://api.example.com/v1/items runs.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "curl-apostrophe-not-a-quote",
+      "text": "The skill's helper runs curl https://api.example.com/v1/items daily.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "curl-preceded-by-colon-line",
+      "text": "Do not use this:\n  curl https://api.example.com/v1/items\n",
+      "lineCount": 2,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "fetch-call-remote",
+      "text": "The helper calls fetch('https://api.example.com/v1') once.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "requests-get-remote",
+      "text": "The loader runs requests.get(\"https://api.example.com/v1\") at startup.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "invoke-webrequest-remote",
+      "text": "Invoke-WebRequest -Uri https://api.example.com/v1 -Method Get\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "remote-api-statement",
+      "text": "This skill calls the Example API to resolve names.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_remote_api_statement"
+    },
+    {
+      "id": "remote-api-statement-negated",
+      "text": "This skill does not call the Example API to resolve names.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "remote-api-statement-quoted",
+      "text": "The README reads \"this skill calls the Example API\" but it does not.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "remote-api-statement-sends-to-endpoint",
+      "text": "The agent sends the rendered batch to a remote service endpoint.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_remote_api_statement"
+    },
+    {
+      "id": "remote-api-statement-uploads",
+      "text": "The tool uploads each report to the vendor cloud service nightly.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_remote_api_statement"
+    },
+    {
+      "id": "remote-api-statement-too-far",
+      "text": "The tool uploads each report to filler words filler words filler words filler words filler words filler words filler words filler words filler words filler words filler words filler words filler words filler words filler words filler words filler words filler words filler words filler words the vendor cloud service.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "http-client-wins-over-statement",
+      "text": "This skill calls the Example API: curl https://api.example.com/v1\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "suite-curl-post",
+      "text": "Run `curl -X POST https://api.example.test/v1/upload` to publish results.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "suite-uploads-remote-api",
+      "text": "This skill uploads scan results to the remote API.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_remote_api_statement"
+    },
+    {
+      "id": "suite-workflow-calls-external",
+      "text": "The workflow calls the external service endpoint.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_remote_api_statement"
+    },
+    {
+      "id": "suite-fetch-double-quote",
+      "text": "fetch(\"https://api.example.test/v1/data\")\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "suite-axios-get",
+      "text": "axios.get('https://api.example.test/v1/data')\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "suite-requests-get",
+      "text": "requests.get(\"https://api.example.test/v1/data\")\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "suite-skill-apostrophe-s",
+      "text": "The skill's requests.get(\"https://api.example.test/v1/data\")\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "suite-skills-trailing-apostrophe",
+      "text": "The skills' requests.get(\"https://api.example.test/v1/data\")\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "suite-bare-doc-url",
+      "text": "API documentation: https://api.example.test/reference\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-full-urls-prose",
+      "text": "Print full URLs when presenting responsive image examples.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-do-not-run-curl",
+      "text": "Do not run:\ncurl https://api.example.test/v1/data\n",
+      "lineCount": 2,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-never-call-remote-api",
+      "text": "Never call the remote API.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-counterexample-fetch",
+      "text": "Counterexample: fetch('https://api.example.test/v1/data')\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-fetch-localhost",
+      "text": "fetch('http://localhost:8000/test')\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-network-throttling-prose",
+      "text": "Use a connection-aware layout and test browser network throttling.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-fetch-unbalanced-ipv6",
+      "text": "fetch(\"https://[::1]:8080/endpoint\")\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-queries-supported-prose",
+      "text": "Queries supported by the API are listed below.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-negated-heading-fenced-curl",
+      "text": "## Do not make network requests\n```sh\ncurl https://api.example.test/v1/data\n```\n",
+      "lineCount": 4,
+      "headingCount": 1,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-blockquote-curl",
+      "text": "> curl https://api.example.test/v1/reference\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-counterexample-heading-fenced-fetch",
+      "text": "## Counterexample\n```js\nfetch('https://api.example.test/v1/data')\n```\n",
+      "lineCount": 4,
+      "headingCount": 1,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-example-quoted-statement",
+      "text": "Example: \"This skill calls the remote API.\"\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-phrase-is-a-sample",
+      "text": "The phrase \"This skill calls the remote API\" is a sample, not a capability.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-sample-says-fetch",
+      "text": "The sample says \"fetch('https://api.example.test/v1/data')\".\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-client-wont-call",
+      "text": "'The client won't call requests.get(\"https://api.example.test/v1/data\")'\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-example-prefix-curl",
+      "text": "Example: curl https://api.example.test/v1/data\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-both-signals",
+      "text": "curl https://api.example.test/v1/data\nThis skill calls the remote API.\n",
+      "lineCount": 2,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    },
+    {
+      "id": "suite-local-formatting",
+      "text": "A local formatting skill.\n",
+      "lineCount": 1,
+      "headingCount": 0,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-private-frontmatter",
+      "text": "---\nname: private-demo\ndescription: Secret heading test\n---\n# Private heading\nBody\n",
+      "lineCount": 6,
+      "headingCount": 1,
+      "frontmatterPresent": true,
+      "documentedNetworkCapability": null
+    },
+    {
+      "id": "suite-upload-heading-token-url",
+      "text": "# Upload\nRun curl https://private-hostname.example.test/v1/upload?token=private-token\n",
+      "lineCount": 2,
+      "headingCount": 1,
+      "frontmatterPresent": false,
+      "documentedNetworkCapability": "explicit_http_client"
+    }
+  ]
+}

@@ -13,6 +13,7 @@
 //! The evaluator never re-parses command text on its own authority.
 
 use super::context_digest_json::write_canonical_json_with_limit;
+use guard_command::native_command_controls::CompiledNativeCommandControls;
 use guard_contracts::{
     CommandEffectBatchRequestV1, CommandEffectBatchResultV1, CommandEffectRequestV1,
     CommandEffectResultV1, COMMAND_EFFECT_BATCH_MAX_BYTES, COMMAND_EFFECT_BATCH_MAX_ITEMS,
@@ -20,6 +21,40 @@ use guard_contracts::{
     COMMAND_EFFECT_MAX_BYTES, COMMAND_EFFECT_REQUEST_SCHEMA, COMMAND_EFFECT_RESULT_SCHEMA,
 };
 use guard_policy_snapshot::digest_bytes;
+
+// The resident owns its guard-home scope. Capture one authenticated generation
+// and hold its mutation lease across the entire single or batch evaluation.
+pub(crate) fn with_store<T>(
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
+    evaluate: impl FnOnce(Option<&CompiledNativeCommandControls>) -> Result<T, String>,
+) -> Result<T, String> {
+    let Some(store) = store else {
+        return evaluate(None);
+    };
+    let snapshot = match store.current_admitted_snapshot() {
+        Ok(snapshot) => snapshot,
+        // Preserve the core-only offline evaluator. It cannot accept an
+        // optional receipt because its catalog identity is still core-only.
+        Err(error) if error == "native_policy_snapshot_missing" => return evaluate(None),
+        Err(error) => return Err(error),
+    };
+    let _lease = store.command_authority_lease(&snapshot)?;
+    evaluate(snapshot.command_extensions.as_ref())
+}
+
+pub(crate) fn evaluate_with_store(
+    request: &CommandEffectRequestV1,
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> Result<Vec<u8>, String> {
+    with_store(store, |controls| single(request, controls))
+}
+
+pub(crate) fn evaluate_batch_with_store(
+    request: &CommandEffectBatchRequestV1,
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> Result<Vec<u8>, String> {
+    with_store(store, |controls| batch_in(request, controls))
+}
 
 /// Canonical serialization of one request: the bytes its `request_sha256`
 /// binds and the size the batch bound is measured against.
@@ -40,8 +75,9 @@ fn digest_of(bytes: &[u8]) -> String {
 fn evaluate_to_result(
     request: &CommandEffectRequestV1,
     request_sha256: String,
+    controls: Option<&CompiledNativeCommandControls>,
 ) -> CommandEffectResultV1 {
-    let (status, code, payload) = match evaluate(request) {
+    let (status, code, payload) = match evaluate(request, controls) {
         Ok(payload) => ("ok".to_owned(), "ok".to_owned(), Some(payload)),
         Err(code) => ("error".to_owned(), code, None),
     };
@@ -58,8 +94,15 @@ fn evaluate_to_result(
 pub(crate) fn evaluate_command_effect_request(
     request: &CommandEffectRequestV1,
 ) -> Result<Vec<u8>, String> {
+    single(request, None)
+}
+
+fn single(
+    request: &CommandEffectRequestV1,
+    controls: Option<&CompiledNativeCommandControls>,
+) -> Result<Vec<u8>, String> {
     let request_sha256 = digest_of(&canonical_request_bytes(request).map_err(str::to_owned)?);
-    crate::encode_response(&evaluate_to_result(request, request_sha256))
+    crate::encode_response(&evaluate_to_result(request, request_sha256, controls))
 }
 
 fn refused_batch(request_id: &str, code: &str) -> Result<Vec<u8>, String> {
@@ -81,8 +124,9 @@ fn refused_batch(request_id: &str, code: &str) -> Result<Vec<u8>, String> {
 /// limit refuses the whole batch with no partial result. Per-item failures
 /// (schema, canonical command, control snapshot, evaluator rejection) are
 /// reported on that item exactly as the single op reports them.
-pub(crate) fn evaluate_command_effect_batch_request(
+fn batch_in(
     batch: &CommandEffectBatchRequestV1,
+    controls: Option<&CompiledNativeCommandControls>,
 ) -> Result<Vec<u8>, String> {
     if batch.schema != COMMAND_EFFECT_BATCH_REQUEST_SCHEMA {
         return refused_batch(
@@ -121,7 +165,7 @@ pub(crate) fn evaluate_command_effect_batch_request(
         .items
         .iter()
         .zip(digests)
-        .map(|(item, digest)| evaluate_to_result(item, digest))
+        .map(|(item, digest)| evaluate_to_result(item, digest, controls))
         .collect();
     match crate::encode_response(&CommandEffectBatchResultV1 {
         schema: COMMAND_EFFECT_BATCH_RESULT_SCHEMA.to_owned(),
@@ -140,19 +184,83 @@ pub(crate) fn evaluate_command_effect_batch_request(
     }
 }
 
-fn evaluate(request: &CommandEffectRequestV1) -> Result<serde_json::Value, String> {
+fn evaluate(
+    request: &CommandEffectRequestV1,
+    controls: Option<&CompiledNativeCommandControls>,
+) -> Result<serde_json::Value, String> {
     if request.schema != COMMAND_EFFECT_REQUEST_SCHEMA {
         return Err("native_command_effect_schema_mismatch".to_owned());
     }
-    evaluate_with_read_floors(request)
+    evaluate_with_read_floors(request, controls)
 }
 
 fn evaluate_with_read_floors(
     request: &CommandEffectRequestV1,
+    controls: Option<&CompiledNativeCommandControls>,
 ) -> Result<serde_json::Value, String> {
+    use guard_command::command_evaluation_controls::to_wire_payload;
+
+    evaluate_composite(request, controls).map(|evaluated| to_wire_payload(&evaluated.evaluation))
+}
+
+/// One composed evaluation with the catalog it was judged against.
+pub(crate) struct EvaluatedCommand {
+    pub(crate) evaluation: guard_command::CompositeCommandEvaluation,
+    pub(crate) registry: std::sync::Arc<guard_command::native_command_catalog::CommandCatalog>,
+    /// Whether the control snapshot's health reports an authority failure.
+    pub(crate) authority_failure: bool,
+}
+
+/// Which authority health an evaluation judges the command under.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AuthorityView {
+    /// The health the control snapshot reports.
+    Reported,
+    /// The health a device that never enrolled reaches once it does: an
+    /// unenrolled authority is judged as protected. Every other health stays
+    /// as reported, so a degraded or tampered authority is still a failure.
+    OnceEnrolled,
+}
+
+/// Evaluate one request into its typed composition. The wire op serializes it;
+/// the allow-hint op reads the matches and re-runs it under a counterfactual
+/// overlay, so both judge a command by exactly the same rules.
+pub(crate) fn evaluate_composite(
+    request: &CommandEffectRequestV1,
+    controls: Option<&CompiledNativeCommandControls>,
+) -> Result<EvaluatedCommand, String> {
+    evaluate_composite_under(request, controls, AuthorityView::Reported)
+}
+
+/// Whether `binding` is the first-install binding enforcement recognises.
+///
+/// The authority is the admitted snapshot's, already checked to be the
+/// snapshot the review is bound to: a review binding built outside the
+/// runtime names none. With no admitted snapshot the resident evaluates
+/// core-only, so only an authority the binding names can show it was lost.
+fn first_install(
+    binding: &guard_contracts::NativeCommandControlBindingV1,
+    controls: Option<&CompiledNativeCommandControls>,
+) -> bool {
+    let authority = match controls {
+        Some(controls) => controls.control_binding().authority.as_ref(),
+        None => binding.authority.as_ref(),
+    };
+    binding.has_first_install_shape()
+        && authority.map_or(controls.is_none(), |authority| authority.is_initial())
+}
+
+/// [`evaluate_composite`] under an explicit [`AuthorityView`]. Only the
+/// advisory allow-hint op asks for [`AuthorityView::OnceEnrolled`]; nothing
+/// that decides a command does.
+pub(crate) fn evaluate_composite_under(
+    request: &CommandEffectRequestV1,
+    controls: Option<&CompiledNativeCommandControls>,
+    view: AuthorityView,
+) -> Result<EvaluatedCommand, String> {
     use std::path::Path;
 
-    use guard_command::command_evaluation_controls::to_wire_payload;
+    use guard_command::command_evaluation_controls::authority_failure_for_health;
     use guard_command::command_shell_read_factors::shell_read_floor_factors;
     use guard_command::{
         canonical_command::CanonicalCommand,
@@ -166,7 +274,10 @@ fn evaluate_with_read_floors(
         serde_json::from_value(request.canonical_command.clone())
             .map_err(|_| "native_command_effect_invalid_canonical_command".to_owned())?;
     let command = CanonicalCommand::from_v1(&canonical_v1);
-    let registry = packaged_command_catalog()
+    let registry = controls
+        .map_or_else(packaged_command_catalog, |controls| {
+            controls.command_catalog()
+        })
         .map_err(|_| "native_command_effect_catalog_unavailable".to_owned())?;
     let mut binding: NativeCommandControlBindingV1 =
         serde_json::from_value(request.control_snapshot.clone())
@@ -175,6 +286,25 @@ fn evaluate_with_read_floors(
     // effective digest the native evidence is bound to. A counterfactual
     // overlay, if any, is applied only after that check.
     binding.validate().map_err(str::to_owned)?;
+    if let Some(controls) = controls {
+        let admitted = controls.control_binding();
+        if binding.program_digest != admitted.program_digest
+            || binding.catalog_digest != admitted.catalog_digest
+            || binding.trust_digest != admitted.trust_digest
+            || binding.effective_digest != admitted.effective_digest
+        {
+            return Err("native_command_extension_evidence_binding_mismatch".to_owned());
+        }
+    }
+    // Judged once enrolled, an authority that was never enrolled counts as
+    // protected. Only the first-install binding enforcement also recognises
+    // qualifies: an unenrolled authority with saved history, layers, a later
+    // epoch, a real key or a pending recovery was lost, and stays a failure.
+    // It is set after the binding check, so the evidence stays bound to the
+    // snapshot the command was actually reviewed under.
+    if view == AuthorityView::OnceEnrolled && first_install(&binding, controls) {
+        "protected".clone_into(&mut binding.health);
+    }
     apply_counterfactual_permissions(&mut binding, &request.counterfactual_enabled_permission_ids)?;
     let workflow_authorization: Option<GitHubWorkflowAuthorizationV1> = request
         .workflow_authorization
@@ -189,7 +319,7 @@ fn evaluate_with_read_floors(
         request.cwd.as_deref().map(Path::new),
         request.home_dir.as_deref().map(Path::new),
     );
-    guard_command::evaluate_command(CommandEvaluationInput {
+    let evaluation = guard_command::evaluate_command(CommandEvaluationInput {
         command: &command,
         native_extension_evidence: &request.native_extension_evidence,
         registry: &registry,
@@ -199,13 +329,20 @@ fn evaluate_with_read_floors(
         workflow_authorization: workflow_authorization.as_ref(),
         read_factors,
     })
-    .map(|evaluation| to_wire_payload(&evaluation))
     .map_err(|code| {
         if code.starts_with("native_") {
             code.to_owned()
         } else {
             format!("native_command_effect_{code}")
         }
+    })?;
+    // The evaluator accepted the health, so an unreadable one cannot reach here;
+    // treat it as a failure all the same.
+    let authority_failure = !matches!(authority_failure_for_health(&binding.health), Ok(None));
+    Ok(EvaluatedCommand {
+        evaluation,
+        registry,
+        authority_failure,
     })
 }
 
@@ -277,6 +414,10 @@ pub(crate) fn evaluate_command_effect_bytes(bytes: &[u8]) -> Result<Vec<u8>, Str
 }
 
 #[cfg(test)]
+#[path = "command_effect_active_tests.rs"]
+mod active_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use guard_command::native_command_catalog::packaged_command_catalog;
@@ -297,6 +438,7 @@ mod tests {
             controls: Vec::new(),
         };
         let mut binding = NativeCommandControlBindingV1 {
+            active_security_digest: None,
             schema: guard_contracts::NATIVE_COMMAND_CONTROL_BINDING_SCHEMA.to_owned(),
             program_digest: digest64(0x11),
             catalog_digest: digest64(0xaa),

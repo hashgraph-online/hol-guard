@@ -8,7 +8,7 @@
 //! below is computed by the resident.
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 /// Configuration facts the stdio proxy reads from `GuardConfig`. `None` on the
 /// query means the proxy holds no valid configuration at all.
@@ -19,10 +19,15 @@ pub struct McpSensitiveReadConfigV1 {
     #[serde(default)]
     pub view_override: Option<String>,
     pub view_default_action: String,
-    /// `resolve_risk_action(view, "local_secret_read")`; empty or absent means
-    /// the conservative `require-reapproval`.
+    /// The configuration `local_secret_read` is resolved under. The caller
+    /// sends what it loaded; the resident resolves the class. An absent
+    /// configuration resolves to nothing and leaves the conservative
+    /// `require-reapproval` floor.
     #[serde(default)]
-    pub risk_action: Option<String>,
+    pub guard_config: Option<crate::RiskActionConfigV1>,
+    /// The harness whose per-harness risk actions and posture apply, if any.
+    #[serde(default)]
+    pub harness: Option<String>,
     /// Override and default of the unmodified configuration (bound into the token).
     #[serde(default)]
     pub artifact_override: Value,
@@ -53,8 +58,17 @@ pub struct McpSensitiveReadContextQueryV1 {
     pub config: Option<McpSensitiveReadConfigV1>,
     /// Identity component: artifact, launch identity, environment hash, workspace.
     pub identity: Value,
-    /// The artifact content hash text (never parsed).
-    pub content: String,
+    /// The artifact's own fields, from which the resident spells the content
+    /// hash that binds the token to the artifact it covers. A caller sends
+    /// this; the hash itself is never computed outside the resident.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<Map<String, Value>>,
+    /// The content hash as the retired Python helper spelled it. Only the
+    /// recorded parity corpus still carries it: those vectors were taken from
+    /// that helper and cannot be re-derived, so the resident keeps reading a
+    /// hash it is handed. A live caller sends `artifact` instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
     pub capabilities: Value,
     pub extension_control_digest: String,
 }

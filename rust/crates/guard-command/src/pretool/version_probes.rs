@@ -24,8 +24,19 @@
 //! - `go version`: a `go.mod` `toolchain` line makes `go` fetch and run a
 //!   different toolchain.
 //! - `-v` for tools where it means "verbose" rather than "version".
+//! - `mysql` and `mysqldump`: their banner is printed by the same startup
+//!   that reads the option files, and the long form prints what those files
+//!   set, so the text can carry a configured credential. `help_probes`
+//!   leaves them out for the same reason.
+//!
+//! The transfer and client tools below print their banner and exit before
+//! they open a connection, read a transfer source or touch a destination, so
+//! a lone version flag on one of them names no host and no path. `-V` is
+//! admitted only where that spelling means version everywhere; `rsync -V`
+//! and `psql -V` are newer spellings on some builds and older operands on
+//! others, so only their long form is read as the question.
 
-pub(super) fn safe_version_probe(basename: &str, arguments: &[String]) -> bool {
+pub(crate) fn safe_version_probe(basename: &str, arguments: &[String]) -> bool {
     match (basename, arguments) {
         // Server-contacting by default; `--client` keeps it local.
         ("kubectl", [subcommand, flag]) => {
@@ -51,7 +62,9 @@ fn single_flag_probe(basename: &str, flag: &str) -> bool {
     match basename {
         "uv" | "pip" | "pip3" | "ruff" => long || flag == "-V",
         "npm" | "bun" | "deno" | "docker" => long || flag == "-v",
-        "gh" | "jq" | "rg" | "fd" | "tsc" | "black" | "mypy" => long,
+        "gh" | "jq" | "rg" | "fd" | "tsc" | "black" | "mypy" | "pipx" => long,
+        "curl" | "wget" | "ssh" => long || flag == "-V",
+        "scp" | "sftp" | "rsync" | "psql" | "redis-cli" | "cp" | "chown" => long,
         "git" => long || flag == "version",
         "helm" => flag == "version",
         _ => false,
@@ -76,6 +89,7 @@ mod tests {
             ("deno", "--version"),
             ("helm", "version"),
             ("pip", "--version"),
+            ("pipx", "--version"),
             ("ruff", "--version"),
             ("gh", "--version"),
             ("docker", "--version"),
@@ -84,6 +98,18 @@ mod tests {
             ("jq", "--version"),
             ("rg", "--version"),
             ("fd", "--version"),
+            ("curl", "--version"),
+            ("curl", "-V"),
+            ("wget", "--version"),
+            ("ssh", "-V"),
+            ("ssh", "--version"),
+            ("scp", "--version"),
+            ("sftp", "--version"),
+            ("rsync", "--version"),
+            ("psql", "--version"),
+            ("redis-cli", "--version"),
+            ("cp", "--version"),
+            ("chown", "--version"),
         ] {
             assert!(safe_version_probe(tool, &args(&[flag])), "{tool} {flag}");
         }
@@ -116,6 +142,18 @@ mod tests {
             ("rg", vec!["-V"]),
             ("make", vec!["--version"]),
             ("npm", vec![]),
+            // The banner is printed by the startup that reads the option
+            // files, so it can carry what those files set.
+            ("mysql", vec!["--version"]),
+            ("mysqldump", vec!["--version"]),
+            // `-V` is a version banner on some builds and an operand on
+            // others, so only the long form is read as the question.
+            ("rsync", vec!["-V"]),
+            ("psql", vec!["-V"]),
+            ("cp", vec!["-v"]),
+            // A version flag with an operand behind it is a transfer.
+            ("curl", vec!["--version", "https://example.test"]),
+            ("scp", vec!["source", "--version"]),
         ] {
             assert!(
                 !safe_version_probe(tool, &args(&arguments)),

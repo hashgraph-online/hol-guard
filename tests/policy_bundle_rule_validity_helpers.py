@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from codex_plugin_scanner.guard.policy_bundle_parser import validated_policy_bundle_payload
+from tests.policy_bundle_parser_support import validated_policy_bundle_payload
 from tests.policy_bundle_signing_helpers import (
     TEST_POLICY_BUNDLE_WORKSPACE_ID,
     policy_bundle_test_verification_key,

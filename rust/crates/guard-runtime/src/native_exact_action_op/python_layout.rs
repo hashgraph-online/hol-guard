@@ -56,6 +56,23 @@ fn prefix_from(start: &str) -> Proof<Option<String>> {
     }
 }
 
+pub(super) fn library_of_native_image(image: &str, version: &str) -> Proof<Option<String>> {
+    let Some(prefix) = prefix_from(&fs_path::parent(image))? else {
+        return Ok(None);
+    };
+    let mut libraries = std::collections::BTreeSet::new();
+    for lib in ["lib", "lib64"] {
+        let library = fs_path::join(&fs_path::join(&prefix, lib), &format!("python{version}"));
+        if fs_path::is_file(&fs_path::join(&library, "os.py")) {
+            libraries.insert(fs_path::resolve_strict(&library).ok_or(MUTABLE_LAUNCHER)?);
+        }
+    }
+    if libraries.len() != 1 {
+        return Err(MUTABLE_LAUNCHER);
+    }
+    Ok(libraries.into_iter().next())
+}
+
 /// `key = value` settings of a virtual environment's `pyvenv.cfg`.
 fn venv_setting(config: &str, key: &str) -> Option<String> {
     config.lines().find_map(|line| {

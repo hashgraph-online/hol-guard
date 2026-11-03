@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
 
+from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..daemon.runtime_peer import (
     daemon_refresh_outcome_succeeded,
     retained_desktop_owner_note,
     retained_desktop_owner_payload,
 )
+from ..daemon.start_classification import GuardDaemonStillStartingError
 from ..mdm.contracts import ManagedNetworkPolicy
 from ..store import GuardStore
 from .update_desktop_core import (
@@ -24,9 +27,14 @@ from .update_desktop_core import (
     pypi_desktop_core_versions,
     select_desktop_core_latest,
 )
+from .update_desktop_core_start import wait_for_started_core
 from .update_release_candidates import live_release_candidates
 
 _DAEMON_REFRESH_FAILED = "HOL Guard was updated, but its daemon could not be restarted safely."
+# Guard Desktop's supervisor respawns a retired daemon on its own schedule,
+# which has been observed to take close to half a minute for a onefile Core.
+_DESKTOP_RESPAWN_WAIT_SECONDS = 60.0
+_DESKTOP_RESPAWN_POLL_SECONDS = 0.5
 _APPLY_FAILURE_FALLBACK = "HOL Guard could not apply the signed Core update. The installed version stays in place."
 _APPLY_FAILURE_MESSAGES = {
     "desktop_core_download_failed": (
@@ -207,6 +215,9 @@ def run_desktop_managed_update(
             current_version=current_version,
             version_check=version_check,
             context=context,
+            store=store,
+            workspace=workspace,
+            now=now,
             daemon_refresh_required=daemon_refresh_required,
         )
     if target_version is None:
@@ -240,22 +251,38 @@ def refresh_desktop_core_daemon(
 
     try:
         retire_all_guard_daemons_for_home(context.guard_home)
-        if not guard_daemon_retirement_is_complete(context.guard_home):
-            # The Guard Desktop supervisor can respawn a retired daemon faster
-            # than retirement completes. When the respawn already serves the
-            # applied version, keeping it is success instead of a failed update.
+        # The Guard Desktop supervisor can start its own respawn before
+        # retirement completes, and that respawn can take a while to answer.
+        # Wait for one of two outcomes: retirement completes and this process
+        # launches the daemon, or the respawn serves the applied version and
+        # is kept. Only when neither happens in time is the refresh a failure.
+        deadline = time.monotonic() + _DESKTOP_RESPAWN_WAIT_SECONDS
+        while not guard_daemon_retirement_is_complete(context.guard_home):
             retained = retained_desktop_owner_payload(
                 context.guard_home,
                 minimum_version=minimum_version,
             )
             if retained is not None:
                 return retained, retained_desktop_owner_note(retained.get("daemon_version"))
-            return None, "Could not stop the running Guard daemon before launching the updated Core."
+            if time.monotonic() >= deadline:
+                return None, "Could not stop the running Guard daemon before launching the updated Core."
+            time.sleep(_DESKTOP_RESPAWN_POLL_SECONDS)
         url = ensure_guard_daemon_after_update(
             context.guard_home,
             home_dir=context.home_dir,
             executable=executable,
         )
+    except GuardDaemonStillStartingError:
+        # The updated Core can take longer to load than the post-update start
+        # window on a busy machine. The launch is left running in that case, so
+        # wait for it to answer before calling the refresh a failure.
+        # Without an applied version, the Core being started is this
+        # executable, so nothing older than this process may stand in for it.
+        url = wait_for_started_core(context.guard_home, minimum_version=minimum_version or __version__)
+        if url is None:
+            return None, (
+                "The updated Guard daemon is still starting. Run `hol-guard daemon status` shortly to confirm it is up."
+            )
     except (OSError, RuntimeError) as error:
         return None, f"Could not restart the Guard daemon after update: {error}"
     # ensure_guard_daemon_after_update only returns once the restarted daemon
@@ -300,6 +327,9 @@ def _desktop_already_current(
     current_version: str,
     version_check: dict[str, object],
     context: HarnessContext | None,
+    store: GuardStore | None,
+    workspace: str | None,
+    now: str | None,
     daemon_refresh_required: bool,
 ) -> tuple[dict[str, object], int]:
     from . import update_commands as commands
@@ -308,13 +338,14 @@ def _desktop_already_current(
     payload["changed"] = False
     payload["resulting_version"] = current_version
     payload["message"] = commands.already_current_update_message(version_check)
-    if context is not None and daemon_refresh_required:
+    restart = _converge_installs(payload, context=context, store=store, workspace=workspace, now=now)
+    if context is not None and (daemon_refresh_required or restart):
         return _refresh_or_fail(
             payload,
             context=context,
             executable=Path(sys.executable).resolve(),
             minimum_version=current_version,
-            required=True,
+            required=daemon_refresh_required or restart,
         )
     return payload, 0
 
@@ -361,27 +392,43 @@ def _desktop_apply_target(
         if applied.changed
         else commands.already_current_update_message(version_check)
     )
-    if context is not None and store is not None and now is not None:
-        repaired_installs, repair_notes = commands._repair_supported_harnesses_in_process(
-            context=context,
-            store=store,
-            workspace=workspace,
-            now=now,
-            dry_run=False,
-        )
-        if repair_notes:
-            payload["notes"] = [*commands._payload_notes(payload), *repair_notes]
-        if repaired_installs:
-            payload["managed_installs"] = repaired_installs
-    if context is not None and (applied.changed or daemon_refresh_required):
+    restart = _converge_installs(payload, context=context, store=store, workspace=workspace, now=now)
+    if context is not None and (applied.changed or daemon_refresh_required or restart):
         return _refresh_or_fail(
             payload,
             context=context,
             executable=applied.executable,
             minimum_version=applied.version,
-            required=daemon_refresh_required,
+            required=daemon_refresh_required or restart,
         )
     return payload, 0
+
+
+def _converge_installs(
+    payload: dict[str, object],
+    *,
+    context: HarnessContext | None,
+    store: GuardStore | None,
+    workspace: str | None,
+    now: str | None,
+) -> bool:
+    """Repair hooks and retire superseded installs; return whether to restart the daemon."""
+
+    from . import update_commands as commands
+    from .desktop_converge import converge_notes, repair_hooks_then_converge
+
+    if context is None or store is None or now is None:
+        return False
+    converged, repaired_installs, repair_notes = repair_hooks_then_converge(
+        context, store=store, workspace=workspace, now=now
+    )
+    if repaired_installs:
+        payload["managed_installs"] = repaired_installs
+    payload["converge"] = converged
+    notes = [*repair_notes, *converge_notes(converged)]
+    if notes:
+        payload["notes"] = [*commands._payload_notes(payload), *notes]
+    return bool(converged.get("daemon_restart_required"))
 
 
 def _refresh_or_fail(

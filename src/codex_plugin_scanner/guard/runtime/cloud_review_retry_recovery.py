@@ -8,6 +8,14 @@ from ..store import GuardStore
 from .cloud_request_native import cloud_error_texts
 
 _REPLAY_MARKER = "guard_cloud_review_retry_identity_replay"
+# Read by tests; the native store owns the counters and the cap.
+_REJECTION_COUNTS_KEY = "guard_cloud_review_rejection_counts"
+MAX_REJECTED_DELIVERY_ATTEMPTS = 12
+_RESULT_TEXT_FIELDS = ("code", "eventId", "status")
+_EVENT_FIELDS = ("eventId", "eventType", "localRequestId")
+# No known Cloud code or event id is longer; longer values never match.
+_MAX_FIELD_CHARS = 512
+_MAX_SAFE_STREAM_SEQUENCE = 2**53 - 1
 
 
 def retry_result_message(items: list[dict[str, object]]) -> str:
@@ -26,37 +34,6 @@ def retry_result_message(items: list[dict[str, object]]) -> str:
     return message
 
 
-def recover_rejected_review_events(
-    store: GuardStore,
-    *,
-    sequences: list[int],
-    results: list[dict[str, object]],
-    events: dict[int, dict[str, object]],
-    binding: dict[str, str],
-    acknowledged_through: object,
-) -> tuple[list[int], list[dict[str, object]]]:
-    collisions = {
-        sequence: event_id
-        for sequence, result in zip(sequences, results, strict=True)
-        if result.get("code") == "review_event_snapshot_sequence_collision"
-        and isinstance(event_id := result.get("eventId"), str)
-        and event_id == events.get(sequence, {}).get("eventId")
-    }
-    repaired: dict[int, int] = {}
-    # Zero is a valid Cloud high-water mark for a fresh rejected stream.
-    if collisions and type(acknowledged_through) is int and 0 <= acknowledged_through <= 2**53 - 1:
-        repaired = store.recover_review_snapshot_sequences(
-            collisions=collisions, acknowledged_through=acknowledged_through, binding=binding
-        )
-    retained = [(s, r) for s, r in zip(sequences, results, strict=True) if s not in repaired]
-    sequences, results = repair_retry_identity_failures(
-        store, sequences=[s for s, _ in retained], results=[r for _, r in retained], binding=binding
-    )
-    return quarantine_terminal_binding_failures(
-        store, sequences=sequences, results=results, events=events, binding=binding
-    )
-
-
 def prepare_retry_identity_replay(store: GuardStore, *, binding: dict[str, str]) -> int:
     marker_key = f"{_REPLAY_MARKER}:{store.guard_source}"
     marker = store.get_sync_payload(marker_key)
@@ -71,61 +48,52 @@ def prepare_retry_identity_replay(store: GuardStore, *, binding: dict[str, str])
     )
 
 
-def repair_retry_identity_failures(
-    store: GuardStore,
-    *,
-    sequences: list[int],
-    results: list[dict[str, object]],
-    binding: dict[str, str],
-) -> tuple[list[int], list[dict[str, object]]]:
-    repaired = {
-        sequence
-        for sequence, result in zip(sequences, results, strict=True)
-        if result.get("code") == "review_event_canonical_correlation_required"
-        and store.repair_rejected_review_correlation(
-            event_sequence=sequence,
-            binding=binding,
-            changed_at=datetime.now(timezone.utc).isoformat(),
-        )
-        > 0
+def _texts(source: dict[str, object], fields: tuple[str, ...]) -> dict[str, object]:
+    return {
+        field: value
+        for field in fields
+        if isinstance(value := source.get(field), str) and len(value) <= _MAX_FIELD_CHARS
     }
-    retained = [
-        (sequence, result) for sequence, result in zip(sequences, results, strict=True) if sequence not in repaired
-    ]
-    return [sequence for sequence, _ in retained], [result for _, result in retained]
 
 
-def quarantine_terminal_binding_failures(
+def forget_rejection_counts(store: GuardStore, sequences: list[int]) -> None:
+    """Drop the rejection counters of events that left the retry path."""
+    store.forget_review_rejection_counts(sequences=sequences, changed_at=datetime.now(timezone.utc).isoformat())
+
+
+def settle_rejected_review_events(
     store: GuardStore,
     *,
     sequences: list[int],
     results: list[dict[str, object]],
     events: dict[int, dict[str, object]],
+    acknowledged: list[int],
+    acknowledged_through: object,
     binding: dict[str, str],
-) -> tuple[list[int], list[dict[str, object]]]:
-    """Retain retryable results and quarantine immutable continuation mismatches.
+) -> tuple[list[int], list[dict[str, object]], bool]:
+    """Repair, quarantine or dead-letter rejected events of one batch.
 
-    A failed store transition stays retryable so concurrent delivery or a
-    changed binding cannot silently discard unacknowledged evidence.
-    Unknown event sequences also stay retryable instead of aborting the batch.
+    The native store decides each rejection in one transaction. Returns the
+    events that stay retryable with their results, and whether the batch made
+    progress: Cloud accepted or acknowledged something, or a rejected event
+    left the retry path.
     """
-    retained: list[tuple[int, dict[str, object]]] = []
-    for sequence, result in zip(sequences, results, strict=True):
-        event_type = events.get(sequence, {}).get("eventType")
-        # A frozen terminal result cannot acquire a different continuation
-        # binding through retries. Keep the rejected evidence unacknowledged.
-        if (
-            result.get("code") == "review_continuation_binding_mismatch"
-            and isinstance(event_type, str)
-            and event_type.startswith("continuation_")
-            and store.quarantine_review_event(
-                sequence,
-                reason="review_continuation_binding_mismatch",
-                error="Cloud rejected the immutable continuation binding; retained for diagnostics.",
-                **binding,
-            )
-            > 0
-        ):
-            continue
-        retained.append((sequence, result))
-    return [sequence for sequence, _ in retained], [result for _, result in retained]
+    rejected = set(sequences)
+    projected = []
+    for result in results:
+        item = _texts(result, _RESULT_TEXT_FIELDS)
+        retry_after = result.get("retryAfterMs")
+        if type(retry_after) is int and retry_after > 0:
+            item["retryAfterMs"] = min(retry_after, _MAX_SAFE_STREAM_SEQUENCE)
+        projected.append(item)
+    through = acknowledged_through
+    retained, progressed = store.settle_rejected_review_events(
+        sequences=sequences,
+        results=projected,
+        events=[[sequence, _texts(event, _EVENT_FIELDS)] for sequence, event in events.items() if sequence in rejected],
+        acknowledged=acknowledged,
+        acknowledged_through=through if type(through) is int and 0 <= through <= _MAX_SAFE_STREAM_SEQUENCE else None,
+        binding=binding,
+        changed_at=datetime.now(timezone.utc).isoformat(),
+    )
+    return [sequences[index] for index in retained], [results[index] for index in retained], progressed

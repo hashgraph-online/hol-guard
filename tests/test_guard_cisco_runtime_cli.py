@@ -860,3 +860,31 @@ def test_scanner_evidence_persists_on_receipts_and_approval_requests(tmp_path: P
     assert store.list_receipts()[0]["scanner_evidence"] == [signal]
     assert store.get_approval_request("request-1")["scanner_evidence"] == [signal]
     assert GuardRiskSignalV3.from_dict(store.list_receipts()[0]["scanner_evidence"][0]) is not None
+
+
+def test_cisco_preflight_plans_every_proven_shell_cwd_in_one_call(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    for workspace in (first, second):
+        skill_path = workspace / "skills" / "demo" / "SKILL.md"
+        skill_path.parent.mkdir(parents=True)
+        skill_path.write_text("# Demo\n", encoding="utf-8")
+    scanned: list[Path] = []
+
+    def fake_scan(path: Path, mode: str = "auto", timeout_seconds: float | None = None):
+        scanned.append(path)
+        return _skill_summary(CiscoIntegrationStatus.ENABLED, (_skill_finding(),))
+
+    monkeypatch.setattr(cisco_skill_scanner, "run_cisco_skill_scan", fake_scan)
+
+    signals = cisco_preflight_module.scan_action_for_cisco_evidence(
+        _relative_target_write_action("skills/demo/SKILL.md"),
+        workspace=first,
+        shell_cwds=[str(first), str(first), "  ", str(second)],
+    )
+
+    assert scanned == [first / "skills", second / "skills"]
+    assert [signal.source for signal in signals] == ["cisco_skill"]

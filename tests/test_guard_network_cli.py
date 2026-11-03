@@ -442,3 +442,25 @@ def test_network_parser_defaults_to_status(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert commands_dispatch_local._run_guard_network_command(args) == 0
     assert emitted[0][0] == "network"
+
+
+def test_no_runtime_never_presents_network_truth(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *args, **kwargs: None)
+
+    with pytest.raises(NetworkStatusSchemaError, match="native runtime"):
+        validate_network_status(build_network_status(platform_name="linux"))
+
+
+def test_no_runtime_falls_back_with_its_own_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *args, **kwargs: None)
+
+    payload = _run_network_status(monkeypatch, response=build_network_status(platform_name="darwin"))
+
+    assert payload["status_source"] == "fallback"
+    assert payload["reason_code"] == "native-runtime-unavailable"
+    assert payload["protection_active"] is False
+    assert payload["backends"] == []

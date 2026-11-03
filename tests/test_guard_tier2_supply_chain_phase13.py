@@ -10,6 +10,7 @@ import pytest
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_workspace import bind_workspace
+from tests.package_review_settings import review_package_signals
 
 from .guard_tier2_phase13_support import (
     WORKSPACE_ID,
@@ -85,6 +86,7 @@ version = "4.5.7"
 def test_evaluate_package_request_artifact_requires_review_on_cargo_local_path_without_leaking_path(
     tmp_path: Path,
 ) -> None:
+    review_package_signals(tmp_path / "home")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
 
@@ -106,6 +108,7 @@ def test_evaluate_package_request_artifact_requires_review_on_cargo_local_path_w
 def test_evaluate_package_request_artifact_requires_review_on_cargo_git_sources(
     tmp_path: Path,
 ) -> None:
+    review_package_signals(tmp_path / "home")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
 
@@ -171,6 +174,7 @@ require github.com/gin-gonic/gin v1.10.0
 def test_evaluate_package_request_artifact_requires_review_on_go_replace_local_path_without_leaking_path(
     tmp_path: Path,
 ) -> None:
+    review_package_signals(tmp_path / "home")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     write_text(
@@ -362,6 +366,7 @@ clap = "4.5"
     )
     write_text(workspace_dir / "Cargo.lock", "version = [\n")
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
     bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,

@@ -53,13 +53,31 @@ def _configure_installed_native() -> None:
     if status.identity is None:
         raise pytest.UsageError("installed wheel has no native runtime identity")
     try:
-        compiler = find_packaged_source_compiler()
+        find_packaged_source_compiler()
     except NativeSourceCompilerError as error:
         raise pytest.UsageError(f"installed wheel has no native source compiler: {error}") from error
-    # Publish neither override until both checks pass. Never use a source-tree or
-    # caller-provided binary as a fallback for an incomplete installed wheel.
+    # Publish the runtime only after both checks pass. Never use a source-tree or
+    # caller-provided binary as a fallback for an incomplete installed wheel. The
+    # source compiler stays unexported: the installed wheel refuses any compiler
+    # override, and tests read the packaged compiler directly.
     os.environ["HOL_GUARD_NATIVE_BINARY"] = str(status.identity.path)
-    os.environ["HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER"] = str(compiler)
+    os.environ.pop("HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER", None)
+    os.environ.pop("HOL_GUARD_NATIVE_SOURCE_COMPILER", None)
+
+
+# A loaded hosted runner can starve a cold resident past its answer deadline.
+# Only that unanswered-resident error class gets one more attempt; an assertion
+# or a wrong decision still fails the shard on its first occurrence.
+TRANSIENT_RERUN = (
+    "--reruns",
+    "1",
+    "--reruns-delay",
+    "2",
+    "--only-rerun",
+    "did not answer",
+    "--only-rerun",
+    "native_approval_authority_busy",
+)
 
 
 class _AssertInstalled:
@@ -74,6 +92,7 @@ class NativeShard:
         self.count = count
         self.all_nodes: list[str] = []
         self.selected: list[str] = []
+        self.reruns: list[str] = []
 
     @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -87,6 +106,11 @@ class NativeShard:
         items[:] = [item for item in items if item.nodeid in selected]
         config.hook.pytest_deselected(items=deselected)
 
+    def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+        # A retried failure must stay visible even when the retry passes.
+        if report.outcome == "rerun" and report.nodeid not in self.reruns:
+            self.reruns.append(report.nodeid)
+
     def report(self, exit_code: int) -> dict[str, object]:
         inventory = "\n".join(self.all_nodes).encode("utf-8")
         return {
@@ -96,6 +120,7 @@ class NativeShard:
             "collected_count": len(self.all_nodes),
             "inventory_sha256": hashlib.sha256(inventory).hexdigest(),
             "selected": self.selected,
+            "reruns": sorted(self.reruns),
             "exit_code": exit_code,
         }
 
@@ -118,7 +143,7 @@ def main() -> int:
         # Retain the exact manifest, pytest configuration, assertions and exit status.
         exit_code = int(
             pytest.main(
-                ["@" + str(ROOT / "ci/native_runtime/regression-tests.txt"), "--durations=10"],
+                ["@" + str(ROOT / "ci/native_runtime/regression-tests.txt"), "--durations=10", *TRANSIENT_RERUN],
                 plugins=[shard, _AssertInstalled()],
             )
         )

@@ -16,8 +16,9 @@ import os
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
+from .artifact_native_fields import artifact_native_fields as _artifact_wire
 from .models import GuardArtifact, HarnessDetection
 from .native_context import _UNBOUND_PREFIX
 from .native_path_anchor import anchor_to_process_directory
@@ -29,19 +30,6 @@ from .skill_directory_identity import (
     skill_directory_identity_metadata,
 )
 
-InstructionRole = Literal[
-    "agents_md",
-    "cursor_rules",
-    "claude_md",
-    "mcp_json",
-    "design_md",
-    "product_md",
-    "roadmap_md",
-    "security_md",
-    "policy_md",
-    "standards_md",
-    "unknown_instruction",
-]
 INVENTORY_ITEM_KINDS: tuple[str, ...] = (
     "agent",
     "daemon_plugin",
@@ -70,51 +58,12 @@ _CODEX_HOME_SKILL_ROOTS = (".codex/skills", ".agents/skills")
 # workspace directory; keep in sync with ``WORKSPACE_SKILL_HARNESSES`` in the
 # resident's ``aibom_discovery.rs``. Only the portable skill walk reads this.
 _WORKSPACE_CODEX_SKILL_HARNESSES = frozenset(
-    {"codex", "openclaw", "opencode", "claude-code", "cursor", "gemini", "pi", "omp"}
+    {"codex", "openclaw", "opencode", "claude-code", "cursor", "gemini", "pi", "omp", "muse"}
 )
-_DOC_DIRECTORY_ROLES: tuple[tuple[str, InstructionRole], ...] = (
-    ("design", "design_md"),
-    ("product", "product_md"),
-    ("standards", "standards_md"),
-    ("policy", "policy_md"),
-    ("policies", "policy_md"),
-    ("security", "security_md"),
-    ("roadmap", "roadmap_md"),
-)
-_NAME_ROLES: dict[str, InstructionRole] = {
-    "agents.md": "agents_md",
-    "claude.md": "claude_md",
-    "design.md": "design_md",
-    "product.md": "product_md",
-    "roadmap.md": "roadmap_md",
-    "security.md": "security_md",
-    "policy.md": "policy_md",
-    "policies.md": "policy_md",
-    "standards.md": "standards_md",
-    "mcp.json": "mcp_json",
-}
 
 
 class NativeAibomError(ValueError):
     """The native resident could not supply a bound AIBOM discovery answer."""
-
-
-def instruction_role_for_path(path: Path) -> InstructionRole | None:
-    name = path.name.lower()
-    role = _NAME_ROLES.get(name)
-    if role is not None:
-        return role
-    if path.suffix.lower() in {".md", ".mdc"}:
-        parts = path.parts
-        for index, part in enumerate(parts):
-            if part == ".cursor" and index + 1 < len(parts) and parts[index + 1] == "rules":
-                return "cursor_rules"
-            if part == "docs" and index + 1 < len(parts):
-                child = parts[index + 1].lower()
-                for directory_name, doc_role in _DOC_DIRECTORY_ROLES:
-                    if child == directory_name:
-                        return doc_role
-    return None
 
 
 # Discovery kinds hash instruction documents, walk docs/* and compute skill
@@ -130,21 +79,25 @@ def _native(kind: str, args: Mapping[str, Any]) -> dict[str, Any]:
         raise NativeAibomError(str(error)) from error
 
 
-def _artifact_wire(artifact: GuardArtifact) -> dict[str, object]:
-    return {
-        "artifact_id": artifact.artifact_id,
-        "name": artifact.name,
-        "harness": artifact.harness,
-        "artifact_type": artifact.artifact_type,
-        "source_scope": artifact.source_scope,
-        "config_path": artifact.config_path,
-        "command": artifact.command,
-        "args": list(artifact.args),
-        "url": artifact.url,
-        "transport": artifact.transport,
-        "publisher": artifact.publisher,
-        "metadata": dict(artifact.metadata),
-    }
+def _private_metadata_from_wire(item: Mapping[str, Any]) -> dict[str, object]:
+    """The unredacted MCP arguments and environment a native kind passes privately."""
+
+    private = item.get("runtime_private_metadata")
+    if private is None:
+        return {}
+    if not isinstance(private, dict):
+        raise NativeAibomError("native_runner_authority_result_invalid")
+    args = private.get("mcp_args")
+    environment = private.get("mcp_env")
+    if (
+        set(private) != {"mcp_args", "mcp_env"}
+        or not isinstance(args, list)
+        or not all(isinstance(value, str) for value in args)
+        or not isinstance(environment, dict)
+        or not all(isinstance(key, str) and isinstance(value, str) for key, value in environment.items())
+    ):
+        raise NativeAibomError("native_runner_authority_result_invalid")
+    return {"mcp_args": tuple(args), "mcp_env": dict(environment)}
 
 
 def _artifact_from_wire(item: object) -> GuardArtifact:
@@ -175,6 +128,7 @@ def _artifact_from_wire(item: object) -> GuardArtifact:
         transport=item["transport"],
         publisher=item["publisher"],
         metadata=metadata,
+        runtime_private_metadata=_private_metadata_from_wire(item),
     )
 
 

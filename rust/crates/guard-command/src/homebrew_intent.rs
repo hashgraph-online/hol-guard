@@ -102,6 +102,7 @@ fn build_brew_intent(
         execution_context_hashes: Vec::new(),
         execution_context_cwds: Vec::new(),
         execution_context_reason_codes: Vec::new(),
+        routine_local_runner: false,
     }
 }
 

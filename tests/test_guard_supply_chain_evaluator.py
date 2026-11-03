@@ -11,7 +11,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar, cast
 
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
@@ -25,11 +25,14 @@ from codex_plugin_scanner.guard.runtime.package_intent_common import (
     build_package_request_artifact,
 )
 from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
-    _evidence_id,
+    PackageRequestEvaluation,
+    SupplyChainUserCopy,
+    _persist_evidence,
 )
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_workspace import bind_workspace
+from tests.package_review_settings import review_package_signals
 from tests.package_target_support import recorded_target
 from tests.silent_cloud_server import silent_cloud_sync_url
 from tests.support.network import stub_authenticated_urlopen
@@ -589,6 +592,7 @@ def test_evaluate_package_request_artifact_reviews_npm_git_sources_before_cloud(
     thread.start()
     try:
         store = GuardStore(tmp_path / "guard-home")
+        review_package_signals(tmp_path / "guard-home")
         _seed_guard_cloud(
             store,
             workspace_id=WORKSPACE_ID,
@@ -874,6 +878,7 @@ def test_evaluate_package_request_artifact_handles_invalid_lockfile_bytes_withou
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     bind_workspace(store, WORKSPACE_ID)
     response = _bundle_response(
         packages=[
@@ -906,6 +911,7 @@ def test_evaluate_package_request_artifact_pauses_for_unreadable_lockfile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     bind_workspace(store, WORKSPACE_ID)
     response = _bundle_response(
         packages=[
@@ -950,6 +956,7 @@ def test_evaluate_package_request_artifact_range_only_timeout_falls_back_safely(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     response = _bundle_response(
         packages=[
@@ -981,20 +988,89 @@ def test_evaluate_package_request_artifact_range_only_timeout_falls_back_safely(
     assert any(reason["code"] == "cloud_timeout" for reason in result.reasons)
 
 
-def test_evidence_id_distinguishes_versions_and_dependency_paths() -> None:
-    direct_package = {
-        "name": "minimist",
-        "resolvedVersion": "1.2.8",
-        "requestedVersion": "1.2.8",
-        "dependencyPath": None,
-        "decision": "block",
-    }
-    transitive_package = {
-        "name": "minimist",
-        "resolvedVersion": "1.2.8",
-        "requestedVersion": "1.2.8",
-        "dependencyPath": "react/node_modules/minimist",
-        "decision": "block",
-    }
+class _RecordingStore:
+    def __init__(self) -> None:
+        self.records: list[object] = []
 
-    assert _evidence_id("intent-hash", direct_package) != _evidence_id("intent-hash", transitive_package)
+    def add_evidence(self, record: object) -> None:
+        self.records.append(record)
+
+
+class _Artifact:
+    artifact_id = "artifact-1"
+    harness = "claude-code"
+    source_scope = "workspace"
+    metadata: ClassVar[dict[str, object]] = {}
+
+
+def _blocked_evaluation(*, packages: tuple[dict[str, object], ...], evidence_ids: tuple[str, ...]):
+    return PackageRequestEvaluation(
+        decision="block",
+        policy_action="block",
+        enforcement="free_local",
+        entitlement_state="free",
+        cache_status="miss",
+        package_intent_hash="intent-hash",
+        policy_version="v1",
+        bundle_version=None,
+        workspace_fingerprint=None,
+        reasons=(),
+        packages=packages,
+        risk_summary="blocked",
+        user_copy=SupplyChainUserCopy(
+            title="Package request blocked",
+            summary="blocked",
+            next_step="Review the request.",
+            dashboard_url=None,
+            harness_message="blocked",
+        ),
+        evidence_ids=evidence_ids,
+    )
+
+
+def test_persisted_evidence_carries_the_identifiers_the_resident_derived() -> None:
+    """The resident owns the evidence identity; Python only writes the row."""
+
+    store = _RecordingStore()
+    evaluation = _blocked_evaluation(
+        packages=(
+            {"name": "minimist", "resolvedVersion": "1.2.8", "decision": "block"},
+            {"name": "left-pad", "resolvedVersion": "1.3.0", "decision": "allow"},
+            {
+                "name": "minimist",
+                "resolvedVersion": "1.2.8",
+                "dependencyPath": "react/node_modules/minimist",
+                "decision": "block",
+            },
+        ),
+        evidence_ids=("evidence-aaaa", "evidence-bbbb"),
+    )
+
+    _persist_evidence(
+        store=cast(Any, store),
+        artifact=cast(Any, _Artifact()),
+        evaluation=evaluation,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert [record.evidence_id for record in store.records] == ["evidence-aaaa", "evidence-bbbb"]
+    # The allowed package is skipped, so the second row is the transitive one.
+    assert store.records[1].details["package"]["dependencyPath"] == "react/node_modules/minimist"
+
+
+def test_a_disagreed_evidence_count_writes_no_row() -> None:
+    store = _RecordingStore()
+    evaluation = _blocked_evaluation(
+        packages=({"name": "minimist", "resolvedVersion": "1.2.8", "decision": "block"},),
+        evidence_ids=(),
+    )
+
+    with pytest.raises(ValueError, match="evidence ids"):
+        _persist_evidence(
+            store=cast(Any, store),
+            artifact=cast(Any, _Artifact()),
+            evaluation=evaluation,
+            now="2026-05-19T00:00:00Z",
+        )
+
+    assert store.records == []

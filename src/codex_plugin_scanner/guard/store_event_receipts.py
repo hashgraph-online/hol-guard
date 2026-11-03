@@ -4,15 +4,12 @@
 
 from __future__ import annotations
 
-from .local_authority_integrity import verify_local_authority_payload
-from .policy_integrity import PolicyIntegrityVerificationResult
-
 # ruff: noqa: F403,F405
+from .native_store_policy import encode_key
 from .store_base import *
-from .store_local_once_authority import (
-    local_once_integrity_purpose,
-    persist_local_once_approval,
-)
+
+LOCAL_ONCE_LEGACY_AUTHORITY_KIND = "legacy"
+EXACT_CLOUD_AUTHORITY_KIND = "exact-cloud"
 
 
 def _list_events_query(limit: int, event_name: str | None) -> tuple[str, tuple[object, ...]]:
@@ -41,25 +38,39 @@ class StoreEventReceiptsMixin:
         action: str,
         created_at: str,
         expires_at: str,
+        authority_kind: str = LOCAL_ONCE_LEGACY_AUTHORITY_KIND,
     ) -> str | None:
+        """Mint exact one-shot authority for an approval granted on this install.
+
+        The row written here is the authority a later native review reads to
+        allow an execution without asking again, so the resident signs it where
+        the verdict is decided. This side reads the install key out of the
+        keyring and ships it; it signs nothing and decides nothing. An install
+        with no key material has no authority to mint, which is why that case
+        answers ``None`` rather than calling.
+        """
+
         key, key_id = self._policy_integrity_secret_material(create=True)
         if key is None or key_id is None:
             return None
-        with self._connect() as connection:
-            return persist_local_once_approval(
-                connection,
-                request_id=request_id,
-                harness=harness,
-                artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
-                workspace=workspace,
-                publisher=publisher,
-                action=action,
-                created_at=created_at,
-                expires_at=expires_at,
-                integrity_key=key,
-                integrity_key_id=key_id,
-            )
+        approval_id = self._native_store_call(
+            "record_local_once_approval",
+            {
+                "request_id": request_id,
+                "harness": harness,
+                "artifact_id": artifact_id,
+                "artifact_hash": artifact_hash,
+                "workspace": workspace,
+                "publisher": publisher,
+                "action": action,
+                "created_at": created_at,
+                "expires_at": expires_at,
+                "authority_kind": authority_kind,
+                "integrity_key_b64": encode_key(key),
+                "integrity_key_id": key_id,
+            },
+        )
+        return None if approval_id is None else str(approval_id)
 
     def list_events(self, limit: int = 100, event_name: str | None = None) -> list[dict[str, object]]:
         query, params = _list_events_query(limit, event_name)
@@ -115,84 +126,3 @@ class StoreEventReceiptsMixin:
                 }
             )
         return items
-
-
-def _local_once_approval_signed_payload(row: Mapping[str, object]) -> dict[str, object]:
-    payload = {
-        "approval_id": _row_value(row, "approval_id"),
-        "request_id": _row_value(row, "request_id"),
-        "harness": _row_value(row, "harness"),
-        "artifact_id": _row_value(row, "artifact_id"),
-        "artifact_hash": _row_value(row, "artifact_hash"),
-        "workspace": _row_value(row, "workspace"),
-        "publisher": _row_value(row, "publisher"),
-        "action": _row_value(row, "action"),
-        "created_at": _row_value(row, "created_at"),
-        "expires_at": _row_value(row, "expires_at"),
-        "claimed_at": _row_value(row, "claimed_at"),
-    }
-    authority_kind = _row_value(row, "authority_kind")
-    if authority_kind is not None:
-        payload["authority_kind"] = authority_kind
-    return payload
-
-
-def _local_once_approval_integrity(row: Mapping[str, object]) -> dict[str, object]:
-    return {
-        "integrity_version": _row_value(row, "integrity_version"),
-        "payload_hash": _row_value(row, "payload_hash"),
-        "payload_mac": _row_value(row, "payload_mac"),
-        "integrity_key_id": _row_value(row, "integrity_key_id"),
-        "signed_at": _row_value(row, "signed_at"),
-    }
-
-
-def _verify_local_once_approval(
-    row: Mapping[str, object],
-    *,
-    key: bytes | None,
-    key_id: str | None,
-) -> PolicyIntegrityVerificationResult:
-    authority_kind = _row_value(row, "authority_kind")
-    return verify_local_authority_payload(
-        _local_once_approval_signed_payload(row),
-        _local_once_approval_integrity(row),
-        key=key,
-        key_id=key_id,
-        purpose=local_once_integrity_purpose(authority_kind),
-    )
-
-
-def _local_once_approval_payload(row: Mapping[str, object]) -> dict[str, object]:
-    payload = {
-        "action": str(row["action"]),
-        "approval_id": str(row["approval_id"]),
-        "artifact_hash": row["artifact_hash"],
-        "artifact_id": row["artifact_id"],
-        "decision_id": None,
-        "expires_at": row["expires_at"],
-        "harness": str(row["harness"]),
-        "integrity_key_id": row["integrity_key_id"],
-        "integrity_status": "valid",
-        "integrity_version": row["integrity_version"],
-        "owner": None,
-        "publisher": row["publisher"],
-        "reason": "approved once in review",
-        "request_id": str(row["request_id"]),
-        "scope": "artifact",
-        "source": "approval-gate-once",
-        "signed_at": row["signed_at"],
-        "updated_at": str(row["created_at"]),
-        "workspace": row["workspace"],
-    }
-    authority_kind = _row_value(row, "authority_kind")
-    if authority_kind is not None:
-        payload["authority_kind"] = authority_kind
-    return payload
-
-
-def _row_value(row: Mapping[str, object], key: str) -> object:
-    try:
-        return row[key]
-    except KeyError:
-        return None

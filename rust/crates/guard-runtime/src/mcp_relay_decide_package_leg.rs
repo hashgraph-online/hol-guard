@@ -143,6 +143,7 @@ pub(super) fn decide_package_leg(
     request: &McpRelayDecideRequestV1,
     inputs: PackageInputs<'_, '_>,
     subject: &McpToolPolicySubjectV1,
+    catalog: &crate::contributed_mcp_decision_op::Catalog<'_>,
     binding: QueueBinding<'_>,
 ) -> Result<Packaged, &'static str> {
     let resolved = inputs.resolve()?;
@@ -157,7 +158,12 @@ pub(super) fn decide_package_leg(
         // package policy.
         || {
             Ok((
-                run_policy(subject, Some(inputs.saved), Some(inputs.saved.connection))?,
+                run_policy(
+                    subject,
+                    Some(inputs.saved),
+                    Some(inputs.saved.connection),
+                    catalog,
+                )?,
                 inputs.resolve()?,
             ))
         },

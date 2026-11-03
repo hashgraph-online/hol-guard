@@ -4,6 +4,27 @@ from __future__ import annotations
 
 import argparse
 
+from ..approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+
+
+def _wait_timeout(value: str) -> int:
+    seconds = int(value)
+    if not 0 <= seconds <= MAX_APPROVAL_WAIT_TIMEOUT_SECONDS:
+        raise argparse.ArgumentTypeError(f"timeout must be between 0 and {MAX_APPROVAL_WAIT_TIMEOUT_SECONDS} seconds")
+    return seconds
+
+
+def _add_read_only_json_flag(parser: argparse.ArgumentParser) -> None:
+    """Add `--json` without erasing the value the `approvals` parser already read.
+
+    argparse hands the subparser the namespace the parent filled in, so a leaf
+    `store_true` with its own default rewrites a `--json` that was spelled
+    before the subcommand. Suppressing the leaf default leaves the parent's
+    value in place, and Guard admits both spellings of these reads.
+    """
+
+    parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+
 
 def add_approval_parser(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
@@ -59,7 +80,15 @@ def add_approval_parser(
         help="List pending approval requests and recent receipts without opening the approval center",
     )
     add_common_args(list_parser)
-    list_parser.add_argument("--json", action="store_true")
+    _add_read_only_json_flag(list_parser)
+
+    wait_parser = approvals_subparsers.add_parser("wait", help="Wait for a decision without resolving or executing it")
+    wait_parser.add_argument("request_id")
+    wait_parser.add_argument(
+        "--timeout", type=_wait_timeout, default=120, help="Wait at most this many seconds (0-600)"
+    )
+    add_common_args(wait_parser)
+    _add_read_only_json_flag(wait_parser)
 
     clear_history_parser = approvals_subparsers.add_parser(
         "clear-history",
@@ -95,7 +124,7 @@ def add_approval_parser(
     )
     retry_hint_parser.add_argument("request_id", help="The approval request ID to get the retry hint for")
     add_common_args(retry_hint_parser)
-    retry_hint_parser.add_argument("--json", action="store_true")
+    _add_read_only_json_flag(retry_hint_parser)
 
     resume_parser = approvals_subparsers.add_parser(
         "resume",

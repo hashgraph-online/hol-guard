@@ -373,6 +373,57 @@ fn publishing_ignores_unrelated_scope_entries() {
 }
 
 #[test]
+fn pruning_keeps_published_state_when_rediscovery_misses_it() {
+    let scope = test_scope("state-prune-missed-publication");
+    let digest = runtime_digest().unwrap();
+    let token = [7u8; crate::AUTH_TOKEN_BYTES];
+    for generation in [1, 2] {
+        publish_state(
+            &scope,
+            generation,
+            std::process::id(),
+            &digest,
+            "loopback",
+            "127.0.0.1:1".to_owned(),
+            &token,
+        )
+        .unwrap();
+    }
+    // Discovery skips unreadable files and uninspectable process identities.
+    // Inject that empty observation into pruning after a successful write.
+    let private_root = private_root_for_scope(&scope).unwrap();
+    prune_superseded_states(&scope, 2, &Default::default(), &private_root).unwrap();
+
+    let states = discover_states(&scope, &digest).unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].generation, 2);
+    assert_eq!(states[0].token_hex, hex_bytes(&token));
+    fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
+fn publication_rejects_invalid_state_before_preserving_its_generation() {
+    let scope = test_scope("state-prune-invalid-publication");
+    let digest = runtime_digest().unwrap();
+    for (generation, token) in [(0, vec![7; crate::AUTH_TOKEN_BYTES]), (1, vec![7; 1])] {
+        assert!(publish_state(
+            &scope,
+            generation,
+            std::process::id(),
+            &digest,
+            "loopback",
+            "127.0.0.1:1".to_owned(),
+            &token,
+        )
+        .is_err());
+    }
+    assert!(resident_state_discovery::state_paths(&scope)
+        .unwrap()
+        .is_empty());
+    fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
 fn startup_lock_drop_preserves_stable_private_lockfile() {
     let scope = test_scope("startup-lock-stable");
     let path = scope.join("startup.lock");
@@ -668,5 +719,57 @@ fn endpoint_identity_is_authenticated_with_generation_state() {
     });
     assert_ne!(state_mac(&state, &token), state_mac(&changed, &token));
     assert!(validate_state(&scope, &changed, &digest).is_err());
+    fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
+fn a_formatted_state_names_its_token_without_disclosing_it() {
+    let scope = test_scope("state-debug-redaction");
+    let digest = runtime_digest().unwrap();
+    let token = vec![0xab; crate::AUTH_TOKEN_BYTES];
+    let state = publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+
+    let rendered = format!("{state:?}");
+
+    // A diagnostic that formats a state must stay useful, so every other
+    // field survives; only the key the state publishes is withheld.
+    assert!(!rendered.contains(&hex_bytes(&token)));
+    assert!(rendered.contains("token_hex: \"<redacted>\""));
+    assert!(rendered.contains(&state.endpoint));
+    assert!(rendered.contains(&state.state_mac));
+    fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
+fn a_decoded_token_is_cleared_when_its_exchange_ends() {
+    let scope = test_scope("state-token-zeroized");
+    let digest = runtime_digest().unwrap();
+    let token = vec![0xcd; crate::AUTH_TOKEN_BYTES];
+    let state = publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+
+    let decoded = token_from_state(&state).unwrap();
+
+    // The decoded copy is a `Zeroizing` buffer, so the plaintext key cannot
+    // outlive the caller that authenticated with it.
+    assert_eq!(decoded.as_slice(), token.as_slice());
+    let _: &zeroize::Zeroizing<Vec<u8>> = &decoded;
     fs::remove_dir_all(scope).unwrap();
 }

@@ -18,10 +18,7 @@ fn evaluate(root: &std::path::Path, command: &str) -> guard_contracts::PreToolRe
 
 #[test]
 fn a_reviewable_setting_before_an_unmodeled_script_reaches_ordinary_review() {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir()
         .canonicalize()
         .unwrap()
@@ -173,10 +170,7 @@ fn an_open_quote_is_named_instead_of_the_extension_controls() {
     let root = std::env::temp_dir().canonicalize().unwrap().join(format!(
         "guard-open-quote-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     std::fs::create_dir_all(root.join("project")).unwrap();
     let _cleanup = FixtureCleanup(root.clone());
@@ -267,8 +261,14 @@ fn a_credential_setting_is_named_with_a_safe_alternative() {
     }
 }
 
+/// A `NODE_OPTIONS` holding only engine sizes or quieting flags loads no
+/// code, and the runtime already reads an inherited one that way. Written in
+/// front of the command it is the same setting, so it is projected away and
+/// the command is judged on its own. Guard used to block it and offer a
+/// hand-written `node --max-old-space-size=N node_modules/...` form instead;
+/// the command the developer wrote now reaches the ordinary proofs.
 #[test]
-fn a_heap_only_node_options_setting_points_to_the_sandboxed_node_form() {
+fn a_heap_only_node_options_setting_leaves_the_command_to_the_ordinary_proofs() {
     let root = std::env::temp_dir()
         .canonicalize()
         .unwrap()
@@ -278,6 +278,38 @@ fn a_heap_only_node_options_setting_points_to_the_sandboxed_node_form() {
     for command in [
         "NODE_OPTIONS=--max-old-space-size=6144 bunx tsc --noEmit",
         "NODE_OPTIONS=--max-old-space-size=6144 npx tsc --noEmit",
+        "NODE_OPTIONS=--max-old-space-size=99999999 bunx tsc --noEmit",
+        "NODE_OPTIONS='--max-old-space-size=6144 --no-warnings' bunx tsc --noEmit",
+    ] {
+        let result = evaluate(&root, command);
+        assert_ne!(
+            result.minimum_action, "block",
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            !result.reason.contains("NODE_OPTIONS"),
+            "{command}: {}",
+            result.reason
+        );
+    }
+    // A value that can load code, open a port or name a file keeps the
+    // refusal, and so does a setting sitting beside an inert one: the reason
+    // names the setting that actually stopped the reading.
+    for (command, setting) in [
+        (
+            "NODE_OPTIONS='--max-old-space-size=6144 --require ./x.js' bunx tsc --noEmit",
+            "NODE_OPTIONS",
+        ),
+        (
+            "NODE_OPTIONS=--require=./x.js bunx tsc --noEmit",
+            "NODE_OPTIONS",
+        ),
+        ("NODE_OPTIONS=--inspect bunx tsc --noEmit", "NODE_OPTIONS"),
+        (
+            "NODE_OPTIONS=--max-old-space-size=6144 NODE_PATH=/ws bunx tsc --noEmit",
+            "NODE_PATH",
+        ),
     ] {
         let result = evaluate(&root, command);
         assert_eq!(
@@ -288,29 +320,69 @@ fn a_heap_only_node_options_setting_points_to_the_sandboxed_node_form() {
         assert!(
             result
                 .reason
-                .contains("the NODE_OPTIONS setting can load code")
-                && result.reason.contains(
-                    "`node --max-old-space-size=6144 node_modules/typescript/bin/tsc --noEmit`"
-                ),
+                .contains(&format!("the {setting} setting can load code"))
+                && result.reason.contains("Run the command without it")
+                && !result.reason.contains("more memory"),
             "{command}: {}",
             result.reason
         );
     }
-    // Anything beyond a bare memory size keeps the plain refusal.
+}
+
+/// An `env` that names no program prints the environment and exits. Reading it
+/// as an interpreter that launches a file nobody opened blocked `env`,
+/// `env -0` and `env | grep '^PATH='` outright, with no approval row to give
+/// them. The dump is still a read of every secret the session exports, so it
+/// stays at review; what it must not be is unapprovable.
+#[test]
+fn an_env_that_names_no_program_is_reviewed_rather_than_refused() {
+    let nonce = crate::unique_nanos::unique_nanos();
+    let root = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("guard-env-dump-{}-{nonce}", std::process::id()));
+    std::fs::create_dir_all(root.join("project")).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+
     for command in [
-        "NODE_OPTIONS='--max-old-space-size=6144 --require ./x.js' bunx tsc --noEmit",
-        "NODE_OPTIONS=--max-old-space-size=99999999 bunx tsc --noEmit",
-        "NODE_OPTIONS=--require=./x.js bunx tsc --noEmit",
+        "env",
+        "env -0",
+        "env | grep '^PATH='",
+        "/usr/bin/env | head -5",
+        "env -u NODE_OPTIONS | sort",
     ] {
         let result = evaluate(&root, command);
-        assert_eq!(
-            result.minimum_action, "block",
+        assert_ne!(
+            result.reason_code, "native_command_extension_evaluation_failed",
             "{command}: {}",
             result.reason
         );
         assert!(
-            result.reason.contains("Run the command without it")
-                && !result.reason.contains("more memory"),
+            matches!(
+                result.minimum_action.as_str(),
+                "review" | "sandbox-required"
+            ),
+            "{command}: {} ({})",
+            result.minimum_action,
+            result.reason
+        );
+    }
+
+    // An `env` that does name a program still runs whatever that program is,
+    // so the prefix keeps the evaluation failure it arrived with. `-S` and
+    // `--split-string` carry the program inside the option's own value, so the
+    // launch arrives as one dash-prefixed word and must be read as a launch.
+    for command in [
+        "env -i sh -c 'echo hi'",
+        "env -S bash",
+        "env -Sbash",
+        "env --split-string=sh",
+        "env -iS'sh -c id'",
+    ] {
+        let result = evaluate(&root, command);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("block", "native_command_extension_evaluation_failed"),
             "{command}: {}",
             result.reason
         );

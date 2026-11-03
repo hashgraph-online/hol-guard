@@ -228,6 +228,20 @@ pub(crate) fn path_bytes(value: &OsStr) -> Vec<u8> {
 }
 
 pub(crate) fn decode_path_hex(value: &str, encoding: &str) -> Result<PathBuf, &'static str> {
+    let path = decode_relative_path_hex(value, encoding)?;
+    if !path.is_absolute() {
+        return Err("native_skill_directory_identity_path_invalid");
+    }
+    Ok(path)
+}
+
+/// `decode_path_hex` for a path the caller may hold relative to its own
+/// working directory. The caller sends that directory alongside, so the raw
+/// components stay exactly as the caller sees them.
+pub(crate) fn decode_relative_path_hex(
+    value: &str,
+    encoding: &str,
+) -> Result<PathBuf, &'static str> {
     let bytes = hex::decode(value).map_err(|_| "native_skill_directory_identity_path_invalid")?;
     #[cfg(unix)]
     let decoded = {
@@ -253,7 +267,7 @@ pub(crate) fn decode_path_hex(value: &str, encoding: &str) -> Result<PathBuf, &'
         OsString::from_wide(&units)
     };
     let path = PathBuf::from(decoded);
-    if path.as_os_str().is_empty() || !path.is_absolute() {
+    if path.as_os_str().is_empty() {
         return Err("native_skill_directory_identity_path_invalid");
     }
     Ok(path)

@@ -136,6 +136,31 @@ pub(super) fn branch_rename(rest: &[&str]) -> bool {
     moved && matches!(names.len(), 1 | 2)
 }
 
+/// `branch NAME` or `branch NAME START`, options first. Creation writes one
+/// new ref and nothing else: Git refuses a name that already exists without
+/// `-f`, leaves `HEAD` and the working tree exactly as they are, and records
+/// an upstream only in the same `branch.NAME.*` configuration that
+/// `checkout -b NAME START` already writes for a remote-tracking start point.
+/// `-f`, `-t`, `--set-upstream-to`, a delete, a copy and every other option
+/// are refused, as is a start point that is not an ordinary reference name.
+pub(super) fn branch_create(rest: &[&str]) -> bool {
+    let mut names: Vec<&str> = Vec::new();
+    for word in rest {
+        match *word {
+            "-q" | "--quiet" | "--no-track" if names.is_empty() => {}
+            value if names.is_empty() => {
+                if !super::super::worktree_add::valid_branch_name(value) {
+                    return false;
+                }
+                names.push(value);
+            }
+            value if names.len() == 1 && super::start::reference(value) => names.push(value),
+            _ => return false,
+        }
+    }
+    !names.is_empty()
+}
+
 /// The two `git stash` spellings that only print are judged by the read
 /// grammar, so a listing proved here and a listing proved as an ordinary
 /// read can never drift apart.
@@ -264,27 +289,19 @@ pub(super) fn aliased(effective: &GitConfig, model: &CanonicalCommandV1) -> bool
         .any(|name| effective.contains_key(&format!("alias.{}", name.to_ascii_lowercase())))
 }
 
-/// The branch `git switch -c <name>` or `git checkout -b <name>` creates at
-/// the checked-out commit. A start point is not one of these forms.
+/// The branch `git switch -c <name>`, `git switch --create=<name>` or
+/// `git checkout -b <name>` creates at the checked-out commit. A start point
+/// is not one of these forms.
 pub(super) fn created_branch(original: &CommandSegmentV1) -> Option<&str> {
-    match original.arguments.as_slice() {
-        [command, flag, name]
-            if matches!(
-                (command.as_str(), flag.as_str()),
-                ("switch", "-c" | "--create") | ("checkout", "-b")
-            ) =>
-        {
-            Some(name.as_str())
-        }
-        _ => None,
-    }
+    let words: Vec<&str> = original.arguments.iter().map(String::as_str).collect();
+    super::super::workspace_contained::created_branch_name(&words)
 }
 
-/// Whether a write other than a branch creation may change the checked-out
-/// branch: any `checkout`, `switch` or `branch` form.
+/// Whether a write other than a branch creation may change what a push would
+/// send: any `checkout`, `switch` or `branch` form, and a `reset`, which moves
+/// the checked-out branch to another commit.
 pub(super) fn moves_head(original: &CommandSegmentV1) -> bool {
-    original
-        .arguments
-        .first()
-        .is_none_or(|command| matches!(command.as_str(), "checkout" | "switch" | "branch"))
+    original.arguments.first().is_none_or(|command| {
+        matches!(command.as_str(), "checkout" | "switch" | "branch" | "reset")
+    })
 }

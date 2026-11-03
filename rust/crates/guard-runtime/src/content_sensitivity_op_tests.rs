@@ -104,10 +104,7 @@ fn python_allow_and_unsigned_receipt_cannot_authorize_forwarding() {
 fn authenticated_forwarding_works_with_and_without_a_loaded_policy_store() {
     use sha2::{Digest, Sha256};
     use std::io::Write;
-    let suffix = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let suffix = crate::unique_nanos::unique_nanos();
     let home = std::env::temp_dir().join(format!(
         "guard-content-receipt-{}-{suffix}",
         std::process::id()

@@ -110,7 +110,15 @@ def test_missing_or_independent_extension_control_decisions_cannot_delegate(brok
 
 
 def test_unsupported_harness_never_receives_a_delegation_hint() -> None:
-    assert "required_execution_profile" not in render_pre_tool("cursor", result())
+    for harness in ("copilot", "hermes"):
+        assert "required_execution_profile" not in render_pre_tool(harness, result())
+
+
+def test_cursor_receives_the_receipt_its_sink_rechecks() -> None:
+    # Cursor's contained sink re-authorizes the saved call against this receipt.
+    response = render_pre_tool("cursor", result())
+    assert response["decision"] == "deny"
+    assert response["required_execution_profile"] == "pytest-readonly-v2"
 
 
 def test_pi_family_receipts_stay_denied_without_a_hook_rewrite() -> None:

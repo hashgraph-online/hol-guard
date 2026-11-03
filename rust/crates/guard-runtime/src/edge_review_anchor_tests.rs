@@ -210,7 +210,7 @@ fn anchor_binds_every_source_field_of_the_approved_request() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     });
     assert_ne!(anchor(&environment, &published), baseline);
 }
@@ -276,4 +276,142 @@ fn anchor_without_a_snapshot_keeps_the_claimed_policy_identity() {
         baseline
     );
     assert_ne!(baseline, anchor(&request, &snapshot()));
+}
+
+/// Cursor stamps every attempt with a fresh `generation_id` and a fresh
+/// `tool_use_id`. Both are the transport's per-attempt identity, so an
+/// identical retry inside one conversation has to reach the approval the user
+/// already gave, while another command or another session stays another
+/// action.
+#[test]
+fn anchor_reaches_a_cursor_retry_under_a_new_generation_id() {
+    let published = snapshot();
+    let mut request = review_envelope();
+    request.0.harness = "cursor".into();
+    request.0.raw_payload["session_id"] = serde_json::json!("conversation-one");
+    request.0.raw_payload["generation_id"] = serde_json::json!("generation-first");
+    request.0.raw_payload["tool_use_id"] = serde_json::json!("call-first");
+    let baseline = anchor(&request, &published);
+    let mut retry = request.0.clone();
+    retry.raw_payload["generation_id"] = serde_json::json!("generation-retry");
+    retry.raw_payload["tool_use_id"] = serde_json::json!("call-retry");
+    assert_eq!(anchor(&retry, &published), baseline);
+    let mut other_conversation = retry.clone();
+    other_conversation.raw_payload["session_id"] = serde_json::json!("conversation-two");
+    assert_ne!(anchor(&other_conversation, &published), baseline);
+    let mut other_command = retry.clone();
+    other_command.raw_payload["tool_input"]["command"] = serde_json::json!("rm -rf /");
+    assert_ne!(anchor(&other_command, &published), baseline);
+    // Without a conversation the attempt IDs are all that tie a retry to its
+    // request, so they stay in the commitment.
+    let mut sessionless = request.0.clone();
+    sessionless.raw_payload["session_id"] = serde_json::json!("");
+    let mut sessionless_retry = sessionless.clone();
+    sessionless_retry.raw_payload["generation_id"] = serde_json::json!("generation-retry");
+    assert_ne!(
+        anchor(&sessionless_retry, &published),
+        anchor(&sessionless, &published)
+    );
+}
+
+/// ZCode spells one tool call as both `tool_use_id` and `toolCallId`, and
+/// stamps the turn around it as `turnId`. All three are replaced on every
+/// attempt, so an unchanged retry inside one session has to reach the approval
+/// the user already gave instead of asking again.
+#[test]
+fn anchor_reaches_a_zcode_retry_under_new_call_and_turn_ids() {
+    let published = snapshot();
+    let mut request = review_envelope();
+    request.0.harness = "zcode".into();
+    request.0.raw_payload["session_id"] = serde_json::json!("session-one");
+    request.0.raw_payload["tool_use_id"] = serde_json::json!("call-first");
+    request.0.raw_payload["toolCallId"] = serde_json::json!("call-first");
+    request.0.raw_payload["turnId"] = serde_json::json!("turn-first");
+    let baseline = anchor(&request, &published);
+    let mut retry = request.0.clone();
+    retry.raw_payload["tool_use_id"] = serde_json::json!("call-retry");
+    retry.raw_payload["toolCallId"] = serde_json::json!("call-retry");
+    retry.raw_payload["turnId"] = serde_json::json!("turn-retry");
+    assert_eq!(anchor(&retry, &published), baseline);
+    let mut other_session = retry.clone();
+    other_session.raw_payload["session_id"] = serde_json::json!("session-two");
+    assert_ne!(anchor(&other_session, &published), baseline);
+    let mut other_command = retry.clone();
+    other_command.raw_payload["tool_input"]["command"] = serde_json::json!("rm -rf /");
+    assert_ne!(anchor(&other_command, &published), baseline);
+    // Without a session the attempt IDs are all that tie a retry to its
+    // request, so they stay in the commitment.
+    let mut sessionless = request.0.clone();
+    sessionless.raw_payload["session_id"] = serde_json::json!("");
+    let mut sessionless_retry = sessionless.clone();
+    sessionless_retry.raw_payload["toolCallId"] = serde_json::json!("call-retry");
+    assert_ne!(
+        anchor(&sessionless_retry, &published),
+        anchor(&sessionless, &published)
+    );
+}
+
+/// Cursor's real hook payload carries no `session_id` at all: it spells the
+/// session `conversation_id`, the field Cursor state is already keyed by. A
+/// retry guard that reads only `session_id` never fires for Cursor, so the
+/// moving `generation_id` stayed in the commitment and no Cursor approval
+/// could be reused.
+#[test]
+fn anchor_reaches_a_cursor_retry_bound_only_by_conversation_id() {
+    let published = snapshot();
+    for key in ["conversation_id", "conversationId"] {
+        let mut request = review_envelope();
+        request.0.harness = "cursor".into();
+        request
+            .0
+            .raw_payload
+            .as_object_mut()
+            .unwrap()
+            .remove("session_id");
+        request.0.raw_payload[key] = serde_json::json!("conversation-one");
+        request.0.raw_payload["generation_id"] = serde_json::json!("generation-first");
+        request.0.raw_payload["tool_use_id"] = serde_json::json!("call-first");
+        let baseline = anchor(&request, &published);
+        let mut retry = request.0.clone();
+        retry.raw_payload["generation_id"] = serde_json::json!("generation-retry");
+        retry.raw_payload["tool_use_id"] = serde_json::json!("call-retry");
+        assert_eq!(anchor(&retry, &published), baseline);
+        let mut other_conversation = retry.clone();
+        other_conversation.raw_payload[key] = serde_json::json!("conversation-two");
+        assert_ne!(anchor(&other_conversation, &published), baseline);
+        let mut other_command = retry.clone();
+        other_command.raw_payload["tool_input"]["command"] = serde_json::json!("rm -rf /");
+        assert_ne!(anchor(&other_command, &published), baseline);
+        // An empty conversation leaves the attempt IDs as the only thing tying
+        // a retry to its request, so they stay in the commitment.
+        let mut anonymous = request.0.clone();
+        anonymous.raw_payload[key] = serde_json::json!("");
+        let mut anonymous_retry = anonymous.clone();
+        anonymous_retry.raw_payload["generation_id"] = serde_json::json!("generation-retry");
+        assert_ne!(
+            anchor(&anonymous_retry, &published),
+            anchor(&anonymous, &published)
+        );
+    }
+}
+
+/// Only Cursor reads `conversation_id` as its session: another harness keeps
+/// its attempt IDs in the commitment when that is the only identifier present.
+#[test]
+fn anchor_keeps_call_ids_for_another_harness_sending_a_conversation_id() {
+    let published = snapshot();
+    let mut request = review_envelope();
+    request.0.harness = "codex".into();
+    request
+        .0
+        .raw_payload
+        .as_object_mut()
+        .unwrap()
+        .remove("session_id");
+    request.0.raw_payload["conversation_id"] = serde_json::json!("conversation-one");
+    request.0.raw_payload["tool_use_id"] = serde_json::json!("call-first");
+    let baseline = anchor(&request, &published);
+    let mut retry = request.0.clone();
+    retry.raw_payload["tool_use_id"] = serde_json::json!("call-retry");
+    assert_ne!(anchor(&retry, &published), baseline);
 }

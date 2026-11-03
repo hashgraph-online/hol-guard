@@ -56,7 +56,9 @@ const SKIP_DIRS: [&str; 15] = [
     ".worktrees",
     "worktrees",
 ];
-const MAX_DEPTH: usize = 3;
+/// Directories below the root whose dependency files the workspace audit
+/// discovers; files in deeper directories are not audited.
+pub(crate) const MAX_DEPTH: usize = 3;
 pub(crate) const MAX_SBOM_BYTES: u64 = 10 * 1024 * 1024;
 
 pub(crate) fn expanduser(path: &str) -> PathBuf {

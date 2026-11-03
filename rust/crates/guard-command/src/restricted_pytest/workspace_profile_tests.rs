@@ -182,6 +182,36 @@ fn privileged_binaries_are_denied_execution() {
     assert!(profile.contains("(deny process-exec (literal \"/usr/bin/sudo\")"));
 }
 
+/// The interpreters macOS ships inside its own frameworks are granted one
+/// `usr/bin` directory at a time. A subpath of the frameworks directory would
+/// also execute the `Support`, `Helpers`, `XPCServices` and `MachServices`
+/// trees beside them, which the literal privilege denials - `/usr/bin`,
+/// `/bin`, `/usr/sbin` and `/sbin` - say nothing about.
+#[test]
+#[cfg(target_os = "macos")]
+fn framework_interpreters_are_granted_by_directory_not_by_tree() {
+    let profile = workspace_profile::compose(&input("/w/proj"), &[], &[]).unwrap();
+    let root = super::launch_roots::MAC_FRAMEWORK_ROOT;
+    assert!(!profile.contains(&format!("(subpath \"{root}\")")));
+    let directories = super::launch_roots::mac_framework_program_directories();
+    assert!(
+        !directories.is_empty(),
+        "macOS ships no framework interpreter directory"
+    );
+    let granted = profile
+        .lines()
+        .find(|line| line.starts_with("(allow process-exec"))
+        .expect("the profile grants execution");
+    for directory in directories {
+        assert!(directory.ends_with("usr/bin"), "{}", directory.display());
+        assert!(
+            granted.contains(&format!("(subpath \"{}\")", directory.display())),
+            "{} is not granted",
+            directory.display()
+        );
+    }
+}
+
 #[test]
 fn existing_profiles_ignore_the_new_fields_and_linux_rejects_this_one() {
     let error = bubblewrap_argv(&input("/w/proj")).unwrap_err();

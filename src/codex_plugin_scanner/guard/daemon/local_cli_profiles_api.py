@@ -5,7 +5,10 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 
+from ..native_context import _resolve_digest_home, native_context_digest
+from ..native_local_cli_identity import record_local_cli_identity_failure
 from ..runtime.custom_extension_profiles import (
     KNOWN_CLI_PROFILES,
     KnownCliProfile,
@@ -17,7 +20,6 @@ from ..runtime.local_cli_commands import (
     LocalCliCommand,
     merge_discovered_commands,
 )
-from ..runtime.local_cli_runner import runner_name, runner_target
 
 SEEDED_PROFILE_PREFIX = "local-cli.profile-"
 _VERSION_OR_TAG = re.compile(r"[A-Za-z0-9.^~<>=*+_-]+")
@@ -40,26 +42,69 @@ def merge_profile_commands(tool_name: str, discovered: Sequence[LocalCliCommand]
     return merge_discovered_commands(tool_name, (*discovered, *profile.local_cli_commands()))
 
 
-def profiled_cli_package_launch(tokens: Sequence[str]) -> bool:
+def profiled_cli_package_launch(tokens: Sequence[str], *, guard_home: Path | None = None) -> bool:
     """Return True when a package runner directly launches a profiled CLI.
 
     ``npx wrangler`` is a CLI call, not an MCP server; probing it over stdio
     would spawn the CLI and then reject the paste as a built-in launcher.
     Selector forms (``npx --package wrangler other``) and scoped packages
     (``@other/wrangler``) are not the profiled CLI, so they keep MCP discovery.
+    The native runtime reads which bin the runner launches; when it cannot
+    answer, the paste is treated as a profiled launch so nothing is spawned.
+
+    ``guard_home`` is the home whose resident answers, which for a served
+    request is the store's own home rather than the operator's.
     """
 
     if not tokens:
         return False
-    runner = runner_name(tokens[0])
-    target = runner_target(runner, tuple(tokens[1:])) if runner is not None else None
-    if target is None:
+    target = _native_runner_target(tokens, guard_home=guard_home)
+    if target is _UNREADABLE:
+        # Only a runner paste can launch a profiled CLI, so a direct launch of a
+        # server keeps MCP discovery when the runner answer is missing, while a
+        # runner paste still spawns nothing.
+        return _names_package_runner(tokens[0])
+    if not isinstance(target, str):
         return False
     package_name, _, version_spec = target.rpartition("@") if target.rfind("@") > 0 else (target, "", "")
     # ``wrangler@npm:other`` or a URL spec can install a different package.
     if version_spec and not _VERSION_OR_TAG.fullmatch(version_spec):
         return False
     return profile_for_executable(package_name) is not None
+
+
+_UNREADABLE = object()
+
+# The runner names the native grammar reads a launched bin through, so a paste
+# this list does not name has no runner target for the native answer to miss.
+_PACKAGE_RUNNERS = frozenset({"npx", "bunx", "pnpm", "pnpx", "yarn", "npm"})
+
+
+def _names_package_runner(executable: str) -> bool:
+    name = Path(executable.replace("\\", "/")).name.lower()
+    if name.endswith(".cmd") or name.endswith(".exe"):
+        name = name[:-4]
+    return name in _PACKAGE_RUNNERS
+
+
+def _native_runner_target(tokens: Sequence[str], *, guard_home: Path | None = None) -> object:
+    """Return the launched bin's name, ``None``, or ``_UNREADABLE``."""
+
+    result = native_context_digest(
+        "package_runner_target",
+        {"tokens": [str(token) for token in tokens]},
+        guard_home=_resolve_digest_home(guard_home),
+    )
+    if not isinstance(result, dict) or result.get("status") != "ok":
+        record_local_cli_identity_failure("native_package_runner_target_unavailable")
+        return _UNREADABLE
+    target = result.get("package_runner_target")
+    if target is None:
+        return None
+    if not isinstance(target, str) or not target:
+        record_local_cli_identity_failure("native_package_runner_target_malformed")
+        return _UNREADABLE
+    return target
 
 
 _MCP_CLI_ID_PREFIX = "local-cli.mcp-"

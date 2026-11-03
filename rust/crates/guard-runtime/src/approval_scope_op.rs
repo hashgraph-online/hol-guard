@@ -18,10 +18,15 @@ use crate::package_authority_op::request_digest_with_limit;
 
 pub(crate) fn evaluate_approval_scope_request(
     request: &ApprovalScopeRequestV1,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest_with_limit(request, APPROVAL_SCOPE_MAX_BYTES)
         .map_err(|_| "native_approval_scope_too_large".to_owned())?;
-    let (status, code, payload) = match evaluate(request) {
+    let result = match owner {
+        Some(owner) => evaluate_with_owner(request, Some(owner)),
+        None => evaluate(request),
+    };
+    let (status, code, payload) = match result {
         Ok(payload) => ("ok".to_owned(), "ok".to_owned(), Some(payload)),
         Err(code) => ("error".to_owned(), code, None),
     };
@@ -36,13 +41,26 @@ pub(crate) fn evaluate_approval_scope_request(
 }
 
 pub(crate) fn evaluate(request: &ApprovalScopeRequestV1) -> Result<Value, String> {
+    evaluate_with_owner(request, None)
+}
+
+fn evaluate_with_owner(
+    request: &ApprovalScopeRequestV1,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> Result<Value, String> {
     if request.items.len() > APPROVAL_SCOPE_MAX_ITEMS {
         return Err("native_approval_scope_too_large".to_owned());
     }
     let items: Vec<Value> = request
         .items
         .iter()
-        .map(|item| contract_value(&contract(&View::new(item))))
+        .map(|item| {
+            let mut view = View::new(item);
+            view.native_bash_owner_verified = owner.is_some_and(|store| {
+                crate::native_bash_review_scope::owner_verified(item, store, None)
+            });
+            contract_value(&contract(&view))
+        })
         .collect();
     Ok(json!({ "items": items }))
 }

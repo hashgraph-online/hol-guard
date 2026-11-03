@@ -375,6 +375,10 @@ fn an_authenticated_answer_is_rendered() {
     assert_eq!(hooks[0].target, "/v1/hooks/codex?harness=codex&home=%2Fh");
     assert_eq!(hooks[0].header("X-Guard-Token"), Some(TOKEN));
     assert!(hooks[0].header("X-Guard-Daemon-Proof").is_some());
+    // No resident answered, and the daemon is told why.
+    assert!(hooks[0]
+        .header("X-Guard-Direct-Miss")
+        .is_some_and(|miss| !miss.is_empty()));
     let body: Value = serde_json::from_slice(&hooks[0].body).unwrap();
     assert_eq!(body["hook_event_name"], json!("Stop"));
 }

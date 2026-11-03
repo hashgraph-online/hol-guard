@@ -13,7 +13,7 @@ use std::time::{Duration, SystemTime};
 use base64::Engine;
 use serde_json::Value;
 
-use crate::codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
+use crate::codex_output_env::{Ctx, GitCheck, InspectionHost};
 use crate::codex_output_py::PyPath;
 use crate::sfrs_gh_actions_env as env_checks;
 use crate::sfrs_gh_actions_filters::{self as filters, ValueKind};
@@ -146,9 +146,6 @@ impl InspectionHost for Host {
     fn git_binary_trusted(&self, git: &str, _: &str) -> bool {
         let bin = format!("{}/bin", self.root);
         git == bin || git.starts_with(&format!("{bin}/"))
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("replay host does not run git")
     }
 }
 

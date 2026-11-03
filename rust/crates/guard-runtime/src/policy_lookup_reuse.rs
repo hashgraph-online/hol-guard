@@ -116,6 +116,7 @@ pub(crate) fn diagnose_miss(
         publisher: request.publisher.clone(),
         now: request.now.clone(),
         evidence: None,
+        current_action: None,
     };
     let mut answer = diagnose(connection, &probe, request.now.clone());
     if let Ok(need) = &answer {

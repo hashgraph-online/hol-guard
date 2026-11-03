@@ -43,7 +43,7 @@ pub(super) fn decision_names_secret_alias(
 
 /// The path a literal argument names: a plain word, or the value of a long
 /// `--option=value`. Other options name no file.
-fn operand(argument: &str) -> Option<&str> {
+pub(super) fn operand(argument: &str) -> Option<&str> {
     let value = match argument.strip_prefix("--") {
         Some(option) => option.split_once('=')?.1,
         None if argument.starts_with('-') => return None,

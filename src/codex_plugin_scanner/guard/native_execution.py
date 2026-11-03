@@ -40,14 +40,10 @@ _MCP_STDIO_SESSION_FEATURE = "mcp-stdio-session-v1"
 _MCP_STDIO_SESSION_OPEN_SCHEMA = "guard-mcp-stdio-session-open-request.v1"
 _MCP_STDIO_SESSION_IO_SCHEMA = "guard-mcp-stdio-session-io-request.v1"
 _MCP_STDIO_SESSION_RESULT_SCHEMA = "guard-mcp-stdio-session-result.v1"
-
-
-def _native_session_feature_available() -> bool:
-    status = native_runtime_status()
-    if not status.available or not status.compatible or status.identity is None or status.capabilities is None:
-        return False
-    features = set(status.capabilities.features)
-    return _RESIDENT_PROTOCOL_FEATURE in features and _MCP_STDIO_SESSION_FEATURE in features
+# Result envelopes that carry more than ``schema`` and ``result``.
+_RESULT_KEYS = {
+    "contained_node_execute": frozenset({"schema", "result", "refusal"}),
+}
 
 
 # Terminal/vocab statuses each session op may legitimately return. A reported
@@ -60,7 +56,7 @@ _MCP_SESSION_ACCEPTED_STATUS = {
     "mcp_stdio_session_close": frozenset({"closed", "error"}),
     "mcp_stdio_session_cancel": frozenset({"cancelled", "error"}),
 }
-_PROMPT_ANALYZE_FEATURE = "prompt-analyze-v1"
+_PROMPT_ANALYZE_FEATURE = "prompt-analyze-v2"
 
 
 def _request_id(prefix: str) -> str:
@@ -143,15 +139,35 @@ def _resident_request(
     result_schema = {
         "prompt_analyze": "guard-prompt-analyze-result.v1",
         "mcp_stdio_probe": "guard-mcp-stdio-probe-result.v1",
-        "contained_node_execute": "guard-contained-node-execute-result.v1",
+        "contained_node_execute": "guard-contained-node-execute-result.v2",
         "contained_typescript_execute": "guard-contained-typescript-execute-result.v1",
         "contained_package_script_execute": "guard-contained-package-script-execute-result.v1",
         "contained_workspace_write_execute": "guard-contained-workspace-write-execute-result.v1",
+        "containment_health_probe": "guard-containment-health-probe-result.v1",
+        "contained_execute": "guard-contained-execute-result.v1",
     }.get(operation)
-    if result_schema is not None:
+    if operation == "cloud_catalog":
+        # Producer/completion replies use a strict payload/error union, with
+        # no status field. Keep native validation refusals intact.
+        if decoded.get("schema") != "guard-cloud-catalog-result.v2":
+            return None
+        if set(decoded) == {"schema", "payload"}:
+            if not isinstance(decoded["payload"], dict):
+                return None
+        elif set(decoded) == {"schema", "error"}:
+            if not isinstance(decoded["error"], str) or decoded["error"] not in {
+                "catalog_invalid",
+                "catalog_limit",
+                "catalog_unavailable",
+            }:
+                return None
+        else:
+            return None
+    elif result_schema is not None:
         # These versioned Rust replies have no status field. Do not discard
         # valid native results or reinterpret them through a Python fallback.
-        if decoded.get("schema") != result_schema or set(decoded) != {"schema", "result"}:
+        result_keys = _RESULT_KEYS.get(operation, frozenset({"schema", "result"}))
+        if decoded.get("schema") != result_schema or set(decoded) != result_keys:
             return None
     else:
         # Session/terminal ops report success under their own status, not
@@ -180,10 +196,17 @@ def _resident_request(
             "approval_bulk_eligibility",
             "codex_request_resume",
             "daemon_route",
+            "context_assistance",
+            "context_agent",
             "daemon_handler",
+            "extension_control",
+            "extension_allow_hint",
+            "approval_extension_recommendation",
             "hook_authority_state",
+            "extension_control_authority",
             "hook_render",
             "protect_request",
+            "protect_advisory_merge",
             "hook_artifact_compose",
             "consumer_artifact_compose",
             "mcp_tool_call_identity",
@@ -192,10 +215,14 @@ def _resident_request(
             "command_policy_decide",
             "command_expression_validate",
             "reviewed_invocation_bindings_validate",
+            "tool_action_request_identity",
+            "verified_read_execute",
         }:
             accepted = frozenset({"ok", "error"})
         elif operation == "mcp_tool_policy_decide":
             accepted = frozenset({"ok", "need", "error"})
+        elif operation == "native_bash_prepare":
+            accepted = frozenset({"ok", "error", "denied", "unavailable"})
         accepted_statuses = accepted if accepted is not None else frozenset({"ok"})
         if decoded.get("status") not in accepted_statuses:
             if record_resilience and not record_success:
@@ -211,6 +238,15 @@ def _resident_request(
 # ---------------------------------------------------------------------------
 
 
+class ContainedVerdictUnavailableError(RuntimeError):
+    """The resident gave no usable verdict for a contained launch.
+
+    Raised only for a caller that asked for it: a transport failure, a missing
+    feature, a schema mismatch or an undecodable reply, as distinct from a
+    well-formed reply that returns the launch to review.
+    """
+
+
 def _contained_request(
     *,
     op_prefix: str,
@@ -219,9 +255,9 @@ def _contained_request(
     manager: str,
     argv: Sequence[str],
     guard_home: Path,
-    evidence: dict[str, object] | None = None,
     extra_fields: dict[str, object] | None = None,
     timeout_seconds: float = 10.0,
+    require_verdict: bool = False,
 ) -> dict[str, object] | None:
     request: dict[str, object] = {
         "schema": request_schema,
@@ -231,8 +267,6 @@ def _contained_request(
         "argv": list(argv),
         "guard_home": str(guard_home),
     }
-    if evidence is not None:
-        request["evidence"] = evidence
     if extra_fields:
         request.update(extra_fields)
     decoded = _resident_request(
@@ -243,9 +277,20 @@ def _contained_request(
         required_feature=_CONTAINED_EXECUTION_FEATURE,
     )
     if decoded is None:
+        if require_verdict:
+            raise ContainedVerdictUnavailableError("resident_unavailable")
         return None
+    refusal = decoded.get("refusal")
+    if isinstance(refusal, str) and refusal:
+        # The resident decided this launch must stop rather than return to
+        # review, where it would otherwise run uncontained.
+        raise SystemExit(refusal)
     result = decoded.get("result")
-    return result if isinstance(result, dict) else None
+    if isinstance(result, dict):
+        return result
+    if require_verdict and result is not None:
+        raise ContainedVerdictUnavailableError("result_invalid")
+    return None
 
 
 _CONTAINED_RUNNER_MAX_SECONDS = 600.0
@@ -268,7 +313,7 @@ def _contained_runner_request(
     shim_directory: Path,
     environment: Mapping[str, str],
     timeout_seconds: float,
-    evidence: dict[str, object] | None,
+    require_verdict: bool = False,
 ) -> dict[str, object] | None:
     """Send one contained local-runner request.
 
@@ -290,16 +335,19 @@ def _contained_runner_request(
         manager=manager,
         argv=argv,
         guard_home=guard_home,
-        evidence=evidence,
         extra_fields=extra_fields,
         timeout_seconds=process_timeout + _CONTAINED_RUNNER_TRANSPORT_SLACK_SECONDS,
+        require_verdict=require_verdict,
     )
 
 
+# runner -> (resident operation, request schema). The node and TypeScript
+# requests carry only the shim's manager and argv; the resident parses the
+# launch intent itself.
 _RUNNER_OPERATIONS = {
-    "node": "contained_node_execute",
-    "typescript": "contained_typescript_execute",
-    "package_script": "contained_package_script_execute",
+    "node": ("contained_node_execute", "guard-contained-node-execute-request.v2"),
+    "typescript": ("contained_typescript_execute", "guard-contained-typescript-execute-request.v2"),
+    "package_script": ("contained_package_script_execute", "guard-contained-package-script-execute-request.v1"),
 }
 
 
@@ -312,15 +360,21 @@ def contained_runner_execute_native(
     guard_home: Path,
     shim_directory: Path,
     environment: Mapping[str, str],
-    evidence: dict[str, object] | None = None,
     timeout_seconds: float = 120.0,
+    require_verdict: bool = False,
 ) -> ContainedRunnerResult | None:
-    """Run one exact local runner in the resident and decode its typed result."""
+    """Run one exact local runner in the resident and decode its typed result.
 
-    operation = _RUNNER_OPERATIONS[runner]
+    A node launch the resident refuses outright raises ``SystemExit`` with
+    the resident's reason instead of returning to review. With
+    ``require_verdict``, a reply that carries no usable verdict raises
+    ``ContainedVerdictUnavailableError`` instead of returning ``None``.
+    """
+
+    operation, request_schema = _RUNNER_OPERATIONS[runner]
     result = _contained_runner_request(
         op_prefix=operation,
-        request_schema=f"guard-{operation.replace('_', '-')}-request.v1",
+        request_schema=request_schema,
         workspace=workspace,
         manager=manager,
         argv=argv,
@@ -328,13 +382,15 @@ def contained_runner_execute_native(
         shim_directory=shim_directory,
         environment=environment,
         timeout_seconds=timeout_seconds,
-        evidence=evidence,
+        require_verdict=require_verdict,
     )
     if result is None:
         return None
     try:
         return _contained_runner_result(result)
     except (KeyError, TypeError, ValueError):
+        if require_verdict:
+            raise ContainedVerdictUnavailableError("result_invalid") from None
         return None
 
 
@@ -372,7 +428,13 @@ def contained_workspace_write_execute_native(
         operation="contained_workspace_write_execute",
         request=request,
         guard_home=guard_home,
-        timeout_seconds=timeout_seconds,
+        # The request above already hands the write its full execution budget.
+        # Waiting for exactly that long leaves nothing for the resident to spawn
+        # the process, drain its output and frame a reply, so a write that uses
+        # its whole budget would come back as a transport failure and count
+        # toward the shared native-runtime circuit. The contained runners add
+        # the same slack for the same reason.
+        timeout_seconds=timeout_seconds + _CONTAINED_RUNNER_TRANSPORT_SLACK_SECONDS,
         required_feature=_CONTAINED_EXECUTION_FEATURE,
     )
     if decoded is None:
@@ -384,6 +446,43 @@ def contained_workspace_write_execute_native(
         return _contained_workspace_write_result(result)
     except (KeyError, TypeError, ValueError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# Containment health probe op
+# ---------------------------------------------------------------------------
+
+# The resident runs a real contained process under a five second timeout and
+# may spend another five seconds reaping it, on top of resident start-up and
+# sandbox setup. This matches the resident's own ceiling for the operation
+# (CONTAINMENT_HEALTH_PROBE_TIMEOUT_CEILING_MS), which clamps anything larger.
+_CONTAINMENT_HEALTH_PROBE_SECONDS = 15.0
+
+
+def containment_health_probe_native(
+    *,
+    daemon_fingerprint: str,
+    guard_home: Path,
+) -> dict[str, object] | None:
+    """Ask the resident for current containment health evidence."""
+
+    request: dict[str, object] = {
+        "schema": "guard-containment-health-probe-request.v1",
+        "request_id": _request_id("containment_health_probe"),
+        "daemon_fingerprint": daemon_fingerprint,
+        "guard_home": str(guard_home),
+    }
+    decoded = _resident_request(
+        operation="containment_health_probe",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=_CONTAINMENT_HEALTH_PROBE_SECONDS,
+        required_feature=_CONTAINED_EXECUTION_FEATURE,
+    )
+    if decoded is None:
+        return None
+    result = decoded.get("result")
+    return result if isinstance(result, dict) else None
 
 
 # ---------------------------------------------------------------------------
@@ -600,6 +699,7 @@ def prompt_analyze_native(
     harness: str | None = None,
     config_path: str | None = None,
     requests: Sequence[Mapping[str, object]] | None = None,
+    artifacts: Sequence[Mapping[str, object]] | None = None,
     prior_policy_present: bool | None = None,
     approved_classes: Sequence[str] | None = None,
     timeout_seconds: float = 10.0,
@@ -614,6 +714,12 @@ def prompt_analyze_native(
         not isinstance(requests, Sequence)
         or isinstance(requests, (str, bytes, bytearray))
         or not all(isinstance(item, Mapping) for item in requests)
+    ):
+        return None
+    if artifacts is not None and (
+        not isinstance(artifacts, Sequence)
+        or isinstance(artifacts, (str, bytes, bytearray))
+        or not all(isinstance(item, Mapping) for item in artifacts)
     ):
         return None
     if approved_classes is not None and (
@@ -632,6 +738,7 @@ def prompt_analyze_native(
         "harness": harness,
         "config_path": config_path,
         "requests": [dict(r) for r in requests] if requests is not None else None,
+        "artifacts": [dict(a) for a in artifacts] if artifacts is not None else None,
         "prior_policy_present": prior_policy_present,
         "approved_classes": list(approved_classes) if approved_classes is not None else None,
         "guard_home": str(guard_home),

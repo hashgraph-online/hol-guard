@@ -11,12 +11,12 @@ Four rounds, each with its own command and its own grant:
 
 * the identical request under the same ``tool_use_id``: allowed, the approval
   is reused, which is the contract working as intended;
-* the identical command under a fresh ``tool_use_id``, which is what a real
-  Claude Code retry sends, since the model emits a new tool-use block:
-  allowed, and the approval is spent. ``request_payload_identity`` drops the
-  transport call id from the review anchor, so the approval reaches the retry
-  the model actually sends and only one of them; a later identical attempt is
-  reviewed again;
+* the identical command under a fresh ``tool_use_id`` and ``prompt_id``, which
+  is what a real Claude Code retry sends: the model emits a new tool-use block,
+  in the turn after the user answers. Allowed, and the approval is spent.
+  ``request_payload_identity`` drops both from the review anchor, so the
+  approval reaches the retry the model actually sends and only one of them; a
+  later identical attempt is reviewed again;
 * a reworded command: reviewed again, the approval binds the exact action;
 * an ordinary ``git status`` command whose row has no once-retry contract:
   attempting once approval is rejected without recording consent, and the
@@ -43,13 +43,14 @@ REVIEW_ACTIONS = {"review", "require-reapproval"}
 RETRY_CONTRACT = "native-review-v4:"
 
 
-def _payload(command: str, use_id: str, workspace: Path) -> dict[str, object]:
+def _payload(command: str, use_id: str, workspace: Path, prompt_id: str = "prompt-review") -> dict[str, object]:
     return {
         "hook_event_name": "PreToolUse",
         "tool_name": "bash",
         "tool_input": {"command": command},
         "session_id": "approved-retry",
         "tool_use_id": use_id,
+        "prompt_id": prompt_id,
         "cwd": str(workspace),
     }
 
@@ -89,6 +90,7 @@ def _approve_then_retry(
     retry_command: str | None = None,
     retry_use_id: str | None = None,
     later_use_id: str | None = None,
+    retry_prompt_id: str = "prompt-review",
 ) -> dict[str, Any]:
     """Review one command, grant that row, and report what its retry got.
 
@@ -113,7 +115,7 @@ def _approve_then_retry(
     assert queued[0]["policy_action"] in REVIEW_ACTIONS, queued[0]
     _grant(store, queued[0]["request_id"], workspace)
 
-    retry_payload = _payload(retry_command or command, retry_use_id or use_id, workspace)
+    retry_payload = _payload(retry_command or command, retry_use_id or use_id, workspace, retry_prompt_id)
     retry = worker.review_http_payload(
         payload=retry_payload,
         deadline=time.monotonic() + WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS,
@@ -128,7 +130,7 @@ def _approve_then_retry(
     }
     if later_use_id is not None:
         later = worker.review_http_payload(
-            payload=_payload(retry_command or command, later_use_id, workspace),
+            payload=_payload(retry_command or command, later_use_id, workspace, retry_prompt_id),
             deadline=time.monotonic() + WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS,
             **kwargs,
         )
@@ -173,6 +175,7 @@ def test_an_approval_carries_only_the_request_it_was_queued_for(
             use_id="toolu_wc_first",
             retry_use_id="toolu_wc_retry",
             later_use_id="toolu_wc_later",
+            retry_prompt_id="prompt-after-approval",
         )
         reworded = _approve_then_retry(
             worker,
@@ -195,9 +198,10 @@ def test_an_approval_carries_only_the_request_it_was_queued_for(
     assert same_id["granted_binding"].startswith(RETRY_CONTRACT), outcomes
     assert same_id["policy_action"] == "allow", outcomes
     assert same_id["requeued_bindings"] == [], outcomes
-    # The retry the model actually sends carries a new tool-use id, and the
-    # review anchor leaves that transport id out, so the approval the operator
-    # just gave covers it: once, and the next identical attempt is reviewed.
+    # The retry the model actually sends carries a new tool-use id and, in the
+    # turn after the user answers, a new prompt id. The review anchor leaves
+    # both out, so the approval the operator just gave covers it: once, and the
+    # next identical attempt is reviewed.
     assert new_id["granted_binding"].startswith(RETRY_CONTRACT), outcomes
     assert new_id["policy_action"] == "allow", outcomes
     assert new_id["requeued_bindings"] == [], outcomes

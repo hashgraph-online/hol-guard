@@ -192,8 +192,21 @@ fn state_transitions_match_the_retired_python() {
                     ops += 1;
                     let op = action["op"].as_str().expect("op");
                     let request = op_request(action, &path, &key_b64);
-                    let result =
+                    let mut result =
                         evaluate(&request).unwrap_or_else(|code| panic!("{label}: {code}"));
+                    if op == "cursor_store_pending_state" {
+                        // The retired Python only said whether it stored the row;
+                        // the resident also names it, and the name must be the key
+                        // the recorded request carried.
+                        let named = result
+                            .as_object_mut()
+                            .and_then(|reply| reply.remove("state_key"));
+                        assert_eq!(
+                            named.as_ref(),
+                            Some(&action["args"]["state_key"]),
+                            "{label}: {op} state_key"
+                        );
+                    }
                     if op != "claude_record_notice" {
                         assert_eq!(result, action["result"], "{label}: {op} result");
                     }

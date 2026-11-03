@@ -33,6 +33,8 @@ GUARD_STORE_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _REQUEST_SCHEMA = "guard-store-request.v1"
 _RESULT_SCHEMA = "guard-store-result.v1"
 _ENVELOPE_SLACK_BYTES = 4096
+# Argument names whose values the request digest never covers.
+_UNDIGESTED_ARGS = frozenset({"integrity_key_b64"})
 _CODE = re.compile(r"^native_guard_store_[a-z_]{1,48}$")
 _SQLITE_ERROR, _SQLITE_BUSY, _SQLITE_IOERR, _SQLITE_CORRUPT = 1, 5, 10, 11
 
@@ -97,6 +99,23 @@ def _raise_for_code(code: object, payload: object) -> None:
     raise _unavailable(reason)
 
 
+def _digest_material(request: Mapping[str, object]) -> dict[str, object]:
+    """``request`` without the argument values the digest must never cover.
+
+    A policy-integrity key travels in ``args``; the resident drops the same
+    names before it digests the request, so a reply, log or diagnostic that
+    carries ``request_sha256`` reveals nothing about the key.
+    """
+
+    args = request.get("args")
+    if not isinstance(args, Mapping) or not any(name in args for name in _UNDIGESTED_ARGS):
+        return dict(request)
+    return {
+        **request,
+        "args": {name: value for name, value in args.items() if name not in _UNDIGESTED_ARGS},
+    }
+
+
 def native_guard_store_call(
     *,
     store_path: Path,
@@ -106,6 +125,7 @@ def native_guard_store_call(
     args: Mapping[str, object],
     deadline_monotonic: float,
     busy_timeout_seconds: float | None = None,
+    prerequisite_store: Any | None = None,
 ) -> tuple[Any, int | None]:
     """Run one store method in the resident; return ``(payload, outbox_generation)``.
 
@@ -113,9 +133,14 @@ def native_guard_store_call(
     storage-gate wait. The remaining budget is recomputed here, after startup
     work, and bounds both the SQLite busy timeout and the transport wait, so the
     call never outlasts the caller's deadline.
+
+    ``prerequisite_store`` is the caller's own open store. The resident's
+    verifier key is derived from the policy-integrity master, so provisioning it
+    from any other store would write a key the caller's rows cannot be verified
+    against; callers that have a store pass it rather than let one be opened.
     """
 
-    if not ensure_resident_prerequisite(guard_home):
+    if not ensure_resident_prerequisite(guard_home, store=prerequisite_store):
         raise _unavailable(prerequisite_unavailable_code("native_guard_store_prerequisite_unavailable", guard_home))
     remaining_seconds = deadline_monotonic - time.monotonic()
     if remaining_seconds <= 0:
@@ -137,7 +162,7 @@ def native_guard_store_call(
         "args": dict(args),
     }
     try:
-        digest = "sha256:" + _canonical_request_sha256(request)
+        digest = "sha256:" + _canonical_request_sha256(_digest_material(request))
     except (TypeError, ValueError):
         raise _unavailable("native_guard_store_request_invalid") from None
     remaining_seconds = deadline_monotonic - time.monotonic()

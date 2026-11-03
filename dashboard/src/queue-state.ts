@@ -694,6 +694,10 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
     return "destructive_shell";
   }
 
+  if (secretReadAction(item, command, text) && hasSecretSignal(decisionCategories, text)) {
+    return "secret_file_read";
+  }
+
   const commandCategory = categoryFromCommandExtension(
     envelope?.command_category ?? item.queue_command_category,
   );
@@ -703,6 +707,14 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
 
   if (gitOperationCommand(command)) {
     return "git_operation";
+  }
+
+  if (dockerCommand(command)) {
+    return "docker_command";
+  }
+
+  if (githubCommand(command)) {
+    return "github_command";
   }
 
   if (fileUploadCommand(command, text)) {
@@ -727,10 +739,6 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
 
   if (packageInstallCommand(command)) {
     return "package_install";
-  }
-
-  if (secretReadAction(item, command, text) && hasSecretSignal(decisionCategories, text)) {
-    return "secret_file_read";
   }
 
   if (envelope?.action_type === "mcp_tool") {
@@ -771,7 +779,32 @@ function categoryFromCommandExtension(extensionId: string | null | undefined): Q
   if (extensionId === "command.git") return "git_operation";
   if (extensionId === "command.container-runtime") return "docker_command";
   if (extensionId === "command.github" || extensionId === "command.cicd.github") return "github_command";
+  if (extensionId === null || extensionId === undefined) return null;
+  // Every other command extension still names the family that reviewed the
+  // command, so its queue category follows the extension rather than a
+  // command-text guess.
+  if (extensionId.startsWith("command.kubernetes-")) return "container_or_deploy";
+  if (
+    extensionId.startsWith("command.cloud.") ||
+    extensionId.startsWith("command.platform.") ||
+    extensionId.startsWith("command.dns.") ||
+    extensionId === "command.infrastructure-as-code" ||
+    extensionId === "command.cdn" ||
+    extensionId === "command.load-balancer" ||
+    extensionId === "command.api-gateway" ||
+    extensionId === "command.monitoring"
+  ) {
+    return "container_or_deploy";
+  }
+  if (extensionId.startsWith("command.remote.")) return "network";
+  if (extensionId === "command.data-protection") return "file_upload";
   return null;
+}
+
+/** The command extension that reviewed this request, when Guard recorded one. */
+export function queueCommandExtensionId(item: GuardApprovalRequest): string | null {
+  const category = item.action_envelope_json?.command_category ?? item.queue_command_category;
+  return typeof category === "string" && category.startsWith("command.") ? category : null;
 }
 
 function queueCategoryText(item: GuardApprovalRequest): string {
@@ -1058,8 +1091,17 @@ function fileDeleteOrCleanupCommand(command: string, text: string): boolean {
 }
 
 function gitOperationCommand(command: string): boolean {
-  const normalized = command.toLowerCase();
-  return /\bgit\s+(?:add|commit|push|pull|merge|rebase|reset|checkout|restore|clean|stash|tag)\b/.test(normalized);
+  return /\bgit(?:\s+(?:-[cC](?:\s+\S+|\S+)|--git-dir(?:=|\s+)\S+|--work-tree(?:=|\s+)\S+|--no-pager|--bare))*\s+(?:add|commit|push|pull|fetch|clone|status|diff|log|show|branch|rev-parse|worktree|remote|config|merge|rebase|reset|checkout|restore|clean|stash|tag|apply|cherry-pick|revert|ls-files|ls-remote|grep)\b/i.test(
+    command
+  );
+}
+
+function dockerCommand(command: string): boolean {
+  return /(?:^|[;&|]\s*)\s*(?:sudo\s+)?(?:docker|docker-compose)(?:\s|$)/i.test(command);
+}
+
+function githubCommand(command: string): boolean {
+  return /(?:^|[;&|]\s*)\s*(?:sudo\s+)?gh\s+\S+/i.test(command);
 }
 
 function processControlCommand(command: string): boolean {

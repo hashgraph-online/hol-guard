@@ -2105,10 +2105,7 @@ mod tests {
             let dir = std::env::temp_dir().join(format!(
                 "hg-rtm008-{}-{}",
                 std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
+                crate::unique_nanos::unique_nanos()
             ));
             fs::create_dir_all(&dir).unwrap();
             TempDir(dir)

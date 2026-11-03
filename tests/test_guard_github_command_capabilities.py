@@ -5,9 +5,8 @@ from typing import Final
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.github_capability_contract import GitHubCommandCapability
-from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.native_github_capability_support import GitHubCommandCapability, github_cli_assessment
 
 
 def _text(*parts: str) -> str:
@@ -51,7 +50,12 @@ GITHUB_CAPABILITY_CASES = (
     (("ssh-key", "list"), "read_remote", "github.command.proven-access-read"),
     (("gpg-key", "list"), "read_remote", "github.command.proven-access-read"),
     (("ssh-key", "delete", "123"), "access_remote", "github.command.access-mutation"),
-    (("run", "cancel", "--help"), "workflow_remote", "github.command.workflow-mutation"),
+    (("run", "cancel", "--help"), "read_local", "github.command.local-help"),
+    (
+        ("run", "rerun", "42", "--job", "--help"),
+        "workflow_remote",
+        "github.command.workflow-mutation",
+    ),
     (
         ("run", "rerun", "31707639186", "--repo", "hashgraph-online/hol-guard", "--failed"),
         "routine_workflow_remote",
@@ -536,7 +540,12 @@ GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
         (("ssh-key", "list"), "read_remote", "github.command.proven-access-read"),
         (("gpg-key", "list"), "read_remote", "github.command.proven-access-read"),
         (("ssh-key", "delete", "123"), "access_remote", "github.command.access-mutation"),
-        (("run", "cancel", "--help"), "workflow_remote", "github.command.workflow-mutation"),
+        (("run", "cancel", "--help"), "read_local", "github.command.local-help"),
+        (
+            ("run", "rerun", "42", "--job", "--help"),
+            "workflow_remote",
+            "github.command.workflow-mutation",
+        ),
         (
             ("--repo", "example/project", "workflow", "view", "release.yml"),
             "read_remote",
@@ -745,10 +754,10 @@ GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
         (("project-alias",), "unknown", "github.command.extension-or-alias"),
     ),
 )
-def test_classify_github_cli_capabilities(
+def test_github_cli_capability_assessments(
     args: tuple[str, ...], capability: GitHubCommandCapability, reason_code: str
 ) -> None:
-    assessment = classify_github_cli(args)
+    assessment = github_cli_assessment(args)
 
     assert assessment.capability == capability
     assert assessment.reason_code == reason_code
@@ -773,8 +782,8 @@ def test_classify_github_cli_capabilities(
         ("api", "graphql", "-X", "GET", "-f", "query=query { viewer { login } }"),
     ),
 )
-def test_classify_github_cli_rejects_ambiguous_graphql_inputs(args: tuple[str, ...]) -> None:
-    assessment = classify_github_cli(args)
+def test_github_cli_assessment_rejects_ambiguous_graphql_inputs(args: tuple[str, ...]) -> None:
+    assessment = github_cli_assessment(args)
 
     assert assessment.capability == "unknown"
 
@@ -805,7 +814,7 @@ def test_guard_keeps_routine_review_thread_resolution_with_data_projection_promp
         *jq_arguments,
     )
 
-    assessment = classify_github_cli(args)
+    assessment = github_cli_assessment(args)
 
     assert assessment.capability == "routine_review_thread_remote"
     assert (
@@ -835,7 +844,7 @@ def test_guard_keeps_routine_review_thread_resolution_with_data_projection_promp
 def test_guard_reviews_routine_review_thread_resolution_with_other_jq_projections(
     jq_arguments: tuple[str, ...],
 ) -> None:
-    assessment = classify_github_cli(
+    assessment = github_cli_assessment(
         (
             "api",
             "graphql",
@@ -1095,8 +1104,8 @@ def test_guard_requires_confirmation_for_github_mutations_and_unverified_composi
 
 
 def test_native_classification_is_memoized_but_failures_are_not(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import native_github_cli
-    from codex_plugin_scanner.guard.runtime import github_command_capabilities as bridge
+    from tests import native_github_capability_support as bridge
+    from tests import native_github_cli
 
     answers: list[native_github_cli.NativeGitHubCliClassification | None] = [
         None,
@@ -1110,12 +1119,13 @@ def test_native_classification_is_memoized_but_failures_are_not(monkeypatch: pyt
         calls.append(tuple(args))
         return answers[min(len(calls), len(answers)) - 1]
 
+    # The bridge looks the classifier up per call, so patching the source
+    # module is the seam memoization runs behind.
     monkeypatch.setattr(native_github_cli, "github_cli_classify_native", fake)
-    monkeypatch.setattr(bridge, "_NATIVE_CACHE", {})
+    monkeypatch.setattr(bridge, "_ASSESSMENT_CACHE", {})
     args = ("pr", "view", "1")
 
-    assert bridge.classify_github_cli(args).capability == "unknown"
-    assert bridge.classify_github_cli(args).capability == "read_remote"
-    assert bridge.classify_github_cli(args).capability == "read_remote"
-    assert bridge.static_markdown_pr_body_file_operand(args) is None
+    assert bridge.github_cli_assessment(args).capability == "unknown"
+    assert bridge.github_cli_assessment(args).capability == "read_remote"
+    assert bridge.github_cli_assessment(args).capability == "read_remote"
     assert len(calls) == 2

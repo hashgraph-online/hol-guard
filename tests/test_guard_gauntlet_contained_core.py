@@ -8,6 +8,7 @@ import json
 import os
 import sys
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -300,7 +301,8 @@ def test_workspace_sandbox_rewrite_is_judged_like_other_containment(fixture, tmp
     pre["reason_code"] = workspace_reason
     pre["native_observation"]["required_execution_profile"] = "workspace-contained-v1"
     pre["native_observation"]["native_receipt"]["reason_code"] = workspace_reason
-    assessment = assess_case(SCENARIO, case)
+    # The case drove the workspace route here, so it is the workspace route it declares.
+    assessment = assess_case(replace(SCENARIO, decision_paths=(workspace_reason,)), case)
     assert assessment["outcome"] == "pass", assessment["reason"]
 
 
@@ -480,3 +482,39 @@ def test_unbound_containment_deny_still_interrupts(fixture, tmp_path):
 def test_a_silent_curl_network_exit_counts_as_a_sandbox_refusal(command, exit_code, refused):
     call = {"result": {"content": [{"type": "text", "text": "000"}]}}
     assert _sandbox_refused(call, {"exitCode": exit_code}, {"command": command}) is refused
+
+
+@pytest.mark.parametrize(("exit_code", "excused"), [(1, True), (2, True), (126, False), (127, False)])
+def test_a_declared_benign_exit_survives_the_contained_rerun(fixture, tmp_path, exit_code, excused):
+    """A command the catalog declares as answering by failing keeps that answer under containment."""
+    case = _contained(fixture, tmp_path)
+    end = _end(case)
+    end["isError"] = True
+    end["result"]["details"]["exitCode"] = exit_code
+    calls, _ = reconcile(case["events"])
+    _, found = contained_calls("allow", case, calls, benign_exit=frozenset({ORIGINAL["command"]}))
+    if excused:
+        assert found is None
+    else:
+        assert found == ("false-positive", f"Guard's contained run of ordinary work failed (exit {exit_code})")
+
+
+def test_an_undeclared_command_still_fails_on_its_own_exit(fixture, tmp_path):
+    """The declaration names one command; another command's failure is still Guard interrupting work."""
+    case = _contained(fixture, tmp_path)
+    end = _end(case)
+    end["isError"] = True
+    end["result"]["details"]["exitCode"] = 1
+    calls, _ = reconcile(case["events"])
+    _, found = contained_calls("allow", case, calls, benign_exit=frozenset({"pytest -q"}))
+    assert found == ("false-positive", "Guard's contained run of ordinary work failed (exit 1)")
+
+
+def test_the_catalog_declaration_reaches_the_contained_judge(fixture, tmp_path):
+    """``assess_case`` carries ``benign_exit_commands`` through, so the lane and the host agree."""
+    case = _contained(fixture, tmp_path)
+    end = _end(case)
+    end["isError"] = True
+    end["result"]["details"]["exitCode"] = 1
+    scenario = replace(SCENARIO, benign_exit_commands=(ORIGINAL["command"],))
+    assert assess_case(scenario, case)["reason"] != "Guard's contained run of ordinary work failed (exit 1)"

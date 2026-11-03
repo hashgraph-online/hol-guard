@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIde
 from codex_plugin_scanner.guard.runtime.observed_local_clis import _latest_request_times
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_local_cli_retention import LocalCliForgetError, LocalCliReplaySkippedError
+from tests.native_store_shims import local_cli_replay_allowed
 
 NOW = datetime(2026, 10, 1, tzinfo=timezone.utc)
 
@@ -234,17 +235,17 @@ def test_history_replay_skips_forgotten_and_expired_identities(tmp_path: Path) -
     recent = datetime.now(timezone.utc) - timedelta(days=2)
     expired = datetime.now(timezone.utc) - timedelta(days=45)
 
-    assert store.local_cli_replay_allowed(forgotten.identity_hash, recent.isoformat()) is False
-    assert store.local_cli_replay_allowed("7" * 64, expired.isoformat()) is False
+    assert local_cli_replay_allowed(store, forgotten.identity_hash, recent.isoformat()) is False
+    assert local_cli_replay_allowed(store, "7" * 64, expired.isoformat()) is False
     # The cutoff is relative to the replaying discovery's own time.
     replay_time = (expired + timedelta(days=1)).isoformat()
-    assert store.local_cli_replay_allowed("7" * 64, expired.isoformat(), now=replay_time) is True
-    assert store.local_cli_replay_allowed("7" * 64, recent.isoformat()) is True
+    assert local_cli_replay_allowed(store, "7" * 64, expired.isoformat(), now=replay_time) is True
+    assert local_cli_replay_allowed(store, "7" * 64, recent.isoformat()) is True
     store.record_local_cli_observation(forgotten, seen_at=recent.isoformat(), surface="cli", only_if_missing=True)
     assert forgotten.cli_id not in _ids(store)
 
     later = datetime.now(timezone.utc) + timedelta(minutes=1)
-    assert store.local_cli_replay_allowed(forgotten.identity_hash, later.isoformat()) is True
+    assert local_cli_replay_allowed(store, forgotten.identity_hash, later.isoformat()) is True
     store.record_local_cli_observation(forgotten, seen_at=later.isoformat(), surface="cli")
     assert forgotten.cli_id in _ids(store)
 
@@ -283,7 +284,7 @@ def test_pruned_record_returns_from_recent_history_but_forgotten_one_does_not(tm
 
     # Expiry is not a Forget: a receipt newer than the stale last_seen_at
     # restores the record on the next history replay.
-    assert store.local_cli_replay_allowed(pruned.identity_hash, _stamp(2), now=_stamp(0)) is True
+    assert local_cli_replay_allowed(store, pruned.identity_hash, _stamp(2), now=_stamp(0)) is True
     store.record_local_cli_observation(
         pruned, seen_at=_stamp(2), surface="cli", only_if_missing=True, replayed_at=_stamp(0)
     )

@@ -122,8 +122,18 @@ fn json_type_name(value: &Value) -> &'static str {
     match value {
         Value::Null => "NoneType",
         Value::Bool(_) => "bool",
-        Value::Number(n) if n.is_i64() || n.is_u64() => "int",
-        Value::Number(_) => "float",
+        // `json.loads` builds an `int` unless the literal carries a fraction or
+        // an exponent, however many digits it has, so a 31-digit integer is
+        // still an `int`. `arbitrary_precision` keeps the literal's own text,
+        // so read that rather than asking whether the value fits an i64.
+        Value::Number(number) => {
+            let text = number.to_string();
+            if text.contains(['.', 'e', 'E']) {
+                "float"
+            } else {
+                "int"
+            }
+        }
         Value::String(_) => "str",
         Value::Array(_) => "list",
         Value::Object(_) => "dict",
@@ -203,6 +213,39 @@ pub fn most_restrictive_of(a: GuardAction, b: GuardAction) -> GuardAction {
     } else {
         a
     }
+}
+
+// ---------------------------------------------------------------------------
+// approval_resolution_block_reason
+// ---------------------------------------------------------------------------
+
+/// `approval_resolution.py:TERMINAL_POLICY_ACTION_NOT_RESOLVABLE`.
+pub const TERMINAL_POLICY_ACTION_NOT_RESOLVABLE: &str = "terminal_policy_action_not_resolvable";
+
+/// `approval_resolution.py:approval_resolution_block_reason`: why a stored
+/// approval row cannot accept a user resolution, or `None` when it can.
+///
+/// A row whose decision contract could not be read is inconsistent, and so is
+/// one whose stored policy action is not a lattice action, because neither can
+/// be ranked against the answer a user would give. `block` and
+/// `sandbox-required` are terminal: no answer to a prompt lifts them, so the
+/// row is left as it stands rather than resolved.
+pub fn approval_resolution_block_reason(
+    contract_error: &Value,
+    policy_action: &Value,
+) -> Option<&'static str> {
+    if !contract_error.is_null() {
+        return Some(crate::authoritative_decision::AUTHORITATIVE_DECISION_INCONSISTENT);
+    }
+    let normalized = normalize_guard_action_result(policy_action, GuardAction::RequireReapproval);
+    if !normalized.recognized() {
+        return Some(crate::authoritative_decision::AUTHORITATIVE_DECISION_INCONSISTENT);
+    }
+    matches!(
+        normalized.action,
+        GuardAction::Block | GuardAction::SandboxRequired
+    )
+    .then_some(TERMINAL_POLICY_ACTION_NOT_RESOLVABLE)
 }
 
 // ---------------------------------------------------------------------------
@@ -472,10 +515,18 @@ pub fn compose_action_from_signals(
     }
 
     if !risk.is_empty() {
+        // Ties keep the first signal the detector registry emitted, so the
+        // reason names the same detector the retired Python composer named.
         let top = risk
             .iter()
-            .max_by_key(|s| severity_rank(s.severity))
             .copied()
+            .reduce(|best, s| {
+                if severity_rank(s.severity) > severity_rank(best.severity) {
+                    s
+                } else {
+                    best
+                }
+            })
             .unwrap();
         return CompositionResult {
             action: final_action,

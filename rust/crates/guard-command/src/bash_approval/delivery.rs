@@ -23,12 +23,86 @@ pub fn bootstrap(source_bytes: usize, source_fd: u32) -> Result<String, Uncertai
     ))
 }
 
+/// Two-frame delivery. The native owner receives `R` only after Bash has read
+/// the complete source. It releases the second NUL after policy/grant commit;
+/// `S` acknowledges dispatch, and is not a completion receipt.
+pub fn acknowledged_bootstrap(
+    source_bytes: usize,
+    source_fd: u32,
+    ack_fd: u32,
+) -> Result<String, Uncertainty> {
+    if !(6..=255).contains(&ack_fd) || ack_fd == source_fd {
+        return Err(Uncertainty {
+            reason: "bash_delivery_bounds",
+            line: 1,
+        });
+    }
+    if source_bytes > 4 * MAX_SOURCE_BYTES || source_fd > 255 {
+        return Err(Uncertainty {
+            reason: "bash_delivery_bounds",
+            line: 1,
+        });
+    }
+    Ok(format!(
+        "__HOL_GUARD_READ() {{ local LC_ALL=C; \
+         IFS= read -r -d '' __HOL_GUARD_CODE <&{source_fd} || return 125; \
+         [ \"${{#__HOL_GUARD_CODE}}\" -eq {source_bytes} ]; }}; \
+         __HOL_GUARD_READ || exit 125; printf R >&{ack_fd} || exit 125; \
+         IFS= read -r -d '' __HOL_GUARD_AUTH <&{source_fd} || exit 125; \
+         [ -z \"$__HOL_GUARD_AUTH\" ] || exit 125; \
+         printf S >&{ack_fd} || exit 125; exec {ack_fd}>&-; eval \"$__HOL_GUARD_CODE\""
+    ))
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use std::io::Write;
     use std::process::{Command, Stdio};
 
     use super::*;
+
+    #[test]
+    fn acknowledged_bootstrap_requires_complete_source_and_empty_authorization() {
+        let source = b"printf executed";
+        for (frame, allowed) in [
+            ([source.as_slice(), b"\0\0"].concat(), true),
+            ([source.as_slice(), b"\0"].concat(), false),
+            ([source.as_slice(), b"\0not-authorized\0"].concat(), false),
+            (b"printf bad\0\0".to_vec(), false),
+            (source.to_vec(), false),
+        ] {
+            let mut command = Command::new("/bin/bash");
+            command.args([
+                "--noprofile",
+                "--norc",
+                "-c",
+                &format!(
+                    "exec 6>&2; {}",
+                    acknowledged_bootstrap(source.len(), 0, 6).unwrap()
+                ),
+            ]);
+            command
+                .env_clear()
+                .env("LC_ALL", "C")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            // Test-only ACK channel: fd6 is a duplicate of the child's captured
+            // stderr. Production uses a native-owned, bounded handshake pipe.
+            let mut child = command.spawn().unwrap();
+            child.stdin.take().unwrap().write_all(&frame).unwrap();
+            let result = child.wait_with_output().unwrap();
+            if allowed {
+                assert!(result.status.success());
+                assert_eq!(result.stderr, b"RS");
+                assert_eq!(result.stdout, b"executed");
+            } else {
+                assert_eq!(result.status.code(), Some(125));
+                assert!(result.stdout.is_empty());
+                assert!(!result.stderr.contains(&b'S'));
+            }
+        }
+    }
 
     fn run(source: &[u8], sent: &[u8]) -> std::process::Output {
         let mut child = Command::new("/bin/bash")

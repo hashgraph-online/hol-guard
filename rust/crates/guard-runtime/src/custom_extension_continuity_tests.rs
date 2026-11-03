@@ -1,5 +1,7 @@
 //! Replays continuity vectors recorded from the reference Python
-//! (`scripts/record_custom_extension_continuity_vectors.py`).
+//! (`scripts/record_custom_extension_continuity_vectors.py`) against the
+//! planners. `custom_extension_continuity_commit_tests.rs` replays the same
+//! vectors through the commit the resident answers.
 
 use serde_json::{json, Map, Value};
 
@@ -7,12 +9,22 @@ use super::*;
 
 const VECTORS: &str = include_str!("../tests/fixtures/custom_extension_continuity_vectors.json");
 
+/// The planners' own answer, which is what the vectors record.
+fn planned(request: &Value) -> Result<Value, &'static str> {
+    settle(match request["operation"].as_str() {
+        Some("plan") => plan(request),
+        Some("local_mutation") => local::local_mutation(request),
+        Some("public_state") => public_state(request),
+        _ => Err(Fail::Request),
+    })
+}
+
 #[test]
 fn continuity_matches_python_vectors() {
     let vectors: Vec<Value> = serde_json::from_str(VECTORS).expect("vectors");
     assert!(vectors.len() >= 300);
     for vector in &vectors {
-        let got = evaluate(&vector["request"]).expect("answer");
+        let got = planned(&vector["request"]).expect("answer");
         assert_eq!(got, vector["expected"], "vector {}", vector["name"]);
     }
 }
@@ -32,7 +44,7 @@ fn plan_loads_only_the_details_it_reads() {
         let mut lazy = request.clone();
         lazy["details"] = json!({});
         let got = loop {
-            let answer = evaluate(&lazy).expect("answer");
+            let answer = planned(&lazy).expect("answer");
             let Some(wanted) = answer.get("need_details").and_then(Value::as_array) else {
                 break answer;
             };

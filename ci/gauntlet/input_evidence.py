@@ -29,16 +29,40 @@ def fixture_path_aliases(replacements: dict[str, str]) -> dict[str, str]:
     return result
 
 
-def redact_value(value: Any, replacements: dict[str, str]) -> Any:
-    """Apply the same redactions to host and Guard evidence."""
+Redaction = str | re.Pattern[str]
+
+
+def _redaction_order(item: tuple[Redaction, str]) -> tuple[int, int]:
+    """Hide credentials before paths, and the longest spelling of each before its prefixes."""
+    matcher = item[0]
+    if isinstance(matcher, re.Pattern):
+        return (0, -len(matcher.pattern))
+    return (1, -len(matcher))
+
+
+def redact_value(value: Any, replacements: dict[Redaction, str]) -> Any:
+    """Apply the same redactions to host and Guard evidence.
+
+    A plain key is replaced literally. A compiled one stands for a secret the
+    transcript may have folded or re-encoded, and is substituted through a
+    function so its placeholder is never read as a backreference.
+
+    A mapping is rewritten on both sides. A tool that reports per-path or
+    per-token results names them in its property names, so a secret reaches the
+    export as readably from a key as from a value, and a path alias belongs on
+    a key for the same reason.
+    """
     if isinstance(value, str):
-        for old, new in sorted(replacements.items(), key=lambda item: -len(item[0])):
-            value = value.replace(old, new)
+        for old, new in sorted(replacements.items(), key=_redaction_order):
+            if isinstance(old, re.Pattern):
+                value = old.sub(lambda _match, text=new: text, value)
+            else:
+                value = value.replace(old, new)
         return value
     if isinstance(value, list):
         return [redact_value(item, replacements) for item in value]
     if isinstance(value, dict):
-        return {key: redact_value(item, replacements) for key, item in value.items()}
+        return {redact_value(key, replacements): redact_value(item, replacements) for key, item in value.items()}
     return value
 
 
@@ -54,7 +78,7 @@ def _unverified_row(row: dict, code: str) -> dict:
     return {**kept, "observer_error": True, "observer_error_code": code}
 
 
-def public_observations(rows: list[dict], replacements: dict[str, str]) -> list[dict]:
+def public_observations(rows: list[dict], replacements: dict[Redaction, str]) -> list[dict]:
     """Check original observer bytes before exporting comparable public inputs.
 
     A row whose input cannot be verified becomes an observer error naming the
@@ -173,7 +197,7 @@ def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str,
     return resolved == expected and all(completed[other] == reviewed[other] for other in reviewed if other != key)
 
 
-def public_native_receipt(receipt: object, replacements: dict[str, str]) -> dict[str, Any] | None:
+def public_native_receipt(receipt: object, replacements: dict[Redaction, str]) -> dict[str, Any] | None:
     """Keep only safe native denial metadata and structured extension binding."""
     if not isinstance(receipt, dict):
         return None
@@ -199,7 +223,7 @@ def public_native_receipt(receipt: object, replacements: dict[str, str]) -> dict
     return redact_value(selected, replacements)
 
 
-def public_native_extension_evidence(edge: object, replacements: dict[str, str]) -> dict[str, Any] | None:
+def public_native_extension_evidence(edge: object, replacements: dict[Redaction, str]) -> dict[str, Any] | None:
     """Export bounded full observations from an independent native expectation probe."""
     if not isinstance(edge, dict):
         return None

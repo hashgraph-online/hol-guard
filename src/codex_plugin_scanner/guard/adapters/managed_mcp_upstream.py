@@ -42,10 +42,12 @@ PROXY_LAUNCHER_ENV_KEYS = frozenset(
     }
 )
 _PROXY_HARNESSES = {
+    "cline-mcp-proxy": "cline",
     "codex-mcp-proxy": "codex",
     "opencode-mcp-proxy": "opencode",
     "copilot-mcp-proxy": "copilot",
     "cursor-mcp-proxy": "cursor",
+    "hermes-mcp-proxy": "hermes",
 }
 
 

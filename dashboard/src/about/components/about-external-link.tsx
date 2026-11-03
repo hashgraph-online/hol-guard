@@ -30,7 +30,7 @@ export function AboutExternalLink({
   if (!safe) {
     return (
       <span
-        className={[`text-slate-400 cursor-not-allowed`, className ?? ""].join(" ")}
+        className={[`text-brand-dark/75 cursor-not-allowed`, className ?? ""].join(" ")}
         title={errorReason}
       >
         {children}

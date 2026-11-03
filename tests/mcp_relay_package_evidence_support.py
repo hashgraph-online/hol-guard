@@ -119,7 +119,9 @@ def calls(monkeypatch: pytest.MonkeyPatch, parsed: dict[str, Any]) -> list[tuple
         parsed["extract"].append((tool_name, arguments, kwargs))
         return parsed["intent"]
 
-    def build(*, harness: str, intent: object, config_path: str, source_scope: str) -> SimpleNamespace:
+    def build(
+        *, harness: str, intent: object, config_path: str, source_scope: str, guard_home: object = None
+    ) -> SimpleNamespace:
         parsed["build"].append((harness, intent, config_path, source_scope))
         return SimpleNamespace(artifact_id=parsed["artifact_id"], artifact_type="package_request")
 

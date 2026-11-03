@@ -301,7 +301,6 @@ mod tests {
     use std::collections::BTreeMap;
     use std::fs;
     use std::os::unix::fs::{symlink, PermissionsExt};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::super::{ShimContext, ShimFacts};
     use super::record_package_shim_audit_result;
@@ -326,10 +325,7 @@ mod tests {
     }
 
     fn scratch(label: &str) -> std::path::PathBuf {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
+        let stamp = crate::unique_nanos::unique_nanos();
         let root = fs::canonicalize(std::env::temp_dir())
             .expect("temp dir")
             .join(format!("hol-guard-shim-audit-{label}-{stamp}"));
@@ -438,10 +434,7 @@ mod tests {
         if !metadata.file_type().is_symlink() {
             return;
         }
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
+        let stamp = crate::unique_nanos::unique_nanos();
         let logical =
             std::path::PathBuf::from(format!("/tmp/hol-guard-shim-audit-syslink-{stamp}"));
         let home = logical.join("guard-home");
@@ -460,16 +453,12 @@ mod tests {
 mod windows_tests {
     use std::fs;
     use std::process::Command;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::write_no_follow;
 
     #[test]
     fn refuses_a_junction_and_does_not_write_outside() {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
+        let stamp = crate::unique_nanos::unique_nanos();
         let root = std::env::temp_dir().join(format!("hol-guard-shim-audit-junction-{stamp}"));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("root");

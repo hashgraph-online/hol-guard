@@ -88,16 +88,19 @@ def _call(
     configs: Iterable[GuardConfig | Mapping[str, object]],
     *,
     guard_config: bool,
+    observed: Mapping[str, object] | None = None,
     deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
     from .native_runtime import _run_native_process
 
-    request = {
+    request: dict[str, object] = {
         "schema": POLICY_EFFECTIVE_SCHEMA,
         "op": op,
         "guard_config": guard_config,
         "configs": [_config_fields(config) for config in configs],
     }
+    if observed is not None:
+        request["observed"] = dict(observed)
     try:
         text = json.dumps(request, separators=(",", ":"), default=_json_default)
     except (TypeError, ValueError) as error:
@@ -170,12 +173,15 @@ def effective_native_policy_v3(
 def compose_effective_native_policies(
     configs: tuple[GuardConfig | Mapping[str, object], ...],
     *,
+    observed: Mapping[str, object] | None = None,
     deadline_monotonic: float | None = None,
 ) -> dict[str, object]:
     """Compile home, workspace and managed configs into one native policy.
 
     The result carries the derived ``mode`` and the strictest per-harness
     postures beside the snapshot fields; neither reaches the Rust digest.
+    ``observed`` carries the operator's stored MCP choices, which the composer
+    lays over the configured policy without loosening a configured restriction.
     """
 
     if not configs:
@@ -187,5 +193,11 @@ def compose_effective_native_policies(
         raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
     return cast(
         "dict[str, object]",
-        _call("compose", configs, guard_config=mappings == 0, deadline_monotonic=deadline_monotonic),
+        _call(
+            "compose",
+            configs,
+            guard_config=mappings == 0,
+            observed=observed,
+            deadline_monotonic=deadline_monotonic,
+        ),
     )

@@ -24,6 +24,8 @@ mod configuration;
 mod configuration_names;
 mod dependency;
 mod executable;
+#[cfg(test)]
+mod executable_tests;
 mod fs;
 mod ports;
 mod repository;

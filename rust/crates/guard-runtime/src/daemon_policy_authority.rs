@@ -44,6 +44,7 @@ use std::time::Duration;
 #[cfg(unix)]
 use std::time::Instant;
 
+use hmac::{Hmac, Mac};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
@@ -346,13 +347,15 @@ pub(crate) fn load_authenticated_daemon_state(guard_home: &Path) -> Option<Map<S
     Some(payload.clone())
 }
 
-/// `load_daemon_discovery_key` (discovery.py:24-:34).
-fn load_daemon_discovery_key(guard_home: &Path) -> Option<String> {
+/// `load_daemon_discovery_key` (discovery.py:24-:34), stripped as
+/// `read_private_regular_text` strips it there.
+pub(crate) fn load_daemon_discovery_key(guard_home: &Path) -> Option<String> {
     let encoded = read_private_regular_text(&guard_home.join("daemon-discovery-key"), 256, false)?;
+    let encoded = encoded.trim();
     if encoded.len() != DAEMON_DISCOVERY_KEY_BYTES * 2 {
         return None;
     }
-    hex::decode(&encoded).ok()?;
+    hex::decode(encoded).ok()?;
     Some(encoded.to_lowercase())
 }
 
@@ -496,28 +499,9 @@ fn write_json_string(s: &str, out: &mut Vec<u8>) {
 /// Raw HMAC-SHA256 over an arbitrary message (single-shot; the crate's
 /// `hmac_sha256` is label+nonce shaped for the resident protocol).
 pub(crate) fn hmac_sha256_raw(key: &[u8], message: &[u8]) -> Vec<u8> {
-    const BLOCK: usize = 64;
-    let mut key_block = [0u8; BLOCK];
-    if key.len() > BLOCK {
-        let digest = Sha256::digest(key);
-        key_block[..digest.len()].copy_from_slice(&digest);
-    } else {
-        key_block[..key.len()].copy_from_slice(key);
-    }
-    let mut inner_pad = [0x36u8; BLOCK];
-    let mut outer_pad = [0x5cu8; BLOCK];
-    for index in 0..BLOCK {
-        inner_pad[index] ^= key_block[index];
-        outer_pad[index] ^= key_block[index];
-    }
-    let mut inner = Sha256::new();
-    inner.update(inner_pad);
-    inner.update(message);
-    let inner_digest = inner.finalize();
-    let mut outer = Sha256::new();
-    outer.update(outer_pad);
-    outer.update(inner_digest);
-    outer.finalize().to_vec()
+    let mut mac = <Hmac<Sha256>>::new_from_slice(key).expect("hmac accepts any key length");
+    mac.update(message);
+    mac.finalize().into_bytes().to_vec()
 }
 
 /// `daemon_state_matches_current_runtime` (runtime_peer.py:105-:135):
@@ -630,7 +614,7 @@ fn paths_equal_resolved(left: &Path, right: &Path) -> bool {
 // bounded.
 // ---------------------------------------------------------------------------
 
-fn read_private_regular_text(
+pub(crate) fn read_private_regular_text(
     path: &Path,
     max_bytes: u64,
     require_private_parent: bool,
@@ -1316,3 +1300,7 @@ mod tests {
         assert!(!healthz_payload_is_current(&outdated_compatibility));
     }
 }
+
+#[cfg(test)]
+#[path = "daemon_policy_authority_hmac_vectors_tests.rs"]
+mod hmac_vectors_tests;

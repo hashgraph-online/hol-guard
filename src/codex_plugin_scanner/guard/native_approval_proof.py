@@ -24,6 +24,10 @@ from .native_context import _canonical_request_sha256, _resolve_digest_home
 from .native_execution import _resident_request
 
 APPROVAL_PROOF_FEATURE = "approval-proof-v1"
+# Revalidating a claimed row against the freshly selected one is a newer query
+# kind; a resident without it rejects the request rather than answering it, and
+# the caller has to treat that as no proof.
+APPROVAL_PROOF_CLAIM_ROW_FEATURE = "approval-proof-claim-row-v1"
 _REQUEST_SCHEMA = "guard-approval-proof-request.v1"
 _RESULT_SCHEMA = "guard-approval-proof-result.v1"
 _PAYLOAD_KEYS = frozenset({"accepted", "claim_disposition"})
@@ -56,12 +60,19 @@ class ApprovalProofOutcome:
     claim_disposition: ApprovalReuseClaimDisposition | None
 
 
-def native_approval_proof(query: Mapping[str, object], *, guard_home: Path | None = None) -> ApprovalProofOutcome:
+def native_approval_proof(
+    query: Mapping[str, object],
+    *,
+    guard_home: Path | None = None,
+    feature: str = APPROVAL_PROOF_FEATURE,
+) -> ApprovalProofOutcome:
     """Return the resident's answer to one proof query, or raise.
 
     The op is pure, so ``guard_home`` only selects which resident answers; the
     bound context-digest home (else the process default home) is used when the
-    caller has no store home.
+    caller has no store home. ``feature`` is the capability the query itself
+    needs, so a query kind added after the base op fails closed against an
+    older resident instead of being sent and refused.
     """
 
     try:
@@ -82,7 +93,7 @@ def native_approval_proof(query: Mapping[str, object], *, guard_home: Path | Non
         request=request,
         guard_home=guard_home,
         timeout_seconds=_TIMEOUT_SECONDS,
-        required_feature=APPROVAL_PROOF_FEATURE,
+        required_feature=feature,
         response_schema=_RESULT_SCHEMA,
     )
     if (
@@ -107,9 +118,14 @@ def native_approval_proof(query: Mapping[str, object], *, guard_home: Path | Non
     return ApprovalProofOutcome(accepted, disposition)
 
 
-def _accepted(query: Mapping[str, object], guard_home: Path | None = None) -> bool:
+def _accepted(
+    query: Mapping[str, object],
+    guard_home: Path | None = None,
+    *,
+    feature: str = APPROVAL_PROOF_FEATURE,
+) -> bool:
     try:
-        return native_approval_proof(query, guard_home=guard_home).accepted
+        return native_approval_proof(query, guard_home=guard_home, feature=feature).accepted
     except NativeApprovalProofError:
         return False
 
@@ -174,6 +190,7 @@ def claimed_approval_authorizes_postclaim_review(
 
 
 __all__ = [
+    "APPROVAL_PROOF_CLAIM_ROW_FEATURE",
     "APPROVAL_PROOF_FEATURE",
     "ApprovalProofOutcome",
     "ApprovalReuseClaimDisposition",

@@ -8,12 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import mcp_server_contribution as mcp_module
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
-    load_mcp_contribution_payloads,
-    mcp_tool_state,
-    validate_mcp_contribution,
-)
+from codex_plugin_scanner.guard.runtime.mcp_server_contribution import validate_mcp_contribution
+from tests import mcp_contribution_loader as mcp_loader
+from tests.mcp_contribution_loader import load_mcp_contribution_payloads
+
+from .mcp_contribution_client import mcp_tool_state
 
 _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.filesystem.json"
 _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
@@ -124,6 +123,6 @@ def test_frozen_mcp_payloads_fail_closed_without_package_data(tmp_path: Path, mo
     def missing_package(_name: str) -> object:
         raise ModuleNotFoundError("missing packaged MCP servers")
 
-    monkeypatch.setattr(mcp_module.resources, "files", missing_package)
+    monkeypatch.setattr(mcp_loader.resources, "files", missing_package)
     with pytest.raises(FileNotFoundError, match="contributions"):
-        mcp_module._load_packaged_payloads()
+        mcp_loader._load_packaged_payloads()

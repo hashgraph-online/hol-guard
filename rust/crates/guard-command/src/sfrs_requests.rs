@@ -215,6 +215,50 @@ pub(crate) fn extract_sensitive_file_read_request_from_action(
     None
 }
 
+/// The harness configuration files a write may not reach without a review,
+/// derived here from the harness and the directories the request already carries
+/// (`cli/commands_support_runtime_artifacts._runtime_protected_file_write_paths`).
+///
+/// The caller used to compute this table and hand it over, so a caller that
+/// sent an empty one left every Codex configuration file writable without a
+/// review. The paths follow from the harness name and the two directories the
+/// request already carries, and nothing about them is the caller's to decide,
+/// so they are decided here instead and the caller's table is only added to
+/// what this returns.
+///
+/// Each path is normalized the way a candidate path is, so an entry matches
+/// exactly when the write names that same file, however the caller spelled it.
+pub(crate) fn harness_protected_write_paths(
+    harness: &str,
+    cwd: Option<&Path>,
+    home_dir: Option<&Path>,
+) -> Vec<(String, String)> {
+    if harness != "codex" {
+        return Vec::new();
+    }
+    let mut protected = Vec::new();
+    let mut push = |root: &Path, name: &str, label: &str| {
+        let path = root.join(".codex").join(name);
+        let spelled = path.to_string_lossy().into_owned();
+        let normalized = normalized_candidate_path(&spelled, cwd, home_dir).unwrap_or(spelled);
+        if !protected
+            .iter()
+            .any(|(existing, _)| *existing == normalized)
+        {
+            protected.push((normalized, label.to_owned()));
+        }
+    };
+    if let Some(home) = home_dir {
+        push(home, "config.toml", "Codex config");
+        push(home, "hooks.json", "Codex hooks");
+    }
+    if let Some(workspace) = cwd {
+        push(workspace, "config.toml", "Codex config");
+        push(workspace, "hooks.json", "Codex hooks");
+    }
+    protected
+}
+
 /// `extract_sensitive_file_write_request`. `protected_paths` maps normalized
 /// paths to the harness configuration label that owns them.
 pub(crate) fn extract_sensitive_file_write_request(
@@ -266,7 +310,10 @@ pub(crate) fn extract_sensitive_file_write_request(
     None
 }
 
-fn artifact(
+/// The artifact wire every request artifact is sent on. The fields a request
+/// artifact never carries are still named, as their empty forms, so a reader
+/// that validates the shape sees one key set whatever built it.
+pub(crate) fn request_artifact_wire(
     artifact_id: String,
     name: String,
     harness: &str,
@@ -290,6 +337,21 @@ fn artifact(
         "metadata": metadata,
         "runtime_private_metadata": {},
     })
+}
+
+/// The last component of `path` for an artifact's display name, as the
+/// retired Python builders read it with `Path(...).name`: on Windows that
+/// splits on `\` as well as `/`, so a review names `id_rsa` rather than the
+/// whole path.
+pub(crate) fn artifact_file_name(path: &str) -> String {
+    let parsed = PyPath::new(path);
+    let name = parsed.name();
+    if cfg!(windows) {
+        let name = name.trim_end_matches('\\');
+        name.rsplit('\\').next().unwrap_or(name).to_owned()
+    } else {
+        name.to_owned()
+    }
 }
 
 /// `build_file_read_request_artifact`.
@@ -317,12 +379,12 @@ pub(crate) fn build_file_read_request_artifact(
         "runtime_request_summary": format!("Requests access to a sensitive local file: {family}."),
         "runtime_request_reason": request.path_match.reason,
     });
-    artifact(
+    request_artifact_wire(
         format!("{harness}:{source_scope}:file-read:{fingerprint}"),
         format!(
             "{} {}",
             request.tool_name,
-            PyPath::new(&request.path_match.path).name()
+            artifact_file_name(&request.path_match.path)
         ),
         harness,
         "file_read_request",
@@ -364,12 +426,12 @@ pub(crate) fn build_file_write_request_artifact(
         ),
         "runtime_request_reason": request.reason,
     });
-    artifact(
+    request_artifact_wire(
         format!("{harness}:{source_scope}:file-write:{fingerprint}"),
         format!(
             "{} {}",
             request.tool_name,
-            PyPath::new(&request.normalized_path).name()
+            artifact_file_name(&request.normalized_path)
         ),
         harness,
         "tool_action_request",

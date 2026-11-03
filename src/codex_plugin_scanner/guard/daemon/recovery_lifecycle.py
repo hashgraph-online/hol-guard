@@ -16,22 +16,32 @@ def _manager():
     return manager
 
 
-def guard_recovery_is_disabled(guard_home: Path) -> bool:
-    """Do not restart a daemon when local protection is explicitly off."""
+def guard_recovery_posture(guard_home: Path) -> str:
+    """Return "on", "off" or "unknown" for local protection.
+
+    "unknown" means the config could not be read. Callers that perform a
+    privileged mutation must refuse on it; automatic hook recovery treats it as
+    not disabled so a broken config cannot suppress a valid recovery.
+    """
 
     try:
         from ..config import load_guard_config
         from ..protection_posture import protection_is_off
 
         config = load_guard_config(guard_home)
-    except Exception as error:
-        # Invalid or unavailable config must not suppress a valid recovery.
-        del error
-        return False
-    # A harness overridden to Protected keeps enforcing under a global Watch, so
-    # its hooks still need a recoverable daemon.
-    enforcing_override = any(posture != "watch" for posture in (config.harness_postures or {}).values())
-    return protection_is_off(posture=config.protection_posture, mode=config.mode) and not enforcing_override
+        # A harness overridden to Protected keeps enforcing under a global Watch, so
+        # its hooks still need a recoverable daemon.
+        enforcing_override = any(posture != "watch" for posture in (config.harness_postures or {}).values())
+        off = protection_is_off(posture=config.protection_posture, mode=config.mode) and not enforcing_override
+    except Exception:
+        return "unknown"
+    return "off" if off else "on"
+
+
+def guard_recovery_is_disabled(guard_home: Path) -> bool:
+    """Do not restart a daemon when local protection is explicitly off."""
+
+    return guard_recovery_posture(guard_home) == "off"
 
 
 def recover_guard_daemon_after_hook_failure(
@@ -43,7 +53,7 @@ def recover_guard_daemon_after_hook_failure(
 ) -> str:
     manager = _manager()
     _validate_failure_kind(failure_kind)
-    if manager._guard_recovery_is_disabled(guard_home):
+    if guard_recovery_is_disabled(guard_home):
         return _disabled_recovery_url(manager, guard_home)
     with suppress(Exception):
         manager.record_daemon_lifecycle_event(
@@ -56,7 +66,7 @@ def recover_guard_daemon_after_hook_failure(
         current_url = _existing_recovery_url(manager, guard_home, deadline)
         if current_url is not None:
             return current_url
-        if manager._guard_recovery_is_disabled(guard_home):
+        if guard_recovery_is_disabled(guard_home):
             return _disabled_recovery_url(manager, guard_home)
         return _ensure_recovered(
             manager,
@@ -97,7 +107,7 @@ def _existing_recovery_url(manager, guard_home: Path, deadline: float | None) ->
         state = manager.load_authenticated_daemon_state(guard_home)
         _record_dead_process(manager, guard_home, state)
         current_url = manager.load_guard_daemon_url(guard_home)
-        live_process_url = manager._authenticated_live_current_daemon_url(guard_home, state)
+        live_process_url = authenticated_live_current_daemon_url(guard_home, state)
         return live_process_url or current_url
 
 
@@ -185,7 +195,7 @@ def schedule_guard_daemon_recovery(
 ) -> None:
     manager = _manager()
     _validate_failure_kind(failure_kind)
-    if manager._guard_recovery_is_disabled(guard_home):
+    if guard_recovery_is_disabled(guard_home):
         return
     try:
         recovery_token = manager._claim_guard_daemon_recovery_reservation(guard_home)
@@ -266,7 +276,7 @@ def _bind_or_contain(manager, guard_home, token, process, process_pid) -> None:
         # A reservation write/query failure must never leave the detached child running.
         bound = False
     if not bound:
-        manager._terminate_recovery_worker(process)
+        terminate_recovery_worker(process)
         with suppress(OSError, RuntimeError, ValueError):
             manager.clear_guard_daemon_recovery_reservation(guard_home, token=token)
 
@@ -299,6 +309,7 @@ def terminate_recovery_worker(process: subprocess.Popen[bytes]) -> bool:
 __all__ = [
     "authenticated_live_current_daemon_url",
     "guard_recovery_is_disabled",
+    "guard_recovery_posture",
     "recover_guard_daemon_after_hook_failure",
     "schedule_guard_daemon_recovery",
     "terminate_recovery_worker",

@@ -451,3 +451,21 @@ def test_worker_spawned_under_deferred_signals_honors_terminate(tmp_path: Path, 
     finally:
         process.kill()
         process.wait()
+
+
+def test_a_dead_provider_route_is_recorded_once_and_printed(capsys):
+    from ci.gauntlet.runner import record_route_failure
+
+    report: dict = {}
+    assert record_route_failure(report, None) is False
+    assert record_route_failure(report, lambda: None) is False
+    assert report == {}
+    calls = iter(["the Luna adapter exited with code 7 during the run\nadapter stderr:\nboom"])
+    assert record_route_failure(report, lambda: next(calls)) is True
+    assert "exited with code 7" in report["provider_route_failure"]
+    printed = capsys.readouterr().out
+    assert json.loads(printed)["provider_route_failure"] == report["provider_route_failure"]
+    # A second case must not consult a route already known to be dead, so the
+    # iterator is not advanced and nothing more is printed.
+    assert record_route_failure(report, lambda: next(calls)) is True
+    assert capsys.readouterr().out == ""

@@ -9,6 +9,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use zeroize::Zeroizing;
 
 #[path = "resident_startup_lock.rs"]
 mod resident_startup_lock;
@@ -16,6 +17,8 @@ mod resident_startup_lock;
 mod resident_state_discovery;
 #[path = "resident_state_files.rs"]
 mod resident_state_files;
+#[path = "resident_state_redaction.rs"]
+mod resident_state_redaction;
 #[path = "resident_state_supersession.rs"]
 mod resident_state_supersession;
 
@@ -34,12 +37,13 @@ pub(crate) use resident_state_files::ensure_private_directory;
 #[allow(unused_imports)]
 pub(crate) use resident_state_files::{
     bind_windows_existing_directory, open_private_read, protect_windows_private_path,
-    remove_windows_private_file, replace_windows_private_file, verify_windows_private_file,
-    verify_windows_private_path,
+    publish_new_windows_private_file, remove_windows_private_file, replace_windows_private_file,
+    verify_windows_private_file, verify_windows_private_path,
 };
 #[allow(unused_imports)]
 pub(crate) use resident_state_files::{
-    ensure_private_directory_under, is_lock_contention, private_file, private_lock_file,
+    ensure_private_directory_under, is_lock_contention, lock_contention_deadline,
+    pause_for_lock_contention, private_file, private_lock_file, try_lock_exclusive_briefly,
 };
 
 const STATE_SCHEMA: &str = "hol-guard-resident-state.v3";
@@ -49,7 +53,10 @@ const STATE_MAC_LABEL: &[u8] = b"hol-guard-resident-state-v3\0";
 const MAX_STATE_BYTES: u64 = 16 * 1024;
 const MAX_STATE_FILES: usize = 64;
 const RETAINED_STATE_FILES: usize = 8;
-const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
+// Gauntlet development wheels build every crate at opt-level 0 and ship a
+// runtime several times the published size; the resident must still identify
+// itself from one. The digest streams, so the bound only limits hashing time.
+const MAX_RUNTIME_BYTES: u64 = 512 * 1024 * 1024;
 const LOCK_STALE_AFTER: Duration = Duration::from_secs(10);
 const MAX_STARTUP_LOCK_BYTES: u64 = 4 * 1024;
 
@@ -58,7 +65,7 @@ pub(crate) use resident_state_discovery::discover_home_states;
 pub(crate) use resident_state_discovery::discover_home_states_prefer;
 pub(crate) use resident_state_discovery::discover_same_executable_states;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ResidentState {
     pub(crate) schema: String,
@@ -222,8 +229,11 @@ pub(crate) fn state_mac(state: &ResidentState, token: &[u8]) -> String {
     ))
 }
 
-pub(crate) fn token_from_state(state: &ResidentState) -> Result<Vec<u8>, String> {
-    let token = decode_hex(&state.token_hex)?;
+/// Decodes the published token for one exchange with the resident.  Every
+/// caller holds a plaintext copy of the key, so the decoded bytes are cleared
+/// when that caller drops them instead of outliving the request they served.
+pub(crate) fn token_from_state(state: &ResidentState) -> Result<Zeroizing<Vec<u8>>, String> {
+    let token = Zeroizing::new(decode_hex(&state.token_hex)?);
     if token.len() != crate::AUTH_TOKEN_BYTES {
         return Err("native_resident_state_token_invalid".to_owned());
     }
@@ -398,6 +408,7 @@ pub(crate) fn publish_state(
         state_mac: String::new(),
     };
     state.state_mac = state_mac(&state, token);
+    validate_state(scope, &state, digest)?;
     let path = scope.join(format!(
         "{STATE_FILE_PREFIX}{generation:020}{STATE_FILE_SUFFIX}"
     ));
@@ -422,6 +433,18 @@ pub(crate) fn publish_state(
         .take(RETAINED_STATE_FILES)
         .map(|candidate| candidate.generation)
         .collect::<std::collections::HashSet<_>>();
+    prune_superseded_states(scope, generation, &retained_generations, &private_root)?;
+    Ok(state)
+}
+
+fn prune_superseded_states(
+    scope: &Path,
+    published_generation: u64,
+    retained_generations: &std::collections::HashSet<u64>,
+    private_root: &Path,
+) -> Result<(), String> {
+    #[cfg(not(windows))]
+    let _ = private_root;
     let superseded = resident_state_discovery::state_paths(scope)?;
     for candidate in superseded {
         let generation = candidate
@@ -430,11 +453,16 @@ pub(crate) fn publish_state(
             .and_then(|name| name.strip_prefix(STATE_FILE_PREFIX))
             .and_then(|name| name.strip_suffix(STATE_FILE_SUFFIX))
             .and_then(|name| name.parse::<u64>().ok());
-        if generation.is_some_and(|value| retained_generations.contains(&value)) {
+        // This generation was constructed, authenticated and durably written
+        // above. A transient read/identity failure during rediscovery must not
+        // unpublish our own live endpoint while its listener keeps serving.
+        if generation.is_some_and(|value| {
+            value == published_generation || retained_generations.contains(&value)
+        }) {
             continue;
         }
         #[cfg(windows)]
-        if remove_windows_private_file(&candidate, &private_root).is_err() {
+        if remove_windows_private_file(&candidate, private_root).is_err() {
             match fs::remove_file(&candidate) {
                 Ok(()) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -451,7 +479,7 @@ pub(crate) fn publish_state(
             }
         }
     }
-    Ok(state)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -461,3 +489,7 @@ mod tests;
 #[cfg(test)]
 #[path = "resident_state_discovery_tests.rs"]
 mod discovery_tests;
+
+#[cfg(test)]
+#[path = "resident_state_manifest_tests.rs"]
+mod manifest_tests;

@@ -323,32 +323,24 @@ def test_availability_without_acknowledged_watch_denies_git_and_network(tmp_path
         encoding="utf-8",
     )
     git_cmd = availability_harness_response(
-        {"hook_event_name": "PreToolUse", "tool_input": {"command": "git status"}},
         harness="grok",
         event_name="PreToolUse",
         reason_code="native_pre_tool_unavailable",
         reason="native unavailable",
-        guard_home=guard_home,
-        workspace=tmp_path,
-        home_dir=tmp_path / "home",
     )
     assert git_cmd["decision"] == "deny"
     gh_cmd = availability_harness_response(
-        {"hook_event_name": "PreToolUse", "tool_input": {"command": "gh pr view 1"}},
         harness="grok",
         event_name="PreToolUse",
         reason_code="native_pre_tool_unavailable",
         reason="native unavailable",
-        guard_home=guard_home,
     )
     assert gh_cmd["decision"] == "deny"
 
 
 def test_cursor_fallback_without_mode_authority_denies_shell() -> None:
     allow, code = cursor_fallback_permission(
-        {"hook_event_name": "beforeShellExecution", "command": "rm -rf /"},
         hook_event_name="beforeShellExecution",
-        recording_only=True,
     )
     assert code == 2
     assert allow["permission"] == "deny"

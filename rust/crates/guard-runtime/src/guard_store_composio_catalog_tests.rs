@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 
 use crate::guard_store_cmd_vectors_tests::{error_code, temp_home};
 use crate::guard_store_local_cli_vectors_tests::{build_database, replay_vectors, run_step};
+use crate::local_store_read;
 
 const COMPOSIO_VECTORS: &str =
     include_str!("../testdata/guard_store/composio_catalog_vectors.json");
@@ -53,6 +54,40 @@ impl Fixture {
                 |row| row.get(0),
             )
             .unwrap()
+    }
+
+    /// Brings the store up to what a read expects of a migrated one: the
+    /// schema marker, and the grant table a page left-joins for each action's
+    /// state. The recorded writer vectors carry neither, because the writers
+    /// read neither.
+    fn migrate_for_reads(&self) {
+        let connection = Connection::open(self.home.join("guard.db")).unwrap();
+        connection
+            .execute_batch(
+                "create table if not exists local_cli_schema_migration (
+                     singleton integer primary key check (singleton = 1),
+                     version integer not null,
+                     checksum text not null
+                 );
+                 create table if not exists local_mcp_provider_grant (
+                     cli_id text not null,
+                     identity_hash text not null,
+                     tool_slug text not null,
+                     state text not null check (state in ('review', 'block')),
+                     updated_at text not null,
+                     primary key (cli_id, identity_hash, tool_slug)
+                 )",
+            )
+            .unwrap();
+        connection
+            .execute(
+                "insert or replace into local_cli_schema_migration values (1, ?1, ?2)",
+                rusqlite::params![
+                    local_store_read::SUPPORTED_SCHEMA_VERSION,
+                    local_store_read::schema_checksum(local_store_read::SUPPORTED_SCHEMA_VERSION),
+                ],
+            )
+            .unwrap();
     }
 
     fn action_rows(&self) -> i64 {
@@ -188,4 +223,71 @@ fn a_repeated_slug_counts_each_copy_against_the_one_before_it() {
     assert_eq!(reply["payload"], json!({ "authority_changed": true }));
     assert_eq!(fixture.action_rows(), 1);
     assert_eq!(fixture.action_revision(), 3);
+}
+
+/// The writer's ceiling counts stored bytes, so a catalog at that ceiling can
+/// still build a page the resident has to refuse as too large to frame. The
+/// caller sees a refusal as the store being unavailable, with no page size it
+/// could retry at, so the read stops short and names the offset to resume at.
+#[test]
+fn a_page_of_a_full_catalog_stays_inside_the_response_cap() {
+    use guard_contracts::MAX_NATIVE_RESPONSE_BYTES;
+
+    let fixture = Fixture::new("composio-page-budget");
+    let mut batch = fixture.step("first_discovery", 0);
+    let template = batch["wire_args"]["actions"][0].clone();
+    // Forty actions just under 50,000 bytes each: inside the writer's
+    // 2,000,000-byte ceiling, past what one reply can carry.
+    let actions: Vec<Value> = (0..40)
+        .map(|index| {
+            let mut action = template.clone();
+            action["tool_slug"] = Value::from(format!("SLACK_ACTION_{index:02}"));
+            action["description"] = Value::from("d".repeat(49_800));
+            action
+        })
+        .collect();
+    batch["wire_args"]["actions"] = Value::from(actions);
+    let reply = fixture.run(&batch);
+    assert_eq!(reply["status"], "ok", "{reply}");
+    assert_eq!(fixture.action_rows(), 40);
+    fixture.migrate_for_reads();
+
+    let read = json!({
+        "method": "read_local_mcp_provider_actions",
+        "wire_args": {
+            "cli_id": batch["wire_args"]["cli_id"].clone(),
+            "limit": 100,
+            "offset": 0,
+            "search": "",
+            "expected_token": Value::Null,
+        },
+    });
+    let reply = fixture.run(&read);
+    assert_eq!(reply["status"], "ok", "{reply}");
+    let encoded = serde_json::to_vec(&reply).unwrap().len();
+    assert!(encoded <= MAX_NATIVE_RESPONSE_BYTES, "{encoded} bytes");
+    let served = reply["payload"]["page"]["actions"]
+        .as_array()
+        .unwrap()
+        .len();
+    assert!(served > 0 && served < 40, "served {served} of 40 actions");
+    assert_eq!(reply["payload"]["page"]["next_offset"], Value::from(served));
+    assert_eq!(
+        reply["payload"]["declarations"].as_array().unwrap().len(),
+        served,
+        "every action still carries its declaration"
+    );
+
+    let mut rest = read.clone();
+    rest["wire_args"]["offset"] = Value::from(served);
+    let reply = fixture.run(&rest);
+    assert_eq!(reply["status"], "ok", "{reply}");
+    assert_eq!(
+        reply["payload"]["page"]["actions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        40 - served,
+        "the dropped actions come back on the next offset"
+    );
 }
