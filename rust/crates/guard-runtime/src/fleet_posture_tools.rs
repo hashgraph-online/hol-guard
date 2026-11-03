@@ -15,6 +15,9 @@ use crate::runner_authority_op::ERR_INVALID;
 
 use super::selection::{iso, normalized_timestamp, timestamp};
 
+/// A reported tool row and the harness it belongs to.
+type ToolRow = (String, Map<String, Value>);
+
 /// `STALE_AFTER`: activity older than a week makes a protected tool stale.
 const STALE_AFTER_MICROS: i64 = 7 * 24 * 60 * 60 * 1_000_000;
 const MAX_BLIND_SPOTS: usize = 8;
@@ -123,10 +126,11 @@ pub(super) fn client_section(client: &Value) -> Result<Value, &'static str> {
     } else {
         "0.0.0"
     };
-    let runtime = match client.get("runtime").and_then(Value::as_str) {
-        Some(runtime @ ("python" | "native")) => runtime,
-        _ => "python",
-    };
+    let runtime = client
+        .get("runtime")
+        .and_then(Value::as_str)
+        .filter(|runtime| matches!(*runtime, "python" | "native"))
+        .unwrap_or("python");
     Ok(json!({
         "version": clip(reported, MAX_VERSION_LENGTH),
         "channel": channel,
@@ -190,7 +194,7 @@ fn tool_row(
     tool: &Map<String, Value>,
     now: i64,
     detail: bool,
-) -> Result<(String, Map<String, Value>), &'static str> {
+) -> Result<ToolRow, &'static str> {
     let harness = tool
         .get("harness")
         .and_then(Value::as_str)
@@ -237,7 +241,7 @@ pub(super) fn reported_tools(
     last: Option<&Map<String, Value>>,
     now: i64,
     detail: bool,
-) -> Result<Vec<(String, Map<String, Value>)>, &'static str> {
+) -> Result<Vec<ToolRow>, &'static str> {
     let previous = object(last.and_then(|last| last.get("tools")));
     let mut rows = Vec::new();
     for tool in tools {
