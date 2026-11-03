@@ -138,15 +138,23 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
         } else {
             None
         };
+        let mut warm = None;
         match request.query.kind {
             Kind::Activate => service.schedule(Check::Activate, home.into())?,
             Kind::Recheck => service.schedule(Check::Recheck, home.into())?,
             // Watch leaves CIGAR resting for a new session, as the
-            // SessionStart hook itself does.
+            // SessionStart hook itself does. A resident that has not been
+            // given a policy binding yet cannot tell, so it answers `waiting`
+            // and the caller may ask again once the daemon has pushed one.
             Kind::Warm => {
-                if !crate::hook_direct::lifecycle::records_only("claude-code", store) {
+                warm = Some(if store.admit_direct_binding().is_err() {
+                    "waiting"
+                } else if crate::hook_direct::lifecycle::records_only("claude-code", store) {
+                    "skipped"
+                } else {
                     service.warm_prompt_lane(home);
-                }
+                    "sent"
+                });
             }
             Kind::Status
             | Kind::Installations
@@ -166,6 +174,9 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
         let mut payload = json!({"kind": request.query.kind.name(), "state": state});
         if let Some(data) = data {
             payload["data"] = data;
+        }
+        if let Some(warm) = warm {
+            payload["warm"] = json!(warm);
         }
         Ok(payload)
     })();

@@ -60,6 +60,45 @@ fn the_prewarm_asks_the_resident_to_warm_cigar_for_its_guard_home() {
 }
 
 #[test]
+fn the_warm_is_asked_again_only_while_the_resident_waits_for_its_binding() {
+    let answer = |warm: &str| {
+        Ok(serde_json::to_vec(&json!({"status": "ok", "payload": {"warm": warm}})).unwrap())
+    };
+    let mut answers = vec![answer("sent"), answer("waiting"), answer("waiting")];
+    let mut asked = 0;
+    warm_until_answered(Duration::from_secs(5), Duration::from_millis(1), || {
+        asked += 1;
+        answers.pop().unwrap()
+    });
+    assert_eq!(
+        asked, 3,
+        "a resident that got its binding is not asked again"
+    );
+
+    for first in [
+        answer("skipped"),
+        Err("native_resident_not_serving".to_owned()),
+    ] {
+        let mut first = Some(first);
+        let mut asked = 0;
+        warm_until_answered(Duration::from_secs(5), Duration::from_millis(1), || {
+            asked += 1;
+            first.take().unwrap()
+        });
+        assert_eq!(asked, 1, "only a missing binding is worth waiting for");
+    }
+
+    let started = Instant::now();
+    warm_until_answered(Duration::from_millis(50), Duration::from_millis(5), || {
+        answer("waiting")
+    });
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "a binding that never arrives ends the wait at the window"
+    );
+}
+
+#[test]
 fn a_client_already_holding_a_lease_keeps_the_prewarm_out() {
     let state_base = test_directory("held");
     let held = super::super::lease::acquire(&state_base).expect("the test should hold a lease");

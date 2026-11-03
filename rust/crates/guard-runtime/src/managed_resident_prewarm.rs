@@ -30,7 +30,9 @@
 //! worker is not, and without this the session's first prompt finds it
 //! starting and gets only a list of files. The resident does nothing unless
 //! project context is on and the harness is not watch-only, and a request
-//! that fails changes nothing.
+//! that fails changes nothing. A resident this prewarm just started has no
+//! policy binding until the daemon pushes one, so it answers `waiting` and the
+//! prewarm asks again for a bounded window.
 
 use std::path::Path;
 use std::thread;
@@ -56,6 +58,12 @@ const PREWARM_POLL: Duration = Duration::from_millis(250);
 /// The CIGAR warm answers once the worker start is scheduled, not when it is
 /// up, so it needs little more than a busy resident's queue.
 const WARM_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long the prewarm keeps asking a resident that is still waiting for
+/// its policy binding. The daemon pushes one within about a second of a new
+/// resident; a daemon that is down never will.
+const WARM_WAIT: Duration = Duration::from_secs(30);
+/// How often the prewarm asks again while the resident is waiting.
+const WARM_RETRY: Duration = Duration::from_millis(500);
 
 pub(super) fn run(state_base: &Path) -> Result<(), String> {
     run_with_hold(
@@ -81,10 +89,13 @@ pub(super) fn run_with_hold(
     }
     if live {
         if let Some(payload) = warm {
-            let _ = super::lease::client_request(state_base, payload, WARM_REQUEST_TIMEOUT);
+            warm_until_answered(WARM_WAIT, WARM_RETRY, || {
+                super::lease::client_request(state_base, payload, WARM_REQUEST_TIMEOUT)
+            });
         }
         return Ok(());
     }
+    let started = Instant::now();
     let client_lease = super::lease::acquire(state_base)?;
     super::client_request_with_lease(
         state_base,
@@ -93,15 +104,42 @@ pub(super) fn run_with_hold(
         &client_lease,
     )?;
     if let Some(payload) = warm {
-        let _ = super::client_request_with_lease(
-            state_base,
-            payload,
-            WARM_REQUEST_TIMEOUT,
-            &client_lease,
-        );
+        warm_until_answered(WARM_WAIT, WARM_RETRY, || {
+            super::client_request_with_lease(
+                state_base,
+                payload,
+                WARM_REQUEST_TIMEOUT,
+                &client_lease,
+            )
+        });
     }
-    hold_lease(hold, std::env::current_exe().ok().as_deref());
+    hold_lease(
+        hold.saturating_sub(started.elapsed()),
+        std::env::current_exe().ok().as_deref(),
+    );
     Ok(())
+}
+
+/// Send the CIGAR warm until the resident stops answering `waiting` or
+/// `window` runs out. Any other answer, including an error, ends it: only a
+/// missing policy binding is worth waiting for.
+fn warm_until_answered(
+    window: Duration,
+    retry: Duration,
+    mut send: impl FnMut() -> Result<Vec<u8>, String>,
+) {
+    let deadline = Instant::now() + window;
+    loop {
+        let waiting = send().ok().is_some_and(|answer| {
+            serde_json::from_slice::<serde_json::Value>(&answer)
+                .is_ok_and(|answer| answer["payload"]["warm"] == "waiting")
+        });
+        let left = deadline.saturating_duration_since(Instant::now());
+        if !waiting || left.is_zero() {
+            return;
+        }
+        thread::sleep(left.min(retry));
+    }
 }
 
 /// The CIGAR warm request for the Guard home holding `state_base`, or `None`

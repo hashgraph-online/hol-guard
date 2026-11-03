@@ -128,6 +128,9 @@ fn a_session_start_warm_leaves_project_context_off_when_nobody_chose_it() {
     assert_eq!(warm["status"], "ok");
     assert_eq!(warm["payload"]["kind"], "warm");
     assert_eq!(warm["payload"]["state"]["effective_enabled"], false);
+    // The fixture's store has no policy binding yet, as a resident the
+    // prewarm just started has none until the daemon pushes one.
+    assert_eq!(warm["payload"]["warm"], "waiting");
     assert!(!fixture.home.join("context-assistance").exists());
     assert_eq!(
         fixture.ask_input("warm", json!({"harness":"codex"}))["code"],
