@@ -274,6 +274,26 @@ def test_caution_when_any_grouped_row_carries_a_caution_class(monkeypatch: pytes
     assert result["caution_risk_classes"] == ["destructive"]
 
 
+def test_an_unchecked_grouped_row_keeps_the_caution(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+
+    _items(monkeypatch)
+    checked = recommendation.validated_connector_setup_hint
+
+    def unavailable_for_siblings(value: object, *, strict: bool = False) -> dict[str, object] | None:
+        if strict:
+            raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+        return checked(value)
+
+    monkeypatch.setattr(recommendation, "validated_connector_setup_hint", unavailable_for_siblings)
+
+    result = _build(_approval(_hint()), _Store({"req-2": _hint(risk_classes=["destructive"])}))
+
+    assert result is not None
+    assert result["caution"] is True
+    assert result["caution_risk_classes"] == []
+
+
 def test_the_resident_of_the_stores_home_decides_the_caution(
     monkeypatch: pytest.MonkeyPatch, _resident_caution: list[tuple[frozenset[str], Path | None]], tmp_path: Path
 ) -> None:

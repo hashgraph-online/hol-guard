@@ -96,10 +96,17 @@ def _group_risk_classes(
     current: list[str],
     read_hint: Callable[[str], object],
 ) -> tuple[set[str], bool]:
+    from ..native_runner_authority import NativeRunnerAuthorityError
+
     classes = set(current)
     rows, complete = pending_connector_group_rows(store, identity_hash)
     for row in rows:
-        hint = validated_connector_setup_hint(read_hint(str(row.get("request_id", ""))))
+        try:
+            hint = validated_connector_setup_hint(read_hint(str(row.get("request_id", ""))), strict=True)
+        except NativeRunnerAuthorityError:
+            # An unchecked sibling may carry a destructive class: not a full scan.
+            complete = False
+            continue
         if hint is not None and hint["identity_hash"] == identity_hash:
             classes.update(_strings(hint["risk_classes"]))
     return classes, complete
