@@ -23,7 +23,6 @@ left for the user to update with their own tooling.
 from __future__ import annotations
 
 import json
-import re
 import threading
 import uuid
 from pathlib import Path
@@ -37,7 +36,6 @@ from .workspace_assessment_worker import queue_manual_run
 MAX_LISTED_PROPOSALS: Final = 100
 MAX_PROPOSALS_PER_PREPARE: Final = 20
 _EDIT_KEYS: Final = ("section", "start", "end", "from_spec", "to_spec")
-_VERSION: Final = re.compile(r"([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?\Z")
 _ROOT_UNAVAILABLE: Final = frozenset(
     {
         "workspace_fix_root_not_absolute",
@@ -47,20 +45,18 @@ _ROOT_UNAVAILABLE: Final = frozenset(
     }
 )
 _MAX_FIELD_CHARS: Final = 128
-# Absence of a finding only means "fixed" if the supply-chain detector looked at
-# everything. These coverage reasons say it did not; any snapshot_* reason says
-# the snapshot behind the run was itself partial. A detector_not_run:* reason
-# (today the not-yet-existing secrets detector) is deliberately not listed: the
-# finding comes from the supply-chain detector, so another detector's gap cannot
-# hide it. Unknown or missing coverage is treated as incomplete.
-_BLOCKING_COVERAGE_REASONS: Final = frozenset(
-    {"finding_cap", "supply_chain_incomplete", "lockfile_warnings", "advisory_data_unavailable"}
-)
-# Snapshot reasons that leave nothing unread: the dependency file was read and
-# hashed but never audited (another ecosystem, or below audit discovery), so it
-# cannot hide a finding in a file the audit checked.
-_READ_SNAPSHOT_REASONS: Final = frozenset(
-    {"snapshot_unsupported_dependency_input", "snapshot_undiscovered_dependency_input"}
+_VERIFY_RUN_KEYS: Final = ("run_id", "snapshot_digest", "started_at_ms", "coverage", "findings")
+_VERIFY_PROPOSAL_KEYS: Final = (
+    "proposal_id",
+    "ecosystem",
+    "package_name",
+    "fix_version",
+    "advisory_ids",
+    "rule_ids",
+    "snapshot_digest",
+    "applied_at_ms",
+    "state",
+    "verification_run_id",
 )
 _COLUMNS: Final = (
     "proposal_id",
@@ -223,18 +219,16 @@ def list_proposals(
 def verify_proposals(store: Any, keys: assessments.WorktreeKeys, *, now_ms: int) -> None:
     """Settle applied proposals against the worktree's newest assessed run.
 
-    Only the newest run is consulted, so the outcome is deterministic: a run
-    that cannot vouch for the whole supply-chain input leaves a proposal as it
-    is, and nothing but such a run can mark one fixed.
+    Only the newest run is consulted, so the outcome is deterministic. The
+    native runtime decides each verdict: a run that cannot vouch for the whole
+    supply-chain input leaves a proposal as it is, and nothing but such a run
+    can mark one fixed. An unavailable native runtime also changes nothing.
     """
 
     run = assessments.latest_assessed_run(store, keys)
-    if run is None or not _supply_chain_verifiable(run["coverage"]):
+    if run is None:
         return
-    findings = [item for item in run["findings"] if isinstance(item, dict)] if isinstance(run["findings"], list) else []
-    started = run["started_at_ms"]
     with store._connect() as connection:
-        connection.execute("begin immediate")
         rows = connection.execute(
             """
             select proposal_id, ecosystem, package_name, fix_version, advisory_ids_json, rule_ids_json,
@@ -244,71 +238,51 @@ def verify_proposals(store: Any, keys: assessments.WorktreeKeys, *, now_ms: int)
             """,
             (keys.codebase_key, keys.worktree_key),
         ).fetchall()
-        for proposal_id, ecosystem, package, fix_version, advisories, rules, digest, applied_at, state, prior in rows:
-            # A run that started at or before the apply may have read the old manifest.
-            if run["snapshot_digest"] == digest or not isinstance(started, int) or started <= applied_at:
+    if not rows:
+        return
+    proposals = [dict(zip(_VERIFY_PROPOSAL_KEYS, row, strict=True)) for row in rows]
+    for item in proposals:
+        item["advisory_ids"], item["rule_ids"] = json.loads(item["advisory_ids"]), json.loads(item["rule_ids"])
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        answer = native_runner_authority(
+            "workspace_fix_verify",
+            {"run": {key: run[key] for key in _VERIFY_RUN_KEYS}, "proposals": proposals},
+        )
+    except NativeRunnerAuthorityError:
+        return
+    updates = answer.get("updates")
+    prior_by_id = {item["proposal_id"]: item for item in proposals}
+    with store._connect() as connection:
+        connection.execute("begin immediate")
+        for update in updates if isinstance(updates, list) else []:
+            proposal = prior_by_id.get(update.get("proposal_id")) if isinstance(update, dict) else None
+            if proposal is None or update.get("state") not in ("still_present", "verified_fixed"):
                 continue
-            identity = (ecosystem, package, fix_version, set(json.loads(advisories)), set(json.loads(rules)))
-            outcome = (
-                "still_present" if any(_same_issue(finding, *identity) for finding in findings) else "verified_fixed"
-            )
-            if outcome == state and prior == run["run_id"]:
-                continue
+            # Only a proposal still as it was read takes the verdict; a
+            # concurrent verification settles it otherwise.
             connection.execute(
                 """
                 update workspace_fix_proposals set
                   state = ?, verified_at_ms = ?, verification_run_id = ?,
                   updated_at_ms = max(created_at_ms, ?)
-                where proposal_id = ? and state in ('applied', 'still_present')
+                where proposal_id = ? and state = ? and verification_run_id is ?
                 """,
-                (outcome, now_ms, run["run_id"], now_ms, proposal_id),
+                (
+                    update["state"],
+                    now_ms,
+                    run["run_id"],
+                    now_ms,
+                    proposal["proposal_id"],
+                    proposal["state"],
+                    proposal["verification_run_id"],
+                ),
             )
-
-
-def _same_issue(
-    finding: dict[str, Any], ecosystem: str, package: str, fix_version: str, advisories: set[str], rules: set[str]
-) -> bool:
-    """Whether a later finding is the problem the proposal set out to fix.
-
-    A finding id also hashes the resolved version, so a package that is still
-    vulnerable after the edit gets a new id. Identity is the package plus
-    either an overlapping advisory or rule id, or a version still below the fix.
-    """
-
-    if finding.get("ecosystem") != ecosystem or finding.get("package_name") != package:
-        return False
-    if advisories & _id_set(finding.get("advisory_ids")) or rules & _id_set(finding.get("rule_ids")):
-        return True
-    return _below(finding.get("package_version"), fix_version)
 
 
 def _id_set(value: object) -> set[str]:
     return {item for item in value if isinstance(item, str)} if isinstance(value, list) else set()
-
-
-def _below(version: object, fix_version: str) -> bool:
-    """Whether ``version`` is older than ``fix_version``; unreadable versions count as older."""
-
-    found, target = (_VERSION.match(version) if isinstance(version, str) else None), _VERSION.match(fix_version)
-    if found is None or target is None:
-        return True
-    left, right = tuple(int(part) for part in found.groups()[:3]), tuple(int(part) for part in target.groups()[:3])
-    return left < right or (left == right and found.group(4) is not None and target.group(4) is None)
-
-
-def _supply_chain_verifiable(coverage: object) -> bool:
-    if not isinstance(coverage, dict):
-        return False
-    detectors, reasons = coverage.get("detectors"), coverage.get("reasons")
-    if not isinstance(detectors, dict) or detectors.get("supply_chain") != "complete":
-        return False
-    if not isinstance(reasons, list) or not all(isinstance(reason, str) for reason in reasons):
-        return False
-    return not any(
-        reason in _BLOCKING_COVERAGE_REASONS
-        or (reason.startswith("snapshot_") and reason not in _READ_SNAPSHOT_REASONS)
-        for reason in reasons
-    )
 
 
 def _store_prepared(

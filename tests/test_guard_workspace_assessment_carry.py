@@ -7,14 +7,14 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import workspace_assessment_carry as carry
-from codex_plugin_scanner.guard import workspace_assessment_fix_proposals as fixes
 from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard.native_package_audit_projection import NativePackageAuditProjectionError
+from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_workspace_assessment_schema import MAX_FINDINGS
 from codex_plugin_scanner.guard.workspace_assessment_carry import carry_unchecked_findings
-from tests.workspace_fix_support import admit_worktree
+from tests.workspace_fix_support import admit_worktree, native_binary  # noqa: F401
 
 DETECTORS = "d" * 64
 T0 = 1_000_000_000
@@ -155,6 +155,7 @@ def test_a_completed_run_or_a_first_run_carries_nothing() -> None:
     assert carry_unchecked_findings(unshaped, previous) is unshaped
 
 
+@pytest.mark.usefixtures("native_binary")
 def test_carried_findings_stay_within_the_finding_bound(tmp_path: Path) -> None:
     store = admitted(tmp_path)
     earlier = [finding(f"{index:032x}") for index in range(MAX_FINDINGS)]
@@ -172,7 +173,23 @@ def test_carried_findings_stay_within_the_finding_bound(tmp_path: Path) -> None:
     assert "finding_cap" not in run["coverage"]["reasons"]
     coverage = {**run["coverage"], "detectors": {**run["coverage"]["detectors"], "supply_chain": "complete"}}
     coverage["reasons"] = [reason for reason in coverage["reasons"] if reason != "ci_workflow_v1_incomplete"]
-    assert fixes._supply_chain_verifiable(coverage)
+    proposal = {
+        "proposal_id": "p",
+        "ecosystem": "npm",
+        "package_name": "minimist",
+        "fix_version": "1.2.9",
+        "advisory_ids": [],
+        "rule_ids": [],
+        "snapshot_digest": "before",
+        "applied_at_ms": T0,
+        "state": "applied",
+        "verification_run_id": None,
+    }
+    verifiable = {"run_id": "r", "snapshot_digest": "after", "started_at_ms": T0 + 1, "coverage": coverage}
+    answer = native_runner_authority(
+        "workspace_fix_verify", {"run": {**verifiable, "findings": []}, "proposals": [proposal]}
+    )
+    assert answer["updates"] == [{"proposal_id": "p", "state": "verified_fixed"}]
 
 
 def test_a_package_the_audit_no_longer_lists_settles_its_earlier_finding(tmp_path: Path) -> None:

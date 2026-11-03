@@ -154,6 +154,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "preclaim_failure" => evaluation::preclaim_failure(args),
         "claim_context_failure" => evaluation::claim_context_failure(args),
         "receipt_evidence_merge" => evaluation::receipt_evidence_merge(args),
+        "workspace_fix_verify" => crate::workspace_fix_verify::dispatch(args),
         "authority_signature" => signature::authority_signature(args),
         "authority_gate" => signature::authority_gate(args),
         "policy_shadow_mismatch" => signature::policy_shadow_mismatch(args),

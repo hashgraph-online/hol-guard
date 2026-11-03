@@ -1110,6 +1110,7 @@ mod workspace_fix;
 mod workspace_fix_diff;
 mod workspace_fix_fs;
 mod workspace_fix_manifest;
+mod workspace_fix_verify;
 mod workspace_inventory_dependencies;
 mod workspace_inventory_files;
 mod workspace_inventory_op;
