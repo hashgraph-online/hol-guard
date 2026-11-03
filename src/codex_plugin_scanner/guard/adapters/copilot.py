@@ -405,16 +405,20 @@ class CopilotHarnessAdapter(HarnessAdapter):
             workspace_payload = (
                 _json_payload(managed_hook_path) if prepared_files is None else parsed(managed_hook_path)
             )
-        config_parts = _hook_command_parts(context, include_workspace=False, prepared_files=prepared_files)
+        # Stage Guard's hook script so a refused plan leaves it as it was.
+        staged: list[TransitionFile] = [] if prepared_files is None else prepared_files
+        config_parts = _hook_command_parts(context, include_workspace=False, prepared_files=staged)
         workspace = (
             None
             if workspace_payload is None
             else (
                 workspace_payload,
-                _hook_command_parts(context, include_workspace=True, prepared_files=prepared_files),
+                _hook_command_parts(context, include_workspace=True, prepared_files=staged),
             )
         )
         config_plan, workspace_plan = plan_copilot_hooks(context.guard_home, (hooks_payload, config_parts), workspace)
+        if prepared_files is None and _hook_command_parts(context, include_workspace=False) != config_parts:
+            raise RuntimeError("Guard could not write its Copilot hook script")
         detection = self.detect(context, config_contents=config_contents)
         managed_servers = managed_stdio_servers(detection)
         skipped_servers = skipped_stdio_server_names(detection)
@@ -570,10 +574,15 @@ class CopilotHarnessAdapter(HarnessAdapter):
         config_payload = self._strict_json_object(config_path, label="Copilot config")
         hooks_payload = _inline_hooks_payload(config_payload)
         managed_hook_path = self._hook_path(context)
-        config_parts = _hook_command_parts(context, include_workspace=False)
+        # Uninstall only reads which entries Guard owns; the staged hook script is never written.
+        staged: list[TransitionFile] = []
+        config_parts = _hook_command_parts(context, include_workspace=False, prepared_files=staged)
         workspace: tuple[dict[str, object], tuple[str, ...]] | None = None
         if managed_hook_path is not None and managed_hook_path.is_file():
-            workspace = (_json_payload(managed_hook_path), _hook_command_parts(context, include_workspace=True))
+            workspace = (
+                _json_payload(managed_hook_path),
+                _hook_command_parts(context, include_workspace=True, prepared_files=staged),
+            )
         config_plan, workspace_plan = plan_copilot_hooks(context.guard_home, (hooks_payload, config_parts), workspace)
         uninstall_targets = self._uninstall_targets(context)
         for state_path, target_mcp_path, backup_path in uninstall_targets:

@@ -50,6 +50,10 @@ class CopilotHookPlan:
                 self.hooks.pop(event, None)
 
 
+# The events Guard manages, in the order the native runtime answers them.
+_MANAGED_EVENTS = ("userPromptSubmitted", "preToolUse", "postToolUse", "permissionRequest", "permissionRequestV2")
+
+
 def _malformed() -> CopilotHookOwnershipError:
     return CopilotHookOwnershipError(_UNANSWERED)
 
@@ -127,13 +131,13 @@ def _plan(
     events = answer["events"]
     if not isinstance(target, dict) or not isinstance(events, list):
         raise _malformed()
+    if len(events) != len(_MANAGED_EVENTS):
+        raise _malformed()
     kept: list[tuple[str, list[object]]] = []
-    for event in events:
-        if not isinstance(event, list) or len(event) != 2 or not isinstance(event[0], str):
+    for expected, event in zip(_MANAGED_EVENTS, events, strict=True):
+        if not isinstance(event, list) or len(event) != 2 or event[0] != expected:
             raise _malformed()
         name, indices = event
-        if name in {seen for seen, _ in kept}:
-            raise _malformed()
         entries = target.get(name)
         source = entries if isinstance(entries, list) else []
         kept.append((name, [source[index] for index in _indices(indices, len(source))]))
