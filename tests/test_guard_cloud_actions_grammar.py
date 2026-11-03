@@ -20,16 +20,22 @@ from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli import commands_dispatch_cloud_actions as dispatch
 from codex_plugin_scanner.guard.cli.commands_dispatch_cloud_actions import (
     CLOUD_ACTIONS_SCHEMA,
-    CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
     CLOUD_ACTIONS_UNAVAILABLE_EXIT,
     _run_guard_cloud_actions_command,  # pyright: ignore[reportPrivateUsage]
 )
+from tests.cloud_actions_pairing_support import FakeCloud, pair
 
 FIXTURE = json.loads(
     (Path(__file__).resolve().parent / "fixtures" / "guard-cloud-actions-grammar.v1.json").read_text(encoding="utf-8")
 )
 VALUES: Mapping[str, str] = FIXTURE["values"]
 CONTEXT_KEYS = ("cloud_workspace", "provider", "connected_account", "ai_tool")
+
+
+@pytest.fixture(autouse=True)
+def _own_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Commands without --guard-home resolve Guard's home from the user's home.
+    monkeypatch.setenv("HOME", str(tmp_path / "user"))
 
 
 def _fill(value: str) -> str:
@@ -44,7 +50,11 @@ def _run(argv: list[str]) -> int:
 
 
 @pytest.mark.parametrize("case", FIXTURE["cases"], ids=[case["id"] for case in FIXTURE["cases"]])
-def test_grammar_fixture(case: dict[str, Any], capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+def test_grammar_fixture(
+    case: dict[str, Any], capsys: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if "paired" in case:
+        _ = pair(monkeypatch, FakeCloud(workspace_id=VALUES["WS"], paired=bool(case["paired"])))
     argv = [_fill(arg) for arg in case["argv"]]
     if case.get("guard_home"):
         argv += ["--guard-home", str(tmp_path)]
@@ -92,7 +102,8 @@ CONNECTED_ACCOUNTS_URL = (
 )
 
 
-def _opener(monkeypatch: pytest.MonkeyPatch, *, accepted: bool) -> list[str]:
+def _opener(monkeypatch: pytest.MonkeyPatch, *, accepted: bool, origin: str = "https://hol.org") -> list[str]:
+    _ = pair(monkeypatch, FakeCloud(workspace_id=VALUES["WS"], origin=origin))
     opened: list[str] = []
 
     def fake_open(url: str) -> bool:
@@ -154,43 +165,26 @@ def test_provider_name_matches_guard_cloud(provider: str, name: str) -> None:
     assert dispatch.provider_name(provider) == name
 
 
-def test_connect_uses_the_cloud_url_origin(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    _ = _opener(monkeypatch, accepted=False)
+def test_connect_uses_the_connected_guard_cloud(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _ = _opener(monkeypatch, accepted=False, origin="http://127.0.0.1:3017")
 
-    exit_code = _run(
-        [
-            "accounts",
-            "connect",
-            "slack",
-            "--cloud-workspace",
-            VALUES["WS"],
-            "--cloud-url",
-            "http://127.0.0.1:3017/x",
-            "--json",
-        ]
-    )
+    exit_code = _run(["accounts", "connect", "slack", "--json"])
 
     assert exit_code == 0
-    assert json.loads(capsys.readouterr().out)["url"].startswith("http://127.0.0.1:3017/guard/settings?")
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["url"].startswith("http://127.0.0.1:3017/guard/settings?")
+    assert payload["cloud_workspace"] == VALUES["WS"]
 
 
 def test_connect_keeps_the_guard_cloud_path_prefix(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _ = _opener(monkeypatch, accepted=True)
     monkeypatch.setenv("HOL_GUARD_STAGING_ORIGIN", "https://guard-staging.example.test|/points")
-    exit_code = _run(
-        [
-            "accounts",
-            "connect",
-            "slack",
-            "--cloud-workspace",
-            VALUES["WS"],
-            "--cloud-url",
-            "https://guard-staging.example.test",
-            "--json",
-        ]
-    )
+    _ = _opener(monkeypatch, accepted=True, origin="https://guard-staging.example.test")
+
+    exit_code = _run(["accounts", "connect", "slack", "--cloud-workspace", VALUES["WS"], "--json"])
 
     assert exit_code == 0
     assert json.loads(capsys.readouterr().out)["url"].startswith(
@@ -198,29 +192,11 @@ def test_connect_keeps_the_guard_cloud_path_prefix(
     )
 
 
-def test_connect_refuses_a_cloud_url_outside_guard_cloud(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    opened = _opener(monkeypatch, accepted=True)
+def test_connect_no_longer_takes_a_cloud_url(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = _run(["accounts", "connect", "slack", "--cloud-url", "https://example.com"])
 
-    exit_code = _run(
-        [
-            "accounts",
-            "connect",
-            "slack",
-            "--cloud-workspace",
-            VALUES["WS"],
-            "--cloud-url",
-            "https://example.com",
-            "--json",
-        ]
-    )
-
-    assert exit_code == CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT
-    assert opened == []
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["state"] == "failed"
-    assert payload["reason"] == "cloud_url_not_allowed"
+    assert exit_code == 2
+    assert "unrecognized arguments: --cloud-url" in capsys.readouterr().err
 
 
 def test_output_goes_to_the_given_stream(capsys: pytest.CaptureFixture[str]) -> None:
@@ -243,7 +219,8 @@ def _help(argv: list[str], capsys: pytest.CaptureFixture[str]) -> str:
 
 def test_help_separates_cloud_workspace_from_local_folder(capsys: pytest.CaptureFixture[str]) -> None:
     family = _help(["cloud-actions", "--help"], capsys)
-    assert "{login,logout,status,doctor,workspace,accounts,ai-tools}" in family
+    assert "{status,doctor,accounts,ai-tools}" in family
+    assert "login" not in family and "logout" not in family
     assert "Separate from `connect`, `apps` and `install`" in family
 
     connect = " ".join(_help(["cloud-actions", "accounts", "connect", "--help"], capsys).split())
@@ -255,7 +232,7 @@ def test_help_separates_cloud_workspace_from_local_folder(capsys: pytest.Capture
     assert "CONNECTED_ACCOUNT_ID" in disconnect
 
     listing = " ".join(_help(["cloud-actions", "accounts", "list", "--help"], capsys).split())
-    assert "defaults to the one chosen with `workspace select`" in listing
+    assert "defaults to the one this computer is connected to" in listing
 
 
 def test_family_stays_out_of_top_level_help_until_it_can_act(capsys: pytest.CaptureFixture[str]) -> None:

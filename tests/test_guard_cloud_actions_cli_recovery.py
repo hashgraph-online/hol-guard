@@ -1,9 +1,7 @@
-"""Recovery across Cloud actions commands.
+"""Recovery from an interrupted `ai-tools configure --apply`.
 
-Signing out of one profile must leave every other profile signed in, and an
-interrupted `ai-tools configure --apply` must leave the AI tool's settings
-file either as it was or recoverable with `ai-tools restore`, never changed
-with no copy to go back to.
+The AI tool's settings file must end either as it was or recoverable with
+`ai-tools restore`, never changed with no copy to go back to.
 """
 
 from __future__ import annotations
@@ -16,46 +14,9 @@ import pytest
 from codex_plugin_scanner.guard.cli import cloud_actions_host_apply
 from codex_plugin_scanner.guard.cli.cloud_actions_host_apply import apply_host_config, backups_dir, restore_host_config
 from codex_plugin_scanner.guard.cli.cloud_actions_host_config import plan_host_config
-from codex_plugin_scanner.guard.cli.cloud_actions_session import CloudActionsSessionStore
-from tests.cloud_actions_login_support import (
-    OTHER_WS,
-    WS,
-    Browser,
-    FakeCloud,
-    _cli,
-    _json_out,
-    _login,
-    browser_fixture,  # noqa: F401 -- shared fixture
-    cloud_fixture,  # noqa: F401 -- shared fixture
-)
+from tests.cloud_actions_pairing_support import URL, entry
 
-URL = "https://hol.org/api/guard/gateway/mcp"
 CODEX_SETTINGS = '# Hand-written; keep this comment.\nmodel = "gpt-5"\n'
-
-
-def test_signing_out_of_one_profile_leaves_the_others_signed_in(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    assert _login(cloud, tmp_path, "--cloud-workspace", WS, "--profile", "work") == 0
-    work_tokens = set(cloud.issued)
-    cloud.overrides["workspace"] = OTHER_WS
-    assert _login(cloud, tmp_path, "--cloud-workspace", OTHER_WS, "--profile", "client") == 0
-    client_tokens = set(cloud.issued) - work_tokens
-    capsys.readouterr()
-
-    assert _cli("logout", "--profile", "work", "--guard-home", str(tmp_path), "--json") == 0
-    assert _json_out(capsys)[0]["revoked"] is True
-
-    assert {entry["token"] for entry in cloud.revocations} == work_tokens
-    store = CloudActionsSessionStore(tmp_path)
-    assert store.load("work") is None and store.load_secrets("work") is None
-    client = store.load_secrets("client")
-    assert client is not None and {client.access_token, client.refresh_token} == client_tokens
-    assert _cli("status", "--profile", "client", "--offline", "--guard-home", str(tmp_path), "--json") == 0
-    status, output = _json_out(capsys)
-    assert (status["state"], status["cloud_workspace"]) == ("signed_in", OTHER_WS)
-    for token in work_tokens | client_tokens:
-        assert token not in output
 
 
 def _seed(home: Path) -> Path:
@@ -73,7 +34,7 @@ def test_an_interrupt_before_the_move_changes_nothing(tmp_path: Path, monkeypatc
     path = _seed(tmp_path)
     before = path.read_bytes()
     guard_home = tmp_path / "guard"
-    plan = plan_host_config("codex", path=path, url=URL)
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
     real = cloud_actions_host_apply.replace_file
 
     def interrupted(source: Path, destination: Path) -> None:
@@ -101,7 +62,7 @@ def test_an_interrupt_right_after_the_move_puts_the_earlier_file_back(
     path = _seed(tmp_path)
     before = path.read_bytes()
     guard_home = tmp_path / "guard"
-    plan = plan_host_config("codex", path=path, url=URL)
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
     real = cloud_actions_host_apply.replace_file
     interrupted = False
 
@@ -127,7 +88,7 @@ def test_an_edit_after_an_interrupted_move_is_kept_and_restore_stays_available(
 ) -> None:
     path = _seed(tmp_path)
     guard_home = tmp_path / "guard"
-    plan = plan_host_config("codex", path=path, url=URL)
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
     real = cloud_actions_host_apply.replace_file
     edited = b"# The AI tool wrote this after Guard.\n" + (plan.after or b"")
 
@@ -153,7 +114,7 @@ def test_an_edit_after_an_interrupted_move_is_kept_and_restore_stays_available(
     after_restore = path.read_text(encoding="utf-8")
     assert "# The AI tool wrote this after Guard." in after_restore
     assert "# Hand-written; keep this comment." in after_restore
-    assert URL not in after_restore
+    assert "cloud-actions" not in after_restore
 
 
 def test_an_interrupt_before_the_move_leaves_another_writers_settings_alone(
@@ -161,7 +122,7 @@ def test_an_interrupt_before_the_move_leaves_another_writers_settings_alone(
 ) -> None:
     path = _seed(tmp_path)
     guard_home = tmp_path / "guard"
-    plan = plan_host_config("codex", path=path, url=URL)
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
     assert plan.after is not None
     real = cloud_actions_host_apply.replace_file
 
@@ -188,7 +149,7 @@ def test_an_edit_made_while_guard_prepares_the_put_back_is_kept(
     path = _seed(tmp_path)
     before = path.read_bytes()
     guard_home = tmp_path / "guard"
-    plan = plan_host_config("codex", path=path, url=URL)
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
     real_replace = cloud_actions_host_apply.replace_file
     real_temporary = cloud_actions_host_apply._write_temporary
     edited = b"# The AI tool wrote this while Guard was putting its file back.\n" + (plan.after or b"")
@@ -223,7 +184,7 @@ def test_an_unknown_move_result_with_the_file_unchanged_keeps_no_copy(
     path = _seed(tmp_path)
     before = path.read_bytes()
     guard_home = tmp_path / "guard"
-    plan = plan_host_config("codex", path=path, url=URL)
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
     real = cloud_actions_host_apply.replace_file
 
     def interrupted(source: Path, destination: Path) -> None:
@@ -248,7 +209,7 @@ def test_a_settings_folder_guard_cannot_write_is_left_alone(tmp_path: Path) -> N
     path = _seed(tmp_path)
     before = path.read_bytes()
     guard_home = tmp_path / "guard"
-    plan = plan_host_config("codex", path=path, url=URL)
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
     path.parent.chmod(0o500)
     try:
         if os.access(path.parent, os.W_OK):

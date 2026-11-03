@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-32g0Wvg2.js","assets/chunks/home-protection-module-DvS_O83r.js","assets/chunks/supply-chain-protection-stats-B5ne_JbZ.js","assets/chunks/workspace-model-Do0eMrgH.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-WQexHemP.js","assets/chunks/harness-version-label-LaVvWn4L.js","assets/chunks/connect-guard-cloud-button-o4J5gv4p.js","assets/chunks/settings-save-proof-modal-0zM1Juyt.js","assets/chunks/settings-workspace-B9cilIV-.js","assets/chunks/confirm-dialog-C0X7QXA-.js","assets/chunks/extensions-workspace-DkKjkCld.js","assets/chunks/app-detail-workspace-DwC-yNPt.js","assets/chunks/policy-workspace-page-16XrxeR4.js","assets/chunks/about-workspace-BBEAKOtb.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-32g0Wvg2.js","assets/chunks/home-protection-module-DvS_O83r.js","assets/chunks/supply-chain-protection-stats-B5ne_JbZ.js","assets/chunks/workspace-model-Do0eMrgH.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-WQexHemP.js","assets/chunks/harness-version-label-LaVvWn4L.js","assets/chunks/connect-guard-cloud-button-o4J5gv4p.js","assets/chunks/settings-save-proof-modal-0zM1Juyt.js","assets/chunks/settings-workspace-SQQE7gi3.js","assets/chunks/confirm-dialog-C0X7QXA-.js","assets/chunks/extensions-workspace-DkKjkCld.js","assets/chunks/app-detail-workspace-DwC-yNPt.js","assets/chunks/policy-workspace-page-16XrxeR4.js","assets/chunks/about-workspace-BBEAKOtb.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -17567,6 +17567,9 @@ async function refreshGuardDashboardSession(guardToken, signal) {
   }
 }
 function guardAwareHref(href) {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href) && !/^https?:/i.test(href)) {
+    return href;
+  }
   const guardToken = readGuardToken();
   if (!guardToken) {
     return href;
@@ -35611,6 +35614,8 @@ function stageFailure(code) {
       return new DiscoveryFailure("mcp_transport_failed", "Guard could not communicate with this MCP server. Check its executable, dependencies, and server logs in the host app. Known tools and choices were kept.");
     case "mcp_initialize_failed":
       return new DiscoveryFailure("mcp_initialize_failed", "The MCP server did not complete initialization. Check that it starts in the host app and uses stdio MCP. Known tools and choices were kept.");
+    case "mcp_server_exited":
+      return new DiscoveryFailure("mcp_server_exited", "The MCP server stopped before it answered. Check that it starts in the host app. If it does, it probably reads a login or settings from your home folder: Guard lists tools in a separate run with a temporary home folder and only the environment from the host config, so it cannot list this server. Its tools still appear here as your host app uses them. Known tools and choices were kept.");
     case "mcp_protocol_unsupported":
       return new DiscoveryFailure("mcp_protocol_unsupported", "This server uses an MCP protocol version Guard does not support. Check the server and Guard versions. Known tools and choices were kept.");
     case "mcp_capability_rejected":
@@ -37215,6 +37220,14 @@ const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then re
 const QUEUE_SESSION_ERROR_HEADLINE = "This approval link needs a signed local session";
 const QUEUE_SESSION_ERROR_DETAIL = "Guard is still running on this device. This browser is not signed in to the local dashboard.";
 const QUEUE_SESSION_ERROR_INSTRUCTION = "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
+const QUEUE_SESSION_COMMAND_INSTRUCTION = "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
+const REQUEST_ID = /^[0-9a-f]{32}$/;
+function desktopRequestUrl(requestId) {
+  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard-desktop://requests/${requestId}` : null;
+}
+function approvalsOpenCommand(requestId) {
+  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard approvals open ${requestId}` : null;
+}
 function queueErrorIsUnauthorizedSession(message) {
   const lower = message.trim().toLowerCase();
   if (!lower) {
@@ -37228,6 +37241,8 @@ function queueErrorIsUnauthorizedSession(message) {
 function QueueConnectionError(props) {
   const [repairing, setRepairing] = reactExports.useState(false);
   const sessionMissing = queueErrorIsUnauthorizedSession(props.message);
+  const desktopUrl = sessionMissing ? desktopRequestUrl(props.requestId ?? null) : null;
+  const openCommand = sessionMissing ? approvalsOpenCommand(props.requestId ?? null) : null;
   const handleRepair = reactExports.useCallback(async () => {
     if (props.onRepair === void 0) {
       return;
@@ -37249,16 +37264,25 @@ function QueueConnectionError(props) {
   const headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
   const detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
   const instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  let sessionRetryVariant;
+  if (desktopUrl !== null) {
+    sessionRetryVariant = "outline";
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", role: "alert", children: headline }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: detail }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple/70", children: instruction }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
-      sessionMissing ? props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRetry, children: "Retry" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),
+      desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: "Open in HOL Guard Desktop" }),
+      sessionMissing ? props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRetry, variant: sessionRetryVariant, children: "Retry" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),
       sessionMissing ? null : props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, variant: "outline", children: repairing ? "Repairing..." : "Reconnect" }),
       sessionMissing ? null : /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: "hol-guard start" }),
       sessionMissing ? null : props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Retry" }),
       sessionMissing ? null : props.approvalUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.approvalUrl, variant: "outline", children: "Open dashboard" })
+    ] }),
+    openCommand !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-purple/70", children: QUEUE_SESSION_COMMAND_INSTRUCTION }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block overflow-x-auto rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: openCommand })
     ] })
   ] }) });
 }
@@ -37861,6 +37885,7 @@ function renderInboxContent(props) {
       {
         message: props.requests.message,
         approvalUrl: props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null,
+        requestId: props.activeRequestId,
         onRetry: props.onRetry,
         onRepair: props.onRepair
       }
@@ -38496,7 +38521,7 @@ function RuntimeGate(props) {
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-32g0Wvg2.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-WQexHemP.js"), true ? __vite__mapDeps([7,8,9,6,10]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-B9cilIV-.js"), true ? __vite__mapDeps([11,10,6,12,9,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-SQQE7gi3.js"), true ? __vite__mapDeps([11,10,6,12,9,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
   () => __vitePreload(() => import("./chunks/extensions-workspace-DkKjkCld.js"), true ? __vite__mapDeps([13,12]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))

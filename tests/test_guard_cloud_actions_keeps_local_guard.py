@@ -18,8 +18,7 @@ from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli.cloud_actions_host_apply import backups_dir
 from codex_plugin_scanner.guard.cli.cloud_actions_host_config import CLOUD_ACTIONS_SERVER_NAME
 from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
-
-WS = "11111111-1111-4111-8111-111111111111"
+from tests.cloud_actions_pairing_support import WS, FakeCloud, pair
 
 CODEX_WITH_GUARD = """[features]
 codex_hooks = true
@@ -49,6 +48,11 @@ SEEDS = {
     "codex": (".codex/config.toml", CODEX_WITH_GUARD),
     "cursor": (".cursor/mcp.json", json.dumps(CURSOR_WITH_GUARD, indent=2) + "\n"),
 }
+
+
+@pytest.fixture(autouse=True)
+def cloud(monkeypatch: pytest.MonkeyPatch) -> FakeCloud:
+    return pair(monkeypatch)
 
 
 def _seed(home: Path, tool: str) -> Path:

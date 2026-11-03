@@ -8,9 +8,13 @@ before: other servers, their environment values, Guard Local's own entries
 and every unrelated setting. Nothing is written here; cloud_actions_host_apply
 writes the rendered file.
 
-The entry holds only the Guard Cloud address. The AI tool signs in to Guard
-Cloud itself and keeps its own credentials, so no credential is read, copied
-or shown, and the workspace is the one chosen when the AI tool signs in.
+The entry starts `hol-guard cloud-actions bridge <ai-tool>`, which the AI
+tool launches like any local MCP server. The bridge obtains short-lived Cloud
+actions access from this computer's `hol-guard connect` pairing each time it is
+needed and keeps it in memory only, so the settings file never holds a
+credential and the AI tool never signs in to Guard Cloud itself. Entries an
+earlier alpha wrote, holding only the Guard Cloud address, are still
+recognised so they can be replaced or put back.
 """
 
 from __future__ import annotations
@@ -23,6 +27,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+
+from .cloud_actions_host_config_toml import UnreadableSettingsError as _UnreadableError
+from .cloud_actions_host_config_toml import render_toml_edit, render_toml_removal
 
 CLOUD_ACTIONS_SERVER_NAME = "hol-guard-cloud"
 _MAX_SETTINGS_BYTES = 32 * 1024 * 1024
@@ -40,8 +47,8 @@ class _AiTool:
     display_name: str
     file_format: Literal["json", "toml"]
     table: str
-    entry_type: str | None
-    sign_in_hint: str
+    typed: bool
+    reload_hint: str
 
 
 _AI_TOOLS: dict[str, _AiTool] = {
@@ -50,24 +57,24 @@ _AI_TOOLS: dict[str, _AiTool] = {
         display_name="Claude Code",
         file_format="json",
         table="mcpServers",
-        entry_type="http",
-        sign_in_hint="In Claude Code, run /mcp and choose hol-guard-cloud to sign in.",
+        typed=True,
+        reload_hint="Start a new Claude Code session to load hol-guard-cloud.",
     ),
     "codex": _AiTool(
         slug="codex",
         display_name="Codex",
         file_format="toml",
         table="mcp_servers",
-        entry_type=None,
-        sign_in_hint="Run `codex mcp login hol-guard-cloud` to sign in.",
+        typed=False,
+        reload_hint="Start a new Codex session to load hol-guard-cloud.",
     ),
     "cursor": _AiTool(
         slug="cursor",
         display_name="Cursor",
         file_format="json",
         table="mcpServers",
-        entry_type=None,
-        sign_in_hint="In Cursor, open Settings > MCP and choose Connect next to hol-guard-cloud.",
+        typed=False,
+        reload_hint="In Cursor, open Settings > MCP and turn hol-guard-cloud on.",
     ),
 }
 
@@ -81,8 +88,9 @@ class HostConfigPlan:
     path: Path
     action: PlanAction
     url: str
+    entry: Mapping[str, object]
     other_entries: int
-    sign_in_hint: str
+    reload_hint: str
     previous_url: str | None = None
     configured_as: tuple[str, ...] = ()
     problem: str | None = None
@@ -103,15 +111,23 @@ class HostConfigPlan:
 
         tool = _AI_TOOLS[self.ai_tool]
         if tool.file_format == "toml":
-            return (f"[{tool.table}.{CLOUD_ACTIONS_SERVER_NAME}]", f"url = {json.dumps(self.url)}")
-        entry = json.dumps(_wanted_entry(tool, self.url), ensure_ascii=False)
+            return (f"[{tool.table}.{CLOUD_ACTIONS_SERVER_NAME}]", *_toml_lines(self.entry))
+        entry = json.dumps(_wanted_entry(tool, self.entry), ensure_ascii=False)
         return (f'"{tool.table}": {{ "{CLOUD_ACTIONS_SERVER_NAME}": {entry} }}',)
 
 
-def gateway_url(origin: str) -> str:
-    from .cloud_actions_oauth import CLOUD_ACTIONS_RESOURCE_PATH
+def bridge_entry(ai_tool: str, *, guard_home: Path) -> dict[str, object]:
+    """The entry that launches the Cloud actions bridge for `ai_tool` with this Guard home."""
 
-    return f"{origin}{CLOUD_ACTIONS_RESOURCE_PATH}"
+    from ..stable_guard_cli import guard_cli_launcher
+
+    tool = _tool(ai_tool)
+    prefix = [] if getattr(sys, "frozen", False) else ["-m", "codex_plugin_scanner.cli", "guard"]
+    args = [*prefix, *_BRIDGE_ARGS, tool.slug, "--guard-home", str(guard_home)]
+    return {"command": guard_cli_launcher(), "args": args}
+
+
+_BRIDGE_ARGS = ("cloud-actions", "bridge")
 
 
 def settings_path(ai_tool: str, *, home: Path, environ: Mapping[str, str] | None) -> Path:
@@ -132,10 +148,15 @@ def settings_path(ai_tool: str, *, home: Path, environ: Mapping[str, str] | None
     return home / ".cursor" / "mcp.json"
 
 
-def plan_host_config(ai_tool: str, *, path: Path, url: str) -> HostConfigPlan:
-    """Work out the change to `path`; never writes."""
+def plan_host_config(ai_tool: str, *, path: Path, entry: Mapping[str, object], url: str) -> HostConfigPlan:
+    """Work out the change to `path`; never writes.
+
+    `entry` is what Guard writes (see bridge_entry); `url` is the Cloud actions
+    server it reaches, used to spot another entry already connected to it.
+    """
 
     tool = _tool(ai_tool)
+    wanted = dict(entry)
 
     def plan(action: PlanAction, **fields: object) -> HostConfigPlan:
         return HostConfigPlan(
@@ -144,7 +165,8 @@ def plan_host_config(ai_tool: str, *, path: Path, url: str) -> HostConfigPlan:
             path=path,
             action=action,
             url=url,
-            sign_in_hint=tool.sign_in_hint,
+            entry=wanted,
+            reload_hint=tool.reload_hint,
             **fields,  # pyright: ignore[reportArgumentType]
         )
 
@@ -153,7 +175,7 @@ def plan_host_config(ai_tool: str, *, path: Path, url: str) -> HostConfigPlan:
     except _UnreadableError as error:
         return plan("unreadable", other_entries=0, problem=str(error))
     if before is None:
-        after = _render_new(tool, url)
+        after = _render_new(tool, wanted)
         return plan("create_file", other_entries=0, after=after)
     try:
         document = _parse(tool, before)
@@ -163,17 +185,18 @@ def plan_host_config(ai_tool: str, *, path: Path, url: str) -> HostConfigPlan:
     others = {name: value for name, value in servers.items() if name != CLOUD_ACTIONS_SERVER_NAME}
     existing = servers.get(CLOUD_ACTIONS_SERVER_NAME)
     if existing is not None:
-        if not _is_guard_entry(tool, existing):
+        current = _guard_fields(tool, existing)
+        if current is None:
             return plan(
                 "conflict",
                 other_entries=len(others),
                 problem=f"An entry named {CLOUD_ACTIONS_SERVER_NAME} already exists with other settings.",
                 before=before,
             )
-        current = existing.get("url")
-        if current == url:
+        if current == wanted:
             return plan("unchanged", other_entries=len(others), before=before, after=before)
-        previous_url = _display_url(current) if isinstance(current, str) else None
+        current_url = current.get("url")
+        previous_url = _display_url(current_url) if isinstance(current_url, str) else None
     else:
         previous_url = None
     # Another entry already reaching this server is left as the one in use,
@@ -182,8 +205,8 @@ def plan_host_config(ai_tool: str, *, path: Path, url: str) -> HostConfigPlan:
     if same_server:
         return plan("already_configured", other_entries=len(others), configured_as=same_server, before=before)
     try:
-        after = _render_edit(tool, before, url)
-        _check_only_guard_entry_changed(tool, before, after, url)
+        after = _render_edit(tool, before, wanted)
+        _check_only_guard_entry_changed(tool, before, after, wanted)
     except UnicodeEncodeError:
         problem = "The settings file holds text that cannot be written back unchanged."
         return plan("unreadable", other_entries=len(others), problem=problem, before=before)
@@ -193,27 +216,29 @@ def plan_host_config(ai_tool: str, *, path: Path, url: str) -> HostConfigPlan:
     return plan(action, other_entries=len(others), previous_url=previous_url, before=before, after=after)
 
 
-def render_entry_undo(ai_tool: str, *, current: bytes, written_url: str, prior: bytes | None) -> tuple[bytes, bool]:
+def render_entry_undo(
+    ai_tool: str, *, current: bytes, written: Mapping[str, object], prior: bytes | None
+) -> tuple[bytes, bool]:
     """`current` with Guard's entry put back as it was in `prior`, or removed; True when removed.
 
-    Only Guard's entry changes, and only while it still points at
-    `written_url`; anything else edited since stays as it is. Raises
-    ValueError when that cannot be done exactly.
+    Only Guard's entry changes, and only while it is still exactly `written`;
+    anything else edited since stays as it is. Raises ValueError when that
+    cannot be done exactly.
     """
 
     tool = _tool(ai_tool)
     try:
         entry = _servers(tool, _parse(tool, current)).get(CLOUD_ACTIONS_SERVER_NAME)
-        if entry is None or not _is_guard_entry(tool, entry) or entry.get("url") != written_url:
+        if entry is None or _guard_fields(tool, entry) != dict(written):
             raise _UnreadableError(f"The {CLOUD_ACTIONS_SERVER_NAME} entry changed after Guard wrote it.")
         prior_document = _parse(tool, prior) if prior is not None else {}
         prior_entry = _servers(tool, prior_document).get(CLOUD_ACTIONS_SERVER_NAME)
         if prior_entry is not None:
-            prior_url = prior_entry.get("url")
-            if not _is_guard_entry(tool, prior_entry) or not isinstance(prior_url, str):
+            prior_fields = _guard_fields(tool, prior_entry)
+            if prior_fields is None:
                 raise _UnreadableError(f"The earlier {CLOUD_ACTIONS_SERVER_NAME} entry was not one Guard wrote.")
-            after = _render_edit(tool, current, prior_url)
-            _check_only_guard_entry_changed(tool, current, after, prior_url)
+            after = _render_edit(tool, current, prior_fields)
+            _check_only_guard_entry_changed(tool, current, after, prior_fields)
             return after, False
         after = _render_removal(tool, current, drop_empty_table=tool.table not in prior_document)
         _check_guard_entry_removed(tool, current, after)
@@ -224,10 +249,6 @@ def render_entry_undo(ai_tool: str, *, current: bytes, written_url: str, prior: 
         raise ValueError(str(error)) from None
 
 
-class _UnreadableError(Exception):
-    pass
-
-
 def _tool(ai_tool: str) -> _AiTool:
     tool = _AI_TOOLS.get(ai_tool)
     if tool is None:
@@ -235,18 +256,46 @@ def _tool(ai_tool: str) -> _AiTool:
     return tool
 
 
-def _wanted_entry(tool: _AiTool, url: str) -> dict[str, str]:
-    return {"type": tool.entry_type, "url": url} if tool.entry_type is not None else {"url": url}
+def _wanted_entry(tool: _AiTool, fields: Mapping[str, object]) -> dict[str, object]:
+    if not tool.typed:
+        return dict(fields)
+    return {"type": "http" if "url" in fields else "stdio", **fields}
 
 
-def _is_guard_entry(tool: _AiTool, entry: Mapping[str, object]) -> bool:
-    """True only for an entry shaped exactly like the one Guard writes."""
+def _guard_fields(tool: _AiTool, entry: Mapping[str, object]) -> dict[str, object] | None:
+    """The fields of an entry shaped exactly like one Guard writes, else None.
 
-    if set(entry) != set(_wanted_entry(tool, "")):
-        return False
-    if tool.entry_type is not None and entry.get("type") != tool.entry_type:
-        return False
-    return isinstance(entry.get("url"), str)
+    That is the bridge launch for this AI tool, or the address-only entry an
+    earlier alpha wrote.
+    """
+
+    fields = {key: value for key, value in entry.items() if key != "type"}
+    if tool.typed:
+        if entry.get("type") != ("http" if "url" in fields else "stdio"):
+            return None
+    elif "type" in entry:
+        return None
+    if set(fields) == {"url"}:
+        return fields if isinstance(fields["url"], str) else None
+    if set(fields) != {"command", "args"}:
+        return None
+    command, args = fields["command"], fields["args"]
+    if not isinstance(command, str) or not isinstance(args, list):
+        return None
+    values: list[str] = [value for value in args if isinstance(value, str)]  # pyright: ignore[reportUnknownVariableType]
+    if len(values) != len(args) or not _names_bridge(values, tool.slug):  # pyright: ignore[reportUnknownArgumentType]
+        return None
+    return {"command": command, "args": values}
+
+
+def _names_bridge(args: list[str], ai_tool: str) -> bool:
+    wanted = [*_BRIDGE_ARGS, ai_tool]
+    return any(args[index : index + len(wanted)] == wanted for index in range(len(args)))
+
+
+def _toml_lines(fields: Mapping[str, object]) -> tuple[str, ...]:
+    # JSON string and array syntax is valid TOML for the plain strings Guard writes.
+    return tuple(f"{key} = {json.dumps(value)}" for key, value in fields.items())
 
 
 def _points_at(entry: object, url: str) -> bool:
@@ -342,23 +391,23 @@ def _servers(tool: _AiTool, document: Mapping[str, object]) -> dict[str, Mapping
     return result
 
 
-def _render_new(tool: _AiTool, url: str) -> bytes:
+def _render_new(tool: _AiTool, fields: Mapping[str, object]) -> bytes:
     if tool.file_format == "toml":
-        return f"[{tool.table}.{CLOUD_ACTIONS_SERVER_NAME}]\nurl = {json.dumps(url)}\n".encode()
-    payload = {tool.table: {CLOUD_ACTIONS_SERVER_NAME: _wanted_entry(tool, url)}}
+        return "\n".join((f"[{tool.table}.{CLOUD_ACTIONS_SERVER_NAME}]", *_toml_lines(fields), "")).encode()
+    payload = {tool.table: {CLOUD_ACTIONS_SERVER_NAME: _wanted_entry(tool, fields)}}
     return (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode()
 
 
-def _render_edit(tool: _AiTool, before: bytes, url: str) -> bytes:
+def _render_edit(tool: _AiTool, before: bytes, fields: Mapping[str, object]) -> bytes:
     text = before.decode("utf-8")
     if tool.file_format == "toml":
-        return _render_toml_edit(tool, text, url).encode()
+        return render_toml_edit(tool.table, CLOUD_ACTIONS_SERVER_NAME, text, fields).encode()
     document = json.loads(text) if text.strip() else {}
     servers = document.get(tool.table)
     if not isinstance(servers, dict):
         servers = {}
         document[tool.table] = servers
-    servers[CLOUD_ACTIONS_SERVER_NAME] = _wanted_entry(tool, url)
+    servers[CLOUD_ACTIONS_SERVER_NAME] = _wanted_entry(tool, fields)
     return _dump_json_like(document, text)
 
 
@@ -377,7 +426,9 @@ def _dump_json_like(document: object, text: str) -> bytes:
 def _render_removal(tool: _AiTool, current: bytes, *, drop_empty_table: bool) -> bytes:
     text = current.decode("utf-8")
     if tool.file_format == "toml":
-        return _render_toml_removal(tool, text, drop_empty_table=drop_empty_table).encode()
+        return render_toml_removal(
+            tool.table, CLOUD_ACTIONS_SERVER_NAME, text, drop_empty_table=drop_empty_table
+        ).encode()
     document = json.loads(text)
     servers = document[tool.table]
     del servers[CLOUD_ACTIONS_SERVER_NAME]
@@ -395,50 +446,6 @@ def _json_indent(text: str) -> int | str:
     return 2
 
 
-def _render_toml_edit(tool: _AiTool, text: str, url: str) -> str:
-    import tomlkit
-    from tomlkit.exceptions import TOMLKitError
-
-    try:
-        document = tomlkit.parse(text)
-        servers = document.get(tool.table)
-        if servers is None:
-            servers = tomlkit.table(is_super_table=True)
-            document[tool.table] = servers
-        existing = servers.get(CLOUD_ACTIONS_SERVER_NAME)
-        if existing is not None:
-            existing["url"] = url
-        else:
-            entry = tomlkit.table()
-            entry["url"] = url
-            entry.add(tomlkit.nl())
-            servers[CLOUD_ACTIONS_SERVER_NAME] = entry
-        rendered = tomlkit.dumps(document)
-        if rendered.endswith("\n\n") and not text.endswith("\n\n"):
-            rendered = rendered.rstrip("\n") + "\n"
-        return rendered
-    except (TOMLKitError, TypeError, ValueError, AttributeError):
-        raise _UnreadableError("Guard could not edit the settings file without changing other settings.") from None
-
-
-def _render_toml_removal(tool: _AiTool, text: str, *, drop_empty_table: bool) -> str:
-    import tomlkit
-    from tomlkit.exceptions import TOMLKitError
-
-    try:
-        document = tomlkit.parse(text)
-        servers = document[tool.table]
-        del servers[CLOUD_ACTIONS_SERVER_NAME]
-        if not servers and drop_empty_table:
-            del document[tool.table]
-        rendered = tomlkit.dumps(document)
-        if rendered.endswith("\n\n") and not text.endswith("\n\n"):
-            rendered = rendered.rstrip("\n") + "\n"
-        return rendered
-    except (TOMLKitError, TypeError, ValueError, AttributeError, KeyError):
-        raise _UnreadableError("Guard could not edit the settings file without changing other settings.") from None
-
-
 def _check_guard_entry_removed(tool: _AiTool, before: bytes, after: bytes) -> None:
     old = _parse(tool, before)
     new = _parse(tool, after)
@@ -448,13 +455,13 @@ def _check_guard_entry_removed(tool: _AiTool, before: bytes, after: bytes) -> No
         raise _UnreadableError("Guard could not edit the settings file without changing other settings.")
 
 
-def _check_only_guard_entry_changed(tool: _AiTool, before: bytes, after: bytes, url: str) -> None:
+def _check_only_guard_entry_changed(tool: _AiTool, before: bytes, after: bytes, fields: Mapping[str, object]) -> None:
     """Refuse a rendering that changes anything but Guard's own entry."""
 
     old = _parse(tool, before)
     new = _parse(tool, after)
     new_servers = new.get(tool.table)
-    if not isinstance(new_servers, dict) or new_servers.get(CLOUD_ACTIONS_SERVER_NAME) != _wanted_entry(tool, url):
+    if not isinstance(new_servers, dict) or new_servers.get(CLOUD_ACTIONS_SERVER_NAME) != _wanted_entry(tool, fields):
         raise _UnreadableError("Guard could not edit the settings file without changing other settings.")
     if _without_guard_entry(tool, new) != _without_guard_entry(tool, old):
         raise _UnreadableError("Guard could not edit the settings file without changing other settings.")
@@ -477,7 +484,7 @@ __all__ = [
     "SUPPORTED_AI_TOOLS",
     "AiToolNotSupportedError",
     "HostConfigPlan",
-    "gateway_url",
+    "bridge_entry",
     "plan_host_config",
     "read_settings_bytes",
     "render_entry_undo",

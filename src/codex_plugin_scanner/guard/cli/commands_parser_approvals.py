@@ -112,9 +112,14 @@ def add_approval_parser(
 
     open_parser = approvals_subparsers.add_parser(
         "open",
-        help="Show the approval URL for a pending request",
+        help="Open a pending request in HOL Guard Desktop or a signed-in browser tab",
     )
     open_parser.add_argument("request_id", help="The approval request ID to open")
+    open_parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Print the request's approval URL without opening it",
+    )
     add_common_args(open_parser)
     open_parser.add_argument("--json", action="store_true")
 

@@ -1,10 +1,13 @@
 """`cloud-actions status` and `cloud-actions doctor`.
 
-Both read the saved sign-in (profile) and ask Guard Cloud whether it still
-accepts it (`cloud_actions_health`); `status --offline` does not ask. `doctor`
-also checks that the saved files are private and which AI tools are set up,
-and can save its results, without any credential, to a new private file.
-The health modules are imported only when one of these commands runs.
+Both read this computer's `hol-guard connect` pairing and what the last
+connect said about Cloud actions. `status` also asks Guard Cloud whether it
+offers Cloud actions (`cloud_actions_health`); `status --offline` does not ask.
+`doctor` checks which AI tools are set up and, for the first one that is,
+exchanges the pairing for that AI tool's access and asks Guard Cloud whether it
+accepts it, exactly as the AI tool would. It can save its results, without any
+access, to a new private file. The health modules are imported only when one
+of these commands runs.
 """
 
 from __future__ import annotations
@@ -19,86 +22,117 @@ from .commands_dispatch_cloud_actions import (
     CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT,
     CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
     CLOUD_ACTIONS_UNAVAILABLE_EXIT,
-    _login_hint,  # pyright: ignore[reportPrivateUsage]
-    _profile_fields,  # pyright: ignore[reportPrivateUsage]
 )
+from .connect_cloud_actions import CLOUD_ACTIONS_RECONNECT_COMMAND
 
 if TYPE_CHECKING:
+    from ..store import GuardStore
+    from .cloud_actions_access import CloudActionsPairing
     from .cloud_actions_health import HealthCheck
-    from .cloud_actions_session import CloudActionsProfile, CloudActionsSecrets, CloudActionsSessionStore
     from .commands_dispatch_cloud_actions import _Reply  # pyright: ignore[reportPrivateUsage]
+    from .connect_cloud_actions import CloudActionsConnectSummary
 
-CLOUD_ACTIONS_DIAGNOSTICS_SCHEMA = "guard.cloud-actions.diagnostics.v1"
-
-
-def _live_checks(profile: CloudActionsProfile, access_token: str, *, offline: bool) -> tuple[HealthCheck, HealthCheck]:
-    from .cloud_actions_health import HealthCheck, check_connection, check_service
-
-    if offline:
-        skipped = HealthCheck("not_checked", "Not checked (--offline).")
-        return skipped, skipped
-    service = check_service(profile)
-    if service.state in {"offline", "not_turned_on", "profile_damaged"}:
-        return service, HealthCheck(service.state, service.message, service.http_status)
-    return service, check_connection(profile, access_token)
+CLOUD_ACTIONS_DIAGNOSTICS_SCHEMA = "guard.cloud-actions.diagnostics.v2"
+_NOT_PAIRED = f"This computer is not connected to Guard Cloud. Run `{CLOUD_ACTIONS_RECONNECT_COMMAND}`."
+# Access refusals that only connecting again (or a workspace admin) can fix.
+_RECONNECT_STATES = frozenset(
+    {"reconnect", "not_paired", "pairing_expired", "cloud_actions_off", "cloud_actions_not_allowed"}
+)
 
 
-def status(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Reply) -> int:
-    from .cloud_actions_health import checked_at
+def _paired(args: argparse.Namespace) -> tuple[GuardStore, CloudActionsPairing, CloudActionsConnectSummary] | None:
+    from . import cloud_actions_access
+    from .commands_dispatch_cloud_actions_ai_tools import settings_guard_home
+    from .connect_cloud_actions import cloud_actions_connect_summary, read_cloud_actions_connect_report
 
-    profile = store.load(args.profile)
-    requested = args.cloud_workspace
-    # `--offline` reads only the profile file: opening the secret store can take
-    # a lock and fix permissions, and the offline view never sends the sign-in.
-    if profile is None:
-        access_token = None
-    elif args.offline:
-        access_token = "" if store.has_saved_secret(args.profile) else None
+    try:
+        store = cloud_actions_access.open_paired_store(settings_guard_home(args))
+        pairing = cloud_actions_access.read_cloud_actions_pairing(store)
+    except cloud_actions_access.CloudActionsAccessError:
+        return None
+    grant_id = store.get_oauth_local_credential_health().get("grant_id")
+    report = read_cloud_actions_connect_report(store, grant_id=grant_id if isinstance(grant_id, str) else None)
+    return store, pairing, cloud_actions_connect_summary(report, paired=True)
+
+
+def _saved_pairing(args: argparse.Namespace) -> tuple[CloudActionsPairing, CloudActionsConnectSummary] | None:
+    """The pairing as saved, read without opening the Guard store (for `--offline`)."""
+
+    from .cloud_actions_saved_pairing import read_saved_pairing
+    from .commands_dispatch_cloud_actions_ai_tools import settings_guard_home
+    from .connect_cloud_actions import cloud_actions_connect_summary
+
+    saved = read_saved_pairing(settings_guard_home(args))
+    if saved is None:
+        return None
+    pairing, report = saved
+    return pairing, cloud_actions_connect_summary(report, paired=True)
+
+
+def _pairing_fields(pairing: CloudActionsPairing, summary: CloudActionsConnectSummary) -> dict[str, object]:
+    return {
+        "cloud_url": pairing.origin,
+        "cloud_workspace": pairing.workspace_id or summary["workspace_id"],
+        "cloud_actions": summary["status"],
+    }
+
+
+def _workspace_line(requested: str | None, workspace: object) -> str | None:
+    if requested is None or workspace is None or requested == workspace:
+        return None
+    return (
+        f"This computer is connected to workspace {workspace}. To use workspace {requested}, "
+        f"run `{CLOUD_ACTIONS_RECONNECT_COMMAND} --cloud-workspace {requested}`."
+    )
+
+
+def status(args: argparse.Namespace, reply: _Reply) -> int:
+    from .cloud_actions_health import HealthCheck, check_service, checked_at
+
+    if args.offline:
+        paired = _saved_pairing(args)
     else:
-        secrets = store.load_secrets(args.profile)
-        access_token = secrets.access_token if secrets is not None else None
-    if profile is None or access_token is None:
+        found = _paired(args)
+        paired = (found[1], found[2]) if found is not None else None
+    if paired is None:
         return reply(
             0,
-            f"Not signed in (profile {args.profile}). Run `{_login_hint(args.profile, requested)}`.",
-            state="signed_out",
-            profile=args.profile,
+            _NOT_PAIRED,
+            state="not_paired",
             accounts="not_available_yet",
             included_actions="not_available_yet",
         )
-    state = "expired" if profile.is_expired() else "signed_in"
-    service, connection = _live_checks(profile, access_token, offline=args.offline)
-    fields: dict[str, object] = {
-        "state": state,
-        # Offline, the sign-in comes from the profile file alone; the saved
-        # secret it names may be gone or unreadable.
-        "secret_checked": not args.offline,
-        **_profile_fields(profile),
-        "checked_at": checked_at(),
-        "service": service.as_dict(),
-        "connection": connection.as_dict(),
-        "included_actions": "not_available_yet",
-        "accounts": "not_available_yet",
-    }
+    pairing, summary = paired
+    service = HealthCheck("not_checked", "Not checked (--offline).") if args.offline else check_service(pairing)
+    fields = _pairing_fields(pairing, summary)
+    fields.update(
+        {
+            "state": "paired",
+            "checked_at": checked_at(),
+            "service": service.as_dict(),
+            "included_actions": "not_available_yet",
+            "accounts": "not_available_yet",
+        }
+    )
     lines = [
-        f"Profile {profile.name}: {'sign-in expired' if state == 'expired' else 'signed in'}",
-        f"Guard Cloud: {profile.issuer}",
-        f"Workspace: {profile.workspace_id}",
-        f"Cloud actions: {service.message}",
-        f"Sign-in: {connection.message}",
+        f"Guard Cloud: {pairing.origin}",
+        f"Workspace: {fields['cloud_workspace'] or 'not reported'}",
+        f"Cloud actions on this computer: {summary['message']}",
+        f"Guard Cloud service: {service.message}",
         "Included actions: not available yet",
         "Connected accounts: not available yet",
     ]
+    requested = getattr(args, "cloud_workspace", None)
     if requested is not None:
-        fields["workspace_matches"] = requested == profile.workspace_id
-        if requested != profile.workspace_id:
-            lines.append(f"Workspace {requested} needs its own sign-in: `{_login_hint(args.profile, requested)}`.")
-    if connection.state in _SIGN_IN_AGAIN or service.state == "changed":
-        lines.append(f"Sign in again: `{_login_hint(profile.name, profile.workspace_id)}`.")
+        fields["workspace_matches"] = requested == fields["cloud_workspace"]
+        mismatch = _workspace_line(requested, fields["cloud_workspace"])
+        if mismatch is not None:
+            lines.append(mismatch)
+    if service.state == "changed":
+        lines.append(f"Connect again: `{CLOUD_ACTIONS_RECONNECT_COMMAND}`.")
     return reply(0, "\n".join(lines), **fields)
 
 
-_SIGN_IN_AGAIN = frozenset({"sign_in_expired", "sign_in_again"})
 _AI_TOOL_STATES = {
     "unchanged": "configured",
     "already_configured": "configured",
@@ -110,36 +144,14 @@ _AI_TOOL_STATES = {
 }
 
 
-def _private_files(store: CloudActionsSessionStore, profile_name: str) -> HealthCheck:
-    from .cloud_actions_health import HealthCheck
-
-    if os.name == "nt":
-        return HealthCheck("not_checked", "File permissions are not checked on Windows.")
-    guard_home = store.root.parent
-    profile_file = store.root / "profiles" / f"{profile_name}.json"
-    # The Guard home may be readable by others, but if they can write to it they can
-    # replace the Cloud actions folder beneath it, whatever that folder's own mode.
-    replaceable = guard_home.exists() and guard_home.stat().st_mode & 0o022
-    too_open = (["."] if replaceable else []) + [
-        str(path.relative_to(guard_home))
-        for path in (store.root, profile_file.parent, profile_file)
-        if path.exists() and path.stat().st_mode & 0o077
-    ]
-    if too_open:
-        return HealthCheck(
-            "too_open",
-            "Other users on this computer can read or replace Cloud actions files.",
-            details=(("paths", too_open),),
-        )
-    return HealthCheck("private", "Cloud actions files are readable only by you.")
-
-
 def _ai_tool_states(args: argparse.Namespace, url: str | None) -> dict[str, dict[str, object]]:
     from .cloud_actions_health import redact_home
-    from .cloud_actions_host_config import SUPPORTED_AI_TOOLS, plan_host_config, settings_path
+    from .cloud_actions_host_config import SUPPORTED_AI_TOOLS, bridge_entry, plan_host_config, settings_path
+    from .commands_dispatch_cloud_actions_ai_tools import settings_guard_home
 
     explicit_home = getattr(args, "home", None)
     home = Path(explicit_home).expanduser() if explicit_home else Path.home()
+    guard_home = settings_guard_home(args)
     states: dict[str, dict[str, object]] = {}
     for ai_tool in SUPPORTED_AI_TOOLS:
         path = settings_path(ai_tool, home=home, environ=None if explicit_home else os.environ)
@@ -147,7 +159,7 @@ def _ai_tool_states(args: argparse.Namespace, url: str | None) -> dict[str, dict
         if url is None:
             entry["state"] = "not_checked"
         else:
-            plan = plan_host_config(ai_tool, path=path, url=url)
+            plan = plan_host_config(ai_tool, path=path, entry=bridge_entry(ai_tool, guard_home=guard_home), url=url)
             entry["state"] = _AI_TOOL_STATES[plan.action]
             if plan.configured_as:
                 entry["configured_as"] = list(plan.configured_as)
@@ -157,73 +169,91 @@ def _ai_tool_states(args: argparse.Namespace, url: str | None) -> dict[str, dict
     return states
 
 
-def doctor(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Reply) -> int:
+def _access_check(
+    store: GuardStore, pairing: CloudActionsPairing, ai_tools: dict[str, dict[str, object]]
+) -> tuple[HealthCheck, str | None]:
+    """Exchange the pairing for the first set-up AI tool's access and ask Guard Cloud whether it accepts it."""
+
+    from . import cloud_actions_access
+    from .cloud_actions_health import HealthCheck, check_connection
+
+    ai_tool = next((name for name, entry in ai_tools.items() if entry["state"] == "configured"), None)
+    if ai_tool is None:
+        return HealthCheck("not_checked", "Not checked: no AI tool is set up for Cloud actions yet."), None
+    try:
+        access = cloud_actions_access.exchange_cloud_actions_access(store, ai_tool=ai_tool)
+    except cloud_actions_access.CloudActionsAccessError as error:
+        return HealthCheck(error.reason, str(error), details=(("ai_tool", ai_tool),)), None
+    check = check_connection(pairing, access.access_token, access.workspace_id)
+    return HealthCheck(check.state, check.message, check.http_status, (*check.details, ("ai_tool", ai_tool))), (
+        access.access_token
+    )
+
+
+def doctor(args: argparse.Namespace, reply: _Reply) -> int:
     import platform
 
     from ...version import __version__
-    from .cloud_actions_health import HealthCheck, checked_at
+    from .cloud_actions_health import HealthCheck, check_service, checked_at
 
-    profile = store.load(args.profile)
-    secrets = store.load_secrets(args.profile) if profile is not None else None
-    checks: dict[str, HealthCheck]
-    if profile is None:
-        sign_in = HealthCheck("signed_out", f"Not signed in (profile {args.profile}).")
-    elif secrets is None:
-        sign_in = HealthCheck("saved_sign_in_unreadable", "The saved sign-in could not be read. Sign in again.")
-    elif profile.is_expired():
-        sign_in = HealthCheck("expired", "The saved sign-in has expired. Sign in again.")
+    paired = _paired(args)
+    fields: dict[str, object] = {}
+    access_token: str | None = None
+    if paired is None:
+        skipped = HealthCheck("not_checked", "Not checked: this computer is not connected to Guard Cloud.")
+        connection = HealthCheck("not_paired", _NOT_PAIRED)
+        checks = {"connection": connection, "service": skipped, "access": skipped}
+        ai_tools = _ai_tool_states(args, None)
     else:
-        sign_in = HealthCheck("signed_in", f"Signed in to workspace {profile.workspace_id}.")
-    checks = {"sign_in": sign_in, "files": _private_files(store, args.profile)}
-    if profile is not None and secrets is not None:
-        checks["service"], checks["connection"] = _live_checks(profile, secrets.access_token, offline=False)
-    else:
-        skipped = HealthCheck("not_checked", "Not checked: no saved sign-in.")
-        checks["service"], checks["connection"] = skipped, skipped
-    url = profile.resource if profile is not None else None
-    ai_tools = _ai_tool_states(args, url)
+        store, pairing, summary = paired
+        fields.update(_pairing_fields(pairing, summary))
+        if summary["status"] == "off":
+            connection = HealthCheck("cloud_actions_off", summary["message"])
+        else:
+            connection = HealthCheck("paired", f"Connected to workspace {fields['cloud_workspace'] or 'unknown'}.")
+        ai_tools = _ai_tool_states(args, pairing.gateway_url)
+        service = check_service(pairing)
+        if service.state in {"offline", "not_turned_on"}:
+            access = HealthCheck("not_checked", f"Not checked: {service.message}")
+        elif connection.state == "cloud_actions_off":
+            access = HealthCheck("not_checked", "Not checked: Cloud actions are off for this computer.")
+        else:
+            access, access_token = _access_check(store, pairing, ai_tools)
+        checks = {"connection": connection, "service": service, "access": access}
 
     if (
-        sign_in.state != "signed_in"
-        or checks["connection"].state in _SIGN_IN_AGAIN
-        or checks["service"].state == "changed"
+        checks["connection"].state != "paired"
+        or checks["access"].state in _RECONNECT_STATES
+        or (checks["service"].state == "changed")
     ):
-        result, code = "needs_sign_in", CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT
-    elif not all(checks[name].ok for name in ("service", "connection")) or checks["files"].state == "too_open":
+        result, code = "needs_connect", CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT
+    elif not checks["service"].ok or not (checks["access"].ok or checks["access"].state == "not_checked"):
         result, code = "problems_found", CLOUD_ACTIONS_UNAVAILABLE_EXIT
     else:
         result, code = "ok", 0
-    fields: dict[str, object] = {
-        "result": result,
-        "profile": args.profile,
-        "checked_at": checked_at(),
-        "hol_guard_version": __version__,
-        "system": {"os": platform.system(), "release": platform.release(), "machine": platform.machine()},
-        "checks": {name: check.as_dict() for name, check in checks.items()},
-        "ai_tools": ai_tools,
-        "included_actions": "not_available_yet",
-        "accounts": "not_available_yet",
-    }
-    if profile is not None:
-        fields.update(_profile_fields(profile))
-        fields["signed_in_at"] = profile.signed_in_at
-    lines = [f"Cloud actions doctor (profile {args.profile}): {result.replace('_', ' ')}"]
-    for name, title in (
-        ("sign_in", "Sign-in"),
-        ("files", "Saved files"),
-        ("service", "Cloud actions"),
-        ("connection", "Guard Cloud"),
-    ):
+    fields.update(
+        {
+            "result": result,
+            "checked_at": checked_at(),
+            "hol_guard_version": __version__,
+            "system": {"os": platform.system(), "release": platform.release(), "machine": platform.machine()},
+            "checks": {name: check.as_dict() for name, check in checks.items()},
+            "ai_tools": ai_tools,
+            "included_actions": "not_available_yet",
+            "accounts": "not_available_yet",
+        }
+    )
+    lines = [f"Cloud actions doctor: {result.replace('_', ' ')}"]
+    for name, title in (("connection", "This computer"), ("service", "Guard Cloud"), ("access", "AI tool access")):
         check = checks[name]
-        lines.append(
-            f"  {'ok ' if check.ok or check.state in {'signed_in', 'private'} else '!! '}{title}: {check.message}"
-        )
+        mark = "ok " if check.ok or check.state in {"paired", "not_checked"} else "!! "
+        lines.append(f"  {mark}{title}: {check.message}")
     for ai_tool, entry in ai_tools.items():
         lines.append(f"  AI tool {ai_tool}: {str(entry['state']).replace('_', ' ')} ({entry['settings_file']})")
-    if result == "needs_sign_in":
-        lines.append(f"Sign in: `{_login_hint(args.profile, profile.workspace_id if profile is not None else None)}`.")
+    if result == "needs_connect":
+        lines.append(f"Connect again: `{CLOUD_ACTIONS_RECONNECT_COMMAND}`.")
     if args.bundle:
-        written = _write_bundle(Path(args.bundle).expanduser(), fields, secrets)
+        written = _write_bundle(Path(args.bundle).expanduser(), fields, access_token)
         if written is not None:
             return reply(
                 CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
@@ -231,24 +261,18 @@ def doctor(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Re
                 state="failed",
                 reason="bundle_not_written",
                 message=written,
-                profile=args.profile,
             )
         fields["bundle"] = str(Path(args.bundle).expanduser())
-        lines.append(f"Saved the results to {fields['bundle']}. It holds no sign-in or AI tool settings.")
+        lines.append(f"Saved the results to {fields['bundle']}. It holds no access or AI tool settings.")
     return reply(code, "\n".join(lines), **fields)
 
 
-def _write_bundle(
-    path: Path,
-    fields: dict[str, object],
-    secrets: CloudActionsSecrets | None,
-) -> str | None:
+def _write_bundle(path: Path, fields: dict[str, object], access_token: str | None) -> str | None:
     """Write the doctor results to a new private file; return a reason when it was not written."""
 
     text = json.dumps({"schema": CLOUD_ACTIONS_DIAGNOSTICS_SCHEMA, **fields}, indent=2, sort_keys=True) + "\n"
-    forbidden = [value for value in (secrets.access_token, secrets.refresh_token) if value] if secrets else []
-    if any(value in text for value in forbidden):
-        return "The results held part of the saved sign-in, so they were not saved to a file."
+    if access_token and access_token in text:
+        return "The results held part of the Cloud actions access, so they were not saved to a file."
     try:
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:

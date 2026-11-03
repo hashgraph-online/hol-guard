@@ -108,6 +108,47 @@ fn wholly_unproven_chains_keep_the_generic_reason() {
 }
 
 #[test]
+fn a_chain_whose_only_proven_steps_are_filters_is_not_told_to_split() {
+    // The proven step here only passes along what the unproven one prints.
+    // Running it separately leaves the same step under review and adds a
+    // second command, so the split advice made the friction worse.
+    for command in ["npm install | head -5", "make build | tail -20 | wc -l"] {
+        let (action, code, reason) = decision(command);
+        assert_eq!(action, "review", "{command}");
+        assert_eq!(code, "native_command_review_required", "{command}");
+        assert!(reason.contains("not proven read-only"), "{reason}");
+        assert!(
+            reason.contains("splitting the command would not avoid the review"),
+            "{reason}"
+        );
+        assert!(
+            !reason.contains("as separate commands"),
+            "{command}: {reason}"
+        );
+    }
+
+    // A leading `cd` is proven but is not work of its own either. The target
+    // is spelled `./src` because a bare relative target is proved only when
+    // the request declares an environment with no CDPATH.
+    let (_, _, reason) = decision("cd ./src && npm install | head -5");
+    assert!(reason.contains("not proven read-only"), "{reason}");
+    assert!(
+        reason.contains("splitting the command would not avoid the review"),
+        "{reason}"
+    );
+}
+
+#[test]
+fn a_chain_with_real_proven_work_keeps_the_split_advice() {
+    let (_, _, reason) = decision("ls src | head -5 && npm install");
+    assert!(
+        reason.contains("Run the proven-safe steps as separate commands"),
+        "{reason}"
+    );
+    assert!(!reason.contains("would not avoid the review"), "{reason}");
+}
+
+#[test]
 fn a_single_step_is_not_told_to_split_itself() {
     // One step has nothing to split, so the advice only sent agents hunting
     // for a split that does not exist.

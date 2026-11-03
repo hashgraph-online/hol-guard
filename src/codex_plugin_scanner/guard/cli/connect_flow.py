@@ -36,6 +36,12 @@ from ..store import GuardStore
 from ..store_connect import build_connect_state_response
 from .commands_parser_constants import DEFAULT_GUARD_CONNECT_URL
 from .commands_parser_constants import DEFAULT_GUARD_SYNC_URL as DEFAULT_GUARD_SYNC_URL
+from .connect_cloud_actions import (
+    CloudActionsConnectReport,
+    connect_status_cloud_actions,
+    parse_cloud_actions_connect_report,
+    record_connect_cloud_actions,
+)
 from .oauth_client import (
     GuardDpopKeyMaterial,
     GuardOAuthClientConfig,
@@ -117,6 +123,7 @@ class GuardOAuthTokenExchangeResult:
     device_id: str | None = None
     cloud_user_profile: dict[str, str] | None = None
     access_token_expires_at: str | None = None
+    cloud_actions: CloudActionsConnectReport | None = None
 
     def __post_init__(self) -> None:
         if self.access_token_expires_at is not None:
@@ -283,22 +290,27 @@ def _build_browser_authorize_url(
     code_challenge: str,
     machine_id: str,
     machine_label: str,
+    cloud_workspace_id: str | None = None,
+    cloud_actions_declined: bool = False,
 ) -> str:
-    query = urllib.parse.urlencode(
-        {
-            "response_type": "code",
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "state": state,
-            "scope": " ".join(DEFAULT_GUARD_DEVICE_SCOPES),
-            "code_challenge": code_challenge,
-            "code_challenge_method": "S256",
-            "requested_machine_id": machine_id,
-            "requested_machine_label": machine_label,
-            "requested_runtime_id": "hol-guard",
-            "requested_runtime_label": "HOL Guard CLI",
-        }
-    )
+    params: dict[str, str] = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "state": state,
+        "scope": " ".join(DEFAULT_GUARD_DEVICE_SCOPES),
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+        "requested_machine_id": machine_id,
+        "requested_machine_label": machine_label,
+        "requested_runtime_id": "hol-guard",
+        "requested_runtime_label": "HOL Guard CLI",
+    }
+    if cloud_workspace_id is not None:
+        params["workspace_id"] = cloud_workspace_id
+    if cloud_actions_declined:
+        params["cloud_actions"] = "off"
+    query = urllib.parse.urlencode(params)
     return f"{authorize_endpoint}?{query}"
 
 
@@ -398,6 +410,8 @@ def start_guard_browser_session(
     connect_url: str,
     machine_id: str,
     machine_label: str,
+    cloud_workspace_id: str | None = None,
+    cloud_actions_declined: bool = False,
 ) -> GuardOAuthBrowserSession:
     _, allowed_origin = resolve_connect_url(connect_url)
     client = resolve_guard_oauth_client_config(allowed_origin)
@@ -420,6 +434,8 @@ def start_guard_browser_session(
         code_challenge=build_pkce_s256_challenge(pkce_verifier),
         machine_id=machine_id,
         machine_label=machine_label,
+        cloud_workspace_id=cloud_workspace_id,
+        cloud_actions_declined=cloud_actions_declined,
     )
     session.authorize_url = authorize_url
     session.pkce_verifier = pkce_verifier
@@ -464,6 +480,7 @@ def build_device_authorization_request_body(
     runtime_label: str,
     client_id: str,
     scopes: tuple[str, ...] = DEFAULT_GUARD_DEVICE_SCOPES,
+    cloud_actions_declined: bool = False,
 ) -> str:
     payload = {
         "client_id": client_id,
@@ -475,6 +492,8 @@ def build_device_authorization_request_body(
     }
     if isinstance(machine_location_label, str) and machine_location_label.strip():
         payload["requested_machine_location_label"] = machine_location_label.strip()
+    if cloud_actions_declined:
+        payload["cloud_actions"] = "off"
     return urllib.parse.urlencode(payload)
 
 
@@ -528,6 +547,7 @@ def _parse_guard_token_exchange_payload(payload: dict[str, object]) -> GuardOAut
         ),
         workspace_id=_read_nested_string(claims, "workspace", "workspaceId"),
         cloud_user_profile=_extract_cloud_user_profile(payload),
+        cloud_actions=parse_cloud_actions_connect_report(payload),
     )
 
 
@@ -1116,6 +1136,7 @@ def run_guard_device_connect_command(
     ci_safe: bool = False,
     machine_label: str | None = None,
     include_sync_auth_context: bool = False,
+    cloud_actions_declined: bool = False,
 ) -> dict[str, object]:
     prepare_guard_cloud_connect_authorization(store)
     device = store.get_device_metadata()
@@ -1131,6 +1152,7 @@ def run_guard_device_connect_command(
         runtime_label=HEADLESS_RUNTIME_LABEL,
         client_id=oauth_client.client_id,
         scopes=_resolve_guard_device_scopes(ci_safe=ci_safe),
+        cloud_actions_declined=cloud_actions_declined,
     )
     restarts_left = DEVICE_CODE_LOST_APPROVAL_RESTARTS
     approval_lost = False
@@ -1215,6 +1237,9 @@ def run_guard_device_connect_command(
             "connect_command": CONNECT_COMMAND,
             "connect_status_command": CONNECT_STATUS_COMMAND,
             "connect_repair_command": CONNECT_REPAIR_COMMAND,
+            "cloud_actions": record_connect_cloud_actions(
+                store, grant_id=token_result.grant_id, report=token_result.cloud_actions, now=timestamp
+            ),
         }
     )
     if include_sync_auth_context:
@@ -1236,6 +1261,8 @@ def run_guard_browser_connect_command(
     now: str | None = None,
     wait_timeout_seconds: float = 180,
     include_sync_auth_context: bool = False,
+    cloud_workspace_id: str | None = None,
+    cloud_actions_declined: bool = False,
 ) -> dict[str, object]:
     from .progress import GuardProgress
 
@@ -1252,6 +1279,8 @@ def run_guard_browser_connect_command(
             connect_url=connect_url,
             machine_id=str(device["installation_id"]),
             machine_label=str(device["device_label"]),
+            cloud_workspace_id=cloud_workspace_id,
+            cloud_actions_declined=cloud_actions_declined,
         )
         try:
             bar.step("Opening browser for sign-in...")
@@ -1307,6 +1336,9 @@ def run_guard_browser_connect_command(
         "connect_command": CONNECT_COMMAND,
         "connect_status_command": CONNECT_STATUS_COMMAND,
         "connect_repair_command": CONNECT_REPAIR_COMMAND,
+        "cloud_actions": record_connect_cloud_actions(
+            store, grant_id=token_result.grant_id, report=token_result.cloud_actions, now=timestamp
+        ),
     }
     if include_sync_auth_context:
         payload[CONNECT_SYNC_AUTH_CONTEXT_KEY] = _build_sync_auth_context(
@@ -1389,6 +1421,7 @@ def build_connect_status_payload(
         "connect_status_command": CONNECT_STATUS_COMMAND,
         "connect_repair_command": CONNECT_REPAIR_COMMAND,
         "review_event_outbox": review_event_status,
+        "cloud_actions": connect_status_cloud_actions(store, oauth_storage_health=oauth_storage_health),
     }
     if review_event_status.get("binding_state") == "quarantined" and review_event_binding is not None:
         source = review_event_binding["oauth_source"]

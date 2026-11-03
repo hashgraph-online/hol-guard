@@ -1,68 +1,70 @@
-"""What the local dashboard may show about Cloud actions sign-ins.
+"""What the local dashboard may show about Cloud actions on this computer.
 
-`GET /v1/cloud-actions/status` reads the saved sign-ins and the last saved
-check. It never calls Guard Cloud, so it answers offline and fast.
-`POST /v1/cloud-actions/status` runs the same checks as `hol-guard
-cloud-actions status`, at most once a minute, and saves what Guard Cloud
-answered.
+Cloud actions use the `hol-guard connect` pairing; there is no separate
+sign-in. `GET /v1/cloud-actions/status` reads the pairing, what the last
+connect said about Cloud actions, and the last saved check. It never calls
+Guard Cloud, so it answers offline and fast. `POST /v1/cloud-actions/status`
+asks Guard Cloud whether it offers Cloud actions (the public description, the
+same check as `hol-guard cloud-actions status`), at most once a minute, and
+saves the answer.
 
-The projection is deliberately narrow. Each row names the workspace, the Guard
-Cloud site (host only), when the sign-in was made and when it expires, and a
-state code. It never carries an access or refresh value, a secret reference, a
-file path or a server reply body. Every check result says when it was made and
-whether it is stale, so the page can label old answers instead of presenting
-them as current. Included actions and connected accounts are not reported by
-Guard Cloud yet; the projection says so rather than inventing numbers.
+The projection is deliberately narrow: the workspace, the Guard Cloud site
+(host only), whether Cloud actions are on for this computer, and a state code.
+It never carries an access value, a file path or a server reply body. The
+check result says when it was made and whether it is stale, so the page can
+label old answers instead of presenting them as current. Included actions and
+connected accounts are not reported by Guard Cloud yet; the projection says so
+rather than inventing numbers.
 
-Signing in to Cloud actions never authorizes the daemon: these routes accept
-only the daemon's own token or a dashboard session, like every other `/v1`
-route.
+These routes accept only the daemon's own token or a dashboard session, like
+every other `/v1` route.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import threading
-import time
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from ..cli.cloud_actions_session import (
-    PROFILE_PATTERN,
-    CloudActionsProfile,
-    CloudActionsProfileBusyError,
-    CloudActionsSessionStore,
-)
+from ..store import GuardStore
+from .atomic_replace import replace_file
 
-CLOUD_ACTIONS_STATUS_SCHEMA = "guard.cloud-actions.local-status.v1"
+CLOUD_ACTIONS_STATUS_SCHEMA = "guard.cloud-actions.local-status.v2"
 STALE_AFTER = timedelta(minutes=5)
 CHECK_INTERVAL = timedelta(minutes=1)
-MAX_PROFILES = 32
-# One check request starts no new work after this long, however many sign-ins are saved.
-CHECK_BUDGET_SECONDS = 20.0
 
-_CACHE_SCHEMA = "guard.cloud-actions.last-check.v1"
-_CACHE_FILE = "last-check.json"
-_MAX_CACHE_BYTES = 64 * 1024
+_CACHE_SCHEMA = "guard.cloud-actions.service-check.v1"
+_CACHE_FILE = "service-check.json"
+_MAX_CACHE_BYTES = 16 * 1024
 _MAX_MESSAGE_CHARS = 240
 _CHECK_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
 class CheckResult:
-    """One profile's saved check: a stable state code and a message safe to show."""
+    """The saved service check: a stable state code and a message safe to show."""
 
     state: str
     message: str
     http_status: int | None = None
 
 
-# Arguments: the profile, its access value, and the monotonic deadline for the whole check.
-Checker = Callable[[CloudActionsProfile, str, float], tuple[CheckResult, CheckResult]]
-_clock = time.monotonic
+@dataclass(frozen=True)
+class _Pairing:
+    origin: str
+    workspace_id: str | None
+    cloud_actions: str
+
+
+# Argument: the Guard Cloud origin to ask.
+Checker = Callable[[str], CheckResult]
 
 
 class CloudActionsCheckBusyError(RuntimeError):
@@ -75,6 +77,10 @@ class CloudActionsCheckedRecentlyError(RuntimeError):
     def __init__(self, retry_after_seconds: int) -> None:
         super().__init__("checked_recently")
         self.retry_after_seconds = retry_after_seconds
+
+
+class CloudActionsNotPairedError(RuntimeError):
+    """There is no pairing to check."""
 
 
 def _iso(moment: datetime) -> str:
@@ -91,9 +97,9 @@ def _parse_iso(value: object) -> datetime | None:
     return parsed if parsed.tzinfo is not None else None
 
 
-def _site_host(issuer: str) -> str | None:
+def _site_host(origin: str) -> str | None:
     try:
-        parts = urlsplit(issuer)
+        parts = urlsplit(origin)
         host = parts.hostname
         port = parts.port
     except ValueError:
@@ -103,29 +109,12 @@ def _site_host(issuer: str) -> str | None:
     return f"{host}:{port}" if port is not None else host
 
 
-def _site_origin(issuer: str) -> str | None:
-    """The Guard Cloud address to sign in to again, with its scheme."""
+def _cloud_base_url(origin: str) -> str | None:
+    """Where Guard Cloud's pages live for this pairing, or None for a site Guard does not recognise."""
 
-    try:
-        parts = urlsplit(issuer)
-        _ = parts.port
-    except ValueError:
-        return None
-    if parts.scheme not in {"http", "https"} or not parts.hostname or parts.username or parts.password:
-        return None
-    return f"{parts.scheme}://{parts.netloc.lower()}"
-
-
-def _cloud_base_url(issuer: str) -> str | None:
-    """Where Guard Cloud's pages live for this sign-in, or None for a site Guard does not recognise.
-
-    Links are only offered for allowlisted HOL sites, so a saved sign-in to an
-    unknown address never becomes a clickable link on this computer.
-    """
     from ..cli.oauth_client import guard_api_base_path, is_guard_oauth_origin_allowed
 
-    origin = _site_origin(issuer)
-    if origin is None or not is_guard_oauth_origin_allowed(origin):
+    if not is_guard_oauth_origin_allowed(origin):
         return None
     try:
         return f"{origin}{guard_api_base_path(origin)}"
@@ -133,48 +122,68 @@ def _cloud_base_url(issuer: str) -> str | None:
         return None
 
 
-def _profile_names(store: CloudActionsSessionStore) -> list[str]:
-    folder = store.root / "profiles"
+def _pairing(store: GuardStore) -> _Pairing | None:
+    from ..cli.cloud_actions_access import CloudActionsAccessError, read_cloud_actions_pairing
+    from ..cli.connect_cloud_actions import read_cloud_actions_connect_report
+
     try:
-        entries = sorted(folder.iterdir())
-    except OSError:
-        return []
-    names = [
-        entry.stem
-        for entry in entries
-        if entry.suffix == ".json" and PROFILE_PATTERN.fullmatch(entry.stem) is not None and entry.is_file()
-    ]
-    return names[:MAX_PROFILES]
-
-
-def _cache_path(store: CloudActionsSessionStore) -> Path:
-    return store.root / _CACHE_FILE
-
-
-def _read_cache(store: CloudActionsSessionStore) -> dict[str, dict[str, object]]:
-    path = _cache_path(store)
-    try:
-        if path.stat().st_size > _MAX_CACHE_BYTES:
-            return {}
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    if not isinstance(payload, dict) or payload.get("schema") != _CACHE_SCHEMA:
-        return {}
-    profiles = payload.get("profiles")
-    if not isinstance(profiles, dict):
-        return {}
-    return {name: entry for name, entry in profiles.items() if isinstance(name, str) and isinstance(entry, dict)}
-
-
-def _write_cache(store: CloudActionsSessionStore, profiles: dict[str, dict[str, object]]) -> None:
-    from ..cli.cloud_actions_session import (
-        _ensure_private_dir,  # pyright: ignore[reportPrivateUsage]
-        _write_private_atomic,  # pyright: ignore[reportPrivateUsage]
+        pairing = read_cloud_actions_pairing(store)
+    except CloudActionsAccessError:
+        return None
+    grant_id = store.get_oauth_local_credential_health().get("grant_id")
+    report = read_cloud_actions_connect_report(store, grant_id=grant_id if isinstance(grant_id, str) else None)
+    return _Pairing(
+        origin=pairing.origin,
+        workspace_id=pairing.workspace_id or (report["workspace_id"] if report is not None else None),
+        cloud_actions=report["status"] if report is not None else "unknown",
     )
 
-    _ensure_private_dir(store.root)
-    _write_private_atomic(_cache_path(store), json.dumps({"schema": _CACHE_SCHEMA, "profiles": profiles}))
+
+def _cache_path(guard_home: Path) -> Path:
+    return guard_home / "cloud-actions" / _CACHE_FILE
+
+
+def _read_cache(guard_home: Path, origin: str) -> tuple[datetime, CheckResult] | None:
+    path = _cache_path(guard_home)
+    try:
+        if path.stat().st_size > _MAX_CACHE_BYTES:
+            return None
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    # A check of another Guard Cloud says nothing about this pairing.
+    if not isinstance(payload, dict) or payload.get("schema") != _CACHE_SCHEMA or payload.get("origin") != origin:
+        return None
+    checked = _parse_iso(payload.get("checked_at"))
+    service = payload.get("service")
+    if checked is None or not isinstance(service, dict):
+        return None
+    state = service.get("state")
+    message = service.get("message")
+    status = service.get("http_status")
+    if not isinstance(state, str) or not isinstance(message, str):
+        return None
+    return checked, CheckResult(state, message[:_MAX_MESSAGE_CHARS], status if isinstance(status, int) else None)
+
+
+def _write_cache(guard_home: Path, origin: str, checked: datetime, service: CheckResult) -> None:
+    path = _cache_path(guard_home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+        os.chmod(path.parent, 0o700)
+    text = json.dumps(
+        {"schema": _CACHE_SCHEMA, "origin": origin, "checked_at": _iso(checked), "service": _check_dict(service)}
+    )
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        replace_file(temporary_path, path)
+    finally:
+        with suppress(OSError):
+            temporary_path.unlink()
 
 
 def _check_dict(check: CheckResult) -> dict[str, object]:
@@ -184,177 +193,79 @@ def _check_dict(check: CheckResult) -> dict[str, object]:
     return entry
 
 
-def _saved_check(entry: object) -> CheckResult | None:
-    if not isinstance(entry, dict):
-        return None
-    state = entry.get("state")
-    message = entry.get("message")
-    status = entry.get("http_status")
-    if not isinstance(state, str) or not isinstance(message, str):
-        return None
-    return CheckResult(state, message[:_MAX_MESSAGE_CHARS], status if isinstance(status, int) else None)
-
-
-def _row_state(*, has_secret: bool, expired: bool, check: tuple[CheckResult, CheckResult] | None) -> str:
-    if not has_secret:
-        return "profile_damaged"
-    # An expiry that passed after the last check is still an expiry.
-    if expired:
-        return "sign_in_expired"
-    if check is None:
-        return "not_checked"
-    service, connection = check
-    return service.state if service.state != "current" else connection.state
-
-
-def _saved_pair(
-    cached: dict[str, object] | None, profile: CloudActionsProfile
-) -> tuple[datetime, CheckResult, CheckResult] | None:
-    # A check made for an earlier sign-in says nothing about this one.
-    if cached is None or cached.get("signed_in_at") != profile.signed_in_at:
-        return None
-    checked = _parse_iso(cached.get("checked_at"))
-    service = _saved_check(cached.get("service"))
-    connection = _saved_check(cached.get("connection"))
-    if checked is None or service is None or connection is None:
-        return None
-    return checked, service, connection
-
-
-def _row(
-    store: CloudActionsSessionStore, name: str, cached: dict[str, object] | None, now: datetime
-) -> dict[str, object]:
-    profile = store.load(name)
-    if profile is None:
-        return {"profile": name, "state": "profile_damaged", "check": {"state": "not_checked"}}
-    saved = _saved_pair(cached, profile)
-    expired = profile.is_expired(now)
+def _connection(guard_home: Path, pairing: _Pairing | None, now: datetime) -> dict[str, object]:
+    if pairing is None:
+        return {"state": "not_paired", "check": {"state": "not_checked"}}
     row: dict[str, object] = {
-        "profile": profile.name,
-        "workspace": profile.workspace_id,
-        "site": _site_host(profile.issuer),
-        "cloud_url": _site_origin(profile.issuer),
-        "cloud_base_url": _cloud_base_url(profile.issuer),
-        "signed_in_at": profile.signed_in_at,
-        "expires_at": profile.expires_at,
-        "expired": expired,
-        "state": _row_state(
-            has_secret=store.load_secrets(name) is not None,
-            expired=expired,
-            check=None if saved is None else (saved[1], saved[2]),
-        ),
+        "state": pairing.cloud_actions,
+        "workspace": pairing.workspace_id,
+        "site": _site_host(pairing.origin),
+        "cloud_url": pairing.origin,
+        "cloud_base_url": _cloud_base_url(pairing.origin),
     }
+    saved = _read_cache(guard_home, pairing.origin)
     if saved is None:
         row["check"] = {"state": "not_checked"}
     else:
-        checked, service, connection = saved
+        checked, service = saved
         row["check"] = {
             "checked_at": _iso(checked),
             "stale": now - checked > STALE_AFTER,
             "service": _check_dict(service),
-            "connection": _check_dict(connection),
         }
     return row
 
 
-def _last_checked(cache: dict[str, dict[str, object]], names: list[str]) -> datetime | None:
-    moments = [moment for name in names if (moment := _parse_iso(cache.get(name, {}).get("checked_at"))) is not None]
-    return max(moments, default=None)
+def cloud_actions_local_status(store: GuardStore, *, now: datetime | None = None) -> dict[str, object]:
+    """This computer's Cloud actions and the last saved check, without calling Guard Cloud."""
 
-
-def cloud_actions_local_status(guard_home: Path, *, now: datetime | None = None) -> dict[str, object]:
-    """The saved sign-ins and their last check, without calling Guard Cloud."""
+    from ..cli.cloud_actions_alpha_cleanup import remove_alpha_sign_ins
 
     moment = now or datetime.now(timezone.utc)
-    store = CloudActionsSessionStore(guard_home)
-    cache = _read_cache(store)
-    names = _profile_names(store)
-    last_checked = _last_checked(cache, names)
+    remove_alpha_sign_ins(store.guard_home)
+    pairing = _pairing(store)
+    saved = _read_cache(store.guard_home, pairing.origin) if pairing is not None else None
     return {
         "schema": CLOUD_ACTIONS_STATUS_SCHEMA,
         "generated_at": _iso(moment),
         "stale_after_seconds": int(STALE_AFTER.total_seconds()),
         "check_interval_seconds": int(CHECK_INTERVAL.total_seconds()),
-        "next_check_allowed_at": _iso(last_checked + CHECK_INTERVAL) if last_checked is not None else None,
-        "sign_ins": [_row(store, name, cache.get(name), moment) for name in names],
+        "next_check_allowed_at": _iso(saved[0] + CHECK_INTERVAL) if saved is not None else None,
+        "connection": _connection(store.guard_home, pairing, moment),
         "included_actions": "not_available_yet",
         "accounts": "not_available_yet",
     }
 
 
-def _time_left(deadline: float) -> float:
-    from ..cli.cloud_actions_health import HEALTH_TIMEOUT_SECONDS
+def _live_checker(origin: str) -> CheckResult:
+    from ..cli.cloud_actions_access import CloudActionsPairing
+    from ..cli.cloud_actions_health import check_service
 
-    return min(float(HEALTH_TIMEOUT_SECONDS), max(1.0, deadline - _clock()))
-
-
-def _live_checker(profile: CloudActionsProfile, access_token: str, deadline: float) -> tuple[CheckResult, CheckResult]:
-    from ..cli.cloud_actions_health import check_connection, check_service
-
-    service = check_service(profile, timeout=_time_left(deadline))
-    if service.state in {"offline", "not_turned_on", "profile_damaged"}:
-        same = CheckResult(service.state, service.message, service.http_status)
-        return same, same
-    connection = check_connection(profile, access_token, timeout=_time_left(deadline))
-    return (
-        CheckResult(service.state, service.message, service.http_status),
-        CheckResult(connection.state, connection.message, connection.http_status),
-    )
+    service = check_service(CloudActionsPairing(origin=origin, workspace_id=None))
+    return CheckResult(service.state, service.message, service.http_status)
 
 
 def check_cloud_actions(
-    guard_home: Path,
-    *,
-    now: datetime | None = None,
-    checker: Checker | None = None,
-    budget_seconds: float = CHECK_BUDGET_SECONDS,
+    store: GuardStore, *, now: datetime | None = None, checker: Checker | None = None
 ) -> dict[str, object]:
-    """Ask Guard Cloud about every saved sign-in once, save the answers, and return the projection.
+    """Ask Guard Cloud whether it offers Cloud actions, save the answer, and return the projection.
 
-    Sign-ins with the oldest check (or none) go first. Any the time budget does
-    not reach keep their earlier saved check, so repeated checks cover every
-    sign-in even when some are slow.
-    Raises CloudActionsCheckedRecentlyError within a minute of the last check
-    and CloudActionsCheckBusyError while another check runs.
+    Raises CloudActionsNotPairedError without a pairing, CloudActionsCheckedRecentlyError
+    within a minute of the last check, and CloudActionsCheckBusyError while another check runs.
     """
 
     if not _CHECK_LOCK.acquire(blocking=False):
         raise CloudActionsCheckBusyError("check_running")
     try:
         moment = now or datetime.now(timezone.utc)
-        store = CloudActionsSessionStore(guard_home)
-        cache = _read_cache(store)
-        names = _profile_names(store)
-        latest = _last_checked(cache, names)
-        if latest is not None and timedelta(0) <= moment - latest < CHECK_INTERVAL:
-            raise CloudActionsCheckedRecentlyError(max(1, int((latest + CHECK_INTERVAL - moment).total_seconds())))
-        run = checker or _live_checker
-        deadline = _clock() + budget_seconds
-        fresh: dict[str, dict[str, object]] = {}
-        for name in sorted(names, key=lambda item: str(cache.get(item, {}).get("checked_at") or "")):
-            if _clock() >= deadline:
-                break
-            try:
-                # Read the site and its access value together, so a sign-in to
-                # another site in between never sends one site's value to the other.
-                with store.lock(name, timeout=deadline - _clock()):
-                    profile = store.load(name)
-                    secrets = store.load_secrets(name) if profile is not None else None
-            except CloudActionsProfileBusyError:
-                continue
-            if profile is None or secrets is None or _clock() >= deadline:
-                continue
-            service, connection = run(profile, secrets.access_token, deadline)
-            fresh[name] = {
-                "checked_at": _iso(moment),
-                "signed_in_at": profile.signed_in_at,
-                "service": _check_dict(service),
-                "connection": _check_dict(connection),
-            }
-        for name in names:
-            if name not in fresh and name in cache:
-                fresh[name] = cache[name]
-        _write_cache(store, fresh)
-        return cloud_actions_local_status(guard_home, now=moment)
+        pairing = _pairing(store)
+        if pairing is None:
+            raise CloudActionsNotPairedError("not_paired")
+        saved = _read_cache(store.guard_home, pairing.origin)
+        if saved is not None and timedelta(0) <= moment - saved[0] < CHECK_INTERVAL:
+            raise CloudActionsCheckedRecentlyError(max(1, int((saved[0] + CHECK_INTERVAL - moment).total_seconds())))
+        service = (checker or _live_checker)(pairing.origin)
+        _write_cache(store.guard_home, pairing.origin, moment, service)
+        return cloud_actions_local_status(store, now=moment)
     finally:
         _CHECK_LOCK.release()
