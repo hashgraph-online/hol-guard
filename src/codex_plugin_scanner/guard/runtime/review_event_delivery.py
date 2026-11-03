@@ -49,11 +49,17 @@ def decode_stored_review_event(row: dict[str, object]) -> StoredReviewEvent:
     """Authenticate one stored event natively and return its immutable request snapshot."""
 
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+    from .cloud_request_native import NATIVE_ROW_REFUSAL_CODES
 
     try:
         answer = native_runner_authority("review_event_decode", {"row": {key: row.get(key) for key in _ROW_COLUMNS}})
     except NativeRunnerAuthorityError as error:
-        # An outage retries the row instead of quarantining it.
+        # A row the resident refuses is quarantined; an outage retries the row.
+        if str(error) in NATIVE_ROW_REFUSAL_CODES:
+            raise StoredReviewEventError(
+                "payload_snapshot_invalid",
+                "Stored Review event cannot be decoded natively.",
+            ) from error
         raise StoredReviewEventError(
             _NATIVE_UNAVAILABLE_REASON,
             "Native Review event decoding is unavailable; the Review event will be retried.",

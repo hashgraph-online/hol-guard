@@ -4,6 +4,7 @@
 
 use serde_json::{Map, Value};
 
+use crate::cloud_review_ack::py_repr;
 use crate::guard_store_db::Row;
 use crate::guard_store_json::py_strip;
 use crate::guard_store_outbox_identity::payload_digest;
@@ -422,42 +423,6 @@ pub(crate) fn decode_checked(row: &Row) -> Result<StoredEvent, Refusal> {
         continuation_result,
         snapshot,
     })
-}
-
-/// Python `repr()` of a stored column value, for refusal messages.
-fn py_repr(value: &Value) -> String {
-    match value {
-        Value::Null => "None".to_owned(),
-        Value::Bool(true) => "True".to_owned(),
-        Value::Bool(false) => "False".to_owned(),
-        Value::String(text) => {
-            let quote = if text.contains('\'') && !text.contains('"') {
-                '"'
-            } else {
-                '\''
-            };
-            let mut out = String::from(quote);
-            for ch in text.chars() {
-                match ch {
-                    '\\' => out.push_str("\\\\"),
-                    '\n' => out.push_str("\\n"),
-                    '\r' => out.push_str("\\r"),
-                    '\t' => out.push_str("\\t"),
-                    ch if ch == quote => {
-                        out.push('\\');
-                        out.push(ch);
-                    }
-                    ch if ch < ' ' || ch == '\x7f' => {
-                        out.push_str(&format!("\\x{:02x}", u32::from(ch)));
-                    }
-                    ch => out.push(ch),
-                }
-            }
-            out.push(quote);
-            out
-        }
-        other => other.to_string(),
-    }
 }
 
 fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
