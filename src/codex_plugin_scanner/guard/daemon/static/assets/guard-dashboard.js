@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-32g0Wvg2.js","assets/chunks/home-protection-module-DvS_O83r.js","assets/chunks/supply-chain-protection-stats-B5ne_JbZ.js","assets/chunks/workspace-model-Do0eMrgH.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-WQexHemP.js","assets/chunks/harness-version-label-LaVvWn4L.js","assets/chunks/connect-guard-cloud-button-o4J5gv4p.js","assets/chunks/settings-save-proof-modal-0zM1Juyt.js","assets/chunks/settings-workspace-CRksbZaW.js","assets/chunks/confirm-dialog-C0X7QXA-.js","assets/chunks/extensions-workspace-DkKjkCld.js","assets/chunks/app-detail-workspace-DwC-yNPt.js","assets/chunks/policy-workspace-page-16XrxeR4.js","assets/chunks/about-workspace-BBEAKOtb.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-32g0Wvg2.js","assets/chunks/home-protection-module-DvS_O83r.js","assets/chunks/supply-chain-protection-stats-B5ne_JbZ.js","assets/chunks/workspace-model-Do0eMrgH.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-WQexHemP.js","assets/chunks/harness-version-label-LaVvWn4L.js","assets/chunks/connect-guard-cloud-button-o4J5gv4p.js","assets/chunks/settings-save-proof-modal-0zM1Juyt.js","assets/chunks/settings-workspace-B9cilIV-.js","assets/chunks/confirm-dialog-C0X7QXA-.js","assets/chunks/extensions-workspace-DkKjkCld.js","assets/chunks/app-detail-workspace-DwC-yNPt.js","assets/chunks/policy-workspace-page-16XrxeR4.js","assets/chunks/about-workspace-BBEAKOtb.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -24010,6 +24010,20 @@ function parseContextBrief(value) {
   if (!object$2(value) || value.schema !== "guard-cigar-context-brief.v1" || value.data_role !== true || !digest$4(value.snapshot_id) || !text$2(value.policy_revision) || !count$1(value.graph_revision) || !text$2(value.rendered) || value.rendered.length > 262144 || !count$1(value.rendered_tokens) || !Array.isArray(value.excerpts) || value.excerpts.length > 16 || !value.excerpts.every((excerpt) => object$2(excerpt) && text$2(excerpt.text) && Array.isArray(excerpt.citations)) || !Array.isArray(value.citations) || value.citations.length > 1024 || !value.citations.every((citation) => object$2(citation) && text$2(citation.source) && text$2(citation.node_id) && count$1(citation.start_line) && citation.start_line > 0 && count$1(citation.end_line) && citation.end_line >= citation.start_line && digest$4(citation.document_digest))) invalid$3();
   return value;
 }
+function refusal(code, action, status) {
+  if (code.endsWith("context_storage_repair_required")) return "CIGAR's saved notes need repair. Delete them in CIGAR → Privacy, then add the project again.";
+  if (code.endsWith("context_storage_outcome_unknown")) return "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again.";
+  if (code.endsWith("context_resource_limit") && action === "authorize_agent") {
+    return "CIGAR is connected to as many apps as it can. Disconnect an app or remove a project you no longer use, then reconnect this app and use its new code.";
+  }
+  if (code.endsWith("context_busy") || code.endsWith("_busy")) return "CIGAR is still finishing something. Try again in a moment.";
+  if (code.endsWith("context_scope_denied") && action === "grant") {
+    return "CIGAR couldn't add these files. It won't read a file that looks like it holds a password or key, a file your settings block, or a folder Guard keeps private. Take that file out, or pick another folder, and try again.";
+  }
+  if (code.endsWith("context_stale") || code.endsWith("context_scope_denied")) return "The project or its files changed. Choose Read files again, or add the project again.";
+  if (status === 403 || status === 401) return "Guard needs your approval password for this.";
+  return "CIGAR could not finish that. Refresh and try again.";
+}
 async function ask(route, input, proof, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context sources require a local Guard installation.");
   const timeout = AbortSignal.timeout(12e3);
@@ -24027,7 +24041,7 @@ async function ask(route, input, proof, signal) {
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const code = object$2(body) && text$2(body.code) && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_request_refused";
-    const message = code.endsWith("context_storage_repair_required") ? "CIGAR's saved notes need repair. Delete them in CIGAR → Privacy, then add the project again." : code.endsWith("context_storage_outcome_unknown") ? "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again." : code.endsWith("context_resource_limit") && input.action === "authorize_agent" ? "CIGAR is connected to as many apps as it can. Disconnect an app or remove a project you no longer use, then reconnect this app and use its new code." : code.endsWith("context_busy") || code.endsWith("_busy") ? "CIGAR is still finishing something. Try again in a moment." : code.endsWith("context_stale") || code.endsWith("context_scope_denied") ? "The project or its files changed. Choose Read files again, or add the project again." : response.status === 403 || response.status === 401 ? "Guard needs your approval password for this." : "CIGAR could not finish that. Refresh and try again.";
+    const message = refusal(code, String(input.action), response.status);
     throw new ContextAssistanceApiError(code, message);
   }
   if (!object$2(body) || body.schema !== "guard-cigar-workspace-result.v1" || body.data_role !== true || !object$2(body.result)) invalid$3();
@@ -38482,7 +38496,7 @@ function RuntimeGate(props) {
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-32g0Wvg2.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-WQexHemP.js"), true ? __vite__mapDeps([7,8,9,6,10]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CRksbZaW.js"), true ? __vite__mapDeps([11,10,6,12,9,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-B9cilIV-.js"), true ? __vite__mapDeps([11,10,6,12,9,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
   () => __vitePreload(() => import("./chunks/extensions-workspace-DkKjkCld.js"), true ? __vite__mapDeps([13,12]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))

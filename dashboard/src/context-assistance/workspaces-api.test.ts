@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parseContextBrief, parseContextScope } from "./workspaces-api";
+import { contextRefusalMessage, parseContextBrief, parseContextScope } from "./workspaces-api";
 
 const observed = JSON.parse(readFileSync(new URL("./fixtures/source-actor.json", import.meta.url), "utf8")).source_test.brief_observation;
 const brief = parseContextBrief(observed);
@@ -40,4 +40,9 @@ for (const malformed of [
     { ...scope.receipt_window, dropped: "-1" }, { ...scope.receipt_window, coverage: "complete_history" }]
     .map((receipt_window) => ({ ...scope, receipt_window })),
 ]) assert.throws(() => parseContextScope(malformed), /does not understand/);
+// A refused pick says why; "read files again" cannot help with a secret-looking file or a private folder.
+assert.match(contextRefusalMessage("native_context_assistance_context_scope_denied", "grant", 403), /password or key, a file your settings block, or a folder Guard keeps private/);
+assert.match(contextRefusalMessage("native_context_assistance_context_scope_denied", "refresh", 403), /files changed/);
+assert.match(contextRefusalMessage("native_context_assistance_context_stale", "grant", 409), /files changed/);
+assert.match(contextRefusalMessage("context_request_refused", "grant", 403), /approval password/);
 console.log("Actual native cited-context projection and malformed disclosure payload checks passed.");
