@@ -30,6 +30,7 @@ use super::copilot_hook_config;
 use super::cursor_detect;
 use super::cursor_editor_plan;
 use super::cursor_hook_config;
+use super::cursor_hook_state;
 use super::devin_detect;
 use super::devin_jsonc;
 use super::gemini_detect;
@@ -47,6 +48,7 @@ use super::pi_detect;
 use super::pi_extension_render;
 use super::runner_authority_signature as signature;
 use super::zcode_detect;
+use super::zcode_hook_settings;
 use super::{
     cloud_receipt_payload as receipt, cloud_request_snapshot as snapshot,
     cloud_sync_privacy as privacy,
@@ -163,6 +165,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "aibom_primary_content" => crate::aibom_primary_content::dispatch(args),
         "package_command_redaction" => crate::package_command_redaction::dispatch(args),
         "zcode_detect" => zcode_detect::detect(args),
+        "zcode_hook_settings" => zcode_hook_settings::dispatch(args),
         "hermes_detect" => hermes_detect::detect(args),
         "pi_detect" => pi_detect::detect(args),
         "cline_plugin_render" => cline_plugin_render::render(args),
@@ -187,6 +190,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cursor_detect" => cursor_detect::detect(args),
         "cursor_hook_config" => cursor_hook_config::dispatch(args),
         "cursor_editor_plan" => cursor_editor_plan::plan(args),
+        "cursor_hook_state" => cursor_hook_state::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
         _ => Err(ERR_KIND),

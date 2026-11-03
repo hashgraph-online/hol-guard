@@ -19,7 +19,7 @@ use super::cursor_hook_command::{py_space, Syntax};
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 
-const SUPPORTED_EVENTS: &[&str] = &[
+pub(crate) const SUPPORTED_EVENTS: &[&str] = &[
     "beforeShellExecution",
     "beforeMCPExecution",
     "afterShellExecution",

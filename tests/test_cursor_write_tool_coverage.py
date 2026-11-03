@@ -11,7 +11,6 @@ from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_events impo
     CURSOR_FILE_MUTATION_TOOL_MATCHER,
     CURSOR_FILE_MUTATION_TOOLS,
     cursor_entry_guards_file_mutations,
-    unsupported_cursor_hook_events,
 )
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     HOOK_SCRIPT_NAME,
@@ -46,11 +45,6 @@ def test_routed_tool_normalizes_to_file_write_with_target(tool_name: str, tmp_pa
     assert envelope.action_type == "file_write"
     assert len(envelope.target_paths) == 1
     assert envelope.target_paths[0].endswith(".env")
-
-
-def test_unsupported_events_are_reported() -> None:
-    hooks = {"beforeShellExecution": [], "beforeWriteFile": [], "beforeEditFile": []}
-    assert unsupported_cursor_hook_events(hooks) == ["beforeEditFile", "beforeWriteFile"]
 
 
 @pytest.mark.parametrize(

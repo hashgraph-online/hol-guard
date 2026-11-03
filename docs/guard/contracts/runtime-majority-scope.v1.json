@@ -1581,12 +1581,10 @@
           "ZCodeHarnessAdapter.prepare_install",
           "ZCodeHarnessAdapter.install",
           "ZCodeHarnessAdapter.uninstall",
-          "ZCodeHarnessAdapter._hook_command_parts",
-          "ZCodeHarnessAdapter._managed_command_wrapper",
-          "ZCodeHarnessAdapter._sync_managed_hook_groups"
+          "ZCodeHarnessAdapter._hook_command_parts"
         ],
         "entry_points": [],
-        "reason": "ZCode adapter hook install and uninstall and the helpers used only to write the install.",
+        "reason": "ZCode adapter hook install and uninstall (settings I/O, handler rendering, the enabled flag) and the helpers used only to write the install; the legacy hook-event migration, the managed hook prune and merge, and the saved enabled-record choice run in the native zcode_hook_settings runner-authority kind.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
