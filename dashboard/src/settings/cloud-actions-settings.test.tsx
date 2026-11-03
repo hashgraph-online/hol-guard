@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   CLOUD_ACTIONS_STATUS_SCHEMA,
   cloudActionsCheckedCopy,
+  cloudActionsCurrentState,
   cloudActionsRetryAfterSeconds,
   cloudActionsSignInCommand,
   cloudActionsStateCopy,
@@ -53,6 +54,7 @@ const ended = {
   profile: "client",
   workspace: "ws_beta",
   site: "cloud.example.test:8443",
+  cloud_url: "https://cloud.example.test:8443",
   signed_in_at: "2026-11-01T10:00:00Z",
   expires_at: "2026-11-02T10:00:00Z",
   expired: true,
@@ -94,12 +96,31 @@ assert(hostile?.signIns.length === 1, "a sign-in with an invalid name is dropped
 assert(hostile.signIns[0]?.workspace === null, "a workspace that is not an ID is not shown");
 assert(hostile.signIns[0]?.site === null, "a site that is not a host is not shown");
 assert(
-  cloudActionsSignInCommand(hostile.signIns[0]!) === "hol-guard cloud-actions login --profile work",
-  "the sign-in command never carries an unchecked workspace",
+  cloudActionsSignInCommand(hostile.signIns[0]!) === "hol-guard cloud-actions login --cloud-url <guard-cloud-address> --profile work",
+  "the sign-in command never carries an unchecked workspace or site",
 );
 assert(
-  cloudActionsSignInCommand(second) === "hol-guard cloud-actions login --cloud-workspace ws_beta --profile client",
-  "the sign-in command names the same workspace and sign-in",
+  cloudActionsSignInCommand(second) ===
+    "hol-guard cloud-actions login --cloud-url https://cloud.example.test:8443 --cloud-workspace ws_beta --profile client",
+  "the sign-in command names the same Guard Cloud, workspace and sign-in",
+);
+
+// The address only counts when it names the site the row shows, and plain http only for this computer.
+function cloudUrlOf(site: string, cloudUrl: string): string | null | undefined {
+  return normalizeCloudActionsStatus(payload([{ ...connected, site, cloud_url: cloudUrl }]))?.signIns[0]?.cloudUrl;
+}
+assert(cloudUrlOf("cloud.example.test", "https://other.example.test") === null, "an address for another site is dropped");
+assert(cloudUrlOf("cloud.example.test", "http://cloud.example.test") === null, "plain http to another computer is dropped");
+assert(cloudUrlOf("127.0.0.1:3000", "http://127.0.0.1:3000") === "http://127.0.0.1:3000", "plain http on this computer is kept");
+assert(
+  cloudActionsSignInCommand({ profile: "default", workspace: "ws_alpha", cloudUrl: "https://hol.org" }) ===
+    "hol-guard cloud-actions login --cloud-workspace ws_alpha",
+  "the default Guard Cloud needs no address",
+);
+assert(
+  cloudActionsSignInCommand({ profile: "default", workspace: null, cloudUrl: null }) ===
+    "hol-guard cloud-actions login --cloud-url <guard-cloud-address>",
+  "an unknown address is never filled in with the default site",
 );
 
 // A message from the daemon is bounded.
@@ -112,11 +133,27 @@ assert(long?.signIns[0]?.check.message?.length === 240, "messages are bounded");
 // Never-checked rows say so.
 const unchecked = normalizeCloudActionsStatus(payload([{ ...connected, state: "not_checked", check: { state: "not_checked" } }]));
 assert(unchecked?.signIns[0]?.check.checkedAt === null, "no check time is invented");
-assert(cloudActionsCheckedCopy(unchecked.signIns[0]!.check, NOW) === "Not checked yet", "unchecked copy");
-assert(cloudActionsCheckedCopy(first.check, NOW) === "Checked 2 minutes ago", "fresh copy");
+assert(cloudActionsCheckedCopy(unchecked.signIns[0]!.check, NOW, 300) === "Not checked yet", "unchecked copy");
+assert(cloudActionsCheckedCopy(first.check, NOW, 300) === "Checked 2 minutes ago", "fresh copy");
 assert(
-  cloudActionsCheckedCopy(second.check, NOW) === "Checked 3 hours ago. This answer may be out of date.",
+  cloudActionsCheckedCopy(second.check, NOW, 300) === "Checked 3 hours ago. This answer may be out of date.",
   "stale copy",
+);
+
+// The page stays open, so an answer that was fresh when loaded goes out of date by the clock.
+const LATER = new Date(NOW.getTime() + 10 * 60 * 1000);
+assert(
+  cloudActionsCheckedCopy(first.check, LATER, 300) === "Checked 12 minutes ago. This answer may be out of date.",
+  "an answer ages out while the page is open",
+);
+
+// A sign-in whose end time passes while the page is open shows as ended.
+assert(cloudActionsCurrentState(first, NOW) === "connected", "a live sign-in keeps its state");
+const AFTER_END = new Date("2026-11-03T22:00:01Z");
+assert(cloudActionsCurrentState(first, AFTER_END) === "sign_in_expired", "a sign-in past its end time has ended");
+assert(
+  cloudActionsCurrentState({ state: "profile_damaged", expiresAt: "2026-11-02T00:00:00Z" }, NOW) === "profile_damaged",
+  "a damaged sign-in keeps that state",
 );
 
 // Every state the daemon reports has plain copy; none of them blames local protection.
@@ -135,7 +172,7 @@ assert(!cloudActionsStateCopy("not_permitted").signInAgain, "signing in again do
 assert(cloudActionsRetryAfterSeconds("2026-11-03T12:00:42Z", NOW) === 42, "retry wait is read");
 assert(cloudActionsRetryAfterSeconds("2026-11-03T11:59:00Z", NOW) === 0, "past wait is zero");
 assert(cloudActionsRetryAfterSeconds(null, NOW) === 0, "no wait without a check");
-assert(cloudActionsSummary(status) === "2 sign-ins on this computer. 1 needs attention.", "summary counts attention");
+assert(cloudActionsSummary(status, NOW) === "2 sign-ins on this computer. 1 needs attention.", "summary counts attention");
 
 function render(overrides: Partial<Parameters<typeof CloudActionsSettingsView>[0]> = {}): string {
   return renderToStaticMarkup(
@@ -159,7 +196,14 @@ assert(html.includes("ws_alpha") && html.includes("ws_beta"), "each workspace is
 assert(html.includes("cloud.example.test:8443"), "each Guard Cloud site is named");
 assert(html.includes("Sign-in ended") && html.includes("Connected"), "each state is labelled");
 assert(html.includes("This answer may be out of date."), "stale answers are labelled");
-assert(html.includes("hol-guard cloud-actions login --cloud-workspace ws_beta --profile client"), "sign in again command");
+assert(
+  html.includes("hol-guard cloud-actions login --cloud-url https://cloud.example.test:8443 --cloud-workspace ws_beta --profile client"),
+  "sign in again command",
+);
+assert(cloudActionsSummary(status, AFTER_END) === "2 sign-ins on this computer. 2 need attention.", "summary follows the clock");
+const endedLater = render({ now: AFTER_END });
+assert(!endedLater.includes(">Connected<"), "a sign-in past its end time is not shown as connected");
+assert(!endedLater.includes("Guard Cloud accepted this sign-in."), "an old answer does not contradict the current state");
 assert(html.includes(">Check now<"), "check button is offered with sign-ins");
 assert(!/token|gateway|endpoint|harness|posture|receipt/i.test(html.replace(/<[^>]+>/g, " ")), "page copy stays in plain terms");
 

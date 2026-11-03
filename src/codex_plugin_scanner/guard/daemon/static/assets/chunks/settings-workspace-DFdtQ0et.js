@@ -1,8 +1,8 @@
-import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, a9 as HiMiniCloud, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as fetchCloudActionsStatus, b4 as checkCloudActionsNow, b5 as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b6 as HiMiniPauseCircle, b7 as listContextAgentSessions, h as harnessDisplayName, b8 as HiMiniLink, b9 as revokeContextAgentSession, ba as authorizeContextAgentSession, bb as ContextAssistanceApiError, bc as ask, bd as parseContextScope, be as validContextBrokerRevision, bf as isGuardDemoMode, bg as fetchWithGuardAuth, bh as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bi as HiMiniCodeBracketSquare, bj as HiMiniFolder, u as HiMiniDocumentText, bk as HiMiniComputerDesktop, bl as HiMiniHome, k as HiMiniCheck, bm as HiMiniFolderPlus, bn as HiMiniClock, bo as commitDashboardLocation, bp as listContextWorkspaces, bq as HiMiniFolderOpen, br as grantContextWorkspace, bs as manageContextWorkspace, bt as compileWorkspaceContext, w as HiMiniArrowRight, M as HiMiniClipboardDocument, bu as HiMiniArrowLeft, bv as isCigarProducerVersion, bw as isCigarCoreLabel, bx as subscribeDashboardLocation, a5 as HiMiniSparkles, by as HiMiniArrowUpCircle, bz as parseContextAssistanceStatus, bA as isCigarBuildIdentity, bB as fetchContextInstallations, bC as HiMiniCloudArrowDown, f as fetchContextAssistance, c as controlContextAssistance, bD as HiMiniArrowDownTray, bE as downloadBlob, bF as savedEvidenceCopy, bG as guardAwareHref, bH as fetchContextData, bI as forgetContextHistory, bJ as forgetSavedEvidence, bK as resolveProtectionLevelCopy, aA as fetchSettings, bL as fetchRuntimeSnapshot, bM as clearHarnessWatchOverrides, bN as withHarnessPosturePatch, P as updateSettings, bO as clearPolicy, bP as clearReviewQueue, bQ as revokeApprovalGateCooldown, bR as disableApprovalGateTotp, bS as importSettings, bT as resetSettings, bU as enrollApprovalGateTotp, bV as verifyApprovalGateTotp, bW as clearEvidence, bX as exportDiagnostics, bY as repairApprovalCenter, bZ as exportSettings, b_ as setupDesktopNotifications, a7 as EmptyState, b$ as settingsWatchBannerModel, c0 as WorkspacePageHeader, Z as WatchProtectionBanner, c1 as navigateFromAnchor, g as HiMiniChevronDown, c2 as humanizeList, c3 as isProtectionPosture, c4 as deriveProtectionPosture, c5 as normalizeHarnessPostures, c6 as approvalGateCooldownLabel } from "../guard-dashboard.js";
-import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-DpNqpqFG.js";
+import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, a9 as HiMiniCloud, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as fetchWithGuardAuth, b4 as isRecord$1, b5 as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b6 as HiMiniPauseCircle, b7 as listContextAgentSessions, h as harnessDisplayName, b8 as HiMiniLink, b9 as revokeContextAgentSession, ba as authorizeContextAgentSession, bb as ContextAssistanceApiError, bc as ask, bd as parseContextScope, be as validContextBrokerRevision, bf as isGuardDemoMode, bg as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bh as HiMiniCodeBracketSquare, bi as HiMiniFolder, u as HiMiniDocumentText, bj as HiMiniComputerDesktop, bk as HiMiniHome, k as HiMiniCheck, bl as HiMiniFolderPlus, bm as HiMiniClock, bn as commitDashboardLocation, bo as listContextWorkspaces, bp as HiMiniFolderOpen, bq as grantContextWorkspace, br as manageContextWorkspace, bs as compileWorkspaceContext, w as HiMiniArrowRight, M as HiMiniClipboardDocument, bt as HiMiniArrowLeft, bu as isCigarProducerVersion, bv as isCigarCoreLabel, bw as subscribeDashboardLocation, a5 as HiMiniSparkles, bx as HiMiniArrowUpCircle, by as parseContextAssistanceStatus, bz as isCigarBuildIdentity, bA as fetchContextInstallations, bB as HiMiniCloudArrowDown, f as fetchContextAssistance, c as controlContextAssistance, bC as HiMiniArrowDownTray, bD as downloadBlob, bE as savedEvidenceCopy, bF as guardAwareHref, bG as fetchContextData, bH as forgetContextHistory, bI as forgetSavedEvidence, bJ as resolveProtectionLevelCopy, aA as fetchSettings, bK as fetchRuntimeSnapshot, bL as clearHarnessWatchOverrides, bM as withHarnessPosturePatch, P as updateSettings, bN as clearPolicy, bO as clearReviewQueue, bP as revokeApprovalGateCooldown, bQ as disableApprovalGateTotp, bR as importSettings, bS as resetSettings, bT as enrollApprovalGateTotp, bU as verifyApprovalGateTotp, bV as clearEvidence, bW as exportDiagnostics, bX as repairApprovalCenter, bY as exportSettings, bZ as setupDesktopNotifications, a7 as EmptyState, b_ as settingsWatchBannerModel, b$ as WorkspacePageHeader, Z as WatchProtectionBanner, c0 as navigateFromAnchor, g as HiMiniChevronDown, c1 as humanizeList, c2 as isProtectionPosture, c3 as deriveProtectionPosture, c4 as normalizeHarnessPostures, c5 as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-C6t1uvM3.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
-import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-R8WOnNuC.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-q5ZpYwb7.js";
+import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-bAWZ8zmO.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-CjWFL3B3.js";
 import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-7c8X0j_V.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
@@ -2692,12 +2692,49 @@ function CloudReviewSettings() {
     ) : null
   ] });
 }
+const STATUS_PATH = "/v1/cloud-actions/status";
+async function failureMessage(response, fallback) {
+  const payload = await response.json().catch(() => null);
+  const message2 = isRecord$1(payload) ? payload["message"] : null;
+  return typeof message2 === "string" && message2.trim() ? message2 : fallback;
+}
+async function fetchCloudActionsStatus() {
+  const response = await fetchWithGuardAuth(STATUS_PATH, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(await failureMessage(response, `Request failed with ${response.status}`));
+  }
+  return await response.json();
+}
+async function checkCloudActionsNow() {
+  const response = await fetchWithGuardAuth(STATUS_PATH, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+    cache: "no-store"
+  });
+  if (response.status === 429 || response.status === 409) {
+    const payload = await response.json().catch(() => null);
+    const retry = isRecord$1(payload) ? payload["retry_after_seconds"] : null;
+    const message2 = isRecord$1(payload) && typeof payload["message"] === "string" ? payload["message"] : null;
+    return {
+      kind: "wait",
+      retryAfterSeconds: typeof retry === "number" && Number.isFinite(retry) && retry > 0 ? Math.min(retry, 60) : 10,
+      message: message2 ?? "Guard is already checking. Try again shortly."
+    };
+  }
+  if (!response.ok) {
+    throw new Error(await failureMessage(response, "Guard could not check Cloud actions. Try again."));
+  }
+  return { kind: "checked", payload: await response.json() };
+}
 const CLOUD_ACTIONS_STATUS_SCHEMA = "guard.cloud-actions.local-status.v1";
 const MAX_SIGN_INS = 32;
 const MAX_MESSAGE_CHARS = 240;
 const PROFILE_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const WORKSPACE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SITE_PATTERN = /^[A-Za-z0-9.-]{1,253}(?::\d{1,5})?$/;
+const CLOUD_URL_PATTERN = /^(?:https:\/\/[A-Za-z0-9.-]{1,253}|http:\/\/(?:127\.0\.0\.1|localhost|host\.docker\.internal))(?::\d{1,5})?$/;
+const DEFAULT_CLOUD_URL = "https://hol.org";
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -2732,10 +2769,14 @@ function normalizeSignIn(value) {
   const profile = text$1(value["profile"], PROFILE_PATTERN);
   const state = text$1(value["state"], /^[a-z_]{1,40}$/);
   if (profile === null || state === null) return null;
+  const site = text$1(value["site"], SITE_PATTERN);
+  const cloudUrl = text$1(value["cloud_url"], CLOUD_URL_PATTERN);
   return {
     profile,
     workspace: text$1(value["workspace"], WORKSPACE_PATTERN),
-    site: text$1(value["site"], SITE_PATTERN),
+    site,
+    // The address must name the same site the row shows.
+    cloudUrl: cloudUrl !== null && site !== null && cloudUrl.replace(/^https?:\/\//, "") === site ? cloudUrl : null,
     signedInAt: moment(value["signed_in_at"]),
     expiresAt: moment(value["expires_at"]),
     state,
@@ -2829,6 +2870,8 @@ function cloudActionsStateCopy(state) {
 }
 function cloudActionsSignInCommand(signIn) {
   let command = "hol-guard cloud-actions login";
+  if (signIn.cloudUrl === null) command += " --cloud-url <guard-cloud-address>";
+  else if (signIn.cloudUrl !== DEFAULT_CLOUD_URL) command += ` --cloud-url ${signIn.cloudUrl}`;
   if (signIn.workspace !== null) command += ` --cloud-workspace ${signIn.workspace}`;
   if (signIn.profile !== "default") command += ` --profile ${signIn.profile}`;
   return command;
@@ -2845,21 +2888,27 @@ function elapsedCopy(seconds) {
   const days = Math.floor(hours / 24);
   return `${days} days ago`;
 }
-function cloudActionsCheckedCopy(check, now) {
+function cloudActionsCheckedCopy(check, now, staleAfterSeconds) {
   if (check.checkedAt === null) return "Not checked yet";
   const seconds = Math.max(0, (now.getTime() - Date.parse(check.checkedAt)) / 1e3);
   const when = `Checked ${elapsedCopy(seconds)}`;
-  return check.stale ? `${when}. This answer may be out of date.` : when;
+  return check.stale || seconds > staleAfterSeconds ? `${when}. This answer may be out of date.` : when;
+}
+function cloudActionsCurrentState(signIn, now) {
+  if (signIn.state === "profile_damaged" || signIn.expiresAt === null) return signIn.state;
+  return Date.parse(signIn.expiresAt) <= now.getTime() ? "sign_in_expired" : signIn.state;
 }
 function cloudActionsRetryAfterSeconds(nextCheckAllowedAt, now) {
   if (nextCheckAllowedAt === null) return 0;
   const seconds = Math.ceil((Date.parse(nextCheckAllowedAt) - now.getTime()) / 1e3);
   return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, 60) : 0;
 }
-function cloudActionsSummary(status) {
+function cloudActionsSummary(status, now) {
   const count2 = status.signIns.length;
   if (count2 === 0) return "No AI tool on this computer is signed in to Cloud actions.";
-  const needsAttention = status.signIns.filter((row2) => cloudActionsStateCopy(row2.state).tone === "attention").length;
+  const needsAttention = status.signIns.filter(
+    (row2) => cloudActionsStateCopy(cloudActionsCurrentState(row2, now)).tone === "attention"
+  ).length;
   const signedIn = count2 === 1 ? "1 sign-in" : `${count2} sign-ins`;
   if (needsAttention === 0) return `${signedIn} on this computer.`;
   return `${signedIn} on this computer. ${needsAttention === 1 ? "1 needs" : `${needsAttention} need`} attention.`;
@@ -2880,8 +2929,13 @@ function CommandLine({ label: label2, command }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block overflow-x-auto whitespace-pre rounded-md bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark", children: command })
   ] });
 }
-function CloudActionsSignInRow({ signIn, now }) {
-  const copy = cloudActionsStateCopy(signIn.state);
+function CloudActionsSignInRow({
+  signIn,
+  now,
+  staleAfterSeconds
+}) {
+  const state = cloudActionsCurrentState(signIn, now);
+  const copy = cloudActionsStateCopy(state);
   const headingId = `cloud-actions-sign-in-${signIn.profile}`;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { "aria-labelledby": headingId, className: "py-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-2", children: [
@@ -2905,12 +2959,12 @@ function CloudActionsSignInRow({ signIn, now }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Guard Cloud's answer" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: cloudActionsCheckedCopy(signIn.check, now) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: cloudActionsCheckedCopy(signIn.check, now, staleAfterSeconds) })
       ] })
     ] }),
-    signIn.check.message !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: signIn.check.message }) : null,
+    signIn.check.message !== null && state === signIn.state ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: signIn.check.message }) : null,
     copy.remedy !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-700", children: copy.remedy }) : null,
-    signIn.state === "profile_damaged" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "Sign out of this sign-in", command: cloudActionsSignOutCommand(signIn) }) : null,
+    state === "profile_damaged" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "Sign out of this sign-in", command: cloudActionsSignOutCommand(signIn) }) : null,
     copy.signInAgain ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "Sign in again in a terminal", command: cloudActionsSignInCommand(signIn) }) : null
   ] });
 }
@@ -2925,7 +2979,7 @@ function CloudActionsSettingsView({
   onCheck
 }) {
   let summary2 = error ?? "Reading Cloud actions sign-ins...";
-  if (status !== null && !loading) summary2 = cloudActionsSummary(status);
+  if (status !== null && !loading) summary2 = cloudActionsSummary(status, now);
   const canCheck = status !== null && status.signIns.length > 0;
   let checkLabel = "Check now";
   if (checking) checkLabel = "Checking...";
@@ -2960,7 +3014,15 @@ function CloudActionsSettingsView({
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-700", children: summary2 }),
       notice2 !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "text-sm text-amber-900", children: notice2 }) : null,
-      status !== null && status.signIns.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white px-4", children: status.signIns.map((signIn) => /* @__PURE__ */ jsxRuntimeExports.jsx(CloudActionsSignInRow, { signIn, now }, signIn.profile)) }) : null,
+      status !== null && status.signIns.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white px-4", children: status.signIns.map((signIn) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CloudActionsSignInRow,
+        {
+          signIn,
+          now,
+          staleAfterSeconds: status.staleAfterSeconds
+        },
+        signIn.profile
+      )) }) : null,
       status !== null && status.signIns.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "To sign in, run this in a terminal", command: "hol-guard cloud-actions login --cloud-workspace <workspace-id>" }) : null,
       status !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600", children: "Included actions and connected accounts are shown in Guard Cloud. This computer does not receive them yet." }) : null
     ] })

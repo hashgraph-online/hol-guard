@@ -103,6 +103,19 @@ def _site_host(issuer: str) -> str | None:
     return f"{host}:{port}" if port is not None else host
 
 
+def _site_origin(issuer: str) -> str | None:
+    """The Guard Cloud address to sign in to again, with its scheme."""
+
+    try:
+        parts = urlsplit(issuer)
+        _ = parts.port
+    except ValueError:
+        return None
+    if parts.scheme not in {"http", "https"} or not parts.hostname or parts.username or parts.password:
+        return None
+    return f"{parts.scheme}://{parts.netloc.lower()}"
+
+
 def _profile_names(store: CloudActionsSessionStore) -> list[str]:
     folder = store.root / "profiles"
     try:
@@ -203,6 +216,7 @@ def _row(
         "profile": profile.name,
         "workspace": profile.workspace_id,
         "site": _site_host(profile.issuer),
+        "cloud_url": _site_origin(profile.issuer),
         "signed_in_at": profile.signed_in_at,
         "expires_at": profile.expires_at,
         "expired": expired,

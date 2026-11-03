@@ -17,6 +17,9 @@ const PROFILE_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
 // Workspace IDs are placed in a copyable command, so only plain ID characters are accepted.
 const WORKSPACE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SITE_PATTERN = /^[A-Za-z0-9.-]{1,253}(?::\d{1,5})?$/;
+// Guard Cloud is reached over https; plain http is only accepted for this computer.
+const CLOUD_URL_PATTERN = /^(?:https:\/\/[A-Za-z0-9.-]{1,253}|http:\/\/(?:127\.0\.0\.1|localhost|host\.docker\.internal))(?::\d{1,5})?$/;
+const DEFAULT_CLOUD_URL = "https://hol.org";
 
 export type CloudActionsTone = "good" | "neutral" | "attention";
 
@@ -30,6 +33,8 @@ export type CloudActionsSignIn = {
   profile: string;
   workspace: string | null;
   site: string | null;
+  /** The Guard Cloud address to sign in to again; null when it is not known. */
+  cloudUrl: string | null;
   signedInAt: string | null;
   expiresAt: string | null;
   state: string;
@@ -91,10 +96,14 @@ function normalizeSignIn(value: unknown): CloudActionsSignIn | null {
   const profile = text(value["profile"], PROFILE_PATTERN);
   const state = text(value["state"], /^[a-z_]{1,40}$/);
   if (profile === null || state === null) return null;
+  const site = text(value["site"], SITE_PATTERN);
+  const cloudUrl = text(value["cloud_url"], CLOUD_URL_PATTERN);
   return {
     profile,
     workspace: text(value["workspace"], WORKSPACE_PATTERN),
-    site: text(value["site"], SITE_PATTERN),
+    site,
+    // The address must name the same site the row shows.
+    cloudUrl: cloudUrl !== null && site !== null && cloudUrl.replace(/^https?:\/\//, "") === site ? cloudUrl : null,
     signedInAt: moment(value["signed_in_at"]),
     expiresAt: moment(value["expires_at"]),
     state,
@@ -191,8 +200,15 @@ export function cloudActionsStateCopy(state: string): CloudActionsStateCopy {
   return STATE_COPY[state] ?? UNKNOWN_STATE;
 }
 
-export function cloudActionsSignInCommand(signIn: Pick<CloudActionsSignIn, "profile" | "workspace">): string {
+/**
+ * The command that renews this sign-in on the same Guard Cloud. When the
+ * address is unknown the command names a placeholder instead of falling back
+ * to the default site.
+ */
+export function cloudActionsSignInCommand(signIn: Pick<CloudActionsSignIn, "profile" | "workspace" | "cloudUrl">): string {
   let command = "hol-guard cloud-actions login";
+  if (signIn.cloudUrl === null) command += " --cloud-url <guard-cloud-address>";
+  else if (signIn.cloudUrl !== DEFAULT_CLOUD_URL) command += ` --cloud-url ${signIn.cloudUrl}`;
   if (signIn.workspace !== null) command += ` --cloud-workspace ${signIn.workspace}`;
   if (signIn.profile !== "default") command += ` --profile ${signIn.profile}`;
   return command;
@@ -214,12 +230,22 @@ function elapsedCopy(seconds: number): string {
   return `${days} days ago`;
 }
 
-/** When Guard Cloud last answered, labelled as out of date once the answer is old. */
-export function cloudActionsCheckedCopy(check: CloudActionsCheck, now: Date): string {
+/**
+ * When Guard Cloud last answered, labelled as out of date once the answer is
+ * old. The page stays open, so age is measured against the current clock as
+ * well as the flag the daemon set when it built the report.
+ */
+export function cloudActionsCheckedCopy(check: CloudActionsCheck, now: Date, staleAfterSeconds: number): string {
   if (check.checkedAt === null) return "Not checked yet";
   const seconds = Math.max(0, (now.getTime() - Date.parse(check.checkedAt)) / 1000);
   const when = `Checked ${elapsedCopy(seconds)}`;
-  return check.stale ? `${when}. This answer may be out of date.` : when;
+  return check.stale || seconds > staleAfterSeconds ? `${when}. This answer may be out of date.` : when;
+}
+
+/** The state to show now: a sign-in whose end time has passed has ended, whatever the last answer said. */
+export function cloudActionsCurrentState(signIn: Pick<CloudActionsSignIn, "state" | "expiresAt">, now: Date): string {
+  if (signIn.state === "profile_damaged" || signIn.expiresAt === null) return signIn.state;
+  return Date.parse(signIn.expiresAt) <= now.getTime() ? "sign_in_expired" : signIn.state;
 }
 
 export function cloudActionsRetryAfterSeconds(nextCheckAllowedAt: string | null, now: Date): number {
@@ -228,10 +254,12 @@ export function cloudActionsRetryAfterSeconds(nextCheckAllowedAt: string | null,
   return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, 60) : 0;
 }
 
-export function cloudActionsSummary(status: CloudActionsStatus): string {
+export function cloudActionsSummary(status: CloudActionsStatus, now: Date): string {
   const count = status.signIns.length;
   if (count === 0) return "No AI tool on this computer is signed in to Cloud actions.";
-  const needsAttention = status.signIns.filter((row) => cloudActionsStateCopy(row.state).tone === "attention").length;
+  const needsAttention = status.signIns.filter(
+    (row) => cloudActionsStateCopy(cloudActionsCurrentState(row, now)).tone === "attention",
+  ).length;
   const signedIn = count === 1 ? "1 sign-in" : `${count} sign-ins`;
   if (needsAttention === 0) return `${signedIn} on this computer.`;
   return `${signedIn} on this computer. ${needsAttention === 1 ? "1 needs" : `${needsAttention} need`} attention.`;

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HiMiniArrowPath, HiMiniCloud, HiMiniShieldCheck } from "react-icons/hi2";
 
-import { checkCloudActionsNow, fetchCloudActionsStatus } from "../guard-api";
+import { checkCloudActionsNow, fetchCloudActionsStatus } from "./cloud-actions-api";
 import {
   cloudActionsCheckedCopy,
+  cloudActionsCurrentState,
   cloudActionsRetryAfterSeconds,
   cloudActionsSignInCommand,
   cloudActionsSignOutCommand,
@@ -39,8 +40,17 @@ function CommandLine({ label, command }: { label: string; command: string }) {
   );
 }
 
-export function CloudActionsSignInRow({ signIn, now }: { signIn: CloudActionsSignIn; now: Date }) {
-  const copy = cloudActionsStateCopy(signIn.state);
+export function CloudActionsSignInRow({
+  signIn,
+  now,
+  staleAfterSeconds,
+}: {
+  signIn: CloudActionsSignIn;
+  now: Date;
+  staleAfterSeconds: number;
+}) {
+  const state = cloudActionsCurrentState(signIn, now);
+  const copy = cloudActionsStateCopy(state);
   const headingId = `cloud-actions-sign-in-${signIn.profile}`;
   return (
     <li aria-labelledby={headingId} className="py-4">
@@ -69,14 +79,14 @@ export function CloudActionsSignInRow({ signIn, now }: { signIn: CloudActionsSig
         </div>
         <div className="min-w-0">
           <dt className="text-xs text-slate-600">Guard Cloud's answer</dt>
-          <dd className="mt-0.5 text-brand-dark">{cloudActionsCheckedCopy(signIn.check, now)}</dd>
+          <dd className="mt-0.5 text-brand-dark">{cloudActionsCheckedCopy(signIn.check, now, staleAfterSeconds)}</dd>
         </div>
       </dl>
-      {signIn.check.message !== null ? (
+      {signIn.check.message !== null && state === signIn.state ? (
         <p className="mt-2 text-sm text-slate-600">{signIn.check.message}</p>
       ) : null}
       {copy.remedy !== null ? <p className="mt-2 text-sm text-slate-700">{copy.remedy}</p> : null}
-      {signIn.state === "profile_damaged" ? (
+      {state === "profile_damaged" ? (
         <CommandLine label="Sign out of this sign-in" command={cloudActionsSignOutCommand(signIn)} />
       ) : null}
       {copy.signInAgain ? (
@@ -106,7 +116,7 @@ export function CloudActionsSettingsView({
   onCheck: () => void;
 }) {
   let summary = error ?? "Reading Cloud actions sign-ins...";
-  if (status !== null && !loading) summary = cloudActionsSummary(status);
+  if (status !== null && !loading) summary = cloudActionsSummary(status, now);
   const canCheck = status !== null && status.signIns.length > 0;
   let checkLabel = "Check now";
   if (checking) checkLabel = "Checking...";
@@ -150,7 +160,12 @@ export function CloudActionsSettingsView({
         {status !== null && status.signIns.length > 0 ? (
           <ul className="divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white px-4">
             {status.signIns.map((signIn) => (
-              <CloudActionsSignInRow key={signIn.profile} signIn={signIn} now={now} />
+              <CloudActionsSignInRow
+                key={signIn.profile}
+                signIn={signIn}
+                now={now}
+                staleAfterSeconds={status.staleAfterSeconds}
+              />
             ))}
           </ul>
         ) : null}
