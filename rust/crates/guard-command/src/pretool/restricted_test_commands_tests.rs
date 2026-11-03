@@ -326,54 +326,6 @@ fn admission_and_the_route_read_one_tool_table() {
 }
 
 #[test]
-fn the_installer_link_reads_as_the_entry_it_points_at() {
-    // Every installer writes `node_modules/.bin/<binary>` as a link to the
-    // file the package publishes, so `./node_modules/.bin/vitest` and `node
-    // node_modules/vitest/vitest.mjs` are one run spelled two ways. Reading
-    // only the second sends the first to review while the direct spelling
-    // beside it runs contained.
-    for command in [
-        "node node_modules/.bin/vitest run",
-        "node ./node_modules/.bin/vitest run src",
-        "node dashboard/node_modules/.bin/vitest run",
-        "node node_modules/.bin/jest",
-        "node ./node_modules/.bin/jest src",
-        "node node_modules/.bin/mocha test/unit",
-        "bun node_modules/.bin/vitest run",
-    ] {
-        assert_eq!(
-            reason(command),
-            Some("native_vitest_readonly_containment_required"),
-            "{command}"
-        );
-    }
-    for command in [
-        "node node_modules/.bin/tsc --noEmit",
-        "node ./node_modules/.bin/eslint src",
-        "node node_modules/.bin/prettier --check .",
-    ] {
-        assert_eq!(
-            reason(command),
-            Some("native_node_tool_readonly_containment_required"),
-            "{command}"
-        );
-    }
-    assert_eq!(
-        reason("node node_modules/.bin/vite build"),
-        Some("native_node_build_output_containment_required")
-    );
-    // A link to a program no profile names, and a `.bin` directory that is
-    // not an installer's, stay where they were.
-    for command in [
-        "node node_modules/.bin/rimraf dist",
-        "node vendored/.bin/vitest run",
-        "node node_modules/.bin/vitest watch",
-    ] {
-        assert_eq!(reason(command), None, "{command}");
-    }
-}
-
-#[test]
 fn an_inert_npm_exec_option_leaves_the_run_the_tool_it_names() {
     // `npm exec` is `npx` under another name and takes the same options in
     // front of the tool: they answer the install prompt, pick the cache over

@@ -5,6 +5,9 @@
 //! containment boundary, so the file is runtime policy, not a test module.
 
 #[cfg(test)]
+#[path = "restricted_test_commands_entry_tests.rs"]
+mod entry_tests;
+#[cfg(test)]
 #[path = "restricted_test_commands_tests.rs"]
 mod tests;
 #[cfg(test)]
