@@ -26,14 +26,15 @@ _MAX_STAMPED_PATH_BYTES = 32 * 1024
 # adds no execution surface beyond the default. Only flags that take no
 # argument are accepted; -o/-O/-k/-T and similar name files.
 _DEFAULT_EQUIVALENT_PAGER = re.compile(r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?")
-# `NODE_OPTIONS` flags that only size the heap or change diagnostics; none
-# loads code, reads a file or opens a port. The pattern has no backslash or
+# `NODE_OPTIONS` flags that only size the heap, change diagnostics or expose
+# an engine API; none loads code, reads a file or opens a port. The pattern has no backslash or
 # brace so generated hook sources can embed it unchanged. The rule itself is
 # owned by `guard_contracts::node_options_inert`; these senders run inside the
 # host before Guard's runtime is reached, so they carry a copy that
 # tests/test_hook_node_options_inert.py holds to the Rust test table.
 _INERT_NODE_OPTION = (
     "--(?:(?:no[-_]warnings|no[-_]deprecation|enable[-_]source[-_]maps"
+    "|experimental[-_]vm[-_]modules"
     "|trace[-_]warnings|trace[-_]deprecation|trace[-_]uncaught)"
     "|(?:max[-_]old[-_]space[-_]size|max[-_]semi[-_]space[-_]size|stack[-_]trace[-_]limit)=[0-9]+)"
 )
@@ -41,7 +42,7 @@ INERT_NODE_OPTIONS_PATTERN = f" *{_INERT_NODE_OPTION}(?: +{_INERT_NODE_OPTION})*
 
 
 def node_options_inert(value: str | None) -> bool:
-    """Report a NODE_OPTIONS value that holds only heap and diagnostic flags."""
+    """Report a NODE_OPTIONS value that holds only heap, diagnostic and engine-API flags."""
     return value is not None and re.fullmatch(INERT_NODE_OPTIONS_PATTERN, value) is not None
 
 

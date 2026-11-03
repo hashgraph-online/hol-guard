@@ -7,6 +7,10 @@ fn heap_and_diagnostic_flags_are_inert() {
         " --max_old_space_size=4096  --no-warnings ",
         "--enable-source-maps --stack-trace-limit=50",
         "--max-semi-space-size=64 --trace-deprecation",
+        // The spelling an ESM Jest run needs, alone and beside a heap size.
+        "--experimental-vm-modules",
+        "--experimental_vm_modules",
+        "--experimental-vm-modules --max-old-space-size=4096",
     ] {
         assert!(node_options_inert(value), "{value:?}");
     }
@@ -23,6 +27,12 @@ fn loaders_files_and_odd_spellings_are_not_inert() {
         "--import=data:text/javascript,0",
         "--loader ./loader.mjs",
         "--experimental-loader=./loader.mjs",
+        // Only the exact flag is inert: it takes no value, and no other
+        // `--experimental-` option inherits the reading.
+        "--experimental-vm-modules=1",
+        "--experimental-vm-modules --require=./hook.js",
+        "--experimental-network-imports",
+        "--experimental-policy=./policy.json",
         "--inspect=0.0.0.0:9229",
         "--max-old-space-size=8192 --require=./hook.js",
         "--max-old-space-size=",
