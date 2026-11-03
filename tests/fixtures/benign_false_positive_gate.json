@@ -34952,7 +34952,7 @@
       "expect": "not_allow"
     },
     {
-      "id": "paste-tab-delimiter-worktree-files",
+      "id": "paste-delimiter-worktree-files",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -34963,13 +34963,13 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "paste -d$'\\t' README.md README.md | head -3"
+        "command": "paste -d: README.md README.md | grep -c $USER"
       },
       "cwd": "worktree",
       "expect": "allow"
     },
     {
-      "id": "paste-tab-delimiter-pipe-pairs",
+      "id": "paste-delimiter-pipe-pairs",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -34980,13 +34980,13 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "cat README.md | paste -d$'\\t' - - | head -3"
+        "command": "grep -c $USER README.md | paste -d: - -"
       },
       "cwd": "worktree",
       "expect": "allow"
     },
     {
-      "id": "join-tab-separator-worktree-files",
+      "id": "join-separator-worktree-files",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -34997,13 +34997,13 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "join -t$'\\t' README.md README.md | head -3"
+        "command": "join -t: README.md README.md | grep -c $USER"
       },
       "cwd": "worktree",
       "expect": "allow"
     },
     {
-      "id": "column-tab-separator-worktree-file",
+      "id": "column-table-worktree-file",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -35014,7 +35014,24 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "column -t -s$'\\t' README.md | head -3"
+        "command": "column -t README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "column-separator-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "column -t -s: README.md | grep -c $USER"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -35031,7 +35048,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "paste -d$'\\t' ${HOME}/.ssh/id_rsa README.md"
+        "command": "paste -d: ${HOME}/.ssh/id_rsa README.md"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -35048,7 +35065,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "join -t$'\\t' README.md README.md README.md"
+        "command": "join -t: README.md README.md README.md | grep -c $USER"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -35065,7 +35082,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "column -t -s$'\\t' --json README.md"
+        "command": "column -t --json README.md | grep -c $USER"
       },
       "cwd": "worktree",
       "expect": "not_allow"
