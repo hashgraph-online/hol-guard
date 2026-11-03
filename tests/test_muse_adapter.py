@@ -16,7 +16,11 @@ from codex_plugin_scanner.guard.adapters.muse_hook_render import (
     apply_muse_pretool_approval_wait,
     muse_bridge_response,
 )
-from codex_plugin_scanner.guard.inventory_contract import _agent_type
+from codex_plugin_scanner.guard.inventory_contract import (
+    _agent_type,
+    inventory_snapshot_from_detection,
+    serialize_inventory_snapshot,
+)
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
 FIXTURES = Path(__file__).parent / "fixtures" / "muse"
@@ -178,6 +182,33 @@ class TestMuseDetect:
         result = MuseHarnessAdapter().detect(ctx)
         names = {a.name for a in result.artifacts if a.artifact_type == "skill"}
         assert names == {"changelog"}
+
+    def test_skill_discovery_issues_sync_with_distinct_path_free_ids(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        target = ctx.home_dir / "linked-skills" / "review"
+        target.mkdir(parents=True)
+        (target / "SKILL.md").write_text("# Review\n", encoding="utf-8")
+        roots = (ctx.home_dir / ".config" / "muse" / "skills", ctx.home_dir / ".agents" / "skills")
+        for root in roots:
+            root.mkdir(parents=True)
+            try:
+                (root / "review").symlink_to(target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                pytest.skip(f"symlink creation unavailable: {exc}")
+
+        result = MuseHarnessAdapter().detect(ctx)
+        issues = [a for a in result.artifacts if ":skill-discovery:" in a.artifact_id]
+        assert len(issues) == 2
+        assert all(str(tmp_path) not in a.artifact_id for a in issues)
+
+        snapshot = serialize_inventory_snapshot(
+            inventory_snapshot_from_detection(result, home_dir=ctx.home_dir, generated_at="2026-11-03T00:00:00Z")
+        )
+        items = snapshot["items"]
+        assert isinstance(items, list)
+        item_ids = [item["itemId"] for item in items]
+        assert len(item_ids) == len(set(item_ids))
+        assert "[REDACTED]" not in item_ids
 
     def test_unparseable_settings_warns_and_is_still_found(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
