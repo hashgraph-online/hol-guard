@@ -44,7 +44,7 @@ fn short_value_role(option: char) -> Option<SearchValueRole> {
     }
 }
 
-fn unsafe_root(value: &str, context: ReadContext<'_>) -> bool {
+fn unsafe_root(value: &str, context: ReadContext<'_>, absent: bool) -> bool {
     // fd does not expand globs or variables in a root; the shell might, and
     // the proof would then describe a different directory, so refuse them.
     if value.contains(['*', '?', '{', '}', '$', '`']) {
@@ -59,6 +59,14 @@ fn unsafe_root(value: &str, context: ReadContext<'_>) -> bool {
     if value.contains(['[', ']']) {
         return !tree::safe_literal_bracket_search_target(value, context);
     }
+    // A root that is not there opens nothing: `fd` prints an error for the
+    // name and exits, which is the answer `rg` and `grep` already carry for a
+    // missing search root. The peer screen the caller runs keeps the proof to
+    // commands where no step can put a tree at the name before the walk
+    // reaches it.
+    if absent && super::grep::absent_target(value, context) {
+        return false;
+    }
     unsafe_search_value(SearchValueRole::Path, value, context)
         && !tree::rg_root_inside_cwd(value, context)
         && !tree::listing_root_below_home(value, context)
@@ -71,9 +79,14 @@ fn unsafe_root(value: &str, context: ReadContext<'_>) -> bool {
         && !sibling::fd_sibling_repository_root(value, context)
 }
 
-fn unsafe_value(role: SearchValueRole, value: &str, context: ReadContext<'_>) -> bool {
+fn unsafe_value(
+    role: SearchValueRole,
+    value: &str,
+    context: ReadContext<'_>,
+    absent: bool,
+) -> bool {
     match role {
-        SearchValueRole::Path => unsafe_root(value, context),
+        SearchValueRole::Path => unsafe_root(value, context, absent),
         _ => unsafe_search_value(role, value, context),
     }
 }
@@ -164,7 +177,24 @@ fn literal_word(pattern: &str) -> bool {
         })
 }
 
-pub(super) fn safe_fd_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
+/// `fd` reads a root as the command spells it, so a missing one is proven only
+/// where the spelling reaches the program intact and no peer segment can put a
+/// tree at the name first. `rg` draws the same line for the same reason.
+pub(super) fn safe_fd_segment(
+    model: &crate::CanonicalCommandV1,
+    segment: &crate::CommandSegmentV1,
+    context: ReadContext<'_>,
+) -> bool {
+    let absent = crate::pretool::directory_targets::drive_targets_quoted(segment)
+        && model
+            .segments
+            .iter()
+            .filter(|other| other.span != segment.span)
+            .all(super::grep::creates_nothing);
+    safe_fd_arguments_inner(&segment.arguments, context, absent)
+}
+
+fn safe_fd_arguments_inner(arguments: &[String], context: ReadContext<'_>, absent: bool) -> bool {
     let mut pending: Option<SearchValueRole> = None;
     let mut options_enabled = true;
     let mut pattern: Option<&str> = None;
@@ -175,7 +205,7 @@ pub(super) fn safe_fd_arguments(arguments: &[String], context: ReadContext<'_>) 
     let mut deferred: Vec<&str> = Vec::new();
     for argument in arguments {
         if let Some(role) = pending.take() {
-            if unsafe_value(role, argument, context) {
+            if unsafe_value(role, argument, context, absent) {
                 return false;
             }
             continue;
@@ -205,7 +235,7 @@ pub(super) fn safe_fd_arguments(arguments: &[String], context: ReadContext<'_>) 
                 pending = Some(role);
             } else if (matches!(role, SearchValueRole::Path)
                 && (attached.starts_with('~') || attached.contains(['[', ']'])))
-                || unsafe_value(role, attached, context)
+                || unsafe_value(role, attached, context, absent)
             {
                 return false;
             }
@@ -223,7 +253,7 @@ pub(super) fn safe_fd_arguments(arguments: &[String], context: ReadContext<'_>) 
                 let attached = &argument[1 + offset + option.len_utf8()..];
                 if attached.is_empty() {
                     pending = Some(role);
-                } else if unsafe_value(role, attached, context) {
+                } else if unsafe_value(role, attached, context, absent) {
                     return false;
                 }
                 break;
@@ -231,7 +261,7 @@ pub(super) fn safe_fd_arguments(arguments: &[String], context: ReadContext<'_>) 
             continue;
         }
         if pattern.is_some() {
-            if unsafe_root(argument, context) {
+            if unsafe_root(argument, context, absent) {
                 deferred.push(argument.as_str());
             }
             root_seen = true;
@@ -242,7 +272,7 @@ pub(super) fn safe_fd_arguments(arguments: &[String], context: ReadContext<'_>) 
     // Without a root fd lists the cwd, the same listing as an explicit `.`
     // root, so both spellings get the same decision.
     pending.is_none()
-        && (root_seen || !unsafe_root(".", context))
+        && (root_seen || !unsafe_root(".", context, false))
         && deferred
             .iter()
             .all(|root| hidden_home_listing(pattern, path_matching, root, context))

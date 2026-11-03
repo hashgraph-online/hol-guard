@@ -229,7 +229,7 @@ fn no_peer_creates(model: &CanonicalCommandV1, segment: &crate::CommandSegmentV1
         .segments
         .iter()
         .filter(|other| other.span != segment.span)
-        .all(|other| search::grep::creates_nothing(other, true))
+        .all(search::grep::creates_nothing)
 }
 
 pub(super) fn exact_safe_segment_with_context(
@@ -274,7 +274,7 @@ pub(super) fn exact_safe_segment_with_context(
         // txt id_rsa -x cat` would otherwise shed the screen that keeps the
         // same pattern reviewed as a plain search -- and as `find ... -exec`,
         // which this arm has never carried either.
-        "fd" => search::safe_search_arguments_with_context(basename, &segment.arguments, context),
+        "fd" => search::safe_fd_segment(model, segment, context),
         _ => false,
     };
     let search_text = if basename == "git" {
@@ -526,11 +526,8 @@ pub(super) fn exact_safe_segment_with_context(
                 }
                 "rg" => search::safe_rg_segment(model, segment, context),
                 _ => {
-                    search::safe_search_arguments_with_context(
-                        basename,
-                        &segment.arguments,
-                        context,
-                    ) || super::fanout_reads::safe_fd_exec(model, segment, context)
+                    search::safe_fd_segment(model, segment, context)
+                        || super::fanout_reads::safe_fd_exec(model, segment, context)
                 }
             }) && super::directory_targets::search_home_targets_safe(
                 segment,
