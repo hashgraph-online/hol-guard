@@ -124,6 +124,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "connector_regroup" => crate::connector_regroup::dispatch(args),
         "mcp_policy_input" => crate::mcp_policy_input::dispatch(args),
         "approval_copy" => crate::approval_copy::dispatch(args),
+        "memory_decision_event" => crate::memory_decision_event::dispatch(args),
         "workspace_assessment_build" | "workspace_assessment_fit" => {
             crate::workspace_assessment_sync::dispatch(kind, args)
         }
