@@ -266,6 +266,31 @@ def test_a_claim_the_encoder_refuses_drops_alone(monkeypatch) -> None:
     assert result["trustLayers"][0]["metadata"]["attestationStatus"] == "signed"
 
 
+def test_shared_fields_the_encoder_refuses_fail_the_item(monkeypatch) -> None:
+    real = trust_attestation.native_runner_authority
+
+    def refuse_marked(kind: str, args: dict[str, object]) -> dict[str, object]:
+        if "refuse-shared" in json.dumps(args):
+            raise NativeRunnerAuthorityRefusalError("native_runner_authority_request_unencodable")
+        return real(kind, args)
+
+    monkeypatch.setattr(trust_attestation, "native_runner_authority", refuse_marked)
+
+    with pytest.raises(NativeRunnerAuthorityRefusalError, match="unencodable"):
+        apply_trust_attestation_metadata(
+            {"trustResolution": _local_claim(), "trustLayers": [_local_claim(layerId="layer", layerType="adapter")]},
+            agent_id="codex:local",
+            adapter_id="codex",
+            adapter_version="2.0.0",
+            item_id="plugin:test",
+            item_kind="plugin",
+            content_hash="sha256:content",
+            config_path_hash="sha256:config",
+            repository_id="refuse-shared",
+            signing_config=_signing_config(),
+        )
+
+
 def test_an_unavailable_runtime_still_fails_the_item(monkeypatch) -> None:
     def unavailable(kind: str, args: dict[str, object]) -> dict[str, object]:
         raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
@@ -289,7 +314,7 @@ def test_every_signed_claim_of_an_item_is_checked_in_one_call(monkeypatch) -> No
 
     result = _apply_local_claims({"trustResolution": _local_claim(), "trustLayers": layers})
 
-    assert ops == ["claims", "payloads"]
+    assert ops == ["sign_plan"]
     assert all(layer["metadata"]["attestationStatus"] == "signed" for layer in result["trustLayers"])
 
 

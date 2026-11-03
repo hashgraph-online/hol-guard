@@ -26747,6 +26747,72 @@
       "requires_sandbox": true
     },
     {
+      "id": "parent-npx-ava-tap",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx ava --tap"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-ava-serial",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx ava --serial --verbose"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-ava-watch-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx ava --watch"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-ava-debug-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx ava debug"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
       "id": "toolchain-npm-exec-tsc-noemit",
       "fix_area": "shell",
       "harnesses": [
