@@ -57,7 +57,11 @@ def _pairs(value: object) -> list[tuple[str, object]]:
 def plan_wait(
     harness: str, *, event_name: str, response: Mapping[str, object], timeout_seconds: int
 ) -> tuple[list[str], int]:
-    """The requests a review waits on and for how long; none when it does not wait."""
+    """The requests a review waits on and for how long; none when it does not wait.
+
+    The time the plan took comes off the wait, but a planned wait keeps at
+    least one second so a short budget still polls the store once.
+    """
 
     started = time.monotonic()
     action = str(response.get("policy_action") or "")
@@ -65,8 +69,9 @@ def plan_wait(
     plan = ask(harness, "plan", {**fields, "response": _answer_fields(response)})
     request_ids = [item for item in plan.get("request_ids", []) if isinstance(item, str)]
     seconds = plan.get("seconds")
-    remaining = math.floor(seconds - (time.monotonic() - started)) if isinstance(seconds, int) else 0
-    return (request_ids, remaining) if request_ids and remaining > 0 else ([], 0)
+    if not request_ids or not isinstance(seconds, int) or seconds <= 0:
+        return [], 0
+    return request_ids, max(1, math.floor(seconds - (time.monotonic() - started)))
 
 
 def settle_wait(

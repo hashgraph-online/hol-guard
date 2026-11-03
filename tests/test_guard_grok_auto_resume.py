@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -499,6 +500,7 @@ def test_apply_grok_pretool_wait_rewrites_hook_specific_output(
         "decision": "deny",
         "policy_action": "review",
         "reason": "needs review",
+        "approval_requests": [{"request_id": "req-grok-apply"}],
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
@@ -506,7 +508,10 @@ def test_apply_grok_pretool_wait_rewrites_hook_specific_output(
         },
     }
 
-    monkeypatch.setattr(grok_approval_resume, "wait_for_grok_live_approval", lambda **_kwargs: "allow")
+    def resolved_as(action: str) -> Callable[..., dict[str, object]]:
+        return lambda **_kwargs: {"resolved": True, "pending_request_ids": [], "items": [{"resolution_action": action}]}
+
+    monkeypatch.setattr(grok_approval_resume, "wait_for_approval_requests", resolved_as("allow"))
     allowed = apply_grok_pretool_approval_wait(
         dict(response),
         event_name="PreToolUse",
@@ -521,7 +526,7 @@ def test_apply_grok_pretool_wait_rewrites_hook_specific_output(
     assert hook_specific["permissionDecision"] == "allow"
     assert "permissionDecisionReason" not in hook_specific
 
-    monkeypatch.setattr(grok_approval_resume, "wait_for_grok_live_approval", lambda **_kwargs: "block")
+    monkeypatch.setattr(grok_approval_resume, "wait_for_approval_requests", resolved_as("deny"))
     blocked = apply_grok_pretool_approval_wait(
         dict(response),
         event_name="PreToolUse",
