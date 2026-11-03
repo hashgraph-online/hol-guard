@@ -15,8 +15,8 @@ mod tests;
 mod tsx_tests;
 
 use crate::contained_argv::{
-    ava_contained_call, contained_runner_call, jest_contained_call, mocha_contained_call,
-    npm_exec_inert_option,
+    ava_contained_call, contained_runner_call, jasmine_contained_call, jest_contained_call,
+    mocha_contained_call, npm_exec_inert_option, qunit_contained_call, uvu_contained_call,
 };
 use crate::contained_node_tool::{entry_tool, supported_tool_in, writes_or_chains, ToolMode};
 use crate::CanonicalCommandV1;
@@ -519,6 +519,9 @@ fn local_runner_entry_call(arguments: &[String]) -> bool {
         || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_jest_entry(&entry.replace('\\', "/")) && jest_contained_call(rest))
         || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_mocha_entry(&entry.replace('\\', "/")) && mocha_contained_call(rest))
         || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_ava_entry(&entry.replace('\\', "/")) && ava_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_jasmine_entry(&entry.replace('\\', "/")) && jasmine_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_qunit_entry(&entry.replace('\\', "/")) && qunit_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_uvu_entry(&entry.replace('\\', "/")) && uvu_contained_call(rest))
 }
 
 /// The mode the supported tool behind this command runs in, read through the
@@ -795,6 +798,9 @@ pub(super) fn readonly_test_reason(
         "jest" => jest_contained_call(arguments),
         "mocha" => mocha_contained_call(arguments),
         "ava" => ava_contained_call(arguments),
+        "jasmine" => jasmine_contained_call(arguments),
+        "qunit" => qunit_contained_call(arguments),
+        "uvu" => uvu_contained_call(arguments),
         "node" | "nodejs" => local_runner_entry_call(arguments),
         _ => false,
     };
