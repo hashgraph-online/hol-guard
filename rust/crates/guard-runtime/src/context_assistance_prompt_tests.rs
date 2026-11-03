@@ -176,3 +176,77 @@ fn pi_gets_context_only_from_an_extension_that_passes_it_on() {
     assert!(takes_context("codex", &older));
     assert!(!takes_context("cursor", &flagged));
 }
+
+#[test]
+fn excerpts_follow_this_prompts_ranking_before_earlier_files() {
+    let picked = [
+        excerpt("src/earlier.tsx", "<button>Cancel</button>"),
+        excerpt("src/data-panel.tsx", "<button>Cancel</button>"),
+        excerpt("src/confirm-dialog.tsx", "cancelLabel = \"Cancel\""),
+    ];
+    let found = words(&["src/confirm-dialog.tsx", "src/data-panel.tsx"]);
+    let rendered = render(&picked, &found, &words(&["cancel"])).unwrap();
+    let at = |path: &str| rendered.find(&format!("{path} (lines")).unwrap();
+    assert!(
+        at("src/confirm-dialog.tsx") < at("src/data-panel.tsx"),
+        "{rendered}"
+    );
+    assert!(
+        at("src/data-panel.tsx") < at("src/earlier.tsx"),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn a_prompt_cigar_cannot_answer_in_time_still_gets_the_matched_files() {
+    assert_eq!(matched(&[]), None);
+    let found: Vec<String> = (0..12).map(|n| format!("src/f{n}.ts")).collect();
+    let listed = matched(&found).unwrap();
+    assert!(listed.starts_with(MATCHED_HEADER), "{listed}");
+    assert!(listed.ends_with(" src/f0.ts, src/f1.ts, src/f2.ts, src/f3.ts, src/f4.ts, src/f5.ts, src/f6.ts, src/f7.ts"), "{listed}");
+}
+
+#[test]
+fn long_matched_paths_stay_within_the_context_limit() {
+    let long = format!("src/{}.ts", "a".repeat(MAX_CONTEXT_CHARS / 3));
+    let found = vec![long.clone(); MAX_OTHER_FILES];
+    let listed = matched(&found).unwrap();
+    assert!(listed.len() <= MAX_CONTEXT_CHARS, "{}", listed.len());
+    assert_eq!(listed.matches(long.as_str()).count(), 2);
+    assert_eq!(
+        matched(&[format!("src/{}.ts", "b".repeat(MAX_CONTEXT_CHARS))]),
+        None
+    );
+}
+
+#[test]
+fn an_excerpt_too_big_to_fit_gives_way_to_the_next_one() {
+    let picked = [
+        excerpt("src/header.ts", &"header ".repeat(2_000)),
+        excerpt("src/header-title.ts", "export const header = 'Title';"),
+    ];
+    let rendered = render(&picked, &[], &words(&["header"])).unwrap();
+    assert!(
+        rendered.contains("src/header-title.ts (lines 1-3)"),
+        "{rendered}"
+    );
+    assert!(rendered.len() <= MAX_CONTEXT_CHARS);
+}
+
+/// The file list that stands in while CIGAR starts goes through the engine's
+/// own checks. A fresh Guard home has project context off for every
+/// workspace, so nothing is named, even for a readable, ordinary file.
+#[test]
+fn the_starting_fallback_names_nothing_a_workspace_has_not_allowed() {
+    let home = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let root = crate::context_assistance_prompt_files::plain(
+        std::fs::canonicalize(project.path()).unwrap(),
+    );
+    std::fs::write(root.join("header.ts"), "export const header = 1;\n").unwrap();
+    let found = words(&["header.ts"]);
+    let later = Instant::now() + Duration::from_secs(5);
+    for app in ["claude-code", "Claude Code"] {
+        assert!(admissible_paths(home.path(), &root, app, &found, 8, later).is_empty());
+    }
+}
