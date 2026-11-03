@@ -6,9 +6,11 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority as authority
 from codex_plugin_scanner.guard.adapters import copilot as copilot_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
@@ -350,10 +352,14 @@ def test_copilot_without_a_hook_ownership_answer_changes_no_file(tmp_path, monke
     adapter.install(context)
     before = _tree(tmp_path)
 
-    def refused(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+    real = authority.native_runner_authority
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.native_runner_authority.native_runner_authority", refused)
+    def refused(kind: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        if kind == "copilot_hook_config":
+            raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+        return real(kind, *args, **kwargs)
+
+    monkeypatch.setattr(authority, "native_runner_authority", refused)
 
     with pytest.raises(copilot_module.CopilotHookOwnershipError, match="hol-guard doctor copilot"):
         adapter.uninstall(context)

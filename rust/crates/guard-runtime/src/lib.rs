@@ -274,6 +274,11 @@ mod copilot_hook_config;
 #[cfg(test)]
 #[path = "adapters/copilot_hook_config_tests.rs"]
 mod copilot_hook_config_tests;
+#[path = "adapters/copilot_lifecycle_state.rs"]
+mod copilot_lifecycle_state;
+#[cfg(test)]
+#[path = "adapters/copilot_lifecycle_state_tests.rs"]
+mod copilot_lifecycle_state_tests;
 #[path = "adapters/copilot_mcp_plan.rs"]
 mod copilot_mcp_plan;
 #[cfg(test)]
