@@ -38,7 +38,7 @@ from .fleet_posture_common import (
     normalized_timestamp,
     utc,
 )
-from .fleet_posture_inventory import projected_rows, store_home
+from .fleet_posture_inventory import chunked_last, committed_state, projected_rows, store_home
 from .fleet_posture_runtimes import RUNTIMES_TTL_SECONDS, runtimes_section
 from .fleet_posture_tools import (
     AUTO_UPDATE_STATE_KEY,
@@ -248,7 +248,7 @@ def build_fleet_posture_state(
         {
             "rows": rows,
             "hash_key": hash_key.decode("utf-8"),
-            "last": last,
+            "last": chunked_last(last),
             "now": now.isoformat(),
             "force_full": bool(force_full),
             "detail": bool(detail),
@@ -263,7 +263,7 @@ def build_fleet_posture_state(
     )
     return FleetPostureBuild(
         payload=built["payload"],
-        next_state=built["next_state"],
+        next_state=committed_state(last, built["next_state"]),
         mode=built["mode"],
         payload_bytes=built["payload_bytes"],
         advanced_inventory=built["advanced_inventory"],

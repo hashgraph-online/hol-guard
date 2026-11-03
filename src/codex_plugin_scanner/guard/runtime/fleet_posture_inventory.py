@@ -30,6 +30,9 @@ _ITEM_KINDS = {
 }
 # Scope names a local source can carry; the native runtime maps each to its contract source.
 ITEM_SOURCE_SCOPES = frozenset({"marketplace", "project", "workspace", "global", "user", "lockfile", "config"})
+# The native request parser refuses any JSON array or object wider than this, so
+# rows and tracked items cross in chunks the runtime joins back in order.
+_NATIVE_JSON_WIDTH = 4096
 # The row fields the native selection reads.
 _ROW_FIELDS = (
     "removed_at",
@@ -51,10 +54,37 @@ def inventory_item_kind(artifact_type: object) -> str | None:
     return _ITEM_KINDS.get(str(artifact_type or ""))
 
 
-def projected_rows(rows: Iterable[Mapping[str, object]]) -> list[dict[str, object]]:
-    """Each row's selection fields, in order."""
+def projected_rows(rows: Iterable[Mapping[str, object]]) -> list[list[dict[str, object]]]:
+    """Each row's selection fields, in order, in chunks the native request parser accepts."""
 
-    return [{key: row.get(key) for key in _ROW_FIELDS if key in row} for row in rows]
+    projected = [{key: row.get(key) for key in _ROW_FIELDS if key in row} for row in rows]
+    return [projected[start : start + _NATIVE_JSON_WIDTH] for start in range(0, len(projected), _NATIVE_JSON_WIDTH)]
+
+
+def chunked_last(last: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The last sent state with its tracked items split into chunks the native request parser accepts."""
+
+    items = last.get("items") if last is not None else None
+    if last is None or not isinstance(items, dict):
+        return last
+    pairs = list(items.items())
+    chunks = [dict(pairs[start : start + _NATIVE_JSON_WIDTH]) for start in range(0, len(pairs), _NATIVE_JSON_WIDTH)]
+    return {**last, "items": chunks}
+
+
+def committed_state(last: dict[str, Any] | None, next_state: dict[str, Any]) -> dict[str, Any]:
+    """The state to commit: the runtime replies with a patch to the tracked items, not all of them."""
+
+    stored = last.get("items") if last is not None else None
+    items = dict(stored) if isinstance(stored, dict) else {}
+    state = dict(next_state)
+    patch = state.pop("itemsPatch", None)
+    if isinstance(patch, dict):
+        for key in patch.get("remove") or ():
+            items.pop(key, None)
+        items.update(patch.get("set") or {})
+    state["items"] = items
+    return state
 
 
 def store_home(store: object) -> Path | None:

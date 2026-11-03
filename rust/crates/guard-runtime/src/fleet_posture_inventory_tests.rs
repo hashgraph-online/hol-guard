@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use super::dispatch;
 
@@ -42,7 +42,33 @@ fn build_with(rows: &[Value], last: &Value, now: &str, extra: &[(&str, Value)]) 
     for (key, value) in extra {
         args[*key] = value.clone();
     }
-    dispatch("fleet_posture_build", &args).expect("build")
+    let mut built = dispatch("fleet_posture_build", &args).expect("build");
+    let items = committed_items(last, &built["next_state"]["itemsPatch"]);
+    built["next_state"]["items"] = items;
+    built
+}
+
+/// What the caller commits: the stored items with the reply's patch applied.
+fn committed_items(last: &Value, patch: &Value) -> Value {
+    let mut items = Map::new();
+    match &last["items"] {
+        Value::Object(stored) => items.extend(stored.clone()),
+        Value::Array(chunks) => {
+            for chunk in chunks.iter().filter_map(Value::as_object) {
+                items.extend(chunk.clone());
+            }
+        }
+        _ => {}
+    }
+    for key in patch["remove"].as_array().into_iter().flatten() {
+        if let Some(key) = key.as_str() {
+            items.remove(key);
+        }
+    }
+    if let Some(set) = patch["set"].as_object() {
+        items.extend(set.clone());
+    }
+    Value::Object(items)
 }
 
 fn build(rows: &[Value], last: &Value) -> Value {
@@ -185,7 +211,9 @@ fn a_week_old_full_send_is_refreshed() {
 #[test]
 fn a_large_refresh_streams_as_deltas() {
     let inventory = rows(300);
-    let first = build(&inventory, &Value::Null);
+    // A roomy byte budget leaves the item cap as the only limit.
+    let roomy = [("max_payload_bytes", json!(1_000_000))];
+    let first = build_with(&inventory, &Value::Null, NOW, &roomy);
     assert_eq!(first["mode"], "delta");
     assert_eq!(
         first["payload"]["inventory"]["items"]
@@ -196,7 +224,7 @@ fn a_large_refresh_streams_as_deltas() {
     assert_eq!(first["next_state"]["fullStreaming"], true);
     assert_eq!(first["next_state"]["fullSentAt"], Value::Null);
 
-    let second = build(&inventory, &first["next_state"]);
+    let second = build_with(&inventory, &first["next_state"], NOW, &roomy);
     assert_eq!(second["mode"], "delta");
     assert_eq!(
         second["payload"]["inventory"]["items"]
@@ -207,6 +235,73 @@ fn a_large_refresh_streams_as_deltas() {
     assert_eq!(second["next_state"]["fullStreaming"], false);
     assert_eq!(second["next_state"]["fullSentAt"], "2026-11-02T12:00:00Z");
     assert_eq!(second["next_state"]["inventoryItemsTracked"], 300);
+}
+
+#[test]
+fn the_reply_patches_the_tracked_items_instead_of_repeating_them() {
+    let inventory = rows(300);
+    let roomy = [("max_payload_bytes", json!(1_000_000))];
+    let first = build_with(&inventory, &Value::Null, NOW, &roomy);
+    let patch = &first["next_state"]["itemsPatch"];
+    assert_eq!(patch["set"].as_object().map(Map::len), Some(250));
+
+    let second = build_with(&inventory, &first["next_state"], NOW, &roomy);
+    let patch = &second["next_state"]["itemsPatch"];
+    assert_eq!(patch["set"].as_object().map(Map::len), Some(50));
+    assert_eq!(patch["remove"], json!([]));
+    assert_eq!(
+        second["next_state"]["items"].as_object().map(Map::len),
+        Some(300)
+    );
+
+    let unchanged = build_with(&inventory, &second["next_state"], NOW, &roomy);
+    assert_eq!(
+        unchanged["next_state"]["itemsPatch"],
+        json!({"set": {}, "remove": []})
+    );
+    let gone = build_with(&inventory[1..], &second["next_state"], NOW, &roomy);
+    let patch = &gone["next_state"]["itemsPatch"];
+    assert_eq!(patch["set"], json!({}));
+    assert_eq!(patch["remove"].as_array().map(Vec::len), Some(1));
+}
+
+#[test]
+fn the_byte_budget_trims_a_delta_below_the_item_cap() {
+    let first = build(&rows(300), &Value::Null);
+    let sent = first["payload"]["inventory"]["items"]
+        .as_array()
+        .map_or(0, Vec::len);
+    assert!(sent > 0 && sent < 250, "{sent}");
+    assert!(first["payload_bytes"]
+        .as_u64()
+        .is_some_and(|bytes| bytes <= 65536));
+}
+
+#[test]
+fn rows_and_tracked_items_may_arrive_in_chunks() {
+    let inventory = rows(300);
+    let chunked_rows = vec![
+        Value::from(inventory[..120].to_vec()),
+        Value::from(inventory[120..].to_vec()),
+    ];
+    let flat = build(&inventory, &Value::Null);
+    let chunked = build(&chunked_rows, &Value::Null);
+    assert_eq!(chunked, flat);
+
+    let mut last = flat["next_state"].clone();
+    let items = last["items"].as_object().cloned().unwrap_or_default();
+    let (head, tail): (Vec<_>, Vec<_>) = items
+        .into_iter()
+        .enumerate()
+        .partition(|(index, _)| *index < 100);
+    let chunk = |pairs: Vec<(usize, (String, Value))>| {
+        Value::Object(pairs.into_iter().map(|(_, pair)| pair).collect())
+    };
+    last["items"] = json!([chunk(head), chunk(tail)]);
+    assert_eq!(
+        build(&chunked_rows, &last),
+        build(&inventory, &flat["next_state"])
+    );
 }
 
 #[test]
@@ -222,7 +317,10 @@ fn a_minimal_report_sends_only_the_digest() {
     assert_eq!(minimal["advanced_inventory"], false);
     assert_eq!(minimal["payload"]["inventory"]["items"], json!([]));
     assert!(minimal["payload"].get("runtimes").is_none());
-    assert_eq!(minimal["next_state"]["items"], json!({}));
+    assert_eq!(
+        minimal["next_state"]["itemsPatch"],
+        json!({"set": {}, "remove": []})
+    );
 }
 
 #[test]
