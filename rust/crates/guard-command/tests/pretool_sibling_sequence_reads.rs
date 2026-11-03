@@ -369,3 +369,44 @@ fn rustfmt_rewrites_sibling_sources_that_pass_the_write_proof() {
     );
     check_with(decide_stamped, &space, &[], &[allowed]);
 }
+
+/// A `cd` compound ran `grep` and refused `egrep` beside a second step.
+///
+/// One segment after the `cd` is proven on its own, so every spelling was
+/// quiet there. Two or more are gated by the roster of programs a verified
+/// `cd` compound may run, and that roster listed `grep` and `rg` without the
+/// spellings that read exactly the same way, so `egrep … ; cat notes` was the
+/// only one of the pair to raise a review.
+#[test]
+fn cd_compounds_run_every_search_spelling_their_segments_prove() {
+    let (space, _cleanup) = space("cd-roster");
+    let sibling = space.sibling.display();
+    let mut allowed = Vec::new();
+    for program in ["grep", "egrep", "fgrep", "rg"] {
+        allowed.push(format!(
+            "cd {sibling} && {program} -rn fixture src; cat README.md"
+        ));
+    }
+    for program in ["dirname", "basename"] {
+        allowed.push(format!(
+            "cd {sibling} && {program} src/lib.rs; cat README.md"
+        ));
+    }
+    // Neither of these is installed on every runner, and neither proof reads
+    // the program file: both answer from the arguments alone, the way the
+    // search spellings above do.
+    allowed.push(format!("cd {sibling} && fd lib src; cat README.md"));
+    allowed.push(format!("cd {sibling} && tree src; cat README.md"));
+    check(
+        &space,
+        &allowed,
+        &[
+            // The roster narrows; it never admits. A listed program whose own
+            // segment proof fails keeps its review, and so does one that
+            // writes.
+            format!("cd {sibling} && egrep -rn fixture .env; cat README.md"),
+            format!("cd {sibling} && egrep -rn fixture src > out.txt; cat README.md"),
+            format!("cd {sibling} && egrep -rn fixture src; rm -rf src"),
+        ],
+    );
+}
