@@ -260,16 +260,6 @@
       "note": "Blocks a continuation it cannot settle."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/business_review_queue.py",
-      "func": "project_request",
-      "root": "none",
-      "reading": "presentation",
-      "actions": [
-        "require-reapproval"
-      ],
-      "note": "A display-only queue row, as its docstring states."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
       "func": "cursor_shell_route_response",
       "root": "hook",

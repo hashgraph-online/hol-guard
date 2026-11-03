@@ -90,6 +90,7 @@ mod browser_open;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
 mod business_document_compile;
+mod business_review_page;
 mod business_source_codec;
 mod catalog_provenance;
 mod cisco_containment;
@@ -833,6 +834,7 @@ mod mcp_tool_policy_lookup;
 mod mcp_tool_policy_proxy;
 mod mcp_tool_policy_revalidate;
 mod mdm_integrity_snapshot;
+mod memory_decision_event;
 mod memory_decision_receipt;
 mod memory_pattern;
 #[cfg(target_os = "macos")]

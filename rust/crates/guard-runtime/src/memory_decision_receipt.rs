@@ -12,8 +12,8 @@
 //! user override and the deterministic receipt id.
 
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 
+use crate::aibom_artifact::sha256_hex;
 use crate::cloud_request_text::py_strip;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
@@ -96,10 +96,6 @@ fn nullable_text<'a>(
         Some(Value::String(text)) if !text.is_empty() => Ok(Some(text)),
         _ => Err(ERR_INVALID),
     }
-}
-
-fn sha256_hex(text: &str) -> String {
-    hex::encode(Sha256::digest(text.as_bytes()))
 }
 
 #[cfg(test)]
