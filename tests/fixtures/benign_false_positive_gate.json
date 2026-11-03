@@ -29457,6 +29457,70 @@
       "expect": "allow"
     },
     {
+      "id": "cd-compound-egrep-beside-a-read",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && egrep -rn \"report-window-marker\" src; cat notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cd-compound-fgrep-beside-a-read",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && fgrep -rn \"report-window-marker\" src; cat notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cd-compound-dirname-beside-a-read",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && dirname src/report.ts; cat notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cd-compound-basename-beside-a-read",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && basename src/report.ts .ts; cat notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "observed-grep-piped-to-sed-ranges",
       "fix_area": "read",
       "harnesses": [
