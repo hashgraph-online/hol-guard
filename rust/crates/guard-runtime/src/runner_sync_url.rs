@@ -69,7 +69,13 @@ pub(crate) fn urlsplit(raw: &str) -> Split {
     }
 }
 
-fn urlunsplit(scheme: &str, netloc: &str, path: &str, query: &str, fragment: &str) -> String {
+pub(crate) fn urlunsplit(
+    scheme: &str,
+    netloc: &str,
+    path: &str,
+    query: &str,
+    fragment: &str,
+) -> String {
     let mut url = path.to_owned();
     if !netloc.is_empty() {
         if !url.is_empty() && !url.starts_with('/') {
@@ -141,7 +147,7 @@ fn quote_plus(text: &str) -> String {
 }
 
 /// `parse_qsl(query, keep_blank_values=True)`.
-fn parse_qsl(query: &str) -> Vec<(String, String)> {
+pub(crate) fn parse_qsl(query: &str) -> Vec<(String, String)> {
     query
         .split('&')
         .filter(|pair| !pair.is_empty())
@@ -155,7 +161,7 @@ fn parse_qsl(query: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-fn urlencode(pairs: &[(String, String)]) -> String {
+pub(crate) fn urlencode(pairs: &[(String, String)]) -> String {
     pairs
         .iter()
         .map(|(key, value)| format!("{}={}", quote_plus(key), quote_plus(value)))

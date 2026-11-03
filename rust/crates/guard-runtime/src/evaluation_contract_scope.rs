@@ -14,7 +14,7 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::cloud_request_text::py_isspace;
-use crate::consumer_url::{url_hostname, url_splits};
+use crate::consumer_url::{url_hostname, url_parses};
 use crate::guard_paths::python_realpath_lax;
 use crate::runner_sync_url::urlsplit;
 
@@ -253,7 +253,7 @@ struct Endpoint {
 }
 
 fn parse_endpoint(text: &str) -> Option<Endpoint> {
-    if !url_splits(text) {
+    if !url_parses(text) {
         return None;
     }
     let split = urlsplit(text);

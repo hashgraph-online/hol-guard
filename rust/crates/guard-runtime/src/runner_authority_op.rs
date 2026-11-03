@@ -118,6 +118,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         | "decision_legacy"
         | "decision_build" => crate::decision_authority_op::dispatch(kind, args),
         "cli_runtime_support" => crate::cli_runtime_support_op::dispatch(args),
+        "cli_profiles" => crate::cli_profiles::dispatch(args),
         "catalog_provenance" => crate::catalog_provenance::dispatch(args),
         "evaluation_contract" => crate::evaluation_contract::dispatch(args),
         "connector_regroup" => crate::connector_regroup::dispatch(args),
@@ -137,6 +138,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "local_cli_recognize" => crate::local_cli_identify::recognize_dispatch(args),
         "network_status_build" => crate::network_status_build::dispatch(args),
         "mcp_registry_page" => crate::mcp_registry_page::dispatch(args),
+        "connector_setup_rows" => crate::connector_setup_rows::dispatch(args),
         "review_event_decode" => crate::review_event_decode::dispatch(args),
         "review_policy_memory_plan" => crate::review_policy_memory_plan::dispatch(args),
         "contained_denial_note" => crate::contained_denial_note::dispatch(args),

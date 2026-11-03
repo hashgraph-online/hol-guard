@@ -82,8 +82,8 @@ fn netloc_normalizes_safely(netloc: &str) -> bool {
     stripped == normalized || !normalized.contains(['/', '?', '#', '@', ':'])
 }
 
-/// Whether `urlsplit` accepts the URL without raising `ValueError`.
-pub(crate) fn url_splits(url: &str) -> bool {
+/// Whether `urlsplit` accepts `url` instead of raising `ValueError`.
+pub(crate) fn url_parses(url: &str) -> bool {
     split(url).is_some()
 }
 
