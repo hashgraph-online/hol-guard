@@ -257,6 +257,22 @@ def test_restore_changes_nothing_when_access_could_not_end(
     assert len(_records(guard_home, "codex")) == 1
 
 
+def test_restore_puts_the_file_back_when_the_pairing_has_expired(
+    cloud: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home, guard_home = tmp_path / "home", tmp_path / "guard"
+    path = _seed(home, "codex")
+    before = path.read_bytes()
+    assert _apply(capsys, home, guard_home, "codex")[0] == 0
+    cloud.revoke_error = CloudActionsAccessError("pairing_expired", "This computer's Guard Cloud connection expired.")
+
+    code, payload = _restore(capsys, home, guard_home, "codex")
+
+    assert (code, payload["state"], payload["access_ended"]) == (0, "restored", False)
+    assert path.read_bytes() == before
+    assert payload["pairing"] == "expired"
+
+
 def test_a_change_after_the_preview_is_never_overwritten(tmp_path: Path) -> None:
     path = _seed(tmp_path, "claude-code")
     plan = plan_host_config("claude-code", path=path, entry=entry("claude-code"), url=URL)

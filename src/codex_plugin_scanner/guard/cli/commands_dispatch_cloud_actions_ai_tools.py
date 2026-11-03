@@ -157,17 +157,20 @@ def restore_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
     guard_home = settings_guard_home(args)
     fields: dict[str, object] = {"ai_tool": args.ai_tool, "settings_file": str(path)}
     # End the access before touching the file. Restoring consumes a saved copy,
-    # so a retry after a failed end must not put back an older one.
+    # so a retry after a failed end must not put back an older one. Without a
+    # pairing, or with an expired one, this computer cannot use the access, so
+    # the file is put back without asking Guard Cloud.
     ended: list[str] | None
+    unpaired_reason: str | None = None
     try:
         store = cloud_actions_access.open_paired_store(guard_home)
         ended = cloud_actions_access.revoke_cloud_actions_access(store, ai_tool=args.ai_tool)
     except cloud_actions_access.CloudActionsAccessError as error:
-        if error.reason != "not_paired":
+        if error.reason not in {"not_paired", "pairing_expired"}:
             return reply(
                 CLOUD_ACTIONS_UNAVAILABLE_EXIT,
                 f"Guard Cloud did not confirm that Cloud actions access for this AI tool ended: {error} "
-                "Nothing was changed. Run this command again to retry.",
+                "Nothing was changed. Run this command again once Guard Cloud can be reached.",
                 state="access_not_ended",
                 reason=error.reason,
                 message=str(error),
@@ -176,6 +179,7 @@ def restore_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
                 **fields,
             )
         ended = None
+        unpaired_reason = error.reason
     try:
         restored = restore_host_config(args.ai_tool, path=path, guard_home=guard_home)
     except HostConfigWriteError as error:
@@ -210,7 +214,12 @@ def restore_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
             "entry_removed": restored.entry_removed,
         }
     # Report only what Guard Cloud confirmed it ended.
-    if ended is None:
+    if unpaired_reason == "pairing_expired":
+        note = (
+            "This computer's Guard Cloud connection has expired, so it can no longer use Cloud actions. "
+            "Run `hol-guard connect` to pair again."
+        )
+    elif ended is None:
         note = "This computer is not paired with Guard Cloud, so there was no Cloud actions access to end."
     elif args.ai_tool in ended:
         note = "Guard Cloud ended Cloud actions access for this AI tool."
@@ -221,6 +230,7 @@ def restore_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
         f"{text}\n{note}",
         state="restored" if restored is not None else "nothing_to_restore",
         access_ended=ended is not None and args.ai_tool in ended,
+        pairing="expired" if unpaired_reason == "pairing_expired" else ("none" if ended is None else "paired"),
         **restore_fields,
         **fields,
     )
