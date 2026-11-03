@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority
 from codex_plugin_scanner.guard.mcp.policy_errors import PolicyToolError
 from codex_plugin_scanner.guard.mcp.policy_schemas import (
     parse_create_policy_input,
@@ -22,6 +23,7 @@ from codex_plugin_scanner.guard.mcp.policy_tools import (
 )
 from codex_plugin_scanner.guard.policy_document import policy_document_digest
 from codex_plugin_scanner.guard.policy_document_yaml import (
+    MAX_POLICY_BYTES,
     format_policy_document_yaml,
     parse_policy_document_yaml,
 )
@@ -375,6 +377,33 @@ class TestPolicySchemas:
     def test_parse_get_policy_creation_input_requires_request_id(self) -> None:
         with pytest.raises(PolicyToolError):
             parse_get_policy_creation_input({})
+
+    def test_unknown_arguments_are_listed_in_sorted_order(self) -> None:
+        with pytest.raises(PolicyToolError) as exc:
+            parse_validate_policy_input({"policyYaml": "x", "zeta": 1, "alpha": 2})
+        assert exc.value.code == "invalid_arguments"
+        assert exc.value.message == "Unknown arguments: ['alpha', 'zeta']"
+
+    def test_an_oversize_policy_never_reaches_the_runtime(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def unreachable(*_args: object, **_kwargs: object) -> dict[str, object]:
+            raise AssertionError("runtime called")
+
+        monkeypatch.setattr(native_runner_authority, "native_runner_authority", unreachable)
+        with pytest.raises(PolicyToolError) as exc:
+            parse_validate_policy_input({"policyYaml": "x" * (MAX_POLICY_BYTES + 1)})
+        assert exc.value.code == "policy_too_large"
+
+    def test_a_runtime_that_cannot_check_the_arguments_fails_retryable(
+        self, store: GuardStore, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+            raise native_runner_authority.NativeRunnerAuthorityError("unavailable")
+
+        monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+        result = json.loads(execute_validate_policy(store, {"policyYaml": _BASIC_POLICY_YAML}))
+        assert result["ok"] is False
+        assert result["error"]["code"] == "policy_compile_failed"
+        assert result["error"]["retryable"] is True
 
 
 class TestPolicyStoreRepository:

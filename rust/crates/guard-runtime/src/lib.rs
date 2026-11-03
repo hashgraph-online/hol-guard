@@ -762,6 +762,7 @@ mod managed_policy_plist;
 mod managed_policy_registry;
 mod managed_resident;
 mod mcp_classification_op;
+mod mcp_policy_input;
 mod mcp_probe_op;
 mod mcp_proxy_actions;
 mod mcp_proxy_archive;
