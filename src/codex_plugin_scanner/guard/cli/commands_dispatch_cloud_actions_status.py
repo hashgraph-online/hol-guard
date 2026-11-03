@@ -15,7 +15,6 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..config import resolve_guard_home
 from .commands_dispatch_cloud_actions import (
     CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT,
     CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
@@ -138,6 +137,7 @@ def _private_files(store: CloudActionsSessionStore, profile_name: str) -> Health
 def _ai_tool_states(args: argparse.Namespace, url: str | None) -> dict[str, dict[str, object]]:
     from .cloud_actions_health import redact_home
     from .cloud_actions_host_config import SUPPORTED_AI_TOOLS, bridge_entry, plan_host_config, settings_path
+    from .commands_dispatch_cloud_actions_ai_tools import settings_guard_home
 
     explicit_home = getattr(args, "home", None)
     home = Path(explicit_home).expanduser() if explicit_home else Path.home()
@@ -148,7 +148,7 @@ def _ai_tool_states(args: argparse.Namespace, url: str | None) -> dict[str, dict
         if url is None:
             entry["state"] = "not_checked"
         else:
-            entry_fields = bridge_entry(ai_tool, guard_home=resolve_guard_home(getattr(args, "guard_home", None)))
+            entry_fields = bridge_entry(ai_tool, guard_home=settings_guard_home(args))
             plan = plan_host_config(ai_tool, path=path, entry=entry_fields, url=url)
             entry["state"] = _AI_TOOL_STATES[plan.action]
             if plan.configured_as:

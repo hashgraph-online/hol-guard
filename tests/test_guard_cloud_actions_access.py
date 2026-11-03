@@ -251,3 +251,24 @@ def test_revoke_ends_one_ai_tools_access_through_the_pairing(
 
 def test_the_gateway_address_follows_the_guard_cloud_path() -> None:
     assert access.CloudActionsPairing(origin=ORIGIN, workspace_id=None).gateway_url == RESOURCE
+
+
+@pytest.mark.parametrize("call", ["exchange", "revoke"])
+def test_a_rate_limited_pairing_refresh_is_an_access_error(
+    store: GuardStore, cloud: Cloud, monkeypatch: pytest.MonkeyPatch, call: str
+) -> None:
+    def rate_limited(_store: GuardStore) -> dict[str, object]:
+        raise runner._GuardOAuthRefreshRateLimitedError(30)  # pyright: ignore[reportPrivateUsage]
+
+    monkeypatch.setattr(runner, "_resolve_guard_sync_auth_context", rate_limited)
+    monkeypatch.setattr(access, "read_cloud_actions_pairing", lambda _store: PAIRING)
+
+    with pytest.raises(CloudActionsAccessError) as error:
+        if call == "exchange":
+            _ = exchange_cloud_actions_access(store, ai_tool="codex")
+        else:
+            _ = revoke_cloud_actions_access(store, ai_tool="codex")
+
+    assert error.value.reason == "rate_limited"
+    assert "30 seconds" in str(error.value)
+    assert cloud.requests == []

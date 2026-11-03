@@ -41,14 +41,17 @@ def _ai_tool_settings_path(args: argparse.Namespace) -> Path | None:
         return None
 
 
-def _settings_guard_home(args: argparse.Namespace) -> Path:
-    """Where copies of changed settings are kept; under `--home` when it is given."""
+def settings_guard_home(args: argparse.Namespace) -> Path:
+    """The Guard home the AI tool's entry names; under `--home` when it is given.
+
+    Absolute, because the AI tool starts the bridge from its own working folder.
+    """
 
     override = getattr(args, "guard_home", None)
     explicit_home = getattr(args, "home", None)
     if override or not explicit_home:
-        return resolve_guard_home(override)
-    return resolve_guard_home_for_user_home(Path(explicit_home).expanduser())
+        return Path(os.path.abspath(resolve_guard_home(override)))
+    return Path(os.path.abspath(resolve_guard_home_for_user_home(Path(explicit_home).expanduser())))
 
 
 def _ai_tool_not_supported(args: argparse.Namespace, reply: _Reply) -> int:
@@ -66,13 +69,12 @@ def _ai_tool_not_supported(args: argparse.Namespace, reply: _Reply) -> int:
 
 
 def _access_refused(error: CloudActionsAccessError, reply: _Reply, **fields: object) -> int:
-    code = (
-        CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT
-        if error.reason in {"not_paired", "pairing_expired", "cloud_actions_off", "cloud_actions_not_allowed"}
-        else CLOUD_ACTIONS_UNAVAILABLE_EXIT
-        if error.reason in {"not_available", "cloud_unreachable"}
-        else CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT
-    )
+    if error.reason in {"not_paired", "pairing_expired", "cloud_actions_off", "cloud_actions_not_allowed"}:
+        code = CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT
+    elif error.reason in {"not_available", "cloud_unreachable", "rate_limited"}:
+        code = CLOUD_ACTIONS_UNAVAILABLE_EXIT
+    else:
+        code = CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT
     return reply(
         code, f"{error} Nothing was changed.", state="failed", reason=error.reason, message=str(error), **fields
     )
@@ -152,8 +154,28 @@ def restore_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
     path = _ai_tool_settings_path(args)
     if path is None:
         return _ai_tool_not_supported(args, reply)
-    guard_home = _settings_guard_home(args)
+    guard_home = settings_guard_home(args)
     fields: dict[str, object] = {"ai_tool": args.ai_tool, "settings_file": str(path)}
+    # End the access before touching the file. Restoring consumes a saved copy,
+    # so a retry after a failed end must not put back an older one.
+    ended: list[str] | None
+    try:
+        store = cloud_actions_access.open_paired_store(guard_home)
+        ended = cloud_actions_access.revoke_cloud_actions_access(store, ai_tool=args.ai_tool)
+    except cloud_actions_access.CloudActionsAccessError as error:
+        if error.reason != "not_paired":
+            return reply(
+                CLOUD_ACTIONS_UNAVAILABLE_EXIT,
+                f"Guard Cloud did not confirm that Cloud actions access for this AI tool ended: {error} "
+                "Nothing was changed. Run this command again to retry.",
+                state="access_not_ended",
+                reason=error.reason,
+                message=str(error),
+                restored=False,
+                access_ended=False,
+                **fields,
+            )
+        ended = None
     try:
         restored = restore_host_config(args.ai_tool, path=path, guard_home=guard_home)
     except HostConfigWriteError as error:
@@ -164,7 +186,7 @@ def restore_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
             reason=error.reason,
             message=str(error),
             restored=False,
-            access_ended=False,
+            access_ended=ended is not None and args.ai_tool in ended,
             **fields,
         )
     if restored is None:
@@ -179,52 +201,26 @@ def restore_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
             f"{change} hol-guard-cloud entry in {path}. The file changed after Guard wrote it, "
             "so everything else in it stays as it is now."
         )
-    restore_fields: dict[str, object] = (
-        {"restored": False}
-        if restored is None
-        else {
+    restore_fields: dict[str, object] = {"restored": False}
+    if restored is not None:
+        restore_fields = {
             "restored": True,
             "scope": restored.scope,
             "removed_file": restored.removed_file,
             "entry_removed": restored.entry_removed,
         }
-    )
     # Report only what Guard Cloud confirmed it ended.
-    try:
-        store = cloud_actions_access.open_paired_store(guard_home)
-        ended = cloud_actions_access.revoke_cloud_actions_access(store, ai_tool=args.ai_tool)
-    except cloud_actions_access.CloudActionsAccessError as error:
-        if error.reason == "not_paired":
-            note = "This computer is not paired with Guard Cloud, so there was no Cloud actions access to end."
-            return reply(
-                0,
-                f"{text}\n{note}",
-                state="restored" if restored is not None else "nothing_to_restore",
-                access_ended=False,
-                **restore_fields,
-                **fields,
-            )
-        note = f"Guard Cloud did not confirm that Cloud actions access for this AI tool ended: {error}"
-        return reply(
-            CLOUD_ACTIONS_UNAVAILABLE_EXIT,
-            f"{text}\n{note} Run this command again to retry.",
-            state="access_not_ended",
-            reason=error.reason,
-            message=str(error),
-            access_ended=False,
-            **restore_fields,
-            **fields,
-        )
-    note = (
-        "Guard Cloud ended Cloud actions access for this AI tool."
-        if args.ai_tool in ended
-        else "Guard Cloud had no Cloud actions access for this AI tool to end."
-    )
+    if ended is None:
+        note = "This computer is not paired with Guard Cloud, so there was no Cloud actions access to end."
+    elif args.ai_tool in ended:
+        note = "Guard Cloud ended Cloud actions access for this AI tool."
+    else:
+        note = "Guard Cloud had no Cloud actions access for this AI tool to end."
     return reply(
         0,
         f"{text}\n{note}",
         state="restored" if restored is not None else "nothing_to_restore",
-        access_ended=args.ai_tool in ended,
+        access_ended=ended is not None and args.ai_tool in ended,
         **restore_fields,
         **fields,
     )
@@ -262,7 +258,7 @@ def configure_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
     path = _ai_tool_settings_path(args)
     if path is None:
         return _ai_tool_not_supported(args, reply)
-    guard_home = _settings_guard_home(args)
+    guard_home = settings_guard_home(args)
     paired = _configure_pairing(args, guard_home, reply)
     if isinstance(paired, int):
         return paired

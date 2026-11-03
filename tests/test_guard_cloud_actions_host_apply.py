@@ -241,7 +241,7 @@ def test_restore_ends_the_ai_tools_access(cloud: FakeCloud, tmp_path: Path, caps
     assert cloud.revoked == ["codex"]
 
 
-def test_restore_reports_access_it_could_not_end(
+def test_restore_changes_nothing_when_access_could_not_end(
     cloud: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     home, guard_home = tmp_path / "home", tmp_path / "guard"
@@ -252,8 +252,9 @@ def test_restore_reports_access_it_could_not_end(
 
     code, payload = _restore(capsys, home, guard_home, "codex")
 
-    assert (code, payload["state"]) == (3, "access_not_ended")
-    assert path.read_bytes() == before
+    assert (code, payload["state"], payload["restored"]) == (3, "access_not_ended", False)
+    assert path.read_bytes() != before
+    assert len(_records(guard_home, "codex")) == 1
 
 
 def test_a_change_after_the_preview_is_never_overwritten(tmp_path: Path) -> None:

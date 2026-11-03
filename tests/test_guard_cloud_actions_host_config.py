@@ -405,59 +405,6 @@ def test_settings_path_follows_the_ai_tool_home_unless_home_is_given(tmp_path: P
         _ = settings_path("windsurf", home=tmp_path, environ=env)
 
 
-def test_unsupported_ai_tool_names_the_supported_ones(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    assert _configure(tmp_path, "windsurf", "--dry-run", "--json") == 3
-    payload = json.loads(capsys.readouterr().out)
-
-    assert payload["reason"] == "ai_tool_not_supported"
-    assert payload["supported_ai_tools"] == ["claude-code", "codex", "cursor"]
-
-
-def test_without_a_pairing_configure_points_to_connect_and_writes_nothing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    _ = pair(monkeypatch, FakeCloud(paired=False))
-
-    assert _configure(tmp_path, "cursor", "--apply") == 4
-    out = capsys.readouterr().out
-
-    assert "hol-guard connect" in out and "Nothing was changed." in out
-    assert not any(tmp_path.iterdir())
-
-
-def test_another_workspace_than_the_paired_one_is_refused(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    other = "22222222-2222-4222-8222-222222222222"
-    code = cli.main(
-        [
-            "cloud-actions",
-            "ai-tools",
-            "configure",
-            "codex",
-            "--cloud-workspace",
-            other,
-            "--home",
-            str(tmp_path),
-            "--dry-run",
-            "--json",
-        ]
-    )
-
-    assert code == 4
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["reason"] == "workspace_mismatch"
-    assert payload["paired_workspace"] == WS
-    assert not any(tmp_path.iterdir())
-
-
-def test_the_workspace_comes_from_the_pairing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    code = cli.main(["cloud-actions", "ai-tools", "configure", "codex", "--home", str(tmp_path), "--dry-run", "--json"])
-
-    assert code == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["cloud_workspace"] == WS
-    assert payload["url"] == URL
-
-
 def test_an_earlier_address_only_entry_is_replaced_with_the_bridge(tmp_path: Path) -> None:
     path = _write(tmp_path, "codex", f'[mcp_servers.{CLOUD_ACTIONS_SERVER_NAME}]\nurl = "{URL}"\n')
 

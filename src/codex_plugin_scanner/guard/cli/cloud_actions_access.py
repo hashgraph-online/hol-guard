@@ -135,6 +135,24 @@ def _check_not_turned_off(store: GuardStore) -> None:
         raise CloudActionsAccessError("cloud_actions_off", _TURNED_OFF_MESSAGE)
 
 
+def _pairing_auth_context(store: GuardStore) -> dict[str, object]:
+    """The pairing's current access, refreshed when needed, with failures as access errors."""
+
+    from ..runtime import runner
+
+    try:
+        return runner._resolve_guard_sync_auth_context(store)  # pyright: ignore[reportPrivateUsage]
+    except (runner.GuardSyncAuthorizationExpiredError, runner.GuardSyncEndpointUntrustedError) as error:
+        raise CloudActionsAccessError("pairing_expired", str(error)) from error
+    except runner.GuardSyncNotAvailableError as error:
+        raise CloudActionsAccessError("cloud_unreachable", str(error)) from error
+    except runner._GuardOAuthRefreshRateLimitedError as error:  # pyright: ignore[reportPrivateUsage]
+        raise CloudActionsAccessError(
+            "rate_limited",
+            f"Guard Cloud asked this computer to wait {error.retry_after_seconds} seconds. Try again after that.",
+        ) from error
+
+
 def exchange_cloud_actions_access(store: GuardStore, *, ai_tool: str) -> CloudActionsAccess:
     """Exchange the pairing for one AI tool's Cloud actions access."""
 
@@ -146,12 +164,7 @@ def exchange_cloud_actions_access(store: GuardStore, *, ai_tool: str) -> CloudAc
     client_id = credentials.get("client_id") if isinstance(credentials, dict) else None
     if not isinstance(client_id, str) or not client_id:
         raise CloudActionsAccessError("not_paired", _NOT_PAIRED_MESSAGE)
-    try:
-        auth_context = runner._resolve_guard_sync_auth_context(store)  # pyright: ignore[reportPrivateUsage]
-    except (runner.GuardSyncAuthorizationExpiredError, runner.GuardSyncEndpointUntrustedError) as error:
-        raise CloudActionsAccessError("pairing_expired", str(error)) from error
-    except runner.GuardSyncNotAvailableError as error:
-        raise CloudActionsAccessError("cloud_unreachable", str(error)) from error
+    auth_context = _pairing_auth_context(store)
     dpop_key_material = auth_context.get("dpop_key_material")
     if not isinstance(dpop_key_material, GuardDpopKeyMaterial):
         raise CloudActionsAccessError("pairing_expired", _NOT_PAIRED_MESSAGE)
@@ -242,7 +255,12 @@ def read_cloud_actions_access(
         raise CloudActionsAccessError("access_invalid", "Guard Cloud granted access other than Cloud actions.")
     claims = decode_oauth_access_token_claims(access_token)
     audience = claims.get("aud") if claims else None
-    audiences = [audience] if isinstance(audience, str) else audience if isinstance(audience, list) else []
+    if isinstance(audience, str):
+        audiences = [audience]
+    elif isinstance(audience, list):
+        audiences = audience
+    else:
+        audiences = []
     if pairing.gateway_resource not in audiences:
         raise CloudActionsAccessError("access_invalid", "Guard Cloud granted access for something else.")
     workspace_id = oauth_claim_string(claims or {}, "workspace", "workspaceId")
@@ -263,12 +281,7 @@ def revoke_cloud_actions_access(store: GuardStore, *, ai_tool: str | None) -> li
     from ..runtime import runner
 
     pairing = read_cloud_actions_pairing(store)
-    try:
-        auth_context = runner._resolve_guard_sync_auth_context(store)  # pyright: ignore[reportPrivateUsage]
-    except (runner.GuardSyncAuthorizationExpiredError, runner.GuardSyncEndpointUntrustedError) as error:
-        raise CloudActionsAccessError("pairing_expired", str(error)) from error
-    except runner.GuardSyncNotAvailableError as error:
-        raise CloudActionsAccessError("cloud_unreachable", str(error)) from error
+    auth_context = _pairing_auth_context(store)
     request = runner._guard_sync_request(  # pyright: ignore[reportPrivateUsage]
         auth_context,
         request_url=pairing.revoke_url,

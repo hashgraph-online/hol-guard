@@ -28,6 +28,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from .cloud_actions_host_config_toml import UnreadableSettingsError as _UnreadableError
+from .cloud_actions_host_config_toml import render_toml_edit, render_toml_removal
+
 CLOUD_ACTIONS_SERVER_NAME = "hol-guard-cloud"
 _MAX_SETTINGS_BYTES = 32 * 1024 * 1024
 
@@ -246,10 +249,6 @@ def render_entry_undo(
         raise ValueError(str(error)) from None
 
 
-class _UnreadableError(Exception):
-    pass
-
-
 def _tool(ai_tool: str) -> _AiTool:
     tool = _AI_TOOLS.get(ai_tool)
     if tool is None:
@@ -402,7 +401,7 @@ def _render_new(tool: _AiTool, fields: Mapping[str, object]) -> bytes:
 def _render_edit(tool: _AiTool, before: bytes, fields: Mapping[str, object]) -> bytes:
     text = before.decode("utf-8")
     if tool.file_format == "toml":
-        return _render_toml_edit(tool, text, fields).encode()
+        return render_toml_edit(tool.table, CLOUD_ACTIONS_SERVER_NAME, text, fields).encode()
     document = json.loads(text) if text.strip() else {}
     servers = document.get(tool.table)
     if not isinstance(servers, dict):
@@ -427,7 +426,9 @@ def _dump_json_like(document: object, text: str) -> bytes:
 def _render_removal(tool: _AiTool, current: bytes, *, drop_empty_table: bool) -> bytes:
     text = current.decode("utf-8")
     if tool.file_format == "toml":
-        return _render_toml_removal(tool, text, drop_empty_table=drop_empty_table).encode()
+        return render_toml_removal(
+            tool.table, CLOUD_ACTIONS_SERVER_NAME, text, drop_empty_table=drop_empty_table
+        ).encode()
     document = json.loads(text)
     servers = document[tool.table]
     del servers[CLOUD_ACTIONS_SERVER_NAME]
@@ -443,54 +444,6 @@ def _json_indent(text: str) -> int | str:
             prefix = line[: len(line) - len(stripped)]
             return prefix if "\t" in prefix else len(prefix)
     return 2
-
-
-def _render_toml_edit(tool: _AiTool, text: str, fields: Mapping[str, object]) -> str:
-    import tomlkit
-    from tomlkit.exceptions import TOMLKitError
-
-    try:
-        document = tomlkit.parse(text)
-        servers = document.get(tool.table)
-        if servers is None:
-            servers = tomlkit.table(is_super_table=True)
-            document[tool.table] = servers
-        existing = servers.get(CLOUD_ACTIONS_SERVER_NAME)
-        if existing is not None:
-            for key in [key for key in existing if key not in fields]:
-                del existing[key]
-            for key, value in fields.items():
-                existing[key] = value
-        else:
-            entry = tomlkit.table()
-            for key, value in fields.items():
-                entry[key] = value
-            entry.add(tomlkit.nl())
-            servers[CLOUD_ACTIONS_SERVER_NAME] = entry
-        rendered = tomlkit.dumps(document)
-        if rendered.endswith("\n\n") and not text.endswith("\n\n"):
-            rendered = rendered.rstrip("\n") + "\n"
-        return rendered
-    except (TOMLKitError, TypeError, ValueError, AttributeError):
-        raise _UnreadableError("Guard could not edit the settings file without changing other settings.") from None
-
-
-def _render_toml_removal(tool: _AiTool, text: str, *, drop_empty_table: bool) -> str:
-    import tomlkit
-    from tomlkit.exceptions import TOMLKitError
-
-    try:
-        document = tomlkit.parse(text)
-        servers = document[tool.table]
-        del servers[CLOUD_ACTIONS_SERVER_NAME]
-        if not servers and drop_empty_table:
-            del document[tool.table]
-        rendered = tomlkit.dumps(document)
-        if rendered.endswith("\n\n") and not text.endswith("\n\n"):
-            rendered = rendered.rstrip("\n") + "\n"
-        return rendered
-    except (TOMLKitError, TypeError, ValueError, AttributeError, KeyError):
-        raise _UnreadableError("Guard could not edit the settings file without changing other settings.") from None
 
 
 def _check_guard_entry_removed(tool: _AiTool, before: bytes, after: bytes) -> None:
