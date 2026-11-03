@@ -198,6 +198,35 @@ def test_sync_fetches_the_derived_route_and_saves_the_verified_bundle(
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_sync_saves_a_bundle_whose_threat_feed_is_wider_than_a_request_frame_array(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, signing_key: RSAPrivateKey
+) -> None:
+    # A resident request frame caps each JSON array at 4,096 items. Production
+    # threat feeds run far past that, and a bundle sent as a JSON value never
+    # reached the verifier: every sync failed with "reply_unbound".
+    store = _connected_store(tmp_path, monkeypatch)
+    store.set_sync_payload(
+        "supply_chain_bundle_keyring",
+        {"workspace_id": WORKSPACE_ID, "keys": [_verification_key(signing_key)]},
+        "2026-10-21T00:00:00Z",
+    )
+    wide_feed = [f"{index:032x}" for index in range(5_000)]
+    response = _response(
+        signing_key,
+        generated_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        threatUrls={"malware_distribution": wide_feed},
+    )
+    monkeypatch.setattr(guard_runner, "_fetch_supply_chain_bundle_payload", lambda request: response)
+
+    summary = guard_runner.sync_network_protection_bundle(store)
+
+    assert summary["status"] == "synced"
+    saved = store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
+    assert saved["bundle"]["threatUrls"]["malware_distribution"] == wide_feed
+    assert saved["payloadHash"] == response["payloadHash"]
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_refuses_a_saved_keyring_it_cannot_read(
     tmp_path, monkeypatch: pytest.MonkeyPatch, signing_key: RSAPrivateKey
 ) -> None:
