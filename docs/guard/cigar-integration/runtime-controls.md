@@ -16,7 +16,7 @@ In **Runtime & preferences**, choose an enrolled runtime, select preferences and
 
 Opening CIGAR reads native status and registered runtime metadata only. It never scans PATH, probes Python, installs packages, or starts a runtime. An empty runtime list means this Guard profile has no registered CIGAR bundle; it does not mean Python 3.14 is absent or incompatible. Final CPython 3.14.7 qualifies, including in a separate selected environment while Guard uses another supported Python.
 
-Home also shows native context readiness, a link to its Protection settings and **Turn off context assistance** when an enabled preference or pending job is known. Opening Home reads status only; it does not start or probe a runtime. Context status failures are separate from Guard protection and approval controls.
+Home also shows a CIGAR card with the same headline and sentence as the CIGAR page, **Open CIGAR**, and **Turn off CIGAR** when an enabled preference or pending job is known. **Try again** appears only when the status read fails. Opening Home reads status only; it does not start or probe a runtime. Context status failures are separate from Guard protection and approval controls.
 
 These CLI commands reach the same resident-owned service:
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { controlContextAssistance, fetchContextAssistance } from "./api";
 import { contextStatusCopy } from "./status";
+import { cigarHomeCopy } from "./workspace-model";
 import type { ContextAssistanceStatus } from "./types";
 
 const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
@@ -16,23 +17,25 @@ type ViewProps = {
 };
 
 export function ContextHomeStatusView(props: ViewProps) {
-  const copy = props.status ? contextStatusCopy(props.status) : {
-    label: props.loading ? "Checking status" : "Status unavailable",
-    detail: props.loading ? "Reading local context assistance status."
-      : "Refresh this status or open CIGAR to check context assistance.",
-  };
-  return <section aria-label="Context assistance overview" className="space-y-3 rounded-xl border border-slate-200 p-4">
+  const label = props.stopping ? "Stopping"
+    : props.status ? contextStatusCopy(props.status).label
+      : props.loading ? "Checking" : "Unavailable";
+  const copy = props.stopping
+    ? { headline: "Turning off CIGAR", detail: "Guard keeps protecting you as usual." }
+    : props.error
+      ? { headline: "CIGAR status unavailable", detail: "Guard did not answer about CIGAR. Protection keeps working." }
+      : cigarHomeCopy(props.status, props.loading, false);
+  const canStop = props.stopAvailable ?? Boolean(props.status?.requested_enabled || props.status?.effective_enabled || props.status?.job);
+  return <section aria-label="CIGAR overview" className="space-y-3 rounded-xl border border-slate-200 p-4">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <h3 className="text-sm font-semibold text-brand-dark">CIGAR context assistance</h3>
-      <span role="status" className="text-sm text-slate-600">{props.stopping ? "Stopping" : copy.label}</span>
+      <h3 className="text-sm font-semibold text-brand-dark">{copy.headline}</h3>
+      <span role="status" className="text-sm text-slate-600">{label}</span>
     </div>
-    <p className="text-sm text-slate-600">{copy.detail}</p>
-    {props.status?.effective_enabled ? <p className="text-sm text-slate-600">Local context is available for workspaces you authorize. Prepared context supplies supporting data; it does not approve or confirm execution.</p> : null}
-    {props.error ? <p role="alert" className="text-sm text-slate-600">The context request did not return a verified result. Guard protection and existing approvals remain available.</p> : null}
+    <p role={props.error ? "alert" : undefined} className="text-sm text-slate-600">{copy.detail}</p>
     <div className="flex flex-wrap gap-2">
       <button className={button} type="button" onClick={props.onOpenSettings}>Open CIGAR</button>
-      <button className={button} type="button" disabled={props.loading || props.stopping} onClick={props.onRefresh}>Refresh context status</button>
-      {(props.stopAvailable ?? Boolean(props.status?.requested_enabled || props.status?.effective_enabled || props.status?.job)) ? <button className={button} type="button" disabled={props.stopping} onClick={props.onStop}>Turn off context assistance</button> : null}
+      {props.error && !props.loading ? <button className={button} type="button" onClick={props.onRefresh}>Try again</button> : null}
+      {canStop ? <button className={button} type="button" disabled={props.stopping} onClick={props.onStop}>Turn off CIGAR</button> : null}
     </div>
   </section>;
 }

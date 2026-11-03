@@ -3,6 +3,7 @@ import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRe
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
 import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-bAWZ8zmO.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-CjWFL3B3.js";
+import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-7c8X0j_V.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
   if (typeof count2 === "number" && count2 > 0) {
@@ -4917,61 +4918,6 @@ function CigarGuide({ onSelect, walkthroughs }) {
     walkthroughs
   ] });
 }
-const CIGAR_TABS = [
-  { value: "runtime", label: "Settings" },
-  { value: "access", label: "Projects & AI apps" },
-  { value: "versions", label: "Updates" },
-  { value: "data", label: "Privacy" },
-  { value: "guide", label: "Guides" }
-];
-function canStartCigar(status, dirty) {
-  return !dirty && status !== null && status.requested_enabled && status.preferences.enabled && status.effective_preferences.enabled && status.verification_permitted && Boolean(status.preferences.runtime_id) && !status.effective_enabled && status.job === null;
-}
-function cigarTabFromSearch(search) {
-  const value = new URLSearchParams(search).get("section");
-  if (value === "tutorials") return "guide";
-  return CIGAR_TABS.find((tab) => tab.value === value)?.value ?? "overview";
-}
-function cigarWaking(status) {
-  if (!status || status.effective_enabled) return false;
-  return status.diagnostic === "runtime_resting" || status.requested_enabled && status.job?.operation === "activate";
-}
-function cigarHelpsPrompts(status) {
-  const effective = status?.effective_preferences;
-  return effective?.features.agent_context === true && effective.sources.workspace_documents === true;
-}
-function cigarWillHelpPrompts(status) {
-  if (!status) return false;
-  if (cigarHelpsPrompts(status)) return true;
-  const { sources } = status.preferences;
-  return !sources.workspace_documents && !sources.source_set_id;
-}
-const PROMPT_PROMISE = "Every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it.";
-const NO_FILES_YET = "Prompts get no project files until Context for AI apps and workspace documents are on in Settings.";
-function cigarHomeCopy(status, loading, running) {
-  if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. You can keep browsing.", setupHint: false };
-  if (!status) {
-    if (loading) return { headline: "Checking CIGAR", detail: "One moment.", setupHint: false };
-    return { headline: "CIGAR status unavailable", detail: "Guard did not answer. Try refreshing the status.", setupHint: false };
-  }
-  if (status.effective_enabled) {
-    if (cigarHelpsPrompts(status)) return { headline: "CIGAR is on", detail: PROMPT_PROMISE, setupHint: false };
-    return { headline: "CIGAR is on", detail: NO_FILES_YET, setupHint: true };
-  }
-  if (cigarWaking(status)) {
-    return { headline: "CIGAR is on", detail: "It rests when nothing needs it and wakes up by itself. You do not need to turn it on again.", setupHint: false };
-  }
-  if (status.restriction && !status.effective_preferences.enabled) {
-    return { headline: "CIGAR is off", detail: "Your organization manages CIGAR on this computer.", setupHint: false };
-  }
-  if (status.requested_enabled) {
-    return { headline: "CIGAR is not running", detail: "It is saved as on but has not started. Turn it on to start it.", setupHint: false };
-  }
-  if (cigarWillHelpPrompts(status)) {
-    return { headline: "CIGAR is off", detail: "Turn it on and " + PROMPT_PROMISE.charAt(0).toLowerCase() + PROMPT_PROMISE.slice(1), setupHint: false };
-  }
-  return { headline: "CIGAR is off", detail: "Turn it on to start CIGAR. " + NO_FILES_YET, setupHint: true };
-}
 function CigarTutorials(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-walkthroughs", "aria-labelledby": "cigar-tutorials-heading", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-intro", children: [
@@ -9237,8 +9183,8 @@ function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, onNaviga
                   )
                 }
               ) : null,
-              /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsFormSection, { title: "CIGAR context assistance", description: "Optional context for reviews, AI apps, and supported execution flows.", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 py-4", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-xl text-sm text-slate-500", children: "CIGAR has its own workspace for getting started, runtime preferences, sources, app access, and data controls." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsFormSection, { title: "CIGAR", description: "Gives your AI app the project files that match what you ask.", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 py-4", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-xl text-sm text-slate-500", children: "Turn it on, pick project folders and choose which AI apps use it on the CIGAR page." }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "a",
                   {

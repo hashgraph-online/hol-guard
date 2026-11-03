@@ -13,14 +13,18 @@ const render = (status: typeof ready | null, extra: { loading?: boolean; stoppin
   renderToStaticMarkup(<ContextHomeStatusView status={status} loading={false} stopping={false} error={false}
     onRefresh={() => {}} onStop={() => {}} onOpenSettings={() => {}} {...extra} />);
 assert.match(render(ready), /Ready/);
-assert.match(render(ready), /Turn off context assistance/);
-assert.match(render(ready), /does not approve or confirm execution/);
+assert.match(render(ready), /Turn off CIGAR/);
+assert.match(render(ready), /CIGAR is on/);
+assert.doesNotMatch(render(ready), /authorize|execution|context assistance/i);
+assert.doesNotMatch(render(ready), /Try again/);
 assert.match(render(off), />Off</);
-assert.doesNotMatch(render(off), /Turn off context assistance/);
-assert.match(render(null, { loading: true }), /Checking status/);
+assert.match(render(off), /CIGAR is off/);
+assert.doesNotMatch(render(off), /Turn off CIGAR/);
+assert.match(render(null, { loading: true }), /Checking CIGAR/);
 assert.match(render(null, { error: true }), /role="alert"/);
-assert.match(render(null, { error: true }), /existing approvals remain available/);
-assert.doesNotMatch(render(null, { error: true }), /Turn off context assistance/);
-assert.match(render(null, { error: true, stopAvailable: true }), /Turn off context assistance/);
+assert.match(render(null, { error: true }), /Protection keeps working/);
+assert.match(render(null, { error: true }), /Try again/);
+assert.doesNotMatch(render(null, { error: true }), /Turn off CIGAR/);
+assert.match(render(null, { error: true, stopAvailable: true }), /Turn off CIGAR/);
 assert.match(render(ready, { stopping: true }), />Stopping</);
 console.log("Home context status, opt-out visibility and independent failure rendering passed.");
