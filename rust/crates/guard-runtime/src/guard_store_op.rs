@@ -83,6 +83,7 @@ use crate::guard_store_read_state as read_state;
 use crate::guard_store_receipt_reads as receipt_reads;
 use crate::guard_store_receipt_rollups as receipt_rollups;
 use crate::guard_store_receipt_writes as receipt_writes;
+use crate::guard_store_review_settle as review_settle;
 use crate::guard_store_sessions as sessions;
 use crate::guard_store_silent_review::add_silent_native_review_approval_request;
 use crate::guard_store_state_ops as state_ops;
@@ -505,6 +506,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "requeue_pending_review_events_with_marker"
         | "repair_rejected_review_correlation"
         | "recover_review_snapshot_sequences"
+        | "settle_rejected_review_events"
+        | "forget_review_rejection_counts"
         | "record_command_activity"
         | "probe_command_activity_persistence"
         | "transition_command_activity"
@@ -637,6 +640,10 @@ fn dispatch(
             repair_rejected_correlation(connection, source, args)
         }
         "recover_review_snapshot_sequences" => recover_sequences(connection, source, args),
+        "settle_rejected_review_events" => review_settle::settle(connection, source, args),
+        "forget_review_rejection_counts" => {
+            crate::guard_store_review_rejection_counts::forget_counts(connection, source, args)
+        }
         "record_command_activity" => activity::record_command_activity(connection, args),
         "probe_command_activity_persistence" => activity::probe_persistence(connection, args),
         "transition_command_activity" => lifecycle::transition(connection, args),
