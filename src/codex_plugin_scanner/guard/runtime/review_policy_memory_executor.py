@@ -98,14 +98,19 @@ def _memory_plan(bundle: dict[str, object], store: GuardStore) -> tuple[list[str
 
 
 def _dicts(value: object) -> list[dict[str, Any]]:
-    items = cast("list[object]", value) if isinstance(value, list) else []
-    return [cast("dict[str, Any]", item) for item in items if isinstance(item, dict)]
+    """The plan's decisions; a reply without a list of objects fails closed before the store write."""
+
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in cast("list[object]", value)):
+        raise ValueError("review_policy_memory_unavailable")
+    return [cast("dict[str, Any]", item) for item in cast("list[object]", value)]
 
 
 def _registry(rule_ids: object, decisions: list[dict[str, Any]]) -> list[dict[str, object]]:
     """Pair each registry rule with its decision; the registry's decisions close the list."""
 
-    ids = cast("list[object]", rule_ids) if isinstance(rule_ids, list) else []
+    if not isinstance(rule_ids, list):
+        raise ValueError("review_policy_memory_unavailable")
+    ids = cast("list[object]", rule_ids)
     if len(ids) > len(decisions):
         raise ValueError("review_policy_memory_unavailable")
     tail = decisions[len(decisions) - len(ids) :]

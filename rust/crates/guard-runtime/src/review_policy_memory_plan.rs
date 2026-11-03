@@ -24,10 +24,10 @@
 //!   or has no `ruleId`, or `{"error": "invalid_decision_memory_registry"}`
 //!   when a stored registry decision is unusable.
 
-use guard_command::attestation_timestamp::python_strip;
 use guard_contracts::GuardAction;
 use serde_json::{json, Map, Value};
 
+use crate::cloud_request_text::optional_string as text;
 use crate::cloud_request_text::py_truthy;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::KindResult;
@@ -92,14 +92,6 @@ fn list(value: Option<&Value>) -> &[Value] {
         .and_then(Value::as_array)
         .map(Vec::as_slice)
         .unwrap_or_default()
-}
-
-/// Python's `value.strip() if isinstance(value, str) and value.strip()`.
-fn text(value: Option<&Value>) -> Option<&str> {
-    value
-        .and_then(Value::as_str)
-        .map(python_strip)
-        .filter(|text| !text.is_empty())
 }
 
 fn guard_action(value: Option<&Value>) -> Option<&str> {

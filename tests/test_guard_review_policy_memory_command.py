@@ -212,3 +212,20 @@ def test_a_native_outage_applies_nothing(tmp_path: Path, monkeypatch) -> None:
     assert result["failureCode"] == "review_policy_memory_unavailable"
     assert store.get_sync_payload("guard_review_memory_registry") is None
     assert store.list_policy_decisions() == []
+
+
+def test_a_malformed_native_plan_applies_nothing(tmp_path: Path, monkeypatch) -> None:
+    store = _store(tmp_path)
+    bundle = _bundle(store)
+    plans = (
+        {"rejected_rule_ids": [], "registry_rule_ids": []},
+        {"rejected_rule_ids": [], "registry_rule_ids": [], "decisions": ["not-a-decision"]},
+        {"rejected_rule_ids": [], "decisions": []},
+    )
+    for plan in plans:
+        monkeypatch.setattr(authority, "native_runner_authority", lambda kind, request, plan=plan: plan)
+        result = _execute(store, {"decisionMemoryBundle": bundle})
+
+        assert result["failureCode"] == "review_policy_memory_unavailable", plan
+        assert store.get_sync_payload("guard_review_memory_registry") is None
+        assert store.list_policy_decisions() == []
