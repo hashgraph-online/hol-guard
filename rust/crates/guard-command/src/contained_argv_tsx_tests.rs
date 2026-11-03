@@ -93,7 +93,7 @@ fn test_mode_reads_every_word_behind_the_flags_as_a_path_node_loads() {
 #[test]
 fn the_test_runner_takes_the_paths_node_takes_rather_than_the_names_it_ignores() {
     // `node --test` runs whatever path it is handed: a spec whose leaf carries
-    // no `.test` marker, a directory it walks, or nothing at all. Reading the
+    // no `.test` marker, a directory it resolves, or nothing at all. Reading the
     // same line through tsx used to demand a test-shaped leaf and at least one
     // operand, so the same run was contained one way and sent to review the
     // other. The workspace is still the boundary -- the leaf name is not.

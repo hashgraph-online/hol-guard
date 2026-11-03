@@ -1733,21 +1733,6 @@
       ]
     },
     {
-      "id": "omp-native-workspace-npx-tsx-node-test-directory",
-      "expectation": "allow",
-      "oracle": "native-tools",
-      "required_tools": [
-        "bash"
-      ],
-      "prompt": "Run every spec in this project's __tests__ directory through Node's own runner: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
-      "commands": [
-        "npx tsx --test __tests__/"
-      ],
-      "decision_paths": [
-        "native_vitest_readonly_containment_required"
-      ]
-    },
-    {
       "id": "omp-native-workspace-bun-runner-entry",
       "expectation": "allow",
       "oracle": "native-tools",

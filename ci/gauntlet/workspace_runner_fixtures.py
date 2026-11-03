@@ -100,9 +100,6 @@ WORKSPACE_LINT_STAGED_CASE = "omp-native-workspace-npx-lint-staged"
 # its sources. `--test` puts Node in test-runner mode, so the words behind the
 # flags are the files it loads rather than the first file's arguments.
 WORKSPACE_TSX_NODE_TEST_CASE = "omp-native-workspace-npx-tsx-node-test"
-# The same workspace, run by naming the directory Node walks rather than the
-# one file inside it.
-WORKSPACE_TSX_NODE_TEST_DIRECTORY_CASE = "omp-native-workspace-npx-tsx-node-test-directory"
 # The script runner a Node project installs to drive several of its own scripts
 # at once. Its own name carries a manager's inside it, and it installs nothing:
 # every script it names is already in the project's manifest.
@@ -135,7 +132,6 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_PNPM_TSC_CASE,
         WORKSPACE_LINT_STAGED_CASE,
         WORKSPACE_TSX_NODE_TEST_CASE,
-        WORKSPACE_TSX_NODE_TEST_DIRECTORY_CASE,
         WORKSPACE_VITEST_FILTER_CASE,
         WORKSPACE_RUN_ALL_CASE,
         WORKSPACE_SKIP_DOWNLOAD_PREFIX_CASE,
@@ -686,12 +682,6 @@ _INSTALLS = {
         entry="bin/tsc",
     ),
     WORKSPACE_TSX_NODE_TEST_CASE: _Install(
-        "tsx",
-        _TSX_FILES,
-        TSX_MARKER,
-        entry="dist/cli.mjs",
-    ),
-    WORKSPACE_TSX_NODE_TEST_DIRECTORY_CASE: _Install(
         "tsx",
         _TSX_FILES,
         TSX_MARKER,

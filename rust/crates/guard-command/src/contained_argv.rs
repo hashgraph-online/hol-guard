@@ -262,8 +262,8 @@ fn tsx_test_parts(command: &[String]) -> Result<Option<TsxTestParts<'_>>, Restri
     let (flags, rest) = args.split_at(tsx_runner_flag_count(args));
     if tsx_runner_test_mode(flags) {
         // Here Node is its own test runner and every remaining word is a path
-        // it loads, a directory it walks, or nothing at all when it discovers
-        // the files itself. The leaf names a project gives its specs are not
+        // it loads, a directory it resolves, or nothing at all when it
+        // discovers the files itself. The leaf names a project gives its specs are not
         // the boundary on that shape -- the workspace is, and the sink
         // resolves each path inside it before the run starts. `node --test`
         // takes the same paths today through the sibling read-only profile,
