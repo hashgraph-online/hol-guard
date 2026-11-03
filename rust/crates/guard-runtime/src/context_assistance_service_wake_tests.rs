@@ -239,3 +239,21 @@ fn a_lane_watch_waits_for_a_start_from_another_thread() {
         "a start that ended without a worker is not waited on"
     );
 }
+
+#[test]
+fn changed_settings_may_wake_the_worker_again_at_once() {
+    let home = home();
+    let service = Service::default();
+    let mut settings = saved_on(&service);
+    lock(&service.state).unwrap().woke = Some(Instant::now());
+    assert!(
+        !service.wake(home.path(), |_| true),
+        "one attempt per retry window"
+    );
+    settings.effective.features.agent_context = true;
+    service.configure(settings).unwrap();
+    assert!(
+        lock(&service.state).unwrap().woke.is_none(),
+        "turning a feature on or off starts a new retry window"
+    );
+}
