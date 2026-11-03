@@ -3,7 +3,7 @@
   "id": "mcp.rel-time",
   "version": "1.2.11",
   "name": "Rel-Time Protocol",
-  "description": "Reviews the Rel-Time zero-knowledge VDF and Bitcoin timestamping tools that spend hash credits, provision API keys, link hardware Passkeys or write stamped proof files to disk: reltime_anchor_file, reltime_anchor_hash, reltime_provision_agent_key, reltime_link_passkey and reltime_stamp_file. Sun-Stamp SVG retrieval (reltime_get_sun_stamp), Bitcoin proof verification (reltime_check_proof), account balance checks (reltime_account_status) and Superhighway forensic integrity audits (reltime_audit_trail) keep Guard's usual handling. Off until you turn it on.",
+  "description": "Reviews Rel-Time tools that spend hash credits, provision API keys, link Passkeys, or write proof files: reltime_anchor_file, reltime_anchor_hash, reltime_provision_agent_key, reltime_link_passkey, and reltime_stamp_file. reltime_get_sun_stamp, reltime_check_proof, reltime_account_status, and reltime_audit_trail retain Guard's usual handling. Off until enabled.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -11,7 +11,11 @@
     "displayName": "Rel-Time Protocol",
     "url": "https://github.com/relsun369-dev/reltime-mcp"
   },
-  "icon": { "kind": "react-icon", "name": "HiMiniBolt", "background": "#0F172A" },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#0F172A"
+  },
   "homepage": "https://rel-time.com",
   "license": "MIT",
   "launch": {
@@ -27,16 +31,46 @@
     "external-ledger-anchor"
   ],
   "tools": [
-    { "name": "reltime_anchor_file", "state": "review" },
-    { "name": "reltime_anchor_hash", "state": "review" },
-    { "name": "reltime_provision_agent_key", "state": "review" },
-    { "name": "reltime_link_passkey", "state": "review" },
-    { "name": "reltime_stamp_file", "state": "review" },
-    { "name": "reltime_get_sun_stamp", "state": "inherit" },
-    { "name": "reltime_check_proof", "state": "inherit" },
-    { "name": "reltime_account_status", "state": "inherit" },
-    { "name": "reltime_audit_trail", "state": "inherit" },
-    { "name": "other", "state": "inherit" }
+    {
+      "name": "reltime_anchor_file",
+      "state": "review"
+    },
+    {
+      "name": "reltime_anchor_hash",
+      "state": "review"
+    },
+    {
+      "name": "reltime_provision_agent_key",
+      "state": "review"
+    },
+    {
+      "name": "reltime_link_passkey",
+      "state": "review"
+    },
+    {
+      "name": "reltime_stamp_file",
+      "state": "review"
+    },
+    {
+      "name": "reltime_get_sun_stamp",
+      "state": "inherit"
+    },
+    {
+      "name": "reltime_check_proof",
+      "state": "inherit"
+    },
+    {
+      "name": "reltime_account_status",
+      "state": "inherit"
+    },
+    {
+      "name": "reltime_audit_trail",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
   ],
   "referenceUrls": [
     "https://github.com/relsun369-dev/reltime-mcp",
