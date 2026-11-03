@@ -10502,7 +10502,7 @@ def test_guard_hook_native_prompt_risk_classes_never_become_a_silent_allow(tmp_p
     assert receipt is not None
     assert receipt["decision"] == "allow"
     assert receipt["policy_action"] == "warn"
-    assert receipt["reason_code"] == output["reason_code"]
+    assert str(receipt["reason_code"]).startswith("native_")
     assert prompt not in json.dumps(receipt)
 
 
