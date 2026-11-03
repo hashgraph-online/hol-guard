@@ -22,7 +22,6 @@ from .fleet_posture_common import (
     normalized_timestamp,
     parse_timestamp,
 )
-from .fleet_posture_inventory import item_digest
 
 if TYPE_CHECKING:
     from ..config import GuardConfig
@@ -226,13 +225,12 @@ def tool_row(
     config: GuardConfig | None,
     now: datetime,
     include_blind_spots: bool,
-    inventory: Mapping[str, list[dict[str, object]]],
 ) -> dict[str, object]:
+    """One AI tool's row; the native build adds its artifact count and inventory digest."""
     harness = str(adapter.harness)
     setup_status = str(diagnostics.get("setup_status"))
     coverage = _coverage(adapter)
     last_activity = _latest_activity(store, harness)
-    items = inventory.get(harness, [])
     blind_spots: list[str] = []
     if include_blind_spots:
         raw_spots = coverage.get("blindSpots")
@@ -258,9 +256,7 @@ def tool_row(
         },
         "blindSpots": blind_spots,
         "postureOverride": _posture_override(config, harness),
-        "artifactCount": min(len(items), 100000),
         "lastActivityAt": iso(last_activity) if last_activity is not None else None,
-        "inventoryDigest": item_digest(items),
     }
 
 

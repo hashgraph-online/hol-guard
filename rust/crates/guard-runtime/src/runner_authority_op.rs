@@ -202,6 +202,9 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cursor_detect" => cursor_detect::detect(args),
         "cursor_hook_config" => cursor_hook_config::dispatch(args),
         "cursor_editor_plan" => cursor_editor_plan::plan(args),
+        "fleet_inventory_rows" | "fleet_inventory_items" | "fleet_posture_build" => {
+            crate::fleet_posture_inventory::dispatch(kind, args)
+        }
         "cursor_hook_state" => cursor_hook_state::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
