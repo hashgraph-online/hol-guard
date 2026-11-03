@@ -367,3 +367,16 @@ def test_dashboard_reconnect_authorization_file_is_private_and_contains_no_verif
     assert cast(str, authorization["verifier"]) not in contents
     if os.name != "nt":
         assert stat.S_IMODE(state_path.stat().st_mode) == 0o600
+
+
+def test_dashboard_reconnect_identity_reports_a_native_outage_as_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard.daemon.dashboard_reconnect import dashboard_reconnect_challenge_identity
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    assert dashboard_reconnect_challenge_identity(tmp_path, {}) == (None, "dashboard_reconnect_identity_unavailable")

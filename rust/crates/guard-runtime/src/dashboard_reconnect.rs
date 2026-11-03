@@ -23,7 +23,7 @@ use crate::daemon_policy_authority::{
     read_private_regular_text,
 };
 use crate::encrypted_secret_store::{atomic_write_bytes, random_bytes};
-use crate::resident_auth_crypto::constant_time_eq;
+use crate::resident_transport::constant_time_eq;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 

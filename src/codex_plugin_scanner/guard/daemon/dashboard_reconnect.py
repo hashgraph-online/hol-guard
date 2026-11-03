@@ -95,9 +95,16 @@ def consume_dashboard_reconnect_challenge(
     return answer.get("verified") is True, reason
 
 
-def dashboard_reconnect_challenge_identity(guard_home: Path, challenge: dict[str, object]) -> str | None:
-    """Return the replay-cache identity of the normalized authenticated challenge."""
+def dashboard_reconnect_challenge_identity(guard_home: Path, challenge: dict[str, object]) -> tuple[str | None, str]:
+    """Return the replay-cache identity of the normalized challenge, or why there is none.
+
+    A native outage is reported as unavailable, never as a malformed proof.
+    """
 
     answer = _native(guard_home, "challenge_identity", {"challenge": challenge})
-    identity = None if answer is None else answer.get("identity")
-    return identity if isinstance(identity, str) else None
+    if answer is None:
+        return None, _IDENTITY_UNAVAILABLE
+    identity = answer.get("identity")
+    if isinstance(identity, str):
+        return identity, ""
+    return None, "dashboard_reconnect_malformed_proof"
