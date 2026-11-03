@@ -67,6 +67,8 @@ const EXTRA_MUTABLE_LAUNCHERS: &[&str] = &[
     "jasmine",
     "qunit",
     "uvu",
+    "tape",
+    "tsd",
     "rake",
     "gradle",
     "mvn",
