@@ -400,16 +400,6 @@ def test_unsupported_ai_tool_names_the_supported_ones(tmp_path: Path, capsys: py
     assert payload["supported_ai_tools"] == ["claude-code", "codex", "cursor"]
 
 
-def test_apply_is_not_available_yet_and_writes_nothing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    path = _seed(tmp_path, "cursor")
-    before = path.read_bytes()
-
-    assert _configure(tmp_path, "cursor", "--apply", "--json") == 3
-
-    assert json.loads(capsys.readouterr().out)["reason"] == "not_available_yet"
-    assert path.read_bytes() == before
-
-
 def test_cloud_url_off_hol_is_refused(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert _configure(tmp_path, "cursor", "--dry-run", "--json", "--cloud-url", "https://evil.example") == 1
 

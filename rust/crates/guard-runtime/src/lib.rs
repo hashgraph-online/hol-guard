@@ -182,6 +182,7 @@ mod codex_hook_trust;
 mod codex_hooks;
 #[cfg(test)]
 mod codex_hooks_parity_tests;
+mod codex_host_inventory;
 mod codex_identity;
 mod codex_live_operation;
 mod codex_live_wait_build;
@@ -374,6 +375,7 @@ mod extension_control_preview_op;
 mod extension_control_proof;
 mod extension_control_terminal_op;
 mod extension_coverage_hint;
+mod fleet_posture_inventory;
 /// Parser entry points for `rust/fuzz`; see `fuzz_entry.rs`.
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod fuzz_entry;
@@ -847,6 +849,8 @@ mod opencode_install_plan;
 #[cfg(test)]
 #[path = "adapters/opencode_install_plan_tests.rs"]
 mod opencode_install_plan_tests;
+#[path = "adapters/opencode_launch.rs"]
+mod opencode_launch;
 #[path = "adapters/opencode_plugin_render.rs"]
 mod opencode_plugin_render;
 #[cfg(test)]
@@ -1060,6 +1064,7 @@ mod windows_pytest;
 #[cfg(windows)]
 mod windows_readonly;
 mod windows_trusted_directories;
+mod workspace_assessment_sync;
 mod workspace_audit_sync;
 mod workspace_fix;
 mod workspace_fix_diff;

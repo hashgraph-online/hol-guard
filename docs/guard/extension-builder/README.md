@@ -178,6 +178,30 @@ with or without bindings. A binding must extend a source in the same request,
 at most once per extension, and an action ID may appear only once. Validation
 needs no account, network access or provider credentials.
 
+[`examples/cloud-binding-rejected.json`](examples/cloud-binding-rejected.json)
+lists bindings that must fail: a default decision, a permission from another
+extension, an unknown effect or portability label, an include, a callback, an
+endpoint override, a hosted action without pinned egress, a malformed resource
+argument, the catch-all tool, a command run in the cloud and a repeated action
+ID. Each case changes the example above and names the expected `code` and
+`pointer`. The pointer locates the rejected binding in the request
+(`/cloud_bindings/1/bindings/0`); the error never repeats its values. Check
+every case against your compiler:
+
+```sh
+jq -c '.cases[]' docs/guard/extension-builder/examples/cloud-binding-rejected.json |
+  while read -r case; do
+    jq --argjson case "$case" 'reduce $case.set[] as $s (.; setpath($s.path; $s.value))' \
+      cloud-binding-build.json |
+      rust/target/release/guard-command-source validate |
+      jq --argjson case "$case" -e '.code == $case.code and .pointer == $case.pointer' >/dev/null ||
+      echo "unexpected result: $(jq -r .name <<<"$case")"
+  done
+```
+
+`compile-stream` reports the same location as `/records/N/bindings/M`, where
+`N` counts command, MCP and then binding records.
+
 ## Run portable fixtures
 
 Portable fixtures contain command text and synthetic control layers. They use

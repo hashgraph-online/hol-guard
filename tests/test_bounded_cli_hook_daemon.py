@@ -142,13 +142,7 @@ def test_grok_daemon_review_translation_keeps_wait_metadata(native_bridge_render
     ],
 )
 def test_grok_daemon_empty_observe_response_matches_native_success(event_name: str, native_bridge_render) -> None:
-    from codex_plugin_scanner.guard.adapters.grok_hooks import grok_hook_response_from_guard
-
-    native = grok_hook_response_from_guard(
-        policy_action="allow",
-        reason="",
-        event_name=event_name,
-    )
+    native: dict[str, object] = {}
     stdout, stderr, code = native_bridge_render(
         native,
         harness="grok",

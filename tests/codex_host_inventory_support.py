@@ -44,7 +44,12 @@ def _request(client: socket.socket) -> dict[str, object]:
 
 def _send(client: socket.socket, message: dict[str, object]) -> None:
     payload = json.dumps(message).encode()
-    header = bytes([0x81, len(payload)]) if len(payload) < 126 else bytes([0x81, 126]) + struct.pack("!H", len(payload))
+    if len(payload) < 126:
+        header = bytes([0x81, len(payload)])
+    elif len(payload) <= 0xFFFF:
+        header = bytes([0x81, 126]) + struct.pack("!H", len(payload))
+    else:
+        header = bytes([0x81, 127]) + struct.pack("!Q", len(payload))
     client.sendall(header + payload)
 
 

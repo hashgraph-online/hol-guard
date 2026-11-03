@@ -16,28 +16,6 @@ from .grok_config import (
 _GROK_WAITABLE_ACTIONS = frozenset({"review", "require-reapproval"})
 
 
-def grok_resume_metadata_from_guard_payload(approval_payload: Mapping[str, object] | None) -> dict[str, object]:
-    if approval_payload is None:
-        return {}
-    request_id = _optional_string(approval_payload.get("primary_approval_request_id"))
-    if request_id is None:
-        request_ids = _approval_request_ids(approval_payload)
-        request_id = request_ids[0] if request_ids else None
-    approval_url = _optional_string(approval_payload.get("primary_approval_url"))
-    if approval_url is None:
-        approval_url = _optional_string(approval_payload.get("approval_url"))
-    approval_center_url = _optional_string(approval_payload.get("approval_center_url"))
-    metadata: dict[str, object] = {}
-    if request_id is not None:
-        metadata["approval_request_id"] = request_id
-        metadata["resume_poll_path"] = f"/v1/requests/{request_id}"
-    if approval_url is not None:
-        metadata["approval_url"] = approval_url
-    if approval_center_url is not None:
-        metadata["approval_center_url"] = approval_center_url
-    return metadata
-
-
 def grok_live_approval_wait_seconds(configured_timeout: int) -> int:
     return min(max(configured_timeout, 0), GROK_APPROVAL_WAIT_MAX_SECONDS)
 
@@ -237,6 +215,5 @@ __all__ = [
     "GROK_PRETOOL_HOOK_TIMEOUT_SECONDS",
     "apply_grok_pretool_approval_wait",
     "grok_live_approval_wait_seconds",
-    "grok_resume_metadata_from_guard_payload",
     "wait_for_grok_live_approval",
 ]

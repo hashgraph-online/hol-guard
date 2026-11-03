@@ -189,17 +189,6 @@
       "note": "Returns allow only when every approval row the user answered resolved to allow; it reads the store, it does not judge the call."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/adapters/grok_hooks.py",
-      "func": "grok_hook_response_from_guard",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow",
-        "block"
-      ],
-      "note": "Renders the resident's policy_action for Grok. An action it does not recognise is normalized to the review tier before rendering, so an enforcement event denies like the other two renderings in this table; a prompt blocks, an observe-only event renders nothing and a recording-only session renders allow because it records rather than enforces."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/adapters/muse_hook_render.py",
       "func": "apply_muse_pretool_approval_wait",
       "root": "hook",

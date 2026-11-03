@@ -107,6 +107,6 @@ pub(crate) fn python_isdigit_char(c: char) -> bool {
 }
 
 /// `str.isdigit()`: non-empty and every character is a digit.
-pub(super) fn python_isdigit(text: &str) -> bool {
+pub fn python_isdigit(text: &str) -> bool {
     !text.is_empty() && text.chars().all(python_isdigit_char)
 }

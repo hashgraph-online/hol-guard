@@ -226,6 +226,38 @@ fn cloud_binding_records_are_optional_and_resolve_against_the_stream() {
 }
 
 #[test]
+fn an_action_repeated_across_contributions_names_the_repeating_binding() {
+    let delete = |action: &str| {
+        json!({
+            "actionId": action,
+            "tool": "delete_pod",
+            "effect": "destructive",
+            "requiredCapabilities": ["egress-pinned", "bounded-output"],
+            "cloudSupport": "cloud-executable"
+        })
+    };
+    let first = json!({
+        "schemaVersion": "guard.cloud-action-binding-contribution.v1",
+        "extensionId": "mcp.instapods",
+        "bindings": [delete("instapods.pod.delete")]
+    });
+    let second = json!({
+        "schemaVersion": "guard.cloud-action-binding-contribution.v1",
+        "extensionId": "mcp.agenthub",
+        "bindings": [delete("agenthub.pod.delete"), delete("instapods.pod.delete")]
+    });
+    let stream = release_stream(&[first, second]);
+    let error = compile_source_stream(stream.as_slice()).unwrap_err();
+    assert_eq!(error.code, "cloud_binding_duplicate_action");
+    assert_eq!(error.binding, Some(1));
+    let record = error.record.unwrap();
+    assert_eq!(
+        error.pointer("/records"),
+        format!("/records/{record}/bindings/1")
+    );
+}
+
+#[test]
 fn binding_records_draw_on_the_shared_retention_budget() {
     // Each record stays under the per-record cap, but together they exceed
     // what the stream may retain once the sources are counted.
@@ -276,6 +308,32 @@ fn cloud_binding_record_errors_keep_their_position() {
         let error = compile_source_stream(binding_stream(&bindings).as_slice()).unwrap_err();
         assert_eq!(error.code, code);
         assert_eq!(error.record, Some(bindings.len()));
+        assert_eq!(error.binding, None);
+        assert_eq!(
+            error.pointer("/records"),
+            format!("/records/{}", bindings.len())
+        );
+    }
+    // A fault inside one binding names that binding, whether parsing or
+    // resolution finds it.
+    let mut unparsed = binding("command.example-cli", "example.resource.destroy");
+    let second = unparsed["bindings"][0].clone();
+    let mut defaulted = second.clone();
+    defaulted["actionId"] = json!("example.resource.remove");
+    defaulted["default"] = json!("allow");
+    unparsed["bindings"].as_array_mut().unwrap().push(defaulted);
+    let mut unresolved = binding("command.example-cli", "example.resource.destroy");
+    let mut foreign = second.clone();
+    foreign["actionId"] = json!("example.resource.remove");
+    foreign["permissionId"] = json!("command.other-cli.permission.destroy");
+    unresolved["bindings"].as_array_mut().unwrap().push(foreign);
+    for (contribution, code) in [
+        (unparsed, "cloud_binding_contract_invalid"),
+        (unresolved, "cloud_binding_permission_unknown"),
+    ] {
+        let error = compile_source_stream(binding_stream(&[contribution]).as_slice()).unwrap_err();
+        assert_eq!(error.code, code);
+        assert_eq!(error.pointer("/records"), "/records/1/bindings/1");
     }
     let mut too_many = binding_stream(&[]);
     let length = u32::from_be_bytes(too_many[5..9].try_into().unwrap()) as usize;

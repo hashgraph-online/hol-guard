@@ -48,6 +48,7 @@ use super::oci_bundle_op as oci;
 use super::openclaw_detect;
 use super::opencode_detect;
 use super::opencode_install_plan;
+use super::opencode_launch;
 use super::opencode_plugin_render;
 use super::pi_detect;
 use super::pi_extension_render;
@@ -114,6 +115,9 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         | "decision_build" => crate::decision_authority_op::dispatch(kind, args),
         "cli_runtime_support" => crate::cli_runtime_support_op::dispatch(args),
         "approval_copy" => crate::approval_copy::dispatch(args),
+        "workspace_assessment_build" | "workspace_assessment_fit" => {
+            crate::workspace_assessment_sync::dispatch(kind, args)
+        }
         "workspace_audit_sync" => crate::workspace_audit_sync::dispatch(args),
         "workspace_runtime_findings" => crate::workspace_runtime_findings::dispatch(args),
         "shell_request_authority" => crate::shell_request_authority_op::dispatch(args),
@@ -177,6 +181,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cline_hook_files" => cline_hook_files::dispatch(args),
         "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
+        "codex_host_inventory" => crate::codex_host_inventory::dispatch(args),
         "copilot_detect" => copilot_detect::detect(args),
         "copilot_hook_config" => copilot_hook_config::dispatch(args),
         "copilot_mcp_plan" => copilot_mcp_plan::plan(args),
@@ -200,6 +205,9 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cursor_hook_config" => cursor_hook_config::dispatch(args),
         "cursor_editor_plan" => cursor_editor_plan::plan(args),
         "cursor_hook_script" => cursor_hook_script::dispatch(args),
+        "fleet_inventory_rows" | "fleet_inventory_items" | "fleet_posture_build" => {
+            crate::fleet_posture_inventory::dispatch(kind, args)
+        }
         "cursor_hook_state" => cursor_hook_state::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
@@ -221,6 +229,8 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
         "package_firewall_refresh_claim" => {
             crate::package_firewall_refresh::dispatch(&request.args, &request.guard_home)
         }
+        // The OpenCode launch overlay is read from that verified home too.
+        "opencode_launch" => opencode_launch::dispatch(&request.args, &request.guard_home),
         _ => dispatch(&request.kind, &request.args),
     }
 }

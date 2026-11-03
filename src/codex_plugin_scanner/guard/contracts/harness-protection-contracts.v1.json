@@ -892,7 +892,7 @@
           "known_blind_spots": [
             "Post-tool events do not prevent an action that already executed."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/grok_hooks.py:grok_hook_response_from_guard"
+          "source_reference": "rust/crates/guard-command/src/hook_responses/mod.rs:pre_tool"
         },
         {
           "event": "UserPromptSubmit",
@@ -921,7 +921,7 @@
           "known_blind_spots": [
             "Post-tool observation does not block or replace model-visible output."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/grok_hooks.py:_OBSERVE_ONLY_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/hook_cli_emit.rs:GROK_OBSERVE_ONLY_EVENTS"
         }
       ]
     },
