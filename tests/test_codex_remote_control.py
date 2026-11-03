@@ -11,7 +11,20 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_context
 from codex_plugin_scanner.guard.adapters import codex_remote_control
+
+
+@pytest.fixture(autouse=True)
+def _native_runtime_probed_before_fakes(_ambient_context_digest_home: None) -> None:
+    """Probe the native runtime before a test replaces ``subprocess``.
+
+    ``codex_remote_control.subprocess`` is the shared module, so a fake
+    ``Popen`` also catches the runtime's one-time capability probe. That
+    probe only runs when this file is the first in its worker to need the
+    runtime, which depends on how tests are split across shards.
+    """
+    native_context._native_runtime_status_memo()  # pyright: ignore[reportPrivateUsage]
 
 
 def test_guarded_codex_launch_candidates_are_side_effect_free(tmp_path, monkeypatch):
