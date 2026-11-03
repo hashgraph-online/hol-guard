@@ -3,119 +3,119 @@
     "label": "no mcp",
     "scope": "global",
     "config": "{\"b\": 1, \"a\": [1.5, null]}",
-    "expected": "{\"b\": 1, \"a\": [1.5, null]}",
+    "expected": "{\"b\":1,\"a\":[1.5,null]}",
     "refreshable": "[]"
   },
   {
     "label": "mcp not an object",
     "scope": "global",
     "config": "{\"mcp\": [1], \"z\": true}",
-    "expected": "{\"mcp\": [1], \"z\": true}",
+    "expected": "{\"mcp\":[1],\"z\":true}",
     "refreshable": "[]"
   },
   {
     "label": "trusted companion folds into its server",
     "scope": "global",
     "config": "{\"x\": 0, \"mcp\": {\"srv\": {\"type\": \"local\", \"command\": [\"node\", \"--config=/srv/x.json\", \"./rel\", \"/help\", \"/verbose/x\", \"C:/w\", \"plain\", \"dir=/a\"], \"enabled\": true, \"environment\": {\"A\": \"1\"}}, \"hol-guard::srv\": {\"type\": \"local\", \"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \"srv\", \"--server-id\", \"mcp_server:opencode:global:srv:8aa794479c5cdfd560c4\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"local\", \"--command\", \"node\", \"--arg=--config=/srv/x.json\", \"--arg=./rel\", \"--arg=/help\", \"--arg=/verbose/x\", \"--arg=C:/w\", \"--arg=plain\", \"--arg=dir=/a\"], \"enabled\": false}, \"other\": \"dropped\"}, \"y\": 1}",
-    "expected": "{\"x\": 0, \"mcp\": {\"srv\": {\"type\": \"local\", \"command\": [\"node\", \"--config=/srv/x.json\", \"./rel\", \"/help\", \"/verbose/x\", \"C:/w\", \"plain\", \"dir=/a\"], \"enabled\": false, \"environment\": {\"A\": \"1\"}}}, \"y\": 1}",
+    "expected": "{\"x\":0,\"mcp\":{\"srv\":{\"type\":\"local\",\"command\":[\"node\",\"--config=/srv/x.json\",\"./rel\",\"/help\",\"/verbose/x\",\"C:/w\",\"plain\",\"dir=/a\"],\"enabled\":false,\"environment\":{\"A\":\"1\"}}},\"y\":1}",
     "refreshable": "[\"hol-guard::srv\"]"
   },
   {
     "label": "companion without server rebuilds it",
     "scope": "project",
     "config": "{\"mcp\": {\"hol-guard::Lone\": {\"type\": \"local\", \"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \"Lone\", \"--server-id\", \"mcp_server:opencode:project:lone:ea28452a5e002db03d5c\", \"--source-scope\", \"project\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"stdio\", \"--command\", \"/usr/bin/Tool.EXE\", \"--arg=a\", \"--server-env-key=K\", \"--server-env-key=MISSING\", \"--server-env-key=N\"], \"environment\": {\"K\": \"v\", \"N\": 3, \"Z\": \"z\"}}}}",
-    "expected": "{\"mcp\": {\"Lone\": {\"type\": \"stdio\", \"command\": [\"/usr/bin/Tool.EXE\", \"a\"], \"environment\": {\"K\": \"v\"}, \"enabled\": true}}}",
+    "expected": "{\"mcp\":{\"Lone\":{\"type\":\"stdio\",\"command\":[\"/usr/bin/Tool.EXE\",\"a\"],\"environment\":{\"K\":\"v\"},\"enabled\":true}}}",
     "refreshable": "[\"hol-guard::Lone\"]"
   },
   {
     "label": "wrong server id restores the wrapper",
     "scope": "global",
     "config": "{\"mcp\": {\"srv\": {\"command\": \"node\", \"args\": [\"a\"]}, \"hol-guard::srv\": {\"type\": \"local\", \"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \"srv\", \"--server-id\", \"mcp_server:opencode:global:srv:0000\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"local\", \"--command\", \"node\", \"--arg=a\"], \"environment\": {\"E\": \"1\"}}}}",
-    "expected": "{\"mcp\": {\"srv\": {\"command\": \"node\", \"args\": [\"a\"]}, \"hol-guard::srv\": {\"type\": \"local\", \"command\": [\"node\", \"a\"], \"enabled\": true, \"environment\": {\"E\": \"1\"}}}}",
+    "expected": "{\"mcp\":{\"srv\":{\"command\":\"node\",\"args\":[\"a\"]},\"hol-guard::srv\":{\"type\":\"local\",\"command\":[\"node\",\"a\"],\"enabled\":true,\"environment\":{\"E\":\"1\"}}}}",
     "refreshable": "[]"
   },
   {
     "label": "relative config path is not trusted",
     "scope": "global",
     "config": "{\"mcp\": {\"hol-guard::srv\": {\"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \"srv\", \"--server-id\", \"mcp_server:opencode:global:srv:d7339eb9354f8eb116dd\", \"--source-scope\", \"global\", \"--config-path\", \"opt/hg-test/work/opencode.json\", \"--transport\", \"local\", \"--command\", \"node\"]}}}",
-    "expected": "{\"mcp\": {\"hol-guard::srv\": {\"type\": \"local\", \"command\": [\"node\"], \"enabled\": true}}}",
+    "expected": "{\"mcp\":{\"hol-guard::srv\":{\"type\":\"local\",\"command\":[\"node\"],\"enabled\":true}}}",
     "refreshable": "[]"
   },
   {
     "label": "dotted config path resolves equal",
     "scope": "global",
     "config": "{\"mcp\": {\"hol-guard::srv\": {\"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/x/../home\", \"--server-name\", \"srv\", \"--server-id\", \"mcp_server:opencode:global:srv:d7339eb9354f8eb116dd\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/../work/./opencode.json\", \"--transport\", \"local\", \"--command\", \"node\"]}}}",
-    "expected": "{\"mcp\": {\"srv\": {\"type\": \"local\", \"command\": [\"node\"], \"enabled\": true}}}",
+    "expected": "{\"mcp\":{\"srv\":{\"type\":\"local\",\"command\":[\"node\"],\"enabled\":true}}}",
     "refreshable": "[\"hol-guard::srv\"]"
   },
   {
     "label": "other guard home is not trusted",
     "scope": "global",
     "config": "{\"mcp\": {\"hol-guard::srv\": {\"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/other\", \"--server-name\", \"srv\", \"--server-id\", \"mcp_server:opencode:global:srv:d7339eb9354f8eb116dd\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"local\", \"--command\", \"node\"]}}}",
-    "expected": "{\"mcp\": {\"hol-guard::srv\": {\"type\": \"local\", \"command\": [\"node\"], \"enabled\": true}}}",
+    "expected": "{\"mcp\":{\"hol-guard::srv\":{\"type\":\"local\",\"command\":[\"node\"],\"enabled\":true}}}",
     "refreshable": "[]"
   },
   {
     "label": "server that differs from the binding keeps the companion",
     "scope": "global",
     "config": "{\"mcp\": {\"srv\": {\"command\": [\"deno\", \"run\"]}, \"hol-guard::srv\": {\"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \"srv\", \"--server-id\", \"mcp_server:opencode:global:srv:2f8167d2c848d5bc3313\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"local\", \"--command\", \"node\", \"--arg=run\"]}}}",
-    "expected": "{\"mcp\": {\"srv\": {\"command\": [\"deno\", \"run\"]}, \"hol-guard::srv\": {\"type\": \"local\", \"command\": [\"node\", \"run\"], \"enabled\": true}}}",
+    "expected": "{\"mcp\":{\"srv\":{\"command\":[\"deno\",\"run\"]},\"hol-guard::srv\":{\"type\":\"local\",\"command\":[\"node\",\"run\"],\"enabled\":true}}}",
     "refreshable": "[]"
   },
   {
     "label": "legacy in-place wrapper restored",
     "scope": "global",
     "config": "{\"mcp\": {\"srv\": {\"type\": \"remote\", \"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--command\", \"uvx\", \"--arg=tool\", \"--arg=--flag\"], \"enabled\": 0, \"environment\": {\"A\": \"b\"}}, \"plain\": {\"command\": [\"ls\"]}}}",
-    "expected": "{\"mcp\": {\"srv\": {\"type\": \"remote\", \"command\": [\"uvx\", \"tool\", \"--flag\"], \"enabled\": 0, \"environment\": {\"A\": \"b\"}}, \"plain\": {\"command\": [\"ls\"]}}}",
+    "expected": "{\"mcp\":{\"srv\":{\"type\":\"remote\",\"command\":[\"uvx\",\"tool\",\"--flag\"],\"enabled\":0,\"environment\":{\"A\":\"b\"}},\"plain\":{\"command\":[\"ls\"]}}}",
     "refreshable": "[]"
   },
   {
     "label": "double prefix and empty name are not companions",
     "scope": "global",
     "config": "{\"mcp\": {\"hol-guard::\": {\"command\": [\"x\"]}, \"hol-guard::hol-guard::a\": {\"command\": [\"y\"]}}}",
-    "expected": "{\"mcp\": {\"hol-guard::\": {\"command\": [\"x\"]}, \"hol-guard::hol-guard::a\": {\"command\": [\"y\"]}}}",
+    "expected": "{\"mcp\":{\"hol-guard::\":{\"command\":[\"x\"]},\"hol-guard::hol-guard::a\":{\"command\":[\"y\"]}}}",
     "refreshable": "[]"
   },
   {
     "label": "bad transport is not trusted",
     "scope": "global",
     "config": "{\"mcp\": {\"hol-guard::srv\": {\"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \"srv\", \"--server-id\", \"mcp_server:opencode:global:srv:55be777ac6a7660e17a0\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"sse\", \"--command\", \"node\"]}}}",
-    "expected": "{\"mcp\": {\"hol-guard::srv\": {\"type\": \"local\", \"command\": [\"node\"], \"enabled\": true}}}",
+    "expected": "{\"mcp\":{\"hol-guard::srv\":{\"type\":\"local\",\"command\":[\"node\"],\"enabled\":true}}}",
     "refreshable": "[]"
   },
   {
     "label": "guarded server listed after its companion keeps its place",
     "scope": "global",
     "config": "{\"mcp\": {\"hol-guard::srv\": {\"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \"srv\", \"--server-id\", \"mcp_server:opencode:global:srv:a2bfab9f537e11cfd4a6\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"local\", \"--command\", \"node\", \"--arg=a\"]}, \"srv\": {\"command\": \"node\", \"args\": [\"a\"], \"enabled\": false}}}",
-    "expected": "{\"mcp\": {\"srv\": {\"command\": \"node\", \"args\": [\"a\"], \"enabled\": true}}}",
+    "expected": "{\"mcp\":{\"srv\":{\"command\":\"node\",\"args\":[\"a\"],\"enabled\":true}}}",
     "refreshable": "[\"hol-guard::srv\"]"
   },
   {
     "label": "lone surrogate round trips",
     "scope": "global",
     "config": "{\"mcp\": {\"s\\udc80\": {\"command\": [\"n\\udc81\", \"--root=x\\udc82\"]}, \"hol-guard::s\\udc80\": {\"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \"s\\udc80\", \"--server-id\", \"mcp_server:opencode:global:s\\udc80:e3aa474319fa87477041\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"local\", \"--command\", \"n\\udc81\", \"--arg=--root=x\\udc82\"]}}}",
-    "expected": "{\"mcp\": {\"s\\udc80\": {\"command\": [\"n\\udc81\", \"--root=x\\udc82\"], \"enabled\": true}}}",
+    "expected": "{\"mcp\":{\"s\\udc80\":{\"command\":[\"n\\udc81\",\"--root=x\\udc82\"],\"enabled\":true}}}",
     "refreshable": "[\"hol-guard::s\\udc80\"]"
   },
   {
     "label": "names and scopes are stripped and lowered",
     "scope": "global",
     "config": "{\"mcp\": {\"hol-guard:: My Srv \": {\"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \" My Srv \", \"--server-id\", \"mcp_server:opencode:global:my srv:1d5952c2fd8ad01f34ec\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"local\", \"--command\", \"C:\\\\Tools\\\\Node.exe\", \"--arg=~/x\", \"--arg=--Work_Dir=/q\", \"--arg=-/path= /r\"]}}}",
-    "expected": "{\"mcp\": {\" My Srv \": {\"type\": \"local\", \"command\": [\"C:\\\\Tools\\\\Node.exe\", \"~/x\", \"--Work_Dir=/q\", \"-/path= /r\"], \"enabled\": true}}}",
+    "expected": "{\"mcp\":{\" My Srv \":{\"type\":\"local\",\"command\":[\"C:\\\\Tools\\\\Node.exe\",\"~/x\",\"--Work_Dir=/q\",\"-/path= /r\"],\"enabled\":true}}}",
     "refreshable": "[\"hol-guard:: My Srv \"]"
   },
   {
     "label": "remote server is not refreshed",
     "scope": "global",
     "config": "{\"mcp\": {\"srv\": {\"type\": \"remote\", \"command\": [\"node\", \"a\"]}, \"hol-guard::srv\": {\"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \"srv\", \"--server-id\", \"mcp_server:opencode:global:srv:a2bfab9f537e11cfd4a6\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"local\", \"--command\", \"node\", \"--arg=a\"]}, \"hol-guard::other\": {\"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \"other\", \"--server-id\", \"mcp_server:opencode:global:other:089963fe8203b6448b75\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"local\", \"--command\", \"node\"]}}}",
-    "expected": "{\"mcp\": {\"srv\": {\"type\": \"remote\", \"command\": [\"node\", \"a\"], \"enabled\": true}, \"other\": {\"type\": \"local\", \"command\": [\"node\"], \"enabled\": true}}}",
+    "expected": "{\"mcp\":{\"srv\":{\"type\":\"remote\",\"command\":[\"node\",\"a\"],\"enabled\":true},\"other\":{\"type\":\"local\",\"command\":[\"node\"],\"enabled\":true}}}",
     "refreshable": "[\"hol-guard::other\"]"
   },
   {
     "label": "server with a non-string type is not refreshed",
     "scope": "global",
     "config": "{\"mcp\": {\"srv\": {\"type\": 1, \"command\": [\"node\"]}, \"hol-guard::srv\": {\"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \"srv\", \"--server-id\", \"mcp_server:opencode:global:srv:d7339eb9354f8eb116dd\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"local\", \"--command\", \"node\"]}, \"stdio\": {\"type\": \"stdio\", \"command\": [\"uvx\", \"t\"]}, \"hol-guard::stdio\": {\"command\": [\"python3\", \"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"opencode-mcp-proxy\", \"--guard-home\", \"/opt/hg-test/home\", \"--server-name\", \"stdio\", \"--server-id\", \"mcp_server:opencode:global:stdio:58f0f05868d3a9a7fbb1\", \"--source-scope\", \"global\", \"--config-path\", \"/opt/hg-test/work/opencode.json\", \"--transport\", \"stdio\", \"--command\", \"uvx\", \"--arg=t\"]}}}",
-    "expected": "{\"mcp\": {\"srv\": {\"type\": 1, \"command\": [\"node\"], \"enabled\": true}, \"stdio\": {\"type\": \"stdio\", \"command\": [\"uvx\", \"t\"], \"enabled\": true}}}",
+    "expected": "{\"mcp\":{\"srv\":{\"type\":1,\"command\":[\"node\"],\"enabled\":true},\"stdio\":{\"type\":\"stdio\",\"command\":[\"uvx\",\"t\"],\"enabled\":true}}}",
     "refreshable": "[\"hol-guard::stdio\"]"
   }
 ]

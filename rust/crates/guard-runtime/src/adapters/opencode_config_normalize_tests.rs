@@ -87,7 +87,7 @@ fn a_relative_path_without_a_working_directory_never_matches() {
 fn private_use_characters_without_a_lone_surrogate_are_kept() {
     assert_eq!(
         normalized(r#"{"mcp": {"󰀀": {"command": ["x"]}}}"#, "global"),
-        "{\"mcp\": {\"\u{f0000}\": {\"command\": [\"x\"]}}}"
+        "{\"mcp\":{\"\u{f0000}\":{\"command\":[\"x\"]}}}"
     );
 }
 
