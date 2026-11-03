@@ -16,6 +16,10 @@ import re
 import shutil
 from contextlib import suppress
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..store_base import EncryptedFileSecretStore
 
 ALPHA_SIGN_IN_REMOVED_NOTICE = (
     "Removed the separate Cloud actions sign-in saved by an earlier version; "
@@ -24,28 +28,53 @@ ALPHA_SIGN_IN_REMOVED_NOTICE = (
 # Only secrets an alpha sign-in created; anything else in the secret store is left alone.
 _SECRET_REF_PATTERN = re.compile(r"cloud-actions-[a-z0-9-]{1,32}-[0-9a-f]{16}")
 _MAX_PROFILE_BYTES = 64 * 1024
+# Profiles handled per run; any beyond this wait for the next command.
 _MAX_PROFILES = 64
 
 
-def _secret_refs(profiles: Path) -> list[str]:
-    refs: list[str] = []
+def _secret_ref(entry: Path) -> str | None:
+    """The alpha secret this profile names, or None when it names none."""
+
+    try:
+        if entry.stat().st_size > _MAX_PROFILE_BYTES:
+            return None
+        payload = json.loads(entry.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    ref = payload.get("secret_ref") if isinstance(payload, dict) else None
+    return ref if isinstance(ref, str) and _SECRET_REF_PATTERN.fullmatch(ref) else None
+
+
+def _remove_profiles(guard_home: Path, profiles: Path) -> None:
+    """Delete each profile once its secret is gone; a failed one stays for the next run."""
+
+    if profiles.is_symlink():
+        with suppress(OSError):
+            profiles.unlink()
+        return
     try:
         entries = sorted(profiles.iterdir())[:_MAX_PROFILES]
     except OSError:
-        return refs
+        return
+    secrets: EncryptedFileSecretStore | None = None
     for entry in entries:
-        if entry.suffix != ".json" or not entry.is_file() or entry.is_symlink():
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.rmtree(entry, ignore_errors=True)
             continue
-        try:
-            if entry.stat().st_size > _MAX_PROFILE_BYTES:
+        ref = _secret_ref(entry) if entry.suffix == ".json" and not entry.is_symlink() else None
+        if ref is not None:
+            if secrets is None:
+                from ..store_base import EncryptedFileSecretStore
+
+                secrets = EncryptedFileSecretStore(guard_home)
+            try:
+                secrets.delete_secret(ref)
+            except (OSError, RuntimeError):
                 continue
-            payload = json.loads(entry.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        ref = payload.get("secret_ref") if isinstance(payload, dict) else None
-        if isinstance(ref, str) and _SECRET_REF_PATTERN.fullmatch(ref):
-            refs.append(ref)
-    return refs
+        with suppress(OSError):
+            entry.unlink()
+    with suppress(OSError):
+        profiles.rmdir()
 
 
 def remove_alpha_sign_ins(guard_home: Path) -> bool:
@@ -54,21 +83,11 @@ def remove_alpha_sign_ins(guard_home: Path) -> bool:
     root = guard_home / "cloud-actions"
     profiles = root / "profiles"
     leftovers = [root / "clients.json", root / "last-check.json"]
-    if not profiles.is_dir() and not any(path.is_file() for path in leftovers):
+    has_profiles = profiles.is_symlink() or profiles.is_dir()
+    if not has_profiles and not any(path.is_file() for path in leftovers):
         return False
-    refs = _secret_refs(profiles) if profiles.is_dir() and not profiles.is_symlink() else []
-    if refs:
-        from ..store_base import EncryptedFileSecretStore
-
-        secrets = EncryptedFileSecretStore(guard_home)
-        for ref in refs:
-            with suppress(OSError, RuntimeError):
-                secrets.delete_secret(ref)
-    if profiles.is_symlink():
-        with suppress(OSError):
-            profiles.unlink()
-    elif profiles.is_dir():
-        shutil.rmtree(profiles, ignore_errors=True)
+    if has_profiles:
+        _remove_profiles(guard_home, profiles)
     for path in leftovers:
         with suppress(FileNotFoundError, IsADirectoryError, PermissionError):
             path.unlink()

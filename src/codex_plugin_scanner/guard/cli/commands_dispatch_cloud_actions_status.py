@@ -55,6 +55,20 @@ def _paired(args: argparse.Namespace) -> tuple[GuardStore, CloudActionsPairing, 
     return store, pairing, cloud_actions_connect_summary(report, paired=True)
 
 
+def _saved_pairing(args: argparse.Namespace) -> tuple[CloudActionsPairing, CloudActionsConnectSummary] | None:
+    """The pairing as saved, read without opening the Guard store (for `--offline`)."""
+
+    from .cloud_actions_saved_pairing import read_saved_pairing
+    from .commands_dispatch_cloud_actions_ai_tools import settings_guard_home
+    from .connect_cloud_actions import cloud_actions_connect_summary
+
+    saved = read_saved_pairing(settings_guard_home(args))
+    if saved is None:
+        return None
+    pairing, report = saved
+    return pairing, cloud_actions_connect_summary(report, paired=True)
+
+
 def _pairing_fields(pairing: CloudActionsPairing, summary: CloudActionsConnectSummary) -> dict[str, object]:
     return {
         "cloud_url": pairing.origin,
@@ -75,7 +89,11 @@ def _workspace_line(requested: str | None, workspace: object) -> str | None:
 def status(args: argparse.Namespace, reply: _Reply) -> int:
     from .cloud_actions_health import HealthCheck, check_service, checked_at
 
-    paired = _paired(args)
+    if args.offline:
+        paired = _saved_pairing(args)
+    else:
+        found = _paired(args)
+        paired = (found[1], found[2]) if found is not None else None
     if paired is None:
         return reply(
             0,
@@ -84,7 +102,7 @@ def status(args: argparse.Namespace, reply: _Reply) -> int:
             accounts="not_available_yet",
             included_actions="not_available_yet",
         )
-    _store, pairing, summary = paired
+    pairing, summary = paired
     service = HealthCheck("not_checked", "Not checked (--offline).") if args.offline else check_service(pairing)
     fields = _pairing_fields(pairing, summary)
     fields.update(

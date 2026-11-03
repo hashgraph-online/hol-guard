@@ -176,6 +176,31 @@ def test_status_offline_asks_nothing(
     assert cloud.gets == [] and cloud.posts == []
 
 
+def test_status_offline_reads_the_pairing_without_changing_guard_db(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import sqlite3
+
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir()
+    database = guard_home / "guard.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute("create table sync_state (state_key text primary key, payload_json text, updated_at text)")
+        pairing = {"issuer": "https://hol.org", "client_id": "client-1", "grant_id": "grant-1", "workspace_id": WS}
+        connection.executemany(
+            "insert into sync_state values (?, ?, '2026-11-03T00:00:00Z')",
+            [("oauth_local_credentials", json.dumps(pairing)), ("cloud_actions_connect:grant-1", '{"status": "on"}')],
+        )
+    connection.close()
+    before = sorted((path.name, path.read_bytes()) for path in guard_home.iterdir())
+
+    code, payload, _ = _status(tmp_path, capsys, "--offline")
+
+    assert (code, payload["state"], payload["cloud_actions"]) == (0, "paired", "on")
+    assert payload["cloud_url"] == "https://hol.org"
+    assert sorted((path.name, path.read_bytes()) for path in guard_home.iterdir()) == before
+
+
 @pytest.mark.parametrize(
     ("change", "state"),
     [

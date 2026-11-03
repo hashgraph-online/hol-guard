@@ -2735,6 +2735,7 @@ const CLOUD_ACTIONS_CONNECT_COMMAND = "hol-guard connect";
 const MAX_MESSAGE_CHARS = 240;
 const WORKSPACE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SITE_PATTERN = /^[A-Za-z0-9.-]{1,253}(?::\d{1,5})?$/;
+const DEFAULT_CONNECT_URL = "https://hol.org/guard/connect";
 const CLOUD_URL_PATTERN = /^(?:https:\/\/[A-Za-z0-9.-]{1,253}|http:\/\/(?:127\.0\.0\.1|localhost|host\.docker\.internal))(?::\d{1,5})?$/;
 const CLOUD_BASE_PATH_PATTERN = /^(?:\/[a-z0-9-]{1,32})?$/;
 function isRecord(value) {
@@ -2848,8 +2849,12 @@ function cloudActionsCurrentState(connection) {
   return connection.setting === "off" ? "off" : connection.check.state;
 }
 function cloudActionsReconnectCommand(connection) {
-  if (connection === null || connection.workspace === null) return CLOUD_ACTIONS_CONNECT_COMMAND;
-  return `${CLOUD_ACTIONS_CONNECT_COMMAND} --cloud-workspace ${connection.workspace}`;
+  if (connection === null) return CLOUD_ACTIONS_CONNECT_COMMAND;
+  const parts = [CLOUD_ACTIONS_CONNECT_COMMAND];
+  const connectUrl = connection.cloudBaseUrl === null ? null : `${connection.cloudBaseUrl}/guard/connect`;
+  if (connectUrl !== null && connectUrl !== DEFAULT_CONNECT_URL) parts.push(`--connect-url ${connectUrl}`);
+  if (connection.workspace !== null) parts.push(`--cloud-workspace ${connection.workspace}`);
+  return parts.join(" ");
 }
 function cloudActionsSettingCopy(setting) {
   if (setting === "on") return "On";

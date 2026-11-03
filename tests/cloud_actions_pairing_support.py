@@ -15,12 +15,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.cli import cloud_actions_access
+from codex_plugin_scanner.guard.cli import cloud_actions_access, cloud_actions_saved_pairing
 from codex_plugin_scanner.guard.cli.cloud_actions_access import (
     CloudActionsAccess,
     CloudActionsAccessError,
     CloudActionsPairing,
 )
+from codex_plugin_scanner.guard.cli.connect_cloud_actions import parse_cloud_actions_connect_report
 
 WS = "11111111-1111-4111-8111-111111111111"
 ORIGIN = "https://hol.org"
@@ -96,7 +97,19 @@ def pair(monkeypatch: pytest.MonkeyPatch, cloud: FakeCloud | None = None) -> Fak
             get_sync_payload=lambda _key: cloud.connect_report,
         )
 
+    def read_saved(guard_home: Path) -> tuple[CloudActionsPairing, object] | None:
+        del guard_home
+        if not cloud.paired:
+            return None
+        report = (
+            parse_cloud_actions_connect_report({"guard_cloud_actions": cloud.connect_report})
+            if cloud.connect_report is not None
+            else None
+        )
+        return CloudActionsPairing(origin=cloud.origin, workspace_id=cloud.workspace_id), report
+
     monkeypatch.setattr(cloud_actions_access, "open_paired_store", open_store)
+    monkeypatch.setattr(cloud_actions_saved_pairing, "read_saved_pairing", read_saved)
     monkeypatch.setattr(cloud_actions_access, "read_cloud_actions_pairing", read_pairing)
     monkeypatch.setattr(cloud_actions_access, "exchange_cloud_actions_access", exchange)
     monkeypatch.setattr(cloud_actions_access, "revoke_cloud_actions_access", revoke)

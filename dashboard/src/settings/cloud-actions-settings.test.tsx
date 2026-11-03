@@ -89,8 +89,14 @@ assert(hostile?.connection?.workspace === null, "a workspace that is not an ID i
 assert(hostile.connection.site === null, "a site that is not a host is not shown");
 assert(cloudActionsReconnectCommand(hostile.connection) === "hol-guard connect", "the command never carries an unchecked workspace");
 assert(
-  cloudActionsReconnectCommand(connection) === "hol-guard connect --cloud-workspace ws_beta",
-  "reconnecting names the same workspace",
+  cloudActionsReconnectCommand(connection) ===
+    "hol-guard connect --connect-url https://cloud.example.test:8443/points/guard/connect --cloud-workspace ws_beta",
+  "reconnecting names the same Guard Cloud and workspace",
+);
+assert(
+  cloudActionsReconnectCommand({ workspace: "ws_beta", cloudBaseUrl: "https://hol.org" }) ===
+    "hol-guard connect --cloud-workspace ws_beta",
+  "the default Guard Cloud needs no address",
 );
 assert(cloudActionsReconnectCommand(null) === "hol-guard connect", "connecting needs no options");
 
@@ -220,12 +226,17 @@ assert(!/cloud-actions login|cloud-actions logout|--profile/.test(html), "no sep
 
 const changedHtml = render({ status: changed });
 assert(changedHtml.includes(">Reconnect<"), "a changed service shows Reconnect");
-assert(changedHtml.includes("hol-guard connect --cloud-workspace ws_beta"), "reconnect command");
+assert(
+  changedHtml.includes(
+    "hol-guard connect --connect-url https://cloud.example.test:8443/points/guard/connect --cloud-workspace ws_beta",
+  ),
+  "reconnect command names the same Guard Cloud",
+);
 assert(!/sign[ -]?in again/i.test(visible(changedHtml)), "reconnecting is never called signing in again");
 
 const offHtml = render({ status: normalizeCloudActionsStatus(payload({ ...connected, state: "off" })) });
 assert(offHtml.includes(">Off on this computer<") && offHtml.includes(">Off<"), "Cloud actions left off are labelled");
-assert(offHtml.includes("hol-guard connect --cloud-workspace ws_beta"), "turning them on is reconnecting");
+assert(offHtml.includes("/points/guard/connect --cloud-workspace ws_beta"), "turning them on is reconnecting");
 
 assert(render({ retryAfterSeconds: 12 }).includes("Check again in 12s"), "the wait is shown on the button");
 assert(render({ checking: true }).includes("Checking..."), "checking state");

@@ -65,6 +65,41 @@ def test_a_profile_naming_another_secret_never_deletes_it(tmp_path: Path) -> Non
     assert not (tmp_path / "cloud-actions" / "profiles").exists()
 
 
+def test_a_secret_that_could_not_be_deleted_keeps_its_profile_for_the_next_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _alpha_sign_in(tmp_path)
+    secrets = EncryptedFileSecretStore(tmp_path)
+    real_delete = EncryptedFileSecretStore.delete_secret
+
+    def failing_delete(self: EncryptedFileSecretStore, secret_id: str) -> None:
+        raise OSError("busy")
+
+    monkeypatch.setattr(EncryptedFileSecretStore, "delete_secret", failing_delete)
+    assert remove_alpha_sign_ins(tmp_path) is True
+    assert (tmp_path / "cloud-actions" / "profiles" / "default.json").is_file()
+    assert secrets.get_secret(ALPHA_REF) == "alpha-sign-in"
+
+    monkeypatch.setattr(EncryptedFileSecretStore, "delete_secret", real_delete)
+    assert remove_alpha_sign_ins(tmp_path) is True
+    assert secrets.get_secret(ALPHA_REF) is None
+    assert not (tmp_path / "cloud-actions" / "profiles").exists()
+
+
+def test_profiles_past_one_runs_limit_are_removed_by_later_runs(tmp_path: Path) -> None:
+    refs = [f"cloud-actions-p{index:03d}-{index:016x}" for index in range(70)]
+    for index, ref in enumerate(refs):
+        _alpha_sign_in(tmp_path, f"p{index:03d}", ref)
+    secrets = EncryptedFileSecretStore(tmp_path)
+
+    assert remove_alpha_sign_ins(tmp_path) is True
+    assert remove_alpha_sign_ins(tmp_path) is True
+
+    assert not (tmp_path / "cloud-actions" / "profiles").exists()
+    assert all(secrets.get_secret(ref) is None for ref in refs)
+    assert remove_alpha_sign_ins(tmp_path) is False
+
+
 def test_nothing_to_remove_creates_nothing(tmp_path: Path) -> None:
     assert remove_alpha_sign_ins(tmp_path / "guard") is False
 
