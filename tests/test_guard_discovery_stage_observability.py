@@ -13,7 +13,6 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -30,6 +29,7 @@ from codex_plugin_scanner.guard.daemon.mcp_discovery_jobs import (
     McpDiscoveryJobs,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.runtime.mcp_protection import McpServerIdentity
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -152,21 +152,34 @@ def test_one_unreadable_harness_keeps_the_other_connections(monkeypatch) -> None
                 transport="stdio",
                 env={},
                 enabled=True,
+                identity=McpServerIdentity(
+                    config_path=artifact.config_path,
+                    command="npx",
+                    args_hash="args",
+                    package_name=None,
+                    package_version=None,
+                    package_source="",
+                    transport="stdio",
+                    env_keys=(),
+                    env_values_hash="",
+                    identity_hash=f"hash-{detection.harness}",
+                ),
             ),
         )
 
-    def identity_for(server: ManagedMcpServer):
-        # Identity building needs the native runtime, which this test does not
-        # exercise; the contract under test is that one harness failing above
-        # does not take the rest of the inventory with it.
-        return (
-            SimpleNamespace(identity_hash=f"hash-{server.harness}", name=server.name),
-            SimpleNamespace(command=server.command, args_hash="args"),
-            None,
-        )
+    def grouped(kind: str, args: dict[str, object], guard_home: object = None) -> dict[str, object]:
+        # The grouping itself is native and pinned by its Rust replay vectors;
+        # the contract here is that one harness failing above does not take
+        # the rest of the inventory with it.
+        entries = args["servers"]
+        assert kind == "harness_mcp_discovery"
+        assert isinstance(entries, list)
+        assert [entry["harness"] for entry in entries] == ["codex"]
+        texts = dict.fromkeys(("cli_id", "name", "identity_hash", "configuration_hash", "example_label"), "x")
+        return {"servers": [{"index": 0, **texts, "launch_command": "npx", "source_label": "Codex"}]}
 
     monkeypatch.setattr(harness_mcp_discovery, "observable_stdio_servers_with_proxy", servers_for)
-    monkeypatch.setattr(harness_mcp_discovery, "_identity_for", identity_for)
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_runner_authority.native_runner_authority", grouped)
 
     found = harness_mcp_discovery.discover_harness_mcp_servers(
         home_dir=Path("/nonexistent-home"),
