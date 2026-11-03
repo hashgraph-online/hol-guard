@@ -51,7 +51,6 @@ from ._commands_shared import *
 from .commands_dispatch_cloud_review import apply_connect_time_cloud_review_consent
 from .commands_parser_helpers import *
 from .commands_support_service import _dispatch_guard_daemon_command
-from .connect_cloud_actions import normalize_cloud_workspace_id
 
 
 def _cloud_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
@@ -182,7 +181,6 @@ def _run_guard_connect_command(
         return 0
     try:
         ci_safe, machine_label = _guard_ci_safe_connect_options(args)
-        cloud_workspace_id = normalize_cloud_workspace_id(getattr(args, "cloud_workspace", None))
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
@@ -198,7 +196,7 @@ def _run_guard_connect_command(
         machine_label=machine_label if headless else None,
         home_dir=context.home_dir if context is not None else None,
         workspace_dir=context.workspace_dir if context is not None else workspace,
-        cloud_workspace_id=cloud_workspace_id,
+        cloud_workspace_id=getattr(args, "cloud_workspace", None),
         cloud_actions_declined=bool(getattr(args, "no_cloud_actions", False)),
     )
     if payload is None:

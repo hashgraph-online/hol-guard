@@ -38,10 +38,9 @@ from .commands_parser_constants import DEFAULT_GUARD_CONNECT_URL
 from .commands_parser_constants import DEFAULT_GUARD_SYNC_URL as DEFAULT_GUARD_SYNC_URL
 from .connect_cloud_actions import (
     CloudActionsConnectReport,
-    cloud_actions_connect_summary,
+    connect_status_cloud_actions,
     parse_cloud_actions_connect_report,
-    read_cloud_actions_connect_report,
-    record_cloud_actions_connect_report,
+    record_connect_cloud_actions,
 )
 from .oauth_client import (
     GuardDpopKeyMaterial,
@@ -1238,7 +1237,9 @@ def run_guard_device_connect_command(
             "connect_command": CONNECT_COMMAND,
             "connect_status_command": CONNECT_STATUS_COMMAND,
             "connect_repair_command": CONNECT_REPAIR_COMMAND,
-            "cloud_actions": _record_connect_cloud_actions(store, token_result, now=timestamp),
+            "cloud_actions": record_connect_cloud_actions(
+                store, grant_id=token_result.grant_id, report=token_result.cloud_actions, now=timestamp
+            ),
         }
     )
     if include_sync_auth_context:
@@ -1335,7 +1336,9 @@ def run_guard_browser_connect_command(
         "connect_command": CONNECT_COMMAND,
         "connect_status_command": CONNECT_STATUS_COMMAND,
         "connect_repair_command": CONNECT_REPAIR_COMMAND,
-        "cloud_actions": _record_connect_cloud_actions(store, token_result, now=timestamp),
+        "cloud_actions": record_connect_cloud_actions(
+            store, grant_id=token_result.grant_id, report=token_result.cloud_actions, now=timestamp
+        ),
     }
     if include_sync_auth_context:
         payload[CONNECT_SYNC_AUTH_CONTEXT_KEY] = _build_sync_auth_context(
@@ -1344,34 +1347,6 @@ def run_guard_browser_connect_command(
             sync_url=sync_url,
         )
     return payload
-
-
-def _record_connect_cloud_actions(
-    store: GuardStore,
-    token_result: GuardOAuthTokenExchangeResult,
-    *,
-    now: str,
-) -> dict[str, object]:
-    record_cloud_actions_connect_report(
-        store,
-        grant_id=token_result.grant_id,
-        report=token_result.cloud_actions,
-        now=now,
-    )
-    return dict(cloud_actions_connect_summary(token_result.cloud_actions, paired=True))
-
-
-def _connect_status_cloud_actions(
-    store: GuardStore,
-    *,
-    oauth_storage_health: Mapping[str, object],
-) -> dict[str, object]:
-    grant_id = oauth_storage_health.get("grant_id")
-    paired_grant_id = (
-        grant_id if oauth_storage_health.get("state") == "healthy" and isinstance(grant_id, str) and grant_id else None
-    )
-    report = read_cloud_actions_connect_report(store, grant_id=paired_grant_id)
-    return dict(cloud_actions_connect_summary(report, paired=paired_grant_id is not None))
 
 
 def build_connect_status_payload(
@@ -1446,7 +1421,7 @@ def build_connect_status_payload(
         "connect_status_command": CONNECT_STATUS_COMMAND,
         "connect_repair_command": CONNECT_REPAIR_COMMAND,
         "review_event_outbox": review_event_status,
-        "cloud_actions": _connect_status_cloud_actions(store, oauth_storage_health=oauth_storage_health),
+        "cloud_actions": connect_status_cloud_actions(store, oauth_storage_health=oauth_storage_health),
     }
     if review_event_status.get("binding_state") == "quarantined" and review_event_binding is not None:
         source = review_event_binding["oauth_source"]

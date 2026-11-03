@@ -18,7 +18,8 @@ from .commands_parser_helpers import *
 from ..browser_opener import open_browser_url
 from .connect_cloud_actions import (
     CloudActionsConnectReport,
-    check_connect_cloud_actions_choices,
+    check_connect_cloud_actions_declined,
+    check_connect_cloud_workspace,
     parse_cloud_actions_connect_report,
 )
 from .connect_sync_result import apply_guard_connect_sync_result
@@ -455,6 +456,18 @@ def _build_guard_device_connect_payload(
     except (RuntimeError, TimeoutError, urllib.error.URLError, http.client.HTTPException) as error:
         print(f"Guard authorization failed: {error}", file=sys.stderr)
         return None, 1
+    workspace_problem = check_connect_cloud_workspace(
+        workspace_id=_optional_string(payload.get("workspace_id")),
+        cloud_workspace_id=cloud_workspace_id,
+    )
+    if workspace_problem is not None:
+        # Undo the pairing before the first sync so nothing reaches the wrong workspace.
+        payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
+        payload["disconnect"] = _undo_unwanted_guard_connect_pairing(store)
+        payload["status"] = "disconnected"
+        payload["cloud_actions_problem"] = workspace_problem
+        print(workspace_problem, file=sys.stderr)
+        return payload, 1
     payload = _finalize_guard_connect_payload(
         store=store,
         connect_url=connect_url,
@@ -463,10 +476,8 @@ def _build_guard_device_connect_payload(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
     )
-    choice_problem = check_connect_cloud_actions_choices(
-        workspace_id=_optional_string(payload.get("workspace_id")),
+    choice_problem = check_connect_cloud_actions_declined(
         report=_connect_payload_cloud_actions_report(payload),
-        cloud_workspace_id=cloud_workspace_id,
         cloud_actions_declined=cloud_actions_declined,
     )
     if choice_problem is not None:
@@ -480,6 +491,13 @@ def _connect_payload_cloud_actions_report(payload: dict[str, object]) -> CloudAc
     if not isinstance(summary, dict):
         return None
     return parse_cloud_actions_connect_report({"guard_cloud_actions": summary})
+
+def _undo_unwanted_guard_connect_pairing(store: GuardStore) -> dict[str, object]:
+    try:
+        return run_guard_disconnect_command(store=store, revoke_cloud_grant=True)
+    except (RuntimeError, ValueError, urllib.error.URLError, http.client.HTTPException) as error:
+        store.clear_oauth_local_credentials()
+        return {"status": "disconnected", "cloud_grant_revoked": False, "detail": str(error)}
 
 def _announce_guard_device_connect_copy(payload: dict[str, object]) -> None:
     user_code = _optional_string(payload.get("user_code")) or "unknown"

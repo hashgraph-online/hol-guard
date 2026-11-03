@@ -13,7 +13,6 @@ itself whenever an AI tool asks for Cloud actions access.
 
 from __future__ import annotations
 
-import uuid
 from collections.abc import Mapping
 from typing import Literal, TypedDict
 
@@ -123,43 +122,61 @@ def cloud_actions_connect_summary(
     }
 
 
-def normalize_cloud_workspace_id(value: object) -> str | None:
-    """Validate ``--cloud-workspace``. It names a Guard Cloud workspace, never a folder."""
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    try:
-        return str(uuid.UUID(text))
-    except ValueError as error:
-        raise ValueError(
-            "--cloud-workspace takes a Guard Cloud workspace ID (a UUID), not a folder path. "
-            "Copy it from Guard Cloud > Settings > Workspace."
-        ) from error
-
-
-def check_connect_cloud_actions_choices(
+def record_connect_cloud_actions(
+    store: GuardStore,
     *,
-    workspace_id: str | None,
+    grant_id: str | None,
     report: CloudActionsConnectReport | None,
-    cloud_workspace_id: str | None,
+    now: str,
+) -> dict[str, object]:
+    """Store the answer from a finished connect and return its summary."""
+    record_cloud_actions_connect_report(store, grant_id=grant_id, report=report, now=now)
+    return dict(cloud_actions_connect_summary(report, paired=True))
+
+
+def connect_status_cloud_actions(
+    store: GuardStore,
+    *,
+    oauth_storage_health: Mapping[str, object],
+) -> dict[str, object]:
+    """Summary for ``hol-guard connect status``; only a healthy pairing counts."""
+    grant_id = oauth_storage_health.get("grant_id")
+    paired_grant_id = (
+        grant_id if oauth_storage_health.get("state") == "healthy" and isinstance(grant_id, str) and grant_id else None
+    )
+    report = read_cloud_actions_connect_report(store, grant_id=paired_grant_id)
+    return dict(cloud_actions_connect_summary(report, paired=paired_grant_id is not None))
+
+
+def check_connect_cloud_workspace(*, workspace_id: str | None, cloud_workspace_id: str | None) -> str | None:
+    """Return a problem message when the browser picked a different workspace.
+
+    The caller checks this before the first sync and undoes the pairing, so
+    nothing from this computer reaches the wrong workspace.
+    """
+    if cloud_workspace_id is None or (workspace_id or "").lower() == cloud_workspace_id.lower():
+        return None
+    return (
+        f"Guard Cloud paired this computer to workspace {workspace_id or 'unknown'}, not {cloud_workspace_id}. "
+        "HOL Guard disconnected it before sending anything. "
+        f"Run {CLOUD_ACTIONS_RECONNECT_COMMAND} --cloud-workspace {cloud_workspace_id} again and pick "
+        "that workspace in the browser."
+    )
+
+
+def check_connect_cloud_actions_declined(
+    *,
+    report: CloudActionsConnectReport | None,
     cloud_actions_declined: bool,
 ) -> str | None:
-    """Return a problem message when the finished connect does not match the flags.
+    """Return a problem message when Cloud actions came back on despite ``--no-cloud-actions``.
 
-    The pairing is kept either way; the caller reports the problem and exits
-    non-zero so scripts notice.
+    The pairing is kept; the caller reports the problem and exits non-zero so
+    scripts notice.
     """
-    if cloud_workspace_id is not None and (workspace_id or "").lower() != cloud_workspace_id.lower():
-        return (
-            f"This computer was paired to workspace {workspace_id or 'unknown'}, not {cloud_workspace_id}. "
-            f"Run {CLOUD_ACTIONS_RECONNECT_COMMAND} --cloud-workspace {cloud_workspace_id} again and pick "
-            "that workspace in the browser."
-        )
-    if cloud_actions_declined and report is not None and report["status"] == "on":
-        return (
-            "Cloud actions were turned on in the browser although --no-cloud-actions was set. "
-            f"Run {CLOUD_ACTIONS_RECONNECT_COMMAND} --no-cloud-actions again and leave that option off."
-        )
-    return None
+    if not cloud_actions_declined or report is None or report["status"] != "on":
+        return None
+    return (
+        "Cloud actions were turned on in the browser although --no-cloud-actions was set. "
+        f"Run {CLOUD_ACTIONS_RECONNECT_COMMAND} --no-cloud-actions again and leave that option off."
+    )

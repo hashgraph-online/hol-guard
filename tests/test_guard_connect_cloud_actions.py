@@ -12,12 +12,13 @@ from rich.console import Console
 
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard.cli import commands as guard_commands
-from codex_plugin_scanner.guard.cli import commands_dispatch_cloud, commands_support_connect, connect_flow
+from codex_plugin_scanner.guard.cli import commands_support_connect, connect_flow
 from codex_plugin_scanner.guard.cli.connect_cloud_actions import (
     CloudActionsConnectReport,
-    check_connect_cloud_actions_choices,
+    check_connect_cloud_actions_declined,
+    check_connect_cloud_workspace,
     cloud_actions_connect_summary,
-    normalize_cloud_workspace_id,
+    connect_status_cloud_actions,
     parse_cloud_actions_connect_report,
     read_cloud_actions_connect_report,
     record_cloud_actions_connect_report,
@@ -28,6 +29,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 WORKSPACE_ID = "6f1c2a52-6a4e-4b8e-9f0e-3f3d6c1b2a10"
 OTHER_WORKSPACE_ID = "0b6e7f8a-1c2d-4e3f-8a9b-0c1d2e3f4a5b"
 NOW = "2026-11-03T16:00:00+00:00"
+TEST_ACCESS_VALUE = "x"
 
 
 def _authorize_query(
@@ -68,7 +70,7 @@ def test_token_response_reports_cloud_actions_only_when_guard_cloud_answers(
 def test_token_exchange_result_carries_cloud_actions_report() -> None:
     result = connect_flow._parse_guard_token_exchange_payload(
         {
-            "access_token": "header.e30.signature",
+            "access_token": TEST_ACCESS_VALUE,
             "token_type": "Bearer",
             "expires_in": 300,
             "guard_cloud_actions": {"status": "on", "workspace_id": WORKSPACE_ID},
@@ -109,13 +111,6 @@ def test_device_request_sends_decline_only_when_asked() -> None:
     assert body(True)["cloud_actions"] == ["off"]
 
 
-def test_cloud_workspace_takes_a_guard_cloud_id_not_a_folder() -> None:
-    assert normalize_cloud_workspace_id(WORKSPACE_ID.upper()) == WORKSPACE_ID
-    assert normalize_cloud_workspace_id(None) is None
-    with pytest.raises(ValueError, match="not a folder path"):
-        normalize_cloud_workspace_id("./my-project")
-
-
 def test_connect_summary_separates_pairing_from_cloud_actions() -> None:
     on = cloud_actions_connect_summary({"status": "on", "workspace_id": WORKSPACE_ID}, paired=True)
     off = cloud_actions_connect_summary({"status": "off", "workspace_id": WORKSPACE_ID}, paired=True)
@@ -136,28 +131,19 @@ def test_connect_summary_separates_pairing_from_cloud_actions() -> None:
 def test_connect_reports_wrong_workspace_and_ignored_decline() -> None:
     on_report: CloudActionsConnectReport = {"status": "on", "workspace_id": WORKSPACE_ID}
 
-    wrong_workspace = check_connect_cloud_actions_choices(
-        workspace_id=OTHER_WORKSPACE_ID,
-        report=None,
-        cloud_workspace_id=WORKSPACE_ID,
-        cloud_actions_declined=False,
+    wrong_workspace = check_connect_cloud_workspace(workspace_id=OTHER_WORKSPACE_ID, cloud_workspace_id=WORKSPACE_ID)
+    matched = check_connect_cloud_workspace(workspace_id=WORKSPACE_ID.upper(), cloud_workspace_id=WORKSPACE_ID)
+    unrequested = check_connect_cloud_workspace(workspace_id=OTHER_WORKSPACE_ID, cloud_workspace_id=None)
+    ignored_decline = check_connect_cloud_actions_declined(report=on_report, cloud_actions_declined=True)
+    honored_decline = check_connect_cloud_actions_declined(
+        report={"status": "off", "workspace_id": WORKSPACE_ID}, cloud_actions_declined=True
     )
-    ignored_decline = check_connect_cloud_actions_choices(
-        workspace_id=WORKSPACE_ID,
-        report=on_report,
-        cloud_workspace_id=None,
-        cloud_actions_declined=True,
-    )
-    matched = check_connect_cloud_actions_choices(
-        workspace_id=WORKSPACE_ID.upper(),
-        report=on_report,
-        cloud_workspace_id=WORKSPACE_ID,
-        cloud_actions_declined=False,
-    )
+    not_declined = check_connect_cloud_actions_declined(report=on_report, cloud_actions_declined=False)
 
     assert wrong_workspace is not None and OTHER_WORKSPACE_ID in wrong_workspace
+    assert matched is None and unrequested is None
     assert ignored_decline is not None and "--no-cloud-actions" in ignored_decline
-    assert matched is None
+    assert honored_decline is None and not_declined is None
 
 
 def test_connect_answer_is_kept_per_pairing(tmp_path: Path) -> None:
@@ -191,15 +177,9 @@ def test_connect_status_reads_answer_only_for_the_current_healthy_pairing(tmp_pa
         now=NOW,
     )
 
-    current = connect_flow._connect_status_cloud_actions(
-        store, oauth_storage_health={"state": "healthy", "grant_id": "grant-1"}
-    )
-    replaced = connect_flow._connect_status_cloud_actions(
-        store, oauth_storage_health={"state": "healthy", "grant_id": "grant-2"}
-    )
-    degraded = connect_flow._connect_status_cloud_actions(
-        store, oauth_storage_health={"state": "degraded", "grant_id": "grant-1"}
-    )
+    current = connect_status_cloud_actions(store, oauth_storage_health={"state": "healthy", "grant_id": "grant-1"})
+    replaced = connect_status_cloud_actions(store, oauth_storage_health={"state": "healthy", "grant_id": "grant-2"})
+    degraded = connect_status_cloud_actions(store, oauth_storage_health={"state": "degraded", "grant_id": "grant-1"})
 
     assert current["status"] == "on"
     assert replaced["status"] == "unknown"
@@ -246,14 +226,12 @@ def test_connect_parser_accepts_cloud_actions_choices(tmp_path: Path) -> None:
 
 def test_connect_rejects_folder_as_cloud_workspace(tmp_path: Path, capsys) -> None:
     parser = _build_parser("hol-guard", program_mode="guard")
-    args = parser.parse_args(
-        ["connect", "--home", str(tmp_path / "guard-home"), "--cloud-workspace", "./my-project", "--json"]
-    )
 
-    exit_code = commands_dispatch_cloud._run_guard_connect_command(args, store=GuardStore(tmp_path / "guard-home"))
+    with pytest.raises(SystemExit) as raised:
+        parser.parse_args(["connect", "--home", str(tmp_path / "guard-home"), "--cloud-workspace", "./my-project"])
 
-    assert exit_code == 2
-    assert "not a folder path" in capsys.readouterr().err
+    assert raised.value.code == 2
+    assert "looks like a folder" in capsys.readouterr().err
 
 
 def _connected_payload(*, workspace_id: str, cloud_actions_status: Literal["on", "off"]) -> dict[str, object]:
@@ -268,15 +246,26 @@ def _connected_payload(*, workspace_id: str, cloud_actions_status: Literal["on",
     }
 
 
-def test_browser_connect_passes_choices_and_flags_wrong_workspace(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_browser_connect_undoes_pairing_to_wrong_workspace_before_first_sync(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
     seen: dict[str, object] = {}
+    disconnects: list[dict[str, object]] = []
 
     def fake_browser_flow(**kwargs: object) -> dict[str, object]:
         seen.update(kwargs)
         return _connected_payload(workspace_id=OTHER_WORKSPACE_ID, cloud_actions_status="off")
 
+    def fail_finalize(**kwargs: object) -> dict[str, object]:
+        raise AssertionError("first sync must not run for the wrong workspace")
+
+    def fake_disconnect(**kwargs: object) -> dict[str, object]:
+        disconnects.append(kwargs)
+        return {"status": "disconnected", "cloud_grant_revoked": True}
+
     monkeypatch.setattr(guard_commands, "_run_guard_browser_connect_flow", fake_browser_flow)
-    monkeypatch.setattr(commands_support_connect, "_finalize_guard_connect_payload", lambda **kwargs: kwargs["payload"])
+    monkeypatch.setattr(commands_support_connect, "_finalize_guard_connect_payload", fail_finalize)
+    monkeypatch.setattr(guard_commands, "run_guard_disconnect_command", fake_disconnect)
 
     payload, exit_code = guard_commands._build_guard_device_connect_payload(
         store=GuardStore(tmp_path / "guard-home"),
@@ -289,7 +278,8 @@ def test_browser_connect_passes_choices_and_flags_wrong_workspace(tmp_path: Path
     assert seen["cloud_workspace_id"] == WORKSPACE_ID
     assert seen["cloud_actions_declined"] is True
     assert exit_code == 1
-    assert payload is not None and payload["status"] == "connected"
+    assert payload is not None and payload["status"] == "disconnected"
+    assert len(disconnects) == 1 and disconnects[0]["revoke_cloud_grant"] is True
     assert OTHER_WORKSPACE_ID in str(payload["cloud_actions_problem"])
     assert OTHER_WORKSPACE_ID in capsys.readouterr().err
 
