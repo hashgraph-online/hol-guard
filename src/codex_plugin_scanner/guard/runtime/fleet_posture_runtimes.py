@@ -17,14 +17,15 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from collections.abc import Mapping
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
 
-from .fleet_posture_common import HARNESS_IDS, clip, iso, keyed_digest, parse_timestamp
+from .fleet_posture_common import iso, keyed_digest, parse_timestamp
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from ..adapters.base import HarnessContext
     from ..store import GuardStore
 
@@ -33,14 +34,8 @@ _LOGGER = logging.getLogger(__name__)
 RUNTIMES_STATE_KEY = "fleet_posture_runtimes"
 RUNTIMES_TTL_SECONDS = 3600
 MAX_RUNTIMES = 64
-MAX_ADVISORY_IDS = 16
-MAX_UNRESOLVED_LAUNCHES = 10_000
-ASSURANCES = frozenset({"vendor_verified", "locally_trusted", "self_reported", "unknown"})
-LOCATION_STATES = frozenset({"present", "missing", "unknown"})
-STATUSES = frozenset({"ok", "partial", "unavailable"})
-
-_CODE = re.compile(r"^[a-z0-9_]{1,64}$")
-_SHA256_HEX = re.compile(r"^[a-f0-9]{64}$")
+# The native request parser refuses wider arrays; long lists cross in chunks.
+_NATIVE_JSON_WIDTH = 4096
 
 
 def runtimes_section(
@@ -72,7 +67,7 @@ def runtimes_section(
                 return cast("dict[str, object]", section)
     try:
         posture = _observe(context, now, advisory)
-        section = project_runtime_posture(posture, hash_key=hash_key)
+        section = project_runtime_posture(posture, hash_key=hash_key, guard_home=context.guard_home)
     except Exception:
         _LOGGER.debug("fleet posture: runtime posture could not be observed", exc_info=True)
         return None
@@ -144,74 +139,30 @@ def _observe(
     )
 
 
-def project_runtime_posture(posture: Mapping[str, Any], *, hash_key: bytes) -> dict[str, object]:
-    """Reduce a ``hol-guard runtime posture`` payload to the contract's ``runtimes`` section."""
+def project_runtime_posture(
+    posture: Mapping[str, Any], *, hash_key: bytes, guard_home: Path | None = None
+) -> dict[str, object]:
+    """Reduce a ``hol-guard runtime posture`` payload to the contract's ``runtimes`` section.
 
-    status = posture.get("status")
-    if status not in STATUSES:
-        raise ValueError("unexpected runtime posture status")
-    coverage = posture.get("coverage")
-    rows = posture.get("runtimes")
-    rows = [row for row in rows if isinstance(row, Mapping)] if isinstance(rows, list) else []
-    unresolved = posture.get("unresolved_launches")
-    truncated = len(rows) > MAX_RUNTIMES
-    error = posture.get("error")
-    reason = _code(error) if error is not None else None
-    if truncated and status == "ok":
-        status, reason = "partial", "runtime_candidate_limit_reached"
-    return {
-        "status": status,
-        "reason": reason,
-        "coverage": "observed_only",
-        "scopeComplete": False,
-        "advisoriesAvailable": isinstance(coverage, Mapping) and coverage.get("advisories_available") is True,
-        "candidateLimitReached": bool(posture.get("candidate_limit_reached")) or truncated,
-        "unresolvedLaunches": min(len(unresolved) if isinstance(unresolved, list) else 0, MAX_UNRESOLVED_LAUNCHES),
-        "items": [_item(row, hash_key) for row in rows[:MAX_RUNTIMES]],
-    }
+    The native runtime shapes the section; a posture it refuses raises.
+    """
+
+    from ..native_runner_authority import native_runner_authority
+
+    request = dict(posture)
+    for key in ("runtimes", "unresolved_launches"):
+        values = request.get(key)
+        request[key] = _chunks(values) if isinstance(values, list) else None
+    answer = native_runner_authority(
+        "fleet_runtime_posture",
+        {"posture": request, "hash_key": hash_key.decode("utf-8")},
+        guard_home,
+    )
+    return cast("dict[str, object]", answer)
 
 
-def _item(row: Mapping[str, Any], hash_key: bytes) -> dict[str, object]:
-    version = row.get("version")
-    executable = row.get("executable_sha256")
-    path = row.get("path")
-    reason = row.get("reason")
-    assurance = row.get("identity_assurance")
-    state = row.get("location_state")
-    launched = row.get("launched_by")
-    harnesses: set[str] = set()
-    for entry in launched if isinstance(launched, list) else []:
-        harness = entry.get("harness") if isinstance(entry, Mapping) else None
-        if isinstance(harness, str) and harness in HARNESS_IDS:
-            harnesses.add(harness)
-    return {
-        "family": _code(row.get("family"), fallback="unknown"),
-        "version": clip(version, 64) if isinstance(version, str) and version else None,
-        "identityAssurance": assurance if assurance in ASSURANCES else "unknown",
-        "executableHash": f"sha256:{executable}"
-        if isinstance(executable, str) and _SHA256_HEX.match(executable)
-        else None,
-        "os": _code(row.get("os"), fallback="unknown"),
-        "arch": _code(row.get("arch"), fallback="unknown"),
-        "locationState": state if state in LOCATION_STATES else "unknown",
-        "reason": _code(reason) if reason is not None else None,
-        "locationHash": keyed_digest(hash_key, path) if isinstance(path, str) and path else None,
-        "harnesses": sorted(harnesses),
-        "advisoryIds": _advisory_ids(row.get("advisory_matches")),
-    }
-
-
-def _advisory_ids(matches: object) -> list[str]:
-    ids: list[str] = []
-    for match in matches if isinstance(matches, list) else []:
-        advisory_id = match.get("advisory_id") if isinstance(match, Mapping) else match
-        if isinstance(advisory_id, str) and 0 < len(advisory_id) <= 128 and advisory_id not in ids:
-            ids.append(advisory_id)
-    return ids[:MAX_ADVISORY_IDS]
-
-
-def _code(value: object, *, fallback: str = "unknown") -> str:
-    return value if isinstance(value, str) and _CODE.match(value) else fallback
+def _chunks(values: list[Any]) -> list[list[Any]]:
+    return [values[start : start + _NATIVE_JSON_WIDTH] for start in range(0, len(values), _NATIVE_JSON_WIDTH)]
 
 
 __all__ = [

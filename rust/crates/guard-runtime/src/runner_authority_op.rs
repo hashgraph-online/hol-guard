@@ -254,7 +254,9 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "fleet_inventory_rows"
         | "fleet_inventory_items"
         | "fleet_posture_build"
-        | "fleet_aibom_rows" => crate::fleet_posture_inventory::dispatch(kind, args),
+        | "fleet_aibom_rows"
+        | "fleet_policy_section"
+        | "fleet_runtime_posture" => crate::fleet_posture_inventory::dispatch(kind, args),
         "cursor_hook_state" => cursor_hook_state::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
