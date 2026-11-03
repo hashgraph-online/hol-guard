@@ -51,7 +51,8 @@ fn an_environment_package_still_names_the_install_when_the_directory_is_unresolv
             &tokens(&["npx", "vitest"]),
             &environment,
             None,
-            Some(Path::new(&environment["HOME"]))
+            Some(Path::new(&environment["HOME"])),
+            true
         ),
         NpmConfiguredPackages::Named(vec!["left-pad".to_owned()])
     );
@@ -71,8 +72,58 @@ fn a_config_redirect_keeps_the_package_unnamed_when_the_directory_is_unresolved(
             &tokens(&["npx", "vitest"]),
             &environment,
             None,
-            Some(Path::new(&environment["HOME"]))
+            Some(Path::new(&environment["HOME"])),
+            true
         ),
         NpmConfiguredPackages::Unnamed
+    );
+}
+
+#[test]
+fn a_directory_the_shell_could_not_name_keeps_the_package_unnamed() {
+    let (dir, project, environment) = project();
+    let home = Path::new(&environment["HOME"]);
+    // The variable is the real project, and both npmrcs name a package.
+    // The model cannot place `$DIR`, so neither file is allowed to become
+    // the reviewed name: the project file would win, and it was not read.
+    fs::write(home.join(".npmrc"), "package=left-pad\n").unwrap();
+    fs::write(project.join(".npmrc"), "package=evil\n").unwrap();
+    let mut launched = environment.clone();
+    launched.insert("DIR".to_owned(), project.to_string_lossy().into_owned());
+
+    let intent = parse_package_intent(
+        r#"cd "$DIR" && npx vitest run"#,
+        Some(&project),
+        Some(home),
+        None,
+        Some(&launched),
+    )
+    .expect("npx intent");
+
+    assert_eq!(intent.targets.len(), 1);
+    assert!(intent.targets[0].package_name.is_none());
+    assert_eq!(
+        intent.targets[0].source_invalid_reason.as_deref(),
+        Some("npm_config_package_unidentified")
+    );
+    let _ = dir;
+}
+
+#[test]
+fn a_skipped_launch_does_not_read_home_config() {
+    let (_dir, _project, environment) = project();
+    let home = Path::new(&environment["HOME"]);
+    fs::write(home.join(".npmrc"), "package=left-pad\n").unwrap();
+
+    assert_eq!(
+        configured_packages_for_segment(
+            &tokens(&["npx", "vitest"]),
+            &tokens(&["npx", "vitest"]),
+            &environment,
+            None,
+            Some(home),
+            false
+        ),
+        NpmConfiguredPackages::Absent
     );
 }

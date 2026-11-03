@@ -52,7 +52,7 @@ pub(super) fn normalized_command_segments(
         .map(|segment| control_context_label(segment.control_operator().map(|s| s.as_str())))
         .collect();
     let mut segments: Vec<CommandSegment> = Vec::new();
-    for context_segment in &execution_context.segments {
+    for (index, context_segment) in execution_context.segments.iter().enumerate() {
         let raw_segment: Vec<String> = context_segment.tokens.clone();
         let normalized_tokens = normalize_segment(&raw_segment);
         if normalized_tokens.is_empty() {
@@ -97,6 +97,7 @@ pub(super) fn normalized_command_segments(
             inherited_environment,
             effective_cwd.as_deref(),
             home_dir,
+            project_npmrc_applies(&execution_context.segments, index),
         );
         segments.push(CommandSegment {
             tokens: normalized_tokens,
@@ -112,6 +113,37 @@ pub(super) fn normalized_command_segments(
         });
     }
     segments
+}
+
+/// Whether npm still reads a project `.npmrc` for this segment.
+///
+/// A `cd` that failed because the directory is missing, and the commands
+/// `&&` joins after it, do not run. Every other unplaced launch can still
+/// reach the directory the model could not name.
+fn project_npmrc_applies(segments: &[ShellExecutionSegment], index: usize) -> bool {
+    let mut cursor = index;
+    while cursor > 0 {
+        let joined_by_and =
+            last_flow_operator(same_shell_controls(&segments[cursor].control_before, true))
+                .is_some_and(|operator| operator == "&&");
+        if !joined_by_and {
+            return true;
+        }
+        let previous = &segments[cursor - 1];
+        if previous.directory_operation.is_some()
+            && matches!(
+                previous.reason_code.as_deref(),
+                Some(SHELL_CWD_MISSING_DIRECTORY) | Some(SHELL_CWD_NOT_DIRECTORY)
+            )
+        {
+            return false;
+        }
+        if previous.complete || previous.directory_operation.is_some() {
+            return true;
+        }
+        cursor -= 1;
+    }
+    true
 }
 
 // package_intent_parser.py `_effective_execution_context`

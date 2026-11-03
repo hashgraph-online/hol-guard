@@ -37,13 +37,15 @@ pub(crate) fn unidentified_npm_package_target() -> PackageIntentTarget {
 ///
 /// A segment that is not `npx` adds nothing. Assignments on `raw` are the
 /// environment npm reads; `env -` and an unreadable config file leave the
-/// package unnamed.
+/// package unnamed. `project_config_applies` is used only when `cwd` is
+/// missing: false when this launch does not run, so it has no project file.
 pub(crate) fn configured_packages_for_segment(
     raw: &[String],
     normalized: &[String],
     environment: &BTreeMap<String, String>,
     cwd: Option<&Path>,
     home: Option<&Path>,
+    project_config_applies: bool,
 ) -> NpmConfiguredPackages {
     let Some(command) = normalized.first() else {
         return NpmConfiguredPackages::Absent;
@@ -55,14 +57,20 @@ pub(crate) fn configured_packages_for_segment(
         return NpmConfiguredPackages::Unnamed;
     };
     let Some(cwd) = cwd.filter(|cwd| cwd.is_absolute()) else {
-        // The shell could not place this launch, so there is no project
-        // `.npmrc` to read. An environment `package` value still names the
-        // install. A `userconfig` or `globalconfig` redirect might too, and
-        // without a directory its path cannot be resolved, so that package
-        // stays unnamed. Nothing else is a package setting.
+        // The shell could not place this launch. An environment `package`
+        // value still names the install. A `userconfig` or `globalconfig`
+        // redirect might too, and without a directory its path cannot be
+        // resolved, so that package stays unnamed. A launch that still runs
+        // also reads `~/.npmrc` and the project `.npmrc` in whatever
+        // directory it lands in. The project file wins, so neither file is
+        // a name while the directory is unknown. A launch that does not run
+        // has no package setting.
         return packages_from_environment(&effective).unwrap_or_else(|| {
             let settings = environment_settings(&effective);
-            if settings.contains_key("userconfig") || settings.contains_key("globalconfig") {
+            if settings.contains_key("userconfig")
+                || settings.contains_key("globalconfig")
+                || project_config_applies
+            {
                 NpmConfiguredPackages::Unnamed
             } else {
                 NpmConfiguredPackages::Absent
