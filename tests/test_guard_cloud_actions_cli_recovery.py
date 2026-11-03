@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import cloud_actions_host_apply
-from codex_plugin_scanner.guard.cli.cloud_actions_host_apply import apply_host_config, backups_dir
+from codex_plugin_scanner.guard.cli.cloud_actions_host_apply import apply_host_config, backups_dir, restore_host_config
 from codex_plugin_scanner.guard.cli.cloud_actions_host_config import plan_host_config
 from codex_plugin_scanner.guard.cli.cloud_actions_session import CloudActionsSessionStore
 from tests.cloud_actions_login_support import (
@@ -129,7 +129,7 @@ def test_an_edit_after_an_interrupted_move_is_kept_and_restore_stays_available(
     guard_home = tmp_path / "guard"
     plan = plan_host_config("codex", path=path, url=URL)
     real = cloud_actions_host_apply.replace_file
-    edited = b'model = "gpt-5"\n# The AI tool wrote this after Guard.\n'
+    edited = b"# The AI tool wrote this after Guard.\n" + (plan.after or b"")
 
     def moved_edited_then_interrupted(source: Path, destination: Path) -> None:
         real(source, destination)
@@ -145,6 +145,15 @@ def test_an_edit_after_an_interrupted_move_is_kept_and_restore_stays_available(
     assert path.read_bytes() == edited
     assert _strays(path.parent) == []
     assert list(backups_dir(guard_home, "codex").glob("*.json"))
+
+    # Restoring removes only Guard's entry; the later edit stays.
+    monkeypatch.setattr(cloud_actions_host_apply, "replace_file", real)
+    restored = restore_host_config("codex", path=path, guard_home=guard_home)
+    assert restored is not None and restored.scope == "entry"
+    after_restore = path.read_text(encoding="utf-8")
+    assert "# The AI tool wrote this after Guard." in after_restore
+    assert "# Hand-written; keep this comment." in after_restore
+    assert URL not in after_restore
 
 
 def test_an_interrupt_before_the_move_leaves_another_writers_settings_alone(

@@ -124,10 +124,11 @@ def apply_host_config(plan: HostConfigPlan, *, guard_home: Path) -> HostConfigBa
                 f"{path} did not read back as written, and Guard could not put the earlier file back. "
                 f"Guard kept its copy; run `hol-guard cloud-actions ai-tools restore {plan.ai_tool}`.",
             ) from None
-        if landed is None:
-            # Guard cannot tell what is on disk now, so the copy stays for `restore`.
-            _record_left_behind(backup)
-        else:
+        # When Guard cannot tell what is on disk now (landed is None), the copy
+        # stays for `restore`. Its record still names Guard's own bytes, so
+        # `restore` puts the whole file back only if it still holds them and
+        # otherwise removes just Guard's entry, keeping the later edit.
+        if landed is not None:
             _discard_backup(backup)
         if isinstance(error, OSError):
             raise HostConfigWriteError(
