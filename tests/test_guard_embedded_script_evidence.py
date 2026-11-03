@@ -9,6 +9,9 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+from codex_plugin_scanner.guard import native_runner_authority
 from codex_plugin_scanner.guard.cli.commands_dispatch_records import (
     _embedded_scripts_for_receipt,
     _run_guard_history_command,
@@ -185,6 +188,15 @@ def test_embedded_scripts_for_receipt_without_evidence_returns_empty() -> None:
     assert _embedded_scripts_for_receipt({"scanner_evidence": []}) == []
     assert _embedded_scripts_for_receipt({}) == []
     assert _embedded_scripts_for_receipt({"scanner_evidence": [{"source": "policy_composition"}]}) == []
+
+
+def test_embedded_scripts_for_receipt_without_the_resident_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        raise native_runner_authority.NativeRunnerAuthorityError("resident unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+    receipt = _receipt_with_embedded_script("python3 - <<'EOF'\nprint(1)\nEOF")
+    assert _embedded_scripts_for_receipt(receipt) == []
 
 
 def test_history_explain_includes_embedded_scripts(tmp_path: Path, capsys: Any) -> None:

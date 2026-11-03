@@ -22,6 +22,7 @@ use super::claude_code_detect;
 use super::claude_hook_config;
 use super::cline_detect;
 use super::cline_hook_files;
+use super::cline_install_plan;
 use super::cline_paths;
 use super::cline_plugin_render;
 use super::codex_detect;
@@ -118,7 +119,9 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         | "decision_legacy"
         | "decision_build" => crate::decision_authority_op::dispatch(kind, args),
         "cli_runtime_support" => crate::cli_runtime_support_op::dispatch(args),
+        "extension_hint_shape" => crate::extension_hint_shape::dispatch(args),
         "mcp_output" => crate::mcp_output::dispatch(args),
+        "memory_decision_receipt" => crate::memory_decision_receipt::dispatch(args),
         "cli_profiles" => crate::cli_profiles::dispatch(args),
         "catalog_provenance" => crate::catalog_provenance::dispatch(args),
         "connector_regroup" => crate::connector_regroup::dispatch(args),
@@ -131,6 +134,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "workspace_audit_sync" => crate::workspace_audit_sync::dispatch(args),
         "workspace_rule_findings" => crate::workspace_rule_findings::dispatch(args),
         "workspace_runtime_findings" => crate::workspace_runtime_findings::dispatch(args),
+        "workspace_findings_carry" => crate::workspace_findings_carry::dispatch(args),
         "shell_request_authority" => crate::shell_request_authority_op::dispatch(args),
         "guard_product_copy" => crate::guard_product_copy::dispatch(args),
         "consumer_mode_contract" => crate::consumer_mode_contract::dispatch(args),
@@ -155,7 +159,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "preclaim_failure" => evaluation::preclaim_failure(args),
         "claim_context_failure" => evaluation::claim_context_failure(args),
         "receipt_evidence_merge" => evaluation::receipt_evidence_merge(args),
-        "workspace_findings_carry" => crate::workspace_findings_carry::dispatch(args),
+        "receipt_embedded_scripts" => crate::receipt_embedded_scripts::dispatch(args),
         "authority_signature" => signature::authority_signature(args),
         "authority_gate" => signature::authority_gate(args),
         "policy_shadow_mismatch" => signature::policy_shadow_mismatch(args),
@@ -202,6 +206,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cline_plugin_render" => cline_plugin_render::render(args),
         "cline_hook_files" => cline_hook_files::dispatch(args),
         "cline_paths" => cline_paths::dispatch(args),
+        "cline_install_plan" => cline_install_plan::dispatch(args),
         "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
         "codex_host_inventory" => crate::codex_host_inventory::dispatch(args),

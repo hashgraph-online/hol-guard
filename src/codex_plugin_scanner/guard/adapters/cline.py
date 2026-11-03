@@ -64,6 +64,16 @@ def _cli_host_artifact(hosts: ClineHostDetection) -> tuple[GuardArtifact, ...]:
     )
 
 
+def _install_plan(context: HarnessContext, op: str, **fields: object) -> dict[str, object]:
+    """Ask the native ``cline_install_plan`` kind for one install decision."""
+
+    from ..native_context import _resolve_existing_digest_home
+    from ..native_runner_authority import native_runner_authority
+
+    home = _resolve_existing_digest_home(context.guard_home)
+    return native_runner_authority("cline_install_plan", {"op": op, **fields}, guard_home=home)
+
+
 def _surface(value: str | None, *, default: str) -> str:
     normalized = (value or default).strip().lower()
     if normalized == "editor":
@@ -123,13 +133,6 @@ class ClineHarnessAdapter(HarnessAdapter):
     def preview_launch_commands(self, context: HarnessContext, passthrough_args: list[str]) -> tuple[list[str], ...]:
         return (self.launch_command(context, passthrough_args),)
 
-    def _auto_transport(self, hosts: ClineHostDetection) -> str:
-        if is_frozen_guard_runtime():
-            return "plugin"
-        if hosts.cli_executable and not hosts.vscode_versions and not hosts.jetbrains_paths:
-            return "plugin"
-        return "hooks"
-
     def _install_transport(self, context: HarnessContext, transport: str) -> dict[str, object]:
         from .cline_hooks import install_cline_hooks, uninstall_cline_hooks
         from .cline_plugin import cline_plugin_syntax_probe, install_cline_plugin, uninstall_cline_plugin
@@ -161,16 +164,21 @@ class ClineHarnessAdapter(HarnessAdapter):
         manifest = self._install_transport(context, transport)
         target_state = cline_plugin_state(context) if transport == "plugin" else cline_native_hook_state(context)
         other_state = cline_native_hook_state(context) if transport == "plugin" else cline_plugin_state(context)
-        transition_pending = bool(other_state.get("installed")) and not bool(target_state.get("ready"))
+        plan = _install_plan(
+            context,
+            "reconcile",
+            target_ready=bool(target_state.get("ready")),
+            other_installed=bool(other_state.get("installed")),
+            other_ready=bool(other_state.get("ready")),
+        )
         removed_other: dict[str, object] | None = None
-        if other_state.get("installed") and (target_state.get("ready") or not other_state.get("ready")):
+        if plan.get("remove_other") is True:
             removed_other = uninstall_cline_hooks(context) if transport == "plugin" else uninstall_cline_plugin(context)
-            transition_pending = False
         return {
             **manifest,
             "active_transport": transport,
             "previous_transport": previous if isinstance(previous, str) else None,
-            "transition_pending_live_proof": transition_pending,
+            "transition_pending_live_proof": plan.get("transition_pending") is True,
             "inactive_transport_cleanup": removed_other,
         }
 
@@ -180,13 +188,20 @@ class ClineHarnessAdapter(HarnessAdapter):
 
         selected_surface = _surface(surface, default="auto")
         hosts = detect_cline_hosts(context)
-        requested_transport = (
-            selected_surface if selected_surface in {"hooks", "plugin"} else self._auto_transport(hosts)
+        transport_plan = _install_plan(
+            context,
+            "transport",
+            surface=selected_surface,
+            frozen=is_frozen_guard_runtime(),
+            cli=bool(hosts.cli_executable),
+            vscode=bool(hosts.vscode_versions),
+            jetbrains=bool(hosts.jetbrains_paths),
         )
+        requested_transport = str(transport_plan.get("transport"))
         try:
             transport_manifest = self._reconcile_transport(context, requested_transport)
         except RuntimeError:
-            if selected_surface not in {"auto", "all", "cli"} or requested_transport == "hooks":
+            if transport_plan.get("fallback") is not True:
                 raise
             requested_transport = "hooks"
             transport_manifest = self._reconcile_transport(context, requested_transport)
@@ -219,8 +234,14 @@ class ClineHarnessAdapter(HarnessAdapter):
             "mcp": mcp_state,
             "shim": shim_manifest,
             "mcp_install": mcp_manifest,
-            "coverage": self._coverage_label(hosts, requested_transport, hook_state, plugin_state),
-            "blind_spots": self._blind_spots(hosts, requested_transport),
+            **_install_plan(
+                context,
+                "posture",
+                transport=requested_transport,
+                hook_ready=hook_state.get("ready") is True,
+                plugin_ready=plugin_state.get("ready") is True,
+                jetbrains=bool(hosts.jetbrains_paths),
+            ),
         }
         if shim_manifest:
             manifest["shim_path"] = shim_manifest.get("shim_path")
@@ -270,36 +291,6 @@ class ClineHarnessAdapter(HarnessAdapter):
             "mcp": mcp_result,
             "complete": complete,
         }
-
-    def _coverage_label(
-        self,
-        hosts: ClineHostDetection,
-        transport: str,
-        hook_state: dict[str, object],
-        plugin_state: dict[str, object],
-    ) -> str:
-        if transport == "plugin":
-            if plugin_state.get("ready") is True:
-                return "full"
-            return "pending-live-proof"
-        if hook_state.get("ready") is True:
-            return "pre-execution"
-        if hosts.jetbrains_paths:
-            return "unverified"
-        return "pending-live-proof"
-
-    @staticmethod
-    def _blind_spots(hosts: ClineHostDetection, transport: str) -> list[str]:
-        blind_spots: list[str] = []
-        if transport == "hooks":
-            blind_spots.append(
-                "Native PostToolUse is observation-only; use the plugin transport for model-visible output replacement."
-            )
-        if hosts.jetbrains_paths:
-            blind_spots.append(
-                "JetBrains runtime protection is unverified until Guard observes a live pre-tool deny proof."
-            )
-        return blind_spots
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         hosts = detect_cline_hosts(context)

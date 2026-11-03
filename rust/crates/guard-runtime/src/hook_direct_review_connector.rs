@@ -529,6 +529,12 @@ pub(crate) fn queued_setup_hint(connector: &Value, paused: &Object) -> Option<Va
     Some(setup_hint(&connector, &risk_classes)).filter(|hint| !hint.is_null())
 }
 
+/// `validated_connector_setup_hint`: a stored connector setup hint, shape
+/// checked and rebuilt, or `None`.
+pub(crate) fn validated_setup_hint(value: &Value) -> Option<Value> {
+    hint::validated_setup_hint(value)
+}
+
 #[path = "hook_direct_review_connector_hint.rs"]
 mod hint;
 
