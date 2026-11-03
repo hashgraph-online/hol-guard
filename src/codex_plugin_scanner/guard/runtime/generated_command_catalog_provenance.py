@@ -15,6 +15,7 @@ either, and the install kind is derived from the path's shape.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only
@@ -27,7 +28,7 @@ def _frozen() -> bool:
     return bool(getattr(sys, "frozen", False) or getattr(sys, "_MEIPASS", None))
 
 
-def _attribution(resource_path: str) -> tuple[str, str | None]:
+def _attribution(resource_path: str, guard_home: Path | None) -> tuple[str, str | None]:
     """The install kind and resource root digest the runtime derives from the path.
 
     A runtime that cannot answer leaves the install unattributed rather than
@@ -37,7 +38,9 @@ def _attribution(resource_path: str) -> tuple[str, str | None]:
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     try:
-        answer = native_runner_authority(_KIND, {"resource_path": resource_path, "frozen": _frozen()})
+        answer = native_runner_authority(
+            _KIND, {"resource_path": resource_path, "frozen": _frozen()}, guard_home=guard_home
+        )
     except NativeRunnerAuthorityError:
         return "unavailable", None
     kind, digest = answer.get("install_kind"), answer.get("resource_root_digest")
@@ -46,7 +49,7 @@ def _attribution(resource_path: str) -> tuple[str, str | None]:
     return kind, digest
 
 
-def is_downgrade(writer_version: str, previous_version: str) -> bool:
+def is_downgrade(writer_version: str, previous_version: str, *, guard_home: Path | None = None) -> bool:
     """Whether ``writer_version`` is an older release than ``previous_version``.
 
     The runtime compares the leading numeric components only, so an alpha of
@@ -57,7 +60,7 @@ def is_downgrade(writer_version: str, previous_version: str) -> bool:
 
     try:
         answer = native_runner_authority(
-            _KIND, {"writer_version": writer_version, "previous_version": previous_version}
+            _KIND, {"writer_version": writer_version, "previous_version": previous_version}, guard_home=guard_home
         )
     except NativeRunnerAuthorityError:
         return False
@@ -70,6 +73,7 @@ def catalog_provenance(
     catalog: GeneratedCommandCatalog | None = None,
     trigger: str,
     writer: bool = False,
+    guard_home: Path | None = None,
 ) -> dict[str, object]:
     """Describe the catalog being written and the process doing the writing.
 
@@ -86,6 +90,7 @@ def catalog_provenance(
     ``writer_version`` recorded. A reader stamping its own version there would
     make an old revision look like the newest install's work, and the downgrade
     check reading it back would then miss the regression it exists to catch.
+    ``guard_home`` is the home whose resident attributes the install.
     """
 
     from ...version import __version__
@@ -120,7 +125,7 @@ def catalog_provenance(
     if resource_path is None or source is not built_in:
         provenance["install_kind"] = "in-process" if resource_path else "unresolved"
         return provenance
-    provenance["install_kind"], provenance["resource_root_digest"] = _attribution(resource_path)
+    provenance["install_kind"], provenance["resource_root_digest"] = _attribution(resource_path, guard_home)
     return provenance
 
 

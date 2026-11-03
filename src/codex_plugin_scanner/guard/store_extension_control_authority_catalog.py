@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from typing import cast
 
 from .native_extension_control_authority import (
@@ -25,6 +26,8 @@ from .store_extension_control_authority_catalog_events import (
     already_recorded,
     build_catalog_migration_payload,
     insert_catalog_migration_event,
+    migration_provenance,
+    recorded_writer_version,
 )
 from .store_extension_control_authority_support import _now, _plan_int, _plan_map, _plan_pack_digest, _plan_record
 
@@ -136,17 +139,25 @@ class ExtensionControlAuthorityCatalogMixin:
         with self._connect() as connection:
             if already_recorded(connection, revision):
                 return
+        provenance = migration_provenance(
+            None,
+            catalog_digest=catalog_digest,
+            registry=None,
+            trigger="authority-read-backfill",
+            writer=False,
+            guard_home=Path(self.guard_home),
+        )
+        with self._connect() as connection:
+            if already_recorded(connection, revision):
+                return
             payload, regression = build_catalog_migration_payload(
-                connection,
                 previous_revision=previous_revision,
                 revision=revision,
                 previous_catalog_digest=previous_catalog_digest,
                 catalog_digest=catalog_digest,
                 layers=layers,
                 retired_targets=retired_targets,
-                registry=None,
-                trigger="authority-read-backfill",
-                writer=False,
+                provenance=provenance,
             )
             insert_catalog_migration_event(
                 connection,
@@ -213,6 +224,7 @@ class ExtensionControlAuthorityCatalogMixin:
         snapshot_json, snapshot_digest, snapshot_mac = _plan_record(plan, "snapshot")
         transition_json, transition_digest, transition_mac = _plan_record(plan, "transition")
         with self._connect() as connection:
+            previous_writer_version = recorded_writer_version(connection, previous_catalog_digest)
             connection.execute(
                 """
                 insert into extension_control_authority_transition (
@@ -252,6 +264,14 @@ class ExtensionControlAuthorityCatalogMixin:
                     recorded_at=created_at,
                 )
         self._write_and_verify_anchor(AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.ANCHORED), key=key)
+        provenance = migration_provenance(
+            previous_writer_version,
+            catalog_digest=catalog_digest,
+            registry=registry,
+            trigger="catalog-migration",
+            writer=True,
+            guard_home=Path(self.guard_home),
+        )
         with self._connect() as connection:
             if pack_activation is not None:
                 from .catalog_delivery.activation_journal import finish
@@ -291,16 +311,13 @@ class ExtensionControlAuthorityCatalogMixin:
                 (AuthorityPhase.COMMITTED.value, created_at, revision),
             )
             payload, regression = build_catalog_migration_payload(
-                connection,
                 previous_revision=previous_revision,
                 revision=revision,
                 previous_catalog_digest=previous_catalog_digest,
                 catalog_digest=catalog_digest,
                 layers=layers,
                 retired_targets=retired_targets,
-                registry=registry,
-                trigger="catalog-migration",
-                writer=True,
+                provenance=provenance,
             )
             insert_catalog_migration_event(
                 connection,

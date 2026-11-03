@@ -28,6 +28,8 @@ from codex_plugin_scanner.guard.store_extension_control_authority_catalog_events
     MIGRATED_EVENT,
     REGRESSED_EVENT,
     build_catalog_migration_payload,
+    migration_provenance,
+    recorded_writer_version,
 )
 from tests.test_extension_control_clear_catalog_migration import (
     _activate_under_catalog,
@@ -195,6 +197,23 @@ def test_an_older_release_is_a_downgrade_and_a_newer_prerelease_is_not() -> None
     assert not is_downgrade("3.47.0", "3.47.0a2")
 
 
+def test_a_runtime_that_cannot_answer_attributes_nothing_and_judges_no_downgrade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority_module
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise authority_module.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(authority_module, "native_runner_authority", unavailable)
+    monkeypatch.setattr(loader_module, "_resolved_catalog_resource_path", "/opt/guard/site-packages/catalog.json")
+    provenance = catalog_provenance(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest, trigger="probe")
+
+    assert provenance["install_kind"] == "unavailable"
+    assert provenance["resource_root_digest"] is None
+    assert not is_downgrade("3.36.0", "3.46.0")
+
+
 def test_a_backfilled_event_names_no_writer_and_judges_no_downgrade(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -270,7 +289,7 @@ def _store_with_events(records: list[dict[str, object]]) -> sqlite3.Connection:
 
 
 def test_a_backfill_over_an_attributed_revision_does_not_hide_the_downgrade(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The writer is looked up by catalog, not by the last migration to it.
 
@@ -291,17 +310,22 @@ def test_a_backfill_over_an_attributed_revision_does_not_hide_the_downgrade(
         ]
     )
 
+    provenance = migration_provenance(
+        recorded_writer_version(connection, "catalog-x"),
+        catalog_digest="catalog-z",
+        registry=None,
+        trigger="catalog-migration",
+        writer=True,
+        guard_home=tmp_path,
+    )
     _payload, regression = build_catalog_migration_payload(
-        connection,
         previous_revision=6,
         revision=7,
         previous_catalog_digest="catalog-x",
         catalog_digest="catalog-z",
         layers=(),
         retired_targets=("control-a",),
-        registry=None,
-        trigger="catalog-migration",
-        writer=True,
+        provenance=provenance,
     )
 
     assert regression == {
