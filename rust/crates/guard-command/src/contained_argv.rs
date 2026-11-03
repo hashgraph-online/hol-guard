@@ -96,6 +96,39 @@ pub(crate) fn local_tsd_entry(argument: &str) -> bool {
     local_package_entry(argument, "tsd/dist/cli.js") || local_bin_entry(argument, "tsd")
 }
 
+/// tap's installed entry points. tap 21 declares `dist/esm/run.mjs`; tap 16
+/// through 20 published the same entry as `bin/run.js`. The sink runs
+/// whichever of them this workspace holds, so reading only the current
+/// spelling would send a working `node node_modules/tap/bin/run.js` to review
+/// while the `npx tap` beside it runs. The installer's link to that entry
+/// names the same run.
+pub(crate) fn local_tap_entry(argument: &str) -> bool {
+    local_package_entry(argument, "tap/dist/esm/run.mjs")
+        || local_package_entry(argument, "tap/bin/run.js")
+        || local_bin_entry(argument, "tap")
+}
+
+/// borp's installed entry point, and the link its installer writes beside it.
+/// borp declares `borp.js` at the package root rather than under a `bin`
+/// directory, and has published it there since 0.1.
+pub(crate) fn local_borp_entry(argument: &str) -> bool {
+    local_package_entry(argument, "borp/borp.js") || local_bin_entry(argument, "borp")
+}
+
+/// poku's installed entry point, and the link its installer writes beside it.
+/// poku declares `lib/bin/index.js`, the compiled CLI its package ships.
+pub(crate) fn local_poku_entry(argument: &str) -> bool {
+    local_package_entry(argument, "poku/lib/bin/index.js") || local_bin_entry(argument, "poku")
+}
+
+/// lab's installed entry point, and the link its installer writes beside it.
+/// lab is published under a scope, so its entry is spelled with the scope
+/// directory the installer writes it into; the extensionless `bin/lab` is the
+/// module `@hapi/lab` has declared since lab 20.
+pub(crate) fn local_lab_entry(argument: &str) -> bool {
+    local_package_entry(argument, "@hapi/lab/bin/lab") || local_bin_entry(argument, "lab")
+}
+
 /// Whether a word names one of those installed entry points. A runtime handed
 /// this path starts the workspace's own runner, whichever of them it is.
 pub(crate) fn local_runner_entry(argument: &str) -> bool {
@@ -109,6 +142,10 @@ pub(crate) fn local_runner_entry(argument: &str) -> bool {
         || local_uvu_entry(&entry)
         || local_tape_entry(&entry)
         || local_tsd_entry(&entry)
+        || local_tap_entry(&entry)
+        || local_borp_entry(&entry)
+        || local_poku_entry(&entry)
+        || local_lab_entry(&entry)
 }
 
 /// Whether a call hands Bun one of those entry points as the file to run.
@@ -435,8 +472,11 @@ pub(crate) use runner_calls::{
     workspace_test_script,
 };
 pub(crate) use single_pass_runners::{
-    jasmine_contained_call, jasmine_runs_once, jasmine_sets_no_environment, qunit_contained_call,
-    qunit_runs_once, tape_contained_call, tsd_contained_call, uvu_contained_call,
+    borp_contained_call, borp_runs_once, jasmine_contained_call, jasmine_runs_once,
+    jasmine_sets_no_environment, lab_contained_call, lab_runs_once, poku_contained_call,
+    poku_runs_once, poku_touches_nothing_else, qunit_contained_call, qunit_runs_once,
+    tap_contained_call, tap_runs_tests_once, tap_sets_no_environment, tape_contained_call,
+    tsd_contained_call, uvu_contained_call,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
@@ -479,6 +519,10 @@ fn runner_tail(arguments: &[String]) -> Option<(&'static str, Vec<String>)> {
                 "uvu" => "uvu",
                 "tape" => "tape",
                 "tsd" => "tsd",
+                "tap" => "tap",
+                "borp" => "borp",
+                "poku" => "poku",
+                "lab" => "lab",
                 _ => "vitest",
             },
             rest.to_vec(),
@@ -558,6 +602,52 @@ fn runner_tail_or_error(
             Some("tsd") => Err(RestrictedPytestError::new(
                 VITEST_INVALID,
                 "Protected tsd reads its types from this workspace.",
+            )),
+            Some("tap") if !tap_runs_tests_once(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected tap runs tests; it does not report, build or open a browser.",
+                ))
+            }
+            Some("tap") if !tap_sets_no_environment(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected tap takes its environment from the run, not from its arguments.",
+                ))
+            }
+            Some("tap") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected tap reads its configuration and modules from this workspace.",
+            )),
+            Some("borp") if !borp_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected borp requires a run that does not watch.",
+            )),
+            Some("borp") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected borp reads its modules from this workspace.",
+            )),
+            Some("poku") if !poku_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected poku requires a run that does not watch.",
+            )),
+            Some("poku") if !poku_touches_nothing_else(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected poku runs tests; it does not end processes or load an environment file.",
+                ))
+            }
+            Some("poku") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected poku reads its modules from this workspace.",
+            )),
+            Some("lab") if !lab_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected lab runs tests; it does not start a debugger.",
+            )),
+            Some("lab") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected lab reads its modules from this workspace.",
             )),
             _ => invalid_vitest(),
         },
@@ -754,7 +844,19 @@ pub fn contained_runner_invocation(
             args.to_vec()
         } else if matches!(
             name,
-            "vitest" | "jest" | "mocha" | "ava" | "jasmine" | "qunit" | "uvu" | "tape" | "tsd"
+            "vitest"
+                | "jest"
+                | "mocha"
+                | "ava"
+                | "jasmine"
+                | "qunit"
+                | "uvu"
+                | "tape"
+                | "tsd"
+                | "tap"
+                | "borp"
+                | "poku"
+                | "lab"
         ) {
             let mut call = vec![name.to_owned()];
             call.extend_from_slice(&argv[1..]);
@@ -783,6 +885,14 @@ pub fn contained_runner_invocation(
                 "tape"
             } else if local_tsd_entry(&entry) {
                 "tsd"
+            } else if local_tap_entry(&entry) {
+                "tap"
+            } else if local_borp_entry(&entry) {
+                "borp"
+            } else if local_poku_entry(&entry) {
+                "poku"
+            } else if local_lab_entry(&entry) {
+                "lab"
             } else {
                 return invalid_vitest();
             };
@@ -1032,6 +1142,10 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                 | "uvu"
                 | "tape"
                 | "tsd"
+                | "tap"
+                | "borp"
+                | "poku"
+                | "lab"
         ) || manager_exec_runner(command).is_some()
             || bun.is_some()
             || bun_runner_entry_launch(command)
@@ -1048,6 +1162,10 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                         || local_uvu_entry(&entry)
                         || local_tape_entry(&entry)
                         || local_tsd_entry(&entry)
+                        || local_tap_entry(&entry)
+                        || local_borp_entry(&entry)
+                        || local_poku_entry(&entry)
+                        || local_lab_entry(&entry)
                 })));
     let node_tool = bun.is_none()
         && !bun_test

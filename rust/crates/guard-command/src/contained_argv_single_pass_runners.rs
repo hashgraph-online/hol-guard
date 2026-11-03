@@ -1,12 +1,14 @@
 //! Reading the Node test runners that take one pass by default.
 //!
 //! Vitest, Jest, Mocha and AVA each carry enough of their own parser to need
-//! their own reading. The five here do not. Jasmine, uvu, tape and tsd have
-//! no watch mode at all, and QUnit's is a single flag, so what these readings
-//! mostly name is the words that run something other than the suite:
-//! scaffolding a project, copying example files in, or watching. Everything
-//! else on their lines is an option value or a spec file, and the shared
-//! workspace screen answers for those the way it does for the other four.
+//! their own reading. The runners here do not. Jasmine, uvu, tape, tsd, tap
+//! and lab have no watch mode at all, and QUnit's, borp's and poku's are a
+//! single flag, so what these readings mostly name is the words that run
+//! something other than the suite: scaffolding a project, copying example
+//! files in, printing a report, opening a browser, setting the environment
+//! the tests inherit, or watching. Everything else on their lines is an
+//! option value or a spec file, and the shared workspace screen answers for
+//! those the way it does for the other runners.
 
 use super::runner_calls::{option_name, reads_its_own_workspace, short_options_carry_watch};
 
@@ -66,7 +68,14 @@ pub(crate) fn qunit_contained_call(arguments: &[String]) -> bool {
 /// whether it stands bare, carries an `=` value, or rides in a short group,
 /// which Commander walks one letter at a time the way the other parsers do.
 pub(crate) fn qunit_runs_once(arguments: &[String]) -> bool {
-    !arguments
+    !names_a_watch(arguments)
+}
+
+/// Whether a word on the line names a watch, read the way a parser that
+/// declares watch as a value-less flag reads it: the name alone decides,
+/// whether it stands bare, carries an `=` value, or rides in a short group.
+fn names_a_watch(arguments: &[String]) -> bool {
+    arguments
         .iter()
         .any(|argument| short_options_carry_watch(argument) || option_name(argument) == "watch")
 }
@@ -103,4 +112,181 @@ pub(crate) fn tape_contained_call(arguments: &[String]) -> bool {
 /// on its line are all it reaches, and the workspace screen answers for them.
 pub(crate) fn tsd_contained_call(arguments: &[String]) -> bool {
     reads_its_own_workspace(arguments)
+}
+
+/// True when a borp call both runs its tests once and takes everything it
+/// loads from the workspace.
+pub(crate) fn borp_contained_call(arguments: &[String]) -> bool {
+    borp_runs_once(arguments) && reads_its_own_workspace(arguments)
+}
+
+/// borp runs once unless a watch is named, and it has no commands: every
+/// other word is an option value or a file to run.
+///
+/// Its line is read by Node's own `parseArgs`, where `watch` is declared a
+/// boolean with the short alias `-w`. A boolean there never takes the next
+/// word, and `--watch=false` is rejected rather than read as off, so the name
+/// alone is the answer, exactly as it is for QUnit. `parseArgs` also walks a
+/// short group one letter at a time, so `-wc` carries the watch too.
+pub(crate) fn borp_runs_once(arguments: &[String]) -> bool {
+    !names_a_watch(arguments)
+}
+
+/// True when a poku call runs its tests once, reaches nothing outside the
+/// run, and takes everything it loads from the workspace.
+pub(crate) fn poku_contained_call(arguments: &[String]) -> bool {
+    poku_runs_once(arguments)
+        && poku_touches_nothing_else(arguments)
+        && reads_its_own_workspace(arguments)
+}
+
+/// poku runs once unless a watch is named.
+///
+/// poku reads its own line rather than a parser: it asks whether any word
+/// *starts with* `--watch`, so `--watch=false` turns the watch on and
+/// `--watchers` would too. The short `-w` is read the same way the other
+/// runners' groups are. Both spellings are screened here because either one
+/// leaves a run that never finishes inside the sink.
+pub(crate) fn poku_runs_once(arguments: &[String]) -> bool {
+    !arguments
+        .iter()
+        .any(|argument| short_options_carry_watch(argument) || poku_names(argument, "watch"))
+}
+
+/// True when no word on a poku line reaches past the test run.
+///
+/// poku carries options that do something other than run tests:
+/// `--killPort`, `--killRange` and `--killPid` end processes the run never
+/// started, `--envFile` loads a file of environment variables into the test
+/// process, and `--denoAllow`/`--denoDeny` hand permissions straight to a
+/// Deno runtime. None of those is a path the workspace screen can answer for
+/// -- a port, a pid and a permission name are not paths at all -- so they are
+/// named here. poku matches these by prefix and by case, so the screen does
+/// the same.
+pub(crate) fn poku_touches_nothing_else(arguments: &[String]) -> bool {
+    const REACHING_OPTIONS: [&str; 6] = [
+        "killPort",
+        "killRange",
+        "killPid",
+        "envFile",
+        "denoAllow",
+        "denoDeny",
+    ];
+    !arguments.iter().any(|argument| {
+        REACHING_OPTIONS
+            .iter()
+            .any(|option| poku_names(argument, option))
+    })
+}
+
+/// Whether a word names a poku option. poku asks `startsWith` against the
+/// option's own spelling, so the match is by prefix and case-sensitive: an
+/// `=` value, a longer name and a trailing character all name the option.
+fn poku_names(argument: &str, option: &str) -> bool {
+    argument
+        .strip_prefix("--")
+        .is_some_and(|name| name.starts_with(option))
+}
+
+/// True when a lab call both runs its tests once and takes everything it
+/// loads from the workspace.
+pub(crate) fn lab_contained_call(arguments: &[String]) -> bool {
+    lab_runs_once(arguments) && reads_its_own_workspace(arguments)
+}
+
+/// lab has no watch mode and no commands, so the one word that stops a call
+/// being a test run is `--inspect`, which starts the suite under Node's
+/// debugger and holds the process open on a listening port. Its other
+/// options name a reporter, a linter, a transform, an output file or a
+/// pattern, and those are paths the shared workspace screen answers for.
+pub(crate) fn lab_runs_once(arguments: &[String]) -> bool {
+    !arguments
+        .iter()
+        .any(|argument| option_name(argument) == "inspect")
+}
+
+/// True when a tap call runs its tests once, sets no environment for them,
+/// and takes everything it loads from the workspace.
+pub(crate) fn tap_contained_call(arguments: &[String]) -> bool {
+    tap_runs_tests_once(arguments)
+        && tap_sets_no_environment(arguments)
+        && reads_its_own_workspace(arguments)
+}
+
+/// tap has no watch flag -- watching lives in its `repl` command -- so what
+/// this reading names is the commands that do something other than run the
+/// suite and the options that leave the run.
+///
+/// tap takes its command from the first positional word and falls back to
+/// `run` when there is none, but telling the first positional from an
+/// unmodelled option's value means reading tap's whole option table, which a
+/// release changes faster than the reading would follow. So a command word is
+/// screened wherever it stands, as Jasmine's is. A spec file is spelled as a
+/// path rather than as the bare word `report` or `config`, so screening the
+/// bare words costs an ordinary run nothing.
+///
+/// The options named here reach past the suite: `--node-arg` forwards
+/// arguments to the Node that runs the tests, `--browser` names a program to
+/// launch, and an HTML or lcov coverage report opens that browser on the
+/// generated page. `--no-browser` is a different name under this screen, so
+/// it stays readable.
+pub(crate) fn tap_runs_tests_once(arguments: &[String]) -> bool {
+    const OTHER_COMMANDS: [&str; 12] = [
+        "help",
+        "versions",
+        "version",
+        "build",
+        "report",
+        "plugin",
+        "list",
+        "repl",
+        "replay",
+        "config",
+        "debug",
+        "node-options",
+    ];
+    let mut expecting_report = false;
+    for argument in arguments {
+        if expecting_report {
+            expecting_report = false;
+            if opens_a_browser(argument) {
+                return false;
+            }
+            continue;
+        }
+        if OTHER_COMMANDS.contains(&argument.as_str()) {
+            return false;
+        }
+        match option_name(argument).as_str() {
+            "nodearg" | "browser" => return false,
+            "coveragereport" => match argument.split_once('=') {
+                Some((_, value)) => {
+                    if opens_a_browser(value) {
+                        return false;
+                    }
+                }
+                None => expecting_report = true,
+            },
+            _ => {}
+        }
+    }
+    true
+}
+
+/// Whether a coverage report names one tap opens a browser on. tap writes the
+/// other formats to its output and stops there.
+fn opens_a_browser(report: &str) -> bool {
+    matches!(report, "html" | "html-spa" | "lcov")
+}
+
+/// True when no word on a tap line sets the environment its tests run in.
+///
+/// `--test-env` is written straight into the environment of the process that
+/// runs the test files, so it chooses what Node loads there. Neither half of
+/// a `NAME=value` pair names a path, so the workspace screen cannot see it
+/// and it is named here instead.
+pub(crate) fn tap_sets_no_environment(arguments: &[String]) -> bool {
+    !arguments
+        .iter()
+        .any(|argument| option_name(argument) == "testenv")
 }

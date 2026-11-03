@@ -343,6 +343,17 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
         "uvu" => ("uvu/package.json", &["uvu/bin.js"]),
         "tape" => ("tape/package.json", &["tape/bin/tape"]),
         "tsd" => ("tsd/package.json", &["tsd/dist/cli.js"]),
+        // tap moved its entry once without renaming the package: tap 21 ships
+        // the ESM runner, tap 16 through 20 the CommonJS one. The manifest is
+        // the spelling every release ships and the entries are read in the
+        // order the releases introduced them.
+        "tap" => (
+            "tap/package.json",
+            &["tap/dist/esm/run.mjs", "tap/bin/run.js"],
+        ),
+        "borp" => ("borp/package.json", &["borp/borp.js"]),
+        "poku" => ("poku/package.json", &["poku/lib/bin/index.js"]),
+        "lab" => ("@hapi/lab/package.json", &["@hapi/lab/bin/lab"]),
         _ => ("vitest/vitest.mjs", &["vitest/vitest.mjs"]),
     };
     let modules = nearest_project_root(cwd, workspace, &format!("node_modules/{installed}"))?
@@ -399,6 +410,10 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
                 "uvu" => "uvu is not installed inside this workspace. Guard did not download or execute a replacement.",
                 "tape" => "tape is not installed inside this workspace. Guard did not download or execute a replacement.",
                 "tsd" => "tsd is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "tap" => "tap is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "borp" => "borp is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "poku" => "poku is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "lab" => "lab is not installed inside this workspace. Guard did not download or execute a replacement.",
                 _ => "Vitest is not installed inside this workspace. Guard did not download or execute a replacement.",
             },
         ));

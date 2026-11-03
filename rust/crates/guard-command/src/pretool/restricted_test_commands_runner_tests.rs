@@ -441,3 +441,119 @@ fn a_tape_or_tsd_word_that_leaves_the_workspace_keeps_its_review() {
         assert_eq!(reason(command), None, "{command}");
     }
 }
+
+#[test]
+fn a_tap_borp_poku_or_lab_entry_reads_as_the_project_runner() {
+    for command in [
+        "node node_modules/tap/dist/esm/run.mjs test/unit.js",
+        "node ./node_modules/tap/bin/run.js",
+        "node node_modules/borp/borp.js",
+        "node /work/app/node_modules/poku/lib/bin/index.js test",
+        "node node_modules/@hapi/lab/bin/lab",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_tap_borp_poku_or_lab_run_inside_its_workspace_is_contained() {
+    // tap and lab cannot watch at all -- tap's watching lives in its `repl`
+    // command -- and borp and poku watch only when the flag is on the line,
+    // so the plain call is the contained one for each of them.
+    for command in [
+        "npx tap",
+        "tap",
+        "npx tap test/unit.js",
+        "npx tap --jobs=4 test/",
+        "npx tap --coverage-report=text",
+        "npx tap --no-browser",
+        "npx borp",
+        "npx borp test/unit.test.js",
+        "npx borp --coverage --reporter=spec",
+        "bunx borp",
+        "npx poku",
+        "npx poku test",
+        "npx poku --debug test",
+        "npx lab",
+        "npx lab -t 100",
+        "npx lab -r console -o stdout",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_tap_borp_poku_or_lab_word_that_leaves_the_run_keeps_its_review() {
+    // tap takes its command from the first positional word, so the words
+    // that print a report, build a plugin or open its repl stop a call being
+    // a test run; `--node-arg` forwards arguments to the Node that runs the
+    // tests, `--test-env` sets that process's environment, and an HTML or
+    // lcov coverage report opens a browser on the generated page.
+    //
+    // borp reads Node's own `parseArgs`, where `watch` is a boolean: it never
+    // takes the next word and `--watch=false` is rejected rather than read as
+    // off, so the name alone watches, as QUnit's does.
+    //
+    // poku reads its line itself, asking whether a word *starts with* the
+    // option's spelling, so `--watch=false` turns the watch on. Its other
+    // options end processes the run never started or load an environment
+    // file, and neither a port, a pid nor a permission name is a path the
+    // workspace screen can see.
+    //
+    // lab's `--inspect` starts the suite under Node's debugger and holds the
+    // process open on a listening port.
+    for command in [
+        "npx tap report",
+        "npx tap list",
+        "npx tap repl",
+        "npx tap build",
+        "npx tap --node-arg=--inspect-brk",
+        "npx tap --test-env=NODE_OPTIONS=--inspect-brk",
+        "npx tap --coverage-report=html",
+        "npx tap --coverage-report lcov",
+        "npx tap --browser=firefox",
+        "npx tap --reporter /etc/tap-reporter.js",
+        "npx borp --watch",
+        "npx borp -w",
+        "npx borp --watch=false",
+        "npx borp -wc",
+        "npx borp --reporter /etc/reporter.js",
+        "npx poku --watch",
+        "npx poku -w",
+        "npx poku --watch=false",
+        "npx poku --killPort=3000",
+        "npx poku --killRange=3000-3010",
+        "npx poku --killPid=1",
+        "npx poku --envFile=.env",
+        "npx poku --denoAllow=net",
+        "npx poku --denoDeny=env",
+        "npx lab --inspect",
+        "npx lab --coverage-path /etc",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_tap_borp_poku_or_lab_lookalike_entry_reads_as_no_runner() {
+    for command in [
+        "node node_modules/xtap/dist/esm/run.mjs",
+        "node node_modules/tap/dist/cjs/run.js",
+        "node node_modules/tap/bin/run.mjs",
+        "node node_modules/xborp/borp.js",
+        "node node_modules/borp/borp.mjs",
+        "node node_modules/poku/lib/bin/index.mjs",
+        "node node_modules/lab/bin/lab",
+        "node node_modules/@hapi/lab/lib/cli.js",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
