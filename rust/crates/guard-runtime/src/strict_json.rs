@@ -28,6 +28,7 @@ const MAX_JSON_STRING_BYTES: usize = 4 * 1024 * 1024;
 struct StrictJsonParser<'a> {
     bytes: &'a [u8],
     index: usize,
+    max_collection_items: usize,
 }
 
 impl StrictJsonParser<'_> {
@@ -132,7 +133,7 @@ impl StrictJsonParser<'_> {
             return Ok(Value::Array(output));
         }
         loop {
-            if output.len() >= MAX_JSON_COLLECTION_ITEMS {
+            if output.len() >= self.max_collection_items {
                 return Err("native_json_array_too_wide");
             }
             output.push(self.value(depth + 1)?);
@@ -159,7 +160,7 @@ impl StrictJsonParser<'_> {
             if output.contains_key(&key) {
                 return Err("native_json_duplicate_key");
             }
-            if output.len() >= MAX_JSON_COLLECTION_ITEMS {
+            if output.len() >= self.max_collection_items {
                 return Err("native_json_object_too_wide");
             }
             self.whitespace();
@@ -179,7 +180,22 @@ impl StrictJsonParser<'_> {
 }
 
 pub(crate) fn parse(bytes: &[u8]) -> Result<Value, String> {
-    let mut parser = StrictJsonParser { bytes, index: 0 };
+    parse_with_collection_limit(bytes, MAX_JSON_COLLECTION_ITEMS)
+}
+
+/// [`parse`] with a different per-collection item cap, for a document an
+/// operation carries as one string because it legitimately holds collections
+/// wider than a request frame allows. Every other rule still applies, and the
+/// string bound on the carrying field keeps the document itself bounded.
+pub(crate) fn parse_with_collection_limit(
+    bytes: &[u8],
+    max_collection_items: usize,
+) -> Result<Value, String> {
+    let mut parser = StrictJsonParser {
+        bytes,
+        index: 0,
+        max_collection_items,
+    };
     let value = parser.value(0).map_err(str::to_owned)?;
     parser.whitespace();
     if parser.index != bytes.len() {

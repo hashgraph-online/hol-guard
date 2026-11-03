@@ -20,6 +20,10 @@ pub const NETWORK_PROTECTION_VERIFY_RESULT_SCHEMA: &str =
     "guard-network-protection-verify-result.v1";
 /// Capability advertised by the runtime when `network_protection_verify` is available.
 pub const NETWORK_PROTECTION_VERIFY_FEATURE: &str = "network-protection-verify-v1";
+/// Capability advertised when the request may carry the response as
+/// `response_json` text instead of a JSON value.
+pub const NETWORK_PROTECTION_VERIFY_RESPONSE_JSON_FEATURE: &str =
+    "network-protection-verify-response-json-v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -28,8 +32,16 @@ pub struct NetworkProtectionVerifyRequestV1 {
     pub request_id: String,
     /// The bundle response as fetched, unaltered: the resident recomputes the
     /// canonical payload over it rather than trusting a hash the caller
-    /// derived.
+    /// derived. Null when `response_json` carries it instead.
+    #[serde(default)]
     pub response: Value,
+    /// The same response as JSON text. A request frame caps every array at
+    /// 4,096 items, and a bundle's threat feeds run far past that, so a
+    /// caller sends the response this way when the runtime advertises
+    /// [`NETWORK_PROTECTION_VERIFY_RESPONSE_JSON_FEATURE`]. Exactly one of
+    /// this and `response` may carry it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_json: Option<String>,
     /// The workspace the bundle must belong to.
     pub workspace_id: String,
     /// The saved supply-chain keyring payload, passed through as stored. The
