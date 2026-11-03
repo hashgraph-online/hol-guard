@@ -56,6 +56,176 @@
       "expect": "not_allow"
     },
     {
+      "id": "guard-cloud-actions-help",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard cloud-actions --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-cloud-actions-ai-tools-help",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard cloud-actions ai-tools configure --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-cloud-actions-status-offline",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard cloud-actions status --offline --json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-cloud-actions-configure-preview",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard cloud-actions ai-tools configure codex --cloud-workspace 11111111-1111-4111-8111-111111111111 --dry-run"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-cloud-actions-status-live",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard cloud-actions status --json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-cloud-actions-configure-apply",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard cloud-actions ai-tools configure codex --cloud-workspace 11111111-1111-4111-8111-111111111111 --apply"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-cloud-actions-restore",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard cloud-actions ai-tools restore codex"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-cloud-actions-login",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard cloud-actions login --cloud-workspace 11111111-1111-4111-8111-111111111111"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-cloud-actions-doctor-bundle",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard cloud-actions doctor --bundle /tmp/b.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-cloud-actions-preview-home-override",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard cloud-actions ai-tools configure codex --cloud-workspace 11111111-1111-4111-8111-111111111111 --dry-run --home /tmp/evil"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "guard-package-shims-bare-refreshes-entitlement",
       "fix_area": "shell",
       "harnesses": [
