@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -26,11 +25,6 @@ _KIMI_HOME_ENV_VAR = "KIMI_CODE_HOME"
 _KIMI_DIR = ".kimi-code"
 _KIMI_CONFIG_FILE = "config.toml"
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
-
-
-_GUARD_MANAGED_BEGIN = "# BEGIN HOL GUARD MANAGED HOOKS"
-_GUARD_MANAGED_END = "# END HOL GUARD MANAGED HOOKS"
-_GUARD_MANAGED_MARKER = "HOL GUARD MANAGED HOOKS"
 
 
 if TYPE_CHECKING:
@@ -130,11 +124,9 @@ class KimiHarnessAdapter(HarnessAdapter):
         _ensure_path_within_root(context.home_dir, config_path, label="Kimi Code")
         hook_files: list[TransitionFile] = []
         hook_command = _shell_command(self._hook_command_parts(context, prepared_files=hook_files))
-        managed_block = self._build_managed_block(hook_command)
         before = _snapshot(config_path)
         existing_text = before.decode("utf-8") if before is not None else ""
-        cleaned_text = _remove_managed_block(existing_text)
-        new_text = f"{cleaned_text.rstrip()}\n\n{managed_block}\n".lstrip()
+        new_text = _managed_config_text({"op": "install", "text": existing_text, "hook_command": hook_command})
         mode = config_path.stat().st_mode & 0o777 if before is not None else 0o644
         config = TransitionFile(
             config_path.resolve(strict=False),
@@ -175,8 +167,8 @@ class KimiHarnessAdapter(HarnessAdapter):
         if config_path.is_file():
             _ensure_path_within_root(context.home_dir, config_path, label="Kimi Code")
             existing_text = config_path.read_text(encoding="utf-8")
-            cleaned_text = _remove_managed_block(existing_text)
-            config_path.write_text(cleaned_text.rstrip() + "\n", encoding="utf-8")
+            cleaned_text = _managed_config_text({"op": "uninstall", "text": existing_text})
+            config_path.write_text(cleaned_text, encoding="utf-8")
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
@@ -192,37 +184,13 @@ class KimiHarnessAdapter(HarnessAdapter):
             ],
         }
 
-    @staticmethod
-    def _build_managed_block(hook_command: str) -> str:
-        escaped_command = _toml_escape(hook_command)
-        lines = [
-            _GUARD_MANAGED_BEGIN,
-            "# The hooks below are managed by HOL Guard. Do not edit manually.",
-        ]
-        for event in ("PreToolUse", "UserPromptSubmit", "PostToolUse", "SessionStart", "Stop"):
-            lines.extend(
-                [
-                    "[[hooks]]",
-                    f'event = "{event}"',
-                    f'command = "{escaped_command}"',
-                    "timeout = 30",
-                ]
-            )
-        lines.append(_GUARD_MANAGED_END)
-        return "\n".join(lines)
 
+def _managed_config_text(request: dict[str, str]) -> str:
+    """Return Kimi's ``config.toml`` text with Guard's managed hooks block installed or removed."""
+    from ..native_runner_authority import native_runner_authority
 
-def _toml_escape(value: str) -> str:
-    """Escape backslashes and double quotes for a TOML double-quoted string."""
-    return value.replace("\\", "\\\\").replace('"', '\\"')
-
-
-def _remove_managed_block(text: str) -> str:
-    pattern = re.compile(
-        rf"^\s*{re.escape(_GUARD_MANAGED_BEGIN)}.*?{re.escape(_GUARD_MANAGED_END)}\s*\n?",
-        re.MULTILINE | re.DOTALL,
-    )
-    cleaned = pattern.sub("", text)
-    # Also remove any leftover marker-only lines from partial edits.
-    cleaned = re.sub(rf"^\s*#.*{re.escape(_GUARD_MANAGED_MARKER)}.*$\n?", "", cleaned, flags=re.MULTILINE)
-    return cleaned
+    answer = native_runner_authority("kimi_hook_config", request)
+    text = answer.get("text") if isinstance(answer, dict) and len(answer) == 1 else None
+    if not isinstance(text, str):
+        raise ValueError("Kimi hook config answer is malformed")
+    return text
