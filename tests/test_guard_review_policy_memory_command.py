@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority as authority
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.review_contracts import payload_hash_for_decision_memory_bundle
@@ -196,3 +197,18 @@ def test_accepted_memory_bundle_rolls_back_rows_and_state_on_transaction_failure
     assert store.get_sync_payload("guard_review_memory_policy_version") == before_version
     assert store.get_sync_payload("guard_review_memory_last_ack") == before_ack
     assert store.list_policy_decisions() == before_policies
+
+
+def test_a_native_outage_applies_nothing(tmp_path: Path, monkeypatch) -> None:
+    store = _store(tmp_path)
+    bundle = _bundle(store)
+
+    def unavailable(kind: str, request: dict[str, object]) -> dict[str, object]:
+        raise authority.NativeRunnerAuthorityError("native runtime unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    result = _execute(store, {"decisionMemoryBundle": bundle})
+
+    assert result["failureCode"] == "review_policy_memory_unavailable"
+    assert store.get_sync_payload("guard_review_memory_registry") is None
+    assert store.list_policy_decisions() == []
