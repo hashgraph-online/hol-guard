@@ -137,6 +137,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "trust_attestation_shape" => crate::trust_attestation_shape::dispatch(args),
         "local_cli_recognize" => crate::local_cli_identify::recognize_dispatch(args),
         "network_status_build" => crate::network_status_build::dispatch(args),
+        "business_review_page" => crate::business_review_page::dispatch(args),
         "mcp_registry_page" => crate::mcp_registry_page::dispatch(args),
         "mcp_registry_setup" => crate::mcp_registry_setup::dispatch(args),
         "connector_setup_rows" => crate::connector_setup_rows::dispatch(args),
