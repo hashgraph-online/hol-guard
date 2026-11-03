@@ -212,6 +212,14 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-goflags-mod-mod-prefix-go-test",
         "neg-rustflags-linker-prefix-cargo-test",
         "neg-pytest-addopts-plugin-prefix-venv-pytest",
+        # A tool setting whose value is a URL, a path or a file to load rather
+        # than the switch word the inert reading accepts: the command keeps its
+        # review, and a contained run has no network for the fetch and no home
+        # for the named program or configuration file.
+        "neg-cypress-install-binary-url-prefix-npm-test",
+        "neg-eslint-flat-config-file-prefix-npm-test",
+        "neg-puppeteer-executable-path-prefix-npm-test",
+        "neg-puppeteer-skip-download-longer-name-prefix-npm-test",
         # A Guard launcher spelled against the working directory, which a clone,
         # an unpacked archive or a generated shim directory can fill: the
         # command keeps its review, and a contained run reaches only the
