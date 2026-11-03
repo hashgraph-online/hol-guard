@@ -31,6 +31,10 @@ use crate::typescript_launch_evidence::*;
 mod routine_local_runner;
 use routine_local_runner::*;
 
+#[path = "package_intent_parser/npm_exec_config.rs"]
+mod npm_exec_config;
+use npm_exec_config::*;
+
 #[path = "package_intent_parser/managers_js.rs"]
 mod managers_js;
 use managers_js::*;
@@ -87,6 +91,10 @@ mod install_help_tests;
 #[cfg(test)]
 #[path = "package_intent_parser/routine_local_runner_tests.rs"]
 mod routine_local_runner_tests;
+
+#[cfg(test)]
+#[path = "package_intent_parser/npm_exec_config_tests.rs"]
+mod npm_exec_config_tests;
 
 #[cfg(test)]
 #[path = "package_intent_parser/bun_value_options_tests.rs"]
@@ -240,6 +248,9 @@ struct CommandSegment {
     context_hash: String,
     context_complete: bool,
     context_reason_code: Option<String>,
+    /// Whether the segment as written assigns npm's `package`, `userconfig`
+    /// or `globalconfig` setting, before the wrapper strip removes it.
+    assigns_npm_package_setting: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -391,7 +402,18 @@ pub fn parse_package_intent(
     // this parser already resolved, so it is computed here rather than sent
     // back for a second round trip.
     let mut intent = combine_package_intents(&intents)?;
-    intent.routine_local_runner = routine_local_runner(&intent);
+    // npm's `package` setting makes `npx` install a package the command never
+    // names, so a pinned runner is routine only when npm's configuration and
+    // the command's own assignments add nothing.
+    intent.routine_local_runner = routine_local_runner(&intent)
+        && !npx_config_adds_package(
+            &intent,
+            segments
+                .iter()
+                .any(|segment| segment.assigns_npm_package_setting),
+            environment,
+            home_dir,
+        );
     Some(intent)
 }
 

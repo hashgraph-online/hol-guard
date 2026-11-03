@@ -175,6 +175,24 @@ def test_protect_reviews_npx_when_npm_config_names_a_package(
     assert _protect(tmp_path, workspace, ["npx", "tsx", "scripts/generate-inventory.ts"]) is not None
 
 
+def test_protect_reviews_npx_when_the_command_itself_sets_npm_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`env npm_config_package=… npx tsx` sets npm's `package` inside the command.
+
+    The parser strips the wrapper before it reads the runner. The same wrapper
+    with an unrelated assignment shows the pinned runner still reads as routine
+    through it, so the request coming back is the assignment's doing.
+    """
+
+    workspace = _pinned_runner_workspace(tmp_path, monkeypatch, "tsx", locked="4.22.4")
+    script = ["npx", "tsx", "scripts/generate-inventory.ts"]
+
+    assert _protect(tmp_path, workspace, ["env", "FOO=1", *script]) is None
+    assert _protect(tmp_path, workspace, ["env", "npm_config_package=left-pad", *script]) is not None
+
+
 def test_protect_keeps_the_pinned_runner_exemption_beside_ordinary_npm_settings(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -48,7 +48,6 @@ from .native_runner_authority import NativeRunnerAuthorityError, native_runner_a
 from .native_shim_admin import NativeShimAdminError
 from .native_supply_chain_posture import native_local_supply_chain_posture
 from .native_workspace_inventory import native_workspace_inventory
-from .npm_exec_config import npm_config_adds_package
 from .package_execution_context import PackageExecutionContext, build_package_execution_context
 from .redaction import redact_text
 from .runtime.approval_context import (
@@ -439,20 +438,6 @@ def _package_manager_launch_environment(
     return {**environment, "PATH": launch_path}
 
 
-def _npm_config_adds_package(intent: PackageIntent, environment: Mapping[str, str], launch_cwd: Path) -> bool:
-    """Whether npm's configuration makes this ``npx`` launch install a package.
-
-    The pinned-runner verdict reads the command alone. ``npx`` also installs
-    whatever npm's ``package`` setting names, from the environment or any
-    ``.npmrc``, and then runs that package's bin instead of the project's.
-    """
-
-    if intent.package_manager != "npx":
-        return False
-    cwds = [launch_cwd / execution.effective_cwd for execution in intent.local_executions if execution.effective_cwd]
-    return any(npm_config_adds_package(environment=environment, cwd=cwd) for cwd in cwds or [launch_cwd])
-
-
 @binds_store_guard_home
 def _build_package_protect_authority(
     *,
@@ -489,7 +474,7 @@ def _build_package_protect_authority(
     )
     if intent is None:
         return None
-    if intent.routine_local_runner and not _npm_config_adds_package(intent, launch_environment, launch_cwd):
+    if intent.routine_local_runner:
         # A runner the project already pins locally fetches nothing: the native
         # parser resolved the executable inside the installed package and read
         # the lockfile entry that binds it to a published release. A package

@@ -101,6 +101,7 @@ pub(super) fn normalized_command_segments(
             context_hash,
             context_complete,
             context_reason_code: validation_reason.or_else(|| context_segment.reason_code.clone()),
+            assigns_npm_package_setting: assigns_npm_package_setting(&raw_segment),
         });
     }
     segments
