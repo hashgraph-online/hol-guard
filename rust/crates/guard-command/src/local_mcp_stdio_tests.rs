@@ -5,7 +5,7 @@
 //! when `HOL_GUARD_NATIVE_BINARY` points at a built runtime.
 
 use super::local_mcp_stdio::*;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -410,4 +410,51 @@ for line in sys.stdin:
     assert_eq!(payload["status"], json!("ok"), "catalog: {payload:?}");
     assert_eq!(payload["server_info"]["name"], json!("legacy"));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn probe_script(name: &str, script: &str, timeout: f64) -> Value {
+    let dir = std::env::temp_dir().join(format!("mcp_probe_{name}_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let server = write_fake_server(&dir, script);
+    let argv = vec!["python3".to_owned(), server.to_string_lossy().into_owned()];
+    let catalog = run_mcp_stdio_probe(
+        &argv,
+        timeout,
+        None,
+        Some(&dir),
+        None,
+        &std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    catalog.to_payload()
+}
+
+#[test]
+fn a_server_that_exits_before_answering_is_reported_as_exited() {
+    // A launcher that cannot find a login in the probe's isolated home stops
+    // at once; the probe must not call that a protocol failure.
+    let payload = probe_script(
+        "exit",
+        "import sys\nsys.stderr.write('no login\\n')\nsys.exit(1)\n",
+        6.0,
+    );
+    assert_eq!(payload["reason"], json!("server_exited"), "{payload:?}");
+}
+
+#[test]
+fn a_server_that_exits_while_reading_discovery_is_reported_as_exited() {
+    // The probe asks `server/discover` first; a server that reads it and then
+    // exits makes the legacy `initialize` fallback meet a closed stream.
+    let payload = probe_script(
+        "exit_after_discover",
+        "import sys\nsys.stdin.readline()\nsys.exit(1)\n",
+        6.0,
+    );
+    assert_eq!(payload["reason"], json!("server_exited"), "{payload:?}");
+}
+
+#[test]
+fn a_server_that_stays_up_without_answering_still_fails_initialization() {
+    let payload = probe_script("silent", "import sys\nfor _ in sys.stdin:\n    pass\n", 1.0);
+    assert_eq!(payload["reason"], json!("initialize_failed"), "{payload:?}");
 }

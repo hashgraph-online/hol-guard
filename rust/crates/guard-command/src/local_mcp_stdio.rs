@@ -499,6 +499,8 @@ struct RpcSession {
     inbox: mpsc::Receiver<Value>,
     catalog_generation: u64,
     cancellation: Arc<AtomicBool>,
+    /// Set when the server's output reached its end, not a probe limit.
+    output_ended: Arc<AtomicBool>,
     _drain: Option<thread::JoinHandle<()>>,
 }
 
@@ -507,16 +509,24 @@ impl RpcSession {
         let stdin = child.stdin.take()?;
         let stdout = child.stdout.take()?;
         let (tx, rx) = mpsc::channel::<Value>();
+        let output_ended = Arc::new(AtomicBool::new(false));
+        let drain_ended = Arc::clone(&output_ended);
         let drain = thread::spawn(move || {
-            drain_stream(stdout, tx);
+            drain_stream(stdout, tx, &drain_ended);
         });
         Some(RpcSession {
             stdin,
             inbox: rx,
             catalog_generation: 0,
             cancellation,
+            output_ended,
             _drain: Some(drain),
         })
+    }
+
+    /// Whether the server closed its output, which it does when it exits.
+    fn output_ended(&self) -> bool {
+        self.output_ended.load(Ordering::Acquire)
     }
 
     fn write(&mut self, message: &Value) {
@@ -551,15 +561,23 @@ impl RpcSession {
 }
 
 /// Drain `fd` into parsed JSON-RPC messages, honoring the output cap and the
-/// bounded 256-message queue. Runs on a dedicated thread.
-pub(crate) fn drain_stream(mut stdout: std::process::ChildStdout, tx: mpsc::Sender<Value>) {
+/// bounded 256-message queue. Runs on a dedicated thread. `output_ended` is
+/// set only when the server's output itself ends; a probe limit leaves it.
+pub(crate) fn drain_stream(
+    mut stdout: std::process::ChildStdout,
+    tx: mpsc::Sender<Value>,
+    output_ended: &AtomicBool,
+) {
     let mut buffer: Vec<u8> = Vec::new();
     let mut output_bytes: usize = 0;
     let mut pending: usize = 0;
     loop {
         let mut chunk = [0u8; 8192];
         let n = match stdout.read(&mut chunk) {
-            Ok(0) | Err(_) => return,
+            Ok(0) | Err(_) => {
+                output_ended.store(true, Ordering::Release);
+                return;
+            }
             Ok(n) => n,
         };
         output_bytes += n;
@@ -911,6 +929,9 @@ fn negotiate_catalog(session: &mut RpcSession, deadline: Instant) -> McpCatalog 
     let initialize = _await_result(session, 1, deadline);
     let initialize = match initialize {
         Some(v) => v,
+        // A server that exits before answering, often because the probe's
+        // isolated home lacks a login it reads, is not a protocol failure.
+        None if session.output_ended() => return McpCatalog::reason_only("server_exited"),
         None => return McpCatalog::reason_only("initialize_failed"),
     };
     if initialize.get("error").is_some() {

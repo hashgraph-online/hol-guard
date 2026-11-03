@@ -37,6 +37,7 @@ for (const [error, guidance] of [
   ["mcp_launch_failed", "configured executable and dependencies"],
   ["mcp_transport_failed", "executable, dependencies, and server logs"],
   ["mcp_initialize_failed", "starts in the host app and uses stdio MCP"],
+  ["mcp_server_exited", "reads a login or settings from your home folder"],
   ["mcp_protocol_unsupported", "protocol version Guard does not support"],
   ["mcp_capability_rejected", "rejected Guard's discovery capabilities"],
 ]) {
