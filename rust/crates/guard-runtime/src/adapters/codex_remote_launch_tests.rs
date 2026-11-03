@@ -72,6 +72,17 @@ fn a_tracked_process_is_ours_only_when_it_listens_on_this_socket() {
         tracked(&format!("/usr/bin/sleep --listen unix://{SOCKET}")),
         json!(false)
     );
+    // The launched arguments must be adjacent, whole and in order.
+    for command in [
+        format!("/usr/bin/sleep app-server unix://{SOCKET}"),
+        format!("/usr/bin/sleep app-server --other --listen unix://{SOCKET}"),
+        format!("/usr/bin/sleep --listen unix://{SOCKET} app-server"),
+        format!("/usr/bin/codex app-server --listen unix://{SOCKET}.old"),
+        format!("/usr/bin/codex xapp-server --listen unix://{SOCKET}"),
+        format!("app-server --listen unix://{SOCKET}"),
+    ] {
+        assert_eq!(tracked(&command), json!(false), "{command}");
+    }
 }
 
 #[cfg(unix)]

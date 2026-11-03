@@ -120,10 +120,27 @@ fn wait(map: &Map<String, Value>) -> KindResult {
 fn tracked(map: &Map<String, Value>) -> KindResult {
     let command = text(map, "command")?;
     let listener = format!("unix://{}", text(map, "socket")?);
-    // The socket path itself names `app-server`, so the subcommand must
-    // appear outside the listener.
-    let ours = command.contains(&listener) && command.replace(&listener, "").contains("app-server");
-    Ok(json!({ "ours": ours }))
+    Ok(json!({ "ours": launched_listener(command, &listener) }))
+}
+
+/// Whether `command` holds the argument run Guard launches,
+/// `app-server --listen unix://<socket>`, as whole adjacent arguments. The
+/// socket path itself names `app-server`, so a stray mention never counts.
+fn launched_listener(command: &str, listener: &str) -> bool {
+    fn after_space(text: &str) -> Option<&str> {
+        let rest = text.trim_start();
+        (rest.len() < text.len()).then_some(rest)
+    }
+    command.match_indices("app-server").any(|(start, word)| {
+        if !command[..start].ends_with(char::is_whitespace) {
+            return false;
+        }
+        after_space(&command[start + word.len()..])
+            .and_then(|rest| rest.strip_prefix("--listen"))
+            .and_then(after_space)
+            .and_then(|rest| rest.strip_prefix(listener))
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
+    })
 }
 
 /// `_socket_is_trusted` and `_socket_is_live`: a socket the user owns, in a
