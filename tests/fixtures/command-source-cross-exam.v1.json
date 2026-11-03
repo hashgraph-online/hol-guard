@@ -8,7 +8,7 @@
       {
         "schema": "guard.command-extension-source.v1",
         "extension": {
-          "extension_id": "command.mcp-cross-exam",
+          "extension_id": "command.cross-exam",
           "version": "1.0.0",
           "name": "MCP Cross Exam",
           "description": "Reviews agent invocations of mcp-cross-exam that contact an MCP target, start a stdio server, run write probes, or serve a fixture process. Help, version, probes list, probes plan, and config show are unmatched and keep first-party floors. Package launchers stay on command.package.python. Enabling this extension does not start Guard-invoked audits.",
@@ -24,8 +24,7 @@
             "local_write"
           ],
           "safer_alternatives": [
-            "Use mcp-cross-exam --help, --version, probes list, probes plan, or config show to inspect the auditor without starting a target.",
-            "Prefer hol-guard mcp audit for Guard-authorized local audits after hol-guard settings set mcp-cross-exam on."
+            "Use mcp-cross-exam --help, --version, probes list, probes plan, or config show to inspect the auditor without starting a target."
           ],
           "reference_urls": [
             "https://github.com/smusali/mcp-cross-exam"
@@ -54,7 +53,7 @@
           "license": "MIT",
           "permissions": [
             {
-              "permission_id": "command.mcp-cross-exam.permission.network",
+              "permission_id": "command.cross-exam.permission.network",
               "implementation_version": "1.0.0",
               "label": "MCP Cross Exam network audit",
               "description": "Allows mcp-cross-exam to contact an http(s) or SSE MCP target.",
@@ -78,7 +77,7 @@
               "example_command": "mcp-cross-exam http://127.0.0.1:8765/mcp --read-only"
             },
             {
-              "permission_id": "command.mcp-cross-exam.permission.stdio",
+              "permission_id": "command.cross-exam.permission.stdio",
               "implementation_version": "1.0.0",
               "label": "MCP Cross Exam stdio audit",
               "description": "Allows mcp-cross-exam to launch a remainder command as a stdio MCP server.",
@@ -101,7 +100,7 @@
               "example_command": "mcp-cross-exam -- python server.py"
             },
             {
-              "permission_id": "command.mcp-cross-exam.permission.writes",
+              "permission_id": "command.cross-exam.permission.writes",
               "implementation_version": "1.0.0",
               "label": "MCP Cross Exam write probes",
               "description": "Allows mcp-cross-exam --allow-writes, which can invoke tools that claim write side effects.",
@@ -124,7 +123,7 @@
               "example_command": "mcp-cross-exam http://127.0.0.1:8765/mcp --allow-writes"
             },
             {
-              "permission_id": "command.mcp-cross-exam.permission.fixture-serve",
+              "permission_id": "command.cross-exam.permission.fixture-serve",
               "implementation_version": "1.0.0",
               "label": "MCP Cross Exam fixture serve",
               "description": "Allows mcp-cross-exam fixture serve, which starts a local process.",
@@ -149,9 +148,9 @@
           ],
           "rules": [
             {
-              "rule_id": "command.mcp-cross-exam.network",
+              "rule_id": "command.cross-exam.network",
               "rule_version": "1.0.0",
-              "permission_id": "command.mcp-cross-exam.permission.network",
+              "permission_id": "command.cross-exam.permission.network",
               "title": "MCP Cross Exam network audit",
               "description": "Identifies mcp-cross-exam invocations that include an http(s) URL or --sse, except --help and --version.",
               "severity": "high",
@@ -260,9 +259,9 @@
               }
             },
             {
-              "rule_id": "command.mcp-cross-exam.stdio",
+              "rule_id": "command.cross-exam.stdio",
               "rule_version": "1.0.0",
-              "permission_id": "command.mcp-cross-exam.permission.stdio",
+              "permission_id": "command.cross-exam.permission.stdio",
               "title": "MCP Cross Exam stdio audit",
               "description": "Identifies mcp-cross-exam invocations that pass a remainder command.",
               "severity": "high",
@@ -298,9 +297,9 @@
               }
             },
             {
-              "rule_id": "command.mcp-cross-exam.writes",
+              "rule_id": "command.cross-exam.writes",
               "rule_version": "1.0.0",
-              "permission_id": "command.mcp-cross-exam.permission.writes",
+              "permission_id": "command.cross-exam.permission.writes",
               "title": "MCP Cross Exam write probes",
               "description": "Identifies mcp-cross-exam --allow-writes.",
               "severity": "high",
@@ -361,9 +360,9 @@
               }
             },
             {
-              "rule_id": "command.mcp-cross-exam.fixture-serve",
+              "rule_id": "command.cross-exam.fixture-serve",
               "rule_version": "1.0.0",
-              "permission_id": "command.mcp-cross-exam.permission.fixture-serve",
+              "permission_id": "command.cross-exam.permission.fixture-serve",
               "title": "MCP Cross Exam fixture serve",
               "description": "Identifies mcp-cross-exam fixture serve, which starts a process.",
               "severity": "medium",
@@ -475,7 +474,7 @@
           "command.mcp-codex-claude-bridge",
           "command.mcp-compose-bridge",
           "command.mcp-contribos",
-          "command.mcp-cross-exam",
+          "command.cross-exam",
           "command.mcp-dchub",
           "command.mcp-debuganything",
           "command.mcp-enola",
@@ -647,121 +646,121 @@
       "id": "network-url",
       "command": "mcp-cross-exam http://127.0.0.1:8765/mcp --read-only",
       "enabled_extensions": [
-        "command.mcp-cross-exam"
+        "command.cross-exam"
       ],
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "rule_id": "command.mcp-cross-exam.network"
+      "rule_id": "command.cross-exam.network"
     },
     {
       "id": "network-sse",
       "command": "mcp-cross-exam --sse http://127.0.0.1:8765/mcp",
       "enabled_extensions": [
-        "command.mcp-cross-exam"
+        "command.cross-exam"
       ],
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "rule_id": "command.mcp-cross-exam.network"
+      "rule_id": "command.cross-exam.network"
     },
     {
       "id": "stdio-remainder",
       "command": "mcp-cross-exam -- python server.py",
       "enabled_extensions": [
-        "command.mcp-cross-exam"
+        "command.cross-exam"
       ],
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "rule_id": "command.mcp-cross-exam.stdio"
+      "rule_id": "command.cross-exam.stdio"
     },
     {
       "id": "writes",
       "command": "mcp-cross-exam http://127.0.0.1:8765/mcp --allow-writes",
       "enabled_extensions": [
-        "command.mcp-cross-exam"
+        "command.cross-exam"
       ],
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "rule_id": "command.mcp-cross-exam.writes"
+      "rule_id": "command.cross-exam.writes"
     },
     {
       "id": "fixture-serve",
       "command": "mcp-cross-exam fixture serve --http 127.0.0.1:8765",
       "enabled_extensions": [
-        "command.mcp-cross-exam"
+        "command.cross-exam"
       ],
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "rule_id": "command.mcp-cross-exam.fixture-serve"
+      "rule_id": "command.cross-exam.fixture-serve"
     },
     {
       "id": "help-unmatched",
       "command": "mcp-cross-exam --help",
       "enabled_extensions": [
-        "command.mcp-cross-exam"
+        "command.cross-exam"
       ],
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "rule_id": "command.mcp-cross-exam.network"
+      "rule_id": "command.cross-exam.network"
     },
     {
       "id": "version-unmatched",
       "command": "mcp-cross-exam --version",
       "enabled_extensions": [
-        "command.mcp-cross-exam"
+        "command.cross-exam"
       ],
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "rule_id": "command.mcp-cross-exam.network"
+      "rule_id": "command.cross-exam.network"
     },
     {
       "id": "probes-list-unmatched",
       "command": "mcp-cross-exam probes list",
       "enabled_extensions": [
-        "command.mcp-cross-exam"
+        "command.cross-exam"
       ],
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "rule_id": "command.mcp-cross-exam.network"
+      "rule_id": "command.cross-exam.network"
     },
     {
       "id": "probes-plan-unmatched",
       "command": "mcp-cross-exam probes plan",
       "enabled_extensions": [
-        "command.mcp-cross-exam"
+        "command.cross-exam"
       ],
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "rule_id": "command.mcp-cross-exam.network"
+      "rule_id": "command.cross-exam.network"
     },
     {
       "id": "config-show-unmatched",
       "command": "mcp-cross-exam config show",
       "enabled_extensions": [
-        "command.mcp-cross-exam"
+        "command.cross-exam"
       ],
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "rule_id": "command.mcp-cross-exam.network"
+      "rule_id": "command.cross-exam.network"
     },
     {
       "id": "extension-inactive",
@@ -770,22 +769,22 @@
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "rule_id": "command.mcp-cross-exam.network"
+      "rule_id": "command.cross-exam.network"
     },
     {
       "id": "permission-disabled",
       "command": "mcp-cross-exam http://127.0.0.1:8765/mcp",
       "enabled_extensions": [
-        "command.mcp-cross-exam"
+        "command.cross-exam"
       ],
       "disabled_permissions": [
-        "command.mcp-cross-exam.permission.network"
+        "command.cross-exam.permission.network"
       ],
       "expected_action": "block",
       "expected_effective_segments": [
         0
       ],
-      "rule_id": "command.mcp-cross-exam.network"
+      "rule_id": "command.cross-exam.network"
     }
   ]
 }
