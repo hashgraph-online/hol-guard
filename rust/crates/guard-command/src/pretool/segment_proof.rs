@@ -148,6 +148,12 @@ pub(crate) fn benign_command_segments(
                         | "unexpand"
                         | "fmt"
                         | "comm"
+                        | "strings"
+                        | "hexdump"
+                        | "xxd"
+                        | "pr"
+                        | "shuf"
+                        | "iconv"
                 ))
                 // A file operand prints a source line on a syntax error, so it
                 // gets the same session proof as `cat`.

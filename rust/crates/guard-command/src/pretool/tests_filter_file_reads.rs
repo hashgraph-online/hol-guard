@@ -176,6 +176,18 @@ fn a_filter_that_could_write_or_reach_further_still_takes_review() {
         "xxd /nonexistent-guard-fixture/secret.key",
         "pr --unknown Cargo.toml",
         "strings -t $RADIX Cargo.toml",
+        // `pr -s` carries an attached separator or none, so the word after a
+        // bare `-s` is a file `pr` opens; `xxd` reads `-ps` whole as its own
+        // spelling of `-p`, so the word after it is an operand too, and the
+        // second operand is the file `xxd` would truncate. Reading either as
+        // a flag that swallows the next word would leave an unproven path
+        // out of the proof.
+        "pr -s /tmp/secret.key Cargo.toml",
+        "printf x | pr -s /tmp/secret.key",
+        "xxd -ps /tmp/secret.key Cargo.toml",
+        // GNU `strings` reads a leading `@` operand as a file of further
+        // arguments, so the names it opens are not in this command line.
+        "strings @args.txt",
     ] {
         assert!(!allowed(command), "{command}");
     }
@@ -207,6 +219,12 @@ fn a_filter_reading_a_file_without_a_verified_context_takes_review() {
         "unexpand Cargo.toml",
         "fmt Cargo.toml",
         "comm -12 Cargo.toml Cargo.toml",
+        "strings Cargo.toml",
+        "hexdump -C Cargo.toml",
+        "xxd Cargo.toml",
+        "pr -t Cargo.toml",
+        "shuf -n 3 Cargo.toml",
+        "iconv -f utf-8 -t ascii Cargo.toml",
     ] {
         assert!(!allowed_without_context(command), "{command}");
     }

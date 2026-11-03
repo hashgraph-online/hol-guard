@@ -8,7 +8,10 @@
 const STRINGS_READING_FLAGS: &str = "af";
 
 /// `strings` prints the printable runs of what it reads. `-n`, `-t` and `-e`
-/// name a length, a radix and an encoding.
+/// name a length, a radix and an encoding. GNU `strings` also reads a leading
+/// `@` operand as a file of further arguments rather than as input, so the
+/// names it would then open are not in this command line; such an operand
+/// keeps the command under review.
 pub(super) fn safe_strings_arguments<'a>(
     arguments: &'a [String],
     operands: &mut Vec<&'a str>,
@@ -20,7 +23,7 @@ pub(super) fn safe_strings_arguments<'a>(
         "nte",
         &["all", "print-file-name"],
         &["bytes", "radix", "encoding"],
-    )
+    ) && operands.iter().all(|operand| !operand.starts_with('@'))
 }
 
 /// The `hexdump` options that carry no value: the output formats and the
@@ -52,37 +55,85 @@ pub(super) fn safe_hexdump_arguments<'a>(
     )
 }
 
-/// The `xxd` options that carry no value.
-const XXD_READING_FLAGS: &str = "abEeipru";
+/// The `xxd` options that carry no value, spelled whole. `-ps`, `-plain` and
+/// `-postscript` are `xxd`'s own spellings of `-p`: it reads a short option
+/// as a whole word, never as a cluster, so reading `-ps` as `-p -s` would
+/// hand the seek the word after it and skip the file that word names.
+const XXD_READING_OPTIONS: &[&str] = &[
+    "-a",
+    "-b",
+    "-E",
+    "-e",
+    "-i",
+    "-p",
+    "-ps",
+    "-plain",
+    "-postscript",
+    "-r",
+    "-u",
+];
+
+/// The `xxd` options that carry a column count, a group size, a length, a
+/// display offset and a seek — all numbers, attached or as the next word.
+const XXD_VALUE_OPTIONS: &[&str] = &["-c", "-g", "-l", "-o", "-s"];
 
 /// `xxd` writes its dump to a second operand, so only one operand is proven
-/// here; the caller caps it. `-c`, `-g`, `-l`, `-o` and `-s` carry a column
-/// count, a group size, a length, a display offset and a seek — all numbers.
+/// here; the caller caps it. Every option is matched whole: a spelling this
+/// screen has not read keeps the command under review rather than being read
+/// as a cluster `xxd` would never split that way.
 pub(super) fn safe_xxd_arguments<'a>(arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
-    super::stdin_filter_options::screen_options(
-        arguments,
-        operands,
-        XXD_READING_FLAGS,
-        "cglos",
-        &[],
-        &[],
-    )
+    let mut expecting_value = false;
+    for argument in arguments {
+        let value = argument.as_str();
+        if expecting_value {
+            if !super::stdin_filter_options::safe_filter_value(value) {
+                return false;
+            }
+            expecting_value = false;
+            continue;
+        }
+        if !value.starts_with('-') || value == "-" {
+            operands.push(value);
+            continue;
+        }
+        if XXD_READING_OPTIONS.contains(&value) {
+            continue;
+        }
+        let Some(option) = XXD_VALUE_OPTIONS
+            .iter()
+            .find(|option| value.starts_with(*option))
+        else {
+            return false;
+        };
+        let attached = &value[option.len()..];
+        if attached.is_empty() {
+            expecting_value = true;
+            continue;
+        }
+        if !super::stdin_filter_options::safe_filter_value(attached) {
+            return false;
+        }
+    }
+    !expecting_value
 }
 
-/// The `pr` options that carry no value.
-const PR_READING_FLAGS: &str = "adFfJmrtT";
+/// The `pr` options that carry no value, plus the digits of the column count
+/// `pr` spells as `-COLUMN`. `-s` is here rather than among the value flags
+/// because its separator is attached (`-s,`) and optional: reading it as a
+/// flag that takes the next word would eat the file that word names.
+const PR_READING_FLAGS: &str = "adFfJmrstT0123456789";
 
 /// `pr` pages what it reads for printing. `-h` carries the header text, `-l`
 /// and `-w` the page geometry, and `-o` the left margin — a count, not a file
-/// to write. A bare digit cluster is the column count.
+/// to write.
 pub(super) fn safe_pr_arguments<'a>(arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
     super::stdin_filter_options::screen_options(
         arguments,
         operands,
         PR_READING_FLAGS,
-        "hlows",
+        "hlow",
         &["show-control-chars", "omit-header", "merge", "join-lines"],
-        &["header", "length", "width", "indent", "separator-char"],
+        &["header", "length", "width", "indent"],
     )
 }
 
