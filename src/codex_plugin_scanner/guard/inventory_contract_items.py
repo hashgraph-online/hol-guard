@@ -2,22 +2,19 @@
 
 from __future__ import annotations
 
+import copy
+import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 from ..version import __version__
-from .inventory_contract_fingerprints import fingerprint_mapping, fingerprint_text
+from .inventory_contract_fingerprints import fingerprint_mapping
 from .inventory_contract_mcp import (
     _apply_tool_trust_attestation_metadata,
     _attestation_path_hash,
     _attestation_repository_id,
-    _capabilities_for_mcp_tool,
-    _first_present_value,
-    _mcp_tool_definitions,
-    _risk_level_for_capabilities,
-    _string_value,
 )
 from .inventory_contract_metadata import (
     _aibom_trust_metadata_module,
@@ -32,6 +29,9 @@ from .inventory_contract_models import (
 )
 from .inventory_contract_redaction import _redact_command_value, _safe_artifact_metadata, redact_url
 from .native_inventory_item_classification import InventoryItemClassificationUnavailableError
+
+# The metadata lists a server advertises its tool definitions under.
+_MCP_TOOL_DEFINITION_KEYS = ("tools", "tool_schemas", "toolSchemas")
 
 
 def _artifact_classification_entry(
@@ -243,52 +243,46 @@ def _mcp_tool_items_from_artifact(
     cisco_runs: tuple[object, ...] = (),
     trust_attestation_context: Mapping[str, object] | None = None,
 ) -> tuple[GuardAgentInventoryItem, ...]:
-    """Expand advertised MCP tool definitions into individually attributable inventory items."""
+    """Expand advertised MCP tool definitions into individually attributable inventory items.
+
+    The resident reads the definitions: which tools the server declares, what
+    each one can do, its risk level and the hashes that identify it. This keeps
+    the trust metadata, attestation and description steps it already delegates.
+    """
     artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
     if artifact_type != "mcp_server":
         return ()
     raw_metadata = getattr(artifact, "metadata", {})
     if not isinstance(raw_metadata, dict):
         return ()
-    raw_tools = _mcp_tool_definitions(raw_metadata)
-    if not raw_tools:
+    definitions = {key: raw_metadata[key] for key in _MCP_TOOL_DEFINITION_KEYS if raw_metadata.get(key)}
+    if not definitions:
         return ()
+    expansion = _mcp_tool_expansion(harness, server_item, definitions)
+    inherited_layers = expansion["inherited_layers"]
+    server_command = getattr(artifact, "command", None)
+    server_url = getattr(artifact, "url", None)
+    server_fields: dict[str, object] = {
+        "serverCommand": _redact_command_value(server_command, home_dir, workspace_dir)
+        if isinstance(server_command, str) and server_command
+        else None,
+        "serverUrl": redact_url(server_url) if isinstance(server_url, str) and server_url else None,
+        "serverTransport": getattr(artifact, "transport", None),
+    }
 
     items: list[GuardAgentInventoryItem] = []
-    raw_trust_layers = server_item.metadata.get("trustLayers")
-    inherited_layers: list[dict[str, object]] = []
-    if isinstance(raw_trust_layers, list):
-        for layer in raw_trust_layers:
-            if isinstance(layer, dict) and layer.get("layerType") == "cisco_mcp_scanner":
-                inherited_layers.append(dict(layer))
-    for raw_tool in raw_tools:
-        if not isinstance(raw_tool, dict):
-            continue
-        name = raw_tool.get("name")
-        if not isinstance(name, str) or not name.strip():
-            continue
-        display_name = _string_value(raw_tool.get("title")) or name
-        description = _string_value(raw_tool.get("description")) or ""
-        input_schema = _first_present_value(raw_tool, "inputSchema", "input_schema")
-        output_schema = _first_present_value(raw_tool, "outputSchema", "output_schema")
-        annotations = raw_tool.get("annotations")
-        safe_annotations = annotations if isinstance(annotations, dict) else {}
-        server_command = getattr(artifact, "command", None)
-        server_url = getattr(artifact, "url", None)
+    for tool in expansion["tools"]:
+        name = tool["name"]
+        display_name = tool["display_name"]
+        description = tool["description"]
+        tool_item_id = tool["item_id"]
+        semantic_hash = tool["semantic_hash"]
         metadata: dict[str, object] = {
             "serverItemId": server_item.item_id,
             "toolName": name,
             "title": display_name,
-            "serverCommand": _redact_command_value(server_command, home_dir, workspace_dir)
-            if isinstance(server_command, str) and server_command
-            else None,
-            "serverUrl": redact_url(server_url) if isinstance(server_url, str) and server_url else None,
-            "serverTransport": getattr(artifact, "transport", None),
-            "descriptionHash": fingerprint_text(description),
-            "inputSchemaHash": fingerprint_mapping(input_schema) if input_schema is not None else None,
-            "outputSchemaHash": fingerprint_mapping(output_schema) if output_schema is not None else None,
-            "annotations": safe_annotations,
-            "schemaPresent": input_schema is not None or output_schema is not None,
+            **server_fields,
+            **tool["fingerprints"],
         }
         tool_artifact = SimpleNamespace(
             artifact_id=f"{getattr(artifact, 'artifact_id', server_item.item_id)}:tool:{name}",
@@ -306,18 +300,6 @@ def _mcp_tool_items_from_artifact(
             metadata=metadata,
             workspace_dir=workspace_dir,
             cisco_runs=cisco_runs,
-        )
-        capabilities = _capabilities_for_mcp_tool(name, description, input_schema, safe_annotations)
-        tool_item_id = f"{server_item.item_id}:tool:{name}"
-        semantic_hash = fingerprint_mapping(
-            {
-                "server": server_item.item_id,
-                "name": name,
-                "description": description,
-                "inputSchema": input_schema,
-                "outputSchema": output_schema,
-                "annotations": safe_annotations,
-            }
         )
         tool_layers = metadata.get("trustLayers")
         tool_layer_dicts = (
@@ -345,32 +327,7 @@ def _mcp_tool_items_from_artifact(
         )
         has_tool_cisco_layer = any(layer.get("layerType") == "cisco_mcp_scanner" for layer in tool_layer_dicts)
         if inherited_layers and not has_tool_cisco_layer:
-            inherited_tool_layers: list[dict[str, object]] = []
-            for layer in inherited_layers:
-                raw_layer_metadata = layer.get("metadata")
-                layer_metadata = dict(raw_layer_metadata) if isinstance(raw_layer_metadata, dict) else {}
-                inherited_tool_layers.append(
-                    {
-                        **layer,
-                        "metadata": {
-                            **{
-                                key: value
-                                for key, value in layer_metadata.items()
-                                if key
-                                not in {
-                                    "attestation",
-                                    "attestationBindings",
-                                    "attestationRef",
-                                    "attestationStatus",
-                                    "attestationVerification",
-                                }
-                            },
-                            "attestationStatus": "unsigned",
-                            "inheritedFromServerItemId": server_item.item_id,
-                        },
-                    }
-                )
-            metadata["trustLayers"] = [*tool_layer_dicts, *inherited_tool_layers]
+            metadata["trustLayers"] = [*tool_layer_dicts, *copy.deepcopy(inherited_layers)]
         tool_description = _inventory_item_description_module().resolve_inventory_item_description(
             harness=harness,
             item_kind="mcp_tool",
@@ -380,20 +337,47 @@ def _mcp_tool_items_from_artifact(
             home_dir=home_dir,
             workspace_dir=workspace_dir,
         )
+        capabilities = cast("tuple[InventoryCapability, ...]", tuple(tool["capabilities"]))
         items.append(
             GuardAgentInventoryItem(
                 item_id=tool_item_id,
                 item_kind="mcp_tool",
                 display_name=display_name,
                 description=tool_description,
-                source_fingerprint=fingerprint_mapping(
-                    {"harness": harness, "server": server_item.item_id, "tool": name}
-                ),
+                source_fingerprint=tool["source_fingerprint"],
                 content_hash=semantic_hash,
                 capability_categories=capabilities,
-                risk_level=_risk_level_for_capabilities(capabilities),
+                risk_level=cast("InventorySeverity", tool["risk_level"]),
                 scanner_sources=("hol-detector",),
                 metadata=metadata,
             )
         )
     return tuple(items)
+
+
+def _mcp_tool_expansion(
+    harness: str,
+    server_item: GuardAgentInventoryItem,
+    definitions: Mapping[str, object],
+) -> dict[str, Any]:
+    """Ask the resident for the server's tool readings and the layers its tools inherit.
+
+    Both travel as JSON text so the resident reads the keys in the order the
+    server declared them. An unavailable resident fails the snapshot closed,
+    as an unclassified artifact does, rather than listing tools unread.
+    """
+    from .native_runner_authority import native_runner_authority
+
+    try:
+        answer = native_runner_authority(
+            "mcp_tool_inventory",
+            {
+                "harness": harness,
+                "server_item_id": server_item.item_id,
+                "definitions": json.dumps(definitions, default=str),
+                "trust_layers": json.dumps(server_item.metadata.get("trustLayers"), default=str),
+            },
+        )
+        return cast("dict[str, Any]", json.loads(answer["answer"]))
+    except (KeyError, TypeError, ValueError) as error:
+        raise InventoryItemClassificationUnavailableError from error
