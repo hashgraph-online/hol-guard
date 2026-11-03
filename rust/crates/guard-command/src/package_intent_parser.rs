@@ -33,6 +33,7 @@ use routine_local_runner::*;
 
 #[path = "package_intent_parser/npm_exec_config.rs"]
 mod npm_exec_config;
+pub(crate) use npm_exec_config::NPM_CONFIG_PACKAGE_UNIDENTIFIED;
 use npm_exec_config::*;
 
 #[path = "package_intent_parser/managers_js.rs"]
@@ -248,9 +249,10 @@ struct CommandSegment {
     context_hash: String,
     context_complete: bool,
     context_reason_code: Option<String>,
-    /// Whether the segment as written assigns npm's `package`, `userconfig`
-    /// or `globalconfig` setting, before the wrapper strip removes it.
-    assigns_npm_package_setting: bool,
+    /// Packages `npx` installs from npm configuration for this segment,
+    /// including assignments the wrapper strip removes before the runner
+    /// verdict. Absent for a segment that is not an `npx` launch.
+    npm_configured_packages: NpmConfiguredPackages,
 }
 
 // ---------------------------------------------------------------------------
@@ -403,17 +405,30 @@ pub fn parse_package_intent(
     // back for a second round trip.
     let mut intent = combine_package_intents(&intents)?;
     // npm's `package` setting makes `npx` install a package the command never
-    // names, so a pinned runner is routine only when npm's configuration and
-    // the command's own assignments add nothing.
-    intent.routine_local_runner = routine_local_runner(&intent)
-        && !npx_config_adds_package(
-            &intent,
-            segments
-                .iter()
-                .any(|segment| segment.assigns_npm_package_setting),
-            environment,
-            home_dir,
-        );
+    // names. A spec that was read becomes the review target. A spec that
+    // could not be read is not a review of the runner the command spelled.
+    if intent.package_manager == "npx" {
+        let configured = segments
+            .iter()
+            .fold(NpmConfiguredPackages::Absent, |acc, segment| {
+                merge_configured(acc, segment.npm_configured_packages.clone())
+            });
+        match configured {
+            NpmConfiguredPackages::Absent => {
+                intent.routine_local_runner = routine_local_runner(&intent);
+            }
+            NpmConfiguredPackages::Named(specs) => {
+                intent.targets = specs.iter().map(|spec| js_target(spec)).collect();
+                intent.routine_local_runner = false;
+            }
+            NpmConfiguredPackages::Unnamed => {
+                intent.targets = vec![unidentified_npm_package_target()];
+                intent.routine_local_runner = false;
+            }
+        }
+    } else {
+        intent.routine_local_runner = routine_local_runner(&intent);
+    }
     Some(intent)
 }
 

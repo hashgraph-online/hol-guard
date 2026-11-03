@@ -172,7 +172,14 @@ def test_protect_reviews_npx_when_npm_config_names_a_package(
     else:
         (tmp_path / "user.npmrc").write_text(setting, encoding="utf-8")
 
-    assert _protect(tmp_path, workspace, ["npx", "tsx", "scripts/generate-inventory.ts"]) is not None
+    payload = _protect(tmp_path, workspace, ["npx", "tsx", "scripts/generate-inventory.ts"])
+
+    assert payload is not None
+    body, _exit_code = payload
+    targets = body["targets"]
+    assert isinstance(targets, list)
+    assert [target["package_name"] for target in targets] == ["left-pad"]
+    assert body["verdict"]["action"] == "review"
 
 
 def test_protect_reviews_npx_when_the_command_itself_sets_npm_config(
@@ -190,7 +197,27 @@ def test_protect_reviews_npx_when_the_command_itself_sets_npm_config(
     script = ["npx", "tsx", "scripts/generate-inventory.ts"]
 
     assert _protect(tmp_path, workspace, ["env", "FOO=1", *script]) is None
-    assert _protect(tmp_path, workspace, ["env", "npm_config_package=left-pad", *script]) is not None
+    payload = _protect(tmp_path, workspace, ["env", "npm_config_package=left-pad", *script])
+    assert payload is not None
+    body, _exit_code = payload
+    targets = body["targets"]
+    assert isinstance(targets, list)
+    assert [target["package_name"] for target in targets] == ["left-pad"]
+
+
+def test_protect_blocks_when_the_configured_package_cannot_be_named(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _pinned_runner_workspace(tmp_path, monkeypatch, "tsx", locked="4.22.4")
+    (workspace / ".npmrc").mkdir()
+
+    payload = _protect(tmp_path, workspace, ["npx", "tsx", "scripts/generate-inventory.ts"])
+
+    assert payload is not None
+    body, exit_code = payload
+    assert body["verdict"]["action"] == "block"
+    assert exit_code != 0
 
 
 def test_protect_keeps_the_pinned_runner_exemption_beside_ordinary_npm_settings(

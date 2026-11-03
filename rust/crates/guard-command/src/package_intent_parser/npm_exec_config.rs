@@ -10,9 +10,9 @@
 //! bins first on `PATH`.
 //!
 //! The routine-runner verdict reads the command alone, so the parser asks this
-//! module before it lets that verdict stand for `npx`. Only setting names are
-//! read: a value is never returned or logged, and is looked at only when it
-//! names another configuration file to follow.
+//! module before it lets that verdict stand for `npx`. A value is the package
+//! the review names. It is not logged. A value that cannot be read blocks the
+//! launch instead of reviewing the runner the command spelled.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -20,6 +20,22 @@ use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 
 use super::*;
+
+/// Reason on a target whose npm `package` setting could not be named.
+/// Protect and package evaluation both treat it as a terminal block.
+pub(crate) const NPM_CONFIG_PACKAGE_UNIDENTIFIED: &str = "npm_config_package_unidentified";
+
+/// What `npm exec` installs from configuration.
+///
+/// `Named` specs replace the runner in the review. `Unnamed` means a package
+/// may be installed and its name could not be read. `Absent` means
+/// configuration adds no package.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum NpmConfiguredPackages {
+    Absent,
+    Named(Vec<String>),
+    Unnamed,
+}
 
 /// The largest `.npmrc` read; a larger one keeps the package review. The
 /// same bound `verified_npm` puts on the config files it reads, kept here
@@ -57,6 +73,7 @@ pub(super) fn npm_setting_name(name: &str) -> Option<String> {
 /// The parser strips those assignments before it reads the runner, so they
 /// are read here from the segment as written. Any token in the segment
 /// counts, which can only add a review.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn assigns_npm_package_setting(tokens: &[String]) -> bool {
     tokens.iter().any(|token| {
         token
@@ -68,6 +85,7 @@ pub(super) fn assigns_npm_package_setting(tokens: &[String]) -> bool {
 
 /// The setting a `.npmrc` line assigns, or `None` for a blank line, a
 /// comment or a section header.
+#[cfg_attr(not(test), allow(dead_code))]
 fn npmrc_setting_name(line: &str) -> Option<String> {
     let text = line.trim();
     if text.is_empty()
@@ -93,6 +111,7 @@ fn npmrc_setting_name(line: &str) -> Option<String> {
 /// So does a file that cannot be read or is larger than `NPMRC_READ_LIMIT`.
 /// npm expands `${VAR}` inside setting names, so a name built that way keeps
 /// the review too: it could expand to `package`.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn npmrc_sets_package(path: &Path) -> bool {
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
@@ -146,6 +165,7 @@ fn config_path(cwd: &Path, home: Option<&Path>, value: &str) -> Option<PathBuf> 
 /// Out of scope: the global `npmrc` under npm's install prefix when nothing
 /// names it, and npm's builtin `npmrc`. Both sit beside the npm install
 /// itself, and finding them means resolving which node and npm would run.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn npm_config_adds_package(
     environment: &BTreeMap<String, String>,
     cwd: &Path,
@@ -193,6 +213,7 @@ pub(super) fn npm_config_adds_package(
 /// inside the command itself. `environment` is the launch environment, or the
 /// process's own when absent, the same fallback the segment model uses;
 /// `home_dir` stands in for its `HOME` when that is missing.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn npx_config_adds_package(
     intent: &PackageIntent,
     segments_assign_setting: bool,
@@ -222,3 +243,11 @@ pub(super) fn npx_config_adds_package(
         npm_config_adds_package(environment, Path::new(&execution.effective_cwd), home)
     })
 }
+
+#[path = "npm_exec_config_identity.rs"]
+mod identity;
+#[cfg(test)]
+pub(super) use identity::npm_configured_exec_packages;
+pub(super) use identity::{
+    configured_packages_for_segment, merge_configured, unidentified_npm_package_target,
+};

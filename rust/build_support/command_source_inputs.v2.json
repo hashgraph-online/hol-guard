@@ -261,6 +261,7 @@
       "src/package_intent_parser/managers_other.rs",
       "src/package_intent_parser/managers_python.rs",
       "src/package_intent_parser/npm_exec_config.rs",
+      "src/package_intent_parser/npm_exec_config_identity.rs",
       "src/package_intent_parser/redaction_and_combination.rs",
       "src/package_intent_parser/routine_local_runner.rs",
       "src/package_intent_parser/routine_local_runner_lockfiles.rs",

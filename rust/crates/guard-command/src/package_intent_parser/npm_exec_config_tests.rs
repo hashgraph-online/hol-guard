@@ -218,6 +218,115 @@ fn ordinary_npm_settings_add_nothing() {
 }
 
 #[test]
+fn a_named_package_setting_is_the_spec_npm_installs() {
+    let (_dir, project, environment) = project();
+    npmrc(&project, "package[]=left-pad\npackage[]=cowsay\n");
+
+    assert_eq!(
+        npm_configured_exec_packages(
+            &environment,
+            &project,
+            Some(Path::new(&environment["HOME"]))
+        ),
+        NpmConfiguredPackages::Named(vec!["left-pad".to_owned(), "cowsay".to_owned()])
+    );
+}
+
+#[test]
+fn an_environment_package_wins_over_a_file() {
+    let (_dir, project, mut environment) = project();
+    npmrc(&project, "package=cowsay\n");
+    environment.insert("npm_config_package".to_owned(), "left-pad".to_owned());
+
+    assert_eq!(
+        npm_configured_exec_packages(
+            &environment,
+            &project,
+            Some(Path::new(&environment["HOME"]))
+        ),
+        NpmConfiguredPackages::Named(vec!["left-pad".to_owned()])
+    );
+}
+
+#[test]
+fn an_env_assignment_on_the_command_names_the_package() {
+    let (dir, project, environment) = project();
+    let home = PathBuf::from(&environment["HOME"]);
+    let intent = parse_package_intent(
+        "env npm_config_package=left-pad npx tsx script.ts",
+        Some(&project),
+        Some(&home),
+        None,
+        Some(&environment),
+    )
+    .expect("npx intent");
+
+    assert_eq!(intent.targets[0].package_name.as_deref(), Some("left-pad"));
+    assert!(intent
+        .targets
+        .iter()
+        .all(|target| target.source_invalid_reason.is_none()));
+    let _ = dir;
+}
+
+#[test]
+fn a_userconfig_path_expands_before_the_file_is_read() {
+    let (dir, _project, mut environment) = project();
+    let outside = dir.path().join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    let folder = dir.path().join("cfg");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("npmrc"), "package=left-pad\n").unwrap();
+    environment.insert("CFG_DIR".to_owned(), folder.to_string_lossy().into_owned());
+    environment.insert(
+        "npm_config_userconfig".to_owned(),
+        "${CFG_DIR}/npmrc".to_owned(),
+    );
+
+    assert_eq!(
+        npm_configured_exec_packages(
+            &environment,
+            &outside,
+            Some(Path::new(&environment["HOME"]))
+        ),
+        NpmConfiguredPackages::Named(vec!["left-pad".to_owned()])
+    );
+}
+
+#[test]
+fn an_unresolved_userconfig_path_leaves_the_package_unnamed() {
+    let (_dir, project, mut environment) = project();
+    environment.insert(
+        "npm_config_userconfig".to_owned(),
+        "${CFG_DIR}/npmrc".to_owned(),
+    );
+
+    assert_eq!(
+        npm_configured_exec_packages(
+            &environment,
+            &project,
+            Some(Path::new(&environment["HOME"]))
+        ),
+        NpmConfiguredPackages::Unnamed
+    );
+}
+
+#[test]
+fn a_directory_npmrc_leaves_the_package_unnamed() {
+    let (_dir, project, environment) = project();
+    fs::create_dir(project.join(".npmrc")).unwrap();
+
+    assert_eq!(
+        npm_configured_exec_packages(
+            &environment,
+            &project,
+            Some(Path::new(&environment["HOME"]))
+        ),
+        NpmConfiguredPackages::Unnamed
+    );
+}
+
+#[test]
 fn an_unknown_home_or_launch_folder_keeps_the_review() {
     let (_dir, project, _environment) = project();
     assert!(npm_config_adds_package(&BTreeMap::new(), &project, None));

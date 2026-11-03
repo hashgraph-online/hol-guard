@@ -91,6 +91,13 @@ pub(super) fn normalized_command_segments(
             &path_source,
             opaque_binding.as_deref(),
         );
+        let npm_configured_packages = configured_packages_for_segment(
+            &raw_segment,
+            &normalized_tokens,
+            inherited_environment,
+            effective_cwd.as_deref(),
+            home_dir,
+        );
         segments.push(CommandSegment {
             tokens: normalized_tokens,
             redacted_tokens,
@@ -101,7 +108,7 @@ pub(super) fn normalized_command_segments(
             context_hash,
             context_complete,
             context_reason_code: validation_reason.or_else(|| context_segment.reason_code.clone()),
-            assigns_npm_package_setting: assigns_npm_package_setting(&raw_segment),
+            npm_configured_packages,
         });
     }
     segments
