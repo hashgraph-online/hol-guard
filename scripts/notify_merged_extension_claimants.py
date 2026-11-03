@@ -24,6 +24,7 @@ try:
     from extension_claim_authority import ClaimProvenanceError as ClaimProvenanceError
     from extension_claim_authority import accepted_claimant_ids as verified_claimant_ids
     from extension_claim_authority import external_contribution
+    from extension_claim_notice_trial import trial_lines
 finally:
     sys.path.remove(_helper_dir)
 
@@ -594,27 +595,11 @@ def build_comment(items: list[NoticeItem], studio_url: str) -> str:
                 "and blog content, and use the verified publisher badge toolkit. "
                 "Submit launch content for review when ready; claiming alone does not publish it."
             ),
-            "",
-            "## Try it in your agent",
-            "",
-            (
-                "Community extensions stay off until enabled on a device. Once a HOL Guard release "
-                "includes yours, update with `hol-guard update` (or `pipx install hol-guard`), connect the "
-                "agent you use with `hol-guard install <harness>`, and turn the extension on:"
-            ),
-            "",
-            "```sh",
-            *(
-                f"hol-guard command controls apply {item.extension_id} --target-kind extension --state enabled"
-                for item in items
-            ),
-            "```",
-            "",
-            (
-                "Then run a destructive command and its safe counterpart through the agent and check the result "
-                "with `hol-guard receipts`. A setup guide written from that run gives readers accurate steps; "
-                "open a follow-up pull request if the agent experience differs from your fixture."
-            ),
+        ]
+    )
+    lines.extend(trial_lines(item.extension_id for item in items))
+    lines.extend(
+        [
             "",
             (
                 "Claim verification re-reads canonical `main` and checks the accepted numeric GitHub ID "

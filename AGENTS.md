@@ -26,7 +26,8 @@ an installed HOL Guard as well as the source checkout:
 
 After the extension ships in a release, follow
 [Test with an installed Guard](docs/guard/extensions/contributing.md#test-with-an-installed-guard)
-to turn it on and run its destructive and safe cases through the agent.
+to turn it on and run its destructive and safe cases through the agent. Use only disposable
+targets for the destructive case and never point it at real data or shared infrastructure.
 
 ## Repository review guidance
 

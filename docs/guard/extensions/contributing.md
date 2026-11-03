@@ -106,8 +106,10 @@ hol-guard command explain '<destructive command>'
 ```
 
 Guard asks for local approval before it applies the change; the dashboard's **Protection Center**
-offers the same setting. Then ask your agent to run the safe counterpart, which should proceed, and
-the destructive command, which should pause for review. Deny the review and confirm the outcome with
+offers the same setting. Point the destructive case at a disposable target, such as a scratch
+directory, a throwaway branch or resource, or a test account, never real data or shared
+infrastructure, and run it in an environment you can discard. Then ask your agent to run the safe
+counterpart, which should proceed, and the destructive command, which should pause for review. Deny the review and confirm the outcome with
 `hol-guard receipts`. If the agent experience differs from your fixture, open a follow-up pull
 request with the case that exposed it.
 

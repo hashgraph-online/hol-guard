@@ -43,6 +43,21 @@ def test_new_contribution_notifies_only_reviewed_numeric_ids() -> None:
     assert "hol-guard receipts" in body
     assert "trust score" not in body
     assert "installs" not in body
+    assert "disposable workspace" in body
+
+
+def test_trial_steps_list_only_command_extensions() -> None:
+    mixed = MODULE.build_comment(
+        [MODULE.NoticeItem("mcp.example", (("100", None),)), MODULE.NoticeItem("command.example", (("100", None),))],
+        MODULE.DEFAULT_STUDIO_URL,
+    )
+    assert "controls apply command.example" in mixed
+    assert "controls apply mcp.example" not in mixed
+
+    mcp_only = MODULE.build_comment([MODULE.NoticeItem("mcp.example", (("100", None),))], MODULE.DEFAULT_STUDIO_URL)
+    assert "## Try it in your agent" not in mcp_only
+    assert "controls apply" not in mcp_only
+    assert "Claim verification re-reads" in mcp_only
 
 
 def test_source_only_command_contribution_gets_mapping_guidance() -> None:
