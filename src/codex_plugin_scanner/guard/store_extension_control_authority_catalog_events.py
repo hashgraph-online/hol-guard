@@ -82,20 +82,17 @@ def recorded_writer_version(connection: sqlite3.Connection, catalog_digest: str)
 
 def migration_provenance(
     previous_writer_version: str | None,
-    *,
     catalog_digest: str,
     registry: CommandSafetyExtensionRegistry | None,
+    *,
     trigger: str,
     writer: bool,
     guard_home: Path,
 ) -> tuple[dict[str, Any], str | None]:
     """The migration's provenance, and the newer writer it hands the store back from.
 
-    Both answers come from the native runtime, so callers settle them before
-    opening a store transaction: a slow resident must never hold the write lock.
-    ``previous_writer_version`` is what ``recorded_writer_version`` read for the
-    catalog being replaced, and ``guard_home`` is the store's own home, whose
-    resident answers. A backfill names no writer and so judges no downgrade.
+    Both come from the store home's native runtime, so callers settle them
+    before a store transaction opens: a slow resident never holds the write lock.
     """
 
     provenance = catalog_provenance(
@@ -104,11 +101,8 @@ def migration_provenance(
     writer_version = provenance.get("writer_version")
     if previous_writer_version is None or not isinstance(writer_version, str):
         return provenance, None
-    return provenance, (
-        previous_writer_version
-        if is_downgrade(writer_version, previous_writer_version, guard_home=guard_home)
-        else None
-    )
+    downgrade = is_downgrade(writer_version, previous_writer_version, guard_home=guard_home)
+    return provenance, previous_writer_version if downgrade else None
 
 
 def build_catalog_migration_payload(
@@ -121,23 +115,9 @@ def build_catalog_migration_payload(
     retired_targets: tuple[str, ...],
     provenance: tuple[dict[str, Any], str | None],
 ) -> tuple[str, dict[str, Any] | None]:
-    """Build the migration event, and the regression record if there is one.
-
-    ``provenance`` is what ``migration_provenance`` answered before the
-    transaction opened.
-    """
+    """Build the migration event, and the regression record if there is one."""
 
     described, downgraded_from = provenance
-    regression = (
-        None
-        if downgraded_from is None
-        else {
-            "previous_writer_version": downgraded_from,
-            "writer_version": described["writer_version"],
-            "retired_target_count": len(retired_targets),
-            "retired_target_ids": list(retired_targets),
-        }
-    )
     payload: dict[str, Any] = {
         "previous_revision": previous_revision,
         "revision": revision,
@@ -149,8 +129,14 @@ def build_catalog_migration_payload(
         "retired_target_ids": list(retired_targets),
         "provenance": described,
     }
-    if regression is not None:
-        payload["regression"] = regression
+    regression: dict[str, Any] | None = None
+    if downgraded_from is not None:
+        regression = payload["regression"] = {
+            "previous_writer_version": downgraded_from,
+            "writer_version": described["writer_version"],
+            "retired_target_count": len(retired_targets),
+            "retired_target_ids": list(retired_targets),
+        }
     return _encode(payload), regression
 
 

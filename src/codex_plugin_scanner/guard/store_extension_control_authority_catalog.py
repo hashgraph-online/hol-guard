@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from pathlib import Path
 from typing import cast
 
 from .native_extension_control_authority import (
@@ -141,11 +140,11 @@ class ExtensionControlAuthorityCatalogMixin:
                 return
         provenance = migration_provenance(
             None,
-            catalog_digest=catalog_digest,
+            catalog_digest,
             registry=None,
             trigger="authority-read-backfill",
             writer=False,
-            guard_home=Path(self.guard_home),
+            guard_home=self.guard_home,
         )
         with self._connect() as connection:
             if already_recorded(connection, revision):
@@ -266,11 +265,11 @@ class ExtensionControlAuthorityCatalogMixin:
         self._write_and_verify_anchor(AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.ANCHORED), key=key)
         provenance = migration_provenance(
             previous_writer_version,
-            catalog_digest=catalog_digest,
-            registry=registry,
+            catalog_digest,
+            registry,
             trigger="catalog-migration",
             writer=True,
-            guard_home=Path(self.guard_home),
+            guard_home=self.guard_home,
         )
         with self._connect() as connection:
             if pack_activation is not None:

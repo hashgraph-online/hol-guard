@@ -312,8 +312,8 @@ def test_a_backfill_over_an_attributed_revision_does_not_hide_the_downgrade(
 
     provenance = migration_provenance(
         recorded_writer_version(connection, "catalog-x"),
-        catalog_digest="catalog-z",
-        registry=None,
+        "catalog-z",
+        None,
         trigger="catalog-migration",
         writer=True,
         guard_home=tmp_path,
