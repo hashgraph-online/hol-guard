@@ -20,31 +20,9 @@ from __future__ import annotations
 
 from typing import Final
 
-from .workspace_rule_findings import project_rule_findings, with_rule_coverage
-
 INSTRUCTION_DETECTOR: Final = "instruction_file_v1"
-
-
-def project_instruction_findings(result: object) -> list[dict[str, object]]:
-    """Return the well-formed findings of a native instruction file result."""
-
-    return project_rule_findings(INSTRUCTION_DETECTOR, result)
-
-
-def with_instruction_coverage(coverage: dict[str, object], result: object) -> dict[str, object]:
-    """Add the instruction file detector to a run's coverage.
-
-    A runtime without the check leaves the detector not run; a check that
-    could not read every instruction file, or a malformed reply, leaves it
-    incomplete. Both make the run partial. A worktree without instruction
-    files has no inputs.
-    """
-
-    return with_rule_coverage(INSTRUCTION_DETECTOR, coverage, result)
 
 
 __all__ = [
     "INSTRUCTION_DETECTOR",
-    "project_instruction_findings",
-    "with_instruction_coverage",
 ]

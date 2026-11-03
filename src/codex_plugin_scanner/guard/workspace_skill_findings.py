@@ -17,30 +17,9 @@ from __future__ import annotations
 
 from typing import Final
 
-from .workspace_rule_findings import project_rule_findings, with_rule_coverage
-
 SKILL_DETECTOR: Final = "skill_content_v1"
-
-
-def project_skill_findings(result: object) -> list[dict[str, object]]:
-    """Return the well-formed findings of a native skill result."""
-
-    return project_rule_findings(SKILL_DETECTOR, result)
-
-
-def with_skill_coverage(coverage: dict[str, object], result: object) -> dict[str, object]:
-    """Add the skill detector to a run's coverage.
-
-    A runtime without the scan leaves the detector not run; a scan that could
-    not read every skill, or a malformed reply, leaves it incomplete. Both make
-    the run partial. A worktree with no agent skills has no skill inputs.
-    """
-
-    return with_rule_coverage(SKILL_DETECTOR, coverage, result)
 
 
 __all__ = [
     "SKILL_DETECTOR",
-    "project_skill_findings",
-    "with_skill_coverage",
 ]
