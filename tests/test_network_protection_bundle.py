@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import json
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -369,3 +372,88 @@ def test_network_check_reports_the_saved_bundle_decision(tmp_path, monkeypatch: 
     code, invalid = check("not a url")
     assert code == 2
     assert invalid["valid_url"] is False
+
+
+def _unauthorized(request: object) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(
+        getattr(request, "full_url", ""),
+        401,
+        "Unauthorized",
+        {"Content-Type": "application/json"},  # type: ignore[arg-type]
+        io.BytesIO(b'{"error":"invalid_token"}'),
+    )
+
+
+def _fetch_after_lapse(
+    monkeypatch: pytest.MonkeyPatch,
+    response: dict[str, object],
+    *,
+    refused_tokens: set[str],
+) -> tuple[list[str], list[bool]]:
+    """Refuse the given tokens with a 401, the way Cloud answers a lapsed one."""
+
+    sent_tokens: list[str] = []
+    refreshes: list[bool] = []
+
+    def resolve(store: object, *, force_refresh: bool = False, **_: object) -> dict[str, object]:
+        refreshes.append(force_refresh)
+        return {
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "access_token": "fresh-token" if force_refresh else "lapsed-token",
+            "dpop_key_material": None,
+        }
+
+    def urlopen(*, request: urllib.request.Request, **_: object) -> dict[str, object]:
+        authorization = str(request.get_header("Authorization") or "")
+        token = authorization.rsplit(" ", 1)[-1]
+        sent_tokens.append(token)
+        if token in refused_tokens:
+            raise _unauthorized(request)
+        return response
+
+    monkeypatch.setattr(guard_runner, "_resolve_guard_sync_auth_context", resolve)
+    monkeypatch.setattr(guard_runner, "_urlopen_json_with_timeout_retry", urlopen)
+    return sent_tokens, refreshes
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_sync_refreshes_a_token_that_lapsed_during_a_long_sync(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, signing_key: RSAPrivateKey
+) -> None:
+    # Access tokens live five minutes, and a full sync reaches the network
+    # bundle minutes after resolving its auth context. Cloud then answers 401,
+    # and the bundle stayed stale until the next sync.
+    store = _connected_store(tmp_path, monkeypatch)
+    store.set_sync_payload(
+        "supply_chain_bundle_keyring",
+        {"workspace_id": WORKSPACE_ID, "keys": [_verification_key(signing_key)]},
+        "2026-10-21T00:00:00Z",
+    )
+    response = _response(signing_key, generated_at=datetime.now(timezone.utc) - timedelta(minutes=1))
+    sent_tokens, refreshes = _fetch_after_lapse(monkeypatch, response, refused_tokens={"lapsed-token"})
+
+    summary = guard_runner.sync_network_protection_bundle_best_effort(store)
+
+    assert summary is not None
+    assert summary["status"] == "synced"
+    assert sent_tokens == ["lapsed-token", "fresh-token"]
+    assert refreshes == [False, True]
+    saved = store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
+    assert saved["payloadHash"] == response["payloadHash"]
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_sync_reports_a_token_cloud_refuses_after_a_refresh(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, signing_key: RSAPrivateKey
+) -> None:
+    store = _connected_store(tmp_path, monkeypatch)
+    response = _response(signing_key, generated_at=datetime.now(timezone.utc) - timedelta(minutes=1))
+    sent_tokens, refreshes = _fetch_after_lapse(monkeypatch, response, refused_tokens={"lapsed-token", "fresh-token"})
+
+    failed = guard_runner.sync_network_protection_bundle_best_effort(store)
+
+    assert failed is not None
+    assert failed["status"] == "failed"
+    assert sent_tokens == ["lapsed-token", "fresh-token"]
+    assert refreshes == [False, True]
+    assert store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY) is None

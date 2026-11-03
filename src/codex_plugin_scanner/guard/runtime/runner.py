@@ -1230,6 +1230,10 @@ def _guard_cloud_http_error_details(error: urllib.error.HTTPError) -> tuple[str,
     return answer.message, answer.retryable
 
 
+class _GuardBundleUnauthorizedError(RuntimeError):
+    """Guard Cloud refused the bundle fetch's access token."""
+
+
 def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[str, object]:
     try:
         # Stop at what the verifier can be asked about. A larger response could
@@ -1247,10 +1251,12 @@ def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[
             if is_plan_restricted:
                 raise GuardSyncNotAvailableError(message) from error
             raise RuntimeError(message) from error
-        message, retryable = _guard_cloud_http_error_details(error)
-        if retryable:
-            raise GuardSyncNotAvailableError(message, retryable=True) from error
-        raise RuntimeError(message) from error
+        answer = _cloud_http_error(error)
+        if answer.retryable:
+            raise GuardSyncNotAvailableError(answer.message, retryable=True) from error
+        if error.code == 401 and answer.edge_block is None:
+            raise _GuardBundleUnauthorizedError(answer.message) from error
+        raise RuntimeError(answer.message) from error
     except OSError as error:
         if _is_guard_cloud_unreachable_error(error):
             raise GuardSyncNotAvailableError(_GUARD_CLOUD_UNREACHABLE_MESSAGE, retryable=True) from error
@@ -1549,14 +1555,24 @@ def sync_network_protection_bundle(
         existing_version = saved_bundle.get("bundleVersion")
         if isinstance(existing_version, str) and existing_version:
             cached_bundle_version = existing_version
-    request = _guard_sync_request(
-        resolved_auth_context,
-        request_url=bundle_url,
-        method="GET",
-        data=None,
-        extra_headers={"Accept-Encoding": "identity"},
-    )
-    payload = _fetch_supply_chain_bundle_payload(request)
+    try:
+        payload = _fetch_network_protection_bundle_payload(resolved_auth_context, bundle_url)
+    except _GuardBundleUnauthorizedError:
+        # Access tokens live five minutes, and a full sync reaches this step
+        # minutes after its auth context was resolved, so the token it was
+        # handed may have lapsed on the way. Refresh once; a second refusal
+        # stands. A refresh that finds the device signed out reports that here
+        # rather than reading as a workspace that was never connected.
+        try:
+            resolved_auth_context = _resolve_guard_sync_auth_context(store, force_refresh=True)
+        except GuardSyncNotConfiguredError as error:
+            raise RuntimeError(str(error)) from error
+        bundle_url = _sync.sync_url(
+            "network_protection_bundle",
+            str(resolved_auth_context["sync_url"]),
+            workspace_id=workspace_id,
+        )
+        payload = _fetch_network_protection_bundle_payload(resolved_auth_context, bundle_url)
     try:
         verified = native_verify_network_protection_response(
             payload,
@@ -1571,6 +1587,20 @@ def sync_network_protection_bundle(
     synced_at = _now()
     store.set_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY, verified, synced_at)
     return {**network_protection_status(verified), "status": "synced", "synced_at": synced_at}
+
+
+def _fetch_network_protection_bundle_payload(
+    auth_context: dict[str, object],
+    bundle_url: str,
+) -> dict[str, object]:
+    request = _guard_sync_request(
+        auth_context,
+        request_url=bundle_url,
+        method="GET",
+        data=None,
+        extra_headers={"Accept-Encoding": "identity"},
+    )
+    return _fetch_supply_chain_bundle_payload(request)
 
 
 def sync_network_protection_bundle_best_effort(
