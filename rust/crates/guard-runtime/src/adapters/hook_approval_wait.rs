@@ -1,6 +1,7 @@
 //! `runner_authority` kind `hook_approval_wait`: whether a Grok or Muse
 //! `PreToolUse` review waits for its approval inside the hook, and how the
-//! answer is rewritten once that wait settles (`wait_for_grok_live_approval`,
+//! answer is rewritten once that wait settles. `settle` returns the rewrite
+//! with the decision, so only one resident call runs after the wait (`wait_for_grok_live_approval`,
 //! `apply_grok_pretool_approval_wait`, `grok_resume_metadata_from_guard_payload`
 //! and `apply_muse_pretool_approval_wait` before they moved here).
 //!
@@ -51,7 +52,6 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     match map.get("op").and_then(Value::as_str) {
         Some("plan") if map.len() == 6 => plan(map, harness),
         Some("settle") if map.len() == 5 => settle(map, harness),
-        Some("rewrite") if map.len() == 3 => rewrite(map, harness),
         Some("resume_metadata") if harness == Harness::Grok && map.len() == 3 => {
             resume_metadata(map)
         }
@@ -151,9 +151,10 @@ fn muse_request_ids(response: &Map<String, Value>) -> Vec<String> {
     ids
 }
 
-/// The decision a finished wait reached and the fields the answer carries
-/// for it. Only a resolved wait whose every resolution is an explicit allow
-/// resumes the call; anything else resolved keeps it blocked.
+/// The decision a finished wait reached, the fields the answer carries for it
+/// and the edits that rewrite the answer to it. Only a resolved wait whose
+/// every resolution is an explicit allow resumes the call; anything else
+/// resolved keeps it blocked.
 fn settle(map: &Map<String, Value>, harness: Harness) -> KindResult {
     let resolved = py_truthy(map.get("resolved").ok_or(ERR_INVALID)?);
     let rows = map
@@ -166,7 +167,7 @@ fn settle(map: &Map<String, Value>, harness: Harness) -> KindResult {
         let hint = format!(
             "Approval is still pending in HOL Guard. Approve it, and {label} will resume this exact tool call."
         );
-        return Ok(json!({ "decision": null, "fields": [["review_hint", hint]] }));
+        return Ok(json!({ "decision": null, "fields": [["review_hint", hint]], "edits": null }));
     }
     let actions: Vec<Option<&Value>> = rows
         .iter()
@@ -179,46 +180,48 @@ fn settle(map: &Map<String, Value>, harness: Harness) -> KindResult {
             .all(|action| action.and_then(Value::as_str) == Some("allow"));
     if !allowed {
         let hint = format!("HOL Guard kept this {label} action blocked.");
-        return Ok(json!({ "decision": "block", "fields": [["review_hint", hint]] }));
+        return Ok(json!({
+            "decision": "block",
+            "fields": [["review_hint", hint]],
+            "edits": edits(harness, false),
+        }));
     }
     let hint = format!("Approval received in HOL Guard. {label} is resuming this action.");
     Ok(json!({
         "decision": "allow",
         "fields": [["browser_resolution_request_id", request_id], ["review_hint", hint]],
+        "edits": edits(harness, true),
     }))
 }
 
 /// The edits that turn a waited review into an allow or a deny. A Grok allow
 /// spells `permissionDecision: "allow"`; Muse rejects a bare allow, so its
 /// allow drops the decision instead.
-fn rewrite(map: &Map<String, Value>, harness: Harness) -> KindResult {
-    match text(map, "decision")? {
-        "allow" => {
-            let (hook_set, hook_drop) = match harness {
-                Harness::Grok => (
-                    json!([["permissionDecision", "allow"]]),
-                    json!(["permissionDecisionReason"]),
-                ),
-                Harness::Muse => (
-                    json!([]),
-                    json!(["permissionDecision", "permissionDecisionReason"]),
-                ),
-            };
-            Ok(json!({
-                "set": [["decision", "allow"], ["policy_action", "allow"]],
-                "drop": ["reason"],
-                "hook_set": hook_set,
-                "hook_drop": hook_drop,
-            }))
-        }
-        "block" => Ok(json!({
+fn edits(harness: Harness, allowed: bool) -> Value {
+    if !allowed {
+        return json!({
             "set": [["decision", "deny"], ["policy_action", "block"]],
             "drop": [],
             "hook_set": [["permissionDecision", "deny"]],
             "hook_drop": [],
-        })),
-        _ => Err(ERR_INVALID),
+        });
     }
+    let (hook_set, hook_drop) = match harness {
+        Harness::Grok => (
+            json!([["permissionDecision", "allow"]]),
+            json!(["permissionDecisionReason"]),
+        ),
+        Harness::Muse => (
+            json!([]),
+            json!(["permissionDecision", "permissionDecisionReason"]),
+        ),
+    };
+    json!({
+        "set": [["decision", "allow"], ["policy_action", "allow"]],
+        "drop": ["reason"],
+        "hook_set": hook_set,
+        "hook_drop": hook_drop,
+    })
 }
 
 /// `grok_resume_metadata_from_guard_payload`: where Grok polls for the

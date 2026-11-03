@@ -44,12 +44,23 @@ def wait_for_grok_live_approval(
     """
 
     del json_mode
+    return _wait(event_name, policy_action, response_payload, store, timeout_seconds, payload)[0]
+
+
+def _wait(
+    event_name: str,
+    policy_action: str,
+    response_payload: dict[str, object],
+    store: GuardStore,
+    timeout_seconds: int,
+    payload: Mapping[str, object] | None,
+) -> tuple[str | None, Mapping[str, object]]:
     answer = {**response_payload, "policy_action": policy_action}
     request_ids, wait_timeout_seconds = hook_approval_wait.plan_wait(
         "grok", event_name=event_name, response=answer, timeout_seconds=timeout_seconds
     )
     if not request_ids:
-        return None
+        return None, {}
     _mark_grok_operations_waiting(
         store,
         request_ids=request_ids,
@@ -63,9 +74,9 @@ def wait_for_grok_live_approval(
         timeout_seconds=wait_timeout_seconds,
     )
     response_payload["approval_wait"] = wait_result
-    decision, fields = hook_approval_wait.settle_wait("grok", wait_result=wait_result, request_id=request_ids[0])
+    decision, fields, edits = hook_approval_wait.settle_wait("grok", wait_result=wait_result, request_id=request_ids[0])
     response_payload.update(fields)
-    return decision
+    return decision, edits
 
 
 def _mark_grok_operations_waiting(
@@ -144,18 +155,8 @@ def apply_grok_pretool_approval_wait(
     """Wait on a native or daemon Grok review and rewrite allow/deny JSON."""
 
     policy_action = str(response.get("policy_action") or "")
-    decision = wait_for_grok_live_approval(
-        event_name=event_name,
-        policy_action=policy_action,
-        response_payload=response,
-        store=store,
-        timeout_seconds=timeout_seconds,
-        json_mode=False,
-        payload=response,
-    )
-    if decision is None:
-        return response
-    return hook_approval_wait.rewrite_answer("grok", decision, response) or response
+    _, edits = _wait(event_name, policy_action, response, store, timeout_seconds, response)
+    return hook_approval_wait.rewrite_answer(edits, response) or response
 
 
 def _now() -> str:

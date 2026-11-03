@@ -106,13 +106,10 @@ def apply_muse_pretool_approval_wait(
 
     wait_result = wait_for_approval_requests(store=store, request_ids=request_ids, timeout_seconds=seconds)
     response["approval_wait"] = wait_result
-    decision, fields = hook_approval_wait.settle_wait("muse", wait_result=wait_result, request_id=request_ids[0])
-    rewritten = hook_approval_wait.rewrite_answer("muse", decision, response) if decision is not None else None
-    if rewritten is None:
-        response.update(fields)
-        return response
-    rewritten.update(fields)
-    return rewritten
+    _, fields, edits = hook_approval_wait.settle_wait("muse", wait_result=wait_result, request_id=request_ids[0])
+    answer = hook_approval_wait.rewrite_answer(edits, response) or response
+    answer.update(fields)
+    return answer
 
 
 __all__ = [

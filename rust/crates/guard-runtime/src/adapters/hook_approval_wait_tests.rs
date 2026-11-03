@@ -163,6 +163,7 @@ fn an_unresolved_wait_stays_pending() {
                     "review_hint",
                     "Approval is still pending in HOL Guard. Approve it, and Grok will resume this exact tool call."
                 ]],
+                "edits": null,
             })
         );
     }
@@ -175,15 +176,19 @@ fn an_unresolved_wait_stays_pending() {
 
 #[test]
 fn only_explicit_allows_resume_the_call() {
-    let allowed = json!({
-        "decision": "allow",
-        "fields": [
-            ["browser_resolution_request_id", "req-1"],
-            ["review_hint", "Approval received in HOL Guard. Muse is resuming this action."],
-        ],
-    });
     let rows = json!([{ "action": "allow" }, null, { "action": "allow" }]);
-    assert_eq!(settle("muse", json!(true), rows), allowed);
+    let allowed = settle("muse", json!(true), rows);
+    assert_eq!(allowed["decision"], "allow");
+    assert_eq!(
+        allowed["fields"],
+        json!([
+            ["browser_resolution_request_id", "req-1"],
+            [
+                "review_hint",
+                "Approval received in HOL Guard. Muse is resuming this action."
+            ],
+        ])
+    );
     assert_eq!(
         settle("grok", json!([0]), json!([{ "action": "allow" }]))["decision"],
         "allow"
@@ -199,20 +204,25 @@ fn only_explicit_allows_resume_the_call() {
         json!([{ "action": "ALLOW" }]),
     ] {
         let answer = settle("grok", json!(true), rows.clone());
+        assert_eq!(answer["decision"], "block", "{rows}");
         assert_eq!(
-            answer,
-            json!({
-                "decision": "block",
-                "fields": [["review_hint", "HOL Guard kept this Grok action blocked."]],
-            }),
+            answer["fields"],
+            json!([["review_hint", "HOL Guard kept this Grok action blocked."]]),
             "{rows}"
         );
     }
 }
 
 fn rewrite(harness: &str, decision: &str) -> Value {
-    let request = json!({ "op": "rewrite", "harness": harness, "decision": decision });
-    dispatch(&request).unwrap()
+    let rows = json!([{ "action": decision }]);
+    let answer = settle(harness, json!(true), rows);
+    let expected = if decision == "allow" {
+        "allow"
+    } else {
+        "block"
+    };
+    assert_eq!(answer["decision"], expected);
+    answer["edits"].clone()
 }
 
 #[test]
@@ -246,8 +256,8 @@ fn a_block_keeps_the_reason() {
         "hook_set": [["permissionDecision", "deny"]],
         "hook_drop": [],
     });
-    assert_eq!(rewrite("grok", "block"), blocked);
-    assert_eq!(rewrite("muse", "block"), blocked);
+    assert_eq!(rewrite("grok", "deny"), blocked);
+    assert_eq!(rewrite("muse", "deny"), blocked);
 }
 
 fn resume(payload: Value) -> Value {
@@ -307,8 +317,7 @@ fn refuses_malformed_requests() {
         json!({ "op": "settle", "harness": "grok", "resolved": true, "rows": {}, "request_id": "r" }),
         json!({ "op": "settle", "harness": "grok", "rows": [], "request_id": "r", "extra": 1 }),
         json!({ "op": "settle", "harness": "grok", "resolved": true, "rows": [], "request_id": 1 }),
-        json!({ "op": "rewrite", "harness": "muse", "decision": "deny" }),
-        json!({ "op": "rewrite", "harness": "muse" }),
+        json!({ "op": "rewrite", "harness": "muse", "decision": "allow" }),
         json!({ "op": "resume_metadata", "harness": "muse", "payload": {} }),
         json!({ "op": "resume_metadata", "harness": "grok", "payload": null }),
         json!({ "op": "wait", "harness": "grok" }),
