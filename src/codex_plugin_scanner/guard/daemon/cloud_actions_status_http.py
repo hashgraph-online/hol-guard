@@ -1,8 +1,8 @@
-"""Dashboard route that asks Guard Cloud about the saved Cloud actions sign-ins.
+"""Dashboard route that asks Guard Cloud whether it offers Cloud actions to this computer.
 
 The check is a POST because it calls Guard Cloud and saves the answer. It
 re-validates the daemon token or dashboard session itself, so a stale route
-table can never open it, and a Cloud actions sign-in sent as a bearer or as
+table can never open it, and a Cloud actions access sent as a bearer or as
 `X-Guard-Token` is rejected like any other wrong token.
 """
 
@@ -13,6 +13,7 @@ from typing import Any
 from .cloud_actions_status import (
     CloudActionsCheckBusyError,
     CloudActionsCheckedRecentlyError,
+    CloudActionsNotPairedError,
     check_cloud_actions,
 )
 
@@ -28,7 +29,7 @@ def handle_cloud_actions_check(handler: Any, payload: dict[str, object]) -> None
         )
         return
     try:
-        result = check_cloud_actions(handler.server.store.guard_home)
+        result = check_cloud_actions(handler.server.store)
     except CloudActionsCheckedRecentlyError as error:
         handler._write_json(
             {
@@ -38,6 +39,13 @@ def handle_cloud_actions_check(handler: Any, payload: dict[str, object]) -> None
             },
             status=429,
             extra_headers={**_NO_STORE, "Retry-After": str(error.retry_after_seconds)},
+        )
+        return
+    except CloudActionsNotPairedError:
+        handler._write_json(
+            {"error": "not_paired", "message": "This computer is not connected to Guard Cloud. Run hol-guard connect."},
+            status=409,
+            extra_headers=_NO_STORE,
         )
         return
     except CloudActionsCheckBusyError:

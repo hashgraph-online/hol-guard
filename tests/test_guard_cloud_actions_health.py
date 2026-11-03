@@ -1,65 +1,134 @@
-"""`cloud-actions status` and `doctor` against a local stand-in for Guard Cloud.
+"""`cloud-actions status` and `doctor` from the `hol-guard connect` pairing.
 
-The stand-in's gateway answers like Guard Cloud's before actions land: 501
-once it accepts the sign-in, 401 when it does not. Each test bends one answer
-and checks that the reported state matches what Guard Cloud said, and that
-the saved access never reaches the output, a bundle or another server.
+A local stand-in plays Guard Cloud: the public Cloud actions description and
+the Cloud actions server. The pairing and the exchange are replaced (see
+cloud_actions_pairing_support); cloud_actions_access has its own tests. Each
+test bends one answer and checks the reported state matches what Guard Cloud
+said, and that the exchanged access never reaches the output, a bundle or
+another server.
 """
 
 from __future__ import annotations
 
+import http.server
 import json
 import os
 import socket
-import sys
+import threading
+from collections.abc import Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import pytest
-from urllib3.exceptions import ProtocolError
 
+from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli import cloud_actions_health
 from codex_plugin_scanner.guard.cli import commands_dispatch_cloud_actions_status as status_commands
-from codex_plugin_scanner.guard.cli.cloud_actions_host_config import bridge_entry
-from codex_plugin_scanner.guard.cli.cloud_actions_oauth import CLOUD_ACTIONS_SCOPES
-from codex_plugin_scanner.guard.cli.cloud_actions_session import CloudActionsSessionStore
-from tests.cloud_actions_login_support import (
-    WS,
-    Browser,
-    FakeCloud,
-    _cli,
-    _json_out,
-    _login,
-    browser_fixture,  # noqa: F401 -- shared fixture
-    cloud_fixture,  # noqa: F401 -- shared fixture
-    serve_fake_cloud,
-)
+from codex_plugin_scanner.guard.cli.cloud_actions_access import CloudActionsAccessError, CloudActionsPairing
+from tests.cloud_actions_pairing_support import WS, FakeCloud, pair
 
-CANARY = "codex-env-canary-7f3a"
+RESOURCE_PATH = "/api/guard/gateway/mcp"
+ACCESS = "exchanged-access"
+_NOT_YET = {"jsonrpc": "2.0", "id": "hol-guard-status", "error": {"code": -32601, "message": "Method not found"}}
 
 
-def _signed_in(cloud: FakeCloud, home: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    assert _login(cloud, home) == 0
-    capsys.readouterr()
+@dataclass
+class StandIn:
+    """Answers like Guard Cloud; tests change one field to bend one answer."""
+
+    origin: str = ""
+    description_status: int = 200
+    description: dict[str, Any] | None = None
+    ping_status: int = 501
+    ping_body: bytes = json.dumps(_NOT_YET).encode()
+    ping_headers: dict[str, str] = field(default_factory=dict)
+    gets: list[str] = field(default_factory=list)
+    posts: list[dict[str, str]] = field(default_factory=list)
+
+    def default_description(self) -> dict[str, Any]:
+        return {
+            "resource": f"{self.origin}{RESOURCE_PATH}",
+            "scopes_supported": ["gateway:discover", "gateway:invoke"],
+        }
+
+
+def _serve(state: StandIn) -> tuple[http.server.ThreadingHTTPServer, str]:
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, format: str, *args: object) -> None:  # noqa: A002 - base class signature
+            return
+
+        def _reply(self, status: int, raw: bytes, headers: dict[str, str] | None = None) -> None:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self) -> None:
+            state.gets.append(self.path)
+            if self.path != f"/.well-known/oauth-protected-resource{RESOURCE_PATH}":
+                self._reply(404, b"{}")
+                return
+            body = state.description if state.description is not None else state.default_description()
+            self._reply(state.description_status, json.dumps(body).encode())
+
+        def do_POST(self) -> None:
+            _ = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            state.posts.append({key.lower(): value for key, value in self.headers.items()} | {"path": self.path})
+            self._reply(state.ping_status, state.ping_body, state.ping_headers)
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{server.server_address[1]}"
+
+
+@pytest.fixture
+def cloud() -> Iterator[StandIn]:
+    state = StandIn()
+    server, state.origin = _serve(state)
+    try:
+        yield state
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.fixture
+def paired(cloud: StandIn, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeCloud:
+    monkeypatch.setenv("HOME", str(tmp_path / "user"))
+    return pair(monkeypatch, FakeCloud(origin=cloud.origin))
+
+
+def _run(*argv: str) -> int:
+    try:
+        return cli.main(["cloud-actions", *argv])
+    except SystemExit as exit_:
+        return int(exit_.code or 0)
+
+
+def _json(capsys: pytest.CaptureFixture[str]) -> tuple[dict[str, Any], str]:
+    text = capsys.readouterr().out
+    return json.loads(text), text
 
 
 def _status(home: Path, capsys: pytest.CaptureFixture[str], *extra: str) -> tuple[int, dict[str, Any], str]:
-    code = _cli("status", "--guard-home", str(home), "--json", *extra)
-    payload, text = _json_out(capsys)
+    code = _run("status", "--guard-home", str(home / "guard"), "--json", *extra)
+    payload, text = _json(capsys)
     return code, payload, text
+
+
+def _configure(home: Path, capsys: pytest.CaptureFixture[str], ai_tool: str = "codex") -> None:
+    assert _run("ai-tools", "configure", ai_tool, "--apply", "--home", str(home / "user"), "--json") == 0
+    capsys.readouterr()
 
 
 def _doctor(home: Path, capsys: pytest.CaptureFixture[str], *extra: str) -> tuple[int, dict[str, Any], str]:
-    code = _cli("doctor", "--guard-home", str(home), "--home", str(home / "user"), "--json", *extra)
-    payload, text = _json_out(capsys)
+    code = _run("doctor", "--home", str(home / "user"), "--json", *extra)
+    payload, text = _json(capsys)
     return code, payload, text
-
-
-def _edit_profile(home: Path, **changes: object) -> None:
-    path = home / "cloud-actions" / "profiles" / "default.json"
-    record = json.loads(path.read_text())
-    record.update(changes)
-    path.write_text(json.dumps(record))
 
 
 def _closed_port() -> int:
@@ -68,428 +137,332 @@ def _closed_port() -> int:
         return int(probe.getsockname()[1])
 
 
-def _no_credentials(cloud: FakeCloud, text: str) -> None:
-    assert cloud.issued
-    for value in cloud.issued:
-        assert value not in text
-
-
-def test_status_reports_that_guard_cloud_accepts_the_sign_in(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_status_reports_the_pairing_and_the_service(
+    cloud: StandIn, paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-
-    code, payload, text = _status(tmp_path, capsys)
-
-    assert code == 0
-    assert payload["state"] == "signed_in"
-    assert payload["service"]["state"] == "current"
-    assert payload["connection"] == {
-        "state": "connected",
-        "message": "Guard Cloud accepted this sign-in. Actions are not available on this Guard Cloud yet.",
-        "http_status": 501,
-        "actions": "not_available_yet",
-    }
-    assert payload["included_actions"] == "not_available_yet"
-    [request] = cloud.gateway_requests
-    assert request["authorization"] == f"Bearer {cloud.issued[0]}"
-    assert request["x-guard-workspace-id"] == WS
-    _no_credentials(cloud, text)
-
-
-def test_status_says_when_guard_cloud_no_longer_accepts_the_sign_in(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    cloud.rejected.update(cloud.issued)
-
-    code, payload, text = _status(tmp_path, capsys)
-    assert code == 0
-    # Saved locally as signed in; Guard Cloud's answer shows it is stale.
-    assert (payload["state"], payload["connection"]["state"]) == ("signed_in", "sign_in_again")
-    assert _cli("status", "--guard-home", str(tmp_path)) == 0
-    human = capsys.readouterr().out
-    assert "Guard Cloud no longer accepts this sign-in" in human
-    assert "Sign in again: `hol-guard cloud-actions login" in human
-    _no_credentials(cloud, text + human)
-
-
-@pytest.mark.parametrize(
-    ("gateway_status", "state"),
-    [(403, "not_permitted"), (400, "workspace_mismatch"), (500, "unexpected_answer")],
-)
-def test_status_names_each_refusal(
-    cloud: FakeCloud,
-    browser: Browser,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    gateway_status: int,
-    state: str,
-) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    cloud.overrides["gateway_status"] = gateway_status
-
-    _, payload, _ = _status(tmp_path, capsys)
-
-    assert payload["connection"]["state"] == state
-    assert payload["connection"]["http_status"] == gateway_status
-
-
-_PING_RESULT = b'{"jsonrpc": "2.0", "id": "hol-guard-status", "result": {}}'
-
-
-@pytest.mark.parametrize(
-    ("content_type", "payload", "state", "actions"),
-    [
-        ("application/json", _PING_RESULT, "connected", "available"),
-        ("text/event-stream", b"event: message\ndata: " + _PING_RESULT + b"\n\n", "connected", "available"),
-        ("text/html", b"<html><body>Sign in to the proxy</body></html>", "unexpected_answer", None),
-        ("application/json", b"", "unexpected_answer", None),
-        (
-            "application/json",
-            b'{"jsonrpc": "2.0", "id": "hol-guard-status", "error": {"code": -32000, "message": "down"}}',
-            "unexpected_answer",
-            None,
-        ),
-        ("application/json", b'{"jsonrpc": "2.0", "id": "other", "result": {}}', "unexpected_answer", None),
-        (
-            "application/json",
-            b'{"jsonrpc": "2.0", "id": ["hol-guard-status"], "error": {"code": -32601, "message": "no"}}',
-            "unexpected_answer",
-            None,
-        ),
-        ("application/json", b"[" * 60_000, "unexpected_answer", None),
-        ("application/json", b"1" * 5_000, "unexpected_answer", None),
-        ("text/event-stream", b"data: " + b"[" * 60_000 + b"\n\n", "unexpected_answer", None),
-    ],
-    ids=[
-        "json-ping-reply",
-        "event-stream-ping-reply",
-        "proxy-page",
-        "empty-body",
-        "rpc-error",
-        "other-id",
-        "unhashable-id",
-        "deep-nesting",
-        "overlong-integer",
-        "event-stream-deep-nesting",
-    ],
-)
-def test_status_trusts_a_success_status_only_with_a_ping_reply(
-    cloud: FakeCloud,
-    browser: Browser,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    content_type: str,
-    payload: bytes,
-    state: str,
-    actions: str | None,
-) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    cloud.overrides["gateway_raw"] = (200, content_type, payload, len(payload))
-
-    code, report, text = _status(tmp_path, capsys)
-
-    assert code == 0
-    assert (report["connection"]["state"], report["connection"].get("actions")) == (state, actions)
-    assert report["connection"]["http_status"] == 200
-    _no_credentials(cloud, text)
-
-
-def test_status_does_not_trust_a_reply_cut_off_mid_body(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    cloud.overrides["gateway_raw"] = (200, "application/json", _PING_RESULT[:12], len(_PING_RESULT))
-
-    code, report, _ = _status(tmp_path, capsys)
-
-    assert code == 0
-    assert report["connection"]["state"] == "unexpected_answer"
-
-
-class _DroppedReply:
-    status = 200
-
-    def __enter__(self) -> _DroppedReply:
-        return self
-
-    def __exit__(self, *exc: object) -> None:
-        return None
-
-    def read(self, amount: int) -> bytes:
-        raise ProtocolError("Connection broken: IncompleteRead(12 bytes read, 57 more expected)")
-
-
-def test_status_reports_a_reply_dropped_by_a_managed_proxy_as_offline(
-    cloud: FakeCloud,
-    browser: Browser,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    monkeypatch.setattr(cloud_actions_health, "managed_urlopen", lambda *args, **kwargs: _DroppedReply())
-
-    code, report, text = _status(tmp_path, capsys)
-
-    assert code == 0
-    assert (report["service"]["state"], report["connection"]["state"]) == ("offline", "offline")
-    _no_credentials(cloud, text)
-
-
-def test_status_offline_when_guard_cloud_cannot_be_reached(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    origin = f"http://127.0.0.1:{_closed_port()}"
-    _edit_profile(tmp_path, issuer=origin, resource=f"{origin}/api/guard/gateway/mcp")
-
     code, payload, _ = _status(tmp_path, capsys)
 
     assert code == 0
-    assert payload["state"] == "signed_in"
-    assert payload["service"]["state"] == "offline"
-    assert payload["connection"]["state"] == "offline"
+    assert payload["state"] == "paired"
+    assert (payload["cloud_url"], payload["cloud_workspace"]) == (cloud.origin, WS)
+    assert payload["cloud_actions"] == "unknown"
+    assert payload["service"] == {
+        "state": "current",
+        "message": "Guard Cloud offers Cloud actions.",
+        "http_status": 200,
+    }
+    assert payload["included_actions"] == "not_available_yet"
+    # Status asks only the public description: no access is exchanged or sent.
+    assert cloud.posts == [] and paired.exchanged == []
 
 
-def test_status_offline_flag_asks_nothing(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(("report", "state"), [({"status": "on"}, "on"), ({"status": "off"}, "off")])
+def test_status_says_what_connect_reported_about_cloud_actions(
+    paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str], report: dict[str, object], state: str
 ) -> None:
-    _signed_in(cloud, tmp_path, capsys)
+    paired.connect_report = report
 
     _, payload, _ = _status(tmp_path, capsys, "--offline")
 
-    assert payload["service"]["state"] == payload["connection"]["state"] == "not_checked"
-    assert cloud.gateway_requests == []
+    assert payload["cloud_actions"] == state
 
 
-def test_an_expired_sign_in_is_never_sent(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_status_offline_asks_nothing(
+    cloud: StandIn, paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    _edit_profile(tmp_path, expires_at="2020-01-01T00:00:00Z")
+    _, payload, _ = _status(tmp_path, capsys, "--offline")
+
+    assert payload["service"]["state"] == "not_checked"
+    assert cloud.gets == [] and cloud.posts == []
+
+
+def test_status_offline_reads_the_pairing_without_changing_guard_db(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import sqlite3
+
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir()
+    database = guard_home / "guard.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute("create table sync_state (state_key text primary key, payload_json text, updated_at text)")
+        pairing = {"issuer": "https://hol.org", "client_id": "client-1", "grant_id": "grant-1", "workspace_id": WS}
+        connection.executemany(
+            "insert into sync_state values (?, ?, '2026-11-03T00:00:00Z')",
+            [("oauth_local_credentials", json.dumps(pairing)), ("cloud_actions_connect:grant-1", '{"status": "on"}')],
+        )
+    connection.close()
+    before = sorted((path.name, path.read_bytes()) for path in guard_home.iterdir())
+
+    code, payload, _ = _status(tmp_path, capsys, "--offline")
+
+    assert (code, payload["state"], payload["cloud_actions"]) == (0, "paired", "on")
+    assert payload["cloud_url"] == "https://hol.org"
+    assert sorted((path.name, path.read_bytes()) for path in guard_home.iterdir()) == before
+
+
+@pytest.mark.parametrize(
+    ("change", "state"),
+    [
+        ({"description_status": 404}, "not_turned_on"),
+        ({"description_status": 503}, "unexpected_answer"),
+        (
+            {"description": {"resource": "https://elsewhere.example/api/guard/gateway/mcp", "scopes_supported": []}},
+            "changed",
+        ),
+        ({"description": {"resource": "SELF", "scopes_supported": ["gateway:discover"]}}, "changed"),
+        ({"description": {"resource": "SELF"}}, "unexpected_answer"),
+    ],
+    ids=["not-turned-on", "server-error", "other-address", "no-invoke", "no-scopes"],
+)
+def test_status_names_each_service_answer(
+    cloud: StandIn,
+    paired: FakeCloud,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    change: dict[str, Any],
+    state: str,
+) -> None:
+    for name, value in change.items():
+        if name == "description" and value.get("resource") == "SELF":
+            value = {**value, "resource": f"{cloud.origin}{RESOURCE_PATH}"}
+        setattr(cloud, name, value)
 
     _, payload, _ = _status(tmp_path, capsys)
 
-    assert (payload["state"], payload["connection"]["state"]) == ("expired", "sign_in_expired")
-    assert cloud.gateway_requests == []
+    assert payload["service"]["state"] == state
 
 
-def test_cloud_actions_turned_off_sends_no_sign_in(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_status_points_to_connect_when_the_service_changed(
+    cloud: StandIn, paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    cloud.overrides["disabled"] = True
+    cloud.description = {"resource": "https://elsewhere.example/api/guard/gateway/mcp", "scopes_supported": []}
 
-    _, payload, _ = _status(tmp_path, capsys)
+    assert _run("status", "--guard-home", str(tmp_path / "guard")) == 0
 
-    assert payload["service"]["state"] == payload["connection"]["state"] == "not_turned_on"
-    assert cloud.gateway_requests == []
+    human = capsys.readouterr().out
+    assert "Connect again: `hol-guard connect`." in human
+    assert "cloud-actions login" not in human
 
 
-def test_status_notices_when_guard_cloud_drops_a_permission(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_status_offline_when_guard_cloud_cannot_be_reached(
+    paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    cloud.overrides["protected_resource"] = {"scopes_supported": list(CLOUD_ACTIONS_SCOPES[1:])}
+    paired.origin = f"http://127.0.0.1:{_closed_port()}"
 
-    _, payload, _ = _status(tmp_path, capsys)
+    code, payload, _ = _status(tmp_path, capsys)
 
-    assert payload["service"]["state"] == "changed"
-    assert payload["service"]["scopes_missing"] == [CLOUD_ACTIONS_SCOPES[0]]
+    assert (code, payload["service"]["state"]) == (0, "offline")
 
 
-def test_the_sign_in_never_follows_a_redirect(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_status_before_connect_points_to_connect(
+    paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    with serve_fake_cloud() as elsewhere:
-        cloud.overrides["gateway_redirect"] = f"{elsewhere.origin}/api/guard/gateway/mcp"
+    paired.paired = False
 
-        _, payload, _ = _status(tmp_path, capsys)
+    assert _run("status", "--guard-home", str(tmp_path / "guard")) == 0
 
-        assert payload["connection"] == {
-            "state": "unexpected_answer",
-            "message": "Guard Cloud answered HTTP 307.",
-            "http_status": 307,
-        }
-        assert elsewhere.gateway_requests == []
+    assert "Run `hol-guard connect`." in capsys.readouterr().out
 
 
-def test_a_saved_address_on_another_site_is_never_sent_the_sign_in(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_status_names_the_workspace_to_connect_to(
+    paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    with serve_fake_cloud() as elsewhere:
-        _edit_profile(tmp_path, resource=f"{elsewhere.origin}/api/guard/gateway/mcp")
+    other = "0b6e7a52-9f1c-4d3e-8a2b-7c6d5e4f3a21"
 
-        _, payload, _ = _status(tmp_path, capsys)
+    _, payload, _ = _status(tmp_path, capsys, "--offline", "--cloud-workspace", other)
+    assert payload["workspace_matches"] is False
+    assert _run("status", "--guard-home", str(tmp_path / "guard"), "--offline", "--cloud-workspace", other) == 0
 
-        assert payload["connection"]["state"] == "profile_damaged"
-        assert elsewhere.gateway_requests == [] and cloud.gateway_requests == []
-
-
-def _ai_tool_settings(home: Path) -> None:
-    user = home / "user"
-    bridge = bridge_entry("codex", guard_home=home)
-    (user / ".codex").mkdir(parents=True)
-    (user / ".codex" / "config.toml").write_text(
-        f'[mcp_servers.docs]\ncommand = "docs"\nenv = {{ TOKEN = "{CANARY}" }}\n\n'
-        f"[mcp_servers.hol-guard-cloud]\ncommand = {json.dumps(bridge['command'])}\n"
-        f"args = {json.dumps(bridge['args'])}\n"
-    )
-    (user / ".cursor").mkdir()
-    (user / ".cursor" / "mcp.json").write_text(
-        json.dumps({"mcpServers": {"hol-guard-cloud": {"url": "https://old.example.test/mcp?key=x"}}})
-    )
+    assert f"run `hol-guard connect --cloud-workspace {other}`" in capsys.readouterr().out
 
 
-def test_doctor_reports_each_check_and_ai_tool(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_doctor_sends_one_ai_tools_access_and_reports_each_check(
+    cloud: StandIn, paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    _ai_tool_settings(tmp_path)
+    _configure(tmp_path, capsys)
+    paired.exchanged.clear()
 
     code, payload, text = _doctor(tmp_path, capsys)
 
-    assert code == 0
-    assert payload["result"] == "ok"
-    assert {name: check["state"] for name, check in payload["checks"].items()} == {
-        "sign_in": "signed_in",
-        "files": "not_checked" if os.name == "nt" else "private",
-        "service": "current",
-        "connection": "connected",
+    assert (code, payload["result"]) == (0, "ok")
+    checks = payload["checks"]
+    assert checks["connection"]["state"] == "paired"
+    assert checks["service"]["state"] == "current"
+    assert checks["access"] == {
+        "state": "connected",
+        "message": "Guard Cloud accepted this computer. Actions are not available on this Guard Cloud yet.",
+        "http_status": 501,
+        "actions": "not_available_yet",
+        "ai_tool": "codex",
     }
-    assert payload["ai_tools"] == {
-        "claude-code": {"state": "not_configured", "settings_file": "~/.claude.json"},
-        "codex": {"state": "configured", "settings_file": "~/.codex/config.toml"},
-        "cursor": {
-            "state": "points_elsewhere",
-            "settings_file": "~/.cursor/mcp.json",
-            "points_to": "https://old.example.test/mcp",
-        },
-    }
-    assert CANARY not in text
-    _no_credentials(cloud, text)
+    assert payload["ai_tools"]["codex"]["state"] == "configured"
+    assert payload["ai_tools"]["codex"]["settings_file"].startswith("~")
+    assert paired.exchanged == ["codex"]
+    [ping] = cloud.posts
+    assert ping["path"] == RESOURCE_PATH
+    assert ping["authorization"] == f"Bearer {ACCESS}"
+    assert ping["x-guard-workspace-id"] == WS
+    assert ACCESS not in text
 
 
-def test_doctor_bundle_holds_no_sign_in_settings_or_user_folder(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_doctor_without_a_configured_ai_tool_exchanges_nothing(
+    cloud: StandIn, paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    _ai_tool_settings(tmp_path)
-    bundle = tmp_path / "bundle.json"
+    code, payload, _ = _doctor(tmp_path, capsys)
+
+    assert (code, payload["result"]) == (0, "ok")
+    assert payload["checks"]["access"]["state"] == "not_checked"
+    assert paired.exchanged == [] and cloud.posts == []
+
+
+def test_doctor_asks_to_connect_again_when_guard_cloud_refuses_the_access(
+    cloud: StandIn, paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _configure(tmp_path, capsys)
+    cloud.ping_status, cloud.ping_body = 401, b"{}"
+
+    code, payload, _ = _doctor(tmp_path, capsys)
+    assert (code, payload["result"], payload["checks"]["access"]["state"]) == (4, "needs_connect", "reconnect")
+    assert _run("doctor", "--home", str(tmp_path / "user")) == 4
+
+    assert "Connect again: `hol-guard connect`." in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("reason", "result"),
+    [("cloud_actions_not_allowed", "needs_connect"), ("cloud_unreachable", "problems_found")],
+)
+def test_doctor_reports_a_refused_exchange_without_sending_anything(
+    cloud: StandIn, paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str], reason: str, result: str
+) -> None:
+    _configure(tmp_path, capsys)
+    paired.exchange_error = CloudActionsAccessError(reason, "Refused.")
+
+    _, payload, _ = _doctor(tmp_path, capsys)
+
+    assert payload["result"] == result
+    assert payload["checks"]["access"]["state"] == reason
+    assert cloud.posts == []
+
+
+@pytest.mark.parametrize(
+    ("ping_status", "state"),
+    [(403, "not_permitted"), (400, "workspace_mismatch"), (500, "unexpected_answer")],
+)
+def test_doctor_names_each_refusal(
+    cloud: StandIn,
+    paired: FakeCloud,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    ping_status: int,
+    state: str,
+) -> None:
+    _configure(tmp_path, capsys)
+    cloud.ping_status, cloud.ping_body = ping_status, b"{}"
+
+    code, payload, _ = _doctor(tmp_path, capsys)
+
+    assert (code, payload["result"]) == (3, "problems_found")
+    assert payload["checks"]["access"]["state"] == state
+
+
+def test_doctor_with_cloud_actions_off_exchanges_nothing(
+    cloud: StandIn, paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _configure(tmp_path, capsys)
+    paired.exchanged.clear()
+    paired.connect_report = {"status": "off"}
+
+    code, payload, _ = _doctor(tmp_path, capsys)
+
+    assert (code, payload["result"]) == (4, "needs_connect")
+    assert payload["checks"]["connection"]["state"] == "cloud_actions_off"
+    assert paired.exchanged == [] and cloud.posts == []
+
+
+def test_doctor_before_connect_reads_no_ai_tool_settings(
+    paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    paired.paired = False
+
+    code, payload, _ = _doctor(tmp_path, capsys)
+
+    assert (code, payload["result"]) == (4, "needs_connect")
+    assert {entry["state"] for entry in payload["ai_tools"].values()} == {"not_checked"}
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "state", "actions"),
+    [
+        (200, b'{"jsonrpc": "2.0", "id": "hol-guard-status", "result": {}}', "connected", "available"),
+        (200, json.dumps(_NOT_YET).encode(), "connected", "not_available_yet"),
+        (200, b"<html>proxy sign-in</html>", "unexpected_answer", None),
+        (200, b'{"jsonrpc": "2.0", "id": "other", "result": {}}', "unexpected_answer", None),
+        (501, b"{}", "unexpected_answer", None),
+    ],
+    ids=["ping-reply", "method-not-found", "proxy-page", "other-id", "bare-501"],
+)
+def test_a_success_status_counts_only_with_a_ping_reply(
+    cloud: StandIn, status: int, body: bytes, state: str, actions: str | None
+) -> None:
+    cloud.ping_status, cloud.ping_body = status, body
+
+    check = cloud_actions_health.check_connection(CloudActionsPairing(cloud.origin, WS), ACCESS, WS)
+
+    assert check.state == state
+    assert dict(check.details).get("actions") == actions
+
+
+def test_the_access_never_follows_a_redirect(cloud: StandIn) -> None:
+    elsewhere = StandIn(ping_status=200)
+    server, elsewhere.origin = _serve(elsewhere)
+    try:
+        cloud.ping_status, cloud.ping_body = 307, b"{}"
+        cloud.ping_headers = {"Location": f"{elsewhere.origin}{RESOURCE_PATH}"}
+
+        check = cloud_actions_health.check_connection(CloudActionsPairing(cloud.origin, WS), ACCESS, WS)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert check.state == "unexpected_answer"
+    assert elsewhere.posts == []
+
+
+def test_doctor_bundle_is_private_and_holds_no_access_or_user_folder(
+    paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _configure(tmp_path, capsys)
+    bundle = tmp_path / "doctor.json"
 
     code, payload, _ = _doctor(tmp_path, capsys, "--bundle", str(bundle))
 
     assert code == 0 and payload["bundle"] == str(bundle)
-    raw = bundle.read_text()
-    saved = json.loads(raw)
-    assert saved["schema"] == "guard.cloud-actions.diagnostics.v1"
-    assert saved["checks"]["connection"]["state"] == "connected"
-    if sys.platform != "win32":
-        assert bundle.stat().st_mode & 0o777 == 0o600
-    _no_credentials(cloud, raw)
-    assert CANARY not in raw
-    assert "secret_ref" not in raw and "cloud-actions-default-" not in raw
-    assert str(tmp_path / "user") not in raw
+    saved = bundle.read_text(encoding="utf-8")
+    assert json.loads(saved)["schema"] == status_commands.CLOUD_ACTIONS_DIAGNOSTICS_SCHEMA
+    assert ACCESS not in saved
+    assert str(tmp_path / "user") not in saved
+    if os.name != "nt":
+        assert bundle.stat().st_mode & 0o077 == 0
 
 
 def test_doctor_bundle_never_overwrites_a_file(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    bundle = tmp_path / "bundle.json"
-    bundle.write_text("keep")
+    bundle = tmp_path / "doctor.json"
+    bundle.write_text("kept", encoding="utf-8")
 
     code, payload, _ = _doctor(tmp_path, capsys, "--bundle", str(bundle))
 
     assert (code, payload["reason"]) == (1, "bundle_not_written")
-    assert bundle.read_text() == "keep"
+    assert bundle.read_text(encoding="utf-8") == "kept"
 
 
-def test_doctor_refuses_a_bundle_that_would_hold_the_sign_in(
-    cloud: FakeCloud,
-    browser: Browser,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    leaked = cloud.issued[1]
-    original = status_commands._profile_fields  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr(status_commands, "_profile_fields", lambda profile: {**original(profile), "note": leaked})
-    bundle = tmp_path / "bundle.json"
+def test_a_bundle_that_would_hold_the_access_is_not_written(tmp_path: Path) -> None:
+    bundle = tmp_path / "doctor.json"
 
-    code = _cli("doctor", "--guard-home", str(tmp_path), "--home", str(tmp_path / "user"), "--bundle", str(bundle))
+    reason = status_commands._write_bundle(bundle, {"echo": ACCESS}, ACCESS)  # pyright: ignore[reportPrivateUsage]
 
-    assert code == 1
-    assert "were not saved to a file" in capsys.readouterr().out
+    assert reason is not None
     assert not bundle.exists()
-
-
-def test_doctor_asks_for_a_new_sign_in_when_guard_cloud_refuses_it(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    cloud.rejected.update(cloud.issued)
-
-    code, payload, _ = _doctor(tmp_path, capsys)
-
-    assert (code, payload["result"]) == (4, "needs_sign_in")
-    assert payload["checks"]["connection"]["state"] == "sign_in_again"
-
-
-def test_doctor_reports_problems_when_offline(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    origin = f"http://127.0.0.1:{_closed_port()}"
-    _edit_profile(tmp_path, issuer=origin, resource=f"{origin}/api/guard/gateway/mcp")
-
-    code, payload, _ = _doctor(tmp_path, capsys)
-
-    assert (code, payload["result"]) == (3, "problems_found")
-    assert payload["checks"]["connection"]["state"] == "offline"
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
-def test_doctor_notices_saved_files_others_can_read(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    (tmp_path / "cloud-actions" / "profiles" / "default.json").chmod(0o644)
-
-    code, payload, _ = _doctor(tmp_path, capsys)
-
-    assert (code, payload["result"]) == (3, "problems_found")
-    assert payload["checks"]["files"] == {
-        "state": "too_open",
-        "message": "Other users on this computer can read or replace Cloud actions files.",
-        "paths": ["cloud-actions/profiles/default.json"],
-    }
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
-def test_doctor_notices_a_guard_home_others_can_write(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    _signed_in(cloud, tmp_path, capsys)
-    tmp_path.chmod(0o777)
-    try:
-        code, payload, _ = _doctor(tmp_path, capsys)
-    finally:
-        tmp_path.chmod(0o700)
-
-    assert (code, payload["result"]) == (3, "problems_found")
-    assert payload["checks"]["files"]["state"] == "too_open"
-    assert payload["checks"]["files"]["paths"] == ["."]
-
-
-def test_doctor_without_a_sign_in_reads_no_ai_tool_settings(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    code, payload, _ = _doctor(tmp_path, capsys)
-
-    assert (code, payload["result"]) == (4, "needs_sign_in")
-    assert {entry["state"] for entry in payload["ai_tools"].values()} == {"not_checked"}
-    assert CloudActionsSessionStore(tmp_path).load("default") is None

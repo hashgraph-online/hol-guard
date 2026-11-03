@@ -3,16 +3,17 @@ import { HiMiniArrowPath, HiMiniArrowTopRightOnSquare, HiMiniCloud, HiMiniShield
 
 import { checkCloudActionsNow, fetchCloudActionsStatus } from "./cloud-actions-api";
 import {
+  CLOUD_ACTIONS_CONNECT_COMMAND,
   cloudActionsCheckedCopy,
   cloudActionsCurrentState,
   cloudActionsLinks,
+  cloudActionsReconnectCommand,
   cloudActionsRetryAfterSeconds,
-  cloudActionsSignInCommand,
-  cloudActionsSignOutCommand,
+  cloudActionsSettingCopy,
   cloudActionsStateCopy,
   cloudActionsSummary,
   normalizeCloudActionsStatus,
-  type CloudActionsSignIn,
+  type CloudActionsConnection,
   type CloudActionsStatus,
   type CloudActionsTone,
 } from "./cloud-actions-model";
@@ -23,12 +24,8 @@ const TONE_CLASS: Record<CloudActionsTone, string> = {
   attention: "border-amber-200 bg-amber-50 text-amber-900",
 };
 
-const UNREADABLE = "Guard could not read the Cloud actions sign-ins on this computer. Update Guard, then reload this page.";
-
-function formatDate(value: string | null): string {
-  if (value === null) return "Not recorded";
-  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
+const UNREADABLE = "Guard could not read the Cloud actions status on this computer. Update Guard, then reload this page.";
+const HEADING_ID = "cloud-actions-connection";
 
 function CommandLine({ label, command }: { label: string; command: string }) {
   return (
@@ -41,10 +38,10 @@ function CommandLine({ label, command }: { label: string; command: string }) {
   );
 }
 
-function CloudPages({ signIn, headingId }: { signIn: CloudActionsSignIn; headingId: string }) {
-  const links = cloudActionsLinks(signIn);
+function CloudPages({ connection }: { connection: CloudActionsConnection }) {
+  const links = cloudActionsLinks(connection);
   if (links.length === 0) return null;
-  const pagesId = `${headingId}-pages`;
+  const pagesId = `${HEADING_ID}-pages`;
   return (
     <nav aria-labelledby={pagesId} className="mt-3">
       <h5 id={pagesId} className="text-xs text-slate-600">
@@ -71,60 +68,49 @@ function CloudPages({ signIn, headingId }: { signIn: CloudActionsSignIn; heading
   );
 }
 
-export function CloudActionsSignInRow({
-  signIn,
+export function CloudActionsConnectionCard({
+  connection,
   now,
   staleAfterSeconds,
 }: {
-  signIn: CloudActionsSignIn;
+  connection: CloudActionsConnection;
   now: Date;
   staleAfterSeconds: number;
 }) {
-  const state = cloudActionsCurrentState(signIn, now);
+  const state = cloudActionsCurrentState(connection);
   const copy = cloudActionsStateCopy(state);
-  const headingId = `cloud-actions-sign-in-${signIn.profile}`;
   return (
-    <li aria-labelledby={headingId} className="py-4">
+    <div aria-labelledby={HEADING_ID} className="rounded-xl border border-slate-100 bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h4 id={headingId} className="break-all text-sm font-semibold text-brand-dark">
-            {signIn.workspace ?? "Workspace not recorded"}
+          <h4 id={HEADING_ID} className="break-all text-sm font-semibold text-brand-dark">
+            {connection.workspace ?? "Workspace not reported"}
           </h4>
-          <p className="mt-0.5 break-all text-xs text-slate-600">
-            {signIn.site ?? "Guard Cloud site not recorded"}
-            {signIn.profile !== "default" ? ` · Sign-in name ${signIn.profile}` : null}
-          </p>
+          <p className="mt-0.5 break-all text-xs text-slate-600">{connection.site ?? "Guard Cloud site not recorded"}</p>
         </div>
         <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${TONE_CLASS[copy.tone]}`}>
           {copy.label}
         </span>
       </div>
-      <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+      <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
         <div className="min-w-0">
-          <dt className="text-xs text-slate-600">Signed in</dt>
-          <dd className="mt-0.5 text-brand-dark">{formatDate(signIn.signedInAt)}</dd>
-        </div>
-        <div className="min-w-0">
-          <dt className="text-xs text-slate-600">Sign-in ends</dt>
-          <dd className="mt-0.5 text-brand-dark">{formatDate(signIn.expiresAt)}</dd>
+          <dt className="text-xs text-slate-600">Cloud actions on this computer</dt>
+          <dd className="mt-0.5 text-brand-dark">{cloudActionsSettingCopy(connection.setting)}</dd>
         </div>
         <div className="min-w-0">
           <dt className="text-xs text-slate-600">Guard Cloud's answer</dt>
-          <dd className="mt-0.5 text-brand-dark">{cloudActionsCheckedCopy(signIn.check, now, staleAfterSeconds)}</dd>
+          <dd className="mt-0.5 text-brand-dark">{cloudActionsCheckedCopy(connection.check, now, staleAfterSeconds)}</dd>
         </div>
       </dl>
-      {signIn.check.message !== null && state === signIn.state ? (
-        <p className="mt-2 text-sm text-slate-600">{signIn.check.message}</p>
+      {connection.check.message !== null && state === connection.check.state ? (
+        <p className="mt-2 text-sm text-slate-600">{connection.check.message}</p>
       ) : null}
       {copy.remedy !== null ? <p className="mt-2 text-sm text-slate-700">{copy.remedy}</p> : null}
-      {state === "profile_damaged" ? (
-        <CommandLine label="Sign out of this sign-in" command={cloudActionsSignOutCommand(signIn)} />
+      {copy.reconnect ? (
+        <CommandLine label="To reconnect, run this in a terminal" command={cloudActionsReconnectCommand(connection)} />
       ) : null}
-      {copy.signInAgain ? (
-        <CommandLine label="Sign in again in a terminal" command={cloudActionsSignInCommand(signIn)} />
-      ) : null}
-      <CloudPages signIn={signIn} headingId={headingId} />
-    </li>
+      <CloudPages connection={connection} />
+    </div>
   );
 }
 
@@ -147,9 +133,9 @@ export function CloudActionsSettingsView({
   now: Date;
   onCheck: () => void;
 }) {
-  let summary = error ?? "Reading Cloud actions sign-ins...";
-  if (status !== null && !loading) summary = cloudActionsSummary(status, now);
-  const canCheck = status !== null && status.signIns.length > 0;
+  let summary = error ?? "Reading Cloud actions...";
+  if (status !== null && !loading) summary = cloudActionsSummary(status);
+  const connection = status?.connection ?? null;
   let checkLabel = "Check now";
   if (checking) checkLabel = "Checking...";
   else if (retryAfterSeconds > 0) checkLabel = `Check again in ${retryAfterSeconds}s`;
@@ -159,21 +145,21 @@ export function CloudActionsSettingsView({
         <HiMiniShieldCheck aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
         <p className="text-sm text-slate-700">
           Protection on this computer does not depend on Cloud actions. It keeps working when Guard Cloud is offline,
-          when a sign-in ends, and when included actions run out.
+          when this computer is disconnected, and when included actions run out.
         </p>
       </div>
       <section aria-labelledby="cloud-actions-heading" className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 id="cloud-actions-heading" className="flex items-center gap-2 text-sm font-semibold text-brand-dark">
-              <HiMiniCloud aria-hidden="true" className="h-5 w-5 shrink-0" /> Cloud actions sign-ins
+              <HiMiniCloud aria-hidden="true" className="h-5 w-5 shrink-0" /> Cloud actions
             </h3>
             <p className="mt-1 text-sm text-slate-600">
-              Each sign-in lets AI tools on this computer ask for actions in one Guard Cloud workspace. Guard Cloud
-              decides those actions; they never approve anything Guard pauses on this computer.
+              Cloud actions let AI tools on this computer ask for actions in the Guard Cloud workspace this computer is
+              connected to. Guard Cloud decides those actions; they never approve anything Guard pauses on this computer.
             </p>
           </div>
-          {canCheck ? (
+          {connection !== null ? (
             <button
               type="button"
               disabled={checking || loading || retryAfterSeconds > 0}
@@ -189,20 +175,11 @@ export function CloudActionsSettingsView({
           {summary}
         </p>
         {notice !== null ? <p role="alert" className="text-sm text-amber-900">{notice}</p> : null}
-        {status !== null && status.signIns.length > 0 ? (
-          <ul className="divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white px-4">
-            {status.signIns.map((signIn) => (
-              <CloudActionsSignInRow
-                key={signIn.profile}
-                signIn={signIn}
-                now={now}
-                staleAfterSeconds={status.staleAfterSeconds}
-              />
-            ))}
-          </ul>
+        {connection !== null ? (
+          <CloudActionsConnectionCard connection={connection} now={now} staleAfterSeconds={status?.staleAfterSeconds ?? 300} />
         ) : null}
-        {status !== null && status.signIns.length === 0 ? (
-          <CommandLine label="To sign in, run this in a terminal" command="hol-guard cloud-actions login --cloud-workspace <workspace-id>" />
+        {status !== null && connection === null ? (
+          <CommandLine label="To connect, run this in a terminal" command={CLOUD_ACTIONS_CONNECT_COMMAND} />
         ) : null}
         {status !== null ? (
           <p className="text-xs text-slate-600">

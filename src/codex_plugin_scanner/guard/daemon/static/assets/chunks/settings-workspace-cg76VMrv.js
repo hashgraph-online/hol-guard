@@ -2093,7 +2093,7 @@ const localSettingsNavGroups = [
   {
     key: "cloud",
     label: "Guard Cloud",
-    summary: "Sign-ins to Guard Cloud. Protection on this machine does not depend on them."
+    summary: "Guard Cloud features for this machine. Protection on this machine does not depend on them."
   }
 ];
 const ICON_PROTECTION = /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4", "aria-hidden": "true" });
@@ -2716,6 +2716,9 @@ async function checkCloudActionsNow() {
     const payload = await response.json().catch(() => null);
     const retry = isRecord$1(payload) ? payload["retry_after_seconds"] : null;
     const message2 = isRecord$1(payload) && typeof payload["message"] === "string" ? payload["message"] : null;
+    if (isRecord$1(payload) && payload["error"] === "not_paired") {
+      throw new Error(message2 ?? "This computer is not connected to Guard Cloud. Run hol-guard connect.");
+    }
     return {
       kind: "wait",
       retryAfterSeconds: typeof retry === "number" && Number.isFinite(retry) && retry > 0 ? Math.min(retry, 60) : 10,
@@ -2727,14 +2730,13 @@ async function checkCloudActionsNow() {
   }
   return { kind: "checked", payload: await response.json() };
 }
-const CLOUD_ACTIONS_STATUS_SCHEMA = "guard.cloud-actions.local-status.v1";
-const MAX_SIGN_INS = 32;
+const CLOUD_ACTIONS_STATUS_SCHEMA = "guard.cloud-actions.local-status.v2";
+const CLOUD_ACTIONS_CONNECT_COMMAND = "hol-guard connect";
 const MAX_MESSAGE_CHARS = 240;
-const PROFILE_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const WORKSPACE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SITE_PATTERN = /^[A-Za-z0-9.-]{1,253}(?::\d{1,5})?$/;
+const DEFAULT_CONNECT_URL = "https://hol.org/guard/connect";
 const CLOUD_URL_PATTERN = /^(?:https:\/\/[A-Za-z0-9.-]{1,253}|http:\/\/(?:127\.0\.0\.1|localhost|host\.docker\.internal))(?::\d{1,5})?$/;
-const DEFAULT_CLOUD_URL = "https://hol.org";
 const CLOUD_BASE_PATH_PATTERN = /^(?:\/[a-z0-9-]{1,32})?$/;
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -2750,16 +2752,16 @@ function moment(value) {
   const raw = text$1(value);
   return raw !== null && Number.isFinite(Date.parse(raw)) ? raw : null;
 }
+const NOT_CHECKED = { state: "not_checked", checkedAt: null, stale: false, message: null };
 function normalizeCheck(value) {
-  if (!isRecord(value) || value["state"] === "not_checked") {
-    return { checkedAt: null, stale: false, message: null };
-  }
+  if (!isRecord(value) || value["state"] === "not_checked" || !isRecord(value["service"])) return NOT_CHECKED;
+  const service = value["service"];
+  const state = text$1(service["state"], /^[a-z_]{1,40}$/);
+  if (state === null) return NOT_CHECKED;
   const checkedAt = moment(value["checked_at"]);
-  const connection = isRecord(value["connection"]) ? value["connection"] : null;
-  const service = isRecord(value["service"]) ? value["service"] : null;
-  const source = service && service["state"] !== "current" ? service : connection;
-  const message2 = text$1(source?.["message"]);
+  const message2 = text$1(service["message"]);
   return {
+    state,
     checkedAt,
     stale: checkedAt === null || value["stale"] === true,
     message: message2 === null ? null : message2.slice(0, MAX_MESSAGE_CHARS)
@@ -2770,121 +2772,94 @@ function cloudBase(value, cloudUrl) {
   if (base === null || cloudUrl === null || !base.startsWith(cloudUrl)) return null;
   return CLOUD_BASE_PATH_PATTERN.test(base.slice(cloudUrl.length)) ? base : null;
 }
-function normalizeSignIn(value) {
-  if (!isRecord(value)) return null;
-  const profile = text$1(value["profile"], PROFILE_PATTERN);
-  const state = text$1(value["state"], /^[a-z_]{1,40}$/);
-  if (profile === null || state === null) return null;
+function normalizeConnection(value) {
   const site = text$1(value["site"], SITE_PATTERN);
   const reported = text$1(value["cloud_url"], CLOUD_URL_PATTERN);
   const cloudUrl = reported !== null && site !== null && reported.replace(/^https?:\/\//, "") === site ? reported : null;
+  const setting = value["state"];
   return {
-    profile,
+    setting: setting === "on" || setting === "off" ? setting : "unknown",
     workspace: text$1(value["workspace"], WORKSPACE_PATTERN),
     site,
-    cloudUrl,
     cloudBaseUrl: cloudBase(value["cloud_base_url"], cloudUrl),
-    signedInAt: moment(value["signed_in_at"]),
-    expiresAt: moment(value["expires_at"]),
-    state,
     check: normalizeCheck(value["check"])
   };
 }
 function normalizeCloudActionsStatus(payload) {
   if (!isRecord(payload) || payload["schema"] !== CLOUD_ACTIONS_STATUS_SCHEMA) return null;
-  const rows = Array.isArray(payload["sign_ins"]) ? payload["sign_ins"].slice(0, MAX_SIGN_INS) : null;
-  if (rows === null) return null;
+  const connection = payload["connection"];
+  if (!isRecord(connection) || typeof connection["state"] !== "string") return null;
   const staleAfter = payload["stale_after_seconds"];
   return {
     generatedAt: moment(payload["generated_at"]),
     staleAfterSeconds: typeof staleAfter === "number" && Number.isFinite(staleAfter) && staleAfter > 0 ? staleAfter : 300,
     nextCheckAllowedAt: moment(payload["next_check_allowed_at"]),
-    signIns: rows.map(normalizeSignIn).filter((row2) => row2 !== null)
+    connection: connection["state"] === "not_paired" ? null : normalizeConnection(connection)
   };
 }
 const STATE_COPY = {
-  connected: { label: "Connected", tone: "good", remedy: null, signInAgain: false },
-  current: { label: "Connected", tone: "good", remedy: null, signInAgain: false },
+  current: { label: "Available", tone: "good", remedy: null, reconnect: false },
   not_checked: {
     label: "Not checked yet",
     tone: "neutral",
-    remedy: "Select Check now to ask Guard Cloud about this sign-in.",
-    signInAgain: false
+    remedy: "Select Check now to ask Guard Cloud about Cloud actions.",
+    reconnect: false
   },
   offline: {
     label: "Guard Cloud not reachable",
     tone: "neutral",
     remedy: "Check this computer's internet connection, then check again.",
-    signInAgain: false
+    reconnect: false
   },
   not_turned_on: {
     label: "Not turned on",
     tone: "neutral",
     remedy: "Cloud actions are not turned on for this Guard Cloud. Nothing on this computer needs changing.",
-    signInAgain: false
-  },
-  sign_in_expired: {
-    label: "Sign-in ended",
-    tone: "attention",
-    remedy: "This sign-in has ended. Sign in again to keep using Cloud actions.",
-    signInAgain: true
-  },
-  sign_in_again: {
-    label: "Sign in again",
-    tone: "attention",
-    remedy: "Guard Cloud no longer accepts this sign-in. Sign in again to keep using Cloud actions.",
-    signInAgain: true
+    reconnect: false
   },
   changed: {
-    label: "Sign in again",
+    label: "Reconnect",
     tone: "attention",
-    remedy: "Guard Cloud changed what Cloud actions offer. Sign in again to pick up the change.",
-    signInAgain: true
-  },
-  not_permitted: {
-    label: "No access",
-    tone: "attention",
-    remedy: "This member may not use Cloud actions in this workspace. Ask a workspace owner for access.",
-    signInAgain: false
-  },
-  workspace_mismatch: {
-    label: "Workspace refused",
-    tone: "attention",
-    remedy: "Guard Cloud refused this workspace. Sign in again with a workspace you belong to.",
-    signInAgain: true
+    remedy: "Guard Cloud changed what Cloud actions offer. Reconnect this computer to pick up the change.",
+    reconnect: true
   },
   unexpected_answer: {
     label: "Unexpected answer",
     tone: "neutral",
     remedy: "Guard Cloud gave an answer Guard did not expect. Check again in a few minutes.",
-    signInAgain: false
+    reconnect: false
   },
-  profile_damaged: {
-    label: "Needs repair",
-    tone: "attention",
-    remedy: "This saved sign-in cannot be read. Sign out of it, then sign in again.",
-    signInAgain: true
+  off: {
+    label: "Off on this computer",
+    tone: "neutral",
+    remedy: "Cloud actions were left off when this computer connected. To turn them on, reconnect and leave them on in the browser.",
+    reconnect: true
   }
 };
 const UNKNOWN_STATE = {
   label: "Unknown",
   tone: "neutral",
   remedy: "Check again, or update Guard if this keeps happening.",
-  signInAgain: false
+  reconnect: false
 };
 function cloudActionsStateCopy(state) {
   return STATE_COPY[state] ?? UNKNOWN_STATE;
 }
-function cloudActionsSignInCommand(signIn) {
-  let command = "hol-guard cloud-actions login";
-  if (signIn.cloudUrl === null) command += " --cloud-url <guard-cloud-address>";
-  else if (signIn.cloudUrl !== DEFAULT_CLOUD_URL) command += ` --cloud-url ${signIn.cloudUrl}`;
-  if (signIn.workspace !== null) command += ` --cloud-workspace ${signIn.workspace}`;
-  if (signIn.profile !== "default") command += ` --profile ${signIn.profile}`;
-  return command;
+function cloudActionsCurrentState(connection) {
+  return connection.setting === "off" ? "off" : connection.check.state;
 }
-function cloudActionsSignOutCommand(signIn) {
-  return signIn.profile === "default" ? "hol-guard cloud-actions logout" : `hol-guard cloud-actions logout --profile ${signIn.profile}`;
+function cloudActionsReconnectCommand(connection) {
+  if (connection === null) return CLOUD_ACTIONS_CONNECT_COMMAND;
+  const parts = [CLOUD_ACTIONS_CONNECT_COMMAND];
+  const connectUrl = connection.cloudBaseUrl === null ? null : `${connection.cloudBaseUrl}/guard/connect`;
+  if (connectUrl !== null && connectUrl !== DEFAULT_CONNECT_URL) parts.push(`--connect-url ${connectUrl}`);
+  if (connection.workspace !== null) parts.push(`--cloud-workspace ${connection.workspace}`);
+  return parts.join(" ");
+}
+function cloudActionsSettingCopy(setting) {
+  if (setting === "on") return "On";
+  if (setting === "off") return "Off";
+  return "Not reported by Guard Cloud";
 }
 function elapsedCopy(seconds) {
   if (seconds < 60) return "less than a minute ago";
@@ -2901,29 +2876,22 @@ function cloudActionsCheckedCopy(check, now, staleAfterSeconds) {
   const when = `Checked ${elapsedCopy(seconds)}`;
   return check.stale || seconds > staleAfterSeconds ? `${when}. This answer may be out of date.` : when;
 }
-function cloudActionsCurrentState(signIn, now) {
-  if (signIn.state === "profile_damaged" || signIn.expiresAt === null) return signIn.state;
-  return Date.parse(signIn.expiresAt) <= now.getTime() ? "sign_in_expired" : signIn.state;
-}
 function cloudActionsRetryAfterSeconds(nextCheckAllowedAt, now) {
   if (nextCheckAllowedAt === null) return 0;
   const seconds = Math.ceil((Date.parse(nextCheckAllowedAt) - now.getTime()) / 1e3);
   return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, 60) : 0;
 }
-function cloudActionsSummary(status, now) {
-  const count2 = status.signIns.length;
-  if (count2 === 0) return "No AI tool on this computer is signed in to Cloud actions.";
-  const needsAttention = status.signIns.filter(
-    (row2) => cloudActionsStateCopy(cloudActionsCurrentState(row2, now)).tone === "attention"
-  ).length;
-  const signedIn = count2 === 1 ? "1 sign-in" : `${count2} sign-ins`;
-  if (needsAttention === 0) return `${signedIn} on this computer.`;
-  return `${signedIn} on this computer. ${needsAttention === 1 ? "1 needs" : `${needsAttention} need`} attention.`;
+function cloudActionsSummary(status) {
+  const connection = status.connection;
+  if (connection === null) return "This computer is not connected to Guard Cloud.";
+  const where = connection.workspace === null ? "Connected to Guard Cloud." : `Connected to workspace ${connection.workspace}.`;
+  const copy = cloudActionsStateCopy(cloudActionsCurrentState(connection));
+  return copy.tone === "attention" ? `${where} Cloud actions need attention.` : where;
 }
-function cloudActionsLinks(signIn) {
-  if (signIn.workspace === null || signIn.cloudBaseUrl === null) return [];
-  const base = signIn.cloudBaseUrl;
-  const workspace = encodeURIComponent(signIn.workspace);
+function cloudActionsLinks(connection) {
+  if (connection.workspace === null || connection.cloudBaseUrl === null) return [];
+  const base = connection.cloudBaseUrl;
+  const workspace = encodeURIComponent(connection.workspace);
   return [
     {
       label: "Review requests",
@@ -2952,21 +2920,18 @@ const TONE_CLASS = {
   neutral: "border-slate-200 bg-slate-50 text-slate-700",
   attention: "border-amber-200 bg-amber-50 text-amber-900"
 };
-const UNREADABLE = "Guard could not read the Cloud actions sign-ins on this computer. Update Guard, then reload this page.";
-function formatDate(value) {
-  if (value === null) return "Not recorded";
-  return new Date(value).toLocaleString(void 0, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
+const UNREADABLE = "Guard could not read the Cloud actions status on this computer. Update Guard, then reload this page.";
+const HEADING_ID = "cloud-actions-connection";
 function CommandLine({ label: label2, command }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600", children: label2 }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block overflow-x-auto whitespace-pre rounded-md bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark", children: command })
   ] });
 }
-function CloudPages({ signIn, headingId }) {
-  const links = cloudActionsLinks(signIn);
+function CloudPages({ connection }) {
+  const links = cloudActionsLinks(connection);
   if (links.length === 0) return null;
-  const pagesId = `${headingId}-pages`;
+  const pagesId = `${HEADING_ID}-pages`;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-labelledby": pagesId, className: "mt-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { id: pagesId, className: "text-xs text-slate-600", children: "Open in Guard Cloud" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-1 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2", children: links.map((link) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "min-w-0", children: [
@@ -2988,44 +2953,35 @@ function CloudPages({ signIn, headingId }) {
     ] }, link.label)) })
   ] });
 }
-function CloudActionsSignInRow({
-  signIn,
+function CloudActionsConnectionCard({
+  connection,
   now,
   staleAfterSeconds
 }) {
-  const state = cloudActionsCurrentState(signIn, now);
+  const state = cloudActionsCurrentState(connection);
   const copy = cloudActionsStateCopy(state);
-  const headingId = `cloud-actions-sign-in-${signIn.profile}`;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { "aria-labelledby": headingId, className: "py-4", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "aria-labelledby": HEADING_ID, className: "rounded-xl border border-slate-100 bg-white p-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { id: headingId, className: "break-all text-sm font-semibold text-brand-dark", children: signIn.workspace ?? "Workspace not recorded" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 break-all text-xs text-slate-600", children: [
-          signIn.site ?? "Guard Cloud site not recorded",
-          signIn.profile !== "default" ? ` · Sign-in name ${signIn.profile}` : null
-        ] })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { id: HEADING_ID, className: "break-all text-sm font-semibold text-brand-dark", children: connection.workspace ?? "Workspace not reported" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 break-all text-xs text-slate-600", children: connection.site ?? "Guard Cloud site not recorded" })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${TONE_CLASS[copy.tone]}`, children: copy.label })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Signed in" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: formatDate(signIn.signedInAt) })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Sign-in ends" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: formatDate(signIn.expiresAt) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud actions on this computer" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: cloudActionsSettingCopy(connection.setting) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Guard Cloud's answer" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: cloudActionsCheckedCopy(signIn.check, now, staleAfterSeconds) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: cloudActionsCheckedCopy(connection.check, now, staleAfterSeconds) })
       ] })
     ] }),
-    signIn.check.message !== null && state === signIn.state ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: signIn.check.message }) : null,
+    connection.check.message !== null && state === connection.check.state ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: connection.check.message }) : null,
     copy.remedy !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-700", children: copy.remedy }) : null,
-    state === "profile_damaged" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "Sign out of this sign-in", command: cloudActionsSignOutCommand(signIn) }) : null,
-    copy.signInAgain ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "Sign in again in a terminal", command: cloudActionsSignInCommand(signIn) }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx(CloudPages, { signIn, headingId })
+    copy.reconnect ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "To reconnect, run this in a terminal", command: cloudActionsReconnectCommand(connection) }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CloudPages, { connection })
   ] });
 }
 function CloudActionsSettingsView({
@@ -3038,27 +2994,27 @@ function CloudActionsSettingsView({
   now,
   onCheck
 }) {
-  let summary2 = error ?? "Reading Cloud actions sign-ins...";
-  if (status !== null && !loading) summary2 = cloudActionsSummary(status, now);
-  const canCheck = status !== null && status.signIns.length > 0;
+  let summary2 = error ?? "Reading Cloud actions...";
+  if (status !== null && !loading) summary2 = cloudActionsSummary(status);
+  const connection = status?.connection ?? null;
   let checkLabel = "Check now";
   if (checking) checkLabel = "Checking...";
   else if (retryAfterSeconds > 0) checkLabel = `Check again in ${retryAfterSeconds}s`;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-xl border border-emerald-100 bg-emerald-50/60 p-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { "aria-hidden": "true", className: "mt-0.5 h-5 w-5 shrink-0 text-emerald-700" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-700", children: "Protection on this computer does not depend on Cloud actions. It keeps working when Guard Cloud is offline, when a sign-in ends, and when included actions run out." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-700", children: "Protection on this computer does not depend on Cloud actions. It keeps working when Guard Cloud is offline, when this computer is disconnected, and when included actions run out." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cloud-actions-heading", className: "space-y-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { id: "cloud-actions-heading", className: "flex items-center gap-2 text-sm font-semibold text-brand-dark", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { "aria-hidden": "true", className: "h-5 w-5 shrink-0" }),
-            " Cloud actions sign-ins"
+            " Cloud actions"
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: "Each sign-in lets AI tools on this computer ask for actions in one Guard Cloud workspace. Guard Cloud decides those actions; they never approve anything Guard pauses on this computer." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: "Cloud actions let AI tools on this computer ask for actions in the Guard Cloud workspace this computer is connected to. Guard Cloud decides those actions; they never approve anything Guard pauses on this computer." })
         ] }),
-        canCheck ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        connection !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
             type: "button",
@@ -3074,16 +3030,8 @@ function CloudActionsSettingsView({
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-700", children: summary2 }),
       notice2 !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "text-sm text-amber-900", children: notice2 }) : null,
-      status !== null && status.signIns.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white px-4", children: status.signIns.map((signIn) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        CloudActionsSignInRow,
-        {
-          signIn,
-          now,
-          staleAfterSeconds: status.staleAfterSeconds
-        },
-        signIn.profile
-      )) }) : null,
-      status !== null && status.signIns.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "To sign in, run this in a terminal", command: "hol-guard cloud-actions login --cloud-workspace <workspace-id>" }) : null,
+      connection !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(CloudActionsConnectionCard, { connection, now, staleAfterSeconds: status?.staleAfterSeconds ?? 300 }) : null,
+      status !== null && connection === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "To connect, run this in a terminal", command: CLOUD_ACTIONS_CONNECT_COMMAND }) : null,
       status !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600", children: "Included actions and connected accounts are kept in Guard Cloud, not on this computer. Guard Cloud asks you to sign in to your account in the browser before it shows them." }) : null
     ] })
   ] });

@@ -18,7 +18,7 @@ async function failureMessage(response: Response, fallback: string): Promise<str
   return typeof message === "string" && message.trim() ? message : fallback;
 }
 
-/** Saved Cloud actions sign-ins and their last check. The daemon answers without calling Guard Cloud. */
+/** This computer's Cloud actions connection and the last check. The daemon answers without calling Guard Cloud. */
 export async function fetchCloudActionsStatus(): Promise<unknown> {
   const response = await fetchWithGuardAuth(STATUS_PATH, { cache: "no-store" });
   if (!response.ok) {
@@ -27,7 +27,7 @@ export async function fetchCloudActionsStatus(): Promise<unknown> {
   return (await response.json()) as unknown;
 }
 
-/** Ask Guard Cloud about every saved sign-in. The daemon allows one check a minute. */
+/** Ask Guard Cloud whether it offers Cloud actions. The daemon allows one check a minute. */
 export async function checkCloudActionsNow(): Promise<CloudActionsCheckOutcome> {
   const response = await fetchWithGuardAuth(STATUS_PATH, {
     method: "POST",
@@ -39,6 +39,10 @@ export async function checkCloudActionsNow(): Promise<CloudActionsCheckOutcome> 
     const payload = (await response.json().catch(() => null)) as unknown;
     const retry = isRecord(payload) ? payload["retry_after_seconds"] : null;
     const message = isRecord(payload) && typeof payload["message"] === "string" ? payload["message"] : null;
+    // Waiting does not help a computer that is not connected; say so instead of counting down.
+    if (isRecord(payload) && payload["error"] === "not_paired") {
+      throw new Error(message ?? "This computer is not connected to Guard Cloud. Run hol-guard connect.");
+    }
     return {
       kind: "wait",
       retryAfterSeconds: typeof retry === "number" && Number.isFinite(retry) && retry > 0 ? Math.min(retry, 60) : 10,

@@ -44,7 +44,7 @@ export const localSettingsNavGroups: readonly LocalSettingsNavGroup[] = [
   {
     key: "cloud",
     label: "Guard Cloud",
-    summary: "Sign-ins to Guard Cloud. Protection on this machine does not depend on them.",
+    summary: "Guard Cloud features for this machine. Protection on this machine does not depend on them.",
   },
 ] as const;
 

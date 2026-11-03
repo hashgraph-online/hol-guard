@@ -27,14 +27,14 @@ fn cloud_actions_admits_only_the_local_reads() {
     }
 
     for command in [
-        // Asking Guard Cloud whether the saved sign-in still works.
+        // Asking Guard Cloud whether it offers Cloud actions.
         "cloud-actions status".to_owned(),
         "cloud-actions status --json".to_owned(),
         format!("cloud-actions status --offline --cloud-workspace {ID}"),
         "cloud-actions status --offline --profile work".to_owned(),
         "cloud-actions status --offline --guard-home /tmp/g".to_owned(),
         "cloud-actions status --offline --json --json".to_owned(),
-        // Changing saved sign-ins, settings or files.
+        // Removed commands, and ones that change saved settings or files.
         format!("cloud-actions login --cloud-workspace {ID}"),
         "cloud-actions logout".to_owned(),
         format!("cloud-actions workspace select {ID}"),
