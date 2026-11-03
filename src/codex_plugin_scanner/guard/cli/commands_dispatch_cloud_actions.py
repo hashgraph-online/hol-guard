@@ -2,12 +2,13 @@
 
 `login`, `logout`, `status` and `workspace select` act on a saved sign-in
 (profile). `ai-tools configure --dry-run` previews an AI tool's settings change
-without writing it. `accounts connect` opens the workspace's connected accounts
-in Guard Cloud, where the member signs in with the provider in the browser; no
-provider password or key passes through this command. The other commands still
-report, without touching this device or the network, that they cannot act yet,
-and echo the contexts they parsed so scripts and tests can see which one each
-value landed in.
+without writing it, `--apply` writes it and keeps a copy of the previous file,
+and `ai-tools restore` undoes that change. `accounts connect` opens the
+workspace's connected accounts in Guard Cloud, where the member signs in with
+the provider in the browser; no provider password or key passes through this
+command. The other commands still report, without touching this device or the
+network, that they cannot act yet, and echo the contexts they parsed so
+scripts and tests can see which one each value landed in.
 
 The commands_support facade imports this module on every hook, so the sign-in
 modules are imported only when a sign-in command runs.
@@ -25,7 +26,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 from ..browser_opener import open_browser_url
-from ..config import resolve_guard_home
+from ..config import resolve_guard_home, resolve_guard_home_for_user_home
 
 if TYPE_CHECKING:
     from .cloud_actions_host_config import HostConfigPlan
@@ -219,24 +220,147 @@ def _workspace_select(args: argparse.Namespace, store: CloudActionsSessionStore,
     )
 
 
-def _configure_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
-    from .cloud_actions_host_config import (
-        SUPPORTED_AI_TOOLS,
-        AiToolNotSupportedError,
-        gateway_url,
-        plan_host_config,
-        settings_path,
+def _ai_tool_settings_path(args: argparse.Namespace) -> Path | None:
+    from .cloud_actions_host_config import AiToolNotSupportedError, settings_path
+
+    explicit_home = getattr(args, "home", None)
+    home = Path(explicit_home).expanduser() if explicit_home else Path.home()
+    try:
+        return settings_path(args.ai_tool, home=home, environ=None if explicit_home else os.environ)
+    except AiToolNotSupportedError:
+        return None
+
+
+def _settings_guard_home(args: argparse.Namespace) -> Path:
+    """Where copies of changed settings are kept; under `--home` when it is given."""
+
+    override = getattr(args, "guard_home", None)
+    explicit_home = getattr(args, "home", None)
+    if override or not explicit_home:
+        return resolve_guard_home(override)
+    return resolve_guard_home_for_user_home(Path(explicit_home).expanduser())
+
+
+def _ai_tool_not_supported(args: argparse.Namespace, reply: _Reply) -> int:
+    from .cloud_actions_host_config import SUPPORTED_AI_TOOLS
+
+    supported = ", ".join(SUPPORTED_AI_TOOLS)
+    return reply(
+        CLOUD_ACTIONS_UNAVAILABLE_EXIT,
+        f"Cloud actions setup is not available for {args.ai_tool}. Supported AI tools: {supported}.",
+        state="unavailable",
+        reason="ai_tool_not_supported",
+        ai_tool=args.ai_tool,
+        supported_ai_tools=list(SUPPORTED_AI_TOOLS),
     )
+
+
+def _apply_ai_tool(args: argparse.Namespace, plan: HostConfigPlan, reply: _Reply) -> int:
+    from .cloud_actions_host_apply import HostConfigWriteError, apply_host_config
+
+    fields: dict[str, object] = {
+        "mode": "apply",
+        "ai_tool": plan.ai_tool,
+        "cloud_workspace": args.cloud_workspace,
+        "settings_file": str(plan.path),
+        "action": plan.action,
+        "server_name": plan.server_name,
+        "url": plan.url,
+    }
+    if not plan.changes:
+        refused = plan.action in {"conflict", "unreadable"}
+        text = _preview_text(plan, args.cloud_workspace).replace("Nothing was written.", "Nothing was changed.")
+        return reply(
+            CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT if refused else 0,
+            text,
+            state="refused" if refused else "unchanged",
+            configured_as=list(plan.configured_as),
+            problem=plan.problem,
+            written=False,
+            **fields,
+        )
+    guard_home = _settings_guard_home(args)
+    try:
+        _ = apply_host_config(plan, guard_home=guard_home)
+    except HostConfigWriteError as error:
+        return reply(
+            CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
+            str(error) if error.reason != "write_not_verified" else f"{error} The previous file was put back.",
+            state="failed",
+            reason=error.reason,
+            message=str(error),
+            written=False,
+            **fields,
+        )
+    if plan.action == "create_file":
+        done = f"Created {plan.path} with only the {plan.server_name} entry."
+    else:
+        verb = "Changed" if plan.action == "update" else "Added"
+        done = f"{verb} the {plan.server_name} entry in {plan.path}. Everything else in the file stays as it was."
+    lines = [
+        f"Set up {plan.display_name} for Cloud actions.",
+        done,
+        f"To undo, run `hol-guard cloud-actions ai-tools restore {plan.ai_tool}`.",
+        f"The AI tool signs in to Guard Cloud itself; choose workspace {args.cloud_workspace} when it asks. "
+        f"{plan.sign_in_hint}",
+    ]
+    return reply(0, "\n".join(lines), state="applied", previous_url=plan.previous_url, written=True, **fields)
+
+
+def _restore_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
+    from .cloud_actions_host_apply import HostConfigWriteError, restore_host_config
+
+    path = _ai_tool_settings_path(args)
+    if path is None:
+        return _ai_tool_not_supported(args, reply)
+    guard_home = _settings_guard_home(args)
+    fields: dict[str, object] = {"ai_tool": args.ai_tool, "settings_file": str(path)}
+    try:
+        restored = restore_host_config(args.ai_tool, path=path, guard_home=guard_home)
+    except HostConfigWriteError as error:
+        return reply(
+            CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
+            str(error),
+            state="failed",
+            reason=error.reason,
+            message=str(error),
+            restored=False,
+            **fields,
+        )
+    if restored is None:
+        return reply(
+            0,
+            f"Guard has no earlier copy of {path} to put back. Nothing was changed.",
+            state="nothing_to_restore",
+            restored=False,
+            **fields,
+        )
+    if restored.removed_file:
+        text = f"Removed {path}, which Guard had created."
+    elif restored.scope == "file":
+        text = f"Put back {path} as it was before Guard changed it."
+    else:
+        change = "Removed the" if restored.entry_removed else "Put back the earlier"
+        text = (
+            f"{change} hol-guard-cloud entry in {path}. The file changed after Guard wrote it, "
+            "so everything else in it stays as it is now."
+        )
+    return reply(
+        0,
+        text,
+        state="restored",
+        scope=restored.scope,
+        removed_file=restored.removed_file,
+        entry_removed=restored.entry_removed,
+        restored=True,
+        **fields,
+    )
+
+
+def _configure_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
+    from .cloud_actions_host_config import gateway_url, plan_host_config
     from .cloud_actions_oauth import CloudActionsSignInError, resolve_cloud_origin
 
-    if args.apply:
-        return reply(
-            CLOUD_ACTIONS_UNAVAILABLE_EXIT,
-            "Applying AI tool settings is not available yet. Nothing was changed. Use --dry-run to preview.",
-            state="unavailable",
-            reason="not_available_yet",
-            context=_context(args),
-        )
     try:
         url = gateway_url(resolve_cloud_origin(args.cloud_url))
     except CloudActionsSignInError as error:
@@ -247,21 +371,12 @@ def _configure_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
             reason=error.reason,
             message=str(error),
         )
-    explicit_home = getattr(args, "home", None)
-    home = Path(explicit_home).expanduser() if explicit_home else Path.home()
-    try:
-        path = settings_path(args.ai_tool, home=home, environ=None if explicit_home else os.environ)
-    except AiToolNotSupportedError:
-        supported = ", ".join(SUPPORTED_AI_TOOLS)
-        return reply(
-            CLOUD_ACTIONS_UNAVAILABLE_EXIT,
-            f"Cloud actions setup is not available for {args.ai_tool}. Supported AI tools: {supported}.",
-            state="unavailable",
-            reason="ai_tool_not_supported",
-            ai_tool=args.ai_tool,
-            supported_ai_tools=list(SUPPORTED_AI_TOOLS),
-        )
+    path = _ai_tool_settings_path(args)
+    if path is None:
+        return _ai_tool_not_supported(args, reply)
     plan = plan_host_config(args.ai_tool, path=path, url=url)
+    if args.apply:
+        return _apply_ai_tool(args, plan, reply)
     return reply(
         CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT if plan.action in {"conflict", "unreadable"} else 0,
         _preview_text(plan, args.cloud_workspace),
@@ -411,6 +526,8 @@ def _run_guard_cloud_actions_command(
         return _workspace_select(args, store, reply)
     if getattr(args, "cloud_actions_ai_tools_command", None) == "configure":
         return _configure_ai_tool(args, reply)
+    if getattr(args, "cloud_actions_ai_tools_command", None) == "restore":
+        return _restore_ai_tool(args, reply)
     if getattr(args, "cloud_actions_accounts_command", None) == "connect":
         return _connect_account(args, reply)
     return reply(

@@ -5,7 +5,8 @@ preview reads that file and works out the single entry Guard would add or
 change, named `hol-guard-cloud`. It renders the whole file as it would be
 written and checks that, apart from that entry, it reads back exactly as
 before: other servers, their environment values, Guard Local's own entries
-and every unrelated setting. Nothing is written here.
+and every unrelated setting. Nothing is written here; cloud_actions_host_apply
+writes the rendered file.
 
 The entry holds only the Guard Cloud address. The AI tool signs in to Guard
 Cloud itself and keeps its own credentials, so no credential is read, copied
@@ -192,6 +193,37 @@ def plan_host_config(ai_tool: str, *, path: Path, url: str) -> HostConfigPlan:
     return plan(action, other_entries=len(others), previous_url=previous_url, before=before, after=after)
 
 
+def render_entry_undo(ai_tool: str, *, current: bytes, written_url: str, prior: bytes | None) -> tuple[bytes, bool]:
+    """`current` with Guard's entry put back as it was in `prior`, or removed; True when removed.
+
+    Only Guard's entry changes, and only while it still points at
+    `written_url`; anything else edited since stays as it is. Raises
+    ValueError when that cannot be done exactly.
+    """
+
+    tool = _tool(ai_tool)
+    try:
+        entry = _servers(tool, _parse(tool, current)).get(CLOUD_ACTIONS_SERVER_NAME)
+        if entry is None or not _is_guard_entry(tool, entry) or entry.get("url") != written_url:
+            raise _UnreadableError(f"The {CLOUD_ACTIONS_SERVER_NAME} entry changed after Guard wrote it.")
+        prior_document = _parse(tool, prior) if prior is not None else {}
+        prior_entry = _servers(tool, prior_document).get(CLOUD_ACTIONS_SERVER_NAME)
+        if prior_entry is not None:
+            prior_url = prior_entry.get("url")
+            if not _is_guard_entry(tool, prior_entry) or not isinstance(prior_url, str):
+                raise _UnreadableError(f"The earlier {CLOUD_ACTIONS_SERVER_NAME} entry was not one Guard wrote.")
+            after = _render_edit(tool, current, prior_url)
+            _check_only_guard_entry_changed(tool, current, after, prior_url)
+            return after, False
+        after = _render_removal(tool, current, drop_empty_table=tool.table not in prior_document)
+        _check_guard_entry_removed(tool, current, after)
+        return after, True
+    except UnicodeEncodeError:
+        raise ValueError("The settings file holds text that cannot be written back unchanged.") from None
+    except _UnreadableError as error:
+        raise ValueError(str(error)) from None
+
+
 class _UnreadableError(Exception):
     pass
 
@@ -252,6 +284,15 @@ def _read_bounded(path: Path) -> bytes | None:
         return path.read_bytes()
     except OSError as error:
         raise _UnreadableError(f"{path} could not be read ({error.strerror or 'error'}).") from None
+
+
+def read_settings_bytes(path: Path) -> bytes | None:
+    """The file's bytes, or None when it does not exist; ValueError when it cannot be read safely."""
+
+    try:
+        return _read_bounded(path)
+    except _UnreadableError as error:
+        raise ValueError(str(error)) from None
 
 
 def _parse(tool: _AiTool, raw: bytes) -> dict[str, object]:
@@ -318,6 +359,12 @@ def _render_edit(tool: _AiTool, before: bytes, url: str) -> bytes:
         servers = {}
         document[tool.table] = servers
     servers[CLOUD_ACTIONS_SERVER_NAME] = _wanted_entry(tool, url)
+    return _dump_json_like(document, text)
+
+
+def _dump_json_like(document: object, text: str) -> bytes:
+    """Render `document` with the indentation and line endings of `text`."""
+
     newline = "\r\n" if "\r\n" in text else "\n"
     rendered = json.dumps(document, indent=_json_indent(text), ensure_ascii=False)
     if newline != "\n":
@@ -325,6 +372,18 @@ def _render_edit(tool: _AiTool, before: bytes, url: str) -> bytes:
     if text.endswith(("\n", "\r\n")) or not text.strip():
         rendered += newline
     return rendered.encode()
+
+
+def _render_removal(tool: _AiTool, current: bytes, *, drop_empty_table: bool) -> bytes:
+    text = current.decode("utf-8")
+    if tool.file_format == "toml":
+        return _render_toml_removal(tool, text, drop_empty_table=drop_empty_table).encode()
+    document = json.loads(text)
+    servers = document[tool.table]
+    del servers[CLOUD_ACTIONS_SERVER_NAME]
+    if not servers and drop_empty_table:
+        del document[tool.table]
+    return _dump_json_like(document, text)
 
 
 def _json_indent(text: str) -> int | str:
@@ -362,6 +421,33 @@ def _render_toml_edit(tool: _AiTool, text: str, url: str) -> str:
         raise _UnreadableError("Guard could not edit the settings file without changing other settings.") from None
 
 
+def _render_toml_removal(tool: _AiTool, text: str, *, drop_empty_table: bool) -> str:
+    import tomlkit
+    from tomlkit.exceptions import TOMLKitError
+
+    try:
+        document = tomlkit.parse(text)
+        servers = document[tool.table]
+        del servers[CLOUD_ACTIONS_SERVER_NAME]
+        if not servers and drop_empty_table:
+            del document[tool.table]
+        rendered = tomlkit.dumps(document)
+        if rendered.endswith("\n\n") and not text.endswith("\n\n"):
+            rendered = rendered.rstrip("\n") + "\n"
+        return rendered
+    except (TOMLKitError, TypeError, ValueError, AttributeError, KeyError):
+        raise _UnreadableError("Guard could not edit the settings file without changing other settings.") from None
+
+
+def _check_guard_entry_removed(tool: _AiTool, before: bytes, after: bytes) -> None:
+    old = _parse(tool, before)
+    new = _parse(tool, after)
+    if CLOUD_ACTIONS_SERVER_NAME in _servers(tool, new):
+        raise _UnreadableError("Guard could not edit the settings file without changing other settings.")
+    if _without_guard_entry(tool, new) != _without_guard_entry(tool, old):
+        raise _UnreadableError("Guard could not edit the settings file without changing other settings.")
+
+
 def _check_only_guard_entry_changed(tool: _AiTool, before: bytes, after: bytes, url: str) -> None:
     """Refuse a rendering that changes anything but Guard's own entry."""
 
@@ -393,5 +479,7 @@ __all__ = [
     "HostConfigPlan",
     "gateway_url",
     "plan_host_config",
+    "read_settings_bytes",
+    "render_entry_undo",
     "settings_path",
 ]
