@@ -92,6 +92,55 @@ pub(crate) fn admissible_paths(
         .collect()
 }
 
+/// CIGAR's picks, led by the walk's best file when CIGAR left it out. The walk
+/// ranks files by the prompt's exact words and quoted text, which a pick by
+/// meaning can miss, so the file the prompt names comes first with the chunk
+/// that says the most of them. A file whose chunks share none of them is not
+/// added.
+fn led_by(
+    mut picked: Vec<PickedExcerpt>,
+    lead: Option<&AdmittedFile>,
+    query: &str,
+) -> Vec<PickedExcerpt> {
+    let Some(file) = lead else {
+        return picked;
+    };
+    if picked
+        .iter()
+        .any(|excerpt| excerpt.path == file.relative_path)
+    {
+        return picked;
+    }
+    let words = crate::context_assistance_prompt_files::terms(query);
+    let quoted = crate::context_assistance_prompt_files::phrases(query);
+    let said = |text: &str| {
+        let text = text.to_lowercase();
+        let count = |list: &[String]| list.iter().filter(|w| text.contains(w.as_str())).count();
+        count(&words) + 2 * count(&quoted)
+    };
+    let best = file
+        .documents
+        .iter()
+        .map(|doc| (said(&doc.text), doc))
+        .filter(|(score, _)| *score > 0)
+        .max_by_key(|(score, doc)| (*score, std::cmp::Reverse(doc.start_line)));
+    let Some((_, doc)) = best else {
+        return picked;
+    };
+    let start = u64::from(doc.start_line);
+    let lines = doc.text.lines().count().max(1) as u64;
+    picked.insert(
+        0,
+        PickedExcerpt {
+            path: file.relative_path.clone(),
+            start_line: start,
+            end_line: start + lines - 1,
+            text: doc.text.clone(),
+        },
+    );
+    picked
+}
+
 /// Reads the wanted files that are not in the scope yet. A file the source
 /// screen refuses (a secret, a key, binary text) is simply left out.
 fn admit(
@@ -168,7 +217,15 @@ impl Engine {
                 None => return Ok(None),
             },
         };
-        self.pick(runtime, &id, &query).map(Some)
+        let picked = self.pick(runtime, &id, &query)?;
+        let lead = wanted.first().and_then(|first| {
+            let scope = self.scopes.get(&id)?;
+            scope
+                .sources
+                .values()
+                .find(|file| &file.relative_path == first)
+        });
+        Ok(Some(led_by(picked, lead, &query)))
     }
 
     /// Before a hand-picked grant: drop the automatic scope for the same
@@ -411,3 +468,7 @@ impl Engine {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "context_assistance_engine_lead_tests.rs"]
+mod lead_tests;
