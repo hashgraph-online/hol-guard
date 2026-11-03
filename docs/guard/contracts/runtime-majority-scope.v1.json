@@ -792,6 +792,7 @@
           "src/codex_plugin_scanner/guard/adapters/devin.py",
           "src/codex_plugin_scanner/guard/adapters/devin_config.py",
           "src/codex_plugin_scanner/guard/adapters/gemini.py",
+          "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py",
           "src/codex_plugin_scanner/guard/adapters/hermes.py",
           "src/codex_plugin_scanner/guard/adapters/hermes_state_paths.py",
           "src/codex_plugin_scanner/guard/adapters/kimi.py",
@@ -1424,8 +1425,7 @@
           "DevinHarnessAdapter.prepare_install",
           "DevinHarnessAdapter.install",
           "DevinHarnessAdapter.uninstall",
-          "DevinHarnessAdapter._hook_command_parts",
-          "DevinHarnessAdapter._sync_managed_hook_groups"
+          "DevinHarnessAdapter._hook_command_parts"
         ],
         "entry_points": [],
         "reason": "Devin adapter hook install and uninstall and the hook command builder used only to write the install.",
@@ -1456,13 +1456,12 @@
           "MuseHarnessAdapter.uninstall",
           "MuseHarnessAdapter._hook_command_parts",
           "MuseHarnessAdapter._managed_state_paths",
-          "MuseHarnessAdapter._sync_managed_hook_groups",
           "_adapter_result",
           "_write_json_atomic"
         ],
         "entry_points": [],
-        "reason": "Muse adapter hook install and uninstall, the managed hook group writer they share, and the settings helpers used only to write or remove that install.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_command_parts, _managed_state_paths, _sync_managed_hook_groups, _adapter_result and _write_json_atomic are called only from those three methods. _bridge_timeout_seconds and the approval wait it reads stay in scope: the bounded hook refresh recomputes that timeout on every update. detect and policy_path stay in scope with the helpers they call. The report validates that no retained symbol or in-scope module references the excluded names."
+        "reason": "Muse adapter hook install and uninstall and the settings helpers used only to write or remove that install.",
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_command_parts, _managed_state_paths, _adapter_result and _write_json_atomic are called only from those three methods. _bridge_timeout_seconds and the approval wait it reads stay in scope: the bounded hook refresh recomputes that timeout on every update. detect and policy_path stay in scope with the helpers they call. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "approval-continuation-replay",

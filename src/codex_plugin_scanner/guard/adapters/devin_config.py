@@ -23,35 +23,6 @@ from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_
 DEVIN_DIR = ".devin"
 DEVIN_CONFIG_FILE = "config.json"
 
-GUARD_MANAGED_MARKER = "HOL_GUARD_MANAGED_DEVIN"
-
-# Tool names Devin surfaces through hooks: file read/write/edit and notebook
-# tools, search tools, exec, webfetch, and MCP tools, which arrive either as
-# the ``mcp_call_tool`` dispatcher or as direct ``mcp__<server>__<tool>``
-# names, so both shapes are matched. Interactive shell helpers
-# (write_to_process, get_output, kill_shell) are intentionally not matched:
-# their payloads carry no new command for Guard to review.
-DEVIN_GUARD_TOOL_MATCHER = (
-    "^(exec|read|write|edit|apply_patch|notebook_read|notebook_edit|grep|glob|webfetch|mcp_call_tool|mcp__.*)$"
-)
-
-
-def is_guard_managed_hook_command(command: object) -> bool:
-    """Return True when a hook command string is owned by HOL Guard for Devin."""
-
-    if not isinstance(command, str):
-        return False
-    # Windows cmdline quoting escapes inner quotes as \"; normalize so the
-    # harness marker in the bounded-bridge config matches on every platform.
-    normalized = command.replace('\\"', '"')
-    return (
-        GUARD_MANAGED_MARKER in command
-        or ("codex_plugin_scanner.cli" in command and "'guard', 'hook'" in command and "--harness', 'devin'" in command)
-        or ("bounded_cli_hook_bridge" in command and '"harness":"devin"' in normalized)
-        or ("__guard-bounded-hook" in command and '"harness":"devin"' in normalized)
-        or ("managed/bounded-hooks/devin.py" in normalized.replace("\\", "/"))
-    )
-
 
 @dataclass(frozen=True)
 class DevinJsonDocument:
@@ -118,9 +89,6 @@ def parse_devin_jsonc(text: str) -> DevinJsonDocument:
 __all__ = [
     "DEVIN_CONFIG_FILE",
     "DEVIN_DIR",
-    "DEVIN_GUARD_TOOL_MATCHER",
-    "GUARD_MANAGED_MARKER",
     "DevinJsonDocument",
-    "is_guard_managed_hook_command",
     "load_devin_jsonc",
 ]

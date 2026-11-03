@@ -1201,7 +1201,7 @@
           "known_blind_spots": [
             "A source declaration does not prove that a live Devin session honored a deny response."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups"
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py:plan_guard_hooks"
         },
         {
           "event": "PermissionRequest",
@@ -1217,7 +1217,7 @@
           "known_blind_spots": [
             "Native approval UX and Guard evidence still require a live host/version check."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups"
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py:plan_guard_hooks"
         },
         {
           "event": "UserPromptSubmit",
@@ -1233,7 +1233,7 @@
           "known_blind_spots": [
             "Prompt screening does not prove downstream model or host request rewriting."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups"
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py:plan_guard_hooks"
         },
         {
           "event": "PostToolUse",
@@ -1247,7 +1247,7 @@
           "known_blind_spots": [
             "Post-tool observation does not block or replace model-visible output."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups"
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py:plan_guard_hooks"
         }
       ]
     },
@@ -1292,7 +1292,7 @@
           "known_blind_spots": [
             "A source declaration does not prove that a live Muse session honored a deny response."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups"
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py:plan_guard_hooks"
         },
         {
           "event": "PermissionRequest",
@@ -1308,7 +1308,7 @@
           "known_blind_spots": [
             "Native approval UX and Guard evidence still require a live host/version check."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups"
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py:plan_guard_hooks"
         },
         {
           "event": "UserPromptSubmit",
@@ -1324,7 +1324,7 @@
           "known_blind_spots": [
             "Prompt screening does not prove downstream model or host request rewriting."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups"
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py:plan_guard_hooks"
         },
         {
           "event": "PostToolUse",
@@ -1338,7 +1338,7 @@
           "known_blind_spots": [
             "Post-tool observation does not block or replace model-visible output."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups"
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py:plan_guard_hooks"
         },
         {
           "event": "SessionStart",
@@ -1352,7 +1352,7 @@
           "known_blind_spots": [
             "Session context does not prove that later tool calls were reviewed."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups"
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py:plan_guard_hooks"
         },
         {
           "event": "Stop",
@@ -1366,7 +1366,7 @@
           "known_blind_spots": [
             "Stop observation does not prove that earlier tool calls were reviewed."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups"
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py:plan_guard_hooks"
         }
       ]
     },

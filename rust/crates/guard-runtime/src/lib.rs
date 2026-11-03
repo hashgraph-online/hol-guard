@@ -556,6 +556,11 @@ mod guard_store_write_cache;
 mod hardening;
 mod harness_coverage;
 mod harness_coverage_command;
+#[path = "adapters/harness_hook_settings.rs"]
+mod harness_hook_settings;
+#[cfg(test)]
+#[path = "adapters/harness_hook_settings_tests.rs"]
+mod harness_hook_settings_tests;
 mod harness_version_compat;
 mod health_lease_contract;
 mod health_lease_state;
