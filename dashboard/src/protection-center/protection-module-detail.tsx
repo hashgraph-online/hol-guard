@@ -398,7 +398,7 @@ export function ProtectionModuleDetail(props: {
             </dl>
           </article>
           <McpServerDefaults extension={props.extension} />
-          <ExtensionRunScope extension={props.extension} localState={protectionView.effectiveState} />
+          <ExtensionRunScope cloudPolicy={orgManaged} localState={protectionView.effectiveState} />
         </section>
       ) : null}
       {activeTab === "permissions" ? <div id="protection-panel-permissions" role="tabpanel" aria-labelledby="protection-tab-permissions" className="mt-6">

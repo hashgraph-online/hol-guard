@@ -1,5 +1,3 @@
-import type { ExtensionCatalogItem } from "../extension-controls-api";
-
 /**
  * Where an Extension takes effect. Guard's local catalog only describes what
  * Guard checks on this computer; it never knows whether a Guard Cloud
@@ -20,7 +18,7 @@ const HERE: Record<LocalState, string> = {
   partial: "Partly on. Guard checks the Permissions you left on.",
   required: "Always on. Guard requires it here.",
   lockdown: "Lockdown. Matching actions stay blocked here.",
-  blocked: "Off. Guard does not check it here.",
+  blocked: "Off. Matching actions stay blocked here.",
 };
 
 const CLOUD = "Not turned on from this computer.";
@@ -31,23 +29,19 @@ const CLOUD_RULE =
 const CLOUD_POLICY =
   "Its settings here come from your Guard Cloud workspace's Policy. That Policy decides what Guard allows on this computer; it does not let Guard Cloud run anything.";
 
-export function extensionRunScope(
-  extension: Pick<ExtensionCatalogItem, "source">,
-  localState: LocalState,
-): ExtensionRunScopeCopy {
+/**
+ * `cloudPolicy` is true only when a Guard Cloud control layer actually sets
+ * this Extension's settings here. Where its definition came from says nothing
+ * about who controls it.
+ */
+export function extensionRunScope(cloudPolicy: boolean, localState: LocalState): ExtensionRunScopeCopy {
   const notes = [CLOUD_RULE];
-  if (extension.source === "signed-cloud") notes.push(CLOUD_POLICY);
+  if (cloudPolicy) notes.push(CLOUD_POLICY);
   return { here: HERE[localState], cloud: CLOUD, notes };
 }
 
-export function ExtensionRunScope({
-  extension,
-  localState,
-}: {
-  extension: Pick<ExtensionCatalogItem, "source">;
-  localState: LocalState;
-}) {
-  const copy = extensionRunScope(extension, localState);
+export function ExtensionRunScope({ cloudPolicy, localState }: { cloudPolicy: boolean; localState: LocalState }) {
+  const copy = extensionRunScope(cloudPolicy, localState);
   return (
     <article aria-labelledby="extension-run-scope-heading" className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2" data-testid="extension-run-scope">
       <h2 id="extension-run-scope-heading" className="text-lg font-semibold text-brand-dark">Where it runs</h2>

@@ -10,35 +10,39 @@ const PLAIN_TERMS = /token|gateway|endpoint|harness|posture|receipt|agent/i;
 const RUNNABLE_IN_CLOUD = /(ready|available|enabled|runs?|can run) (in|on|through) Guard Cloud|Cloud actions:? (on|ready|available|enabled)/i;
 
 for (const state of ["allowed", "blocked", "partial", "required", "lockdown"] as const) {
-  for (const source of ["built-in", "local-admin", "signed-cloud"] as const) {
-    const copy = extensionRunScope({ source }, state);
-    assert.equal(copy.cloud, "Not turned on from this computer.", `${state}/${source} never claims Cloud actions`);
+  for (const cloudPolicy of [false, true]) {
+    const copy = extensionRunScope(cloudPolicy, state);
+    assert.equal(copy.cloud, "Not turned on from this computer.", `${state}/${cloudPolicy} never claims Cloud actions`);
     const all = [copy.here, copy.cloud, ...copy.notes].join(" ");
-    assert.doesNotMatch(all, RUNNABLE_IN_CLOUD, `${state}/${source} copy never implies Guard Cloud may run it`);
-    assert.doesNotMatch(all, PLAIN_TERMS, `${state}/${source} copy stays in plain terms`);
+    assert.doesNotMatch(all, RUNNABLE_IN_CLOUD, `${state}/${cloudPolicy} copy never implies Guard Cloud may run it`);
+    assert.doesNotMatch(all, PLAIN_TERMS, `${state}/${cloudPolicy} copy stays in plain terms`);
     assert.match(all, /verified or paid listing does not do that/, "paid or verified listings grant nothing");
   }
 }
-assert.match(extensionRunScope({ source: "built-in" }, "allowed").here, /^On\./);
-assert.match(extensionRunScope({ source: "built-in" }, "blocked").here, /^Off\./);
-assert.equal(extensionRunScope({ source: "built-in" }, "allowed").notes.length, 1);
+assert.match(extensionRunScope(false, "allowed").here, /^On\./);
+assert.equal(extensionRunScope(false, "blocked").here, "Off. Matching actions stay blocked here.");
+assert.equal(extensionRunScope(false, "allowed").notes.length, 1);
 assert.match(
-  extensionRunScope({ source: "signed-cloud" }, "allowed").notes.join(" "),
+  extensionRunScope(true, "allowed").notes.join(" "),
   /does not let Guard Cloud run anything/,
   "Policy from Guard Cloud is not presented as Cloud actions",
 );
 
-function render(extension: ReturnType<typeof protectionModuleFixture>): string {
+function render(
+  extension: ReturnType<typeof protectionModuleFixture>,
+  effective = PROTECTION_AUTHORITY_FIXTURES.protected,
+): string {
   return renderToStaticMarkup(createElement(ProtectionModuleDetail, {
     extension,
-    effective: PROTECTION_AUTHORITY_FIXTURES.protected,
+    effective,
     catalogDigest: "a".repeat(64),
     onBack: () => undefined,
     onRefresh: () => undefined,
   }));
 }
 
-// A verified, cloud-synced, remote MCP Extension that is on here still reads as not turned on for Guard Cloud.
+// A verified remote MCP Extension from the Guard Cloud catalog still reads as not turned on for Guard Cloud,
+// and its catalog source alone does not claim a workspace Policy controls it.
 const hosted = render(protectionModuleFixture({
   extension_id: "mcp.example-remote",
   name: "Example remote tools",
@@ -48,11 +52,19 @@ const hosted = render(protectionModuleFixture({
 }));
 assert.match(hosted, /Where it runs/);
 assert.match(hosted, /Not turned on from this computer\./);
-assert.match(hosted, /does not let Guard Cloud run anything/);
+assert.doesNotMatch(hosted, /does not let Guard Cloud run anything/);
 assert.doesNotMatch(hosted.replace(/<[^>]+>/g, " "), RUNNABLE_IN_CLOUD);
 
-const local = render(protectionModuleFixture({ extension_id: "command.git", name: "Git", source: "built-in" }));
+const git = protectionModuleFixture({ extension_id: "command.git", name: "Git", source: "built-in" });
+const local = render(git);
 assert.match(local, /Where it runs/);
 assert.doesNotMatch(local, /does not let Guard Cloud run anything/);
+
+// A built-in Extension whose settings a Guard Cloud Policy sets shows the Policy note, and still no Cloud actions.
+const managed = render(git, PROTECTION_AUTHORITY_FIXTURES.managedBlock);
+assert.match(managed, /come from your Guard Cloud workspace&#x27;s Policy|come from your Guard Cloud workspace's Policy/);
+assert.match(managed, /does not let Guard Cloud run anything/);
+assert.match(managed, /Not turned on from this computer\./);
+assert.doesNotMatch(managed.replace(/<[^>]+>/g, " "), RUNNABLE_IN_CLOUD);
 
 console.log("extension-run-scope.test.tsx: all tests passed");
