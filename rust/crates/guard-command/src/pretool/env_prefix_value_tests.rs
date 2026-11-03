@@ -91,6 +91,10 @@ fn a_pattern_in_a_setting_value_is_the_text_the_program_reads() {
         ("DEBUG=app:{a,b} npm test", "npm test"),
         ("DEBUG=app:[ab] npm test", "npm test"),
         ("DEBUG=app:? npm test", "npm test"),
+        // A value spelled like a pathname pattern is the same literal text.
+        // The shell globs a command word, never an assignment prefix's value,
+        // so `ls` reads the five characters `*.env` and matches no file.
+        ("FOO=*.env ls", "ls"),
         ("env DEBUG='app:*' npm test", "npm test"),
         ("env DEBUG=\"app:*\" npm test", "npm test"),
         // A heap prefix beside the pattern used to leave the whole prefix
@@ -131,6 +135,7 @@ fn an_env_argument_carries_its_pattern_only_inside_quotes() {
         "env DEBUG=app:{a,b} npm test",
         "env DEBUG=app:[ab] npm test",
         "env DEBUG=app:? npm test",
+        "env FOO=*.env ls",
         // One quote has to cover the whole value, not part of it.
         "env DEBUG=app:'*' npm test",
     ] {

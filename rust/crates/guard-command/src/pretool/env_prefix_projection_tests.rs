@@ -82,7 +82,6 @@ fn execution_changing_prefixes_leave_the_command_untouched() {
         "CURL_HOME=/tmp curl https://x.example",
         "FOO=`id` ls",
         "FOO=~/x ls",
-        "FOO=*.env ls",
         "FOO=1",
         "FOO=1 && rm -rf x",
         "env",
