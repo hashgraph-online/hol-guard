@@ -42,9 +42,11 @@ def _run(argv: list[str]) -> int:
 
 
 @pytest.mark.parametrize("case", FIXTURE["cases"], ids=[case["id"] for case in FIXTURE["cases"]])
-def test_grammar_fixture(case: dict[str, Any], capsys: pytest.CaptureFixture[str]) -> None:
-    argv: list[str] = case["argv"]
-    exit_code = _run([_fill(arg) for arg in argv])
+def test_grammar_fixture(case: dict[str, Any], capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    argv = [_fill(arg) for arg in case["argv"]]
+    if case.get("guard_home"):
+        argv += ["--guard-home", str(tmp_path)]
+    exit_code = _run(argv)
     captured = capsys.readouterr()
 
     assert exit_code == case["exit"], captured.err
@@ -53,6 +55,13 @@ def test_grammar_fixture(case: dict[str, Any], capsys: pytest.CaptureFixture[str
         assert captured.out == ""
         return
     payload: object = json.loads(captured.out)
+    if "expect" in case:
+        assert isinstance(payload, dict)
+        assert payload["schema"] == CLOUD_ACTIONS_SCHEMA
+        assert payload["command"] == case["command"]
+        for key, value in case["expect"].items():
+            assert payload[key] == (_fill(value) if isinstance(value, str) else value), key
+        return
     context: dict[str, str] = case["context"]
     expected_context: dict[str, str | None] = dict.fromkeys(CONTEXT_KEYS)
     expected_context.update({key: _fill(value) for key, value in context.items()})
@@ -75,12 +84,12 @@ def test_human_output_says_nothing_changed(capsys: pytest.CaptureFixture[str]) -
 
 def test_output_goes_to_the_given_stream(capsys: pytest.CaptureFixture[str]) -> None:
     stream = io.StringIO()
-    args = argparse.Namespace(cloud_actions_command="status", json=True)
+    args = argparse.Namespace(cloud_actions_command="accounts", cloud_actions_accounts_command="list", json=True)
 
     exit_code = _run_guard_cloud_actions_command(args, output_stream=stream)
 
     assert exit_code == CLOUD_ACTIONS_UNAVAILABLE_EXIT
-    assert json.loads(stream.getvalue())["command"] == "status"
+    assert json.loads(stream.getvalue())["command"] == "accounts list"
     assert capsys.readouterr().out == ""
 
 
@@ -93,7 +102,7 @@ def _help(argv: list[str], capsys: pytest.CaptureFixture[str]) -> str:
 
 def test_help_separates_cloud_workspace_from_local_folder(capsys: pytest.CaptureFixture[str]) -> None:
     family = _help(["cloud-actions", "--help"], capsys)
-    assert "{status,workspace,accounts,ai-tools}" in family
+    assert "{login,logout,status,workspace,accounts,ai-tools}" in family
     assert "Separate from `connect`, `apps` and `install`" in family
 
     connect = " ".join(_help(["cloud-actions", "accounts", "connect", "--help"], capsys).split())
