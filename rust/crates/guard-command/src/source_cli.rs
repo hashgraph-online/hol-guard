@@ -262,12 +262,15 @@ fn run(arguments: &[String]) -> Result<Value, &'static str> {
     if operation == "compile" {
         serde_json::to_value(output).map_err(|_| "command_source_encoding_failed")
     } else {
-        Ok(
-            json!({"ok":true,"program_digest":output.program["program_digest"],
-            "source_digest":output.source_digest,"implementation_digest":output.implementation_digest,
-            "extensions":output.program["extensions"].as_array().map(Vec::len),
-            "rules":output.program["rules"].as_array().map(Vec::len)}),
-        )
+        let mut summary = json!({"ok":true,"program_digest":output.program["program_digest"],
+        "source_digest":output.source_digest,"implementation_digest":output.implementation_digest,
+        "extensions":output.program["extensions"].as_array().map(Vec::len),
+        "rules":output.program["rules"].as_array().map(Vec::len)});
+        if let Some(artifact) = &output.cloud_bindings {
+            summary["cloud_binding_digest"] = artifact["artifact_digest"].clone();
+            summary["cloud_actions"] = json!(artifact["actions"].as_array().map(Vec::len));
+        }
+        Ok(summary)
     }
 }
 

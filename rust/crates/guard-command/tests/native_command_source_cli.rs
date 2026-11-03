@@ -194,3 +194,120 @@ fn portable_fixtures_use_native_policy_and_report_failed_expectations() {
         Some(2)
     );
 }
+
+const CLOUD_BINDING_EXAMPLE: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../docs/guard/extension-builder/examples/cloud-binding-build.json"
+));
+
+/// The example plus the trust map and validation base an installed compiler exports.
+fn cloud_binding_request(example: &Value) -> Vec<u8> {
+    let trust: Value = serde_json::from_slice(&invoke(&["export-trust"], &[]).stdout).unwrap();
+    let built: Value = serde_json::from_slice(&invoke(&["export-built"], &[]).stdout).unwrap();
+    let mut request = example.clone();
+    request["trust"] = trust;
+    request["validation_base"] = json!({"catalog": built["catalog"], "programs": []});
+    serde_json::to_vec(&request).unwrap()
+}
+
+fn strings<'a>(value: &'a Value, found: &mut Vec<&'a str>) {
+    match value {
+        Value::String(text) => found.push(text),
+        Value::Array(items) => items.iter().for_each(|item| strings(item, found)),
+        Value::Object(map) => map.iter().for_each(|(key, item)| {
+            found.push(key);
+            strings(item, found);
+        }),
+        _ => {}
+    }
+}
+
+#[test]
+fn documented_cloud_binding_example_validates_offline_with_fictional_data() {
+    let example: Value = serde_json::from_slice(CLOUD_BINDING_EXAMPLE).unwrap();
+    let mut found = Vec::new();
+    strings(&example, &mut found);
+    for text in found {
+        let lower = text.to_ascii_lowercase();
+        for secret in [
+            "token",
+            "secret",
+            "password",
+            "apikey",
+            "api_key",
+            "credential",
+        ] {
+            assert!(!lower.contains(secret), "example carries {text:?}");
+        }
+        if let Some(rest) = lower.strip_prefix("https://") {
+            let host = rest.split('/').next().unwrap();
+            assert!(
+                host == "example.com" || host.ends_with(".example.com"),
+                "example names a real provider: {text}"
+            );
+        }
+    }
+
+    let request = cloud_binding_request(&example);
+    let validated = invoke(&["validate"], &request);
+    assert!(
+        validated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&validated.stdout)
+    );
+    let summary: Value = serde_json::from_slice(&validated.stdout).unwrap();
+    assert_eq!(summary["cloud_actions"], 2);
+
+    let compiled = invoke(&["compile"], &request);
+    assert!(compiled.status.success());
+    let compiled: Value = serde_json::from_slice(&compiled.stdout).unwrap();
+    let artifact = &compiled["cloud_bindings"];
+    assert_eq!(artifact["artifact_digest"], summary["cloud_binding_digest"]);
+    assert_eq!(
+        artifact["program_digest"],
+        compiled["program"]["program_digest"]
+    );
+    let actions: Vec<_> = artifact["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|action| {
+            (
+                action["action_id"].as_str().unwrap(),
+                action["cloud_support"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        actions,
+        [
+            ("example-tasks.task.delete", "cloud-executable"),
+            ("example.resource.destroy", "portable-policy"),
+        ]
+    );
+    assert_eq!(
+        artifact["actions"][0]["target"]["endpoint"],
+        "https://mcp.example.com/mcp"
+    );
+
+    // Bindings describe hosted actions; they never change the local program.
+    let mut unbound = example.clone();
+    unbound.as_object_mut().unwrap().remove("cloud_bindings");
+    let unbound = invoke(&["compile"], &cloud_binding_request(&unbound));
+    assert!(unbound.status.success());
+    let unbound: Value = serde_json::from_slice(&unbound.stdout).unwrap();
+    assert_eq!(unbound["program"], compiled["program"]);
+    assert!(unbound.get("cloud_bindings").is_none());
+}
+
+#[test]
+fn cloud_bindings_must_extend_a_source_in_the_same_request() {
+    let mut example: Value = serde_json::from_slice(CLOUD_BINDING_EXAMPLE).unwrap();
+    example["cloud_bindings"][1]["extensionId"] = json!("mcp.instapods");
+    let output = invoke(&["validate"], &cloud_binding_request(&example));
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["code"],
+        "cloud_binding_extension_unknown"
+    );
+}

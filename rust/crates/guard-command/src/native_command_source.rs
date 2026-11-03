@@ -82,6 +82,9 @@ struct BuildRequest {
     sources: Vec<Value>,
     #[serde(default)]
     mcp_sources: Vec<Value>,
+    /// Optional sibling cloud action bindings for sources in this request.
+    #[serde(default)]
+    cloud_bindings: Vec<Value>,
     trust: Value,
     base: Option<BaseProgram>,
     validation_base: Option<baseline::ValidationBase>,
@@ -138,7 +141,7 @@ fn compile_owned_request(
     } else {
         None
     };
-    match request.base {
+    let mut output = match request.base {
         Some(BaseProgram::Packaged) if fixture => {
             fixture_catalog::compile_fixture_with_base(&borrowed, &mcp_borrowed, &trust, baseline)
         }
@@ -146,7 +149,28 @@ fn compile_owned_request(
             catalog::addition::compile_with_base(&borrowed, &mcp_borrowed, &trust, baseline)
         }
         None => compile_catalog_with_mcp(&borrowed, &mcp_borrowed, &trust),
+    }?;
+    // Sources are admitted first, so a binding never masks a source error.
+    let bindings = request
+        .cloud_bindings
+        .iter()
+        .enumerate()
+        .map(|(record, binding)| {
+            serde_json::to_vec(binding)
+                .map_err(|_| "command_source_encoding_failed")
+                .and_then(|bytes| cloud_binding::parse_binding_contribution(&bytes))
+                .map(|parsed| (record, parsed))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let resolved =
+        stream::resolve_bindings(&bindings, &sources, &mcp_sources).map_err(|error| error.code)?;
+    if !resolved.is_empty() {
+        let program_digest = output.program["program_digest"]
+            .as_str()
+            .ok_or("command_source_encoding_failed")?;
+        output.cloud_bindings = Some(cloud_binding::compile_artifact(&resolved, program_digest)?);
     }
+    Ok(output)
 }
 #[cfg(test)]
 #[path = "native_command_source_tests.rs"]
