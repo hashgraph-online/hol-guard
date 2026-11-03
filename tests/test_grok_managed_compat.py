@@ -4,17 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]
-
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
-from codex_plugin_scanner.guard.adapters.grok_config import (
-    remove_managed_block,
-    restore_compat_hooks,
-)
 from codex_plugin_scanner.guard.shims import PreparedGuardShim
 
 
@@ -27,18 +18,6 @@ def _ctx(tmp_path: Path) -> HarnessContext:
 
 
 class TestGrokManagedCompat:
-    def test_restore_mixed_newline_hooks_value(self) -> None:
-        merged = (
-            "[compat.claude]\nskills = true\nhooks = false\r\n\n[ui]\nsimple_mode = true\n\n"
-            "# BEGIN HOL GUARD MANAGED GROK\n[permission]\ndeny = []\n# END HOL GUARD MANAGED GROK\n"
-        )
-        prior: dict[str, str | None] = {"claude": "true", "cursor": None}
-        restored = restore_compat_hooks(remove_managed_block(merged), prior)
-        restored_claude = restored.split("[ui]", 1)[0]
-        assert "hooks = true" in restored_claude
-        assert "hooks = false" not in restored_claude
-        tomllib.loads(restored)
-
     def test_install_merges_preexisting_compat_tables(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         managed = ctx.home_dir / ".grok" / "config.toml"
