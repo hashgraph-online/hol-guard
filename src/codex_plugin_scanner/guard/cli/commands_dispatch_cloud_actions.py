@@ -4,6 +4,9 @@
 (profile). The other commands still report, without touching this device or
 the network, that they cannot act yet, and echo the contexts they parsed so
 scripts and tests can see which one each value landed in.
+
+The commands_support facade imports this module on every hook, so the sign-in
+modules are imported only when a sign-in command runs.
 """
 
 from __future__ import annotations
@@ -12,13 +15,13 @@ import argparse
 import json
 import sys
 from collections.abc import Callable
-from typing import TextIO
+from typing import TYPE_CHECKING, TextIO
 
 from ..browser_opener import open_browser_url
 from ..config import resolve_guard_home
-from .cloud_actions_login import sign_in, sign_out
-from .cloud_actions_oauth import CloudActionsSignInError
-from .cloud_actions_session import CloudActionsProfile, CloudActionsSessionStore
+
+if TYPE_CHECKING:
+    from .cloud_actions_session import CloudActionsProfile, CloudActionsSessionStore
 
 CLOUD_ACTIONS_SCHEMA = "guard.cloud-actions.v1"
 CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT = 1
@@ -90,6 +93,9 @@ def _login_hint(profile: str, workspace: str | None) -> str:
 
 
 def _login(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Reply, notice: TextIO) -> int:
+    from .cloud_actions_login import sign_in
+    from .cloud_actions_oauth import CloudActionsSignInError
+
     opener: Callable[[str], bool] | None = None if args.no_browser else open_browser_url
     try:
         profile = sign_in(
@@ -119,15 +125,28 @@ def _login(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Re
 
 
 def _logout(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Reply) -> int:
-    was_signed_in, revoked = sign_out(store=store, profile_name=args.profile)
+    from .cloud_actions_login import sign_out
+    from .cloud_actions_oauth import CloudActionsSignInError
+
+    try:
+        was_signed_in, revoked = sign_out(store=store, profile_name=args.profile)
+    except CloudActionsSignInError as error:
+        return reply(
+            CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
+            f"Sign-out did not finish: {error} Nothing was removed.",
+            state="failed",
+            reason=error.reason,
+            message=str(error),
+            profile=args.profile,
+        )
     if not was_signed_in:
         text = f"Profile {args.profile} was not signed in. Nothing to remove."
     elif revoked:
         text = f"Signed out of Cloud actions (profile {args.profile}). Guard Cloud ended the sign-in."
     else:
         text = (
-            f"Removed the saved sign-in (profile {args.profile}). Guard Cloud could not be reached to end it; "
-            "it stops working when it expires, or you can end it from Guard Cloud."
+            f"Removed the saved sign-in (profile {args.profile}). Guard Cloud did not confirm that it ended "
+            "the sign-in; it stops working when it expires, or you can end it from Guard Cloud."
         )
     return reply(0, text, state="signed_out", profile=args.profile, was_signed_in=was_signed_in, revoked=revoked)
 
@@ -205,6 +224,8 @@ def _run_guard_cloud_actions_command(
     command = args.cloud_actions_command
     workspace_command = getattr(args, "cloud_actions_workspace_command", None)
     if command in {"login", "logout", "status"} or workspace_command == "select":
+        from .cloud_actions_session import CloudActionsSessionStore
+
         store = CloudActionsSessionStore(resolve_guard_home(getattr(args, "guard_home", None)))
         if command == "login":
             notice = notice_stream if notice_stream is not None else sys.stderr

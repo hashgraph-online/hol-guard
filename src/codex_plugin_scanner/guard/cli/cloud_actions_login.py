@@ -19,7 +19,12 @@ from .cloud_actions_oauth import (
     resolve_cloud_origin,
     revoke_cloud_actions_grant,
 )
-from .cloud_actions_session import CloudActionsProfile, CloudActionsSecrets, CloudActionsSessionStore
+from .cloud_actions_session import (
+    CloudActionsProfile,
+    CloudActionsProfileBusyError,
+    CloudActionsSecrets,
+    CloudActionsSessionStore,
+)
 from .oauth_client import build_pkce_s256_challenge, generate_pkce_verifier
 
 
@@ -69,8 +74,6 @@ def sign_in(
         grant = read_cloud_actions_grant(
             payload, server=server, client_id=client_id, requested_workspace_id=workspace_id
         )
-        previous = store.load(profile_name)
-        previous_secrets = store.load_secrets(profile_name)
         profile = CloudActionsProfile(
             name=profile_name,
             issuer=server.issuer,
@@ -82,33 +85,58 @@ def sign_in(
             grant_id=grant.grant_id,
             signed_in_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         )
-        store.save(profile, CloudActionsSecrets(access_token=grant.access_token, refresh_token=grant.refresh_token))
+        with store.lock(profile_name):
+            previous = store.load(profile_name)
+            previous_secrets = store.load_secrets(profile_name)
+            replaced_ref = store.save(
+                profile, CloudActionsSecrets(access_token=grant.access_token, refresh_token=grant.refresh_token)
+            )
+    except CloudActionsProfileBusyError:
+        _revoke_answer(server, client_id=client_id, payload=payload)
+        raise CloudActionsSignInError(
+            "profile_busy", f"Another hol-guard command is changing profile {profile_name}; try again."
+        ) from None
     except BaseException:
         _revoke_answer(server, client_id=client_id, payload=payload)
         raise
-    if previous is not None and previous_secrets is not None and previous.issuer == server.issuer:
-        _revoke_saved(server, previous, previous_secrets)
+    # Committed. End the sign-in this one replaced, on whichever Guard Cloud issued it.
+    store.discard_secret(replaced_ref)
+    if previous is not None and previous_secrets is not None:
+        _ = _revoke_saved(previous, previous_secrets, known=server)
     return profile
 
 
 def sign_out(*, store: CloudActionsSessionStore, profile_name: str) -> tuple[bool, bool]:
     """Remove the profile; returns (was signed in, Guard Cloud confirmed the revocation)."""
 
-    profile = store.load(profile_name)
-    saved = store.load_secrets(profile_name)
+    try:
+        with store.lock(profile_name):
+            profile = store.load(profile_name)
+            saved = store.load_secrets(profile_name)
+            was_signed_in = store.delete(profile_name)
+    except CloudActionsProfileBusyError:
+        raise CloudActionsSignInError(
+            "profile_busy", f"Another hol-guard command is changing profile {profile_name}; try again."
+        ) from None
     revoked = False
     if profile is not None and saved is not None:
-        try:
-            server = discover_cloud_actions_server(resolve_cloud_origin(profile.issuer))
-        except CloudActionsSignInError:
-            server = None
-        if server is not None and server.issuer == profile.issuer:
-            revoked = _revoke_saved(server, profile, saved)
-    was_signed_in = store.delete(profile_name)
+        revoked = _revoke_saved(profile, saved)
     return was_signed_in, revoked
 
 
-def _revoke_saved(server: CloudActionsServer, profile: CloudActionsProfile, saved: CloudActionsSecrets) -> bool:
+def _revoke_saved(
+    profile: CloudActionsProfile, saved: CloudActionsSecrets, *, known: CloudActionsServer | None = None
+) -> bool:
+    """End a saved sign-in on the Guard Cloud that issued it; best effort."""
+
+    server = known if known is not None and known.issuer == profile.issuer else None
+    if server is None:
+        try:
+            server = discover_cloud_actions_server(resolve_cloud_origin(profile.issuer))
+        except CloudActionsSignInError:
+            return False
+        if server.issuer != profile.issuer:
+            return False
     revoked = False
     if saved.refresh_token is not None:
         revoked = revoke_cloud_actions_grant(

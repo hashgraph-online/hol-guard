@@ -3,8 +3,13 @@
 A profile names one sign-in: one Guard Cloud, one workspace, one grant. The
 details that are safe to show (Guard Cloud, workspace, scopes, expiry) live in
 `<guard home>/cloud-actions/profiles/<profile>.json`. The access and refresh
-credentials live in Guard's encrypted secret store under their own ID, never
-in that file and never in the device sign-in written by `hol-guard connect`.
+credentials live in Guard's encrypted secret store, never in that file and
+never in the device sign-in written by `hol-guard connect`.
+
+Each sign-in gets its own secret ID, named in the profile file. Writing the
+profile file is the commit: a save that fails before it leaves the previous
+profile and its credentials untouched, and a lock keeps two sign-ins for the
+same profile from interleaving.
 """
 
 from __future__ import annotations
@@ -12,19 +17,29 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets as _secrets
 import tempfile
-from contextlib import suppress
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ..daemon.atomic_replace import replace_file
+from ..mdm.file_lock import acquire_file_lock, release_file_lock
 from ..store_base import EncryptedFileSecretStore, SecretStore
 
 DEFAULT_PROFILE = "default"
 PROFILE_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
 _SCHEMA = "guard.cloud-actions.profile.v1"
 _MAX_FILE_BYTES = 64 * 1024
+_LOCK_WAIT_SECONDS = 10.0
+_SECRET_REF_PATTERN = re.compile(r"cloud-actions-[a-z0-9-]{1,32}-[0-9a-f]{16}")
+
+
+class CloudActionsProfileBusyError(RuntimeError):
+    """Another Guard process is changing the same profile."""
 
 
 @dataclass(frozen=True)
@@ -67,13 +82,44 @@ class CloudActionsSessionStore:
             raise ValueError("invalid profile name")
         return self._root / "profiles" / f"{name}.json"
 
-    @staticmethod
-    def _secret_id(name: str) -> str:
-        return f"cloud-actions-{name}"
-
-    def load(self, name: str) -> CloudActionsProfile | None:
+    def _record(self, name: str) -> dict[str, object] | None:
         payload = _read_json(self._profile_path(name))
         if payload is None or payload.get("schema") != _SCHEMA:
+            return None
+        return payload
+
+    def _secret_ref(self, name: str) -> str | None:
+        payload = self._record(name)
+        ref = payload.get("secret_ref") if payload is not None else None
+        return ref if isinstance(ref, str) and _SECRET_REF_PATTERN.fullmatch(ref) else None
+
+    @contextmanager
+    def lock(self, name: str) -> Iterator[None]:
+        """Hold the profile's lock; raises CloudActionsProfileBusyError after a short wait."""
+
+        path = self._profile_path(name)
+        _ensure_private_dir(path.parent)
+        with (path.parent / f".{name}.lock").open("a+b") as handle:
+            if os.name != "nt":
+                # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+                os.chmod(handle.name, 0o600)
+            deadline = time.monotonic() + _LOCK_WAIT_SECONDS
+            while True:
+                try:
+                    acquire_file_lock(handle)
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise CloudActionsProfileBusyError(name) from None
+                    time.sleep(0.1)
+            try:
+                yield
+            finally:
+                release_file_lock(handle)
+
+    def load(self, name: str) -> CloudActionsProfile | None:
+        payload = self._record(name)
+        if payload is None:
             return None
         try:
             scopes = payload["scopes"]
@@ -95,7 +141,8 @@ class CloudActionsSessionStore:
         return profile
 
     def load_secrets(self, name: str) -> CloudActionsSecrets | None:
-        raw = self._secrets.get_secret(self._secret_id(name))
+        ref = self._secret_ref(name)
+        raw = self._secrets.get_secret(ref) if ref is not None else None
         if raw is None:
             return None
         try:
@@ -111,21 +158,43 @@ class CloudActionsSessionStore:
             refresh_token=refresh_token if isinstance(refresh_token, str) and refresh_token else None,
         )
 
-    def save(self, profile: CloudActionsProfile, secrets: CloudActionsSecrets) -> None:
+    def save(self, profile: CloudActionsProfile, secrets: CloudActionsSecrets) -> str | None:
+        """Save under a new secret ID; returns the replaced one for `discard_secret`.
+
+        Call while holding `lock(profile.name)`. The profile file write is the
+        commit; if anything fails before it, the new secret is removed and the
+        previous sign-in stays as it was.
+        """
+
         path = self._profile_path(profile.name)
         _ensure_private_dir(path.parent)
-        self._secrets.set_secret(self._secret_id(profile.name), json.dumps(asdict(secrets), sort_keys=True))
-        record = {"schema": _SCHEMA, **asdict(profile)}
+        previous_ref = self._secret_ref(profile.name)
+        ref = f"cloud-actions-{profile.name}-{_secrets.token_hex(8)}"
+        record = {"schema": _SCHEMA, **asdict(profile), "secret_ref": ref}
         record.pop("name")
         record["scopes"] = list(profile.scopes)
-        _write_private_atomic(path, json.dumps(record, indent=2, sort_keys=True) + "\n")
+        self._secrets.set_secret(ref, json.dumps(asdict(secrets), sort_keys=True))
+        try:
+            _write_private_atomic(path, json.dumps(record, indent=2, sort_keys=True) + "\n")
+        except BaseException:
+            self._secrets.delete_secret(ref)
+            raise
+        return previous_ref
+
+    def discard_secret(self, ref: str | None) -> None:
+        if ref is not None and _SECRET_REF_PATTERN.fullmatch(ref):
+            with suppress(OSError):
+                self._secrets.delete_secret(ref)
 
     def delete(self, name: str) -> bool:
+        """Remove the profile; call while holding `lock(name)`."""
+
         path = self._profile_path(name)
+        ref = self._secret_ref(name)
         existed = path.exists()
         with suppress(FileNotFoundError):
             path.unlink()
-        self._secrets.delete_secret(self._secret_id(name))
+        self.discard_secret(ref)
         return existed
 
     def registered_client(self, issuer: str) -> str | None:
@@ -188,6 +257,7 @@ __all__ = [
     "DEFAULT_PROFILE",
     "PROFILE_PATTERN",
     "CloudActionsProfile",
+    "CloudActionsProfileBusyError",
     "CloudActionsSecrets",
     "CloudActionsSessionStore",
 ]

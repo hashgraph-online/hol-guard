@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from ...version import __version__
-from ..mdm.network import managed_urlopen
+from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..oauth_token_claims import decode_oauth_access_token_claims, oauth_claim_string
 from .oauth_client import _require_allowlisted_guard_oauth_origin  # pyright: ignore[reportPrivateUsage]
 
@@ -116,7 +116,8 @@ def _read_json(request: urllib.request.Request, *, step: str) -> dict[str, objec
             raw = response.read(_MAX_RESPONSE_BYTES + 1)
     except urllib.error.HTTPError as error:
         raise _http_error(error, step=step) from None
-    except OSError as error:
+    except (OSError, ManagedNetworkError) as error:
+        # ManagedNetworkError covers this machine's proxy or network policy setup failing.
         raise CloudActionsSignInError(f"{step}_unreachable", f"Guard Cloud could not be reached ({step}).") from error
     if len(raw) > _MAX_RESPONSE_BYTES:
         raise CloudActionsSignInError(f"{step}_invalid", f"Guard Cloud sent an oversized answer ({step}).")
