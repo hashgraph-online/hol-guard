@@ -1440,11 +1440,10 @@
           "KimiHarnessAdapter.prepare_install",
           "KimiHarnessAdapter.install",
           "KimiHarnessAdapter.uninstall",
-          "KimiHarnessAdapter._hook_command_parts",
-          "KimiHarnessAdapter._build_managed_block"
+          "KimiHarnessAdapter._hook_command_parts"
         ],
         "entry_points": [],
-        "reason": "Kimi adapter hook install and uninstall and the managed block builder used only to write the install.",
+        "reason": "Kimi adapter hook install and uninstall and the hook command builder used only to write the install.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {

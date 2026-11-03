@@ -59,6 +59,23 @@ def test_uninstall_writes_the_native_text(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert config.read_text(encoding="utf-8") == "keep = 1\n"
 
 
+def test_a_refused_uninstall_answer_keeps_the_launcher(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    config = ctx.home_dir / ".kimi-code" / "config.toml"
+    config.parent.mkdir()
+    config.write_text("keep = 1\n# BEGIN HOL GUARD MANAGED HOOKS\n", encoding="utf-8")
+    _native(monkeypatch, {"text": 1})
+    removed: list[str] = []
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.kimi.remove_guard_shim",
+        lambda harness, *_args, **_kwargs: removed.append(harness) or {},
+    )
+    with pytest.raises(ValueError, match="malformed"):
+        KimiHarnessAdapter().uninstall(ctx)
+    assert removed == []
+    assert config.read_text(encoding="utf-8") == "keep = 1\n# BEGIN HOL GUARD MANAGED HOOKS\n"
+
+
 def test_uninstall_without_a_config_asks_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls = _native(monkeypatch, {"text": "unused"})
     KimiHarnessAdapter().uninstall(_ctx(tmp_path))

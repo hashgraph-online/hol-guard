@@ -157,17 +157,20 @@ class KimiHarnessAdapter(HarnessAdapter):
         return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        config_path = self._managed_config_path(context)
+        cleaned_text: str | None = None
+        if config_path.is_file():
+            _ensure_path_within_root(context.home_dir, config_path, label="Kimi Code")
+            existing_text = config_path.read_text(encoding="utf-8")
+            # Ask for the cleaned text first, so a refused answer leaves the launcher in place.
+            cleaned_text = _managed_config_text({"op": "uninstall", "text": existing_text})
         shim_manifest = remove_guard_shim(
             self.harness,
             context,
             launcher_name=self.launcher_name,
             display_name="kimi",
         )
-        config_path = self._managed_config_path(context)
-        if config_path.is_file():
-            _ensure_path_within_root(context.home_dir, config_path, label="Kimi Code")
-            existing_text = config_path.read_text(encoding="utf-8")
-            cleaned_text = _managed_config_text({"op": "uninstall", "text": existing_text})
+        if cleaned_text is not None:
             config_path.write_text(cleaned_text, encoding="utf-8")
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
