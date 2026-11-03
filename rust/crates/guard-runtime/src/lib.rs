@@ -136,6 +136,11 @@ mod cline_detect;
 #[path = "adapters/detection/cline_detect_tests.rs"]
 mod cline_detect_tests;
 mod cline_hook_worker;
+#[path = "adapters/cline_plugin_render.rs"]
+mod cline_plugin_render;
+#[cfg(test)]
+#[path = "adapters/cline_plugin_render_tests.rs"]
+mod cline_plugin_render_tests;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
 mod cloud_exception_lift;

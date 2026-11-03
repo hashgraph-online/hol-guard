@@ -1903,7 +1903,7 @@
           "_atomic_write"
         ],
         "entry_points": [],
-        "reason": "Cline AgentPlugin install, uninstall and install-time syntax probe, plus the TypeScript plugin and package.json templates they write.",
+        "reason": "Cline AgentPlugin install, uninstall and install-time syntax probe, plus the package.json they write; _plugin_source only resolves the install values and passes them to the native cline_plugin_render kind, which renders the TypeScript plugin.",
         "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. The plugin source is a TypeScript asset executed by Cline, not Python on the request path."
       },
       {
