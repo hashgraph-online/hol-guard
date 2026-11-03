@@ -510,8 +510,7 @@ def _build_package_protect_authority(
     if intent is None:
         return None
     unidentified_npm_package = any(
-        target.source_invalid_reason == "npm_config_package_unidentified"
-        for target in intent.targets
+        target.source_invalid_reason == "npm_config_package_unidentified" for target in intent.targets
     )
     if intent.routine_local_runner:
         # A runner the project already pins locally fetches nothing: the native

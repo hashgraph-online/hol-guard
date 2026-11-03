@@ -312,6 +312,89 @@ fn an_unresolved_userconfig_path_leaves_the_package_unnamed() {
 }
 
 #[test]
+fn a_command_line_package_replaces_the_configured_package() {
+    let (dir, project, environment) = project();
+    npmrc(&project, "package=left-pad\n");
+    let home = PathBuf::from(&environment["HOME"]);
+    let intent = parse_package_intent(
+        "npx --package=evil tsx script.ts",
+        Some(&project),
+        Some(&home),
+        None,
+        Some(&environment),
+    )
+    .expect("npx intent");
+
+    assert_eq!(
+        intent
+            .targets
+            .iter()
+            .filter_map(|target| target.package_name.as_deref())
+            .collect::<Vec<_>>(),
+        vec!["evil"]
+    );
+    let _ = dir;
+}
+
+#[test]
+fn a_short_package_option_replaces_the_configured_package() {
+    let (dir, project, environment) = project();
+    npmrc(&project, "package=left-pad\n");
+    let home = PathBuf::from(&environment["HOME"]);
+    let intent = parse_package_intent(
+        "npx -p evil tsx script.ts",
+        Some(&project),
+        Some(&home),
+        None,
+        Some(&environment),
+    )
+    .expect("npx intent");
+
+    assert_eq!(intent.targets[0].package_name.as_deref(), Some("evil"));
+    let _ = dir;
+}
+
+#[test]
+fn a_package_flag_after_the_executable_does_not_replace_npm_config() {
+    let (dir, project, environment) = project();
+    npmrc(&project, "package=left-pad\n");
+    let home = PathBuf::from(&environment["HOME"]);
+    let intent = parse_package_intent(
+        "npx tsx --package=evil script.ts",
+        Some(&project),
+        Some(&home),
+        None,
+        Some(&environment),
+    )
+    .expect("npx intent");
+
+    assert_eq!(intent.targets[0].package_name.as_deref(), Some("left-pad"));
+    let _ = dir;
+}
+
+#[test]
+fn an_unreadable_npmrc_does_not_block_a_command_line_package() {
+    let (dir, project, environment) = project();
+    fs::create_dir(project.join(".npmrc")).unwrap();
+    let home = PathBuf::from(&environment["HOME"]);
+    let intent = parse_package_intent(
+        "npx --package=evil tsx script.ts",
+        Some(&project),
+        Some(&home),
+        None,
+        Some(&environment),
+    )
+    .expect("npx intent");
+
+    assert_eq!(intent.targets[0].package_name.as_deref(), Some("evil"));
+    assert!(intent
+        .targets
+        .iter()
+        .all(|target| target.source_invalid_reason.is_none()));
+    let _ = dir;
+}
+
+#[test]
 fn a_directory_npmrc_leaves_the_package_unnamed() {
     let (_dir, project, environment) = project();
     fs::create_dir(project.join(".npmrc")).unwrap();

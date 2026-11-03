@@ -248,6 +248,4 @@ pub(super) fn npx_config_adds_package(
 mod identity;
 #[cfg(test)]
 pub(super) use identity::npm_configured_exec_packages;
-pub(super) use identity::{
-    configured_packages_for_segment, merge_configured, unidentified_npm_package_target,
-};
+pub(super) use identity::{configured_packages_for_segment, unidentified_npm_package_target};

@@ -14,22 +14,6 @@ use crate::package_intent_common::PackageIntentTarget;
 
 use super::*;
 
-pub(crate) fn merge_configured(
-    left: NpmConfiguredPackages,
-    right: NpmConfiguredPackages,
-) -> NpmConfiguredPackages {
-    use NpmConfiguredPackages::{Absent, Named, Unnamed};
-    match (left, right) {
-        (Unnamed, _) | (_, Unnamed) => Unnamed,
-        (Absent, other) => other,
-        (other, Absent) => other,
-        (Named(mut specs), Named(more)) => {
-            specs.extend(more);
-            Named(dedup_specs(specs))
-        }
-    }
-}
-
 pub(crate) fn unidentified_npm_package_target() -> PackageIntentTarget {
     PackageIntentTarget {
         ecosystem: "npm".to_owned(),

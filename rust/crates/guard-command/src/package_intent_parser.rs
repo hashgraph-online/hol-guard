@@ -397,6 +397,7 @@ pub fn parse_package_intent(
                     .unwrap_or_default();
             }
             i.redacted_command = redacted_command(&segment.redacted_tokens);
+            apply_npm_configured_packages(&mut i, segment);
             intents.push(i);
         }
     }
@@ -404,32 +405,41 @@ pub fn parse_package_intent(
     // this parser already resolved, so it is computed here rather than sent
     // back for a second round trip.
     let mut intent = combine_package_intents(&intents)?;
-    // npm's `package` setting makes `npx` install a package the command never
-    // names. A spec that was read becomes the review target. A spec that
-    // could not be read is not a review of the runner the command spelled.
     if intent.package_manager == "npx" {
-        let configured = segments
-            .iter()
-            .fold(NpmConfiguredPackages::Absent, |acc, segment| {
-                merge_configured(acc, segment.npm_configured_packages.clone())
-            });
-        match configured {
-            NpmConfiguredPackages::Absent => {
-                intent.routine_local_runner = routine_local_runner(&intent);
-            }
-            NpmConfiguredPackages::Named(specs) => {
-                intent.targets = specs.iter().map(|spec| js_target(spec)).collect();
-                intent.routine_local_runner = false;
-            }
-            NpmConfiguredPackages::Unnamed => {
-                intent.targets = vec![unidentified_npm_package_target()];
-                intent.routine_local_runner = false;
-            }
-        }
+        // A command-line `--package` replaces npm's config, so only a segment
+        // without one can make the configured package the thing that installs.
+        let config_supplies_package = segments.iter().any(|segment| {
+            !command_sets_package_option(&segment.tokens)
+                && !matches!(
+                    segment.npm_configured_packages,
+                    NpmConfiguredPackages::Absent
+                )
+        });
+        intent.routine_local_runner = !config_supplies_package && routine_local_runner(&intent);
     } else {
         intent.routine_local_runner = routine_local_runner(&intent);
     }
     Some(intent)
+}
+
+/// npm's `package` setting makes `npx` install a package the command never
+/// names. A spec that was read becomes the review target. A spec that could
+/// not be read is not a review of the runner the command spelled. `--package`
+/// and `-p` on the command replace that setting, so they keep the targets
+/// `runner_packages` already recorded.
+fn apply_npm_configured_packages(intent: &mut PackageIntent, segment: &CommandSegment) {
+    if intent.package_manager != "npx" || command_sets_package_option(&segment.tokens) {
+        return;
+    }
+    match &segment.npm_configured_packages {
+        NpmConfiguredPackages::Absent => {}
+        NpmConfiguredPackages::Named(specs) => {
+            intent.targets = specs.iter().map(|spec| js_target(spec)).collect();
+        }
+        NpmConfiguredPackages::Unnamed => {
+            intent.targets = vec![unidentified_npm_package_target()];
+        }
+    }
 }
 
 /// Dispatch to the non-local-execution intent parsers.
