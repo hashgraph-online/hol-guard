@@ -92,7 +92,7 @@ fn file_name(path: &Path) -> &str {
 }
 
 /// `is_guard_managed_hook_command`.
-fn guard_managed(command: &str) -> bool {
+pub(crate) fn guard_managed(command: &str) -> bool {
     let normalized = command.replace("\\\"", "\"");
     command.contains("HOL_GUARD_MANAGED_DEVIN")
         || (command.contains("codex_plugin_scanner.cli")
