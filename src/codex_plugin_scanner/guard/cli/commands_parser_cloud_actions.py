@@ -166,7 +166,7 @@ def configure_guard_cloud_actions_parser(
         dest="cloud_actions_command",
         required=True,
         parser_class=FriendlyArgumentParser,
-        metavar="{login,logout,status,workspace,accounts,ai-tools}",
+        metavar="{login,logout,status,doctor,workspace,accounts,ai-tools}",
     )
 
     login = _add_parser(commands, "login", "Sign in to Guard Cloud for Cloud actions in one workspace")
@@ -189,8 +189,21 @@ def configure_guard_cloud_actions_parser(
 
     status = _add_parser(commands, "status", "Show Cloud actions sign-in, workspace and connected accounts")
     _add_cloud_workspace(status, required=False)
+    status.add_argument(
+        "--offline", action="store_true", help="Show only what is saved on this computer; do not ask Guard Cloud"
+    )
     _add_profile(status)
     _add_json(status)
+
+    doctor = _add_parser(commands, "doctor", "Check the Cloud actions sign-in, Guard Cloud and AI tool settings")
+    doctor.add_argument(
+        "--bundle",
+        metavar="FILE",
+        help="Also save the results to a new file to share with support; it never holds the sign-in itself",
+    )
+    doctor.add_argument("--home", help=argparse.SUPPRESS)
+    _add_profile(doctor)
+    _add_json(doctor)
 
     workspace = _add_parser(commands, "workspace", "Choose the Guard Cloud workspace these commands use")
     workspace_commands = workspace.add_subparsers(

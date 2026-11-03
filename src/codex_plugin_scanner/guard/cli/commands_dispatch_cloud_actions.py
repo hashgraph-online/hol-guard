@@ -1,9 +1,11 @@
 """Early dispatch for `cloud-actions`.
 
-`login`, `logout`, `status` and `workspace select` act on a saved sign-in
-(profile). `ai-tools configure --dry-run` previews an AI tool's settings change
-without writing it, `--apply` writes it and keeps a copy of the previous file,
-and `ai-tools restore` undoes that change. `accounts connect` opens the
+`login`, `logout`, `status`, `doctor` and `workspace select` act on a saved
+sign-in (profile). `status` and `doctor` also ask Guard Cloud whether it still
+accepts that sign-in (`cloud_actions_health`); `status --offline` does not.
+`ai-tools configure --dry-run` previews an AI tool's settings change without
+writing it, `--apply` writes it and keeps a copy of the previous file, and
+`ai-tools restore` undoes that change. `accounts connect` opens the
 workspace's connected accounts in Guard Cloud, where the member signs in with
 the provider in the browser; no provider password or key passes through this
 command. The other commands still report, without touching this device or the
@@ -157,34 +159,6 @@ def _logout(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _R
     return reply(0, text, state="signed_out", profile=args.profile, was_signed_in=was_signed_in, revoked=revoked)
 
 
-def _status(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Reply) -> int:
-    profile = store.load(args.profile)
-    requested = args.cloud_workspace
-    if profile is None or store.load_secrets(args.profile) is None:
-        return reply(
-            0,
-            f"Not signed in (profile {args.profile}). Run `{_login_hint(args.profile, requested)}`.",
-            state="signed_out",
-            profile=args.profile,
-            accounts="not_available_yet",
-        )
-    state = "expired" if profile.is_expired() else "signed_in"
-    fields = {"state": state, **_profile_fields(profile), "accounts": "not_available_yet"}
-    lines = [
-        f"Profile {profile.name}: {'sign-in expired' if state == 'expired' else 'signed in'}",
-        f"Guard Cloud: {profile.issuer}",
-        f"Workspace: {profile.workspace_id}",
-        "Connected accounts: not available yet",
-    ]
-    if requested is not None:
-        fields["workspace_matches"] = requested == profile.workspace_id
-        if requested != profile.workspace_id:
-            lines.append(f"Workspace {requested} needs its own sign-in: `{_login_hint(args.profile, requested)}`.")
-    if state == "expired":
-        lines.append(f"Sign in again: `{_login_hint(profile.name, profile.workspace_id)}`.")
-    return reply(0, "\n".join(lines), **fields)
-
-
 def _workspace_select(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Reply) -> int:
     requested = args.cloud_workspace
     profile = store.load(args.profile)
@@ -293,7 +267,7 @@ def _run_guard_cloud_actions_command(
     reply = _Reply(args, stream)
     command = args.cloud_actions_command
     workspace_command = getattr(args, "cloud_actions_workspace_command", None)
-    if command in {"login", "logout", "status"} or workspace_command == "select":
+    if command in {"login", "logout", "status", "doctor"} or workspace_command == "select":
         from .cloud_actions_session import CloudActionsSessionStore
 
         store = CloudActionsSessionStore(resolve_guard_home(getattr(args, "guard_home", None)))
@@ -310,8 +284,10 @@ def _run_guard_cloud_actions_command(
                 )
         if command == "logout":
             return _logout(args, store, reply)
-        if command == "status":
-            return _status(args, store, reply)
+        if command in {"status", "doctor"}:
+            from .commands_dispatch_cloud_actions_status import doctor, status
+
+            return (status if command == "status" else doctor)(args, store, reply)
         return _workspace_select(args, store, reply)
     ai_tools_command = getattr(args, "cloud_actions_ai_tools_command", None)
     if ai_tools_command in {"configure", "restore"}:
