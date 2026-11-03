@@ -18,7 +18,8 @@ const HERE: Record<LocalState, string> = {
   partial: "Partly on. Guard checks the Permissions you left on.",
   required: "Always on. Guard requires it here.",
   lockdown: "Lockdown. Matching actions stay blocked here.",
-  blocked: "Off. Matching actions stay blocked here.",
+  // Blocked can mean every Permission is off while the Extension itself stays on.
+  blocked: "Blocked. Matching actions stay blocked here.",
 };
 
 const CLOUD = "Not turned on from this computer.";
@@ -27,7 +28,7 @@ const CLOUD_RULE =
   "Guard Cloud runs an Extension's actions only after a workspace connects the account it needs and turns those actions on there. Installing it, turning it on here, or a verified or paid listing does not do that.";
 
 const CLOUD_POLICY =
-  "Its settings here come from your Guard Cloud workspace's Policy. That Policy decides what Guard allows on this computer; it does not let Guard Cloud run anything.";
+  "Your Guard Cloud workspace's Policy sets some of its settings here and limits what can be changed on this computer. It does not let Guard Cloud run anything.";
 
 /**
  * `cloudPolicy` is true only when a Guard Cloud control layer actually sets

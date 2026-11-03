@@ -20,7 +20,8 @@ for (const state of ["allowed", "blocked", "partial", "required", "lockdown"] as
   }
 }
 assert.match(extensionRunScope(false, "allowed").here, /^On\./);
-assert.equal(extensionRunScope(false, "blocked").here, "Off. Matching actions stay blocked here.");
+assert.equal(extensionRunScope(false, "blocked").here, "Blocked. Matching actions stay blocked here.");
+assert.doesNotMatch(extensionRunScope(true, "blocked").here, /\bOff\b/, "blocked Permissions never read as the Extension being off");
 assert.equal(extensionRunScope(false, "allowed").notes.length, 1);
 assert.match(
   extensionRunScope(true, "allowed").notes.join(" "),
@@ -62,7 +63,7 @@ assert.doesNotMatch(local, /does not let Guard Cloud run anything/);
 
 // A built-in Extension whose settings a Guard Cloud Policy sets shows the Policy note, and still no Cloud actions.
 const managed = render(git, PROTECTION_AUTHORITY_FIXTURES.managedBlock);
-assert.match(managed, /come from your Guard Cloud workspace&#x27;s Policy|come from your Guard Cloud workspace's Policy/);
+assert.match(managed, /Guard Cloud workspace(&#x27;|')s Policy sets some of its settings here/);
 assert.match(managed, /does not let Guard Cloud run anything/);
 assert.match(managed, /Not turned on from this computer\./);
 assert.doesNotMatch(managed.replace(/<[^>]+>/g, " "), RUNNABLE_IN_CLOUD);
