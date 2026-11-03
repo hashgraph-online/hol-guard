@@ -458,3 +458,14 @@ fn a_server_that_stays_up_without_answering_still_fails_initialization() {
     let payload = probe_script("silent", "import sys\nfor _ in sys.stdin:\n    pass\n", 1.0);
     assert_eq!(payload["reason"], json!("initialize_failed"), "{payload:?}");
 }
+
+#[test]
+fn a_server_that_closes_its_output_but_keeps_running_still_fails_initialization() {
+    // End of output is not an exit: the probe must see the child gone first.
+    let payload = probe_script(
+        "closed_stdout",
+        "import os, time\nos.close(1)\ntime.sleep(30)\n",
+        6.0,
+    );
+    assert_eq!(payload["reason"], json!("initialize_failed"), "{payload:?}");
+}

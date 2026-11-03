@@ -562,7 +562,7 @@ impl RpcSession {
 
 /// Drain `fd` into parsed JSON-RPC messages, honoring the output cap and the
 /// bounded 256-message queue. Runs on a dedicated thread. `output_ended` is
-/// set only when the server's output itself ends; a probe limit leaves it.
+/// set only at end of file; a read error or a probe limit leaves it.
 pub(crate) fn drain_stream(
     mut stdout: std::process::ChildStdout,
     tx: mpsc::Sender<Value>,
@@ -574,10 +574,12 @@ pub(crate) fn drain_stream(
     loop {
         let mut chunk = [0u8; 8192];
         let n = match stdout.read(&mut chunk) {
-            Ok(0) | Err(_) => {
+            Ok(0) => {
                 output_ended.store(true, Ordering::Release);
                 return;
             }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => return,
             Ok(n) => n,
         };
         output_bytes += n;
@@ -1579,7 +1581,12 @@ pub fn run_mcp_stdio_probe(
             return McpCatalog::reason_only("transport_failed");
         }
     };
-    let catalog = negotiate_catalog(&mut session, deadline);
+    let mut catalog = negotiate_catalog(&mut session, deadline);
+    // Closed output alone does not prove an exit: a server can close stdout
+    // and keep running. Only a child that is gone is reported as exited.
+    if catalog.reason.as_deref() == Some("server_exited") && !child_exited(&mut child) {
+        catalog = McpCatalog::reason_only("initialize_failed");
+    }
     let result = if catalog.reason.is_some() {
         catalog
     } else {
@@ -1591,6 +1598,19 @@ pub fn run_mcp_stdio_probe(
     } else {
         result
     }
+}
+
+/// Whether the child has exited, allowing up to half a second for an exit
+/// that is still being reaped after its output closed.
+fn child_exited(child: &mut Child) -> bool {
+    for _ in 0..20 {
+        match child.try_wait() {
+            Ok(Some(_)) => return true,
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+            Err(_) => return false,
+        }
+    }
+    false
 }
 
 /// `_stop` — kill the child's process tree, then reap the direct child.
