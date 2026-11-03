@@ -38,10 +38,7 @@ pub(super) use walk_memo::with_walk_memo;
 /// peers; a whole-command answer serves the readers that prove one operand
 /// at a time.
 pub(super) fn command_creates_nothing(model: &crate::CanonicalCommandV1) -> bool {
-    model
-        .segments
-        .iter()
-        .all(|segment| grep::creates_nothing(segment))
+    model.segments.iter().all(grep::creates_nothing)
 }
 
 /// A names-only walk (`find`) rooted at a project-metadata directory such as

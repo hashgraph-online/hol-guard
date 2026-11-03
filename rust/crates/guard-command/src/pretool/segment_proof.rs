@@ -229,7 +229,7 @@ fn no_peer_creates(model: &CanonicalCommandV1, segment: &crate::CommandSegmentV1
         .segments
         .iter()
         .filter(|other| other.span != segment.span)
-        .all(|other| search::grep::creates_nothing(other))
+        .all(search::grep::creates_nothing)
 }
 
 pub(super) fn exact_safe_segment_with_context(

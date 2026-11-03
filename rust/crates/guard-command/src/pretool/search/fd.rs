@@ -59,6 +59,14 @@ fn unsafe_root(value: &str, context: ReadContext<'_>, absent: bool) -> bool {
     if value.contains(['[', ']']) {
         return !tree::safe_literal_bracket_search_target(value, context);
     }
+    // A root that is not there opens nothing: `fd` prints an error for the
+    // name and exits, which is the answer `rg` and `grep` already carry for a
+    // missing search root. The peer screen the caller runs keeps the proof to
+    // commands where no step can put a tree at the name before the walk
+    // reaches it.
+    if absent && super::grep::absent_target(value, context) {
+        return false;
+    }
     unsafe_search_value(SearchValueRole::Path, value, context)
         && !tree::rg_root_inside_cwd(value, context)
         && !tree::listing_root_below_home(value, context)
@@ -69,12 +77,6 @@ fn unsafe_root(value: &str, context: ReadContext<'_>, absent: bool) -> bool {
         // `rg` root proves this listing too, once it reads the ignore files
         // `fd` reads rather than the ones `rg` reads.
         && !sibling::fd_sibling_repository_root(value, context)
-        // A root that is not there opens nothing: `fd` prints an error for
-        // the name and exits, which is the answer `rg` and `grep` already
-        // carry for a missing search root. The peer screen the caller runs
-        // keeps the proof to commands where no step can put a tree at the
-        // name before the walk reaches it.
-        && !(absent && super::grep::absent_target(value, context))
 }
 
 fn unsafe_value(
@@ -188,7 +190,7 @@ pub(super) fn safe_fd_segment(
             .segments
             .iter()
             .filter(|other| other.span != segment.span)
-            .all(|other| super::grep::creates_nothing(other));
+            .all(super::grep::creates_nothing);
     safe_fd_arguments_inner(&segment.arguments, context, absent)
 }
 
