@@ -58,9 +58,9 @@ pub(super) fn unproven_steps_reason(
     // them separately turns one review into two and leaves the same steps
     // under review, so the advice is withheld rather than reversed.
     let splittable = model.segments.iter().enumerate().any(|(index, segment)| {
-        !unproven.contains(&index)
-            && !stdin_filter_segment(segment)
-            && !(index == 0 && cwd.is_some())
+        let proven = !unproven.contains(&index);
+        let leading_cd = index == 0 && cwd.is_some();
+        proven && !(stdin_filter_segment(segment) || leading_cd)
     });
     let steps = unproven
         .iter()
