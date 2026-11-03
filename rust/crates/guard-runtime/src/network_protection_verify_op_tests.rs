@@ -45,6 +45,7 @@ fn request(response: Value, trusted_keys: Option<Value>) -> NetworkProtectionVer
         schema: NETWORK_PROTECTION_VERIFY_REQUEST_SCHEMA.to_owned(),
         request_id: "network-protection-verify-test".to_owned(),
         response,
+        response_json: None,
         workspace_id: workspace_id(),
         trusted_keys,
         cached_bundle_version: None,
@@ -198,5 +199,96 @@ fn still_reads_an_envelope_that_lists_no_entries_as_an_empty_keyring() {
     assert_eq!(
         message,
         "Network protection bundle signing key is not trusted"
+    );
+}
+
+fn as_text(request: NetworkProtectionVerifyRequestV1) -> NetworkProtectionVerifyRequestV1 {
+    NetworkProtectionVerifyRequestV1 {
+        response: Value::Null,
+        response_json: Some(serde_json::to_string(&request.response).expect("response encodes")),
+        ..request
+    }
+}
+
+#[test]
+fn verifies_the_same_bundle_when_the_response_arrives_as_text() {
+    let response = response();
+    let keys = advertised_keys(&response);
+    let as_value = result(&request(response.clone(), Some(keys.clone())));
+    let as_json = result(&as_text(request(response, Some(keys))));
+
+    assert_eq!(as_value.payload["outcome"], "verified");
+    assert_eq!(as_json.payload, as_value.payload);
+}
+
+#[test]
+fn refuses_a_request_that_carries_the_response_twice() {
+    let response = response();
+    let keys = advertised_keys(&response);
+    let both = NetworkProtectionVerifyRequestV1 {
+        response_json: Some(serde_json::to_string(&response).expect("response encodes")),
+        ..request(response, Some(keys))
+    };
+
+    assert_eq!(
+        refusal(&both),
+        "Network protection bundle request carries the response twice"
+    );
+}
+
+#[test]
+fn refuses_response_text_that_is_not_json() {
+    let response = response();
+    let keys = advertised_keys(&response);
+    let broken = NetworkProtectionVerifyRequestV1 {
+        response_json: Some("{".to_owned()),
+        ..as_text(request(response, Some(keys)))
+    };
+
+    assert_eq!(
+        refusal(&broken),
+        "Network protection bundle response is not valid JSON"
+    );
+}
+
+/// A production bundle's threat feeds hold far more than the 4,096 items a
+/// request frame allows in one array. Sent as a value, the frame never reaches
+/// the verifier and the caller sees no reply at all; sent as text, the
+/// verifier reads it and answers.
+#[test]
+fn a_bundle_with_wide_threat_feeds_reaches_the_verifier_as_text() {
+    let mut response = response();
+    let keys = advertised_keys(&response);
+    response["bundle"]["threatUrls"]["malware_distribution"] = Value::Array(
+        (0..5_000)
+            .map(|index| Value::String(format!("{index:032x}")))
+            .collect(),
+    );
+    let frame = |request: NetworkProtectionVerifyRequestV1| {
+        serde_json::to_vec(&json!({
+            "operation": "network_protection_verify",
+            "request": request,
+            "deadline_budget_ms": 15_000,
+        }))
+        .expect("frame encodes")
+    };
+
+    let as_value = request(response.clone(), Some(keys.clone()));
+    assert_eq!(
+        crate::resident_ops::evaluate_resident_bytes(&frame(as_value), None),
+        Err("native_json_array_too_wide".to_owned())
+    );
+
+    let as_json = as_text(request(response, Some(keys)));
+    let reply = crate::resident_ops::evaluate_resident_bytes(&frame(as_json), None)
+        .expect("the frame reaches the operation");
+    let parsed: NetworkProtectionVerifyResultV1 =
+        serde_json::from_slice(&reply).expect("the reply parses");
+    // The extra entries are outside what the producer signed, so the
+    // verifier itself refuses them, which is the point: it read the bundle.
+    assert_eq!(parsed.payload["outcome"], "refused");
+    assert_eq!(
+        parsed.payload["message"],
+        "Network protection bundle payloadHash does not match its payload"
     );
 }
