@@ -35,6 +35,8 @@ from ..strict_json_pairs import unique_json_object
 from .bounded_json_depth import check_json_depth
 
 _MAX_TOOLS = 10_000
+# The resident request parser refuses a list or object wider than this.
+_NATIVE_WIDTH = 4096
 _MAX_MESSAGES = 128
 _MAX_JSON_DEPTH = 32
 _SNAPSHOT_TTL = 30.0
@@ -356,7 +358,10 @@ def read_codex_host_inventory(
             )
             _send_websocket_text(client, '{"method":"initialized"}')
             result = _rpc(client, pending, "app/installed", {"forceRefresh": False}, deadline=deadline, cancel=cancel)
-            apps = cast(list[dict[str, object]], _native_rows({"installed": result})["apps"])
+            apps = cast(
+                list[dict[str, object]],
+                _native_rows({"installed": _narrow_installed(result)}, deadline=deadline)["apps"],
+            )
             complete = True
             for start in range(0, len(apps), 100):
                 page = apps[start : start + 100]
@@ -371,7 +376,9 @@ def read_codex_host_inventory(
                     deadline=deadline,
                     cancel=cancel,
                 )
-                answer = _native_rows({"page": page, "read": result}, count=len(page))
+                read, wide = _narrow_read(result)
+                request = {"page": page, "read": read} | ({"wide": wide} if wide else {})
+                answer = _native_rows(request, count=len(page), deadline=deadline)
                 apps[start : start + 100] = cast(list[dict[str, object]], answer["apps"])
                 complete = answer["complete"] is True and complete
                 if sum(len(cast(list[object], app.get("tools", []))) for app in apps) > _MAX_TOOLS:
@@ -391,7 +398,56 @@ def read_codex_host_inventory(
         raise
 
 
-def _native_rows(request: dict[str, object], *, count: int | None = None) -> dict[str, object]:
+def _leaf(value: object) -> object:
+    """A value Rust reads as a scalar: a container there only fails by its type."""
+    return [] if isinstance(value, list) else {} if isinstance(value, dict) else value
+
+
+def _rows(value: object, keys: tuple[str, ...], width: int = _NATIVE_WIDTH) -> object:
+    """A host list cut to ``width`` rows that keep only ``keys``; Rust still refuses it as too long."""
+    if not isinstance(value, list):
+        return _leaf(value)
+    return [
+        {key: _leaf(row[key]) for key in keys if key in row} if isinstance(row, dict) else _leaf(row)
+        for row in value[:width]
+    ]
+
+
+def _narrow_installed(result: object) -> object:
+    """The ``app/installed`` reply narrowed to the fields the native kind reads."""
+    if not isinstance(result, dict):
+        return _leaf(result)
+    return {"apps": _rows(result["apps"], ("id", "enabled", "callable", "runtimeName"))} if "apps" in result else {}
+
+
+def _narrow_read(result: object) -> tuple[object, list[int]]:
+    """The ``app/read`` reply narrowed to the fields Rust reads, so it fits the resident request parser.
+
+    A longer tool list travels in chunks at the returned ``apps`` positions.
+    """
+    if not isinstance(result, dict):
+        return _leaf(result), []
+    narrowed = {key: _rows(result[key], ()) for key in ("missingAppIds",) if key in result}
+    wide: list[int] = []
+    if "apps" in result:
+        apps = _rows(result["apps"], ("id", "name"))
+        rows = cast(list[object], result["apps"]) if isinstance(apps, list) else []
+        for index, (app, row) in enumerate(zip(cast(list[object], apps), rows, strict=False)):
+            key = "toolSummaries" if isinstance(row, dict) and "toolSummaries" in row else "tools"
+            if not isinstance(app, dict) or not isinstance(row, dict) or key not in row:
+                continue
+            tools = _rows(row[key], ("name", "title", "description"), _MAX_TOOLS + 1)
+            if isinstance(tools, list) and len(tools) > _NATIVE_WIDTH:
+                tools = [tools[start : start + _NATIVE_WIDTH] for start in range(0, len(tools), _NATIVE_WIDTH)]
+                wide.append(index)
+            app[key] = tools
+        narrowed["apps"] = apps
+    return narrowed, wide
+
+
+def _native_rows(
+    request: dict[str, object], *, count: int | None = None, deadline: float | None = None
+) -> dict[str, object]:
     """Ask the native ``codex_host_inventory`` kind what a host reply says.
 
     Rust validates the reply and builds the public app rows; a reply it
@@ -400,7 +456,7 @@ def _native_rows(request: dict[str, object], *, count: int | None = None) -> dic
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     try:
-        answer = native_runner_authority("codex_host_inventory", request)
+        answer = native_runner_authority("codex_host_inventory", request, deadline_monotonic=deadline)
     except NativeRunnerAuthorityError as error:
         raise ValueError(
             "codex_host_limit" if str(error).endswith("_too_large") else "codex_host_unavailable"

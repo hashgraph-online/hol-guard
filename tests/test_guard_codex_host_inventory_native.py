@@ -141,7 +141,7 @@ def test_native_peer_process_timeout_is_a_bounded_refresh_failure(tmp_path, monk
 def test_native_reply_check_raises_only_host_codes(monkeypatch, reply, expected):
     requests = []
 
-    def answer(kind, request):
+    def answer(kind, request, **_options):
         requests.append((kind, request))
         if isinstance(reply, Exception):
             raise reply
@@ -152,3 +152,31 @@ def test_native_reply_check_raises_only_host_codes(monkeypatch, reply, expected)
     with pytest.raises(ValueError, match=f"^codex_host_{expected}$"):
         inventory._native_rows({"page": page, "read": {"apps": []}}, count=1)
     assert requests == [("codex_host_inventory", {"page": page, "read": {"apps": []}})]
+
+
+def test_host_replies_wider_than_the_native_request_parser_are_still_read(tmp_path, monkeypatch):
+    def handler(request):
+        response = _handler(request)
+        if request["method"] == "app/read":
+            app = response["result"]["apps"][0]
+            app["toolSummaries"] = [{"name": f"tool_{index}", "inputSchema": {"a": [[[[]]]]}} for index in range(5000)]
+            app["labels"] = {f"label_{index}": index for index in range(5000)}
+            response["result"]["extra"] = list(range(5000))
+        return response
+
+    deadlines = []
+    authority = native_runner_authority.native_runner_authority
+
+    def bounded(kind, request, **options):
+        deadlines.append(options["deadline_monotonic"])
+        return authority(kind, request, **options)
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", bounded)
+    with _host(tmp_path, monkeypatch, handler) as (home, _requests):
+        snapshot = inventory.read_codex_host_inventory(codex_home=home)
+    assert snapshot.metadata_complete
+    tools = snapshot.apps[0]["tools"]
+    assert len(tools) == 5000
+    assert [tool["name"] for tool in tools[4095:4097]] == ["tool_4095", "tool_4096"]
+    assert len(deadlines) == 2
+    assert all(isinstance(deadline, float) for deadline in deadlines)

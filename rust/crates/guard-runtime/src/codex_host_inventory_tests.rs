@@ -82,6 +82,47 @@ fn tool_summaries_are_bounded_per_app() {
 }
 
 #[test]
+fn chunked_tool_lists_join_back_in_order() {
+    let chunk = |range: std::ops::Range<usize>| -> Value {
+        range
+            .map(|index| json!({"name": format!("tool_{index}")}))
+            .collect()
+    };
+    let request = |chunks: Value, wide: Value| {
+        dispatch(&json!({
+            "page": page(&["example"]),
+            "read": {
+                "apps": [{"id": "example", "name": "Example", "toolSummaries": chunks}],
+                "missingAppIds": [],
+            },
+            "wide": wide,
+        }))
+        .expect("read")
+    };
+    let answer = request(json!([chunk(0..4096), chunk(4096..5000)]), json!([0]));
+    assert_eq!(answer["complete"], json!(true));
+    let tools = answer["apps"][0]["tools"].as_array().expect("tools");
+    assert_eq!(tools.len(), 5000);
+    assert_eq!(tools[4096]["name"], json!("tool_4096"));
+    assert_eq!(
+        request(
+            json!([chunk(0..4096), chunk(4096..8192), chunk(8192..10_001)]),
+            json!([0])
+        ),
+        json!({"error": "codex_host_limit"})
+    );
+    // Chunks only join where Python said it chunked the list.
+    assert_eq!(
+        request(json!([chunk(0..2)]), json!([])),
+        json!({"error": "codex_host_invalid"})
+    );
+    assert_eq!(
+        request(json!(chunk(0..2)), json!([0])),
+        json!({"error": "codex_host_invalid"})
+    );
+}
+
+#[test]
 fn identifiers_are_not_normalized_into_another_connection() {
     for value in [" example", "example\n", "example tool", "\u{0}example"] {
         let answer = installed(json!([{"id": value, "enabled": true, "callable": true}]));
@@ -147,6 +188,9 @@ fn refuses_malformed_requests() {
         json!({"page": [{"app_id": 1}], "read": reply.clone()}),
         json!({"page": [row.clone(), row.clone()], "read": reply.clone()}),
         json!({"page": [row.clone()], "read": reply.clone(), "op": "read"}),
+        json!({"page": [row.clone()], "read": reply.clone(), "wide": "0"}),
+        json!({"page": [row.clone()], "read": reply.clone(), "wide": [-1]}),
+        json!({"installed": {}, "wide": []}),
     ] {
         assert_eq!(dispatch(&request), Err(ERR_INVALID), "{request}");
     }

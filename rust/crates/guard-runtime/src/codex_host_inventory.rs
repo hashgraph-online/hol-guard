@@ -12,6 +12,10 @@
 //!   `{"apps": [row, ...], "complete": bool}`: the same rows in the same order,
 //!   with each covered app's name and tool summaries filled in.
 //!
+//! The resident request parser refuses any list wider than 4096 entries, so
+//! Python sends a longer tool list as a list of chunks and names the
+//! position of each such app in `read.apps` under `"wide"`.
+//!
 //! A reply the host should not have sent answers `{"error": code}` with the
 //! code Python raised for it: `codex_host_limit` for a list that is missing or
 //! too long, `codex_host_invalid` for anything else. Host text is display
@@ -48,9 +52,12 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         (1, Some(Value::Object(installed)), None, None) => {
             installed_apps(installed).map(|apps| json!({ "apps": apps }))
         }
-        (2, None, Some(page), Some(Value::Object(read))) => {
+        (count, None, Some(page), Some(Value::Object(read)))
+            if count == 2 + usize::from(map.contains_key("wide")) =>
+        {
             let page = page_rows(page)?;
-            merge_metadata(page, read)
+            let wide = wide_positions(map.get("wide"))?;
+            merge_metadata(page, read, &wide)
                 .map(|(apps, complete)| json!({ "apps": apps, "complete": complete }))
         }
         _ => return Err(ERR_INVALID),
@@ -78,6 +85,38 @@ fn page_rows(page: &Value) -> Result<Rows, &'static str> {
         .iter()
         .filter_map(|row| row.as_object().cloned())
         .collect())
+}
+
+/// The `read.apps` positions whose tool list arrived in chunks.
+fn wide_positions(value: Option<&Value>) -> Result<Vec<usize>, &'static str> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let positions = value.as_array().ok_or(ERR_INVALID)?;
+    if positions.len() > MAX_PAGE {
+        return Err(ERR_INVALID);
+    }
+    positions
+        .iter()
+        .map(|position| {
+            position
+                .as_u64()
+                .and_then(|position| usize::try_from(position).ok())
+                .ok_or(ERR_INVALID)
+        })
+        .collect()
+}
+
+/// A tool list sent as chunks: the chunks join back in order.
+fn chunked(value: &Value) -> HostResult<Vec<&Value>> {
+    let mut entries = Vec::new();
+    for chunk in value.as_array().ok_or(INVALID)? {
+        entries.extend(chunk.as_array().ok_or(INVALID)?);
+        if entries.len() > MAX_TOOLS {
+            return Err(LIMIT);
+        }
+    }
+    Ok(entries)
 }
 
 /// `_installed_apps`.
@@ -110,7 +149,11 @@ fn installed_apps(result: &Map<String, Value>) -> HostResult<Vec<Value>> {
 
 /// `_merge_metadata`: the page with each covered app's metadata, and whether
 /// every app on it came back with tool summaries.
-fn merge_metadata(mut page: Rows, result: &Map<String, Value>) -> HostResult<(Rows, bool)> {
+fn merge_metadata(
+    mut page: Rows,
+    result: &Map<String, Value>,
+    wide: &[usize],
+) -> HostResult<(Rows, bool)> {
     let requested: Vec<String> = page
         .iter()
         .map(|row| {
@@ -122,7 +165,7 @@ fn merge_metadata(mut page: Rows, result: &Map<String, Value>) -> HostResult<(Ro
         .collect();
     let mut covered: HashSet<String> = HashSet::new();
     let mut complete = true;
-    for value in array(result.get("apps"), MAX_PAGE)? {
+    for (position, value) in array(result.get("apps"), MAX_PAGE)?.iter().enumerate() {
         let row = object(value)?;
         let app_id = identifier(row.get("id"))?;
         let Some(index) = requested.iter().position(|id| *id == app_id) else {
@@ -138,9 +181,10 @@ fn merge_metadata(mut page: Rows, result: &Map<String, Value>) -> HostResult<(Ro
             .get("toolSummaries")
             .or_else(|| row.get("tools"))
             .filter(|value| !value.is_null());
-        let entries: &[Value] = match summaries {
-            Some(value) => array(Some(value), MAX_TOOLS)?,
-            None => &[],
+        let entries: Vec<&Value> = match summaries {
+            Some(value) if wide.contains(&position) => chunked(value)?,
+            Some(value) => array(Some(value), MAX_TOOLS)?.iter().collect(),
+            None => Vec::new(),
         };
         let mut tools = Vec::with_capacity(entries.len());
         let mut names: HashSet<String> = HashSet::new();
