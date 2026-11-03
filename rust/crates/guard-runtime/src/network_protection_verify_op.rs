@@ -22,7 +22,6 @@ use guard_contracts::{
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
-use std::io::Read;
 
 use crate::package_authority_op::request_digest_with_limit;
 
@@ -34,7 +33,7 @@ const MAX_RESPONSE_JSON_COLLECTION_ITEMS: usize = 262_144;
 
 /// Largest response file the resident reads. A production bundle is a few
 /// megabytes today; this leaves room for its feeds to grow many times over.
-const MAX_RESPONSE_FILE_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_RESPONSE_FILE_BYTES: usize = 64 * 1024 * 1024;
 
 /// Per-collection cap for a response read from a file, scaled with
 /// [`MAX_RESPONSE_FILE_BYTES`] as the text cap is with its string bound.
@@ -132,8 +131,9 @@ fn response(
 /// The file is evidence, not authority: the verifier still checks the bundle
 /// inside it end to end. The digest is what ties it to this request, whose
 /// hash the reply is bound to, so a file that changed after the caller wrote
-/// it is refused rather than verified in its new form. A link is refused so
-/// the read stays on the file the caller created.
+/// it is refused rather than verified in its new form. The shared stable
+/// reader refuses links and anything but a regular file before it opens it,
+/// so a FIFO swapped in for the file cannot stall the resident.
 fn read_response_file(
     path: &str,
     expected: Option<&str>,
@@ -143,21 +143,23 @@ fn read_response_file(
             "Network protection bundle response file has no digest",
         ));
     };
-    let unreadable = || refusal("Network protection bundle response file is unreadable");
-    let metadata = std::fs::symlink_metadata(path).map_err(|_| unreadable())?;
-    if !metadata.file_type().is_file() {
-        return Err(unreadable());
-    }
-    let file = std::fs::File::open(path).map_err(|_| unreadable())?;
-    let mut bytes = Vec::new();
-    file.take(MAX_RESPONSE_FILE_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| unreadable())?;
-    if bytes.len() as u64 > MAX_RESPONSE_FILE_BYTES {
-        return Err(refusal(
-            "Network protection bundle response file is too large",
-        ));
-    }
+    let bytes = match guard_secure_fs::read_stable(
+        std::path::Path::new(path),
+        MAX_RESPONSE_FILE_BYTES,
+        false,
+    ) {
+        Ok(read) => read.bytes,
+        Err(guard_secure_fs::SecureReadError::TooLarge) => {
+            return Err(refusal(
+                "Network protection bundle response file is too large",
+            ))
+        }
+        Err(_) => {
+            return Err(refusal(
+                "Network protection bundle response file is unreadable",
+            ))
+        }
+    };
     let actual = format!("sha256:{}", hex::encode(Sha256::digest(&bytes)));
     if actual != expected {
         return Err(refusal(
