@@ -998,15 +998,81 @@ fn package_runtime_reason(intent: &PackageIntent) -> String {
     )
 }
 
+/// The placeholder a workspace file operand collapses to.
+const WORKSPACE_OPERAND: &str = "<workspace-path>";
+
+/// Whether this token is a file the command works on inside its own
+/// workspace, rather than anything that decides which package is fetched.
+///
+/// A registry spec never looks like this: it carries no `/`, and the specs
+/// that do — `@scope/name`, `git+…`, `file:…` — carry an `@` or a `:` with
+/// it. An absolute path, a `~` path and a `..` path each name somewhere the
+/// workspace does not reach, so they keep their exact spelling and go on
+/// identifying the request on their own.
+fn workspace_file_operand(token: &str, targets: &[PackageIntentTarget]) -> bool {
+    if targets
+        .iter()
+        .any(|target| target.raw_spec == token || target.source_url.as_deref() == Some(token))
+    {
+        return false;
+    }
+    if token == "." {
+        return true;
+    }
+    !token.starts_with('-')
+        && !token.starts_with('/')
+        && !token.starts_with('~')
+        && !token.contains('@')
+        && !token.contains(':')
+        && token.contains('/')
+        && !token.split('/').any(|segment| segment == "..")
+}
+
+/// The file list an executed tool was pointed at, collapsed to one
+/// placeholder.
+///
+/// A `uvx ruff check` over one set of files fetches exactly the package a
+/// `uvx ruff check` over the next set does, so keeping the file list in the
+/// identity gives every lint run its own approval and no saved answer ever
+/// covers the next one. Subcommands, options and option values that are not
+/// workspace files all stay verbatim, so `check` and `format` still part, and
+/// so does anything naming a source to fetch.
+fn collapse_workspace_operands(tokens: &[String], targets: &[PackageIntentTarget]) -> Vec<String> {
+    let mut collapsed: Vec<String> = Vec::with_capacity(tokens.len());
+    for token in tokens {
+        if !workspace_file_operand(token, targets) {
+            collapsed.push(token.clone());
+            continue;
+        }
+        if collapsed.last().map(String::as_str) != Some(WORKSPACE_OPERAND) {
+            collapsed.push(WORKSPACE_OPERAND.to_owned());
+        }
+    }
+    collapsed
+}
+
 /// `_fingerprint_command_shape` (:295-306): git source spellings collapse to
-/// `<canonical-git-source>` so alias/format variants share an identity.
+/// `<canonical-git-source>` so alias/format variants share an identity, and
+/// an executed tool's workspace file list collapses to `<workspace-path>` so
+/// one answer covers the same run over the next set of files.
 fn fingerprint_command_shape(intent: &PackageIntent) -> String {
-    if !intent
+    let git_sourced = intent
         .targets
         .iter()
-        .any(|target| target.source_kind.as_deref() == Some("git"))
-    {
-        return intent.redacted_command.clone();
+        .any(|target| target.source_kind.as_deref() == Some("git"));
+    if !git_sourced {
+        if intent.intent_kind != "execute" {
+            return intent.redacted_command.clone();
+        }
+        // The parser redacts its own token list, which a combined intent then
+        // joins, so the stored spelling is the one to keep whenever nothing
+        // collapses. Rebuilding it only where a file list did collapse leaves
+        // every other execution identified exactly as it was.
+        let collapsed = collapse_workspace_operands(&intent.command_tokens, &intent.targets);
+        if collapsed == intent.command_tokens {
+            return intent.redacted_command.clone();
+        }
+        return redacted_command(&collapsed);
     }
     let mut tokens: Vec<String> = intent.command_tokens.clone();
     for target in &intent.targets {
@@ -1023,6 +1089,9 @@ fn fingerprint_command_shape(intent: &PackageIntent) -> String {
                 .map(|token| token.replace(source_spelling, "<canonical-git-source>"))
                 .collect();
         }
+    }
+    if intent.intent_kind == "execute" {
+        tokens = collapse_workspace_operands(&tokens, &intent.targets);
     }
     shlex_join(&tokens)
 }
@@ -3071,5 +3140,107 @@ mod tests {
                 || artifact.to_dict().get("runtime_private_metadata").is_none()
         );
         assert!(artifact.to_dict().get("runtime_private_metadata").is_none());
+    }
+
+    /// An `execute` intent for `command`, with `spec` as its only target.
+    fn execution_intent(command: &str, spec: &str) -> PackageIntent {
+        let tokens: Vec<String> = command.split(' ').map(str::to_owned).collect();
+        PackageIntent {
+            package_manager: tokens[0].clone(),
+            intent_kind: "execute",
+            redacted_command: redacted_command(&tokens),
+            command_tokens: tokens,
+            targets: vec![PackageIntentTarget {
+                ecosystem: "pypi".to_owned(),
+                package_name: Some(spec.to_owned()),
+                raw_spec: spec.to_owned(),
+                requested_specifier: None,
+                source_url: None,
+                source_kind: None,
+                source_repository: None,
+                source_revision_kind: None,
+                source_identity: None,
+                source_invalid_reason: None,
+                alias: None,
+                dependency_group: None,
+                extras: Vec::new(),
+                editable: false,
+            }],
+            manifest_paths: Vec::new(),
+            lockfile_paths: Vec::new(),
+            flags: Vec::new(),
+            notes: Vec::new(),
+            local_executions: Vec::new(),
+            execution_context_hashes: Vec::new(),
+            execution_context_cwds: Vec::new(),
+            execution_context_reason_codes: Vec::new(),
+            routine_local_runner: false,
+        }
+    }
+
+    fn execution_identity(command: &str, spec: &str) -> String {
+        build_package_request_artifact(
+            "guard-cli",
+            &execution_intent(command, spec),
+            "settings.json",
+            "project",
+        )
+        .artifact_id
+    }
+
+    #[test]
+    fn a_run_over_a_different_file_list_asks_under_one_identity() {
+        // The package fetched is the same either way, so a saved answer for
+        // the first lint run has to cover the next one.
+        let first = execution_identity("uvx ruff check src/one.py tests/two.py", "ruff");
+        let second = execution_identity("uvx ruff check src/three.py", "ruff");
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn a_run_that_changes_more_than_its_files_keeps_its_own_identity() {
+        let check = execution_identity("uvx ruff check src/one.py", "ruff");
+        for command in [
+            // A different subcommand.
+            "uvx ruff format src/one.py",
+            // A different option.
+            "uvx ruff check --fix src/one.py",
+            // A pinned version.
+            "uvx ruff@0.8.6 check src/one.py",
+            // A file the workspace does not reach.
+            "uvx ruff check /etc/one.py",
+            "uvx ruff check ../sibling/one.py",
+        ] {
+            let spec = if command.contains("ruff@") {
+                "ruff@0.8.6"
+            } else {
+                "ruff"
+            };
+            assert_ne!(check, execution_identity(command, spec), "{command}");
+        }
+    }
+
+    #[test]
+    fn a_package_spec_spelled_as_a_path_is_never_collapsed() {
+        // `npx ./tool` names the package itself, so the two runs fetch
+        // different code and cannot share one answer.
+        let first = execution_identity("npx ./tool-one", "./tool-one");
+        let second = execution_identity("npx ./tool-two", "./tool-two");
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn an_install_keeps_its_exact_command_shape() {
+        let mut intent = execution_intent("uv pip install src/local-one", "src/local-one");
+        intent.intent_kind = "install";
+        let installing =
+            build_package_request_artifact("guard-cli", &intent, "settings.json", "project")
+                .artifact_id;
+        let mut other = execution_intent("uv pip install src/local-two", "src/local-two");
+        other.intent_kind = "install";
+        let installing_other =
+            build_package_request_artifact("guard-cli", &other, "settings.json", "project")
+                .artifact_id;
+        assert_ne!(installing, installing_other);
     }
 }
