@@ -23,6 +23,7 @@ from .store_local_cli_context import note_capability_cause
 from .store_local_cli_retention import utc_now_iso
 from .store_local_cli_rows import _row_int, _row_values, local_cli_rules_exist
 from .store_local_cli_schema import ensure_local_cli_schema
+from .store_mcp_catalog import catalog_change_ids
 
 # How many times one listing starts over because the inventory changed between
 # its pages. Each restart means a connector was observed or granted mid-walk;
@@ -218,6 +219,9 @@ class StoreLocalCliMixin:
             raise ValueError("invalid local CLI id")
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
+            reviewing = (identity.cli_id,) if reviewed_catalog_revision is not None else ()
+            change_ids = catalog_change_ids(connection, reviewing)
+        with self._connect() as connection:
             current = connection.execute("select revision from local_cli_authority where singleton = 1").fetchone()
             current_revision = 0 if current is None else _row_int(current[0])
             if current_revision != expected_revision:
@@ -230,6 +234,7 @@ class StoreLocalCliMixin:
                 updated_at=updated_at,
                 command_states=command_states,
                 reviewed_catalog_revision=reviewed_catalog_revision,
+                catalog_change_ids=change_ids,
             )
         return next_revision
 

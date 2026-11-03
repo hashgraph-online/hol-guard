@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -58,19 +57,18 @@ def _is_command_path(value: str) -> bool:
     return 1 <= len(parts) <= _MAX_DEPTH and all(_COMMAND_NAME.fullmatch(part) for part in parts)
 
 
-def slug_local_cli_command_id(name: str) -> str:
-    """Turn an MCP tool name or CLI token into a catalog command id."""
+def slug_local_cli_command_ids(names: Sequence[str]) -> tuple[str, ...]:
+    """Catalog command ids for tool names, from the native ``local_mcp_probe`` kind.
 
-    stripped = name.strip()
-    # Slugs stay command paths, so a tool name never becomes an option id.
-    if stripped not in {ROOT_COMMAND_ID, OTHER_COMMAND_ID} and _is_command_path(stripped):
-        return stripped
-    compact = "".join(ch.lower() if ch.isalnum() else "-" for ch in stripped).strip("-")
-    compact = "-".join(part for part in compact.split("-") if part)
-    digest = hashlib.sha256(stripped.encode("utf-8")).hexdigest()[:8]
-    base = (compact or "tool")[:31]
-    candidate = f"{base}-{digest}"
-    return candidate if _is_command_path(candidate) else OTHER_COMMAND_ID
+    Slugs stay command paths, so a tool name never becomes an option id.
+    """
+
+    from ..native_runner_authority import native_runner_authority
+
+    ids = native_runner_authority("local_mcp_probe", {"op": "slugs", "names": list(names)}).get("ids")
+    if not isinstance(ids, list) or len(ids) != len(names) or not all(isinstance(item, str) for item in ids):
+        raise ValueError("command ids are unavailable")
+    return tuple(ids)
 
 
 def is_local_cli_command_state(value: object) -> bool:
