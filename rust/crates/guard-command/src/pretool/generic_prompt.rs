@@ -49,7 +49,7 @@ fn referential_access_pattern() -> &'static Regex {
 fn prompt_requests_secret(value: &str) -> bool {
     static VALUE_REQUEST: OnceLock<Regex> = OnceLock::new();
     static CLAUSE_BREAK: OnceLock<Regex> = OnceLock::new();
-    let lowered = value.to_ascii_lowercase().replace('\\', "/");
+    let lowered = mask_credential_categories(&value.to_ascii_lowercase().replace('\\', "/"));
     let mut locations = lowered.clone();
     for word in CREDENTIAL_WORDS {
         locations = locations.replace(word, " ");
@@ -500,6 +500,30 @@ fn mask_format_options(value: &str) -> String {
                 "{}output-layout",
                 captures.get(1).map_or("", |prefix| prefix.as_str())
             )
+        })
+        .into_owned()
+}
+
+/// Replaces a credential word that only names a category of action or rule,
+/// such as "secret reads", "password policy" or "API key rotation", so that a
+/// prompt about what Guard blocks is not read as a request for a value. A file
+/// name such as `secret-rules.txt` keeps its credential word.
+fn mask_credential_categories(value: &str) -> String {
+    static CATEGORY: OnceLock<Regex> = OnceLock::new();
+    static FILE_TAIL: OnceLock<Regex> = OnceLock::new();
+    let file_tail =
+        FILE_TAIL.get_or_init(|| Regex::new(r"^[._/-][a-z0-9]").expect("bounded file tail"));
+    CATEGORY
+        .get_or_init(|| {
+            Regex::new(r"(?i)\b(?:aws_secret_access_key|private_key|api[ _-]key|password|secret)s?\s+(?:reads?|reading|scans?|scanning|scanners?|detection|detectors?|rules?|polic(?:y|ies)|rotation|management|handling|redaction|hygiene|coverage|protection|checks?|categor(?:y|ies)|types?|class(?:es)?)\b")
+                .expect("bounded credential category")
+        })
+        .replace_all(value, |captures: &Captures| {
+            let whole = captures.get(0).expect("whole match present");
+            if file_tail.is_match(&value[whole.end()..]) {
+                return whole.as_str().to_owned();
+            }
+            "credential-category".to_owned()
         })
         .into_owned()
 }
