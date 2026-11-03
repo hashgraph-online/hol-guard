@@ -20,6 +20,7 @@ from .connect_cloud_actions import (
     CloudActionsConnectReport,
     check_connect_cloud_actions_declined,
     check_connect_cloud_workspace,
+    cloud_actions_connect_summary,
     parse_cloud_actions_connect_report,
 )
 from .connect_sync_result import apply_guard_connect_sync_result
@@ -470,6 +471,8 @@ def _build_guard_device_connect_payload(
         payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
         payload["disconnect"] = _undo_unwanted_guard_connect_pairing(store)
         payload["status"] = "disconnected"
+        # The pairing is gone, so the Cloud actions row must not still say "Ready".
+        payload["cloud_actions"] = cloud_actions_connect_summary(None, paired=False)
         payload["cloud_actions_problem"] = problem
         print(problem, file=sys.stderr)
         return payload, 1

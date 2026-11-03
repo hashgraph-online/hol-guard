@@ -282,6 +282,7 @@ def test_browser_connect_undoes_pairing_to_wrong_workspace_before_first_sync(
     assert len(disconnects) == 1 and disconnects[0]["revoke_cloud_grant"] is True
     assert OTHER_WORKSPACE_ID in str(payload["cloud_actions_problem"])
     assert OTHER_WORKSPACE_ID in capsys.readouterr().err
+    assert payload["cloud_actions"]["status"] == "off"
 
 
 def test_headless_connect_undoes_the_pairing_when_cloud_actions_came_back_on_despite_decline(
@@ -318,6 +319,8 @@ def test_headless_connect_undoes_the_pairing_when_cloud_actions_came_back_on_des
     assert payload is not None and payload["status"] == "disconnected"
     assert len(disconnects) == 1 and disconnects[0]["revoke_cloud_grant"] is True
     assert "--no-cloud-actions" in str(payload["cloud_actions_problem"])
+    assert payload["cloud_actions"]["status"] == "off"
+    assert "not paired" in payload["cloud_actions"]["message"]
 
 
 def test_plain_connect_keeps_its_flow_call_and_succeeds(tmp_path: Path, monkeypatch) -> None:
