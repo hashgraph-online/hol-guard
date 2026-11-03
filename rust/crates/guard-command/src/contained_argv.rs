@@ -175,7 +175,10 @@ fn windows_plain_script(script: &str, node: bool) -> bool {
         && name.is_match(script.rsplit('/').next().unwrap_or(""))
 }
 
-fn workspace_script_path(script: &str) -> bool {
+/// The path hygiene every workspace-relative operand has to pass: a relative
+/// path with no option spelling, no shell metacharacter and no walk out of the
+/// tree it was admitted for.
+pub(crate) fn workspace_script_path(script: &str) -> bool {
     !script.is_empty()
         && !script.starts_with(['-', '/', '~', '$'])
         && !script.contains(['\\', '$', '`'])
@@ -224,9 +227,12 @@ pub fn node_script_index(command: &[String], start: usize) -> Option<usize> {
 struct TsxTestParts<'a> {
     /// The Node test-runner flags ahead of the script.
     flags: &'a [String],
-    /// The script the run names.
-    script: &'a String,
-    /// The arguments the script is passed.
+    /// The first path the run names, when it names one. In test-runner mode
+    /// Node discovers its own files from the working directory, so a run that
+    /// names nothing is still a test run.
+    script: Option<&'a String>,
+    /// The arguments the script is passed, or the further paths the test
+    /// runner loads.
     arguments: &'a [String],
 }
 
@@ -254,15 +260,32 @@ fn tsx_test_parts(command: &[String]) -> Result<Option<TsxTestParts<'_>>, Restri
         return Ok(None);
     }
     let (flags, rest) = args.split_at(tsx_runner_flag_count(args));
-    if tsx_runner_test_mode(flags) && !rest.iter().all(|value| named_test_script(value, true)) {
-        return Ok(None);
+    if tsx_runner_test_mode(flags) {
+        // Here Node is its own test runner and every remaining word is a path
+        // it loads, a directory it walks, or nothing at all when it discovers
+        // the files itself. The leaf names a project gives its specs are not
+        // the boundary on that shape -- the workspace is, and the sink
+        // resolves each path inside it before the run starts. `node --test`
+        // takes the same paths today through the sibling read-only profile,
+        // and takes them without resolving them at all, so reading them here
+        // admits nothing that was not already contained.
+        if !rest.iter().all(|value| workspace_script_path(value)) {
+            return Ok(None);
+        }
+        return Ok(Some(TsxTestParts {
+            flags,
+            script: rest.first(),
+            arguments: rest.get(1..).unwrap_or_default(),
+        }));
     }
+    // Without those flags the first word is a script Node runs and the rest is
+    // its argv, so the leaf still has to name a test file.
     Ok(rest
         .first()
         .filter(|value| named_test_script(value, true))
         .map(|script| TsxTestParts {
             flags,
-            script,
+            script: Some(script),
             arguments: &rest[1..],
         }))
 }
@@ -270,8 +293,8 @@ fn tsx_test_parts(command: &[String]) -> Result<Option<TsxTestParts<'_>>, Restri
 /// The test script a tsx run names, and the arguments the script is passed.
 pub fn tsx_test_invocation(
     command: &[String],
-) -> Result<Option<(String, Vec<String>)>, RestrictedPytestError> {
-    Ok(tsx_test_parts(command)?.map(|parts| (parts.script.clone(), parts.arguments.to_vec())))
+) -> Result<Option<(Option<String>, Vec<String>)>, RestrictedPytestError> {
+    Ok(tsx_test_parts(command)?.map(|parts| (parts.script.cloned(), parts.arguments.to_vec())))
 }
 
 /// The Node test-runner flags a tsx run carries, which the sink re-emits in

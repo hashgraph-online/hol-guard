@@ -27027,6 +27027,139 @@
       "expect": "not_allow"
     },
     {
+      "id": "parent-npx-tsx-test-plain-leaf",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsx --test test/a.ts"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-tsx-test-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsx --test __tests__/"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-tsx-test-discovers",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsx --test"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-tsx-test-two-paths",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsx --test src/lib.ts test/a.ts"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-tsx-test-only-flag",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsx --test --test-only test/a.ts"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-tsx-test-reporter-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsx --test --test-reporter=./r.js test/a.test.ts"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-tsx-test-outside-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsx --test ../outside/a.test.ts"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-tsx-script-run-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsx src/index.ts"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
       "id": "toolchain-npm-exec-tsc-noemit",
       "fix_area": "shell",
       "harnesses": [
