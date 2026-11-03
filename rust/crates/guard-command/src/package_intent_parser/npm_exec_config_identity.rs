@@ -55,7 +55,19 @@ pub(crate) fn configured_packages_for_segment(
         return NpmConfiguredPackages::Unnamed;
     };
     let Some(cwd) = cwd.filter(|cwd| cwd.is_absolute()) else {
-        return packages_from_environment(&effective).unwrap_or(NpmConfiguredPackages::Unnamed);
+        // The shell could not place this launch, so there is no project
+        // `.npmrc` to read. An environment `package` value still names the
+        // install. A `userconfig` or `globalconfig` redirect might too, and
+        // without a directory its path cannot be resolved, so that package
+        // stays unnamed. Nothing else is a package setting.
+        return packages_from_environment(&effective).unwrap_or_else(|| {
+            let settings = environment_settings(&effective);
+            if settings.contains_key("userconfig") || settings.contains_key("globalconfig") {
+                NpmConfiguredPackages::Unnamed
+            } else {
+                NpmConfiguredPackages::Absent
+            }
+        });
     };
     npm_configured_exec_packages(&effective, cwd, home)
 }

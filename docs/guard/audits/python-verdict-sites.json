@@ -456,6 +456,16 @@
       "note": "Decodes the stored resume resolution into the enforced vocabulary."
     },
     {
+      "file": "src/codex_plugin_scanner/guard/local_supply_chain.py",
+      "func": "_block_unidentified_npm_package",
+      "root": "package",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Projects the unidentified-package block when package evaluation was stubbed. The only verdict it writes is block."
+    },
+    {
       "file": "src/codex_plugin_scanner/guard/mcp_tool_calls.py",
       "func": "allow_tool_call",
       "root": "mcp",

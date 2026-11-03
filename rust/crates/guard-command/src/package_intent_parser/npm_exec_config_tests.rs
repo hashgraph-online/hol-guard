@@ -481,3 +481,6 @@ fn an_unknown_home_or_launch_folder_keeps_the_review() {
         Some(&project)
     ));
 }
+
+#[path = "npm_exec_config_directory_tests.rs"]
+mod directory_tests;
