@@ -14,9 +14,14 @@
 //! hunk longer than the generic walk's 24-item cap is scanned in full instead
 //! of becoming a "too large" excerpt.
 //!
-//! Only what is scanned narrows. An allow still records the digest of the
-//! whole observed result, as `canonical_observed_output_sha256` computes it,
-//! so receipts and delivery checks see the same output identity as before.
+//! Only what is scanned narrows. An allow records the same whole-result
+//! digest the generic path defines, `canonical_observed_output_sha256`, so
+//! receipts and delivery checks keep one output identity. That function has
+//! no digest for a result its walk cannot read in full, such as a patch hunk
+//! over 24 lines, so such an allow carries none. The generic path never had
+//! one there either: it answered with a reviewed excerpt. No second digest
+//! is invented that nothing else could recompute.
+//!
 //! Every other harness, tool and response shape, and an edit whose own text
 //! cannot be read in full, keeps the generic review.
 

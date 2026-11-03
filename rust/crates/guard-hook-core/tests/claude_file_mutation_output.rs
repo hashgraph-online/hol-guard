@@ -3,7 +3,7 @@
 //! `originalFile` and never shows the model.
 
 use guard_contracts::NativeHookRequestV1;
-use guard_hook_core::review_post_tool;
+use guard_hook_core::{canonical_observed_output_sha256, review_post_tool};
 use serde_json::{json, Value};
 
 fn request(harness: &str, payload: Value) -> NativeHookRequestV1 {
@@ -66,18 +66,26 @@ fn an_edit_is_not_refused_for_a_credential_elsewhere_in_the_file() {
             "+export const label = \"new\";".into(),
         ],
     );
-    let response = review_post_tool(&request("claude-code", payload));
+    let response = review_post_tool(&request("claude-code", payload.clone()));
     assert_eq!(response.decision, "allow");
     assert_eq!(response.reason_code, "output_scan_allow");
+    // The allow keeps the whole result's identity, originalFile included.
+    let digest = canonical_observed_output_sha256(&payload);
+    assert!(digest.is_some());
+    assert_eq!(response.reviewed_output_sha256, digest);
 }
 
 #[test]
 fn a_long_patch_is_scanned_in_full_rather_than_excerpted() {
     let lines: Vec<String> = (0..30).map(|index| format!("+line {index}")).collect();
     let payload = edit("a\n", "a", "b", lines);
-    let response = review_post_tool(&request("claude-code", payload));
+    let response = review_post_tool(&request("claude-code", payload.clone()));
     assert_eq!(response.decision, "allow");
     assert_eq!(response.reason_code, "output_scan_allow");
+    // The generic walk cannot read this result in full, so there is no
+    // whole-result digest to record; none is invented.
+    assert_eq!(canonical_observed_output_sha256(&payload), None);
+    assert_eq!(response.reviewed_output_sha256, None);
 }
 
 #[test]
