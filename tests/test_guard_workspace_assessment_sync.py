@@ -168,7 +168,9 @@ def test_a_finding_carried_from_an_earlier_run_is_not_sent_as_seen_again(tmp_pat
 
     assert built is not None
     [entry] = built.payload["worktrees"]
-    observed = sync.keyed_digest(sync.load_hash_key(guard_store, NOW), "guard.workspace.finding\0" + f"{1:032x}")
+    observed = fleet_common.keyed_digest(
+        sync.load_hash_key(guard_store, NOW), "guard.workspace.finding\0" + f"{1:032x}"
+    )
     assert [item["findingKey"] for item in entry["findings"]] == [observed]
     assert entry["findingsTruncated"] is False
 
