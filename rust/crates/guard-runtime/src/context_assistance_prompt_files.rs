@@ -18,6 +18,7 @@ const MAX_SCANNED_BYTES: u64 = 12 * 1024 * 1024;
 const MAX_FILE_BYTES: u64 = 65_536;
 const MAX_DEPTH: usize = 10;
 const MAX_TERMS: usize = 12;
+const MAX_PHRASES: usize = 4;
 const WALK_BUDGET: Duration = Duration::from_millis(350);
 
 const SKIPPED_DIRS: &[&str] = &[
@@ -136,6 +137,47 @@ fn prompt_mentions_tests(prompt: &str) -> bool {
         .any(|word| TEST_WORDS.contains(&singular(&word.to_lowercase()).as_str()))
 }
 
+/// Text the prompt quotes, such as a label to change, lowercased. A quote
+/// opens only at the start of a word, so an apostrophe inside one ("dialog's")
+/// never pairs with a later quote.
+pub(crate) fn phrases(prompt: &str) -> Vec<String> {
+    let chars: Vec<char> = prompt.chars().collect();
+    let mut found: Vec<String> = Vec::new();
+    let mut at = 0;
+    while at < chars.len() && found.len() < MAX_PHRASES {
+        if at > 0 && chars[at - 1].is_alphanumeric() {
+            at += 1;
+            continue;
+        }
+        let close = match chars[at] {
+            '"' => '"',
+            '\u{201c}' => '\u{201d}',
+            '`' => '`',
+            '\'' => '\'',
+            _ => {
+                at += 1;
+                continue;
+            }
+        };
+        let end = chars[at + 1..].iter().enumerate().position(|(offset, &c)| {
+            let next = chars.get(at + offset + 2);
+            (c == close || (close == '\u{201d}' && c == '"'))
+                && (close != '\'' || next.is_none_or(|n| !n.is_alphanumeric()))
+        });
+        let Some(end) = end else {
+            at += 1;
+            continue;
+        };
+        let phrase: String = chars[at + 1..at + 1 + end].iter().collect();
+        let phrase = phrase.trim().to_lowercase();
+        if (3..=80).contains(&phrase.chars().count()) && !found.contains(&phrase) {
+            found.push(phrase);
+        }
+        at += end + 2;
+    }
+    found
+}
+
 fn singular(word: &str) -> String {
     if word.len() > 4 && word.ends_with("ies") {
         return format!("{}y", &word[..word.len() - 3]);
@@ -146,16 +188,31 @@ fn singular(word: &str) -> String {
     word.into()
 }
 
+/// What one file matched, kept until the walk ends because a word's weight
+/// depends on how many files contain it.
+struct Seen {
+    relative: String,
+    modified: SystemTime,
+    in_path: Vec<bool>,
+    hits: Vec<u8>,
+    quoted: Vec<bool>,
+}
+
 struct Scored {
     relative: String,
-    score: u32,
+    score: f64,
     modified: SystemTime,
 }
 
 /// Project files that mention the prompt's words, best first. An empty
 /// result means nothing in the project matched, so no context is added. The
 /// walk stops after `budget` or its own time limit, whichever comes first.
-pub(crate) fn candidates(root: &Path, terms: &[String], budget: Duration) -> Vec<String> {
+pub(crate) fn candidates(
+    root: &Path,
+    terms: &[String],
+    phrases: &[String],
+    budget: Duration,
+) -> Vec<String> {
     let budget = budget.min(WALK_BUDGET);
     if terms.is_empty() {
         return Vec::new();
@@ -167,7 +224,8 @@ pub(crate) fn candidates(root: &Path, terms: &[String], budget: Duration) -> Vec
     let mut stack = vec![(root.to_path_buf(), String::new(), 0_usize, rules)];
     let mut visited = 0_usize;
     let mut scanned = 0_u64;
-    let mut scored = Vec::new();
+    let mut files = 0_usize;
+    let mut seen = Vec::new();
     while let Some((dir, prefix, depth, rules)) = stack.pop() {
         let Ok(entries) = fs::read_dir(&dir) else {
             continue;
@@ -175,7 +233,7 @@ pub(crate) fn candidates(root: &Path, terms: &[String], budget: Duration) -> Vec
         for entry in entries.flatten() {
             visited += 1;
             if visited > MAX_VISITED || started.elapsed() >= budget {
-                return ranked(scored, terms);
+                return ranked(scores(seen, files, terms.len(), phrases.len()), terms);
             }
             let name = entry.file_name().to_string_lossy().into_owned();
             // `file_type` never follows a link, so a linked folder or file is skipped.
@@ -216,24 +274,84 @@ pub(crate) fn candidates(root: &Path, terms: &[String], budget: Duration) -> Vec
             if metadata.len() == 0 || metadata.len() > MAX_FILE_BYTES {
                 continue;
             }
-            let path_score = path_score(&relative, terms);
-            let mut score = path_score * 6;
+            files += 1;
+            let in_path = in_path(&relative, terms);
+            let mut text = None;
             if scanned + metadata.len() <= MAX_SCANNED_BYTES {
                 scanned += metadata.len();
-                score += guard_secure_fs::read_bounded(&entry.path(), MAX_FILE_BYTES as usize)
+                text = guard_secure_fs::read_bounded(&entry.path(), MAX_FILE_BYTES as usize)
                     .ok()
-                    .map_or(0, |read| content_score(&read.bytes, terms));
+                    .and_then(|read| String::from_utf8(read.bytes).ok())
+                    .map(|text| text.to_lowercase());
             }
-            if score > 0 {
-                scored.push(Scored {
+            let text = text.unwrap_or_default();
+            let hits: Vec<u8> = terms
+                .iter()
+                .map(|term| text.matches(term.as_str()).take(8).count() as u8)
+                .collect();
+            let quoted: Vec<bool> = phrases.iter().map(|p| text.contains(p.as_str())).collect();
+            if in_path.contains(&true) || hits.iter().any(|&n| n > 0) {
+                seen.push(Seen {
                     relative,
-                    score,
                     modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+                    in_path,
+                    hits,
+                    quoted,
                 });
             }
         }
     }
-    ranked(scored, terms)
+    ranked(scores(seen, files, terms.len(), phrases.len()), terms)
+}
+
+/// A word counts for more the fewer files contain it, so a name like
+/// "confirm" outweighs "button", which half a project says. A word in the
+/// file's path counts twice; repeats inside the file add a little, capped.
+/// Quoted text the file contains, such as the label being changed, counts
+/// most of all, again more the rarer it is.
+fn scores(seen: Vec<Seen>, files: usize, terms: usize, phrases: usize) -> Vec<Scored> {
+    let rarity = |containing: usize| {
+        if containing == 0 {
+            0.0
+        } else {
+            (1.0 + files as f64 / containing as f64).ln()
+        }
+    };
+    let term_weights: Vec<f64> = (0..terms)
+        .map(|i| {
+            rarity(
+                seen.iter()
+                    .filter(|s| s.in_path[i] || s.hits[i] > 0)
+                    .count(),
+            )
+        })
+        .collect();
+    let phrase_weights: Vec<f64> = (0..phrases)
+        .map(|i| 2.0 * rarity(seen.iter().filter(|s| s.quoted[i]).count()))
+        .collect();
+    seen.into_iter()
+        .map(|file| {
+            let mut score = 0.0;
+            for (i, weight) in term_weights.iter().enumerate() {
+                if file.in_path[i] {
+                    score += 2.0 * weight;
+                }
+                if file.hits[i] > 0 {
+                    score += weight * (1.0 + f64::from(file.hits[i]) / 8.0);
+                }
+            }
+            for (i, weight) in phrase_weights.iter().enumerate() {
+                if file.quoted[i] {
+                    score += weight;
+                }
+            }
+            Scored {
+                relative: file.relative,
+                score,
+                modified: file.modified,
+            }
+        })
+        .collect()
 }
 
 /// Best first. Test files stay out when a source file matched and the prompt
@@ -245,7 +363,7 @@ fn ranked(mut scored: Vec<Scored>, terms: &[String]) -> Vec<String> {
     }
     scored.sort_by(|a, b| {
         b.score
-            .cmp(&a.score)
+            .total_cmp(&a.score)
             .then(b.modified.cmp(&a.modified))
             .then(a.relative.cmp(&b.relative))
     });
@@ -282,28 +400,12 @@ fn wanted_file(name: &str) -> bool {
         .is_some_and(|ext| TEXT_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
 }
 
-fn path_score(relative: &str, terms: &[String]) -> u32 {
+fn in_path(relative: &str, terms: &[String]) -> Vec<bool> {
     let lower = relative.to_lowercase().replace(['-', '_'], "");
     terms
         .iter()
-        .filter(|term| lower.contains(term.as_str()))
-        .count() as u32
-}
-
-/// Distinct words found count most; repeats add a little, capped.
-fn content_score(bytes: &[u8], terms: &[String]) -> u32 {
-    let Ok(text) = std::str::from_utf8(bytes) else {
-        return 0;
-    };
-    let lower = text.to_lowercase();
-    let mut score = 0;
-    for term in terms {
-        let hits = lower.matches(term.as_str()).count().min(8) as u32;
-        if hits > 0 {
-            score += 3 + hits / 2;
-        }
-    }
-    score
+        .map(|term| lower.contains(term.as_str()))
+        .collect()
 }
 
 /// The path without Windows' `\\?\` prefix, as grants spell it.

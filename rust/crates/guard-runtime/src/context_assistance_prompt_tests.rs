@@ -176,3 +176,32 @@ fn pi_gets_context_only_from_an_extension_that_passes_it_on() {
     assert!(takes_context("codex", &older));
     assert!(!takes_context("cursor", &flagged));
 }
+
+#[test]
+fn excerpts_follow_this_prompts_ranking_before_earlier_files() {
+    let picked = [
+        excerpt("src/earlier.tsx", "<button>Cancel</button>"),
+        excerpt("src/data-panel.tsx", "<button>Cancel</button>"),
+        excerpt("src/confirm-dialog.tsx", "cancelLabel = \"Cancel\""),
+    ];
+    let found = words(&["src/confirm-dialog.tsx", "src/data-panel.tsx"]);
+    let rendered = render(&picked, &found, &words(&["cancel"])).unwrap();
+    let at = |path: &str| rendered.find(&format!("{path} (lines")).unwrap();
+    assert!(
+        at("src/confirm-dialog.tsx") < at("src/data-panel.tsx"),
+        "{rendered}"
+    );
+    assert!(
+        at("src/data-panel.tsx") < at("src/earlier.tsx"),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn a_prompt_cigar_cannot_answer_in_time_still_gets_the_matched_files() {
+    assert_eq!(matched(&[]), None);
+    let found: Vec<String> = (0..12).map(|n| format!("src/f{n}.ts")).collect();
+    let listed = matched(&found).unwrap();
+    assert!(listed.starts_with(MATCHED_HEADER), "{listed}");
+    assert!(listed.ends_with(" src/f0.ts, src/f1.ts, src/f2.ts, src/f3.ts, src/f4.ts, src/f5.ts, src/f6.ts, src/f7.ts"), "{listed}");
+}
