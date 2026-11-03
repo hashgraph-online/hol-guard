@@ -5881,7 +5881,7 @@
     text-decoration-line: underline;
   }
 
-  .decoration-brand-blue\/30 {
+  .decoration-brand-blue, .decoration-brand-blue\/30 {
     -webkit-text-decoration-color: var(--brand-blue);
     -webkit-text-decoration-color: var(--brand-blue);
     text-decoration-color: var(--brand-blue);
@@ -7096,6 +7096,10 @@
       -webkit-text-decoration-color: var(--brand-blue);
       -webkit-text-decoration-color: var(--brand-blue);
       text-decoration-color: var(--brand-blue);
+    }
+
+    .hover\:decoration-2:hover {
+      text-decoration-thickness: 2px;
     }
 
     .hover\:opacity-80:hover {

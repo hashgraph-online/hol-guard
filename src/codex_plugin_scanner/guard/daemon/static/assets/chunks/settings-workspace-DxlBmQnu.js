@@ -2929,7 +2929,14 @@ const HEADING_ID = "cloud-actions-connection";
 function CommandLine({ label: label2, command }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600", children: label2 }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block overflow-x-auto whitespace-pre rounded-md bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark", children: command })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "code",
+      {
+        tabIndex: 0,
+        className: "mt-1 block overflow-x-auto whitespace-pre rounded-md bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
+        children: command
+      }
+    )
   ] });
 }
 function Reconnect({ connection }) {
@@ -2959,7 +2966,7 @@ function CloudPages({ connection }) {
           href: link.href,
           target: "_blank",
           rel: "noopener noreferrer",
-          className: "inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-brand-blue hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 sm:min-h-0",
+          className: "inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-brand-dark underline decoration-brand-blue underline-offset-2 hover:decoration-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 sm:min-h-0",
           children: [
             link.label,
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { "aria-hidden": "true", className: "h-3.5 w-3.5 shrink-0" }),
