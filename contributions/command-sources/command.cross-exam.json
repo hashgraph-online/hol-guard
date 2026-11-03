@@ -296,7 +296,8 @@
               "--json",
               "--quiet",
               "--no-color",
-              "--exit-zero"
+              "--exit-zero",
+              "--sse"
             ],
             "interspersed_options_with_values": [],
             "inverse_flag_pairs": [],
@@ -319,8 +320,7 @@
               "--expired-bearer-env",
               "--ca-bundle",
               "--protocol-version",
-              "--seed",
-              "--sse"
+              "--seed"
             ],
             "options_with_values": [],
             "paths": [

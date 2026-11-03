@@ -303,7 +303,8 @@
                     "--json",
                     "--quiet",
                     "--no-color",
-                    "--exit-zero"
+                    "--exit-zero",
+                    "--sse"
                   ],
                   "interspersed_options_with_values": [],
                   "inverse_flag_pairs": [],
@@ -326,8 +327,7 @@
                     "--expired-bearer-env",
                     "--ca-bundle",
                     "--protocol-version",
-                    "--seed",
-                    "--sse"
+                    "--seed"
                   ],
                   "options_with_values": [],
                   "paths": [
@@ -850,6 +850,21 @@
     {
       "id": "stdio-permission-disabled",
       "command": "mcp-cross-exam -- python server.py",
+      "enabled_extensions": [
+        "command.cross-exam"
+      ],
+      "disabled_permissions": [
+        "command.cross-exam.permission.stdio"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.cross-exam.stdio"
+    },
+    {
+      "id": "stdio-sse-permission-disabled",
+      "command": "mcp-cross-exam --sse -- python server.py",
       "enabled_extensions": [
         "command.cross-exam"
       ],
