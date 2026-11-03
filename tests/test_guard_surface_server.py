@@ -22,6 +22,7 @@ import pytest
 from codex_plugin_scanner.guard import native_directory_trust as native_directory_trust_module
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.approvals import primary_approval_browser_url
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer, protection_repair_retry
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
@@ -36,7 +37,7 @@ from codex_plugin_scanner.guard.local_dashboard_session import (
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
-from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime, _browser_url_for_review
+from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
@@ -3925,7 +3926,7 @@ class TestGuardSurfaceServer:
         browser_url = "http://127.0.0.1:5474#guard-token=session-token"
         review_url = "http://localhost:5474/requests/req-localhost"
 
-        result = _browser_url_for_review(browser_url, review_url)
+        result = primary_approval_browser_url([{"approval_url": review_url}], browser_url=browser_url)
         assert result is not None
         parsed = urllib.parse.urlparse(result)
         fragment = urllib.parse.parse_qs(parsed.fragment)
@@ -3937,7 +3938,7 @@ class TestGuardSurfaceServer:
         browser_url = "http://0.0.0.0:5474#guard-token=session-token"
         review_url = "http://127.0.0.1:5474/requests/req-bind-host"
 
-        result = _browser_url_for_review(browser_url, review_url)
+        result = primary_approval_browser_url([{"approval_url": review_url}], browser_url=browser_url)
         assert result is not None
         parsed = urllib.parse.urlparse(result)
         fragment = urllib.parse.parse_qs(parsed.fragment)

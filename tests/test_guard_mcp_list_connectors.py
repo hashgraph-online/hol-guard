@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -197,6 +198,39 @@ def test_status_line_counts_connectors_needing_setup(tmp_path: Path) -> None:
     assert connector_setup_line({**status, "url": None}).endswith("→ hol-guard dashboard")
     assert connector_setup_line({**status, "needing_setup": 0}) is None
     assert connector_setup_line(None) is None
+
+
+@pytest.mark.parametrize("answer", [{}, {"rows": [{"cli_id": "x"}]}, {"rows": [{"declared_sources": 1}]}])
+def test_status_line_is_dropped_when_the_runtime_cannot_list_connectors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: dict[str, object]
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    store = GuardStore(tmp_path / "home")
+    _observe(store, "codex", "alpha")
+    monkeypatch.setattr(authority, "native_runner_authority", lambda *_args, **_kwargs: answer)
+
+    assert connector_setup_status(store, None) is None
+
+
+def test_the_setup_check_receives_only_the_fields_it_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    store = GuardStore(tmp_path / "home")
+    _observe(store, "codex", "alpha")
+    sent: list[dict[str, object]] = []
+
+    def answer(_kind: str, request: dict[str, object], **_kwargs: object) -> dict[str, object]:
+        sent.extend(cast("list[dict[str, object]]", request["items"]))
+        return {"rows": []}
+
+    monkeypatch.setattr(authority, "native_runner_authority", answer)
+
+    assert connector_setup_status(store, None) == {"needing_setup": 0, "mcp_servers": 0, "local_clis": 0, "url": None}
+    allowed = {"cli_id", "display_name", "name", "surface", "state", "suggestable", "stale", "source_label"}
+    allowed |= {"remote_origin", "declared_sources", "mcp_catalog"}
+    assert sent
+    assert all(set(item) <= allowed for item in sent)
 
 
 def test_status_json_carries_the_connector_count(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

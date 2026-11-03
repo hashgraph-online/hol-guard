@@ -440,7 +440,11 @@ fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
                 detach = true;
                 index += 1;
             }
-            "-b" if branch.is_none() && reference.is_none() => {
+            // Git's option parser permutes, so the branch may be named after
+            // the destination and the start point as readily as before them.
+            // The spelling says nothing about what the checkout does; only a
+            // second `-b` would leave the branch in doubt.
+            "-b" if branch.is_none() => {
                 branch = Some(arguments.get(index + 1)?.as_str());
                 index += 2;
             }

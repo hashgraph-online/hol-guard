@@ -17998,6 +17998,23 @@
       "expect": "allow"
     },
     {
+      "id": "session-git-worktree-add-trailing-branch-flag",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../parent-repo-trailing HEAD -b trailing-lane"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "session-git-worktree-add-then-checks-in-checkout",
       "fix_area": "git",
       "harnesses": [
