@@ -307,13 +307,23 @@ pub(crate) fn tap_contained_call(arguments: &[String]) -> bool {
 /// tap run this route takes. tap spells the word three ways: `--no-cov` and
 /// `--no-coverage` negate the flag, and tap 18 and later add
 /// `--disable-coverage`.
+///
+/// Both of tap's option readers let the last spelling of a flag win, so the
+/// line is walked in order rather than searched: `--no-coverage --coverage`
+/// collects after all, and a route that read only the negation would take
+/// that run read-only and deny the write partway through. tap 16 and 17 turn
+/// the flag back on with `--cov` or `--coverage`; tap 18 and later negate
+/// their own negation with `--no-disable-coverage`.
 pub(crate) fn tap_writes_no_coverage(arguments: &[String]) -> bool {
-    arguments.iter().any(|argument| {
-        matches!(
-            option_name(argument).as_str(),
-            "nocov" | "nocoverage" | "disablecoverage"
-        )
-    })
+    let mut coverage_off = false;
+    for argument in arguments {
+        match option_name(argument).as_str() {
+            "nocov" | "nocoverage" | "disablecoverage" => coverage_off = true,
+            "cov" | "coverage" | "nodisablecoverage" => coverage_off = false,
+            _ => {}
+        }
+    }
+    coverage_off
 }
 
 /// What this reading names is the watch, the commands that do something

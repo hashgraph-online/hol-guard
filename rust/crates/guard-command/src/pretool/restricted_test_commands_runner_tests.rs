@@ -589,6 +589,34 @@ fn a_tap_watch_or_a_borp_report_destination_keeps_its_review() {
 }
 
 #[test]
+fn a_tap_line_that_turns_coverage_back_on_keeps_its_review() {
+    // Both of tap's option readers let the last spelling win, so a negation
+    // earlier on the line is not the answer. tap 16 and 17 turn the flag back
+    // on with `--cov` or `--coverage`, and tap 18 and later with
+    // `--no-disable-coverage`; each of these runs collects into `.nyc_output`
+    // or `.tap`, which the read-only route carries no write root for.
+    for command in [
+        "npx tap --no-coverage --coverage test/",
+        "npx tap --no-cov --cov",
+        "npx tap --disable-coverage --no-disable-coverage test/unit.js",
+        "node node_modules/tap/bin/run.js --no-cov --coverage",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+    // The other order is the ordinary one and stays contained.
+    for command in [
+        "npx tap --coverage --no-coverage test/",
+        "npx tap --no-disable-coverage --disable-coverage test/unit.js",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn a_tap_borp_poku_or_lab_lookalike_entry_reads_as_no_runner() {
     for command in [
         "node node_modules/xtap/dist/esm/run.mjs",
