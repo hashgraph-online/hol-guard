@@ -698,20 +698,6 @@ class CopilotHarnessAdapter(HarnessAdapter):
             *passthrough_args,
         ]
 
-    def diagnostic_warnings(
-        self,
-        detection: HarnessDetection,
-        runtime_probe: dict[str, object] | None,
-    ) -> list[str]:
-        warnings = super().diagnostic_warnings(detection, runtime_probe)
-        if (
-            runtime_probe is not None
-            and runtime_probe.get("ok") is False
-            and runtime_probe.get("timed_out") is not True
-        ):
-            warnings.append("Copilot CLI was found on PATH, but `copilot --help` did not complete successfully.")
-        return warnings
-
     _backup_payload = staticmethod(load_backup_payload)
 
     @staticmethod

@@ -21,13 +21,15 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import Autho
 from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
 from codex_plugin_scanner.guard.runtime.generated_command_catalog_provenance import (
     catalog_provenance,
-    version_ordinal,
+    is_downgrade,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_extension_control_authority_catalog_events import (
     MIGRATED_EVENT,
     REGRESSED_EVENT,
     build_catalog_migration_payload,
+    migration_provenance,
+    recorded_writer_version,
 )
 from tests.test_extension_control_clear_catalog_migration import (
     _activate_under_catalog,
@@ -189,23 +191,27 @@ def test_a_frozen_bundle_is_named_as_one(monkeypatch: pytest.MonkeyPatch) -> Non
     assert provenance["install_kind"] == "desktop-bundle"
 
 
-@pytest.mark.parametrize(
-    ("version", "expected"),
-    [
-        ("3.46.0", (3, 46, 0)),
-        ("3.47.0a2", (3, 47, 0)),
-        ("3.8.0", (3, 8, 0)),
-        ("", ()),
-        ("not-a-version", ()),
-    ],
-)
-def test_version_ordinal_reads_the_leading_numbers(version: str, expected: tuple[int, ...]) -> None:
-    assert version_ordinal(version) == expected
+def test_an_older_release_is_a_downgrade_and_a_newer_prerelease_is_not() -> None:
+    assert is_downgrade("3.36.0", "3.46.0")
+    assert not is_downgrade("3.47.0a2", "3.46.0")
+    assert not is_downgrade("3.47.0", "3.47.0a2")
 
 
-def test_an_older_release_orders_below_a_newer_prerelease() -> None:
-    assert version_ordinal("3.36.0") < version_ordinal("3.46.0")
-    assert version_ordinal("3.47.0a2") > version_ordinal("3.46.0")
+def test_a_runtime_that_cannot_answer_attributes_nothing_and_judges_no_downgrade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority_module
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise authority_module.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(authority_module, "native_runner_authority", unavailable)
+    monkeypatch.setattr(loader_module, "_resolved_catalog_resource_path", "/opt/guard/site-packages/catalog.json")
+    provenance = catalog_provenance(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest, trigger="probe")
+
+    assert provenance["install_kind"] == "unavailable"
+    assert provenance["resource_root_digest"] is None
+    assert not is_downgrade("3.36.0", "3.46.0")
 
 
 def test_a_backfilled_event_names_no_writer_and_judges_no_downgrade(
@@ -283,7 +289,7 @@ def _store_with_events(records: list[dict[str, object]]) -> sqlite3.Connection:
 
 
 def test_a_backfill_over_an_attributed_revision_does_not_hide_the_downgrade(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The writer is looked up by catalog, not by the last migration to it.
 
@@ -304,17 +310,22 @@ def test_a_backfill_over_an_attributed_revision_does_not_hide_the_downgrade(
         ]
     )
 
+    provenance = migration_provenance(
+        recorded_writer_version(connection, "catalog-x"),
+        "catalog-z",
+        None,
+        trigger="catalog-migration",
+        writer=True,
+        guard_home=tmp_path,
+    )
     _payload, regression = build_catalog_migration_payload(
-        connection,
         previous_revision=6,
         revision=7,
         previous_catalog_digest="catalog-x",
         catalog_digest="catalog-z",
         layers=(),
         retired_targets=("control-a",),
-        registry=None,
-        trigger="catalog-migration",
-        writer=True,
+        provenance=provenance,
     )
 
     assert regression == {
