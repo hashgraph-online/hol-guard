@@ -164,6 +164,7 @@ mod cloud_request_snapshot;
 mod cloud_request_text;
 #[cfg(test)]
 mod cloud_request_vectors_tests;
+mod cloud_review_ack;
 mod cloud_sync_privacy;
 mod codex_app_server_socket;
 #[path = "adapters/detection/codex_detect.rs"]
