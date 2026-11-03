@@ -292,7 +292,8 @@ def _preview_text(plan: HostConfigPlan, workspace: str) -> str:
         if plan.action == "create_file":
             lines.append("The file does not exist yet; it would be created with only this entry:")
         elif plan.action == "update":
-            lines.append(f"Would change {plan.server_name} from {plan.previous_url} to:")
+            previous = f" from {plan.previous_url}" if plan.previous_url else ""
+            lines.append(f"Would change {plan.server_name}{previous} to:")
         else:
             lines.append("Would add this entry:")
         lines.extend(f"+ {line}" for line in plan.entry_lines)

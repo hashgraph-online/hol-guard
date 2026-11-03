@@ -14,7 +14,9 @@ or shown, and the workspace is the one chosen when the AI tool signs in.
 
 from __future__ import annotations
 
+import importlib
 import json
+import sys
 import urllib.parse
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -172,13 +174,18 @@ def plan_host_config(ai_tool: str, *, path: Path, url: str) -> HostConfigPlan:
             return plan("unchanged", other_entries=len(others), before=before, after=before)
         previous_url = _display_url(current) if isinstance(current, str) else None
     else:
-        same_server = tuple(sorted(name for name, value in others.items() if _points_at(value, url)))
-        if same_server:
-            return plan("already_configured", other_entries=len(others), configured_as=same_server, before=before)
         previous_url = None
+    # Another entry already reaching this server is left as the one in use,
+    # so pointing ours at it too would not add a second connection.
+    same_server = tuple(sorted(name for name, value in others.items() if _points_at(value, url)))
+    if same_server:
+        return plan("already_configured", other_entries=len(others), configured_as=same_server, before=before)
     try:
         after = _render_edit(tool, before, url)
         _check_only_guard_entry_changed(tool, before, after, url)
+    except UnicodeEncodeError:
+        problem = "The settings file holds text that cannot be written back unchanged."
+        return plan("unreadable", other_entries=len(others), problem=problem, before=before)
     except _UnreadableError as error:
         return plan("unreadable", other_entries=len(others), problem=str(error), before=before)
     action: PlanAction = "update" if existing is not None else "add"
@@ -253,8 +260,7 @@ def _parse(tool: _AiTool, raw: bytes) -> dict[str, object]:
     except UnicodeDecodeError:
         raise _UnreadableError("The settings file is not UTF-8 text.") from None
     if tool.file_format == "toml":
-        import tomllib
-
+        tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
         try:
             return tomllib.loads(text)
         except tomllib.TOMLDecodeError:

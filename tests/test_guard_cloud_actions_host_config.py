@@ -25,7 +25,7 @@ from codex_plugin_scanner.guard.cli.cloud_actions_host_config import (
 
 WS = "11111111-1111-4111-8111-111111111111"
 URL = "https://hol.org/api/guard/gateway/mcp"
-SECRET = "sk-test-CANARY-7f3a9c"
+CANARY = "sk-test-CANARY-7f3a9c"
 HEADER_SECRET = "Bearer hdr-CANARY-41be"
 QUERY_SECRET = "qs-CANARY-90d2"
 
@@ -40,7 +40,7 @@ codex_hooks = true
 [mcp_servers.github]
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-github"]
-env = {{ GITHUB_TOKEN = "{SECRET}" }}
+env = {{ GITHUB_TOKEN = "{CANARY}" }}
 
 [mcp_servers."hol-guard::filesystem"]
 command = "/opt/hol-guard/bin/hol-guard"
@@ -60,7 +60,7 @@ CLAUDE_SETTINGS: dict[str, Any] = {
             "url": "https://mcp.linear.example/mcp",
             "headers": {"Authorization": HEADER_SECRET},
         },
-        "db": {"command": "pg-mcp", "env": {"PGPASSWORD": SECRET}},
+        "db": {"command": "pg-mcp", "env": {"PGPASSWORD": CANARY}},
     },
 }
 
@@ -68,7 +68,7 @@ CURSOR_SETTINGS: dict[str, Any] = {
     "mcpServers": {
         "hol-guard::filesystem": {"command": "/opt/hol-guard/bin/hol-guard", "args": ["cursor-mcp-proxy"]},
         "notion": {"url": "https://mcp.notion.example/mcp", "headers": {"Authorization": HEADER_SECRET}},
-        "db": {"command": "pg-mcp", "env": {"PGPASSWORD": SECRET}},
+        "db": {"command": "pg-mcp", "env": {"PGPASSWORD": CANARY}},
     }
 }
 
@@ -147,7 +147,7 @@ def test_preview_adds_only_the_guard_entry_and_writes_nothing(
     assert payload["other_entries"] == len(_parse(tool, plan.before)[_table(tool)])
     assert payload["url"] == URL
     assert URL in text_out and "Nothing was written." in text_out
-    for leaked in (SECRET, HEADER_SECRET, "someone@example.test", "server-github", "/opt/hol-guard"):
+    for leaked in (CANARY, HEADER_SECRET, "someone@example.test", "server-github", "/opt/hol-guard"):
         assert leaked not in text_out + json_out
     assert _snapshot(tmp_path) == before_files
 
@@ -214,7 +214,7 @@ def test_new_file_holds_only_the_guard_entry(tool: str, tmp_path: Path, capsys: 
 
 def test_update_shows_the_old_address_without_its_query(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     old = f"https://registry-staging.hol.org/api/guard/gateway/mcp?k={QUERY_SECRET}"
-    servers = {CLOUD_ACTIONS_SERVER_NAME: {"type": "http", "url": old}, "db": {"command": "x", "env": {"K": SECRET}}}
+    servers = {CLOUD_ACTIONS_SERVER_NAME: {"type": "http", "url": old}, "db": {"command": "x", "env": {"K": CANARY}}}
     _write(tmp_path, "claude-code", json.dumps({"mcpServers": servers}))
 
     assert _configure(tmp_path, "claude-code", "--dry-run", "--json") == 0
@@ -223,7 +223,7 @@ def test_update_shows_the_old_address_without_its_query(tmp_path: Path, capsys: 
 
     assert payload["action"] == "update"
     assert payload["previous_url"] == "https://registry-staging.hol.org/api/guard/gateway/mcp"
-    assert QUERY_SECRET not in out and SECRET not in out
+    assert QUERY_SECRET not in out and CANARY not in out
 
 
 @pytest.mark.parametrize(
@@ -243,11 +243,33 @@ def test_update_display_drops_user_and_survives_bad_ports(old: str, shown: str |
     assert plan.previous_url == shown
 
 
+def test_update_text_without_a_displayable_old_address(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    old = "https://hol.org:99999/api/guard/gateway/mcp"
+    _write(tmp_path, "cursor", json.dumps({"mcpServers": {CLOUD_ACTIONS_SERVER_NAME: {"url": old}}}))
+
+    assert _configure(tmp_path, "cursor", "--dry-run") == 0
+    out = capsys.readouterr().out
+
+    assert f"Would change {CLOUD_ACTIONS_SERVER_NAME} to:" in out
+    assert "None" not in out
+
+
+def test_update_is_not_offered_when_another_entry_already_reaches_the_server(tmp_path: Path) -> None:
+    staging = "https://registry-staging.hol.org/api/guard/gateway/mcp"
+    servers = {CLOUD_ACTIONS_SERVER_NAME: {"url": staging}, "guard": {"url": URL}}
+    path = _write(tmp_path, "cursor", json.dumps({"mcpServers": servers}))
+
+    plan = plan_host_config("cursor", path=path, url=URL)
+
+    assert plan.action == "already_configured"
+    assert plan.configured_as == ("guard",)
+
+
 @pytest.mark.parametrize(
     "entry",
     [
         {"type": "http", "url": URL, "headers": {"Authorization": HEADER_SECRET}},
-        {"command": "evil", "env": {"K": SECRET}},
+        {"command": "evil", "env": {"K": CANARY}},
         {"type": "sse", "url": URL},
         "not a table",
     ],
@@ -264,7 +286,7 @@ def test_entry_with_guard_name_but_other_settings_is_never_replaced(
 
     assert payload["action"] == "conflict"
     assert payload["written"] is False
-    assert HEADER_SECRET not in out and SECRET not in out and "evil" not in out
+    assert HEADER_SECRET not in out and CANARY not in out and "evil" not in out
 
 
 def test_another_entry_for_the_same_server_is_reported_not_duplicated(
@@ -283,14 +305,24 @@ def test_another_entry_for_the_same_server_is_reported_not_duplicated(
     ("tool", "content"),
     [
         ("cursor", '{"mcpServers": {'),
-        ("cursor", f'{{"mcpServers": {{}}, "mcpServers": {{"db": {{"env": {{"K": "{SECRET}"}}}}}}}}'),
+        ("cursor", f'{{"mcpServers": {{}}, "mcpServers": {{"db": {{"env": {{"K": "{CANARY}"}}}}}}}}'),
         ("cursor", "[1, 2]"),
-        ("cursor", f'{{"mcpServers": ["{SECRET}"]}}'),
+        ("cursor", f'{{"mcpServers": ["{CANARY}"]}}'),
         ("claude-code", '﻿{"a": 1}'),
-        ("codex", f'mcp_servers = "{SECRET}"\n'),
-        ("codex", f'key = "{SECRET}\n'),
+        ("codex", f'mcp_servers = "{CANARY}"\n'),
+        ("codex", f'key = "{CANARY}\n'),
+        ("cursor", f'{{"mcpServers": {{"db": {{"env": {{"K": "{CANARY}"}}}}}}, "note": "\\ud800"}}'),
     ],
-    ids=["truncated", "repeated-key", "array", "servers-not-table", "bom", "toml-servers-string", "toml-broken"],
+    ids=[
+        "truncated",
+        "repeated-key",
+        "array",
+        "servers-not-table",
+        "bom",
+        "toml-servers-string",
+        "toml-broken",
+        "lone-surrogate",
+    ],
 )
 def test_unreadable_settings_are_left_alone_and_not_echoed(
     tool: str, content: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -302,8 +334,29 @@ def test_unreadable_settings_are_left_alone_and_not_echoed(
     out = capsys.readouterr().out
 
     assert json.loads(out)["action"] == "unreadable"
-    assert SECRET not in out
+    assert CANARY not in out
     assert path.read_bytes() == before
+
+
+def test_codex_settings_are_read_with_tomli_before_python_3_11(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Python310:
+        version_info = (3, 10, 14)
+
+    imported: list[str] = []
+    real_import = cloud_actions_host_config.importlib.import_module
+
+    def _import(name: str) -> object:
+        imported.append(name)
+        return real_import("tomllib" if name == "tomli" else name)
+
+    monkeypatch.setattr(cloud_actions_host_config, "sys", _Python310)
+    monkeypatch.setattr(cloud_actions_host_config.importlib, "import_module", _import)
+    path = _seed(tmp_path, "codex")
+
+    plan = plan_host_config("codex", path=path, url=URL)
+
+    assert plan.action == "add"
+    assert "tomllib" not in imported and "tomli" in imported
 
 
 def test_settings_path_that_is_a_folder_is_unreadable(tmp_path: Path) -> None:
@@ -373,7 +426,7 @@ def test_a_rendering_that_changes_another_entry_is_refused(
     honest = cloud_actions_host_config._render_edit  # pyright: ignore[reportPrivateUsage]
 
     def lossy(ai_tool: object, before: bytes, url: str) -> bytes:
-        return honest(ai_tool, before.replace(SECRET.encode(), b"changed"), url)  # pyright: ignore[reportArgumentType]
+        return honest(ai_tool, before.replace(CANARY.encode(), b"changed"), url)  # pyright: ignore[reportArgumentType]
 
     monkeypatch.setattr(cloud_actions_host_config, "_render_edit", lossy)
 
