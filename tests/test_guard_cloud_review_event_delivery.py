@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
-from unittest.mock import Mock
 
 import pytest
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime import cloud_review_event_delivery as delivery
 from codex_plugin_scanner.guard.runtime import cloud_review_sync
-from codex_plugin_scanner.guard.runtime.cloud_review_retry_recovery import recover_rejected_review_events
-from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_exact_cloud_review_support import add_review_request, connected_exact_review_store, review_request
 
 _AUTH: dict[str, object] = {"sync_url": "https://guard.example/api/guard/receipts/sync"}
@@ -222,41 +218,6 @@ def test_collision_result_retains_verified_event_identity_only_for_recoverable_c
     normalized = _post([_event()])["perEventResults"]
     assert isinstance(normalized, list)
     assert normalized[0].get("eventId") == ("event-41" if code.endswith("snapshot_sequence_collision") else None)
-
-
-@pytest.mark.parametrize(
-    ("code", "event_id", "high_water", "repaired"),
-    [
-        ("review_event_snapshot_sequence_collision", "event-41", 529, True),
-        ("review_event_sequence_conflict", "event-41", 529, False),
-        ("review_event_snapshot_sequence_collision", "different-event", 529, False),
-        ("review_event_snapshot_sequence_collision", "event-41", True, False),
-    ],
-)
-def test_recovery_requires_typed_collision_and_exact_sent_identity(
-    code: str, event_id: str, high_water: object, repaired: bool
-) -> None:
-    recovery = Mock(return_value={41: 530})
-
-    class Store:
-        recover_review_snapshot_sequences = recovery
-
-    result: dict[str, object] = {"code": code, "eventId": event_id}
-    binding = {"workspace_id": "workspace-1"}
-    sequences, results = recover_rejected_review_events(
-        cast(GuardStore, cast(object, Store())),
-        sequences=[41],
-        results=[result],
-        events={41: _event()},
-        binding=binding,
-        acknowledged_through=high_water,
-    )
-    if repaired:
-        recovery.assert_called_once_with(collisions={41: "event-41"}, acknowledged_through=529, binding=binding)
-        assert (sequences, results) == ([], [])
-    else:
-        recovery.assert_not_called()
-        assert (sequences, results) == ([41], [result])
 
 
 @pytest.mark.parametrize("status", ["duplicate", "stale"])

@@ -565,6 +565,8 @@ mod guard_store_receipt_rollups;
 mod guard_store_receipt_writes;
 #[cfg(test)]
 mod guard_store_receipts_vectors_tests;
+mod guard_store_review_rejection_counts;
+mod guard_store_review_settle;
 mod guard_store_sessions;
 #[cfg(test)]
 mod guard_store_sessions_vectors_tests;
