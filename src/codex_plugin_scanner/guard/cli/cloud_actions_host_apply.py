@@ -101,8 +101,13 @@ def apply_host_config(plan: HostConfigPlan, *, guard_home: Path) -> HostConfigBa
         if _read(path) != plan.after:
             raise HostConfigWriteError("write_not_verified", f"{path} did not read back as written.")
     except BaseException as error:
-        if published:
-            _put_back(backup, plan.before)
+        if published and not _put_back(backup, plan.before):
+            # The copy is the only way back now, so it stays for `restore`.
+            raise HostConfigWriteError(
+                "put_back_failed",
+                f"{path} did not read back as written, and Guard could not put the earlier file back. "
+                f"Guard kept its copy; run `hol-guard cloud-actions ai-tools restore {plan.ai_tool}`.",
+            ) from None
         _discard_backup(backup)
         if isinstance(error, OSError):
             raise HostConfigWriteError(
@@ -228,15 +233,18 @@ def _publish(temporary: Path, path: Path, *, create: bool) -> None:
         replace_file(temporary, path)
         return
     # A hard link fails if the file appeared since the check, so a file
-    # another program just created is never replaced.
+    # another program just created is never replaced. Without hard links
+    # there is no such guarantee, so nothing is written.
     try:
         os.link(temporary, path)
     except FileExistsError:
         raise _changed_since_preview(path) from None
-    except OSError:
-        if path.exists():
-            raise _changed_since_preview(path) from None
-        replace_file(temporary, path)
+    except OSError as error:
+        raise HostConfigWriteError(
+            "write_failed",
+            f"{path} could not be created safely ({error.strerror or 'error'}), so nothing was written. "
+            "Add the entry yourself from the preview.",
+        ) from None
 
 
 def _write_exact(path: Path, payload: bytes, *, mode: int, expected: bytes) -> None:
@@ -250,18 +258,22 @@ def _write_exact(path: Path, payload: bytes, *, mode: int, expected: bytes) -> N
     _sync_directory(path.parent)
 
 
-def _put_back(backup: HostConfigBackup, before: bytes | None) -> None:
-    with contextlib.suppress(OSError):
+def _put_back(backup: HostConfigBackup, before: bytes | None) -> bool:
+    """Put the previewed file back; False when it could not be confirmed."""
+
+    try:
         if before is None:
             backup.path.unlink(missing_ok=True)
-            _sync_directory(backup.path.parent)
-            return
-        temporary = _write_temporary(backup.path, before, backup.mode or _NEW_FILE_MODE)
-        try:
-            replace_file(temporary, backup.path)
-        finally:
-            temporary.unlink(missing_ok=True)
+        else:
+            temporary = _write_temporary(backup.path, before, backup.mode or _NEW_FILE_MODE)
+            try:
+                replace_file(temporary, backup.path)
+            finally:
+                temporary.unlink(missing_ok=True)
         _sync_directory(backup.path.parent)
+        return _read(backup.path) == before
+    except (OSError, HostConfigWriteError):
+        return False
 
 
 def _sync_directory(directory: Path) -> None:
@@ -278,6 +290,8 @@ def _sync_directory(directory: Path) -> None:
 def _private_dir(directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True, mode=_PRIVATE_DIR_MODE)
     if os.name != "nt":
+        # Owner-only access: the folder holds copies of AI tool settings files.
+        # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
         os.chmod(directory, _PRIVATE_DIR_MODE)
 
 
@@ -295,7 +309,7 @@ def _save_backup(plan: HostConfigPlan, *, guard_home: Path, mode: int | None) ->
         record_file = directory / f"{stem}.json"
         backup = HostConfigBackup(
             ai_tool=plan.ai_tool,
-            path=plan.path,
+            path=_absolute(plan.path),
             url=plan.url,
             replaced_entry=plan.action == "update",
             existed=plan.before is not None,
@@ -378,10 +392,23 @@ def _load_backup(record_file: Path) -> HostConfigBackup | None:
     )
 
 
+def _absolute(path: Path) -> Path:
+    # Same file, same key: `--home ./x` and its absolute spelling find one record.
+    return Path(os.path.abspath(path))
+
+
 def _latest_backup(directory: Path, path: Path) -> HostConfigBackup | None:
+    wanted = _absolute(path)
     for record_file in reversed(_records(directory)):
         backup = _load_backup(record_file)
-        if backup is not None and backup.path == path:
+        if backup is None:
+            # A newer record that cannot be read may be the change to undo.
+            raise HostConfigWriteError(
+                "backup_unreadable",
+                f"Guard's record {record_file} is damaged, so nothing was changed. "
+                "Check that file, or remove it to undo earlier changes.",
+            )
+        if _absolute(backup.path) == wanted:
             return backup
     return None
 

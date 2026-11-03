@@ -287,6 +287,55 @@ def test_a_write_that_does_not_read_back_is_undone(tmp_path: Path, monkeypatch: 
     assert _records(tmp_path / "guard", "codex") == []
 
 
+def test_a_write_that_cannot_be_put_back_keeps_the_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = _seed(tmp_path, "codex")
+    before = path.read_bytes()
+    plan = plan_host_config("codex", path=path, url=URL)
+    real = cloud_actions_host_apply.replace_file
+    calls = 0
+
+    def damage_then_refuse(source: Path, destination: Path) -> None:
+        nonlocal calls
+        if destination != path:
+            real(source, destination)
+            return
+        calls += 1
+        if calls > 1:
+            raise PermissionError(13, "Permission denied")
+        real(source, destination)
+        with destination.open("ab") as handle:
+            _ = handle.write(b"damaged = true\n")
+
+    monkeypatch.setattr(cloud_actions_host_apply, "replace_file", damage_then_refuse)
+
+    with pytest.raises(HostConfigWriteError) as error:
+        _ = apply_host_config(plan, guard_home=tmp_path / "guard")
+
+    assert error.value.reason == "put_back_failed"
+    assert "restore codex" in str(error.value)
+    [record] = _records(tmp_path / "guard", "codex")
+    assert record.with_suffix(".before").read_bytes() == before
+
+
+def test_nothing_is_created_without_hard_links(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / PATHS["cursor"]
+    plan = plan_host_config("cursor", path=path, url=URL)
+    assert plan.action == "create_file"
+
+    def no_links(source: object, destination: object) -> None:
+        raise OSError(1, "Operation not permitted")
+
+    monkeypatch.setattr(cloud_actions_host_apply.os, "link", no_links)
+
+    with pytest.raises(HostConfigWriteError) as error:
+        _ = apply_host_config(plan, guard_home=tmp_path / "guard")
+
+    assert error.value.reason == "write_failed"
+    assert not path.exists()
+    assert _strays(path.parent) == []
+    assert _records(tmp_path / "guard", "cursor") == []
+
+
 def test_nothing_is_written_when_no_copy_can_be_kept(tmp_path: Path) -> None:
     path = _seed(tmp_path, "codex")
     before = path.read_bytes()
@@ -432,6 +481,31 @@ def test_restore_refuses_a_damaged_copy(tmp_path: Path, capsys: pytest.CaptureFi
     assert code == 1
     assert payload["reason"] == "backup_unreadable"
     assert path.read_bytes() == written
+
+
+def test_restore_reports_a_damaged_newer_record(tmp_path: Path) -> None:
+    path = _seed(tmp_path, "codex")
+    guard_home = tmp_path / "guard"
+    _ = apply_host_config(plan_host_config("codex", path=path, url=URL), guard_home=guard_home)
+    written = path.read_bytes()
+    (backups_dir(guard_home, "codex") / f"{'9' * 20}-1.json").write_bytes(b'{"format": "guard.cloud')
+
+    with pytest.raises(HostConfigWriteError) as error:
+        _ = restore_host_config("codex", path=path, guard_home=guard_home)
+
+    assert error.value.reason == "backup_unreadable"
+    assert path.read_bytes() == written
+
+
+def test_restore_finds_the_copy_through_another_spelling(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = _seed(tmp_path / "home", "codex")
+    original = path.read_bytes()
+    monkeypatch.chdir(tmp_path)
+    relative = Path("home") / PATHS["codex"]
+    _ = apply_host_config(plan_host_config("codex", path=relative, url=URL), guard_home=tmp_path / "guard")
+
+    assert restore_host_config("codex", path=path, guard_home=tmp_path / "guard") is not None
+    assert path.read_bytes() == original
 
 
 def test_restore_steps_back_through_each_apply(tmp_path: Path) -> None:
