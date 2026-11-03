@@ -3,7 +3,9 @@
 The contract lives in ``contracts/fleet-posture/v1`` and is documented in
 ``docs/guard/fleet-posture.md``. This module collects the machine, AI-tool,
 inventory and policy sections, derives each tool's protection state, and decides
-whether the inventory goes out as ``full``, ``delta`` or ``digest_only``.
+whether the inventory goes out as ``full``, ``delta`` or ``digest_only``. The
+native runtime plans the inventory and fits the payload under its byte cap
+(``fleet_posture_inventory.rs``); this module collects the sections it needs.
 
 Building never writes inventory state. ``build_fleet_posture_state`` returns the
 payload together with the next "last sent" snapshot, and the caller commits that
@@ -13,12 +15,12 @@ request.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from ..native_runner_authority import native_runner_authority
 from .fleet_posture_common import (
     CAPABILITY,
     FOLLOWUP_STATE_KEY,
@@ -26,27 +28,17 @@ from .fleet_posture_common import (
     HARNESS_IDS,
     HASH_KEY_STATE_KEY,
     LAST_SENT_STATE_KEY,
-    MAX_ITEMS_PER_SYNC,
     MAX_PAYLOAD_BYTES,
     MAX_TOOLS,
     SCHEMA_VERSION,
     SETTINGS_STATE_KEY,
     clip,
     iso,
-    json_size,
     load_hash_key,
     normalized_timestamp,
     utc,
 )
-from .fleet_posture_inventory import (
-    InventoryPlan,
-    group_by_harness,
-    inventory_items,
-    item_digest,
-    plan_inventory,
-    previous_items,
-    stream_active,
-)
+from .fleet_posture_inventory import projected_rows, store_home
 from .fleet_posture_runtimes import RUNTIMES_TTL_SECONDS, runtimes_section
 from .fleet_posture_tools import (
     AUTO_UPDATE_STATE_KEY,
@@ -219,8 +211,9 @@ def build_fleet_posture_state(
     # Raises when the inventory cannot be read: the runner then omits this posture
     # rather than reporting an empty inventory.
     hash_key = load_hash_key(store, now_text)
-    current_items = inventory_items(store, hash_key=hash_key)
-    grouped = group_by_harness(current_items)
+    from .fleet_posture_aibom import fleet_inventory_rows
+
+    rows = projected_rows(fleet_inventory_rows(store))
     diagnostics_cache = DiagnosticsCache(store, now=now, ttl_seconds=settings.diagnostics_ttl_seconds)
     tools: list[dict[str, object]] = []
     for adapter in adapters:
@@ -237,120 +230,44 @@ def build_fleet_posture_state(
             config=config,
             now=now,
             include_blind_spots=detail,
-            inventory=grouped,
         )
         absent = row["protectionState"] == "not_detected"
         if absent and previous_tool_states.get(harness) in (None, "not_detected"):
             continue
         tools.append(row)
     diagnostics_cache.save()
-    tools = tools[:MAX_TOOLS]
 
-    previous = previous_items(last)
     # Runtime identities are detail: a minimal report leaves them out.
     runtimes = (
         runtimes_section(store, settings.context, hash_key=hash_key, now=now, ttl_seconds=settings.runtimes_ttl_seconds)
         if detail
         else None
     )
-
-    def plan_and_assemble(limit: int) -> tuple[InventoryPlan, dict[str, Any]]:
-        plan = plan_inventory(
-            current=current_items,
-            previous=previous,
-            last=last,
-            force_full=force_full,
-            detail=detail,
-            now=now,
-            limit=limit,
-        )
-        assembled = _assemble(store, settings, now, detail, tools, current_items, plan, acknowledgement, hash_key)
-        if runtimes is not None:
-            assembled["runtimes"] = runtimes
-        return plan, assembled
-
-    plan, payload = plan_and_assemble(MAX_ITEMS_PER_SYNC)
-    payload_bytes = json_size(payload)
-    if payload_bytes > MAX_PAYLOAD_BYTES and runtimes is not None:
-        # Inventory rows matter more than runtime identities; drop those first.
-        runtimes = None
-        plan, payload = plan_and_assemble(MAX_ITEMS_PER_SYNC)
-        payload_bytes = json_size(payload)
-    if payload_bytes > MAX_PAYLOAD_BYTES and plan.mode != "digest_only":
-        # Send as many items as fit, in successive deltas; digest_only only when
-        # not even one item fits next to the machine and tool sections.
-        low, high, best = 1, MAX_ITEMS_PER_SYNC - 1, None
-        while low <= high:
-            middle = (low + high) // 2
-            candidate = plan_and_assemble(middle)
-            if json_size(candidate[1]) <= MAX_PAYLOAD_BYTES:
-                best, low = candidate, middle + 1
-            else:
-                high = middle - 1
-        if best is not None:
-            plan, payload = best
-        else:
-            plan = InventoryPlan("digest_only", [], [], dict(previous or {}), stream_active(last), False)
-            payload = _assemble(store, settings, now, detail, tools, current_items, plan, acknowledgement, hash_key)
-        payload_bytes = json_size(payload)
-    if payload_bytes > MAX_PAYLOAD_BYTES:
-        for tool in payload["aiTools"]:
-            tool["blindSpots"] = []
-        payload_bytes = json_size(payload)
-
-    full_sent_at = last.get("fullSentAt") if isinstance(last, dict) else None
-    if plan.full_complete:
-        full_sent_at = now_text
-    summary = json.loads(json.dumps(payload))
-    summary["inventory"]["items"] = []
-    summary["inventory"]["removed"] = []
-    next_state: dict[str, object] = {
-        "sentAt": now_text,
-        "collectedAt": payload["collectedAt"],
-        "mode": plan.mode,
-        "inventoryDigest": payload["inventory"]["digest"],
-        "inventoryItemsTracked": len(current_items),
-        "fullSentAt": full_sent_at,
-        "fullStreaming": plan.streaming,
-        "payloadBytes": payload_bytes,
-        "items": plan.next_items,
-        "tools": {str(tool["harness"]): tool["protectionState"] for tool in tools},
-        "summary": summary,
-    }
-    return FleetPostureBuild(
-        payload=payload,
-        next_state=next_state,
-        mode=plan.mode,
-        payload_bytes=payload_bytes,
-        advanced_inventory=plan.mode != "digest_only",
-    )
-
-
-def _assemble(
-    store: GuardStore,
-    settings: FleetPostureSettings,
-    now: datetime,
-    detail: bool,
-    tools: list[dict[str, object]],
-    current_items: list[dict[str, object]],
-    plan: InventoryPlan,
-    acknowledgement: Mapping[str, object] | None,
-    hash_key: bytes,
-) -> dict[str, Any]:
-    return {
-        "schemaVersion": SCHEMA_VERSION,
-        "collectedAt": iso(now),
-        "client": client_section(store, settings.runtime),
-        "machine": machine_section(include_os_version=detail, hash_key=hash_key),
-        "aiTools": [dict(tool) for tool in tools],
-        "inventory": {
-            "digest": item_digest(current_items),
-            "mode": plan.mode,
-            "items": plan.items,
-            "removed": plan.removed,
+    built = native_runner_authority(
+        "fleet_posture_build",
+        {
+            "rows": rows,
+            "hash_key": hash_key.decode("utf-8"),
+            "last": last,
+            "now": now.isoformat(),
+            "force_full": bool(force_full),
+            "detail": bool(detail),
+            "max_payload_bytes": MAX_PAYLOAD_BYTES,
+            "client": client_section(store, settings.runtime),
+            "machine": machine_section(include_os_version=detail, hash_key=hash_key),
+            "policy": policy_section(store, acknowledgement),
+            "runtimes": runtimes,
+            "tools": tools[:MAX_TOOLS],
         },
-        "policy": policy_section(store, acknowledgement),
-    }
+        store_home(store),
+    )
+    return FleetPostureBuild(
+        payload=built["payload"],
+        next_state=built["next_state"],
+        mode=built["mode"],
+        payload_bytes=built["payload_bytes"],
+        advanced_inventory=built["advanced_inventory"],
+    )
 
 
 def commit_fleet_posture_sent(store: GuardStore, built: FleetPostureBuild, *, now: str) -> None:
