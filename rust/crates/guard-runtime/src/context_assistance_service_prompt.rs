@@ -52,6 +52,39 @@ impl Service {
         deadline: Instant,
     ) -> Result<PromptLane, LaneMiss> {
         self.wake(guard_home, chosen);
+        self.lane_watch().wait(deadline)
+    }
+
+    /// A handle that waits for the worker without borrowing the service, so
+    /// a prompt that found CIGAR starting can leave a warm-up behind.
+    pub(crate) fn lane_watch(&self) -> LaneWatch {
+        LaneWatch {
+            state: Arc::clone(&self.state),
+        }
+    }
+
+    /// True while the lane's worker is still the current one and project
+    /// context is still on, so an answer is never shown after a change.
+    pub(crate) fn prompt_lane_current(&self, lane: &PromptLane) -> bool {
+        lock(&self.state).is_ok_and(|state| {
+            state.generation == lane.generation
+                && chosen(&state.settings)
+                && state
+                    .runtime
+                    .as_ref()
+                    .is_some_and(|current| Arc::ptr_eq(current, &lane.actor))
+        })
+    }
+}
+
+/// Waits for a worker someone already woke; never wakes one itself.
+pub(crate) struct LaneWatch {
+    state: Arc<Mutex<State>>,
+}
+
+impl LaneWatch {
+    /// The live worker, waiting for a starting one until `deadline` at most.
+    pub(crate) fn wait(&self, deadline: Instant) -> Result<PromptLane, LaneMiss> {
         loop {
             if let Ok(mut state) = self.state.try_lock() {
                 if state.closed || !chosen(&state.settings) {
@@ -78,17 +111,36 @@ impl Service {
             std::thread::sleep(Duration::from_millis(50));
         }
     }
+}
 
-    /// True while the lane's worker is still the current one and project
-    /// context is still on, so an answer is never shown after a change.
-    pub(crate) fn prompt_lane_current(&self, lane: &PromptLane) -> bool {
-        lock(&self.state).is_ok_and(|state| {
-            state.generation == lane.generation
-                && chosen(&state.settings)
-                && state
-                    .runtime
-                    .as_ref()
-                    .is_some_and(|current| Arc::ptr_eq(current, &lane.actor))
+#[cfg(test)]
+impl Service {
+    /// Project context on, with a start that stays pending until
+    /// `end_start_for_tests`.
+    pub(crate) fn hold_start_for_tests(&self) {
+        let mut config = guard_context_assistance::ContextAssistanceConfig {
+            enabled: true,
+            runtime_id: "selected".into(),
+            ..Default::default()
+        };
+        config.features.agent_context = true;
+        config.sources.workspace_documents = true;
+        self.configure(AssistanceSettings {
+            requested: config.clone(),
+            effective: config,
+            verification_permitted: true,
+            ..Default::default()
         })
+        .unwrap();
+        let mut state = lock(&self.state).unwrap();
+        state.pending = Some(Pending {
+            id: state.generation,
+            operation: Check::Activate,
+            cancel: Arc::default(),
+        });
+    }
+
+    pub(crate) fn end_start_for_tests(&self) {
+        lock(&self.state).unwrap().pending = None;
     }
 }
