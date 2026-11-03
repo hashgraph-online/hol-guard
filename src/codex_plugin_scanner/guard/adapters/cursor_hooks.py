@@ -10,15 +10,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..frozen_runtime_commands import frozen_daemon_recovery_command
-from ..stable_guard_cli import uses_top_level_hook_command as _uses_top_level_hook_command
 from ._modules.cursor.cursor_hook_entries import _remove_managed_hook_entries, _render_without_managed_hook_entries
 from ._modules.cursor.cursor_hook_native import CursorNativeBridgeUnavailableError, require_cursor_hook_bridge
-from ._modules.cursor.cursor_hook_script_template import HOOK_SCRIPT_TEMPLATE
 from .adapter_safe_output import write_text_at_authorized_path
 from .base import HarnessContext, PreparedHarnessInstall, _ensure_path_within_root
 from .cursor_hook_config import (
     _MANAGED_HOOK_EVENTS,
-    _MANAGED_HOOK_TIMEOUT_SECONDS,
     HOOK_SCRIPT_NAME,
     _backup_payload,
     _hooks_backup_path,
@@ -41,28 +38,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from ..runtime_transition import TransitionFile
-
-_INHERIT_ENV_KEYS = (
-    "PATH",
-    "HOME",
-    "USER",
-    "TMPDIR",
-    "TEMP",
-    "TMP",
-    "LANG",
-    "LC_ALL",
-    "SYSTEMROOT",
-    "CURSOR_PROJECT_DIR",
-    "CURSOR_VERSION",
-    "CURSOR_TRACE_ID",
-    "CURSOR_SESSION_ID",
-    "CURSOR_TRANSCRIPT_PATH",
-    "HOL_GUARD_NATIVE",
-    "HOL_GUARD_NATIVE_BINARY",
-    "HOL_GUARD_SRC",
-    "HOL_GUARD_TEST_MODE",
-    "HOL_GUARD_NATIVE_DIAGNOSTIC",
-)
 
 
 def cursor_hooks_path(context: HarnessContext) -> Path:
@@ -433,18 +408,23 @@ def _resolve_guard_cli_command(context: HarnessContext) -> list[str]:
     return list(resolve_attested_guard_cli(context).command)
 
 
-def _embedded_guard_hook_argv(context: HarnessContext) -> list[str]:
-    guard_argv = [
-        "hook",
-        "--guard-home",
-        str(context.guard_home),
-        "--harness",
-        "cursor",
-        "--json",
-    ]
-    if context.home_dir.resolve() != Path.home().resolve():
-        guard_argv.extend(["--home", str(context.home_dir)])
-    return guard_argv
+def _cursor_hook_script(request: dict[str, object], field: str) -> object:
+    """Ask the native ``cursor_hook_script`` kind for one rendered value."""
+
+    # Imported here so the hook bridges stay off the native runtime at import time.
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        answer = native_runner_authority("cursor_hook_script", request)
+        value = answer.get(field) if isinstance(answer, dict) and set(answer) == {field} else None
+        if not isinstance(value, str) and not (
+            isinstance(value, list) and all(isinstance(item, str) for item in value)
+        ):
+            raise NativeRunnerAuthorityError("native_cursor_hook_script_invalid")
+    except NativeRunnerAuthorityError as error:
+        # Best-effort repair and rebind callers handle RuntimeError, not ValueError.
+        raise RuntimeError(f"Cursor hook script request failed: {error}") from error
+    return value
 
 
 def _cursor_recovery_command(
@@ -453,23 +433,17 @@ def _cursor_recovery_command(
 ) -> list[str]:
     if attestation is None:
         return list(frozen_daemon_recovery_command(context.guard_home, context.home_dir))
-    trusted_roots = [str(root) for root in attestation.import_roots]
-    bootstrap = (
-        "import json,sys;"
-        f"sys.path[:0]={json.dumps(trusted_roots)};"
-        "from pathlib import Path;"
-        "from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure;"
-        f"recover_guard_daemon_after_hook_failure(Path({str(context.guard_home.resolve())!r}),"
-        f"home_dir=Path({str(context.home_dir.resolve())!r}),failure_kind=sys.argv[1])"
-    )
-    return [
-        str(attestation.identity.target_path),
-        "-I",
-        "-S",
-        "-s",
-        "-c",
-        bootstrap,
-    ]
+    request: dict[str, object] = {
+        "op": "recovery",
+        "python": str(attestation.identity.target_path),
+        "import_roots": [str(root) for root in attestation.import_roots],
+        "guard_home": str(context.guard_home.resolve()),
+        "home": str(context.home_dir.resolve()),
+    }
+    command = _cursor_hook_script(request, "command")
+    if not isinstance(command, list):
+        raise RuntimeError("Cursor hook script answer is malformed")
+    return command
 
 
 def cursor_hook_script_source(
@@ -482,27 +456,19 @@ def cursor_hook_script_source(
         guard_cli = _resolve_guard_cli_command(context)
     if recovery_command is None:
         recovery_command = _cursor_recovery_command(context, resolve_attested_guard_cli(context).python)
-    guard_cli = list(guard_cli)
-    guard_argv = _embedded_guard_hook_argv(context)
-    if not _uses_top_level_hook_command(guard_cli):
-        guard_argv = ["guard", *guard_argv]
-    return (
-        HOOK_SCRIPT_TEMPLATE.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
-        .replace("__GUARD_CLI__", json.dumps(guard_cli))
-        .replace("__GUARD_RECOVERY_COMMAND__", json.dumps(recovery_command))
-        .replace(
-            "__GUARD_HOOK_ARGV__",
-            json.dumps(guard_argv),
-        )
-        .replace(
-            "__GUARD_INHERIT_ENV_KEYS__",
-            json.dumps(list(_INHERIT_ENV_KEYS)),
-        )
-        .replace(
-            "__GUARD_HOOK_TIMEOUT_SECONDS__",
-            str(max(_MANAGED_HOOK_TIMEOUT_SECONDS - 3, 1)),
-        )
-    )
+    request: dict[str, object] = {
+        "op": "render",
+        "guard_home": str(context.guard_home),
+        "guard_home_resolved": str(context.guard_home.resolve()),
+        # The user's own home is never named, so the hook keeps following it.
+        "home": None if context.home_dir.resolve() == Path.home().resolve() else str(context.home_dir),
+        "guard_cli": list(guard_cli),
+        "recovery_command": list(recovery_command),
+    }
+    source = _cursor_hook_script(request, "source")
+    if not isinstance(source, str):
+        raise RuntimeError("Cursor hook script answer is malformed")
+    return source
 
 
 _STATE_STATUSES = frozenset({"missing", "tampered", "stale"})
