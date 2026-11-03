@@ -8,11 +8,13 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority as native_runner_authority_module
 from codex_plugin_scanner.guard import package_firewall_entitlement as entitlement_module
 from codex_plugin_scanner.guard.native_hook_artifact_compose import (
     NativeHookComposeError,
     NativeHookComposeValidationError,
 )
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.package_firewall_entitlement import (
     PACKAGE_FIREWALL_RUNTIME_UNAVAILABLE_REASON,
     build_oauth_package_firewall_entitlement,
@@ -109,66 +111,68 @@ def test_an_unavailable_resident_does_not_decide_package_firewall_access(
         )
 
 
-def test_build_oauth_package_firewall_entitlement_preserves_team_tier() -> None:
-    entitlement = build_oauth_package_firewall_entitlement(
-        {
-            "guard_local_entitlement": {
-                "plan_id": "team",
-                "tier": "team",
-                "supply_chain_firewall": True,
-                "expires_at": "2026-06-30T00:00:00.000Z",
-            }
-        },
-        now=datetime(2026, 5, 31, tzinfo=timezone.utc),
-    )
+def _fake_runner_authority(monkeypatch: pytest.MonkeyPatch, answer: object) -> list[tuple[str, dict[str, object]]]:
+    sent: list[tuple[str, dict[str, object]]] = []
 
-    assert entitlement == {
+    def fake(kind: str, args: dict[str, object], **_: object) -> object:
+        sent.append((kind, dict(args)))
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(native_runner_authority_module, "native_runner_authority", fake)
+    return sent
+
+
+def test_build_oauth_package_firewall_entitlement_asks_the_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    granted = {
         "plan_id": "team",
         "supply_chain_entitlement_expires_at": "2026-06-30T00:00:00.000Z",
         "supply_chain_firewall": True,
         "supply_chain_plan_id": "team",
     }
+    sent = _fake_runner_authority(monkeypatch, {"entitlement": granted})
+    record = {"plan_id": "team", "supply_chain_firewall": True, "expires_at": "2026-06-30T00:00:00.000Z"}
 
-
-def test_build_oauth_package_firewall_entitlement_consumes_solo_plan_identity() -> None:
     entitlement = build_oauth_package_firewall_entitlement(
-        {
-            "guard_local_entitlement": {
-                "plan_id": "solo",
-                "tier": "solo",
-                "supply_chain_firewall": False,
-                "expires_at": "2026-09-07T00:00:00.000Z",
-            }
-        },
-        now=datetime(2026, 8, 7, tzinfo=timezone.utc),
+        {"guard_local_entitlement": record, "access_token": "unused"},
+        now=datetime(2026, 5, 31, 1, 2, 3, tzinfo=timezone.utc),
     )
 
-    assert entitlement == {
-        "plan_id": "solo",
-        "supply_chain_entitlement_expires_at": "2026-09-07T00:00:00.000Z",
-        "supply_chain_firewall": False,
-        "supply_chain_plan_id": "solo",
-    }
+    assert entitlement == granted
+    assert sent == [
+        (
+            "oauth_package_firewall_entitlement",
+            {"record": record, "fallback_expires_at": "2026-06-30T01:02:03+00:00"},
+        )
+    ]
 
 
-def test_build_oauth_package_firewall_entitlement_keeps_legacy_paid_alias_compatible() -> None:
-    entitlement = build_oauth_package_firewall_entitlement(
-        {
-            "guard_local_entitlement": {
-                "plan_id": "paid",
-                "tier": "paid",
-                "expires_at": "2026-09-07T00:00:00.000Z",
-            }
-        },
-        now=datetime(2026, 8, 7, tzinfo=timezone.utc),
-    )
+def test_build_oauth_package_firewall_entitlement_without_a_record_asks_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent = _fake_runner_authority(monkeypatch, {"entitlement": {"plan_id": "team"}})
 
-    assert entitlement == {
-        "plan_id": "paid",
-        "supply_chain_entitlement_expires_at": "2026-09-07T00:00:00.000Z",
-        "supply_chain_firewall": True,
-        "supply_chain_plan_id": "paid",
-    }
+    assert build_oauth_package_firewall_entitlement({}) is None
+    assert build_oauth_package_firewall_entitlement({"guard_local_entitlement": ["team"]}) is None
+    assert sent == []
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {"entitlement": None},
+        {"entitlement": "team"},
+        {},
+        NativeRunnerAuthorityError("native_runner_authority_unavailable"),
+    ],
+)
+def test_build_oauth_package_firewall_entitlement_grants_nothing_unanswered(
+    monkeypatch: pytest.MonkeyPatch, answer: object
+) -> None:
+    _fake_runner_authority(monkeypatch, answer)
+
+    assert build_oauth_package_firewall_entitlement({"guard_local_entitlement": {"plan_id": "team"}}) is None
 
 
 def test_reconcile_connect_state_clears_stale_sync_not_available_for_paid_oauth(

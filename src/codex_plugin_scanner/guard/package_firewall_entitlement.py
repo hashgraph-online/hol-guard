@@ -3,21 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import cast
 
-from .cloud_entitlements import parse_guard_cloud_entitlements
 from .native_hook_artifact_compose import (
     NativeHookComposeError,
     NativeHookComposeValidationError,
     native_hook_compose,
 )
-from .package_firewall_defaults import (
-    PACKAGE_FIREWALL_PAID_TIERS,
-    build_guard_local_entitlement_defaults,
-)
+from .package_firewall_defaults import PACKAGE_FIREWALL_PAID_TIERS
 from .store import GuardStore
+
+# How long a grant whose record names no expiry lasts.
+_OAUTH_ENTITLEMENT_FALLBACK_TTL = timedelta(days=30)
 
 
 def _dict_or_none(value: object) -> dict[str, object] | None:
@@ -36,25 +35,31 @@ def build_oauth_package_firewall_entitlement(
     *,
     now: datetime | None = None,
 ) -> dict[str, object] | None:
+    """The package-firewall grant an OAuth token response carries, per the runtime.
+
+    The native runtime reads the response's ``guard_local_entitlement`` record.
+    ``None`` means the response granted nothing, or the runtime could not say
+    what it granted; callers keep the entitlement they already stored.
+    """
+
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
     record = payload.get("guard_local_entitlement")
     if not isinstance(record, dict):
         return None
-    defaults = build_guard_local_entitlement_defaults(record, now=now)
-    if defaults is None:
+    resolved_now = now or datetime.now(timezone.utc)
+    try:
+        answer = native_runner_authority(
+            "oauth_package_firewall_entitlement",
+            {
+                "record": record,
+                "fallback_expires_at": (resolved_now + _OAUTH_ENTITLEMENT_FALLBACK_TTL).isoformat(),
+            },
+        )
+    except NativeRunnerAuthorityError:
         return None
-
-    # The typed Cloud parser is the authoritative path for canonical Guard
-    # plan IDs. Retain the legacy defaults path for older paid-tier aliases so
-    # existing OAuth grants are not invalidated during rollout.
-    parsed = parse_guard_cloud_entitlements(payload)
-    if parsed is None:
-        return defaults
-    defaults["plan_id"] = parsed.plan_id
-    defaults["supply_chain_plan_id"] = parsed.plan_id
-    firewall = parsed.features.get("guard.cloud.supply_chain_firewall")
-    if isinstance(firewall, bool):
-        defaults["supply_chain_firewall"] = firewall
-    return defaults
+    entitlement = answer.get("entitlement")
+    return entitlement if isinstance(entitlement, dict) else None
 
 
 def _oauth_entitlement_fields_from_sync_payload(payload: object) -> dict[str, object] | None:
