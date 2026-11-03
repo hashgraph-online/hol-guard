@@ -144,17 +144,28 @@ def _embedded_scripts_for_receipt(match: dict[str, object]) -> list[dict[str, ob
     the span and hash recorded in the receipt's ``embedded_script`` evidence.
     """
 
-    from ..native_runner_authority import native_runner_authority
+    evidence = match.get("scanner_evidence")
+    if not isinstance(evidence, list) or not any(
+        isinstance(item, dict) and item.get("source") == "embedded_script" and item.get("kind") == "heredoc"
+        for item in evidence
+    ):
+        return []
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     envelope = match.get("action_envelope_json")
-    answer = native_runner_authority(
-        "receipt_embedded_scripts",
-        {
-            "scanner_evidence": match.get("scanner_evidence"),
-            "raw_command_text": match.get("raw_command_text"),
-            "envelope_command": envelope.get("command") if isinstance(envelope, dict) else None,
-        },
-    )
+    try:
+        answer = native_runner_authority(
+            "receipt_embedded_scripts",
+            {
+                "scanner_evidence": evidence,
+                "raw_command_text": match.get("raw_command_text"),
+                "envelope_command": envelope.get("command") if isinstance(envelope, dict) else None,
+            },
+        )
+    except NativeRunnerAuthorityError:
+        # Explaining a receipt must not need the resident; the receipt and its
+        # evidence still print without the reconstructed bodies.
+        return []
     scripts = answer.get("scripts")
     return [dict(item) for item in scripts if isinstance(item, dict)] if isinstance(scripts, list) else []
 
