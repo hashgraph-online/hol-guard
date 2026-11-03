@@ -262,6 +262,9 @@ mod manager;
 #[path = "restricted_test_commands_runner_tests.rs"]
 mod runner;
 
+#[path = "restricted_test_commands_cucumber_tests.rs"]
+mod cucumber;
+
 #[test]
 fn pnpm_without_its_exec_verb_is_not_read_as_a_local_bin_run() {
     // pnpm resolves a bare word against the manifest first and only falls back

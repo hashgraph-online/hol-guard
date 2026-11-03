@@ -484,11 +484,12 @@ pub(crate) use runner_calls::{
     workspace_test_script,
 };
 pub(crate) use single_pass_runners::{
-    borp_contained_call, borp_runs_once, cucumber_contained_call, cucumber_runs_once,
-    jasmine_contained_call, jasmine_runs_once, jasmine_sets_no_environment, lab_contained_call,
-    lab_runs_once, poku_contained_call, poku_runs_once, poku_touches_nothing_else,
-    qunit_contained_call, qunit_runs_once, tap_contained_call, tap_runs_tests_once,
-    tap_sets_no_environment, tape_contained_call, tsd_contained_call, uvu_contained_call,
+    borp_contained_call, borp_runs_once, cucumber_contained_call, cucumber_prints_its_report,
+    cucumber_runs_once, jasmine_contained_call, jasmine_runs_once, jasmine_sets_no_environment,
+    lab_contained_call, lab_runs_once, poku_contained_call, poku_runs_once,
+    poku_touches_nothing_else, qunit_contained_call, qunit_runs_once, tap_contained_call,
+    tap_runs_tests_once, tap_sets_no_environment, tape_contained_call, tsd_contained_call,
+    uvu_contained_call,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
@@ -662,6 +663,12 @@ fn runner_tail_or_error(
                 VITEST_INVALID,
                 "Protected lab reads its modules from this workspace.",
             )),
+            Some("cucumber-js") if !cucumber_prints_its_report(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected cucumber-js prints its report here; it does not write it to a file.",
+                ))
+            }
             Some("cucumber-js") if !cucumber_runs_once(&arguments[1..]) => {
                 Err(RestrictedPytestError::new(
                     VITEST_INVALID,

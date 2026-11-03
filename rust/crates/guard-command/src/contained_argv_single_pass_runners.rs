@@ -416,7 +416,39 @@ pub(crate) fn tap_sets_no_environment(arguments: &[String]) -> bool {
 /// True when a cucumber-js call both finishes on its own and takes
 /// everything it loads from the workspace.
 pub(crate) fn cucumber_contained_call(arguments: &[String]) -> bool {
-    cucumber_runs_once(arguments) && reads_its_own_workspace(arguments)
+    cucumber_runs_once(arguments)
+        && cucumber_prints_its_report(arguments)
+        && reads_its_own_workspace(arguments)
+}
+
+/// True when every formatter on the line writes to the terminal.
+///
+/// `--format TYPE[:TARGET]` sends that formatter's output to the target
+/// rather than to standard output, and the contained profile mounts the
+/// project read-only, so a report target inside the workspace is as
+/// unopenable as one outside it: the call would be admitted and then fail on
+/// the open. A formatter that names a target therefore keeps its review, and
+/// the workspace screen is left to answer for the paths the runner loads.
+///
+/// The target is read off whichever word carries it, so no spelling of the
+/// option has to be enumerated: `--format`, `--format=`, `-f`, `-fTYPE:PATH`
+/// and a short cluster ending in `f` all put the colon in a word of their
+/// own or in the word that follows. The one colon cucumber-js writes
+/// elsewhere is the `FILE:LINE` operand that picks a single scenario, whose
+/// tail is a line number, so that spelling stays contained.
+pub(crate) fn cucumber_prints_its_report(arguments: &[String]) -> bool {
+    before_terminator(arguments)
+        .iter()
+        .all(|argument| names_no_formatter_target(argument))
+}
+
+/// Whether a word carries no formatter target. A `FILE:LINE` operand is the
+/// exception: it starts no option and ends in a line number.
+fn names_no_formatter_target(argument: &str) -> bool {
+    let Some((_, tail)) = argument.rsplit_once(':') else {
+        return true;
+    };
+    !argument.starts_with('-') && !tail.is_empty() && tail.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 /// cucumber-js has no watch mode and no command verbs. Its operands are
