@@ -355,20 +355,31 @@ fn environment_after_wrappers(
             index += 1;
         }
     }
-    if index < raw.len() && launch_name(&raw[index]) == "env" {
-        let parsed = parse_env_wrapper(&raw[index + 1..], Some(&env), None);
+    // Each `env` runs the next command, and that command may be `env` again.
+    // `env FOO=1 env npm_config_package=left-pad npx tsx` installs left-pad.
+    let mut ignored_environment = false;
+    let mut rest = raw[index..].to_vec();
+    while rest
+        .first()
+        .is_some_and(|token| launch_name(token) == "env")
+    {
+        let parsed = parse_env_wrapper(&rest[1..], Some(&env), None);
         if !parsed.complete || parsed.error.is_some() {
             return None;
         }
         if let Some(pairs) = parsed.effective_environment {
             env = pairs.into_iter().collect();
         }
-        if parsed.option_effects.ignore_environment
-            && !environment_settings(&env).contains_key("package")
-        {
-            // npm's home, and so its user config, is no longer the launch home.
+        ignored_environment |= parsed.option_effects.ignore_environment;
+        // `executable_argv` is a suffix of `rest` with this `env` removed.
+        if parsed.executable_argv.len() >= rest.len() {
             return None;
         }
+        rest = parsed.executable_argv;
+    }
+    if ignored_environment && !environment_settings(&env).contains_key("package") {
+        // npm's home, and so its user config, is no longer the launch home.
+        return None;
     }
     Some(env)
 }

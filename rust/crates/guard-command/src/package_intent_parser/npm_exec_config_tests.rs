@@ -270,6 +270,68 @@ fn an_env_assignment_on_the_command_names_the_package() {
 }
 
 #[test]
+fn a_nested_env_wrapper_names_the_inner_package() {
+    let (dir, project, environment) = project();
+    let home = PathBuf::from(&environment["HOME"]);
+    let intent = parse_package_intent(
+        "env FOO=1 env npm_config_package=left-pad npx tsx script.ts",
+        Some(&project),
+        Some(&home),
+        None,
+        Some(&environment),
+    )
+    .expect("npx intent");
+
+    assert_eq!(intent.targets[0].package_name.as_deref(), Some("left-pad"));
+    assert!(intent
+        .targets
+        .iter()
+        .all(|target| target.source_invalid_reason.is_none()));
+    let _ = dir;
+}
+
+#[test]
+fn an_inner_env_names_the_package_after_the_environment_was_cleared() {
+    let (dir, project, environment) = project();
+    let home = PathBuf::from(&environment["HOME"]);
+    let intent = parse_package_intent(
+        "env -i env npm_config_package=left-pad npx tsx script.ts",
+        Some(&project),
+        Some(&home),
+        None,
+        Some(&environment),
+    )
+    .expect("npx intent");
+
+    assert_eq!(intent.targets[0].package_name.as_deref(), Some("left-pad"));
+    assert!(intent
+        .targets
+        .iter()
+        .all(|target| target.source_invalid_reason.is_none()));
+    let _ = dir;
+}
+
+#[test]
+fn an_inner_env_that_clears_the_environment_leaves_the_package_unnamed() {
+    let (dir, project, environment) = project();
+    let home = PathBuf::from(&environment["HOME"]);
+    let intent = parse_package_intent(
+        "env npm_config_package=left-pad env -i npx tsx script.ts",
+        Some(&project),
+        Some(&home),
+        None,
+        Some(&environment),
+    )
+    .expect("npx intent");
+
+    assert_eq!(
+        intent.targets[0].source_invalid_reason.as_deref(),
+        Some("npm_config_package_unidentified")
+    );
+    let _ = dir;
+}
+
+#[test]
 fn a_userconfig_path_expands_before_the_file_is_read() {
     let (dir, _project, mut environment) = project();
     let outside = dir.path().join("outside");
