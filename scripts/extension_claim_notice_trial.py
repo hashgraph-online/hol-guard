@@ -32,9 +32,11 @@ def trial_lines(extension_ids: Iterable[str]) -> list[str]:
         "```",
         "",
         (
-            "Use a disposable workspace, test account, or throwaway resource for the destructive case, "
-            "never real data. Ask the agent to run the safe counterpart and then the destructive command, "
-            "deny the review, and check the result with `hol-guard receipts`. A setup guide written from "
+            "Use a disposable workspace, test account, or throwaway resource for the destructive case, one "
+            "that is safe to lose even if Guard does not intercept the command; never use real data. Ask the "
+            "agent to run the safe counterpart and then the destructive command, compare the verdict with your "
+            "fixture, deny any review it presents, and check the result with `hol-guard receipts`. "
+            "A setup guide written from "
             "that run gives readers accurate steps; open a follow-up pull request if the agent experience "
             "differs from your fixture."
         ),
