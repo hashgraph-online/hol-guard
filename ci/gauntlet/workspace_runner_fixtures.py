@@ -31,6 +31,10 @@ WORKSPACE_NPM_EXEC_CASE = "omp-native-workspace-npm-exec-inert-option"
 # front of it. The setting only sizes the engine, so the run has to finish the
 # same way the unprefixed launch does.
 WORKSPACE_HEAP_PREFIX_CASE = "omp-native-workspace-node-options-heap-prefix"
+# The same install, launched with the flag an ESM suite needs in front of it.
+# The setting only turns on Node's module VM classes, so the run has to finish
+# the same way the unprefixed launch does.
+WORKSPACE_VM_MODULES_PREFIX_CASE = "omp-native-workspace-node-options-vm-modules-prefix"
 # The other runner a Node project installs for itself. Mocha runs its suite once
 # and exits unless it is told to watch, so the plain launch is the routine one.
 WORKSPACE_MOCHA_CASE = "omp-native-workspace-npx-mocha"
@@ -86,6 +90,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_NODE_ENTRY_CASE,
         WORKSPACE_NPM_EXEC_CASE,
         WORKSPACE_HEAP_PREFIX_CASE,
+        WORKSPACE_VM_MODULES_PREFIX_CASE,
         WORKSPACE_MOCHA_CASE,
         WORKSPACE_NAMED_TEST_SCRIPT_CASE,
         WORKSPACE_SCRIPT_PASSED_OPTION_CASE,
