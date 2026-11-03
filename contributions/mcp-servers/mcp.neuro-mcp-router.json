@@ -13,7 +13,7 @@
   },
   "icon": {
     "kind": "react-icon",
-    "name": "HiMiniCpuChip",
+    "name": "HiMiniGlobeAlt",
     "background": "#0F172A"
   },
   "homepage": "https://github.com/its-shahvez/neuro-mcp-router",
