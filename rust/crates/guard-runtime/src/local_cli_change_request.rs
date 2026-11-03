@@ -19,7 +19,7 @@
 use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
-use guard_contracts::python_text::python_strip;
+use guard_contracts::python_strip;
 use regex::Regex;
 use serde_json::{json, Map, Value};
 
