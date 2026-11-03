@@ -49,6 +49,9 @@ fn fetch_text_is_cut_to_the_byte_limit_on_a_character_boundary() {
     assert_eq!(wide["result"]["truncated"], json!(true));
     let split = answer(json!({"fetch": {"text": format!("a{}", "é".repeat(20_000))}}));
     assert_eq!(split["result"]["text"].as_str().map(str::len), Some(32_767));
+    let ascii = answer(json!({"fetch": {"text": "a".repeat(40_000)}}));
+    assert_eq!(ascii["result"]["text"].as_str().map(str::len), Some(32_768));
+    assert_eq!(ascii["result"]["truncated"], json!(true));
     let flagged = answer(json!({"fetch": {"text": "abc", "truncated": "yes"}}));
     assert_eq!(flagged["result"]["truncated"], json!(true));
 }

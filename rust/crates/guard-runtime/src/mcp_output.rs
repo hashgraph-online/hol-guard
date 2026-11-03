@@ -150,7 +150,9 @@ fn byte_prefix(text: &str, limit: usize) -> &str {
 
 fn fetch(raw: &Map<String, Value>) -> Value {
     let mut allowed = common_fields(raw);
-    let text = normalized_text(raw.get("text"), MAX_FETCH_TEXT_BYTES);
+    // Cut by bytes alone: a character is at least one byte, so a separate
+    // character cut could only drop text the truncation flag never saw.
+    let text = normalized_text(raw.get("text"), usize::MAX);
     let fitted = byte_prefix(&text, MAX_FETCH_TEXT_BYTES);
     let truncated = fitted.len() < text.len() || raw.get("truncated").is_some_and(py_truthy);
     allowed.insert("text".to_owned(), Value::String(fitted.to_owned()));

@@ -35,12 +35,20 @@ class MCPOutputUnavailableError(RuntimeError):
     """The native runtime could not sanitize MCP output, so none is returned."""
 
 
-def _bounded(raw: dict[str, object]) -> dict[str, object]:
+def _bounded_value(key: str, value: object) -> object:
     # Text is cut well past each output limit before it crosses to the runtime,
     # so normalization still sees enough characters to fill the field. Enum
     # values are never normalized, and a cut this long stays an invalid name.
+    if not isinstance(value, str):
+        return value
+    if key == "text":
+        return value[: 8 * MAX_FETCH_TEXT_BYTES]
+    return value[:4096]
+
+
+def _bounded(raw: dict[str, object]) -> dict[str, object]:
     return {
-        key: value[: 8 * MAX_FETCH_TEXT_BYTES if key == "text" else 4096] if isinstance(value, str) else value
+        key: _bounded_value(key, value)
         for key, value in raw.items()
         if key in _FIELDS and isinstance(value, (str, bool, int, float))
     }
