@@ -159,3 +159,20 @@ fn a_test_an_earlier_prompt_loaded_gives_way_to_the_source() {
     let only_tests = render(&picked[..1], &[], &words(&["header"])).unwrap();
     assert!(only_tests.contains("Header.test.tsx"), "{only_tests}");
 }
+
+#[test]
+fn pi_gets_context_only_from_an_extension_that_passes_it_on() {
+    let flagged = json!({"prompt": "fix the cart", "guard_prompt_context": true});
+    let older = json!({"prompt": "fix the cart"});
+    for harness in ["pi", "omp"] {
+        assert!(takes_context(harness, &flagged));
+        assert!(!takes_context(harness, &older));
+        assert!(!takes_context(
+            harness,
+            &json!({"guard_prompt_context": "yes"})
+        ));
+    }
+    assert!(takes_context("claude-code", &older));
+    assert!(takes_context("codex", &older));
+    assert!(!takes_context("cursor", &flagged));
+}

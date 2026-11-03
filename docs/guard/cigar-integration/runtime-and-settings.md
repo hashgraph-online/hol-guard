@@ -141,9 +141,9 @@ Guard's typed MCP registry supplies list, call and FastMCP registration. Pass th
 
 The status response can remain available through existing Guard status reporting. It should not require installing CIGAR to explain why CIGAR is unavailable.
 
-## Prompt context in Claude Code and Codex
+## Prompt context in Claude Code, Codex, Pi and Oh My Pi
 
-This part is implemented. When CIGAR is on and verified, and both `features.agent_context` and `sources.workspace_documents` are on, Guard's `UserPromptSubmit` hook for Claude Code and Codex adds matching project code to an allowed prompt through `hookSpecificOutput.additionalContext`. The one-click setup in the dashboard turns both on for a fresh install.
+This part is implemented. When CIGAR is on and verified, and both `features.agent_context` and `sources.workspace_documents` are on, Guard's `UserPromptSubmit` hook for Claude Code, Codex, Pi and Oh My Pi adds matching project code to an allowed prompt through `hookSpecificOutput.additionalContext`. The Pi and Oh My Pi extensions ask for it with `guard_prompt_context: true` and hand it to the model as a hidden message just before the turn starts; an older extension that does not ask gets no lookup. The one-click setup in the dashboard turns both on for a fresh install.
 
 For each prompt the native runtime:
 

@@ -2932,7 +2932,7 @@ function ContextSettingsControls(props) {
           SettingsToggleRow,
           {
             label: "Context for AI apps",
-            description: "Add the project files that match each prompt in Claude Code and Codex, and allow context tools for apps you authorize. Sharing between agents is a separate choice.",
+            description: "Add the project files that match each prompt in Claude Code, Codex, Pi and Oh My Pi, and allow context tools for apps you authorize. Sharing between agents is a separate choice.",
             checked: value.features.agent_context,
             disabled: editingDisabled,
             onChange: (agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })
@@ -2942,7 +2942,7 @@ function ContextSettingsControls(props) {
           SettingsToggleRow,
           {
             label: "Allow selected workspace documents",
-            description: "With Context for AI apps on, prompts in Claude Code and Codex get the files in their project that match them. Pick a project folder under Projects & AI apps to choose exact files instead.",
+            description: "With Context for AI apps on, prompts in Claude Code, Codex, Pi and Oh My Pi get the files in their project that match them. To limit one app to exact files, pick a project folder under Projects & AI apps and choose that app.",
             checked: value.sources.workspace_documents,
             disabled: editingDisabled,
             onChange: (workspace_documents) => props.onChange({ ...value, sources: {
@@ -4171,11 +4171,16 @@ const openSettings = () => {
   commitDashboardLocation(url.pathname + url.search + url.hash);
 };
 const plural = (count2, word2) => `${count2} ${word2}${count2 === 1 ? "" : "s"}`;
+const agentAppDescriptions = {
+  codex: "Its prompts get only the files you tick. It can also ask CIGAR about the project after you connect it.",
+  "claude-code": "Its prompts get only the files you tick. It can also ask CIGAR about the project after you connect it.",
+  cursor: "This app can ask CIGAR about the project after you connect it."
+};
 function projectAppOptions(agentsAllowed, executionAllowed) {
   return [
-    { value: "dashboard", label: "Only this page", description: "You look things up here, in Guard." },
-    ...agentsAllowed ? ["codex", "claude-code", "cursor"].map((name) => ({ value: name, label: harnessDisplayName(name), description: "This app can ask CIGAR about the project after you connect it." })) : [],
-    ...executionAllowed ? ["pi", "omp"].map((name) => ({ value: name, label: harnessDisplayName(name), description: "Commands it runs through Guard come back with project notes." })) : []
+    { value: "dashboard", label: "Only this page", description: "You look things up here, in Guard. Your AI apps keep getting matching files on their own." },
+    ...agentsAllowed ? ["codex", "claude-code", "cursor"].map((name) => ({ value: name, label: harnessDisplayName(name), description: agentAppDescriptions[name] })) : [],
+    ...executionAllowed ? ["pi", "omp"].map((name) => ({ value: name, label: harnessDisplayName(name), description: "Its prompts get only the files you tick, and commands it runs through Guard come back with project notes." })) : []
   ];
 }
 function proofDetail(input, executionAllowed, sharingAllowed) {
@@ -4861,7 +4866,7 @@ function CigarGuide({ onSelect, walkthroughs }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-guide", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-explained-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-explained-heading", children: "How CIGAR works" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "With CIGAR on, and Context for AI apps and workspace documents turned on in Settings, every prompt you send in Claude Code or Codex gets the few project files that match it. The Turn on CIGAR button sets both up on a fresh install. CIGAR finds your project from the folder your AI app runs in. A prompt about the header color brings the header and its styles. A prompt that matches nothing, like “build a to-do app” in an empty folder, adds nothing." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "With CIGAR on, and Context for AI apps and workspace documents turned on in Settings, every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it. The Turn on CIGAR button sets both up on a fresh install. CIGAR finds your project from the folder your AI app runs in. A prompt about the header color brings the header and its styles. A prompt that matches nothing, like “build a to-do app” in an empty folder, adds nothing." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Secrets, keys, hidden files, generated folders and anything your project's .gitignore files leave out are always skipped. To stop it, turn off CIGAR, or turn off Context for AI apps in Settings." }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-caption", children: [
         "CIGAR stands for ",
@@ -4886,7 +4891,7 @@ function CigarGuide({ onSelect, walkthroughs }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Do I have to pick a project folder?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. Without one, CIGAR uses the files that match each prompt. Pick a folder if you want to choose exactly which files it uses for that project." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. Your AI apps get the files that match each prompt from the folder they work in. To limit one app to files you tick, pick the folder and choose that app. A folder picked for Only this page is for looking things up here and does not change what your AI apps get." }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("access"), children: [
           "Open Projects & AI apps",
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
@@ -4941,7 +4946,7 @@ function cigarWillHelpPrompts(status) {
   const { sources } = status.preferences;
   return !sources.workspace_documents && !sources.source_set_id;
 }
-const PROMPT_PROMISE = "Every prompt you send in Claude Code or Codex gets the few project files that match it.";
+const PROMPT_PROMISE = "Every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it.";
 const NO_FILES_YET = "Prompts get no project files until Context for AI apps and workspace documents are on in Settings.";
 function cigarHomeCopy(status, loading, running) {
   if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. You can keep browsing.", setupHint: false };
@@ -5641,7 +5646,7 @@ function CigarSetupProof({ setup, gate }) {
       mode: "verify-save",
       gate,
       title: "Approve turning on CIGAR",
-      detail: "Guard will download CIGAR, make sure it is the approved copy and start it on this computer. After that, each prompt you send in Claude Code or Codex gets the few files from that project that match it. CIGAR skips secrets, keys, generated folders and anything the project's .gitignore files leave out. Turn off Context for AI apps in Settings to stop it. One approval covers everything.",
+      detail: "Guard will download CIGAR, make sure it is the approved copy and start it on this computer. After that, each prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few files from that project that match it. CIGAR skips secrets, keys, generated folders and anything the project's .gitignore files leave out. Turn off Context for AI apps in Settings to stop it. One approval covers everything.",
       confirmLabel: "Turn on CIGAR",
       error: run.phase === "proof" ? run.error : null,
       pending: false,

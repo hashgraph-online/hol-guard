@@ -12,7 +12,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter, _remove_managed_block
+from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.adapters.grok_hooks import grok_hook_process_exit
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 
@@ -225,12 +225,6 @@ class TestGrokHookResponses:
             )
         assert rc == 2
         assert '"decision":"deny"' in stdout_capture.getvalue()
-
-
-class TestGrokManagedBlockHelpers:
-    def test_remove_managed_block_strips_guard_section(self) -> None:
-        text = "keep = true\n\n# BEGIN HOL GUARD MANAGED GROK\nmanaged = false\n# END HOL GUARD MANAGED GROK\n"
-        assert _remove_managed_block(text).strip() == "keep = true"
 
 
 class TestGrokFixturesAreRedacted:

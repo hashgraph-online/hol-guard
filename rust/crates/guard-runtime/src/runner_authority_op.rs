@@ -28,12 +28,14 @@ use super::context_digest_json::write_canonical_json_with_limit;
 use super::copilot_detect;
 use super::copilot_hook_config;
 use super::cursor_detect;
+use super::cursor_editor_plan;
 use super::cursor_hook_config;
 use super::cursor_hook_state;
 use super::devin_detect;
 use super::devin_jsonc;
 use super::gemini_detect;
 use super::grok_detect;
+use super::grok_legacy_settings;
 use super::grok_user_config_op;
 use super::harness_hook_settings;
 use super::hermes_detect;
@@ -42,6 +44,7 @@ use super::muse_detect;
 use super::oci_bundle_op as oci;
 use super::openclaw_detect;
 use super::opencode_detect;
+use super::opencode_install_plan;
 use super::opencode_plugin_render;
 use super::pi_detect;
 use super::pi_extension_render;
@@ -182,15 +185,18 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "devin_jsonc" => devin_jsonc::document(args),
         "harness_hook_settings" => harness_hook_settings::dispatch(args),
         "grok_detect" => grok_detect::detect(args),
+        "grok_legacy_settings" => grok_legacy_settings::dispatch(args),
         "grok_user_config" => grok_user_config_op::dispatch(args),
         "kimi_detect" => kimi_detect::detect(args),
         "muse_detect" => muse_detect::detect(args),
         "openclaw_detect" => openclaw_detect::detect(args),
         "cursor_detect" => cursor_detect::detect(args),
         "cursor_hook_config" => cursor_hook_config::dispatch(args),
+        "cursor_editor_plan" => cursor_editor_plan::plan(args),
         "cursor_hook_state" => cursor_hook_state::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
+        "opencode_install_plan" => opencode_install_plan::dispatch(args),
         _ => Err(ERR_KIND),
     }
 }

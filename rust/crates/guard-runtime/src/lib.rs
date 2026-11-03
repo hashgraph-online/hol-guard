@@ -278,6 +278,11 @@ mod copilot_vectors_tests;
 mod critical_floor_op;
 #[path = "adapters/detection/cursor_detect.rs"]
 mod cursor_detect;
+#[path = "adapters/cursor_editor_plan.rs"]
+mod cursor_editor_plan;
+#[cfg(test)]
+#[path = "adapters/cursor_editor_plan_tests.rs"]
+mod cursor_editor_plan_tests;
 mod cursor_hook_bridge;
 mod cursor_hook_bridge_response;
 mod cursor_hook_bridge_script;
@@ -383,6 +388,11 @@ mod github_workflow_prepare_op;
 mod grok_detect;
 mod grok_executable;
 mod grok_executable_paths;
+#[path = "adapters/detection/grok_legacy_settings.rs"]
+mod grok_legacy_settings;
+#[cfg(test)]
+#[path = "adapters/detection/grok_legacy_settings_tests.rs"]
+mod grok_legacy_settings_tests;
 #[path = "adapters/detection/grok_toml_engine.rs"]
 mod grok_toml_engine;
 #[path = "adapters/detection/grok_toml_scan.rs"]
@@ -815,11 +825,18 @@ mod openclaw_mcp;
 mod openclaw_skills;
 #[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
+#[path = "adapters/opencode_install_plan.rs"]
+mod opencode_install_plan;
+#[cfg(test)]
+#[path = "adapters/opencode_install_plan_tests.rs"]
+mod opencode_install_plan_tests;
 #[path = "adapters/opencode_plugin_render.rs"]
 mod opencode_plugin_render;
 #[cfg(test)]
 #[path = "adapters/opencode_plugin_render_tests.rs"]
 mod opencode_plugin_render_tests;
+#[path = "adapters/opencode_proxy_entry.rs"]
+mod opencode_proxy_entry;
 mod orphaned_worker_reap;
 mod ownership_acl_verdict;
 mod package_approval_hash_op;
