@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -107,6 +108,7 @@ def test_absent_files_are_sent_as_null(tmp_path: Path, monkeypatch: pytest.Monke
     assert request["hooks_text"] is None
 
 
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="named pipes are POSIX only")
 def test_non_regular_scripts_are_never_opened(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     context = _context(tmp_path)
     _attested(monkeypatch)
@@ -125,6 +127,27 @@ def test_non_regular_scripts_are_never_opened(tmp_path: Path, monkeypatch: pytes
 
     [(_kind, request)] = calls
     assert request["scripts"] == [None, {"regular": False, "text": ""}]
+
+
+def test_a_script_swapped_after_lstat_is_not_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    context = _context(tmp_path)
+    _attested(monkeypatch)
+    _plant(context)
+    script_path = cursor_hooks.cursor_hook_script_path(context)
+    real_fstat = os.fstat
+
+    def swapped(fd: int) -> os.stat_result:
+        result = real_fstat(fd)
+        return os.stat_result((stat.S_IFIFO | 0o600, *tuple(result)[1:]))
+
+    monkeypatch.setattr(cursor_hooks.os, "fstat", swapped)
+    calls = _answering(monkeypatch, {"integrity_status": "missing", "reason": "guard_cursor_hook_script_missing"})
+
+    cursor_hooks.cursor_native_hook_state(context)
+
+    [(_kind, request)] = calls
+    assert request["scripts"] == [None, None]
+    assert script_path.read_text(encoding="utf-8") == _SOURCE
 
 
 def test_a_raised_render_is_reraised_only_when_the_answer_names_it(

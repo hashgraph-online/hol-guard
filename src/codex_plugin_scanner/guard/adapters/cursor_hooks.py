@@ -518,16 +518,22 @@ def _observe(errors: dict[str, Exception], label: str, read: Callable[[], object
         return False
 
 
+_NOFOLLOW_NONBLOCK = getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+
+
 def _read_script(path: Path) -> object:
     try:
         mode = path.lstat().st_mode
-        if stat.S_ISREG(mode):
-            return {"regular": True, "text": path.read_text(encoding="utf-8")}
-        # Never open a link, pipe or device. A link to a file reads as tampered;
+        # Never read a link, pipe or device. A link to a file reads as tampered;
         # anything else could not be read as a script, so it is missing.
-        if stat.S_ISLNK(mode) and path.is_file():
-            return {"regular": False, "text": ""}
-        return None
+        if not stat.S_ISREG(mode):
+            return {"regular": False, "text": ""} if stat.S_ISLNK(mode) and path.is_file() else None
+        # The path can be swapped after lstat, so the descriptor is checked too.
+        fd = os.open(path, os.O_RDONLY | _NOFOLLOW_NONBLOCK)
+        with os.fdopen(fd, encoding="utf-8") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                return None
+            return {"regular": True, "text": handle.read()}
     except OSError:
         return None
 
