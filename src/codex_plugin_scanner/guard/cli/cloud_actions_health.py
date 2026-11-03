@@ -16,11 +16,14 @@ Neither ever includes the saved access, a server reply body or a header value.
 
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
+
+from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
 from ...version import __version__
 from ..mdm.network import ManagedNetworkError, managed_urlopen
@@ -33,6 +36,7 @@ _USER_AGENT = f"hol-guard/{__version__}"
 _WORKSPACE_HEADER = "X-Guard-Workspace-Id"
 # JSON-RPC "method not found": Guard Cloud accepted the sign-in but serves no actions yet.
 _METHOD_NOT_FOUND = -32601
+_PING_ID = "hol-guard-status"
 
 
 @dataclass(frozen=True)
@@ -76,6 +80,11 @@ def resource_on_issuer(profile: CloudActionsProfile) -> bool:
     return profile.resource == f"{profile.issuer}{CLOUD_ACTIONS_RESOURCE_PATH}"
 
 
+# A reply cut off mid-body raises from the standard library (`IncompleteRead`) or,
+# through a managed proxy, from urllib3 (`ProtocolError`). Both mean no usable answer.
+_TRANSPORT_ERRORS = (OSError, ManagedNetworkError, http.client.HTTPException, Urllib3HTTPError)
+
+
 def _send(request: urllib.request.Request, timeout: float) -> _Answer:
     try:
         with managed_urlopen(request, timeout=timeout, allow_redirects=False) as response:
@@ -85,17 +94,33 @@ def _send(request: urllib.request.Request, timeout: float) -> _Answer:
         status = error.code
         try:
             raw = error.read(_MAX_RESPONSE_BYTES + 1)
-        except OSError:
+        except _TRANSPORT_ERRORS:
             raw = b""
-    except (OSError, ManagedNetworkError) as error:
+    except _TRANSPORT_ERRORS as error:
         raise _UnreachableError from error
-    body: object = None
-    if len(raw) <= _MAX_RESPONSE_BYTES:
-        try:
-            body = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            body = None
-    return _Answer(status=status, body=body)
+    return _Answer(status=status, body=_decode_body(raw))
+
+
+def _decode_body(raw: bytes) -> object:
+    """Read a JSON reply, or the first JSON event of an event-stream reply."""
+
+    if len(raw) > _MAX_RESPONSE_BYTES:
+        return None
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    data = [line[5:].strip() for line in text.splitlines() if line.startswith("data:")]
+    if not data:
+        return None
+    try:
+        return json.loads(data[0])
+    except json.JSONDecodeError:
+        return None
 
 
 def check_service(profile: CloudActionsProfile, *, timeout: float = HEALTH_TIMEOUT_SECONDS) -> HealthCheck:
@@ -138,7 +163,7 @@ def check_connection(
         return HealthCheck("sign_in_expired", "The saved sign-in has expired. Sign in again.")
     if not resource_on_issuer(profile):
         return HealthCheck("profile_damaged", "The saved sign-in names a Cloud actions address on another site.")
-    body = json.dumps({"jsonrpc": "2.0", "id": "hol-guard-status", "method": "ping"}).encode()
+    body = json.dumps({"jsonrpc": "2.0", "id": _PING_ID, "method": "ping"}).encode()
     request = urllib.request.Request(
         profile.resource,
         data=body,
@@ -157,7 +182,7 @@ def check_connection(
         return HealthCheck("offline", "Guard Cloud could not be reached.")
     status = answer.status
     if 200 <= status < 300:
-        return HealthCheck("connected", "Guard Cloud accepted this sign-in.", status, (("actions", "available"),))
+        return _classify_ping_reply(answer.body, status)
     if status == 501 and _rpc_error_code(answer.body) == _METHOD_NOT_FOUND:
         return HealthCheck(
             "connected",
@@ -176,6 +201,24 @@ def check_connection(
     if status == 404:
         return HealthCheck("not_turned_on", "Cloud actions are not turned on for this Guard Cloud.", status)
     return HealthCheck("unexpected_answer", f"Guard Cloud answered HTTP {status}.", status)
+
+
+def _classify_ping_reply(body: object, status: int) -> HealthCheck:
+    """A success status alone proves nothing: a proxy page or an error inside HTTP 200 is not a ping reply."""
+
+    if isinstance(body, dict) and body.get("jsonrpc") == "2.0":
+        if "result" in body and body.get("id") == _PING_ID:
+            return HealthCheck("connected", "Guard Cloud accepted this sign-in.", status, (("actions", "available"),))
+        if _rpc_error_code(body) == _METHOD_NOT_FOUND and body.get("id") in {_PING_ID, None}:
+            return HealthCheck(
+                "connected",
+                "Guard Cloud accepted this sign-in. Actions are not available on this Guard Cloud yet.",
+                status,
+                (("actions", "not_available_yet"),),
+            )
+    return HealthCheck(
+        "unexpected_answer", f"Guard Cloud answered HTTP {status} without a Cloud actions reply.", status
+    )
 
 
 def _rpc_error_code(body: object) -> object:

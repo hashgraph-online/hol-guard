@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from urllib3.exceptions import ProtocolError
 
+from codex_plugin_scanner.guard.cli import cloud_actions_health
 from codex_plugin_scanner.guard.cli import commands_dispatch_cloud_actions_status as status_commands
 from codex_plugin_scanner.guard.cli.cloud_actions_oauth import CLOUD_ACTIONS_SCOPES
 from codex_plugin_scanner.guard.cli.cloud_actions_session import CloudActionsSessionStore
@@ -130,6 +132,88 @@ def test_status_names_each_refusal(
 
     assert payload["connection"]["state"] == state
     assert payload["connection"]["http_status"] == gateway_status
+
+
+_PING_RESULT = b'{"jsonrpc": "2.0", "id": "hol-guard-status", "result": {}}'
+
+
+@pytest.mark.parametrize(
+    ("content_type", "payload", "state", "actions"),
+    [
+        ("application/json", _PING_RESULT, "connected", "available"),
+        ("text/event-stream", b"event: message\ndata: " + _PING_RESULT + b"\n\n", "connected", "available"),
+        ("text/html", b"<html><body>Sign in to the proxy</body></html>", "unexpected_answer", None),
+        ("application/json", b"", "unexpected_answer", None),
+        (
+            "application/json",
+            b'{"jsonrpc": "2.0", "id": "hol-guard-status", "error": {"code": -32000, "message": "down"}}',
+            "unexpected_answer",
+            None,
+        ),
+        ("application/json", b'{"jsonrpc": "2.0", "id": "other", "result": {}}', "unexpected_answer", None),
+    ],
+)
+def test_status_trusts_a_success_status_only_with_a_ping_reply(
+    cloud: FakeCloud,
+    browser: Browser,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    content_type: str,
+    payload: bytes,
+    state: str,
+    actions: str | None,
+) -> None:
+    _signed_in(cloud, tmp_path, capsys)
+    cloud.overrides["gateway_raw"] = (200, content_type, payload, len(payload))
+
+    code, report, text = _status(tmp_path, capsys)
+
+    assert code == 0
+    assert (report["connection"]["state"], report["connection"].get("actions")) == (state, actions)
+    assert report["connection"]["http_status"] == 200
+    _no_credentials(cloud, text)
+
+
+def test_status_does_not_trust_a_reply_cut_off_mid_body(
+    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _signed_in(cloud, tmp_path, capsys)
+    cloud.overrides["gateway_raw"] = (200, "application/json", _PING_RESULT[:12], len(_PING_RESULT))
+
+    code, report, _ = _status(tmp_path, capsys)
+
+    assert code == 0
+    assert report["connection"]["state"] == "unexpected_answer"
+
+
+class _DroppedReply:
+    status = 200
+
+    def __enter__(self) -> _DroppedReply:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def read(self, amount: int) -> bytes:
+        raise ProtocolError("Connection broken: IncompleteRead(12 bytes read, 57 more expected)")
+
+
+def test_status_reports_a_reply_dropped_by_a_managed_proxy_as_offline(
+    cloud: FakeCloud,
+    browser: Browser,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _signed_in(cloud, tmp_path, capsys)
+    monkeypatch.setattr(cloud_actions_health, "managed_urlopen", lambda *args, **kwargs: _DroppedReply())
+
+    code, report, text = _status(tmp_path, capsys)
+
+    assert code == 0
+    assert (report["service"]["state"], report["connection"]["state"]) == ("offline", "offline")
+    _no_credentials(cloud, text)
 
 
 def test_status_offline_when_guard_cloud_cannot_be_reached(
@@ -358,9 +442,25 @@ def test_doctor_notices_saved_files_others_can_read(
     assert (code, payload["result"]) == (3, "problems_found")
     assert payload["checks"]["files"] == {
         "state": "too_open",
-        "message": "Other users on this computer can read Cloud actions files.",
+        "message": "Other users on this computer can read or replace Cloud actions files.",
         "paths": ["cloud-actions/profiles/default.json"],
     }
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_doctor_notices_a_guard_home_others_can_write(
+    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _signed_in(cloud, tmp_path, capsys)
+    tmp_path.chmod(0o777)
+    try:
+        code, payload, _ = _doctor(tmp_path, capsys)
+    finally:
+        tmp_path.chmod(0o700)
+
+    assert (code, payload["result"]) == (3, "problems_found")
+    assert payload["checks"]["files"]["state"] == "too_open"
+    assert payload["checks"]["files"]["paths"] == ["."]
 
 
 def test_doctor_without_a_sign_in_reads_no_ai_tool_settings(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

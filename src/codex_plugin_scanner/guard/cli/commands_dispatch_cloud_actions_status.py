@@ -104,16 +104,20 @@ def _private_files(store: CloudActionsSessionStore, profile_name: str) -> Health
 
     if os.name == "nt":
         return HealthCheck("not_checked", "File permissions are not checked on Windows.")
+    guard_home = store.root.parent
     profile_file = store.root / "profiles" / f"{profile_name}.json"
-    too_open = [
-        str(path.relative_to(store.root.parent))
+    # The Guard home may be readable by others, but if they can write to it they can
+    # replace the Cloud actions folder beneath it, whatever that folder's own mode.
+    replaceable = guard_home.exists() and guard_home.stat().st_mode & 0o022
+    too_open = (["."] if replaceable else []) + [
+        str(path.relative_to(guard_home))
         for path in (store.root, profile_file.parent, profile_file)
         if path.exists() and path.stat().st_mode & 0o077
     ]
     if too_open:
         return HealthCheck(
             "too_open",
-            "Other users on this computer can read Cloud actions files.",
+            "Other users on this computer can read or replace Cloud actions files.",
             details=(("paths", too_open),),
         )
     return HealthCheck("private", "Cloud actions files are readable only by you.")

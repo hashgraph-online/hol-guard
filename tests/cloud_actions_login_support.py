@@ -146,6 +146,19 @@ def serve_fake_cloud() -> Iterator[FakeCloud]:
                     self._send(404, {"error": "not_found"})
                     return
                 state.gateway_requests.append({key.lower(): value for key, value in self.headers.items()})
+                raw_reply = state.overrides.get("gateway_raw")
+                if isinstance(raw_reply, tuple):
+                    # (status, content type, body bytes, declared length): a declared length
+                    # above the body's size cuts the reply off mid-body.
+                    status, content_type, payload, length = raw_reply
+                    self.send_response(status)
+                    self.send_header("Content-Type", content_type)
+                    self.send_header("Content-Length", str(length))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    self.wfile.flush()
+                    self.close_connection = True
+                    return
                 redirect = state.overrides.get("gateway_redirect")
                 if isinstance(redirect, str):
                     self.send_response(307)
