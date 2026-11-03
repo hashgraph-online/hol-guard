@@ -1,0 +1,371 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.wever-labs",
+  "version": "1.0.0",
+  "name": "Wever Labs",
+  "description": "Hosted agent payments and commerce infrastructure with Base USDC x402 access, escrow, payouts, purchases, work orders, signed mandates and receipts, plus asset research and catalog lookups. Money movement, signing, writes and other computations require review. Read-only lookups, searches and status tools inherit Guard policy. Off until enabled locally.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "com.weverlabs",
+    "displayName": "Wever Labs",
+    "url": "https://weverlabs.com"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://weverlabs.com",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://weverlabs.com/mcp",
+    "serverNames": [
+      "wever-labs"
+    ]
+  },
+  "riskClasses": [
+    "external-paid-api-access",
+    "external-financial-transactions",
+    "external-managed-escrow-custody",
+    "external-payouts-and-refunds",
+    "external-purchases-and-order-writes",
+    "external-signing-and-delegated-authority",
+    "external-private-data-and-messaging",
+    "external-read-only-lookups"
+  ],
+  "tools": [
+    {
+      "name": "wever_delegated-authority",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-paid-workflow",
+      "state": "review"
+    },
+    {
+      "name": "wever_unified-agent-checkout",
+      "state": "review"
+    },
+    {
+      "name": "wever_diligenceops-paid-run",
+      "state": "review"
+    },
+    {
+      "name": "wever_receipt-passport",
+      "state": "review"
+    },
+    {
+      "name": "wever_return-package-viewer",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_agent-allowance-console",
+      "state": "review"
+    },
+    {
+      "name": "wever_callback-health-monitor",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-work-order-exchange",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-budget-guard",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-sla-rail",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-trust-scorecard",
+      "state": "review"
+    },
+    {
+      "name": "wever_payment-authority-inspector",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_x402-payment-gateway",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_ap2-mandate-gateway",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-to-agent-handoff-pack",
+      "state": "review"
+    },
+    {
+      "name": "wever_proof-inbox",
+      "state": "review"
+    },
+    {
+      "name": "wever_rail-playground",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-escrow-lite",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-invoice-rail",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-permission-ledger",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-work-order-rail",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-decision-packet-rail",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-file-desk-rail",
+      "state": "review"
+    },
+    {
+      "name": "wever_mcp-diligence-rail",
+      "state": "review"
+    },
+    {
+      "name": "wever_agent-daily-operator-brief",
+      "state": "review"
+    },
+    {
+      "name": "wever_proof-relay",
+      "state": "review"
+    },
+    {
+      "name": "wever_referral-rail",
+      "state": "review"
+    },
+    {
+      "name": "wever_subscription-rail",
+      "state": "review"
+    },
+    {
+      "name": "wever_atlas-asset-passport",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_atlas-asset-search",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_treasury-balance",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_treasury-flows",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_workorder-create",
+      "state": "review"
+    },
+    {
+      "name": "wever_workorder-fund",
+      "state": "review"
+    },
+    {
+      "name": "wever_workorder-accept",
+      "state": "review"
+    },
+    {
+      "name": "wever_workorder-deliver",
+      "state": "review"
+    },
+    {
+      "name": "wever_workorder-release",
+      "state": "review"
+    },
+    {
+      "name": "wever_workorder-dispute",
+      "state": "review"
+    },
+    {
+      "name": "wever_payout-create",
+      "state": "review"
+    },
+    {
+      "name": "wever_payout-authorize",
+      "state": "review"
+    },
+    {
+      "name": "wever_payout-execute",
+      "state": "review"
+    },
+    {
+      "name": "wever_payout-status",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_dispute-open",
+      "state": "review"
+    },
+    {
+      "name": "wever_dispute-submit-evidence",
+      "state": "review"
+    },
+    {
+      "name": "wever_dispute-resolve",
+      "state": "review"
+    },
+    {
+      "name": "wever_dispute-status",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_boutique-create-order",
+      "state": "review"
+    },
+    {
+      "name": "wever_boutique-record-shipment",
+      "state": "review"
+    },
+    {
+      "name": "wever_boutique-confirm-delivery",
+      "state": "review"
+    },
+    {
+      "name": "wever_atlas-compare",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_atlas-rights-gap",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_boutique-real-money-acceptance",
+      "state": "review"
+    },
+    {
+      "name": "wever_purchase-create-intent",
+      "state": "review"
+    },
+    {
+      "name": "wever_purchase-status",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_purchase-execute",
+      "state": "review"
+    },
+    {
+      "name": "wever_purchase-dispute",
+      "state": "review"
+    },
+    {
+      "name": "wever_sports-plan-trip",
+      "state": "review"
+    },
+    {
+      "name": "wever_sports-book-leg",
+      "state": "review"
+    },
+    {
+      "name": "wever_sports-trip-status",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_sports-cancel-leg",
+      "state": "review"
+    },
+    {
+      "name": "wever_matchmaking-opt-in-profile",
+      "state": "review"
+    },
+    {
+      "name": "wever_matchmaking-propose-intro",
+      "state": "review"
+    },
+    {
+      "name": "wever_matchmaking-approve-or-decline-intro",
+      "state": "review"
+    },
+    {
+      "name": "wever_post-job",
+      "state": "review"
+    },
+    {
+      "name": "wever_accept-job",
+      "state": "review"
+    },
+    {
+      "name": "wever_submit-work",
+      "state": "review"
+    },
+    {
+      "name": "wever_verify-and-release",
+      "state": "review"
+    },
+    {
+      "name": "wever_single-credential-issue",
+      "state": "review"
+    },
+    {
+      "name": "wever_second-date-market-open",
+      "state": "review"
+    },
+    {
+      "name": "wever_second-date-bet",
+      "state": "review"
+    },
+    {
+      "name": "wever_second-date-resolve",
+      "state": "review"
+    },
+    {
+      "name": "wever_mandate-issue",
+      "state": "review"
+    },
+    {
+      "name": "wever_mandate-status",
+      "state": "inherit"
+    },
+    {
+      "name": "wever_mandate-amend",
+      "state": "review"
+    },
+    {
+      "name": "wever_mandate-halt",
+      "state": "review"
+    },
+    {
+      "name": "wever_mandate-revoke",
+      "state": "review"
+    },
+    {
+      "name": "wever_matchmaking-register-mailbox",
+      "state": "review"
+    },
+    {
+      "name": "wever_data-evidence-check",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://weverlabs.com/llms.txt",
+    "https://weverlabs.com/mcp",
+    "https://weverlabs.com/api/agent-operating-products",
+    "https://weverlabs.com/api/payout-contract",
+    "https://weverlabs.com/api/workorder-contract",
+    "https://weverlabs.com/api/dispute-contract",
+    "https://weverlabs.com/api/mandate-contract"
+  ],
+  "saferAlternatives": [
+    "Use catalog, asset, treasury and status lookups to inspect the current state before requesting a write.",
+    "Review the exact recipient, amount, asset, network and authorization before funding or releasing escrow, paying, refunding or executing a purchase.",
+    "Review signed mandates, receipts, permission changes and mixed-mode tools as a whole; keep human approval and wallet signing in their supported flows."
+  ]
+}
