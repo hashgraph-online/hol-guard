@@ -198,3 +198,121 @@ fn malformed_requests_are_refused() {
         assert_eq!(dispatch(&request), Err(ERR_INVALID), "{request}");
     }
 }
+
+fn serves(script: &Path, name: &str) -> bool {
+    let request = json!({"op": "mcp_evidence", "script": spelled(script), "invocation": [name]});
+    let answer = dispatch(&request).expect("mcp_evidence answer");
+    answer["serves"].as_bool().expect("bool")
+}
+
+#[test]
+fn a_script_serves_mcp_only_on_evidence_from_its_source() {
+    let (_directory, base) = base();
+    let server = write(
+        &base.join("server.py"),
+        b"from mcp.server.fastmcp import FastMCP\n",
+    );
+    let ship = write(&base.join("ship.py"), b"import sys\nprint(sys.argv)\n");
+    assert!(serves(&server, "server"));
+    assert!(!serves(&ship, "ship"));
+    assert!(!serves(&base.join("missing.py"), "missing"));
+}
+
+#[test]
+fn a_followed_local_module_or_package_initializer_can_carry_the_evidence() {
+    let (_directory, base) = base();
+    write(&base.join("server_impl.py"), b"import fastmcp\n");
+    let entry = write(&base.join("entry.py"), b"import server_impl\n");
+    assert!(serves(&entry, "entry"));
+    write(
+        &base.join("server/__init__.py"),
+        b"from fastmcp import FastMCP\n",
+    );
+    let package_entry = write(&base.join("package_entry.py"), b"from server import mcp\n");
+    assert!(serves(&package_entry, "package_entry"));
+    write(&base.join("quiet.py"), b"def main():\n    pass\n");
+    let quiet_entry = write(&base.join("quiet_entry.py"), b"import quiet\n");
+    assert!(!serves(&quiet_entry, "quiet_entry"));
+}
+
+fn wrapper(bin: &Path, name: &str, module: &str) -> PathBuf {
+    let text = format!(
+        "#!{}/python3\nimport sys\nfrom {module} import main\nif __name__ == '__main__':\n    sys.exit(main())\n",
+        spelled(bin)
+    );
+    write(&bin.join(name), text.as_bytes())
+}
+
+#[test]
+fn an_entry_point_serves_mcp_only_when_its_installed_module_does() {
+    let (_directory, base) = base();
+    let bin = base.join("venv/bin");
+    let site = base.join("venv/lib/python3.12/site-packages");
+    write(
+        &site.join("mcp_server_demo/__init__.py"),
+        b"from .server import main\n",
+    );
+    write(
+        &site.join("mcp_server_demo/server.py"),
+        b"from mcp.server import Server\n",
+    );
+    write(&site.join("kit/__init__.py"), b"");
+    write(&site.join("kit/cli.py"), b"from kit.serve import main\n");
+    write(&site.join("kit/serve.py"), b"import fastmcp\n");
+    write(&site.join("mytool/__init__.py"), b"");
+    write(&site.join("mytool/cli.py"), b"def main():\n    deploy()\n");
+    write(
+        &site.join("mytool/mcp_server.py"),
+        b"from fastmcp import FastMCP\n",
+    );
+    write(&site.join("twine/__init__.py"), b"import sys\n");
+    write(&site.join("single.py"), b"import fastmcp\n");
+    assert!(serves(
+        &wrapper(&bin, "mcp-server-demo", "mcp_server_demo"),
+        "mcp-server-demo"
+    ));
+    assert!(serves(&wrapper(&bin, "kit-mcp", "kit.cli"), "kit-mcp"));
+    assert!(serves(&wrapper(&bin, "single", "single"), "single"));
+    // An optional server beside the module the wrapper runs does not count.
+    assert!(!serves(&wrapper(&bin, "mytool", "mytool.cli"), "mytool"));
+    assert!(!serves(&wrapper(&bin, "twine", "twine.__main__"), "twine"));
+    assert!(!serves(&wrapper(&bin, "gone", "gone"), "gone"));
+    // A local module beside the wrapper is read instead of the package.
+    write(&bin.join("ship.py"), b"def main():\n    deploy()\n");
+    write(&site.join("ship/__init__.py"), b"import fastmcp\n");
+    assert!(!serves(&wrapper(&bin, "ship-it", "ship"), "ship-it"));
+}
+
+#[test]
+fn a_package_import_never_leaves_the_package() {
+    let (_directory, base) = base();
+    let bin = base.join("venv/bin");
+    let site = base.join("venv/lib/python3.12/site-packages");
+    write(&site.join("outside.py"), b"import fastmcp\n");
+    write(&site.join("tool/__init__.py"), b"from . import helpers\n");
+    write(
+        &site.join("tool/helpers.py"),
+        b"from tool.deep.inner import run\n",
+    );
+    write(&site.join("tool/deep/inner.py"), b"from .leaf import run\n");
+    write(
+        &site.join("tool/deep/leaf.py"),
+        b"from fastmcp import FastMCP\n",
+    );
+    assert!(serves(&wrapper(&bin, "tool", "tool"), "tool"));
+    write(&site.join("other/__init__.py"), b"import outside\n");
+    assert!(!serves(&wrapper(&bin, "other", "other"), "other"));
+}
+
+#[test]
+fn a_malformed_evidence_request_is_refused() {
+    for request in [
+        json!({"op": "mcp_evidence", "script": "/tmp/x.py"}),
+        json!({"op": "mcp_evidence", "script": "/tmp/x.py", "invocation": "x"}),
+        json!({"op": "mcp_evidence", "script": "/tmp/x.py", "invocation": [1]}),
+        json!({"op": "mcp_evidence", "script": 1, "invocation": []}),
+        json!({"op": "mcp_evidence", "script": "/tmp/x.py", "invocation": [], "extra": 1}),
+    ] {
+        assert_eq!(dispatch(&request).unwrap_err(), ERR_INVALID, "{request}");
+    }
+}
