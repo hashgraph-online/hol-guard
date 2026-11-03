@@ -218,7 +218,7 @@ fn inspect(document: &Path, root: &Path, home: &Path, digest: &str) -> Result<Va
 }
 
 #[cfg(unix)]
-fn open_no_follow(path: &Path) -> std::io::Result<File> {
+pub(crate) fn open_no_follow(path: &Path) -> std::io::Result<File> {
     use std::os::unix::fs::OpenOptionsExt;
     fs::OpenOptions::new()
         .read(true)
@@ -227,7 +227,7 @@ fn open_no_follow(path: &Path) -> std::io::Result<File> {
 }
 
 #[cfg(windows)]
-fn open_no_follow(path: &Path) -> std::io::Result<File> {
+pub(crate) fn open_no_follow(path: &Path) -> std::io::Result<File> {
     use std::os::windows::fs::OpenOptionsExt;
     const FILE_SHARE_READ: u32 = 0x1;
     const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;

@@ -708,6 +708,7 @@ mod inventory_scan_targets_op;
 mod inventory_snapshot_digest_op;
 mod inventory_source_evidence_op;
 mod inventory_url_redaction_op;
+mod isolation_provider_registry;
 #[path = "adapters/detection/kimi_detect.rs"]
 mod kimi_detect;
 #[path = "adapters/detection/kimi_hook_config.rs"]
