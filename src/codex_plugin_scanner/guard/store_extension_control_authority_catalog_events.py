@@ -21,7 +21,7 @@ from typing import Any, Final
 
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_contract import ExtensionControlLayer
-from .runtime.generated_command_catalog_provenance import catalog_provenance, version_ordinal
+from .runtime.generated_command_catalog_provenance import catalog_provenance, is_downgrade
 
 MIGRATED_EVENT: Final = "extension_control_authority_catalog_migrated"
 REGRESSED_EVENT: Final = "extension_control_authority_catalog_regressed"
@@ -94,7 +94,7 @@ def _regression(
     writer_version = provenance.get("writer_version")
     if not isinstance(writer_version, str):
         return None
-    if version_ordinal(writer_version) >= version_ordinal(previous_version):
+    if not is_downgrade(writer_version, previous_version):
         return None
     return {
         "previous_writer_version": previous_version,

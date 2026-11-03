@@ -91,6 +91,7 @@ mod browser_open;
 mod bundle_parse_reuse_tests;
 mod business_document_compile;
 mod business_source_codec;
+mod catalog_provenance;
 mod cisco_containment;
 mod cisco_evidence;
 mod cisco_plan;

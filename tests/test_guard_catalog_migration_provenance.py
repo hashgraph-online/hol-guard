@@ -21,7 +21,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import Autho
 from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
 from codex_plugin_scanner.guard.runtime.generated_command_catalog_provenance import (
     catalog_provenance,
-    version_ordinal,
+    is_downgrade,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_extension_control_authority_catalog_events import (
@@ -189,23 +189,10 @@ def test_a_frozen_bundle_is_named_as_one(monkeypatch: pytest.MonkeyPatch) -> Non
     assert provenance["install_kind"] == "desktop-bundle"
 
 
-@pytest.mark.parametrize(
-    ("version", "expected"),
-    [
-        ("3.46.0", (3, 46, 0)),
-        ("3.47.0a2", (3, 47, 0)),
-        ("3.8.0", (3, 8, 0)),
-        ("", ()),
-        ("not-a-version", ()),
-    ],
-)
-def test_version_ordinal_reads_the_leading_numbers(version: str, expected: tuple[int, ...]) -> None:
-    assert version_ordinal(version) == expected
-
-
-def test_an_older_release_orders_below_a_newer_prerelease() -> None:
-    assert version_ordinal("3.36.0") < version_ordinal("3.46.0")
-    assert version_ordinal("3.47.0a2") > version_ordinal("3.46.0")
+def test_an_older_release_is_a_downgrade_and_a_newer_prerelease_is_not() -> None:
+    assert is_downgrade("3.36.0", "3.46.0")
+    assert not is_downgrade("3.47.0a2", "3.46.0")
+    assert not is_downgrade("3.47.0", "3.47.0a2")
 
 
 def test_a_backfilled_event_names_no_writer_and_judges_no_downgrade(
