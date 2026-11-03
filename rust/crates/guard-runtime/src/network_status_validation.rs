@@ -19,7 +19,7 @@ const MAX_IDENTIFIER_CHARS: usize = 128;
 
 const PLATFORMS: [&str; 4] = ["linux", "macos", "windows", "kubernetes"];
 /// Enforcement grades, weakest first; the index is the grade's rank.
-const GRADES: [&str; 7] = [
+pub(crate) const GRADES: [&str; 7] = [
     "unavailable",
     "observe",
     "deny-all",

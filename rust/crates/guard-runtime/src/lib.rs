@@ -842,6 +842,7 @@ mod native_runtime_admission;
 mod native_runtime_resilience;
 mod network_protection;
 mod network_protection_verify_op;
+mod network_status_build;
 mod network_status_validation;
 mod oauth_refresh;
 mod oauth_secret_authority;
