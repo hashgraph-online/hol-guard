@@ -7,23 +7,6 @@ from typing import cast
 
 from ..models import GuardArtifact
 
-_VALUE_OPTIONS = frozenset(
-    {
-        "--guard-home",
-        "--server-name",
-        "--server-id",
-        "--source-scope",
-        "--config-path",
-        "--transport",
-        "--command",
-        "--home",
-        "--workspace",
-    }
-)
-_REQUIRED_OPTIONS = _VALUE_OPTIONS - {"--home", "--workspace"}
-_ALLOWED_PROXY_KEYS = _VALUE_OPTIONS | {"--arg", "--server-env-key"}
-MAX_PROXY_ARGS = 512
-MAX_PROXY_ARGS_BYTES = 262_144
 MAX_PROXY_UNWRAP_LAYERS = 4
 _NATIVE_RELAY_COMMAND = "mcp-relay"
 PROXY_LAUNCHER_ENV_KEYS = frozenset(
@@ -41,14 +24,6 @@ PROXY_LAUNCHER_ENV_KEYS = frozenset(
         "HOL_GUARD_TEST_MODE",
     }
 )
-_PROXY_HARNESSES = {
-    "cline-mcp-proxy": "cline",
-    "codex-mcp-proxy": "codex",
-    "opencode-mcp-proxy": "opencode",
-    "copilot-mcp-proxy": "copilot",
-    "cursor-mcp-proxy": "cursor",
-    "hermes-mcp-proxy": "hermes",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,64 +59,8 @@ def read_managed_mcp_upstream(artifact: GuardArtifact, commands: frozenset[str])
     by the caller. These fields describe inventory, never trusted tool schemas
     or execution permission. Unknown or ambiguous forms remain unavailable.
     """
-    if len(artifact.args) > MAX_PROXY_ARGS:
-        return None
-    try:
-        if sum(len(value.encode("utf-8")) for value in artifact.args) > MAX_PROXY_ARGS_BYTES:
-            return None
-    except UnicodeError:
-        return None
-    selected = proxy_argument_tail(artifact.args, commands)
-    if selected is None:
-        return None
-    proxy, tail = selected
-    if proxy in _PROXY_HARNESSES and _PROXY_HARNESSES[proxy] != artifact.harness:
-        return None
-    options: dict[str, str] = {}
-    args: list[str] = []
-    env_keys: set[str] = set()
-    index = 0
-    while index < len(tail):
-        key, separator, value = tail[index].partition("=")
-        if key not in _ALLOWED_PROXY_KEYS:
-            return None
-        if not separator:
-            index += 1
-            if index >= len(tail):
-                return None
-            value = tail[index]
-            if value.startswith("--"):
-                return None
-        if "\x00" in value:
-            return None
-        if key == "--arg":
-            args.append(value)
-        elif key == "--server-env-key":
-            if not value or value != value.strip() or "=" in value or value in env_keys:
-                return None
-            env_keys.add(value)
-        else:
-            if key in options or not value:
-                return None
-            options[key] = value
-        index += 1
-    if not _REQUIRED_OPTIONS.issubset(options):
-        return None
-    expected = {"--server-name": artifact.name, "--transport": artifact.transport or "stdio"}
-    if any(options[key] != value for key, value in expected.items()):
-        return None
-    origin = (options["--source-scope"], options["--config-path"])
-    if origin != (artifact.source_scope, artifact.config_path):
-        # Cursor's installer copies workspace proxies into its global file.
-        # The adapter binds this exception to Guard's saved install state;
-        # arbitrary origin claims in a server's argv are never sufficient.
-        saved_origin = artifact.runtime_private_metadata.get("managed_mcp_origin")
-        if (
-            artifact.harness != "cursor"
-            or origin != saved_origin
-            or options["--guard-home"] != artifact.runtime_private_metadata.get("managed_guard_home")
-        ):
-            return None
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
     configured_env = artifact.runtime_private_metadata.get("mcp_env", artifact.metadata.get("env", {}))
     if not isinstance(configured_env, dict):
         return None
@@ -150,12 +69,46 @@ def read_managed_mcp_upstream(artifact: GuardArtifact, commands: frozenset[str])
         for key, value in cast(dict[object, object], configured_env).items()
         if isinstance(key, str) and key.strip() and isinstance(value, str)
     }
-    env: dict[str, str] = {}
-    for key in sorted(env_keys):
-        if key.upper() in PROXY_LAUNCHER_ENV_KEYS:
-            continue
-        value = normalized_env.get(key)
-        if not isinstance(value, str):
+    saved = artifact.runtime_private_metadata.get("managed_mcp_origin")
+    saved_home = artifact.runtime_private_metadata.get("managed_guard_home")
+    request = {
+        "op": "upstream",
+        "commands": sorted(commands),
+        "harness": artifact.harness,
+        "name": artifact.name,
+        "transport": artifact.transport or "stdio",
+        "source_scope": artifact.source_scope,
+        "config_path": artifact.config_path,
+        "args": list(artifact.args),
+        "saved_origin": list(saved) if isinstance(saved, tuple) and all(isinstance(v, str) for v in saved) else None,
+        "saved_guard_home": saved_home if isinstance(saved_home, str) else None,
+        "env_names": list(normalized_env),
+    }
+    try:
+        # A value that cannot travel as UTF-8 refuses, so its launch stays unavailable.
+        found = native_runner_authority("harness_mcp_discovery", request)["upstream"]
+        if found is None:
             return None
-        env[key] = value
-    return ManagedMcpUpstream(options["--command"], tuple(args), env, options["--server-id"], *origin)
+        upstream = ManagedMcpUpstream(
+            command=_text(found["command"]),
+            args=tuple(_text(value) for value in _list(found["args"])),
+            env={name: normalized_env[name] for name in map(_text, _list(found["env_names"]))},
+            server_id=_text(found["server_id"]),
+            source_scope=_text(found["source_scope"]),
+            config_path=_text(found["config_path"]),
+        )
+    except (NativeRunnerAuthorityError, KeyError, TypeError):
+        return None
+    return upstream
+
+
+def _text(value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError("harness_mcp_discovery upstream field is malformed")
+    return value
+
+
+def _list(value: object) -> list[object]:
+    if not isinstance(value, list):
+        raise TypeError("harness_mcp_discovery upstream field is malformed")
+    return cast(list[object], value)
