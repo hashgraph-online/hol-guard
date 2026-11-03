@@ -288,6 +288,11 @@ mod cursor_hook_config;
 #[cfg(test)]
 #[path = "adapters/cursor_hook_config_tests.rs"]
 mod cursor_hook_config_tests;
+#[path = "adapters/cursor_hook_state.rs"]
+mod cursor_hook_state;
+#[cfg(test)]
+#[path = "adapters/cursor_hook_state_tests.rs"]
+mod cursor_hook_state_tests;
 mod cursor_observer_proof_op;
 mod custom_extension_continuity;
 mod custom_extension_suggestion;

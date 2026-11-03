@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 from ..frozen_runtime_commands import frozen_daemon_recovery_command
 from ..stable_guard_cli import uses_top_level_hook_command as _uses_top_level_hook_command
 from ._modules.cursor.cursor_hook_entries import _remove_managed_hook_entries, _render_without_managed_hook_entries
-from ._modules.cursor.cursor_hook_events import unsupported_cursor_hook_events
 from ._modules.cursor.cursor_hook_native import CursorNativeBridgeUnavailableError, require_cursor_hook_bridge
 from ._modules.cursor.cursor_hook_script_template import HOOK_SCRIPT_TEMPLATE
 from .adapter_safe_output import write_text_at_authorized_path
@@ -39,6 +38,8 @@ from .hook_python import HookPythonAttestation
 from .state_files import parse_backup_payload
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ..runtime_transition import TransitionFile
 
 _INHERIT_ENV_KEYS = (
@@ -504,6 +505,48 @@ def cursor_hook_script_source(
     )
 
 
+_STATE_STATUSES = frozenset({"missing", "tampered", "stale"})
+
+
+def _observe(errors: dict[str, Exception], label: str, read: Callable[[], object]) -> object:
+    """Run a later read or render; keep its error under ``label`` and send ``false``."""
+
+    try:
+        return read()
+    except Exception as error:
+        errors[label] = error
+        return False
+
+
+_NOFOLLOW_NONBLOCK = getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+
+
+def _read_script(path: Path) -> object:
+    try:
+        mode = path.lstat().st_mode
+        # Never read a link, pipe or device. A link to a file reads as tampered;
+        # anything else could not be read as a script, so it is missing.
+        if not stat.S_ISREG(mode):
+            return {"regular": False, "text": ""} if stat.S_ISLNK(mode) and path.is_file() else None
+        # The path can be swapped after lstat, so the descriptor is checked too.
+        fd = os.open(path, os.O_RDONLY | _NOFOLLOW_NONBLOCK)
+        with os.fdopen(fd, encoding="utf-8") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                return None
+            return {"regular": True, "text": handle.read()}
+    except OSError:
+        return None
+
+
+def _read_hooks(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
 def cursor_native_hook_state(context: HarnessContext) -> dict[str, object]:
     """Verify Cursor registration, scripts, and the current attested CLI identity."""
 
@@ -526,89 +569,58 @@ def cursor_native_hook_state(context: HarnessContext) -> dict[str, object]:
             "integrity_status": "attestation-unavailable",
             "reason": "guard_cursor_cli_attestation_unavailable",
         }
+    # Imported here so the hook bridges stay off the native runtime at import time.
+    from ..native_runner_authority import native_runner_authority
+
     hooks_path = cursor_hooks_path(context)
     script_path = cursor_hook_script_path(context)
     managed_script_path = managed_hook_script_path(context)
-    state_path = _hooks_state_path(hooks_path, context)
     try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {
-            "protection_active": False,
-            "integrity_status": "missing",
-            "reason": "guard_cursor_hook_state_missing",
-        }
-    if not isinstance(state, dict) or state.get("guard_cli_identity") != guard_cli.manifest_payload():
-        return {
-            "protection_active": False,
-            "integrity_status": "tampered",
-            "reason": "guard_cursor_cli_identity_mismatch",
-        }
-    expected_hash = sha256(expected_source.encode("utf-8")).hexdigest()
-    if state.get("hook_script_sha256") != expected_hash:
-        return {
-            "protection_active": False,
-            "integrity_status": "stale",
-            "reason": "guard_cursor_hook_script_identity_stale",
-        }
-    for candidate in (script_path, managed_script_path):
-        try:
-            metadata = candidate.lstat()
-            source = candidate.read_text(encoding="utf-8")
-        except OSError:
-            return {
-                "protection_active": False,
-                "integrity_status": "missing",
-                "reason": "guard_cursor_hook_script_missing",
-            }
-        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or source != expected_source:
-            return {
-                "protection_active": False,
-                "integrity_status": "tampered",
-                "reason": "guard_cursor_hook_script_tampered",
-            }
-    try:
-        hooks_payload = _json_object(hooks_path, recover_missing=False)
-    except RuntimeError:
-        return {
-            "protection_active": False,
-            "integrity_status": "missing",
-            "reason": "guard_cursor_hook_registration_missing",
-        }
-    hooks = hooks_payload.get("hooks")
-    if not isinstance(hooks, dict):
-        return {
-            "protection_active": False,
-            "integrity_status": "tampered",
-            "reason": "guard_cursor_hook_registration_mismatch",
-        }
-    if unsupported_cursor_hook_events(hooks):
-        # Cursor ignores the whole file when it names an unknown event.
-        return {
-            "protection_active": False,
-            "integrity_status": "tampered",
-            "reason": "guard_cursor_hook_unsupported_event",
-        }
-    for event_name in _MANAGED_HOOK_EVENTS:
-        entries = hooks.get(event_name)
-        expected_entry = _managed_hook_entry(
-            context,
-            script_path=script_path,
-            event_name=event_name,
-            python_executable=guard_cli.python.executable if guard_cli.python is not None else None,
-        )
-        if not isinstance(entries, list) or sum(entry == expected_entry for entry in entries) != 1:
-            return {
-                "protection_active": False,
-                "integrity_status": "tampered",
-                "reason": "guard_cursor_hook_registration_mismatch",
-            }
-    return {
-        "protection_active": True,
-        "integrity_status": "valid",
-        "reason": None,
-        "guard_cli_identity": guard_cli.manifest_payload(),
+        state_text: str | None = _hooks_state_path(hooks_path, context).read_text(encoding="utf-8")
+    except OSError:
+        state_text = None
+    python_executable = guard_cli.python.executable if guard_cli.python is not None else None
+    errors: dict[str, Exception] = {}
+    request = {
+        "source": expected_source,
+        "identity": guard_cli.manifest_payload(),
+        "state_text": state_text,
+        "scripts": [
+            _observe(errors, "script", lambda: _read_script(script_path)),
+            _observe(errors, "managed_script", lambda: _read_script(managed_script_path)),
+        ],
+        "hooks_text": _observe(errors, "hooks", lambda: _read_hooks(hooks_path)),
+        "entries": {
+            event: _observe(
+                errors,
+                event,
+                lambda event=event: _managed_hook_entry(
+                    context, script_path=script_path, event_name=event, python_executable=python_executable
+                ),
+            )
+            for event in _MANAGED_HOOK_EVENTS
+        },
     }
+    answer = native_runner_authority("cursor_hook_state", request)
+    if not isinstance(answer, dict):
+        raise ValueError("Cursor hook state answer is malformed")
+    label = answer.get("raise")
+    if set(answer) == {"raise"} and isinstance(label, str) and label in errors:
+        raise errors[label]
+    status = answer.get("integrity_status")
+    reason = answer.get("reason")
+    if set(answer) != {"integrity_status", "reason"}:
+        raise ValueError("Cursor hook state answer is malformed")
+    if status == "valid" and reason is None:
+        return {
+            "protection_active": True,
+            "integrity_status": "valid",
+            "reason": None,
+            "guard_cli_identity": guard_cli.manifest_payload(),
+        }
+    if status not in _STATE_STATUSES or not isinstance(reason, str):
+        raise ValueError("Cursor hook state answer is malformed")
+    return {"protection_active": False, "integrity_status": status, "reason": reason}
 
 
 __all__ = [
