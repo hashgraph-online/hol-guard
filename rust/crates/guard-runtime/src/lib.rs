@@ -1024,6 +1024,11 @@ mod workspace_snapshot_git;
 mod zcode_artifacts;
 #[path = "adapters/detection/zcode_detect.rs"]
 mod zcode_detect;
+#[path = "adapters/zcode_hook_settings.rs"]
+mod zcode_hook_settings;
+#[cfg(test)]
+#[path = "adapters/zcode_hook_settings_tests.rs"]
+mod zcode_hook_settings_tests;
 #[cfg(all(test, unix))]
 mod zcode_vectors_tests;
 

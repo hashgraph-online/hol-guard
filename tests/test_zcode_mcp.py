@@ -14,12 +14,10 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.zcode import ZCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.zcode_config import (
-    ZCODE_PRETOOL_MATCHERS,
-    is_guard_managed_hook_command,
-)
+from codex_plugin_scanner.guard.adapters.zcode_config import ZCODE_PRETOOL_MATCHERS
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.shims import PreparedGuardShim
+from tests.test_zcode_adapter import is_guard_managed_hook_command
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
