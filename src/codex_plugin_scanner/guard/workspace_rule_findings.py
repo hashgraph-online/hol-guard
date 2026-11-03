@@ -27,15 +27,25 @@ def rule_findings(
     detector not run.
     """
 
-    batched = _checked(coverage, results)
-    if batched is not None or len(results) < 2:
-        return batched or _not_run(coverage, [detector for detector, _ in results])
-    # One batch can fail where its parts would not, for example a reply over
-    # the transport limit. Checking each detector alone keeps one oversized or
-    # unreadable result from hiding the findings of the others.
+    from .native_runner_authority import NativeRunnerAuthorityError
+
+    try:
+        return _checked(coverage, results) or _not_run(coverage, [detector for detector, _ in results])
+    except NativeRunnerAuthorityError as error:
+        if str(error) not in _TOO_LARGE_CODES or len(results) < 2:
+            return _not_run(coverage, [detector for detector, _ in results])
+    # One batch can cross the transport limit where its parts would not.
+    # Checking each detector alone keeps one oversized result from hiding the
+    # findings of the others. Any other failure, such as a resident that does
+    # not answer, leaves every detector still waiting not run at once.
     findings: list[dict[str, object]] = []
-    for detector, result in results:
-        checked = _checked(coverage, [(detector, result)])
+    for index, (detector, result) in enumerate(results):
+        try:
+            checked = _checked(coverage, [(detector, result)])
+        except NativeRunnerAuthorityError as error:
+            if str(error) not in _TOO_LARGE_CODES:
+                return findings, _not_run(coverage, [detector for detector, _ in results[index:]])[1]
+            checked = None
         if checked is None:
             coverage = _not_run(coverage, [detector])[1]
             continue
@@ -44,16 +54,23 @@ def rule_findings(
     return findings, coverage
 
 
+_TOO_LARGE_CODES = frozenset(
+    {"native_runner_authority_request_too_large", "native_runner_authority_response_too_large"}
+)
+
+
 def _checked(
     coverage: dict[str, object], results: Sequence[tuple[str, object]]
 ) -> tuple[list[dict[str, object]], dict[str, object]] | None:
-    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+    """The native check of ``results``, or ``None`` for an answer it cannot read.
+
+    A failed call raises ``NativeRunnerAuthorityError``.
+    """
+
+    from .native_runner_authority import native_runner_authority
 
     request = {"coverage": coverage, "results": [[detector, result] for detector, result in results]}
-    try:
-        answer = native_runner_authority("workspace_rule_findings", request)
-    except NativeRunnerAuthorityError:
-        return None
+    answer = native_runner_authority("workspace_rule_findings", request)
     findings, merged = answer.get("findings"), answer.get("coverage")
     if isinstance(findings, list) and isinstance(merged, dict):
         return cast(list[dict[str, object]], findings), cast(dict[str, object], merged)
