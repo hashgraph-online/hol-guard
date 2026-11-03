@@ -135,16 +135,16 @@ fn read_limited(file: File) -> Option<Vec<u8>> {
     Some(raw)
 }
 
-fn safe_probe_path(path_text: &str) -> bool {
+/// The file an absolute path resolves to, when it is a regular file outside
+/// the kernel's virtual file systems.
+fn probe_target(path_text: &str) -> Option<PathBuf> {
     let path = Path::new(path_text);
     if path_text.is_empty() || !path.is_absolute() {
-        return false;
+        return None;
     }
-    let Ok(resolved) = python_realpath_lax(path) else {
-        return false;
-    };
+    let resolved = python_realpath_lax(path).ok()?;
     if !is_file(&resolved) {
-        return false;
+        return None;
     }
     let mut components = resolved.components();
     let kernel = matches!(components.next(), Some(Component::RootDir))
@@ -152,14 +152,23 @@ fn safe_probe_path(path_text: &str) -> bool {
             let name = part.as_os_str().to_string_lossy().to_lowercase();
             KERNEL_ROOTS.contains(&name.as_str())
         });
-    !kernel
+    (!kernel).then_some(resolved)
 }
 
+fn safe_probe_path(path_text: &str) -> bool {
+    probe_target(path_text).is_some()
+}
+
+/// A script's text, read only from the regular file its path resolved to
+/// when it was checked: a link swapped in after the check is not followed.
 fn read_script_source(path: &str, shebang_only: bool) -> Option<String> {
-    if !safe_probe_path(path) {
+    let resolved = probe_target(path)?;
+    let opened = open_no_follow(&resolved).ok()?;
+    let regular = opened.metadata().is_ok_and(|metadata| metadata.is_file());
+    if !regular || !same_file(&opened, &resolved) {
         return None;
     }
-    let raw = read_limited(File::open(path).ok()?)?;
+    let raw = read_limited(opened)?;
     if shebang_only && !raw.starts_with(b"#!") {
         return None;
     }
