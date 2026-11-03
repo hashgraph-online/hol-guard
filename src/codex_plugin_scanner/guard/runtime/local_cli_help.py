@@ -18,6 +18,7 @@ from .command_model import parse_shell_command
 from .local_cli_commands import LocalCliCommand, merge_discovered_commands
 from .local_cli_identity import UnlistedCliIdentity, identify_unlisted_cli
 from .local_cli_script_source import (
+    ScriptSourceUnavailableError,
     local_import_paths,
     read_local_module,
     read_script_source,
@@ -107,6 +108,7 @@ def help_invocation_for_command(
     *,
     cwd: Path,
     home_dir: Path | None,
+    guard_home: Path | None = None,
 ) -> tuple[UnlistedCliIdentity, tuple[str, ...]] | None:
     """Return the verified identity and argv Guard may use for --help."""
 
@@ -116,7 +118,7 @@ def help_invocation_for_command(
     if identity.runner is not None:
         # Probe the proven project bin directly; registry fetches are never run.
         bin_path = identity.source_path
-        if identity.is_registry_package or bin_path is None or not _safe_probe_path(bin_path):
+        if identity.is_registry_package or bin_path is None or not _safe_probe_path(bin_path, guard_home=guard_home):
             return None
         return identity, (bin_path, "--help")
     try:
@@ -138,11 +140,11 @@ def help_invocation_for_command(
     if not isinstance(executable, dict) or not isinstance(entrypoint, dict):
         return None
     exe_path = executable.get("path")
-    if not isinstance(exe_path, str) or not _safe_probe_path(exe_path):
+    if not isinstance(exe_path, str) or not _safe_probe_path(exe_path, guard_home=guard_home):
         return None
     if identity.kind == "script":
         script_path = entrypoint.get("path")
-        if not isinstance(script_path, str) or not _safe_probe_path(script_path):
+        if not isinstance(script_path, str) or not _safe_probe_path(script_path, guard_home=guard_home):
             return None
         return identity, (exe_path, script_path, "--help")
     return identity, (exe_path, "--help")
@@ -165,15 +167,22 @@ def discover_local_cli_commands(
     probe: Callable[[Sequence[str]], str] = runner if runner is not None else run_cli_help
     empty: tuple[LocalCliCommand, ...] = ()
     source = script_source_path(identity, argv)
-    text = read_script_source(source[0], shebang_only=source[1]) if source is not None else None
-    if source is not None and text is not None:
-        reads_first = _resident_reads_sources_first()
-        if reads_first is None:
-            # Without the resident's word on what the script does with --help,
-            # running it could do its normal work.
-            return merge_discovered_commands(identity.name, empty), "failed"
-        if reads_first:
-            return _discover_from_source(identity, argv, source[0], text, probe, guard_home=guard_home)
+    try:
+        text = (
+            read_script_source(source[0], shebang_only=source[1], guard_home=guard_home) if source is not None else None
+        )
+        if source is not None and text is not None:
+            reads_first = _resident_reads_sources_first()
+            if reads_first is None:
+                # Without the resident's word on what the script does with --help,
+                # running it could do its normal work.
+                return merge_discovered_commands(identity.name, empty), "failed"
+            if reads_first:
+                return _discover_from_source(identity, argv, source[0], text, probe, guard_home=guard_home)
+    except ScriptSourceUnavailableError:
+        # A read that failed is not a compiled program; running the script
+        # with --help unread could do its normal work.
+        return merge_discovered_commands(identity.name, empty), "failed"
     output = str(probe(tuple(argv)))
     # The probe printed nothing, so there is no help to send anywhere.
     discovered = (
@@ -213,7 +222,10 @@ def _script_source_commands(
     source = script_source_path(identity, argv)
     if source is None:
         return None
-    text = read_script_source(source[0], shebang_only=source[1])
+    try:
+        text = read_script_source(source[0], shebang_only=source[1], guard_home=guard_home)
+    except ScriptSourceUnavailableError:
+        return None
     if text is None:
         return None
     return parse_cli_help_text(text, invocation=(identity.name,), guard_home=guard_home, script_source=True)
@@ -246,8 +258,8 @@ def _discover_from_source(
         return merge_discovered_commands(identity.name, empty), "failed"
     from_source = list(_commands(read.rows))
     handler: _HelpHandler = read.help_handler
-    for module in local_import_paths(script, read.imports):
-        module_text = read_local_module(module, script)
+    for module in local_import_paths(script, read.imports, guard_home=guard_home):
+        module_text = read_local_module(module, script, guard_home=guard_home)
         if module_text is None:
             continue
         imported = _source_read(module_text, invocation, guard_home)
