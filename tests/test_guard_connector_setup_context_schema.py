@@ -31,6 +31,15 @@ _HASH = "a" * 64
 _OTHER_HASH = "b" * 64
 
 
+@pytest.fixture(autouse=True)
+def _provisioned_verifier_key() -> None:
+    """The regroup never provisions the key itself, so the tests start with it."""
+
+    from codex_plugin_scanner.guard.native_context import _resolve_digest_home, ensure_resident_prerequisite
+
+    assert ensure_resident_prerequisite(_resolve_digest_home(None))
+
+
 def _columns(connection: sqlite3.Connection, table: str) -> list[str]:
     return [str(row[1]) for row in connection.execute(f"pragma table_info({table})").fetchall()]
 
@@ -333,6 +342,89 @@ def test_a_runtime_that_cannot_answer_moves_nothing(tmp_path: Path, monkeypatch:
         raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
     monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    connection = _v13_store(tmp_path)
+    _approvals(connection)
+    _observe(connection, "lanectl")
+    _queue(connection, "r1", "lanectl status")
+    connection.commit()
+
+    ensure_local_cli_schema(connection)
+
+    assert _marker(connection) == (14, _SCHEMA_CHECKSUM)
+    assert _groups(connection) == {"r1": "action:old"}
+    connection.close()
+
+
+def test_a_failed_batch_leaves_every_batch_in_place(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard import store_local_cli_regroup as regroup
+
+    answer = authority.native_runner_authority
+    calls: list[object] = []
+
+    def second_batch_fails(kind: str, args: dict[str, object]) -> dict[str, object]:
+        calls.append(args)
+        if len(calls) > 1:
+            raise authority.NativeRunnerAuthorityError("native_runner_authority_resident_unavailable")
+        return answer(kind, args)
+
+    monkeypatch.setattr(regroup, "_REVIEW_BATCH", 1)
+    monkeypatch.setattr(authority, "native_runner_authority", second_batch_fails)
+    connection = _v13_store(tmp_path)
+    _approvals(connection)
+    _observe(connection, "lanectl")
+    _queue(connection, "r1", "lanectl status")
+    _queue(connection, "r2", "lanectl ping")
+    connection.commit()
+
+    ensure_local_cli_schema(connection)
+
+    assert len(calls) == 2
+    assert _marker(connection) == (14, _SCHEMA_CHECKSUM)
+    assert _groups(connection) == {"r1": "action:old", "r2": "action:old"}
+    connection.close()
+
+
+def test_a_batch_carries_only_the_observations_its_commands_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    answer = authority.native_runner_authority
+    sent: list[dict[str, object]] = []
+
+    def recording(kind: str, args: dict[str, object]) -> dict[str, object]:
+        sent.append(args)
+        return answer(kind, args)
+
+    monkeypatch.setattr(authority, "native_runner_authority", recording)
+    connection = _v13_store(tmp_path)
+    _approvals(connection)
+    _observe(connection, "lanectl")
+    _observe(connection, "otherctl")
+    _queue(connection, "r1", "lanectl status")
+    connection.commit()
+
+    ensure_local_cli_schema(connection)
+
+    observations = sent[0]["observations"]
+    assert isinstance(observations, list)
+    assert [row[2] for row in observations] == ["lanectl"]
+    assert _groups(connection)["r1"] == _group(_HASH, _WORKSPACE, "lanectl status")
+    connection.close()
+
+
+def test_a_missing_verifier_key_skips_the_regroup_without_a_native_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard import store_local_cli_regroup as regroup
+
+    def unexpected(kind: str, args: object) -> dict[str, object]:
+        raise AssertionError("the regroup must not provision the key from inside the migration")
+
+    monkeypatch.setattr(regroup, "_verifier_key_ready", lambda: False)
+    monkeypatch.setattr(authority, "native_runner_authority", unexpected)
     connection = _v13_store(tmp_path)
     _approvals(connection)
     _observe(connection, "lanectl")

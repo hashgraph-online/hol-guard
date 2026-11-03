@@ -15,6 +15,7 @@ runtime that cannot answer leaves every review where it was.
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 from typing import Final, cast
 
@@ -87,26 +88,48 @@ def _regroup(connection: sqlite3.Connection) -> int:
         if _has_columns(connection, "local_cli_grant", {"cli_id", "identity_hash", "state"})
         else []
     )
-    moved = 0
-    # Batches keep each request well under the native transport limit.
+    if not _verifier_key_ready():
+        # Without the key the native call would provision it through a second
+        # store, which waits on the schema lock this migration holds.
+        _LOGGER.warning("Connector review regroup skipped (native verifier key not provisioned)")
+        return 0
+    planned: list[tuple[object, str]] = []
+    # Batches keep each request well under the native transport limit. A batch
+    # carries only the observations whose name occurs in one of its commands
+    # (the program a command names is always in its text) and the decisions
+    # for those CLIs.
     for start in range(0, len(reviews), _REVIEW_BATCH):
+        batch = reviews[start : start + _REVIEW_BATCH]
+        commands = [str(row[1]) for row in batch]
+        named = [row for row in observations if row[2] and any(str(row[2]) in command for command in commands)]
+        identities = {(row[0], row[1]) for row in named}
         moves = _native_moves(
             {
-                "reviews": [list(row) for row in reviews[start : start + _REVIEW_BATCH]],
-                "observations": [list(row) for row in observations],
-                "decided": [list(row) for row in decided],
+                "reviews": [list(row) for row in batch],
+                "observations": [list(row) for row in named],
+                "decided": [list(row) for row in decided if (row[0], row[1]) in identities],
             }
         )
-        for request_id, target in moves:
-            connection.execute(
-                "update approval_requests set queue_group_id = ? where request_id = ?", (target, request_id)
-            )
-        moved += len(moves)
-    return moved
+        if moves is None:
+            # All or nothing: a batch that cannot be answered leaves every
+            # review where it was, including those earlier batches would move.
+            return 0
+        planned.extend(moves)
+    for request_id, target in planned:
+        connection.execute("update approval_requests set queue_group_id = ? where request_id = ?", (target, request_id))
+    return len(planned)
 
 
-def _native_moves(request: dict[str, object]) -> list[tuple[object, str]]:
-    """The ``[request_id, queue_group_id]`` moves the native runtime answers, or none."""
+def _verifier_key_ready() -> bool:
+    from .native_context import _resolve_digest_home  # pyright: ignore[reportPrivateUsage]
+    from .native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME, NATIVE_RUNTIME_STATE_DIRECTORY
+
+    key = _resolve_digest_home(None) / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_VERIFIER_KEY_NAME
+    return os.path.lexists(key)
+
+
+def _native_moves(request: dict[str, object]) -> list[tuple[object, str]] | None:
+    """The ``[request_id, queue_group_id]`` moves the native runtime answers, or ``None`` when it cannot."""
 
     from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
@@ -114,17 +137,17 @@ def _native_moves(request: dict[str, object]) -> list[tuple[object, str]]:
         answer = native_runner_authority("connector_regroup", request)
     except NativeRunnerAuthorityError as error:
         _LOGGER.warning("Connector review regroup skipped (%s)", error)
-        return []
+        return None
     moves = answer.get("moves")
     if not isinstance(moves, list):
-        return []
+        return None
     checked: list[tuple[object, str]] = []
     for move in cast("list[object]", moves):
         if not isinstance(move, list) or len(cast("list[object]", move)) != 2:
-            return []
+            return None
         request_id, target = cast("list[object]", move)
         if not isinstance(target, str) or not target.startswith("connector:"):
-            return []
+            return None
         checked.append((request_id, target))
     return checked
 
