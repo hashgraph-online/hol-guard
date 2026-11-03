@@ -273,6 +273,11 @@ mod copilot_hook_config;
 #[cfg(test)]
 #[path = "adapters/copilot_hook_config_tests.rs"]
 mod copilot_hook_config_tests;
+#[path = "adapters/copilot_mcp_plan.rs"]
+mod copilot_mcp_plan;
+#[cfg(test)]
+#[path = "adapters/copilot_mcp_plan_tests.rs"]
+mod copilot_mcp_plan_tests;
 #[cfg(all(test, unix))]
 mod copilot_vectors_tests;
 mod critical_floor_op;
