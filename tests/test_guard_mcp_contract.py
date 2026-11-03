@@ -71,6 +71,13 @@ class TestMCPModuleImport:
             "truncated": True,
         }
 
+    def test_text_cut_before_the_runtime_is_still_marked_truncated(self):
+        from codex_plugin_scanner.guard.mcp.sanitizers import sanitize_fetch_result
+        from codex_plugin_scanner.guard.mcp.schemas import MAX_FETCH_TEXT_BYTES
+
+        result = sanitize_fetch_result({"id": "r1", "text": "a" + "\x00" * (8 * MAX_FETCH_TEXT_BYTES)})
+        assert (result["text"], result["truncated"]) == ("a", True)
+
     def test_sanitizers_fail_closed_without_the_native_runtime(self, monkeypatch: pytest.MonkeyPatch):
         from codex_plugin_scanner.guard import native_runner_authority
         from codex_plugin_scanner.guard.mcp import sanitizers

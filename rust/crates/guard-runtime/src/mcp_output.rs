@@ -85,11 +85,12 @@ fn py_str(value: Option<&Value>) -> String {
     }
 }
 
-/// `_normalize_text`: NFKC, then control characters out, then a character cut.
+/// `_normalize_text`: NFKC, then control characters (C0, DEL and C1) out
+/// except tab, newline and carriage return, then a character cut.
 fn normalized_text(value: Option<&Value>, max_chars: usize) -> String {
     py_str(value)
         .nfkc()
-        .filter(|c| !matches!(c, '\u{00}'..='\u{08}' | '\u{0b}' | '\u{0c}' | '\u{0e}'..='\u{1f}' | '\u{7f}'))
+        .filter(|c| !c.is_control() || matches!(c, '\t' | '\n' | '\r'))
         .take(max_chars)
         .collect()
 }

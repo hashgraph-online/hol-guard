@@ -47,11 +47,14 @@ def _bounded_value(key: str, value: object) -> object:
 
 
 def _bounded(raw: dict[str, object]) -> dict[str, object]:
-    return {
+    bounded = {
         key: _bounded_value(key, value)
         for key, value in raw.items()
         if key in _FIELDS and isinstance(value, (str, bool, int, float))
     }
+    if isinstance(text := raw.get("text"), str) and len(text) > 8 * MAX_FETCH_TEXT_BYTES:
+        bounded["truncated"] = True
+    return bounded
 
 
 def _sanitized(field: str, raw: object, answer_key: str) -> Any:

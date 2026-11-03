@@ -29,9 +29,9 @@ fn enums_fall_back_and_blank_ids_are_dropped() {
 
 #[test]
 fn text_is_normalized_and_stripped_of_control_characters() {
-    let raw = json!({"title": "ｆｕｌｌ\u{0}\u{1b}[31m\tok\n", "id": 7});
+    let raw = json!({"title": "ｆｕｌｌ\u{0}\u{1b}[31m\u{9b}2J\u{85}\tok\n\r", "id": 7});
     let result = &answer(json!({ "search": [raw] }))["results"][0];
-    assert_eq!(result["title"], json!("full[31m\tok\n"));
+    assert_eq!(result["title"], json!("full[31m2J\tok\n\r"));
     assert_eq!(result["id"], json!("7"));
     let long = json!({"title": "é".repeat(300)});
     let title = answer(json!({ "search": [long] }))["results"][0]["title"].clone();
