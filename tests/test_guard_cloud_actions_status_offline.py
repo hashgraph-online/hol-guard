@@ -76,3 +76,28 @@ def test_status_offline_without_a_saved_secret_is_signed_out(
     _, payload, _ = _status(tmp_path, capsys, "--offline")
 
     assert payload["state"] == "signed_out"
+
+
+def test_status_offline_says_it_did_not_check_the_saved_secret(
+    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _signed_in(cloud, tmp_path, capsys)
+    for path in (tmp_path / "secrets").iterdir():
+        if path.name.startswith("cloud-actions-"):
+            path.unlink()
+
+    _, offline, _ = _status(tmp_path, capsys, "--offline")
+    _, online, _ = _status(tmp_path, capsys)
+
+    assert (offline["state"], offline["secret_checked"]) == ("signed_in", False)
+    assert online["state"] == "signed_out"
+
+
+def test_status_online_checks_the_saved_secret(
+    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _signed_in(cloud, tmp_path, capsys)
+
+    _, payload, _ = _status(tmp_path, capsys)
+
+    assert (payload["state"], payload["secret_checked"]) == ("signed_in", True)

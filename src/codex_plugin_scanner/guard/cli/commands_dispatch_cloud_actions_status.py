@@ -70,6 +70,9 @@ def status(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Re
     service, connection = _live_checks(profile, access_token, offline=args.offline)
     fields: dict[str, object] = {
         "state": state,
+        # Offline, the sign-in comes from the profile file alone; the saved
+        # secret it names may be gone or unreadable.
+        "secret_checked": not args.offline,
         **_profile_fields(profile),
         "checked_at": checked_at(),
         "service": service.as_dict(),
