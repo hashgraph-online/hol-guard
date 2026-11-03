@@ -221,7 +221,12 @@ pub(super) fn safe_file_arguments(
         "join" => 2,
         _ => MAX_INPUTS,
     };
-    options_proven
+    // A file operand is opened, so it takes the read proof `cat` takes, and
+    // that proof only holds against a verified home and working directory.
+    // Without them the screen reads the spelling alone, which cannot tell a
+    // plain name from a link to a secret. The stdin forms above are unaffected.
+    super::safe_reads::verified_path_context(context.home_dir, context.cwd)
+        && options_proven
         && !operands.is_empty()
         && operands.len() <= maximum
         && operands

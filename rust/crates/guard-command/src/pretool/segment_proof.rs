@@ -129,6 +129,16 @@ pub(crate) fn benign_command_segments(
                         | "npm"
                         | "jq"
                         | "pkill"
+                        // A filter given a file operand opens that file, so
+                        // its coverage takes the same session proof `cat`
+                        // takes. The stdin forms are path-free above.
+                        | "sort"
+                        | "uniq"
+                        | "cut"
+                        | "tr"
+                        | "paste"
+                        | "join"
+                        | "column"
                 ))
                 // A file operand prints a source line on a syntax error, so it
                 // gets the same session proof as `cat`.

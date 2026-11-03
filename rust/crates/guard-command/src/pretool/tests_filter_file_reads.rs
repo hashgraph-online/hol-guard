@@ -103,3 +103,26 @@ fn a_filter_that_could_write_or_reach_further_still_takes_review() {
         assert!(!allowed(command), "{command}");
     }
 }
+
+fn allowed_without_context(command: &str) -> bool {
+    evaluate_pre_tool_with_context(&request(command), None, None)
+        .is_ok_and(|decision| decision.minimum_action == "allow")
+}
+
+/// A file operand is opened, so it takes `cat`'s read proof, and that proof
+/// only holds against a verified home and working directory. With neither,
+/// the screen reads the spelling alone, which cannot tell a plain name from a
+/// link to a secret. The stdin forms carry no operand and stay proven.
+#[test]
+fn a_filter_reading_a_file_without_a_verified_context_takes_review() {
+    for command in [
+        "sort Cargo.toml",
+        "uniq Cargo.toml",
+        "cut -d= -f1 Cargo.toml",
+        "paste Cargo.toml Cargo.toml",
+        "join Cargo.toml Cargo.toml",
+        "column -t Cargo.toml",
+    ] {
+        assert!(!allowed_without_context(command), "{command}");
+    }
+}
