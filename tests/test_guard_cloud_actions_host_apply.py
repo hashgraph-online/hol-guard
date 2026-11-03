@@ -18,6 +18,7 @@ import pytest
 
 from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli import cloud_actions_host_apply
+from codex_plugin_scanner.guard.cli.cloud_actions_access import CloudActionsAccessError
 from codex_plugin_scanner.guard.cli.cloud_actions_host_apply import (
     HostConfigWriteError,
     apply_host_config,
@@ -26,11 +27,11 @@ from codex_plugin_scanner.guard.cli.cloud_actions_host_apply import (
 )
 from codex_plugin_scanner.guard.cli.cloud_actions_host_config import (
     CLOUD_ACTIONS_SERVER_NAME,
+    HostConfigPlan,
     plan_host_config,
 )
+from tests.cloud_actions_pairing_support import URL, WS, FakeCloud, entry, pair, wanted
 
-WS = "11111111-1111-4111-8111-111111111111"
-URL = "https://hol.org/api/guard/gateway/mcp"
 LOCAL_URL = "http://127.0.0.1:3017/api/guard/gateway/mcp"
 POSIX = os.name != "nt"
 
@@ -50,6 +51,11 @@ JSON_SETTINGS: dict[str, Any] = {
 PATHS = {"claude-code": ".claude.json", "codex": ".codex/config.toml", "cursor": ".cursor/mcp.json"}
 
 
+@pytest.fixture(autouse=True)
+def cloud(monkeypatch: pytest.MonkeyPatch) -> FakeCloud:
+    return pair(monkeypatch)
+
+
 def _seed(home: Path, tool: str, *, mode: int = 0o640) -> Path:
     path = home / PATHS[tool]
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,6 +64,10 @@ def _seed(home: Path, tool: str, *, mode: int = 0o640) -> Path:
     if POSIX:
         path.chmod(mode)
     return path
+
+
+def _plan(tool: str, path: Path, guard_home: str = "/guard-home") -> HostConfigPlan:
+    return plan_host_config(tool, path=path, entry=entry(tool, guard_home), url=URL)
 
 
 def _main(*argv: str) -> int:
@@ -95,7 +105,7 @@ def test_apply_writes_the_previewed_file_and_keeps_a_copy(
     home, guard_home = tmp_path / "home", tmp_path / "guard"
     path = _seed(home, tool)
     before = path.read_bytes()
-    preview = plan_host_config(tool, path=path, url=URL)
+    preview = plan_host_config(tool, path=path, entry=entry(tool, guard_home), url=URL)
 
     code, payload = _apply(capsys, home, guard_home, tool)
 
@@ -161,7 +171,7 @@ def test_apply_creates_a_private_file_and_restore_removes_it(
 
     assert code == 0
     assert payload["action"] == "create_file"
-    assert json.loads(path.read_bytes())["mcpServers"][CLOUD_ACTIONS_SERVER_NAME]["url"] == URL
+    assert json.loads(path.read_bytes())["mcpServers"][CLOUD_ACTIONS_SERVER_NAME] == wanted("cursor", guard_home)
     if POSIX:
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert list(backups_dir(guard_home, "cursor").glob("*.before")) == []
@@ -176,32 +186,79 @@ def test_apply_creates_a_private_file_and_restore_removes_it(
 def test_apply_text_names_the_change_and_how_to_undo(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     home, guard_home = tmp_path / "home", tmp_path / "guard"
     path = _seed(home, "codex")
-    hint = plan_host_config("codex", path=path, url=URL).sign_in_hint
-    code = _main(
-        "ai-tools",
-        "configure",
-        "codex",
-        "--cloud-workspace",
-        WS,
-        "--apply",
-        "--home",
-        str(home),
-        "--guard-home",
-        str(guard_home),
-    )
+    hint = plan_host_config("codex", path=path, entry=entry("codex"), url=URL).reload_hint
+    code = _main("ai-tools", "configure", "codex", "--apply", "--home", str(home), "--guard-home", str(guard_home))
 
     assert code == 0
     assert capsys.readouterr().out == (
-        "Set up Codex for Cloud actions.\n"
-        f"Added the {CLOUD_ACTIONS_SERVER_NAME} entry in {path}. Everything else in the file stays as it was.\n"
+        f"Set up Codex for Cloud actions in workspace {WS}.\n"
+        f"Added the {CLOUD_ACTIONS_SERVER_NAME} entry in {path}. Everything else in the file stays as it is.\n"
+        "Codex uses this computer's Guard Cloud connection; it does not sign in separately.\n"
+        f"{hint}\n"
         "To undo, run `hol-guard cloud-actions ai-tools restore codex`.\n"
-        f"The AI tool signs in to Guard Cloud itself; choose workspace {WS} when it asks. {hint}\n"
     )
+
+
+def test_apply_gets_the_ai_tools_access_before_writing(
+    cloud: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home, guard_home = tmp_path / "home", tmp_path / "guard"
+    path = _seed(home, "codex")
+
+    assert _apply(capsys, home, guard_home, "codex")[0] == 0
+
+    assert cloud.exchanged == ["codex"]
+    assert "exchanged-access" not in path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("reason", "code"),
+    [("cloud_actions_not_allowed", 4), ("cloud_actions_off", 4), ("not_available", 3), ("cloud_unreachable", 3)],
+)
+def test_a_refused_access_writes_nothing(
+    reason: str, code: int, cloud: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home, guard_home = tmp_path / "home", tmp_path / "guard"
+    path = _seed(home, "cursor")
+    before = path.read_bytes()
+    cloud.exchange_error = CloudActionsAccessError(reason, "Refused.")
+
+    result, payload = _apply(capsys, home, guard_home, "cursor")
+
+    assert (result, payload["reason"]) == (code, reason)
+    assert path.read_bytes() == before
+    assert _records(guard_home, "cursor") == []
+
+
+def test_restore_ends_the_ai_tools_access(cloud: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    home, guard_home = tmp_path / "home", tmp_path / "guard"
+    _ = _seed(home, "codex")
+    assert _apply(capsys, home, guard_home, "codex")[0] == 0
+
+    code, payload = _restore(capsys, home, guard_home, "codex")
+
+    assert (code, payload["access_ended"]) == (0, True)
+    assert cloud.revoked == ["codex"]
+
+
+def test_restore_reports_access_it_could_not_end(
+    cloud: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home, guard_home = tmp_path / "home", tmp_path / "guard"
+    path = _seed(home, "codex")
+    before = path.read_bytes()
+    assert _apply(capsys, home, guard_home, "codex")[0] == 0
+    cloud.revoke_error = CloudActionsAccessError("cloud_unreachable", "Guard Cloud could not be reached.")
+
+    code, payload = _restore(capsys, home, guard_home, "codex")
+
+    assert (code, payload["state"]) == (3, "access_not_ended")
+    assert path.read_bytes() == before
 
 
 def test_a_change_after_the_preview_is_never_overwritten(tmp_path: Path) -> None:
     path = _seed(tmp_path, "claude-code")
-    plan = plan_host_config("claude-code", path=path, url=URL)
+    plan = plan_host_config("claude-code", path=path, entry=entry("claude-code"), url=URL)
     edited = path.read_bytes().replace(b'"numStartups": 3', b'"numStartups": 4')
     path.write_bytes(edited)
 
@@ -215,7 +272,7 @@ def test_a_change_after_the_preview_is_never_overwritten(tmp_path: Path) -> None
 
 def test_a_change_just_before_the_move_is_never_overwritten(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = _seed(tmp_path, "claude-code")
-    plan = plan_host_config("claude-code", path=path, url=URL)
+    plan = plan_host_config("claude-code", path=path, entry=entry("claude-code"), url=URL)
     edited = path.read_bytes().replace(b'"numStartups": 3', b'"numStartups": 5')
     real = cloud_actions_host_apply._write_temporary  # pyright: ignore[reportPrivateUsage]
 
@@ -237,7 +294,7 @@ def test_a_change_just_before_the_move_is_never_overwritten(tmp_path: Path, monk
 
 def test_a_file_created_after_the_preview_is_never_replaced(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / PATHS["cursor"]
-    plan = plan_host_config("cursor", path=path, url=URL)
+    plan = plan_host_config("cursor", path=path, entry=entry("cursor"), url=URL)
     assert plan.action == "create_file"
     real = cloud_actions_host_apply._read  # pyright: ignore[reportPrivateUsage]
     calls = 0
@@ -263,7 +320,7 @@ def test_a_file_created_after_the_preview_is_never_replaced(tmp_path: Path, monk
 def test_a_write_that_does_not_read_back_is_undone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = _seed(tmp_path, "codex")
     before = path.read_bytes()
-    plan = plan_host_config("codex", path=path, url=URL)
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
     real = cloud_actions_host_apply.replace_file
     damaged = False
 
@@ -290,7 +347,7 @@ def test_a_write_that_does_not_read_back_is_undone(tmp_path: Path, monkeypatch: 
 def test_a_write_that_cannot_be_put_back_keeps_the_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = _seed(tmp_path, "codex")
     before = path.read_bytes()
-    plan = plan_host_config("codex", path=path, url=URL)
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
     real = cloud_actions_host_apply.replace_file
     calls = 0
 
@@ -329,7 +386,7 @@ def test_a_write_that_cannot_be_put_back_keeps_the_copy(tmp_path: Path, monkeypa
 def test_a_failed_write_that_removed_the_file_is_restored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = _seed(tmp_path, "codex")
     before = path.read_bytes()
-    plan = plan_host_config("codex", path=path, url=URL)
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
     real = cloud_actions_host_apply.replace_file
     calls = 0
 
@@ -360,7 +417,7 @@ def test_a_failed_write_that_removed_the_file_is_restored(tmp_path: Path, monkey
 
 def test_nothing_is_created_without_hard_links(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / PATHS["cursor"]
-    plan = plan_host_config("cursor", path=path, url=URL)
+    plan = plan_host_config("cursor", path=path, entry=entry("cursor"), url=URL)
     assert plan.action == "create_file"
 
     def no_links(source: object, destination: object) -> None:
@@ -386,7 +443,9 @@ def test_nothing_is_written_when_no_copy_can_be_kept(tmp_path: Path) -> None:
     blocker.write_text("not a folder", encoding="utf-8")
 
     with pytest.raises(HostConfigWriteError) as error:
-        _ = apply_host_config(plan_host_config("codex", path=path, url=URL), guard_home=guard_home)
+        _ = apply_host_config(
+            plan_host_config("codex", path=path, entry=entry("codex"), url=URL), guard_home=guard_home
+        )
 
     assert error.value.reason == "backup_failed"
     assert path.read_bytes() == before
@@ -493,7 +552,7 @@ def test_restore_leaves_guards_entry_alone_once_someone_changed_it(
     assert _apply(capsys, home, guard_home, "cursor")[0] == 0
     document = json.loads(path.read_bytes())
     if change == "address":
-        document["mcpServers"][CLOUD_ACTIONS_SERVER_NAME]["url"] = LOCAL_URL
+        document["mcpServers"][CLOUD_ACTIONS_SERVER_NAME]["args"][-1] = "/elsewhere"
     else:
         del document["mcpServers"][CLOUD_ACTIONS_SERVER_NAME]
     path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
@@ -527,7 +586,7 @@ def test_restore_refuses_a_damaged_copy(tmp_path: Path, capsys: pytest.CaptureFi
 def test_restore_reports_a_damaged_newer_record(tmp_path: Path) -> None:
     path = _seed(tmp_path, "codex")
     guard_home = tmp_path / "guard"
-    _ = apply_host_config(plan_host_config("codex", path=path, url=URL), guard_home=guard_home)
+    _ = apply_host_config(_plan("codex", path), guard_home=guard_home)
     written = path.read_bytes()
     (backups_dir(guard_home, "codex") / f"{'9' * 20}-1.json").write_bytes(b'{"format": "guard.cloud')
 
@@ -543,7 +602,9 @@ def test_restore_finds_the_copy_through_another_spelling(tmp_path: Path, monkeyp
     original = path.read_bytes()
     monkeypatch.chdir(tmp_path)
     relative = Path("home") / PATHS["codex"]
-    _ = apply_host_config(plan_host_config("codex", path=relative, url=URL), guard_home=tmp_path / "guard")
+    _ = apply_host_config(
+        plan_host_config("codex", path=relative, entry=entry("codex"), url=URL), guard_home=tmp_path / "guard"
+    )
 
     assert restore_host_config("codex", path=path, guard_home=tmp_path / "guard") is not None
     assert path.read_bytes() == original
@@ -553,9 +614,11 @@ def test_restore_steps_back_through_each_apply(tmp_path: Path) -> None:
     path = _seed(tmp_path, "codex")
     original = path.read_bytes()
     guard_home = tmp_path / "guard"
-    _ = apply_host_config(plan_host_config("codex", path=path, url=URL), guard_home=guard_home)
+    _ = apply_host_config(_plan("codex", path), guard_home=guard_home)
     first = path.read_bytes()
-    _ = apply_host_config(plan_host_config("codex", path=path, url=LOCAL_URL), guard_home=guard_home)
+    _ = apply_host_config(
+        plan_host_config("codex", path=path, entry=entry("codex", "/other-guard-home"), url=URL), guard_home=guard_home
+    )
 
     assert restore_host_config("codex", path=path, guard_home=guard_home) is not None
     assert path.read_bytes() == first
@@ -568,8 +631,8 @@ def test_only_the_latest_copies_are_kept(tmp_path: Path) -> None:
     path = _seed(tmp_path, "codex")
     guard_home = tmp_path / "guard"
     for index in range(12):
-        url = URL if index % 2 == 0 else LOCAL_URL
-        _ = apply_host_config(plan_host_config("codex", path=path, url=url), guard_home=guard_home)
+        fields = entry("codex", f"/guard-home-{index % 2}")
+        _ = apply_host_config(plan_host_config("codex", path=path, entry=fields, url=URL), guard_home=guard_home)
 
     directory = backups_dir(guard_home, "codex")
     assert len(_records(guard_home, "codex")) == 10

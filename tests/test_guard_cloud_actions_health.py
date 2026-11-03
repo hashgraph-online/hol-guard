@@ -20,6 +20,7 @@ from urllib3.exceptions import ProtocolError
 
 from codex_plugin_scanner.guard.cli import cloud_actions_health
 from codex_plugin_scanner.guard.cli import commands_dispatch_cloud_actions_status as status_commands
+from codex_plugin_scanner.guard.cli.cloud_actions_host_config import bridge_entry
 from codex_plugin_scanner.guard.cli.cloud_actions_oauth import CLOUD_ACTIONS_SCOPES
 from codex_plugin_scanner.guard.cli.cloud_actions_session import CloudActionsSessionStore
 from tests.cloud_actions_login_support import (
@@ -329,12 +330,14 @@ def test_a_saved_address_on_another_site_is_never_sent_the_sign_in(
         assert elsewhere.gateway_requests == [] and cloud.gateway_requests == []
 
 
-def _ai_tool_settings(home: Path, resource: str) -> None:
+def _ai_tool_settings(home: Path) -> None:
     user = home / "user"
+    bridge = bridge_entry("codex", guard_home=home)
     (user / ".codex").mkdir(parents=True)
     (user / ".codex" / "config.toml").write_text(
         f'[mcp_servers.docs]\ncommand = "docs"\nenv = {{ TOKEN = "{CANARY}" }}\n\n'
-        f'[mcp_servers.hol-guard-cloud]\nurl = "{resource}"\n'
+        f"[mcp_servers.hol-guard-cloud]\ncommand = {json.dumps(bridge['command'])}\n"
+        f"args = {json.dumps(bridge['args'])}\n"
     )
     (user / ".cursor").mkdir()
     (user / ".cursor" / "mcp.json").write_text(
@@ -346,7 +349,7 @@ def test_doctor_reports_each_check_and_ai_tool(
     cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _signed_in(cloud, tmp_path, capsys)
-    _ai_tool_settings(tmp_path, f"{cloud.origin}/api/guard/gateway/mcp")
+    _ai_tool_settings(tmp_path)
 
     code, payload, text = _doctor(tmp_path, capsys)
 
@@ -375,7 +378,7 @@ def test_doctor_bundle_holds_no_sign_in_settings_or_user_folder(
     cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _signed_in(cloud, tmp_path, capsys)
-    _ai_tool_settings(tmp_path, f"{cloud.origin}/api/guard/gateway/mcp")
+    _ai_tool_settings(tmp_path)
     bundle = tmp_path / "bundle.json"
 
     code, payload, _ = _doctor(tmp_path, capsys, "--bundle", str(bundle))
