@@ -240,12 +240,19 @@ pub(super) fn resolve_bindings<'a>(
         if !extended.insert(contribution.extension_id.as_str()) {
             return Err(fail("cloud_binding_duplicate_extension"));
         }
-        if contribution
+        // Name the binding that repeats an action an earlier contribution bound.
+        if let Some(binding) = contribution
             .bindings
             .iter()
-            .any(|binding| !actions.insert(binding.action_id.as_str()))
+            .position(|binding| !actions.insert(binding.action_id.as_str()))
         {
-            return Err(fail("cloud_binding_duplicate_action"));
+            return Err(SourceStreamError::rejected(
+                *record,
+                cloud_binding::BindingRejection {
+                    code: "cloud_binding_duplicate_action",
+                    binding: Some(binding),
+                },
+            ));
         }
         let target = cloud_binding::BindingTarget::from_source(bytes, *server).map_err(fail)?;
         cloud_binding::resolve(contribution, &target)

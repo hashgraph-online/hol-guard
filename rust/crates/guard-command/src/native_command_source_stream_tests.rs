@@ -226,6 +226,38 @@ fn cloud_binding_records_are_optional_and_resolve_against_the_stream() {
 }
 
 #[test]
+fn an_action_repeated_across_contributions_names_the_repeating_binding() {
+    let delete = |action: &str| {
+        json!({
+            "actionId": action,
+            "tool": "delete_pod",
+            "effect": "destructive",
+            "requiredCapabilities": ["egress-pinned", "bounded-output"],
+            "cloudSupport": "cloud-executable"
+        })
+    };
+    let first = json!({
+        "schemaVersion": "guard.cloud-action-binding-contribution.v1",
+        "extensionId": "mcp.instapods",
+        "bindings": [delete("instapods.pod.delete")]
+    });
+    let second = json!({
+        "schemaVersion": "guard.cloud-action-binding-contribution.v1",
+        "extensionId": "mcp.agenthub",
+        "bindings": [delete("agenthub.pod.delete"), delete("instapods.pod.delete")]
+    });
+    let stream = release_stream(&[first, second]);
+    let error = compile_source_stream(stream.as_slice()).unwrap_err();
+    assert_eq!(error.code, "cloud_binding_duplicate_action");
+    assert_eq!(error.binding, Some(1));
+    let record = error.record.unwrap();
+    assert_eq!(
+        error.pointer("/records"),
+        format!("/records/{record}/bindings/1")
+    );
+}
+
+#[test]
 fn binding_records_draw_on_the_shared_retention_budget() {
     // Each record stays under the per-record cap, but together they exceed
     // what the stream may retain once the sources are counted.
