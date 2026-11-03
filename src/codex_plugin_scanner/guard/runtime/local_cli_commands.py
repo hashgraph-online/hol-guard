@@ -57,12 +57,6 @@ def _is_command_path(value: str) -> bool:
     return 1 <= len(parts) <= _MAX_DEPTH and all(_COMMAND_NAME.fullmatch(part) for part in parts)
 
 
-def slug_local_cli_command_id(name: str) -> str:
-    """Turn an MCP tool name or CLI token into a catalog command id."""
-
-    return slug_local_cli_command_ids((name,))[0]
-
-
 def slug_local_cli_command_ids(names: Sequence[str]) -> tuple[str, ...]:
     """Catalog command ids for tool names, from the native ``local_mcp_probe`` kind.
 

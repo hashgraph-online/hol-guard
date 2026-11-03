@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -190,7 +191,10 @@ def _timeout_for(tokens: Sequence[str], timeout: float | None) -> float:
 def _resolve_launch_argv(tokens: Sequence[str], *, cwd: Path) -> tuple[str, ...] | None:
     """The argv a probe launches, resolved by the native ``local_mcp_probe`` kind."""
 
-    request = {"op": "launch", "tokens": list(tokens), "cwd": str(cwd), "search_path": probe_search_path()}
+    # The resident has its own working directory, so a relative PATH entry is
+    # made absolute here, where ``shutil.which`` used to resolve it.
+    search_path = os.pathsep.join(os.path.abspath(entry) for entry in probe_search_path().split(os.pathsep) if entry)
+    request = {"op": "launch", "tokens": list(tokens), "cwd": str(cwd), "search_path": search_path}
     argv = _ask(request).get("argv")
     if argv is None:
         return None

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterable, Mapping
 from hashlib import sha256
 
 from .runtime.local_cli_commands import slug_local_cli_command_ids
@@ -38,6 +39,7 @@ def acknowledge_catalog_changes(
     reviewed: set[str],
     *,
     catalog_revision: int,
+    change_ids: Mapping[str, str],
 ) -> None:
     """A saved choice for a new or changed tool reviews that change.
 
@@ -50,6 +52,8 @@ def acknowledge_catalog_changes(
     save from an older view cannot clear a change a later listing recorded.
     A tool is matched by its command id, so a saved Other-tools choice reviews
     the tools folded into it, while a real tool named ``other`` has its own id.
+    ``change_ids`` comes from ``catalog_change_ids``; a name it lacks stays
+    flagged.
     """
 
     row = connection.execute(
@@ -63,17 +67,9 @@ def acknowledge_catalog_changes(
     if payload is None or not isinstance(changes, dict):
         return
     listed = {key: names for key in ("added", "changed") if isinstance(names := changes.get(key), list)}
-    texts = sorted({name for names in listed.values() for name in names if isinstance(name, str)})
-    if not texts:
-        return
-    try:
-        ids = dict(zip(texts, slug_local_cli_command_ids(texts), strict=True))
-    except ValueError:
-        # Without the resident the changes stay flagged for review.
-        return
     updated = dict(changes)
     for key, names in listed.items():
-        updated[key] = [name for name in names if not (isinstance(name, str) and ids[name] in reviewed)]
+        updated[key] = [name for name in names if not (isinstance(name, str) and change_ids.get(name) in reviewed)]
     if updated == changes:
         return
     payload["changes"] = updated
@@ -82,6 +78,25 @@ def acknowledge_catalog_changes(
         "update local_mcp_catalog set catalog_json = ? where cli_id = ? and identity_hash = ?",
         (raw, cli_id, identity_hash),
     )
+
+
+def catalog_change_ids(connection: sqlite3.Connection, cli_ids: Iterable[str]) -> dict[str, str]:
+    """Command ids for the flagged tool names, resolved by the resident before the write lock."""
+
+    texts: set[str] = set()
+    for cli_id in cli_ids:
+        rows = connection.execute("select catalog_json from local_mcp_catalog where cli_id = ?", (cli_id,))
+        for (raw,) in rows.fetchall():
+            changes = (_decode_snapshot(raw) or {}).get("changes")
+            for names in (changes.get("added"), changes.get("changed")) if isinstance(changes, dict) else ():
+                if isinstance(names, list):
+                    texts.update(name for name in names if isinstance(name, str))
+    ordered = sorted(texts)
+    try:
+        return dict(zip(ordered, slug_local_cli_command_ids(ordered), strict=True)) if ordered else {}
+    except ValueError:
+        # Without the resident the changes stay flagged for review.
+        return {}
 
 
 def _decode_snapshot(raw: object) -> dict[str, object] | None:
