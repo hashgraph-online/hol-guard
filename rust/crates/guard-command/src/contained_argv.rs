@@ -39,6 +39,19 @@ pub(crate) fn local_mocha_entry(argument: &str) -> bool {
         || local_bin_entry(argument, "mocha")
 }
 
+/// AVA's installed entry points. AVA 6 declares `entrypoints/cli.js`, AVA 4
+/// and 5 published the same entry as `entrypoints/cli.mjs`, and AVA 3 kept it
+/// at `cli.js`. The sink runs whichever of them this workspace holds, so
+/// reading only the current spelling would send a working
+/// `node node_modules/ava/entrypoints/cli.mjs` to review while the `npx ava`
+/// beside it runs. The installer's link to that entry names the same run.
+pub(crate) fn local_ava_entry(argument: &str) -> bool {
+    local_package_entry(argument, "ava/entrypoints/cli.js")
+        || local_package_entry(argument, "ava/entrypoints/cli.mjs")
+        || local_package_entry(argument, "ava/cli.js")
+        || local_bin_entry(argument, "ava")
+}
+
 /// Jest's installed entry point, and the link its installer writes beside it.
 /// `jest-cli` publishes the executable Jest's own `bin` field points at, and
 /// `node_modules/.bin/jest` is the link to it, so a call that hands either to
@@ -47,11 +60,39 @@ pub(crate) fn local_jest_entry(argument: &str) -> bool {
     local_package_entry(argument, "jest/bin/jest.js") || local_bin_entry(argument, "jest")
 }
 
+/// Jasmine's installed entry point, and the link its installer writes beside
+/// it. `bin/jasmine.js` is the module `jasmine-npm` has declared as its `bin`
+/// since Jasmine 3, so one spelling answers for every release a workspace is
+/// likely to hold.
+pub(crate) fn local_jasmine_entry(argument: &str) -> bool {
+    local_package_entry(argument, "jasmine/bin/jasmine.js") || local_bin_entry(argument, "jasmine")
+}
+
+/// QUnit's installed entry point, and the link its installer writes beside
+/// it. `bin/qunit.js` is the module QUnit declares as its `bin` from QUnit 2
+/// on, so it names the installed runner at every release that ships a CLI.
+pub(crate) fn local_qunit_entry(argument: &str) -> bool {
+    local_package_entry(argument, "qunit/bin/qunit.js") || local_bin_entry(argument, "qunit")
+}
+
+/// uvu's installed entry point, and the link its installer writes beside it.
+/// uvu declares `bin.js` at the package root rather than under a `bin`
+/// directory, and has published it there since 0.3.
+pub(crate) fn local_uvu_entry(argument: &str) -> bool {
+    local_package_entry(argument, "uvu/bin.js") || local_bin_entry(argument, "uvu")
+}
+
 /// Whether a word names one of those installed entry points. A runtime handed
 /// this path starts the workspace's own runner, whichever of the three it is.
 pub(crate) fn local_runner_entry(argument: &str) -> bool {
     let entry = argument.replace('\\', "/");
-    local_vitest_entry(&entry) || local_jest_entry(&entry) || local_mocha_entry(&entry)
+    local_vitest_entry(&entry)
+        || local_jest_entry(&entry)
+        || local_mocha_entry(&entry)
+        || local_ava_entry(&entry)
+        || local_jasmine_entry(&entry)
+        || local_qunit_entry(&entry)
+        || local_uvu_entry(&entry)
 }
 
 /// Whether a call hands Bun one of those entry points as the file to run.
@@ -343,10 +384,17 @@ fn bun_runner_invocation(
 
 #[path = "contained_argv_runner_calls.rs"]
 mod runner_calls;
+#[path = "contained_argv_single_pass_runners.rs"]
+mod single_pass_runners;
 pub(crate) use runner_calls::{
-    bun_test_runs_once, bun_test_script_once, contained_runner_call, jest_contained_call,
-    jest_runs_once, mocha_contained_call, mocha_runs_once, tsx_runner_flag_count,
-    tsx_runner_test_mode, vitest_runs_once, workspace_test_script,
+    ava_contained_call, ava_runs_once, bun_test_runs_once, bun_test_script_once,
+    contained_runner_call, jest_contained_call, jest_runs_once, mocha_contained_call,
+    mocha_runs_once, tsx_runner_flag_count, tsx_runner_test_mode, vitest_runs_once,
+    workspace_test_script,
+};
+pub(crate) use single_pass_runners::{
+    jasmine_contained_call, jasmine_runs_once, jasmine_sets_no_environment, qunit_contained_call,
+    qunit_runs_once, uvu_contained_call,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
@@ -383,6 +431,10 @@ fn runner_tail(arguments: &[String]) -> Option<(&'static str, Vec<String>)> {
             match tool.as_str() {
                 "jest" => "jest",
                 "mocha" => "mocha",
+                "ava" => "ava",
+                "jasmine" => "jasmine",
+                "qunit" => "qunit",
+                "uvu" => "uvu",
                 _ => "vitest",
             },
             rest.to_vec(),
@@ -418,6 +470,42 @@ fn runner_tail_or_error(
             Some("mocha") => Err(RestrictedPytestError::new(
                 VITEST_INVALID,
                 "Protected Mocha reads its configuration and modules from this workspace.",
+            )),
+            Some("ava") if !ava_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected AVA requires a run that does not watch.",
+            )),
+            Some("ava") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected AVA reads its configuration and modules from this workspace.",
+            )),
+            Some("jasmine") if !jasmine_runs_once(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected Jasmine runs specs; it does not scaffold a project.",
+                ))
+            }
+            Some("jasmine") if !jasmine_sets_no_environment(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected Jasmine takes its environment from the run, not from its arguments.",
+                ))
+            }
+            Some("jasmine") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected Jasmine reads its configuration and helpers from this workspace.",
+            )),
+            Some("qunit") if !qunit_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected QUnit requires a run that does not watch.",
+            )),
+            Some("qunit") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected QUnit reads its modules from this workspace.",
+            )),
+            Some("uvu") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected uvu reads its modules from this workspace.",
             )),
             _ => invalid_vitest(),
         },
@@ -612,7 +700,10 @@ pub fn contained_runner_invocation(
             args.to_vec()
         } else if let Some(args) = manager_exec_tool(&argv) {
             args.to_vec()
-        } else if matches!(name, "vitest" | "jest" | "mocha") {
+        } else if matches!(
+            name,
+            "vitest" | "jest" | "mocha" | "ava" | "jasmine" | "qunit" | "uvu"
+        ) {
             let mut call = vec![name.to_owned()];
             call.extend_from_slice(&argv[1..]);
             call
@@ -628,6 +719,14 @@ pub fn contained_runner_invocation(
                 "jest"
             } else if local_mocha_entry(&entry) {
                 "mocha"
+            } else if local_ava_entry(&entry) {
+                "ava"
+            } else if local_jasmine_entry(&entry) {
+                "jasmine"
+            } else if local_qunit_entry(&entry) {
+                "qunit"
+            } else if local_uvu_entry(&entry) {
+                "uvu"
             } else {
                 return invalid_vitest();
             };
@@ -864,8 +963,10 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let bun_test = bun_test_invocation(command) || bun_test_script_invocation(command);
     let entries = command.iter().skip(1).take(2);
     let vitest = !command.is_empty()
-        && (matches!(name, "bunx" | "npx" | "vitest" | "jest" | "mocha")
-            || manager_exec_runner(command).is_some()
+        && (matches!(
+            name,
+            "bunx" | "npx" | "vitest" | "jest" | "mocha" | "ava" | "jasmine" | "qunit" | "uvu"
+        ) || manager_exec_runner(command).is_some()
             || bun.is_some()
             || bun_runner_entry_launch(command)
             || tsx_test_invocation(command)?.is_some()
@@ -875,6 +976,10 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                     local_vitest_entry(&entry)
                         || local_jest_entry(&entry)
                         || local_mocha_entry(&entry)
+                        || local_ava_entry(&entry)
+                        || local_jasmine_entry(&entry)
+                        || local_qunit_entry(&entry)
+                        || local_uvu_entry(&entry)
                 })));
     let node_tool = bun.is_none()
         && !bun_test

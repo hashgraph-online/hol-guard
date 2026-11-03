@@ -20,6 +20,7 @@ import {
 import { TechnicalDetails } from "./components/protection-primitives";
 import { ExtensionBrandMark } from "./components/extension-brand-mark";
 import { ExtensionActivity } from "./extension-activity";
+import { ExtensionRunScope } from "./extension-run-scope";
 import { McpServerDefaults } from "./mcp-server-defaults";
 import { ProtectionTestLab } from "./protection-test-lab";
 
@@ -397,6 +398,7 @@ export function ProtectionModuleDetail(props: {
             </dl>
           </article>
           <McpServerDefaults extension={props.extension} />
+          <ExtensionRunScope cloudPolicy={orgManaged} localState={protectionView.effectiveState} />
         </section>
       ) : null}
       {activeTab === "permissions" ? <div id="protection-panel-permissions" role="tabpanel" aria-labelledby="protection-tab-permissions" className="mt-6">

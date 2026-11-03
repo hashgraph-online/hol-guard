@@ -11,6 +11,7 @@ recognised as local rather than as a package fetched for the occasion.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -42,6 +43,16 @@ WORKSPACE_NPM_CONFIG_PREFIX_CASE = "omp-native-workspace-npm-config-loglevel-pre
 # The other runner a Node project installs for itself. Mocha runs its suite once
 # and exits unless it is told to watch, so the plain launch is the routine one.
 WORKSPACE_MOCHA_CASE = "omp-native-workspace-npx-mocha"
+# The runner a Node project reaches for when it wants its tests to run as
+# separate processes. AVA runs its suite once and exits unless it is asked to
+# watch, so the plain launch is the routine one.
+WORKSPACE_AVA_CASE = "omp-native-workspace-npx-ava"
+# The three runners that take one pass and have nowhere else to go. Jasmine and
+# uvu have no watch mode at all and QUnit watches only when it is asked to, so
+# for each of them the plain launch is the routine one.
+WORKSPACE_JASMINE_CASE = "omp-native-workspace-npx-jasmine"
+WORKSPACE_QUNIT_CASE = "omp-native-workspace-npx-qunit"
+WORKSPACE_UVU_CASE = "omp-native-workspace-npx-uvu"
 # The same install, launched through the project's own name for one part of its
 # suite. A project with more than one kind of test names them `test:unit`,
 # `test:types` and so on, and npm runs whatever the entry holds, so the named
@@ -107,6 +118,10 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_VM_MODULES_PREFIX_CASE,
         WORKSPACE_NPM_CONFIG_PREFIX_CASE,
         WORKSPACE_MOCHA_CASE,
+        WORKSPACE_AVA_CASE,
+        WORKSPACE_JASMINE_CASE,
+        WORKSPACE_QUNIT_CASE,
+        WORKSPACE_UVU_CASE,
         WORKSPACE_NAMED_TEST_SCRIPT_CASE,
         WORKSPACE_SCRIPT_PASSED_OPTION_CASE,
         WORKSPACE_QUIET_SCRIPT_RUN_CASE,
@@ -206,6 +221,130 @@ _MOCHA_FILES = {
     "node_modules/mocha/bin/mocha.js": ("#!/usr/bin/env node\nrequire('./_mocha.js');\n"),
     "node_modules/mocha/bin/_mocha.js": (f"#!/usr/bin/env node\nconsole.log('{MOCHA_MARKER}');\n"),
 }
+
+
+_AVA_VERSION = "6.4.1"
+# The one line the workspace's own AVA prints, which only a real launch produces.
+AVA_MARKER = f"ava {_AVA_VERSION}"
+_AVA_FILES = {
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        f'  "devDependencies": {{\n    "ava": "{_AVA_VERSION}"\n  }}\n}}\n'
+    ),
+    "package-lock.json": (
+        '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+        '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+        '      "version": "0.0.0",\n      "devDependencies": {\n'
+        f'        "ava": "{_AVA_VERSION}"\n      }}\n    }},\n'
+        '    "node_modules/ava": {\n'
+        f'      "version": "{_AVA_VERSION}",\n      "dev": true,\n'
+        '      "bin": {\n        "ava": "entrypoints/cli.js"\n      }\n    }\n  }\n}\n'
+    ),
+    # AVA's own configuration file. It can name the files to run and how to
+    # compile them; it has no setting that turns watch mode on.
+    "ava.config.js": "export default {\n  files: ['test/**/*.js'],\n};\n",
+    "test/sample.js": ("const test = require('ava');\n\ntest('reads its own defaults', (t) => {\n  t.pass();\n});\n"),
+    "node_modules/ava/package.json": (
+        f'{{"name": "ava", "version": "{_AVA_VERSION}", "bin": {{"ava": "entrypoints/cli.js"}}}}\n'
+    ),
+    # AVA's launcher hands the run to the module beside it, the way the real
+    # package does once it has read the configuration the run needs.
+    "node_modules/ava/entrypoints/cli.js": ("#!/usr/bin/env node\nrequire('./main.js');\n"),
+    "node_modules/ava/entrypoints/main.js": (f"#!/usr/bin/env node\nconsole.log('{AVA_MARKER}');\n"),
+}
+
+
+def _single_pass_project(
+    name: str,
+    version: str,
+    entry: str,
+    spec: str,
+    marker: str,
+    passed: tuple[str, ...] = (),
+) -> dict[str, str]:
+    """A workspace that installed one single-pass runner, and nothing else.
+
+    Jasmine, QUnit and uvu install the same way: a dev dependency, a lockfile
+    that records it, one spec file, and a package whose declared `bin` is the
+    executable npm links into `node_modules/.bin`. Only the names and the entry
+    path differ, so one builder plants all three and each case keeps its own
+    line to print.
+
+    `passed` names the words the scenario's own command spells after the
+    runner. A launch that lost them would still start this executable, so the
+    marker is printed only when they all arrive; otherwise the line says which
+    run actually happened, and the case fails on the effect rather than on a
+    missing file.
+    """
+    return {
+        "package.json": (
+            '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+            f'  "devDependencies": {{\n    "{name}": "{version}"\n  }}\n}}\n'
+        ),
+        "package-lock.json": (
+            '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+            '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+            '      "version": "0.0.0",\n      "devDependencies": {\n'
+            f'        "{name}": "{version}"\n      }}\n    }},\n'
+            f'    "node_modules/{name}": {{\n'
+            f'      "version": "{version}",\n      "dev": true,\n'
+            f'      "bin": {{\n        "{name}": "{entry}"\n      }}\n    }}\n  }}\n}}\n'
+        ),
+        spec: f"// One spec for the workspace's own {name} to find.\n",
+        f"node_modules/{name}/package.json": (
+            f'{{"name": "{name}", "version": "{version}", "bin": {{"{name}": "{entry}"}}}}\n'
+        ),
+        f"node_modules/{name}/{entry}": (
+            "#!/usr/bin/env node\n"
+            f"const passed = {json.dumps(list(passed))};\n"
+            "const seen = process.argv.slice(2);\n"
+            "const whole = passed.every((word) => seen.includes(word));\n"
+            f"console.log(whole ? '{marker}' : '{name}: ' + JSON.stringify(seen));\n"
+        ),
+    }
+
+
+_JASMINE_VERSION = "5.12.0"
+# The one line the workspace's own Jasmine prints, which only a real launch produces.
+JASMINE_MARKER = f"jasmine {_JASMINE_VERSION}"
+# Jasmine reads this file for the specs to load; nothing in it can turn a watch on.
+_JASMINE_FILES = {
+    **_single_pass_project(
+        "jasmine",
+        _JASMINE_VERSION,
+        "bin/jasmine.js",
+        "spec/sample_spec.js",
+        JASMINE_MARKER,
+        passed=("--filter=auth",),
+    ),
+    "spec/support/jasmine.json": ('{\n  "spec_dir": "spec",\n  "spec_files": ["**/*[sS]pec.js"]\n}\n'),
+}
+
+_QUNIT_VERSION = "2.24.1"
+# The one line the workspace's own QUnit prints, which only a real launch produces.
+QUNIT_MARKER = f"qunit {_QUNIT_VERSION}"
+_QUNIT_FILES = _single_pass_project(
+    "qunit",
+    _QUNIT_VERSION,
+    "bin/qunit.js",
+    "test/sample.js",
+    QUNIT_MARKER,
+    passed=("test/",),
+)
+
+_UVU_VERSION = "0.5.6"
+# The one line the workspace's own uvu prints, which only a real launch produces.
+UVU_MARKER = f"uvu {_UVU_VERSION}"
+# uvu publishes its executable at the package root rather than under `bin`.
+_UVU_FILES = _single_pass_project(
+    "uvu",
+    _UVU_VERSION,
+    "bin.js",
+    "test/sample.js",
+    UVU_MARKER,
+    passed=("test",),
+)
+
 
 
 _ESLINT_VERSION = "9.33.0"
@@ -511,6 +650,10 @@ class _Install(NamedTuple):
 _JEST_INSTALL = _Install("jest", _FILES, RUNNER_MARKER)
 _INSTALLS = {
     WORKSPACE_MOCHA_CASE: _Install("mocha", _MOCHA_FILES, MOCHA_MARKER),
+    WORKSPACE_AVA_CASE: _Install("ava", _AVA_FILES, AVA_MARKER, entry="entrypoints/cli.js"),
+    WORKSPACE_JASMINE_CASE: _Install("jasmine", _JASMINE_FILES, JASMINE_MARKER),
+    WORKSPACE_QUNIT_CASE: _Install("qunit", _QUNIT_FILES, QUNIT_MARKER),
+    WORKSPACE_UVU_CASE: _Install("uvu", _UVU_FILES, UVU_MARKER, entry="bin.js"),
     WORKSPACE_SCRIPT_PASSED_OPTION_CASE: _Install("eslint", _ESLINT_FILES, ESLINT_MARKER),
     WORKSPACE_QUIET_SCRIPT_RUN_CASE: _Install("eslint", _QUIET_LINT_FILES, QUIET_LINT_MARKER),
     WORKSPACE_SCRIPT_RUN_ALIAS_CASE: _Install("eslint", _ALIAS_LINT_FILES, ALIAS_LINT_MARKER),
