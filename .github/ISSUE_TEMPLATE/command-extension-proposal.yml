@@ -55,6 +55,13 @@ body:
     validations:
       required: true
   - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current HOL Guard behavior
+      description: With the released CLI installed (`pipx install hol-guard`), paste redacted `hol-guard command explain '<command>'` results for one destructive example and its safe counterpart, and note your `hol-guard --version`. This shows what the current catalog already covers.
+    validations:
+      required: false
+  - type: textarea
     id: edge_cases
     attributes:
       label: Parser and composition edge cases

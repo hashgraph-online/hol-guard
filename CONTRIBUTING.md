@@ -38,12 +38,21 @@ not copy their registration pattern to add an extension.
 
 ## Fast path for command extensions
 
-1. Generate and review an offline Builder kit, then preview and apply it with
+1. Install the released CLI with `pipx install hol-guard` and connect it to the agent you work
+   with, for example `hol-guard install claude-code`. The released CLI includes the Extension
+   Builder, so generating and validating a kit needs no Rust toolchain. Run
+   `hol-guard command explain '<command>'` on a few commands from the tool you are covering to see
+   what the current catalog already does.
+2. Generate and review an offline Builder kit, then preview and apply it with
    `hol-guard extensions apply ... --repo .`.
-2. Run `scripts/prepare_extension_contribution.py` for the source and fixture, then verify the
+3. Run `scripts/prepare_extension_contribution.py` for the source and fixture, then verify the
    complete handoff with `hol-guard extensions handoff --repo . --source ... --fixture ...`.
-3. Open a PR using the **Command extension** template. Ready PRs receive Gitar's managed label,
-   which enables automatic repair for mechanical schema, binding, and generated-projection issues.
+4. Open a PR using the **Command extension** template, including its **Installed Guard check**.
+   Ready PRs receive Gitar's managed label, which enables automatic repair for mechanical schema,
+   binding, and generated-projection issues.
+5. After the extension ships in a release, turn it on and exercise it in your agent as described
+   in [Test with an installed Guard](docs/guard/extensions/contributing.md#test-with-an-installed-guard).
+   Coding agents should also follow the contribution steps in [AGENTS.md](AGENTS.md).
 
 The canonical source, portable fixture, and per-extension trust binding are contributor-owned inputs.
 The shared `contracts/extensions/build-trust-class-map.v1.json` is ignored build output. Rust builds
