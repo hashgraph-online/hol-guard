@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -14,10 +14,6 @@ if TYPE_CHECKING:
 SCHEMA_VERSION = "fleet-posture/v1"
 CAPABILITY = "fleet-posture/v1"
 MAX_PAYLOAD_BYTES = 65536
-MAX_TOOLS = 32
-MAX_BLIND_SPOTS = 8
-MAX_BLIND_SPOT_LENGTH = 80
-STALE_AFTER = timedelta(days=7)
 
 LAST_SENT_STATE_KEY = "fleet_posture_last"
 SETTINGS_STATE_KEY = "fleet_posture_settings"

@@ -47166,6 +47166,102 @@
       "expect": "allow"
     },
     {
+      "id": "nodeopts-vm-modules-prefix-npx-jest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NODE_OPTIONS=--experimental-vm-modules npx jest --ci"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "nodeopts-vm-modules-quoted-prefix-npm-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NODE_OPTIONS='--experimental-vm-modules' npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "nodeopts-vm-modules-and-heap-prefix-npx-vitest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NODE_OPTIONS=\"--experimental-vm-modules --max-old-space-size=4096\" npx vitest run"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-nodeopts-vm-modules-with-a-value-prefix-npm-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NODE_OPTIONS=--experimental-vm-modules=1 npm test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-nodeopts-vm-modules-then-preload-prefix-npm-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NODE_OPTIONS=\"--experimental-vm-modules --require=./hook.js\" npm test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-nodeopts-network-imports-prefix-npm-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "NODE_OPTIONS=--experimental-network-imports npm test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "goflags-count-prefix-go-test",
       "fix_area": "env-prefix",
       "harnesses": [
@@ -47340,6 +47436,250 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "puppeteer-skip-download-prefix-npx-jest",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "PUPPETEER_SKIP_DOWNLOAD=1 npx jest --ci"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "puppeteer-skip-download-prefix-npm-test",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "PUPPETEER_SKIP_DOWNLOAD=true npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "playwright-skip-browser-download-prefix-npm-test",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cypress-install-binary-off-prefix-npm-test",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "CYPRESS_INSTALL_BINARY=0 npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "electron-skip-binary-download-prefix-npm-test",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "browserslist-ignore-old-data-prefix-npm-test",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "BROWSERSLIST_IGNORE_OLD_DATA=1 npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "browserslist-disable-cache-prefix-npm-test",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "BROWSERSLIST_DISABLE_CACHE=1 npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sharp-ignore-global-libvips-prefix-npm-test",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "husky-skip-hooks-prefix-npm-test",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "HUSKY_SKIP_HOOKS=1 npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "eslint-flat-config-prefix-npx-eslint",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ESLINT_USE_FLAT_CONFIG=true npx eslint ."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "eslint-flat-config-lowercase-prefix-npm-run-lint",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "eslint_use_flat_config=false npm run lint"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-cypress-install-binary-url-prefix-npm-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "CYPRESS_INSTALL_BINARY=https://example.test/cypress.zip npm test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-eslint-flat-config-file-prefix-npm-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ESLINT_USE_FLAT_CONFIG=./eslint.config.js npm test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-puppeteer-executable-path-prefix-npm-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chrome npm test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-puppeteer-skip-download-longer-name-prefix-npm-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "PUPPETEER_SKIP_DOWNLOAD_DIR=1 npm test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-goflags-toolexec-prefix-go-test",

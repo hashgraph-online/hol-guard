@@ -31,6 +31,10 @@ WORKSPACE_NPM_EXEC_CASE = "omp-native-workspace-npm-exec-inert-option"
 # front of it. The setting only sizes the engine, so the run has to finish the
 # same way the unprefixed launch does.
 WORKSPACE_HEAP_PREFIX_CASE = "omp-native-workspace-node-options-heap-prefix"
+# The same install, launched with the flag an ESM suite needs in front of it.
+# The setting only turns on Node's module VM classes, so the run has to finish
+# the same way the unprefixed launch does.
+WORKSPACE_VM_MODULES_PREFIX_CASE = "omp-native-workspace-node-options-vm-modules-prefix"
 # The same install, launched with npm's own logging key written in front of
 # it. The setting only decides how much npm prints, so the run has to finish
 # the same way the unprefixed launch does.
@@ -89,12 +93,18 @@ WORKSPACE_TSX_NODE_TEST_CASE = "omp-native-workspace-npx-tsx-node-test"
 # at once. Its own name carries a manager's inside it, and it installs nothing:
 # every script it names is already in the project's manifest.
 WORKSPACE_RUN_ALL_CASE = "omp-native-workspace-npm-run-all-scripts"
+# The same install, launched with the switch that stops a browser dependency
+# fetching its own copy of Chrome. The setting carries one of two words and
+# names nothing to run, so the launch has to reach the runner the unprefixed
+# spelling reaches.
+WORKSPACE_SKIP_DOWNLOAD_PREFIX_CASE = "omp-native-workspace-puppeteer-skip-download-prefix"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
         WORKSPACE_NODE_ENTRY_CASE,
         WORKSPACE_NPM_EXEC_CASE,
         WORKSPACE_HEAP_PREFIX_CASE,
+        WORKSPACE_VM_MODULES_PREFIX_CASE,
         WORKSPACE_NPM_CONFIG_PREFIX_CASE,
         WORKSPACE_MOCHA_CASE,
         WORKSPACE_NAMED_TEST_SCRIPT_CASE,
@@ -109,6 +119,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_TSX_NODE_TEST_CASE,
         WORKSPACE_VITEST_FILTER_CASE,
         WORKSPACE_RUN_ALL_CASE,
+        WORKSPACE_SKIP_DOWNLOAD_PREFIX_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the

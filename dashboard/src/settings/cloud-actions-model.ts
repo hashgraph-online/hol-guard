@@ -20,6 +20,8 @@ const SITE_PATTERN = /^[A-Za-z0-9.-]{1,253}(?::\d{1,5})?$/;
 // Guard Cloud is reached over https; plain http is only accepted for this computer.
 const CLOUD_URL_PATTERN = /^(?:https:\/\/[A-Za-z0-9.-]{1,253}|http:\/\/(?:127\.0\.0\.1|localhost|host\.docker\.internal))(?::\d{1,5})?$/;
 const DEFAULT_CLOUD_URL = "https://hol.org";
+// Guard Cloud's pages sit at the site itself or under one short path such as /points.
+const CLOUD_BASE_PATH_PATTERN = /^(?:\/[a-z0-9-]{1,32})?$/;
 
 export type CloudActionsTone = "good" | "neutral" | "attention";
 
@@ -35,6 +37,8 @@ export type CloudActionsSignIn = {
   site: string | null;
   /** The Guard Cloud address to sign in to again; null when it is not known. */
   cloudUrl: string | null;
+  /** Where Guard Cloud's pages live for this sign-in; null when Guard does not recognise the site. */
+  cloudBaseUrl: string | null;
   signedInAt: string | null;
   expiresAt: string | null;
   state: string;
@@ -46,6 +50,12 @@ export type CloudActionsStatus = {
   staleAfterSeconds: number;
   nextCheckAllowedAt: string | null;
   signIns: CloudActionsSignIn[];
+};
+
+export type CloudActionsLink = {
+  label: string;
+  description: string;
+  href: string;
 };
 
 export type CloudActionsStateCopy = {
@@ -91,19 +101,27 @@ function normalizeCheck(value: unknown): CloudActionsCheck {
   };
 }
 
+function cloudBase(value: unknown, cloudUrl: string | null): string | null {
+  const base = text(value);
+  if (base === null || cloudUrl === null || !base.startsWith(cloudUrl)) return null;
+  return CLOUD_BASE_PATH_PATTERN.test(base.slice(cloudUrl.length)) ? base : null;
+}
+
 function normalizeSignIn(value: unknown): CloudActionsSignIn | null {
   if (!isRecord(value)) return null;
   const profile = text(value["profile"], PROFILE_PATTERN);
   const state = text(value["state"], /^[a-z_]{1,40}$/);
   if (profile === null || state === null) return null;
   const site = text(value["site"], SITE_PATTERN);
-  const cloudUrl = text(value["cloud_url"], CLOUD_URL_PATTERN);
+  const reported = text(value["cloud_url"], CLOUD_URL_PATTERN);
+  // The address must name the same site the row shows.
+  const cloudUrl = reported !== null && site !== null && reported.replace(/^https?:\/\//, "") === site ? reported : null;
   return {
     profile,
     workspace: text(value["workspace"], WORKSPACE_PATTERN),
     site,
-    // The address must name the same site the row shows.
-    cloudUrl: cloudUrl !== null && site !== null && cloudUrl.replace(/^https?:\/\//, "") === site ? cloudUrl : null,
+    cloudUrl,
+    cloudBaseUrl: cloudBase(value["cloud_base_url"], cloudUrl),
     signedInAt: moment(value["signed_in_at"]),
     expiresAt: moment(value["expires_at"]),
     state,
@@ -263,4 +281,37 @@ export function cloudActionsSummary(status: CloudActionsStatus, now: Date): stri
   const signedIn = count === 1 ? "1 sign-in" : `${count} sign-ins`;
   if (needsAttention === 0) return `${signedIn} on this computer.`;
   return `${signedIn} on this computer. ${needsAttention === 1 ? "1 needs" : `${needsAttention} need`} attention.`;
+}
+
+/**
+ * Guard Cloud pages for this sign-in's workspace, or none when the site or
+ * workspace is not known. Links carry only the workspace; Guard Cloud checks
+ * the member's own browser sign-in before showing anything.
+ */
+export function cloudActionsLinks(signIn: Pick<CloudActionsSignIn, "workspace" | "cloudBaseUrl">): CloudActionsLink[] {
+  if (signIn.workspace === null || signIn.cloudBaseUrl === null) return [];
+  const base = signIn.cloudBaseUrl;
+  const workspace = encodeURIComponent(signIn.workspace);
+  return [
+    {
+      label: "Review requests",
+      description: "Actions waiting for a decision. Approving one there never approves anything paused on this computer.",
+      href: `${base}/guard/review?workspaceId=${workspace}&tab=needs-review`,
+    },
+    {
+      label: "Action history",
+      description: "What Cloud actions did and who decided.",
+      href: `${base}/guard/evidence?workspaceId=${workspace}&tab=decisions&source=cloud`,
+    },
+    {
+      label: "Included actions",
+      description: "How many actions your plan includes and how many are left.",
+      href: `${base}/guard/settings?tab=billing&workspaceId=${workspace}#included-actions`,
+    },
+    {
+      label: "Connected accounts",
+      description: "The accounts Cloud actions can use for this workspace.",
+      href: `${base}/guard/settings?tab=integrations&workspaceId=${workspace}#connected-accounts`,
+    },
+  ];
 }

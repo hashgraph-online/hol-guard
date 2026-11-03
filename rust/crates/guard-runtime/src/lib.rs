@@ -234,6 +234,7 @@ mod consumer_mode_contract;
 mod consumer_outcome;
 mod consumer_result;
 mod consumer_url;
+mod contained_denial_note;
 #[cfg(unix)]
 mod contained_op;
 mod contained_output_match;
@@ -242,6 +243,7 @@ mod contained_test_request;
 mod contained_workspace_grant_plan;
 #[cfg(unix)]
 mod contained_workspace_sink;
+mod contained_workspace_sink_denial;
 mod contained_wrapper_plan_op;
 mod content_decode;
 mod content_sensitivity_op;
@@ -847,6 +849,7 @@ mod oci_bundle_op;
 #[cfg(test)]
 mod oci_bundle_vectors_tests;
 mod oci_path;
+mod omp_code_mode;
 mod omp_yield_input_scan;
 mod onefile_extraction_reclaim;
 mod onefile_extraction_removal;
@@ -864,6 +867,7 @@ mod openclaw_detect;
 mod openclaw_detect_tests;
 mod openclaw_mcp;
 mod openclaw_skills;
+mod opencode_command_replace;
 #[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
 #[path = "adapters/opencode_install_plan.rs"]

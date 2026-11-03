@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { HiMiniArrowPath, HiMiniCloud, HiMiniShieldCheck } from "react-icons/hi2";
+import { HiMiniArrowPath, HiMiniArrowTopRightOnSquare, HiMiniCloud, HiMiniShieldCheck } from "react-icons/hi2";
 
 import { checkCloudActionsNow, fetchCloudActionsStatus } from "./cloud-actions-api";
 import {
   cloudActionsCheckedCopy,
   cloudActionsCurrentState,
+  cloudActionsLinks,
   cloudActionsRetryAfterSeconds,
   cloudActionsSignInCommand,
   cloudActionsSignOutCommand,
@@ -37,6 +38,36 @@ function CommandLine({ label, command }: { label: string; command: string }) {
         {command}
       </code>
     </div>
+  );
+}
+
+function CloudPages({ signIn, headingId }: { signIn: CloudActionsSignIn; headingId: string }) {
+  const links = cloudActionsLinks(signIn);
+  if (links.length === 0) return null;
+  const pagesId = `${headingId}-pages`;
+  return (
+    <nav aria-labelledby={pagesId} className="mt-3">
+      <h5 id={pagesId} className="text-xs text-slate-600">
+        Open in Guard Cloud
+      </h5>
+      <ul className="mt-1 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+        {links.map((link) => (
+          <li key={link.label} className="min-w-0">
+            <a
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-brand-blue hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 sm:min-h-0"
+            >
+              {link.label}
+              <HiMiniArrowTopRightOnSquare aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+              <span className="sr-only">(opens in a new tab)</span>
+            </a>
+            <p className="text-xs text-slate-600">{link.description}</p>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -92,6 +123,7 @@ export function CloudActionsSignInRow({
       {copy.signInAgain ? (
         <CommandLine label="Sign in again in a terminal" command={cloudActionsSignInCommand(signIn)} />
       ) : null}
+      <CloudPages signIn={signIn} headingId={headingId} />
     </li>
   );
 }
@@ -174,7 +206,8 @@ export function CloudActionsSettingsView({
         ) : null}
         {status !== null ? (
           <p className="text-xs text-slate-600">
-            Included actions and connected accounts are shown in Guard Cloud. This computer does not receive them yet.
+            Included actions and connected accounts are kept in Guard Cloud, not on this computer. Guard Cloud asks you to
+            sign in to your account in the browser before it shows them.
           </p>
         ) : null}
       </section>

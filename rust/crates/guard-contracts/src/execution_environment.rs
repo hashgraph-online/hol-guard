@@ -16,12 +16,19 @@ pub const LIBRARY_SEARCH_PATH_NAMES: &[&str] = &[
     "DYLD_FRAMEWORK_PATH",
     "DYLD_FALLBACK_FRAMEWORK_PATH",
 ];
-/// `NODE_OPTIONS` flags that change diagnostics only. None of them loads code,
-/// reads a file or opens a port.
+/// `NODE_OPTIONS` flags that take no value and change only what the engine
+/// prints or which of its own APIs it exposes. None of them loads code, reads
+/// a file or opens a port.
+///
+/// `--experimental-vm-modules` is here because it unlocks `node:vm`'s module
+/// classes for the program to call, the way an ESM Jest run needs; it compiles
+/// nothing by itself, and a program that wanted to evaluate a string could
+/// already do so without it.
 const INERT_NODE_FLAGS: &[&str] = &[
     "no-warnings",
     "no-deprecation",
     "enable-source-maps",
+    "experimental-vm-modules",
     "trace-warnings",
     "trace-deprecation",
     "trace-uncaught",
@@ -34,10 +41,10 @@ const INERT_NODE_SIZES: &[&str] = &[
 ];
 
 /// Whether `value`, a `NODE_OPTIONS` value, holds only flags that size the
-/// heap or change diagnostics, such as `--max-old-space-size=8192`. A preload
-/// (`--require`, `--import`), a loader, an inspector or anything else is not
-/// inert, and neither is an empty value, quoting or a flag Node would read
-/// from a file.
+/// heap, change diagnostics or expose an engine API, such as
+/// `--max-old-space-size=8192`. A preload (`--require`, `--import`), a
+/// loader, an inspector or anything else is not inert, and neither is an
+/// empty value, quoting or a flag Node would read from a file.
 pub fn node_options_inert(value: &str) -> bool {
     let mut tokens = value
         .split(' ')
