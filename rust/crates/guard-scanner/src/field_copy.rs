@@ -195,6 +195,9 @@ mod tests {
             "password={password};",
             "password={password}+tail",
             "<Login token={session.user} />",
+            "<Field password = {hunter2production} />",
+            "<Field password = {password} />",
+            "password = {user.password}",
         ] {
             assert!(credential_assignment(text), "{text:?}");
         }
