@@ -162,6 +162,26 @@ def test_package_sync_does_not_treat_fd_merge_as_a_package_target(tmp_path: Path
     assert pnpm.targets == ()
 
 
+def test_parse_without_an_environment_sends_the_caller_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A parse with no environment still names the caller's home."""
+
+    from codex_plugin_scanner.guard import native_package_authority
+
+    seen: dict[str, object] = {}
+
+    def parse(*_args: object, **kwargs: object) -> None:
+        seen.update(kwargs)
+        return None
+
+    monkeypatch.setattr(native_package_authority, "package_intent_parse_native", parse)
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    assert parse_package_intent("npx create-vite@latest") is None
+    assert seen["environment"] == {"PATH": "/usr/bin", "HOME": str(home)}
+
+
 def test_parse_package_intent_exec_commands_are_classified_as_execute_requests() -> None:
     commands = {
         "npx create-vite@latest": ("npx", "create-vite", "latest"),

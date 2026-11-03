@@ -61,6 +61,7 @@ pub(super) fn normalized_command_segments(
         let redacted_tokens = redacted_segment(&raw_segment);
         let (modeled_cwd, validation_reason) =
             validate_shell_execution_segment(&execution_context, context_segment);
+        let npm_cwd = npm_config_directory(&execution_context, context_segment, &modeled_cwd);
         let (effective_path, path_source, effective_cwd, cwd_source) = match modeled_cwd {
             None => (
                 None,
@@ -95,7 +96,7 @@ pub(super) fn normalized_command_segments(
             &raw_segment,
             &normalized_tokens,
             inherited_environment,
-            effective_cwd.as_deref(),
+            npm_cwd.as_deref(),
             home_dir,
             project_npmrc_applies(&execution_context.segments, index),
         );
@@ -113,6 +114,31 @@ pub(super) fn normalized_command_segments(
         });
     }
     segments
+}
+
+/// Directory whose project `.npmrc` this segment's `npx` reads.
+///
+/// A trailing `}` marks the last segment incomplete so the commands after
+/// the group have no directory. The launch inside the group already ran in
+/// `effective_cwd`, and that is the directory npm reads.
+fn npm_config_directory(
+    context: &ShellExecutionContext,
+    segment: &ShellExecutionSegment,
+    modeled_cwd: &Option<PathBuf>,
+) -> Option<PathBuf> {
+    if modeled_cwd.is_some() {
+        return modeled_cwd.clone();
+    }
+    if segment.reason_code.as_deref() != Some(SHELL_CWD_UNRESOLVED_CONTROL_FLOW) {
+        return None;
+    }
+    if segment.effective_cwd.is_none() || segment.cwd_identity.is_none() {
+        return None;
+    }
+    let mut launched = segment.clone();
+    launched.complete = true;
+    launched.reason_code = None;
+    validate_shell_execution_segment(context, &launched).0
 }
 
 /// Whether npm still reads a project `.npmrc` for this segment.

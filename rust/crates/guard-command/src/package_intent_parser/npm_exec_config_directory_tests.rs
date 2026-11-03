@@ -141,6 +141,27 @@ fn a_cd_after_a_failed_cd_keeps_the_package_unnamed() {
 }
 
 #[test]
+fn a_brace_after_a_plain_command_keeps_the_pinned_runner() {
+    let (dir, project, environment) = project();
+    fs::create_dir_all(project.join("app")).unwrap();
+    let home = Path::new(&environment["HOME"]);
+    // `echo` succeeds, so the group runs. The closing `}` marks the `npx`
+    // segment incomplete even though that launch already has `app`.
+    let intent = parse_package_intent(
+        "echo start && { cd app && npx vitest run; }",
+        Some(&project),
+        Some(home),
+        None,
+        Some(&environment),
+    )
+    .expect("npx intent");
+
+    assert_eq!(intent.targets[0].package_name.as_deref(), Some("vitest"));
+    assert!(intent.targets[0].source_invalid_reason.is_none());
+    let _ = dir;
+}
+
+#[test]
 fn a_skipped_launch_does_not_read_home_config() {
     let (_dir, _project, environment) = project();
     let home = Path::new(&environment["HOME"]);
