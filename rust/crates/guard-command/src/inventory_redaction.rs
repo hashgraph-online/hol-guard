@@ -119,7 +119,7 @@ fn matches_secret_assignment(value: &str) -> bool {
 }
 
 /// `_is_sensitive_key(key)` with CPython's case folding.
-fn matches_sensitive_key(key: &str) -> bool {
+pub fn matches_sensitive_key(key: &str) -> bool {
     // `evidenceAuthority` names who vouches for trust evidence, not a
     // credential; only that exact key is exempt, as in `_is_sensitive_key`.
     if key.eq_ignore_ascii_case("evidenceAuthority") {
@@ -190,14 +190,18 @@ pub fn safe_json(value: &Value, parent_key: &str, parent_sensitive: bool) -> Val
 
 /// `_assert_serialized_inventory_payload_safe(payload)`.
 pub fn assert_serialized_inventory_payload_safe(payload: &Value) -> Result<(), String> {
-    let encoded = python_json(payload, DEFAULT_SEPARATORS);
-    if SERIALIZER_UNSAFE_PATH_RE.is_match(&encoded)
-        || matches_sensitive_value(&encoded)
-        || matches_secret_assignment(&encoded)
-    {
+    if !encoded_payload_is_safe(&python_json(payload, DEFAULT_SEPARATORS)) {
         return Err("Inventory snapshot serialization produced unsafe payload.".to_string());
     }
     Ok(())
+}
+
+/// Whether `json.dumps(payload, sort_keys=True)` text passes the export
+/// safety net: no private path, credential value or secret assignment left.
+pub fn encoded_payload_is_safe(encoded: &str) -> bool {
+    !(SERIALIZER_UNSAFE_PATH_RE.is_match(encoded)
+        || matches_sensitive_value(encoded)
+        || matches_secret_assignment(encoded))
 }
 
 /// `_safe_source_detail(run)`.

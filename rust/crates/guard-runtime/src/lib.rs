@@ -732,6 +732,7 @@ mod hook_process_spawn;
 mod hook_render_op;
 mod insights_share_payload;
 mod installation_continuity;
+mod inventory_export_redaction;
 mod inventory_item_classification_op;
 mod inventory_scan_findings_op;
 mod inventory_scan_targets_op;

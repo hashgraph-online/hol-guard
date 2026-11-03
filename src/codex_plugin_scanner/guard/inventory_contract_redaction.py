@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 from . import native_inventory_url_redaction as _native_url
 from .inventory_contract_constants import (
-    _SAFE_SERIALIZED_MARKERS,
     _SENSITIVE_VALUE_RE,
-    _SERIALIZER_REDACTED_VALUE,
-    _SERIALIZER_SECRET_ASSIGNMENT_RE,
-    _SERIALIZER_UNSAFE_PATH_RE,
     _is_sensitive_key,
 )
+
+# One native request redacts a value whose JSON text fits this budget. A larger
+# dict or list is split by member, so neither the request nor the answer nears
+# the resident's frame limits even when every string is escaped or redacted.
+_NATIVE_VALUE_BUDGET = 128 * 1024
 
 
 def redact_local_path(path: str | Path, *, home_dir: Path | None = None) -> str:
@@ -234,35 +236,53 @@ def _redact_command_value(value: str, home_dir: Path, workspace_dir: Path | None
     return _native_url.redact_command_value(value, home_dir, workspace_dir)
 
 
-def _sanitize_serializer_string(
-    value: str,
-    *,
-    parent_key: str = "",
-    parent_sensitive: bool = False,
-) -> str:
-    """Apply final string redaction before inventory serialization."""
-    if value in _SAFE_SERIALIZED_MARKERS:
-        return value
-    if parent_sensitive or (parent_key and _is_sensitive_key(parent_key)):
-        return _SERIALIZER_REDACTED_VALUE
-    if _SERIALIZER_UNSAFE_PATH_RE.search(value):
-        return _SERIALIZER_REDACTED_VALUE
-    if _SENSITIVE_VALUE_RE.search(value):
-        return _SERIALIZER_REDACTED_VALUE
-    if _SERIALIZER_SECRET_ASSIGNMENT_RE.search(value):
-        return _SERIALIZER_REDACTED_VALUE
-    return value
-
-
 def _assert_serialized_inventory_payload_safe(payload: object) -> None:
     """Reject serialized inventory that still violates the export safety contract."""
-    encoded = json.dumps(payload, sort_keys=True)
-    if (
-        _SERIALIZER_UNSAFE_PATH_RE.search(encoded)
-        or _SENSITIVE_VALUE_RE.search(encoded)
-        or _SERIALIZER_SECRET_ASSIGNMENT_RE.search(encoded)
-    ):
-        raise ValueError("Inventory snapshot serialization produced unsafe payload.")
+    for part in _payload_parts(payload):
+        answer = _native_export_redaction({"op": "assert_payload_safe", "payload": part})
+        safe = answer.get("safe")
+        if not isinstance(safe, bool):
+            raise _native_url.NativeInventoryUrlRedactionError("native_inventory_url_redaction_unavailable")
+        if not safe:
+            raise ValueError("Inventory snapshot serialization produced unsafe payload.")
+
+
+def _payload_parts(value: object) -> Iterator[str]:
+    """JSON texts within the request budget that, checked together, check the value.
+
+    Every match the safety patterns can make starts inside one encoded string
+    and needs nothing past its closing quote: the text between strings holds
+    only brackets, separators, numbers and literals, none of which a pattern
+    can start in or run through. An oversized container is therefore checked
+    as runs of its members, each key alone as the string JSON writes for it,
+    and each part finds exactly the matches the whole text holds. A string
+    over the budget goes alone, so the split always makes progress.
+    """
+    text = _json_text(value)
+    if len(text) <= _NATIVE_VALUE_BUDGET or not isinstance(value, (dict, list, tuple)):
+        yield text
+        return
+    members: list[object] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            (key_text,) = json.loads(_json_text({key: None}))
+            members.extend((key_text, item))
+    else:
+        members.extend(value)
+    batch: list[object] = []
+    size = 0
+    for member in members:
+        member_size = len(_json_text(member)) + 2
+        if member_size > _NATIVE_VALUE_BUDGET:
+            yield from _payload_parts(member)
+            continue
+        if batch and size + member_size > _NATIVE_VALUE_BUDGET:
+            yield _json_text(batch)
+            batch, size = [], 0
+        batch.append(member)
+        size += member_size
+    if batch:
+        yield _json_text(batch)
 
 
 def _safe_json(
@@ -272,24 +292,40 @@ def _safe_json(
     parent_sensitive: bool = False,
 ) -> object:
     """Normalize metadata into bounded JSON-compatible evidence."""
-    key_sensitive = parent_sensitive or bool(parent_key and _is_sensitive_key(parent_key))
-    if isinstance(value, dict):
-        return {
-            _sanitize_serializer_string(str(key)): _safe_json(
-                item,
-                parent_key=str(key),
-                parent_sensitive=key_sensitive,
-            )
-            for key, item in value.items()
-        }
-    if isinstance(value, (list, tuple)):
+    text = _json_text(value)
+    if len(text) > _NATIVE_VALUE_BUDGET and isinstance(value, dict):
+        key_sensitive = parent_sensitive or bool(parent_key and _is_sensitive_key(parent_key))
+        projected: dict[object, object] = {}
+        for key, item in value.items():
+            projected[_safe_json(str(key))] = _safe_json(item, parent_key=str(key), parent_sensitive=key_sensitive)
+        return projected
+    if len(text) > _NATIVE_VALUE_BUDGET and isinstance(value, (list, tuple)):
         return [_safe_json(item, parent_key=parent_key, parent_sensitive=parent_sensitive) for item in value]
-    if isinstance(value, Path):
-        return value.name
-    if isinstance(value, str):
-        return _sanitize_serializer_string(
-            value,
-            parent_key=parent_key,
-            parent_sensitive=parent_sensitive,
-        )
-    return value
+    answer = _native_export_redaction(
+        {"op": "safe_json", "value": text, "parent_key": parent_key, "parent_sensitive": parent_sensitive}
+    )
+    projected_text = answer.get("value")
+    if not isinstance(projected_text, str):
+        raise _native_url.NativeInventoryUrlRedactionError("native_inventory_url_redaction_unavailable")
+    return json.loads(projected_text)
+
+
+def _json_text(value: object) -> str:
+    """The value as the JSON text the native redaction reads; a path exports its name."""
+
+    def _path_name(item: object) -> object:
+        if isinstance(item, Path):
+            return item.name
+        raise TypeError(f"Object of type {type(item).__name__} is not JSON serializable")
+
+    return json.dumps(value, default=_path_name)
+
+
+def _native_export_redaction(args: dict[str, object]) -> dict[str, object]:
+    """Ask the native runtime for one export redaction answer."""
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        return native_runner_authority("inventory_export_redaction", args)
+    except (NativeRunnerAuthorityError, KeyError, TypeError) as error:
+        raise _native_url.NativeInventoryUrlRedactionError("native_inventory_url_redaction_unavailable") from error
