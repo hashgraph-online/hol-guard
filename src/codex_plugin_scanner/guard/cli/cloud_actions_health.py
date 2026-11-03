@@ -1,17 +1,19 @@
 """Live checks behind `cloud-actions status` and `cloud-actions doctor`.
 
-A saved sign-in says only what was true when it was made: Guard Cloud may
-have ended it since, the member may have lost access, or this computer may be
-offline. These checks ask Guard Cloud, and report what it answered:
+The `hol-guard connect` pairing says only what was true when this computer
+connected: Guard Cloud may have turned Cloud actions off since, the member may
+have lost access, or this computer may be offline. These checks ask Guard
+Cloud, and report what it answered:
 
-- the service check reads the public Cloud actions description (no sign-in
-  sent) and compares it with what the saved sign-in expects;
-- the connection check sends the saved access, and only to the Cloud actions
-  address saved at sign-in, which must sit on the same Guard Cloud. Redirects
-  are refused, so the access never follows a redirect elsewhere.
+- the service check reads the public Cloud actions description (nothing sent
+  but the request) and compares it with the address the pairing expects;
+- the connection check sends one AI tool's Cloud actions access, exchanged
+  from the pairing, to the Cloud actions server on the pairing's own Guard
+  Cloud. Redirects are refused, so the access never follows a redirect
+  elsewhere.
 
 Each check returns a stable state code and a message that is safe to print.
-Neither ever includes the saved access, a server reply body or a header value.
+Neither ever includes the access, a server reply body or a header value.
 """
 
 from __future__ import annotations
@@ -27,14 +29,14 @@ from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
 from ...version import __version__
 from ..mdm.network import ManagedNetworkError, managed_urlopen
-from .cloud_actions_oauth import CLOUD_ACTIONS_RESOURCE_PATH
-from .cloud_actions_session import CloudActionsProfile
+from .cloud_actions_access import CLOUD_ACTIONS_RESOURCE_PATH, CloudActionsPairing
+from .connect_cloud_actions import CLOUD_ACTIONS_RECONNECT_COMMAND
 
 HEALTH_TIMEOUT_SECONDS = 10
 _MAX_RESPONSE_BYTES = 64 * 1024
 _USER_AGENT = f"hol-guard/{__version__}"
 _WORKSPACE_HEADER = "X-Guard-Workspace-Id"
-# JSON-RPC "method not found": Guard Cloud accepted the sign-in but serves no actions yet.
+# JSON-RPC "method not found": Guard Cloud accepted the access but serves no actions yet.
 _METHOD_NOT_FOUND = -32601
 _PING_ID = "hol-guard-status"
 
@@ -72,12 +74,6 @@ class _UnreachableError(Exception):
 
 def checked_at(now: datetime | None = None) -> str:
     return (now or datetime.now(timezone.utc)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def resource_on_issuer(profile: CloudActionsProfile) -> bool:
-    """The saved Cloud actions address must be the one on the saved Guard Cloud."""
-
-    return profile.resource == f"{profile.issuer}{CLOUD_ACTIONS_RESOURCE_PATH}"
 
 
 # A reply cut off mid-body raises from the standard library (`IncompleteRead`) or,
@@ -124,12 +120,10 @@ def _decode_body(raw: bytes) -> object:
         return None
 
 
-def check_service(profile: CloudActionsProfile, *, timeout: float = HEALTH_TIMEOUT_SECONDS) -> HealthCheck:
-    """Compare Guard Cloud's public Cloud actions description with the saved sign-in."""
+def check_service(pairing: CloudActionsPairing, *, timeout: float = HEALTH_TIMEOUT_SECONDS) -> HealthCheck:
+    """Compare Guard Cloud's public Cloud actions description with what the pairing expects."""
 
-    if not resource_on_issuer(profile):
-        return HealthCheck("profile_damaged", "The saved sign-in names a Cloud actions address on another site.")
-    url = f"{profile.issuer}/.well-known/oauth-protected-resource{CLOUD_ACTIONS_RESOURCE_PATH}"
+    url = f"{pairing.origin}/.well-known/oauth-protected-resource{CLOUD_ACTIONS_RESOURCE_PATH}"
     request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
     try:
         answer = _send(request, timeout)
@@ -139,34 +133,24 @@ def check_service(profile: CloudActionsProfile, *, timeout: float = HEALTH_TIMEO
         return HealthCheck("not_turned_on", "Cloud actions are not turned on for this Guard Cloud.", 404)
     if answer.status != 200 or not isinstance(answer.body, dict):
         return HealthCheck("unexpected_answer", f"Guard Cloud answered HTTP {answer.status}.", answer.status)
-    if answer.body.get("resource") != profile.resource:
+    if answer.body.get("resource") != pairing.gateway_resource:
         return HealthCheck("changed", "Guard Cloud now describes a different Cloud actions address.", 200)
     supported = answer.body.get("scopes_supported")
     if not isinstance(supported, list):
         return HealthCheck("unexpected_answer", "Guard Cloud did not list the Cloud actions permissions.", 200)
-    missing = sorted(scope for scope in profile.scopes if scope not in supported)
-    if missing:
-        return HealthCheck(
-            "changed",
-            "Guard Cloud no longer offers every permission this sign-in holds. Sign in again.",
-            200,
-            (("scopes_missing", missing),),
-        )
-    return HealthCheck("current", "Guard Cloud offers Cloud actions as this sign-in expects.", 200)
+    if "gateway:invoke" not in supported:
+        return HealthCheck("changed", "Guard Cloud no longer offers Cloud actions to AI tools.", 200)
+    return HealthCheck("current", "Guard Cloud offers Cloud actions.", 200)
 
 
 def check_connection(
-    profile: CloudActionsProfile, access_token: str, *, timeout: float = HEALTH_TIMEOUT_SECONDS
+    pairing: CloudActionsPairing, access_token: str, workspace_id: str, *, timeout: float = HEALTH_TIMEOUT_SECONDS
 ) -> HealthCheck:
-    """Ask Guard Cloud whether it still accepts the saved sign-in for its workspace."""
+    """Ask Guard Cloud whether it accepts Cloud actions access exchanged from the pairing."""
 
-    if profile.is_expired():
-        return HealthCheck("sign_in_expired", "The saved sign-in has expired. Sign in again.")
-    if not resource_on_issuer(profile):
-        return HealthCheck("profile_damaged", "The saved sign-in names a Cloud actions address on another site.")
     body = json.dumps({"jsonrpc": "2.0", "id": _PING_ID, "method": "ping"}).encode()
     request = urllib.request.Request(
-        profile.resource,
+        pairing.gateway_url,
         data=body,
         method="POST",
         headers={
@@ -174,7 +158,7 @@ def check_connection(
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
             "User-Agent": _USER_AGENT,
-            _WORKSPACE_HEADER: profile.workspace_id,
+            _WORKSPACE_HEADER: workspace_id,
         },
     )
     try:
@@ -187,18 +171,22 @@ def check_connection(
     if status == 501 and _rpc_error_code(answer.body) == _METHOD_NOT_FOUND:
         return HealthCheck(
             "connected",
-            "Guard Cloud accepted this sign-in. Actions are not available on this Guard Cloud yet.",
+            "Guard Cloud accepted this computer. Actions are not available on this Guard Cloud yet.",
             status,
             (("actions", "not_available_yet"),),
         )
     if status == 401:
-        return HealthCheck("sign_in_again", "Guard Cloud no longer accepts this sign-in. Sign in again.", status)
+        return HealthCheck(
+            "reconnect", f"Guard Cloud no longer accepts this computer. Run {CLOUD_ACTIONS_RECONNECT_COMMAND}.", status
+        )
     if status == 403:
         return HealthCheck(
-            "not_permitted", "Guard Cloud accepted the sign-in, but this member may not use Cloud actions.", status
+            "not_permitted", "Guard Cloud accepted this computer, but this member may not use Cloud actions.", status
         )
     if status == 400:
-        return HealthCheck("workspace_mismatch", "Guard Cloud refused the workspace this sign-in names.", status)
+        return HealthCheck(
+            "workspace_mismatch", "Guard Cloud refused the workspace this computer is connected to.", status
+        )
     if status == 404:
         return HealthCheck("not_turned_on", "Cloud actions are not turned on for this Guard Cloud.", status)
     return HealthCheck("unexpected_answer", f"Guard Cloud answered HTTP {status}.", status)
@@ -209,12 +197,12 @@ def _classify_ping_reply(body: object, status: int) -> HealthCheck:
 
     if isinstance(body, dict) and body.get("jsonrpc") == "2.0":
         if "result" in body and body.get("id") == _PING_ID:
-            return HealthCheck("connected", "Guard Cloud accepted this sign-in.", status, (("actions", "available"),))
+            return HealthCheck("connected", "Guard Cloud accepted this computer.", status, (("actions", "available"),))
         reply_id = body.get("id")
         if _rpc_error_code(body) == _METHOD_NOT_FOUND and (reply_id is None or reply_id == _PING_ID):
             return HealthCheck(
                 "connected",
-                "Guard Cloud accepted this sign-in. Actions are not available on this Guard Cloud yet.",
+                "Guard Cloud accepted this computer. Actions are not available on this Guard Cloud yet.",
                 status,
                 (("actions", "not_available_yet"),),
             )

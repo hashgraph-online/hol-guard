@@ -196,6 +196,8 @@ def _run_guard_connect_command(
         machine_label=machine_label if headless else None,
         home_dir=context.home_dir if context is not None else None,
         workspace_dir=context.workspace_dir if context is not None else workspace,
+        cloud_workspace_id=getattr(args, "cloud_workspace", None),
+        cloud_actions_declined=bool(getattr(args, "no_cloud_actions", False)),
     )
     if payload is None:
         return exit_code

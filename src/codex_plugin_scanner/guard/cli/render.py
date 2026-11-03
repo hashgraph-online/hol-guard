@@ -1981,6 +1981,12 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
         repair_message = payload.get("repair_message")
         if isinstance(repair_message, str) and repair_message.strip():
             body.add_row("Repair note", repair_message)
+        cloud_actions = payload.get("cloud_actions")
+        if isinstance(cloud_actions, dict):
+            body.add_row("Cloud actions", str(cloud_actions.get("message") or cloud_actions.get("status") or "unknown"))
+        cloud_actions_problem = payload.get("cloud_actions_problem")
+        if isinstance(cloud_actions_problem, str) and cloud_actions_problem.strip():
+            body.add_row("Needs attention", cloud_actions_problem)
         sync_payload = payload.get("sync")
         should_render_sync_counts = False
         if isinstance(sync_payload, dict):

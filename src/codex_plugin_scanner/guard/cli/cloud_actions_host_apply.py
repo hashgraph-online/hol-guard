@@ -28,6 +28,7 @@ import os
 import stat
 import tempfile
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -57,7 +58,7 @@ class HostConfigBackup:
 
     ai_tool: str
     path: Path
-    url: str
+    entry: Mapping[str, object]
     replaced_entry: bool
     existed: bool
     mode: int | None
@@ -204,9 +205,7 @@ def _undo_entry(backup: HostConfigBackup, *, current: bytes | None, before: byte
     try:
         if current is None:
             raise ValueError("missing")
-        restored, entry_removed = render_entry_undo(
-            backup.ai_tool, current=current, written_url=backup.url, prior=before
-        )
+        restored, entry_removed = render_entry_undo(backup.ai_tool, current=current, written=backup.entry, prior=before)
     except ValueError:
         raise HostConfigWriteError(
             "changed_since_apply",
@@ -383,7 +382,7 @@ def _save_backup(plan: HostConfigPlan, *, guard_home: Path, mode: int | None) ->
         backup = HostConfigBackup(
             ai_tool=plan.ai_tool,
             path=_absolute(plan.path),
-            url=plan.url,
+            entry=plan.entry,
             replaced_entry=plan.action == "update",
             existed=plan.before is not None,
             mode=mode,
@@ -414,7 +413,7 @@ def _write_record(backup: HostConfigBackup, *, after_sha256: str) -> None:
         "format": _BACKUP_FORMAT,
         "ai_tool": backup.ai_tool,
         "path": str(backup.path),
-        "url": backup.url,
+        "entry": dict(backup.entry),
         "replaced_entry": backup.replaced_entry,
         "existed": backup.existed,
         "mode": backup.mode,
@@ -455,9 +454,10 @@ def _load_backup(record_file: Path) -> HostConfigBackup | None:
         return None
     if not isinstance(raw, dict) or raw.get("format") != _BACKUP_FORMAT:
         return None
-    path, url, copy, mode = raw.get("path"), raw.get("url"), raw.get("copy"), raw.get("mode")
+    path, copy, mode = raw.get("path"), raw.get("copy"), raw.get("mode")
     after, before = raw.get("after_sha256"), raw.get("before_sha256")
-    if not isinstance(path, str) or not isinstance(url, str) or not isinstance(after, str):
+    entry = _recorded_entry(raw)
+    if not isinstance(path, str) or entry is None or not isinstance(after, str):
         return None
     if not isinstance(raw.get("ai_tool"), str):
         return None
@@ -466,7 +466,7 @@ def _load_backup(record_file: Path) -> HostConfigBackup | None:
     return HostConfigBackup(
         ai_tool=str(raw["ai_tool"]),
         path=Path(path),
-        url=url,
+        entry=entry,
         replaced_entry=raw.get("replaced_entry") is True,
         existed=raw.get("existed") is True,
         mode=mode if isinstance(mode, int) and 0 <= mode <= 0o7777 else None,
@@ -475,6 +475,16 @@ def _load_backup(record_file: Path) -> HostConfigBackup | None:
         record_file=record_file,
         copy_file=None if copy is None else record_file.parent / copy,
     )
+
+
+def _recorded_entry(raw: Mapping[str, object]) -> dict[str, object] | None:
+    """The entry Guard wrote; records from an earlier alpha hold only its address."""
+
+    entry = raw.get("entry")
+    if isinstance(entry, dict) and all(isinstance(key, str) for key in entry):  # pyright: ignore[reportUnknownVariableType]
+        return dict(entry)  # pyright: ignore[reportUnknownArgumentType]
+    url = raw.get("url")
+    return {"url": url} if entry is None and isinstance(url, str) else None
 
 
 def _absolute(path: Path) -> Path:
