@@ -39,6 +39,19 @@ pub(crate) fn local_mocha_entry(argument: &str) -> bool {
         || local_bin_entry(argument, "mocha")
 }
 
+/// AVA's installed entry points. AVA 6 declares `entrypoints/cli.js`, AVA 4
+/// and 5 published the same entry as `entrypoints/cli.mjs`, and AVA 3 kept it
+/// at `cli.js`. The sink runs whichever of them this workspace holds, so
+/// reading only the current spelling would send a working
+/// `node node_modules/ava/entrypoints/cli.mjs` to review while the `npx ava`
+/// beside it runs. The installer's link to that entry names the same run.
+pub(crate) fn local_ava_entry(argument: &str) -> bool {
+    local_package_entry(argument, "ava/entrypoints/cli.js")
+        || local_package_entry(argument, "ava/entrypoints/cli.mjs")
+        || local_package_entry(argument, "ava/cli.js")
+        || local_bin_entry(argument, "ava")
+}
+
 /// Jest's installed entry point, and the link its installer writes beside it.
 /// `jest-cli` publishes the executable Jest's own `bin` field points at, and
 /// `node_modules/.bin/jest` is the link to it, so a call that hands either to
@@ -51,7 +64,10 @@ pub(crate) fn local_jest_entry(argument: &str) -> bool {
 /// this path starts the workspace's own runner, whichever of the three it is.
 pub(crate) fn local_runner_entry(argument: &str) -> bool {
     let entry = argument.replace('\\', "/");
-    local_vitest_entry(&entry) || local_jest_entry(&entry) || local_mocha_entry(&entry)
+    local_vitest_entry(&entry)
+        || local_jest_entry(&entry)
+        || local_mocha_entry(&entry)
+        || local_ava_entry(&entry)
 }
 
 /// Whether a call hands Bun one of those entry points as the file to run.
@@ -344,9 +360,10 @@ fn bun_runner_invocation(
 #[path = "contained_argv_runner_calls.rs"]
 mod runner_calls;
 pub(crate) use runner_calls::{
-    bun_test_runs_once, bun_test_script_once, contained_runner_call, jest_contained_call,
-    jest_runs_once, mocha_contained_call, mocha_runs_once, tsx_runner_flag_count,
-    tsx_runner_test_mode, vitest_runs_once, workspace_test_script,
+    ava_contained_call, ava_runs_once, bun_test_runs_once, bun_test_script_once,
+    contained_runner_call, jest_contained_call, jest_runs_once, mocha_contained_call,
+    mocha_runs_once, tsx_runner_flag_count, tsx_runner_test_mode, vitest_runs_once,
+    workspace_test_script,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
@@ -383,6 +400,7 @@ fn runner_tail(arguments: &[String]) -> Option<(&'static str, Vec<String>)> {
             match tool.as_str() {
                 "jest" => "jest",
                 "mocha" => "mocha",
+                "ava" => "ava",
                 _ => "vitest",
             },
             rest.to_vec(),
@@ -418,6 +436,14 @@ fn runner_tail_or_error(
             Some("mocha") => Err(RestrictedPytestError::new(
                 VITEST_INVALID,
                 "Protected Mocha reads its configuration and modules from this workspace.",
+            )),
+            Some("ava") if !ava_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected AVA requires a run that does not watch.",
+            )),
+            Some("ava") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected AVA reads its configuration and modules from this workspace.",
             )),
             _ => invalid_vitest(),
         },
@@ -612,7 +638,7 @@ pub fn contained_runner_invocation(
             args.to_vec()
         } else if let Some(args) = manager_exec_tool(&argv) {
             args.to_vec()
-        } else if matches!(name, "vitest" | "jest" | "mocha") {
+        } else if matches!(name, "vitest" | "jest" | "mocha" | "ava") {
             let mut call = vec![name.to_owned()];
             call.extend_from_slice(&argv[1..]);
             call
@@ -628,6 +654,8 @@ pub fn contained_runner_invocation(
                 "jest"
             } else if local_mocha_entry(&entry) {
                 "mocha"
+            } else if local_ava_entry(&entry) {
+                "ava"
             } else {
                 return invalid_vitest();
             };
@@ -864,7 +892,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let bun_test = bun_test_invocation(command) || bun_test_script_invocation(command);
     let entries = command.iter().skip(1).take(2);
     let vitest = !command.is_empty()
-        && (matches!(name, "bunx" | "npx" | "vitest" | "jest" | "mocha")
+        && (matches!(name, "bunx" | "npx" | "vitest" | "jest" | "mocha" | "ava")
             || manager_exec_runner(command).is_some()
             || bun.is_some()
             || bun_runner_entry_launch(command)
@@ -875,6 +903,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                     local_vitest_entry(&entry)
                         || local_jest_entry(&entry)
                         || local_mocha_entry(&entry)
+                        || local_ava_entry(&entry)
                 })));
     let node_tool = bun.is_none()
         && !bun_test

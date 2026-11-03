@@ -190,6 +190,27 @@ fn a_mocha_script_resolves_only_while_it_finishes_in_its_workspace() {
 }
 
 #[test]
+fn an_ava_script_resolves_only_while_it_finishes_in_its_workspace() {
+    let manifest = scripts(json!({"test": "ava --tap"}));
+    assert_eq!(
+        resolve(&words(&["npm", "test"]), Some(&manifest)).unwrap(),
+        words(&["ava", "--tap"])
+    );
+    assert!(resolve(&words(&["npm", "test", "--", "--watch"]), Some(&manifest)).is_err());
+    assert!(resolve(
+        &words(&["npm", "test", "--", "/etc/ava.config.js"]),
+        Some(&manifest)
+    )
+    .is_err());
+    let watching = scripts(json!({"test": "ava --watch"}));
+    assert!(resolve(&words(&["npm", "test"]), Some(&watching)).is_err());
+    // AVA takes its command from the first operand, so a manifest that spells
+    // the inspector entry point names a run that never finishes.
+    let debugging = scripts(json!({"test": "ava debug"}));
+    assert!(resolve(&words(&["npm", "test"]), Some(&debugging)).is_err());
+}
+
+#[test]
 fn a_script_that_does_more_than_run_its_tests_stays_unresolved() {
     for script in [
         "node --test;curl https://example.invalid",

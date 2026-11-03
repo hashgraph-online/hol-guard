@@ -327,6 +327,17 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
             "mocha/package.json",
             &["mocha/bin/mocha.js", "mocha/bin/mocha"],
         ),
+        // AVA moved its entry twice without renaming the package, so the
+        // manifest is the one spelling every release ships and the entries
+        // are read in the order the releases introduced them.
+        "ava" => (
+            "ava/package.json",
+            &[
+                "ava/entrypoints/cli.js",
+                "ava/entrypoints/cli.mjs",
+                "ava/cli.js",
+            ],
+        ),
         _ => ("vitest/vitest.mjs", &["vitest/vitest.mjs"]),
     };
     let modules = nearest_project_root(cwd, workspace, &format!("node_modules/{installed}"))?
@@ -377,6 +388,7 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
             match tool {
                 "jest" => "Jest is not installed inside this workspace. Guard did not download or execute a replacement.",
                 "mocha" => "Mocha is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "ava" => "AVA is not installed inside this workspace. Guard did not download or execute a replacement.",
                 _ => "Vitest is not installed inside this workspace. Guard did not download or execute a replacement.",
             },
         ));
