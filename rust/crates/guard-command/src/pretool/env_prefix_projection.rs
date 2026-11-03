@@ -234,7 +234,9 @@ fn strip_prefixes(
         let token = &tokens[index];
         if let Some((name, value)) = shell_assignment(chars, token) {
             let reviewed = setting.is_some();
-            if !(literal_word(chars, token) || reviewed && private_temp_word(chars, token)) {
+            if !(literal_assignment_word(chars, token, name)
+                || reviewed && private_temp_word(chars, token))
+            {
                 return None;
             }
             if !(inert_assignment(name, value)
@@ -304,7 +306,11 @@ fn strip_env_options(
 ) -> Option<usize> {
     while index < tokens.len() && !tokens[index].is_control {
         let token = &tokens[index];
-        if !literal_word(chars, token) {
+        let literal = match assignment(token) {
+            Some((name, _)) => literal_assignment_word(chars, token, name),
+            None => literal_word(chars, token),
+        };
+        if !literal {
             return None;
         }
         let value = token.value.as_str();
@@ -370,6 +376,33 @@ fn shell_assignment<'t>(chars: &[char], token: &'t ShellToken) -> Option<(&'t st
 /// The raw word has no expansion, substitution, glob or escape.
 fn literal_word(chars: &[char], token: &ShellToken) -> bool {
     literal_chars(&chars[token.start..token.end])
+}
+
+/// [`literal_word`] for an assignment, reading its value the way a shell does.
+/// A shell applies tilde, parameter, command and arithmetic expansion and
+/// quote removal to an assignment's value, but never field splitting or
+/// pathname expansion, so `DEBUG=app:*` hands the program the four characters
+/// `app:*`. Reading them as a glob refused to project a setting that changes
+/// nothing about which program runs, and an unprojected prefix stops the
+/// command extensions from evaluating at all. The name and its `=` are still
+/// read as any other word; only the value carries the wider set.
+fn literal_assignment_word(chars: &[char], token: &ShellToken, name: &str) -> bool {
+    let raw = &chars[token.start..token.end];
+    let split = name.len() + 1;
+    if raw.len() < split
+        || raw[split - 1] != '='
+        || !raw[..name.len()].iter().copied().eq(name.chars())
+    {
+        return literal_word(chars, token);
+    }
+    literal_chars(&raw[..split]) && raw[split..].iter().copied().all(literal_value_character)
+}
+
+/// A character a shell leaves alone inside an assignment's value. `(` and `)`
+/// stay out because they open an array assignment rather than a scalar, and
+/// `~` and `!` stay out because the shell does expand those.
+fn literal_value_character(character: char) -> bool {
+    matches!(character, '*' | '?' | '[' | ']' | '{' | '}') || literal_chars(&[character])
 }
 
 /// The raw word's only expansions are `$TMPDIR`, `${TMPDIR}` or
@@ -472,7 +505,7 @@ fn inert_assignment(name: &str, value: &str) -> bool {
 /// value screen in `env_prefix_values` free to say so.
 fn ordinary_project_setting(name: &str, value: &str) -> bool {
     inert_tool_setting(name, value)
-        || plain_scalar(value)
+        || plain_project_value(value)
             && crate::command_compatibility::environment::ordinary_setting_name(name)
 }
 
@@ -488,6 +521,21 @@ fn plain_scalar(value: &str) -> bool {
         && value
             .chars()
             .all(|character| character.is_ascii_alphanumeric() || "._:+,-".contains(character))
+}
+
+/// [`plain_scalar`] widened by the pathname and brace characters a shell
+/// leaves alone in an assignment's value, for a setting whose name is already
+/// an ordinary one. `DEBUG=app:*` names a debug namespace the program itself
+/// matches, and `npm_config_*`, credential, endpoint and code-loading names
+/// never reach here, so the characters add no reach. The approval binding in
+/// [`bindable_setting`] keeps the narrower set: a bound retry must run the
+/// text that was reviewed.
+fn plain_project_value(value: &str) -> bool {
+    value.len() <= MAX_SCALAR_CHARS
+        && !value.starts_with('-')
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || "._:+,-*?[]{}".contains(character)
+        })
 }
 
 /// Unsetting removes context; only names whose absence changes which config

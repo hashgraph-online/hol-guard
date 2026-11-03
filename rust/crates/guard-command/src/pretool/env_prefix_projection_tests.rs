@@ -538,3 +538,44 @@ fn a_screened_build_or_test_setting_is_removed_in_place() {
         assert_eq!(project(command), None, "{command}");
     }
 }
+
+#[test]
+fn a_pattern_in_a_setting_value_is_the_text_the_program_reads() {
+    for (command, expected) in [
+        // The control: the same setting without a pattern already projects.
+        ("DEBUG=app:main npx jest --ci", "npx jest --ci"),
+        ("DEBUG=app:* npx jest --ci", "npx jest --ci"),
+        ("DEBUG=app:* npm test", "npm test"),
+        ("DEBUG='app:*' npm test", "npm test"),
+        ("DEBUG=\"app:*,db:*\" npm test", "npm test"),
+        ("DEBUG=app:{a,b} npm test", "npm test"),
+        ("DEBUG=app:[ab] npm test", "npm test"),
+        ("DEBUG=app:? npm test", "npm test"),
+        ("env DEBUG=app:* npm test", "npm test"),
+        // A heap prefix beside the pattern used to leave the whole prefix
+        // unprojected, which stops the command extensions evaluating at all.
+        (
+            "NODE_OPTIONS=--no-warnings DEBUG=app:* npm test",
+            "npm test",
+        ),
+    ] {
+        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+    }
+}
+
+#[test]
+fn a_setting_value_the_shell_would_expand_is_still_not_projected() {
+    for command in [
+        "DEBUG=$(id) npm test",
+        "DEBUG=$HOME npm test",
+        "DEBUG=`id` npm test",
+        "DEBUG=~/app npm test",
+        "DEBUG=a\\*b npm test",
+        "DEBUG=app:!a npm test",
+        // A pattern does not make a steering name ordinary.
+        "PATH=/tmp/* npm test",
+        "NODE_OPTIONS=--require=./*.js npm test",
+    ] {
+        assert_eq!(project(command), None, "{command}");
+    }
+}
