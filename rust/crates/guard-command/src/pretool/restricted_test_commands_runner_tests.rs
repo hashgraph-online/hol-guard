@@ -461,9 +461,10 @@ fn a_tap_borp_poku_or_lab_entry_reads_as_the_project_runner() {
 
 #[test]
 fn a_tap_borp_poku_or_lab_run_inside_its_workspace_is_contained() {
-    // tap and lab cannot watch at all -- tap's watching lives in its `repl`
-    // command -- and borp and poku watch only when the flag is on the line,
-    // so the plain call is the contained one for each of them.
+    // lab cannot watch at all, and tap, borp and poku watch only when the
+    // flag is on the line, so the plain call is the contained one for each
+    // of them. borp's reporter writes a file only when its value carries a
+    // colon destination, so a plain reporter name stays readable.
     for command in [
         "npx tap",
         "tap",
@@ -481,6 +482,11 @@ fn a_tap_borp_poku_or_lab_run_inside_its_workspace_is_contained() {
         "npx lab",
         "npx lab -t 100",
         "npx lab -r console -o stdout",
+        "npx lab -L",
+        "npx borp --reporter spec",
+        "npx borp -r spec",
+        "npx borp --reporter=tap:stdout",
+        "npx borp --reporter tap:stderr",
     ] {
         assert_eq!(
             reason(command),
@@ -536,7 +542,31 @@ fn a_tap_borp_poku_or_lab_word_that_leaves_the_run_keeps_its_review() {
         "npx poku --denoAllow=net",
         "npx poku --denoDeny=env",
         "npx lab --inspect",
+        "npx lab --inspect-brk",
+        "npx lab -L --lint-fix",
         "npx lab --coverage-path /etc",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_tap_watch_or_a_borp_report_destination_keeps_its_review() {
+    // tap declares `watch` as a flag with the short `-w`, so a tap call that
+    // names it runs the suite and then keeps re-running it, exactly as borp's
+    // and poku's do. borp reads a colon in a reporter value as a file to
+    // write, which the read-only route carries no root for; `stdout` and
+    // `stderr` name a stream instead, so they stay readable.
+    for command in [
+        "npx tap --watch",
+        "npx tap -w",
+        "npx tap -w test/unit.js",
+        "npx tap -wj4",
+        "node node_modules/tap/bin/run.js --watch",
+        "npx borp --reporter=tap:results.txt",
+        "npx borp --reporter tap:results.txt",
+        "npx borp -r tap:results.txt",
+        "npx borp -rtap:results.txt",
     ] {
         assert_eq!(reason(command), None, "{command}");
     }

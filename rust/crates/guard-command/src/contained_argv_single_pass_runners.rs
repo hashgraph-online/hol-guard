@@ -117,7 +117,54 @@ pub(crate) fn tsd_contained_call(arguments: &[String]) -> bool {
 /// True when a borp call both runs its tests once and takes everything it
 /// loads from the workspace.
 pub(crate) fn borp_contained_call(arguments: &[String]) -> bool {
-    borp_runs_once(arguments) && reads_its_own_workspace(arguments)
+    borp_runs_once(arguments)
+        && borp_writes_no_report(arguments)
+        && reads_its_own_workspace(arguments)
+}
+
+/// True when no reporter on a borp line sends its output to a file.
+///
+/// borp spells a reporter as `--reporter`, or `-r`, and reads a colon in the
+/// value as a file destination: `--reporter tap:results.txt` writes the run's
+/// output to that path. The read-only route carries no write root, so the
+/// report the caller asked for cannot be produced and the run fails on a
+/// permission the admission never covered. `stdout` and `stderr` are the two
+/// destinations that name a stream rather than a file, so they stay readable.
+pub(crate) fn borp_writes_no_report(arguments: &[String]) -> bool {
+    let mut expecting_reporter = false;
+    for argument in arguments {
+        if expecting_reporter {
+            expecting_reporter = false;
+            if reporter_names_a_file(argument) {
+                return false;
+            }
+            continue;
+        }
+        if option_name(argument) == "reporter" || argument == "-r" {
+            match argument.split_once('=') {
+                Some((_, value)) => {
+                    if reporter_names_a_file(value) {
+                        return false;
+                    }
+                }
+                None => expecting_reporter = true,
+            }
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("-r") {
+            if !value.is_empty() && !value.starts_with('-') && reporter_names_a_file(value) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Whether a reporter value sends its output somewhere other than a stream.
+fn reporter_names_a_file(value: &str) -> bool {
+    value
+        .rsplit_once(':')
+        .is_some_and(|(_, destination)| !matches!(destination, "stdout" | "stderr"))
 }
 
 /// borp runs once unless a watch is named, and it has no commands: every
@@ -194,15 +241,21 @@ pub(crate) fn lab_contained_call(arguments: &[String]) -> bool {
     lab_runs_once(arguments) && reads_its_own_workspace(arguments)
 }
 
-/// lab has no watch mode and no commands, so the one word that stops a call
-/// being a test run is `--inspect`, which starts the suite under Node's
-/// debugger and holds the process open on a listening port. Its other
-/// options name a reporter, a linter, a transform, an output file or a
-/// pattern, and those are paths the shared workspace screen answers for.
+/// lab has no watch mode and no commands, so the words that stop a call
+/// being a single read-only pass are the two debugger spellings and the
+/// linter's fix pass. `--inspect` and `--inspect-brk` start the suite under
+/// Node's debugger and hold the process open on a listening port, and
+/// `--lint-fix` asks the linter to rewrite the sources it reads, which the
+/// read-only route has no roots for. Its other options name a reporter, a
+/// linter, a transform, an output file or a pattern, and those are paths the
+/// shared workspace screen answers for.
 pub(crate) fn lab_runs_once(arguments: &[String]) -> bool {
-    !arguments
-        .iter()
-        .any(|argument| option_name(argument) == "inspect")
+    !arguments.iter().any(|argument| {
+        matches!(
+            option_name(argument).as_str(),
+            "inspect" | "inspectbrk" | "lintfix"
+        )
+    })
 }
 
 /// True when a tap call runs its tests once, sets no environment for them,
@@ -213,9 +266,13 @@ pub(crate) fn tap_contained_call(arguments: &[String]) -> bool {
         && reads_its_own_workspace(arguments)
 }
 
-/// tap has no watch flag -- watching lives in its `repl` command -- so what
-/// this reading names is the commands that do something other than run the
-/// suite and the options that leave the run.
+/// What this reading names is the watch, the commands that do something
+/// other than run the suite, and the options that leave the run.
+///
+/// tap declares `watch` as a flag with the short `-w`: it runs the suite once
+/// and then keeps re-running it as files change, so the call never finishes
+/// inside the sink. The name alone is the answer, as it is for borp and
+/// QUnit, and a short group carries it the same way.
 ///
 /// tap takes its command from the first positional word and falls back to
 /// `run` when there is none, but telling the first positional from an
@@ -231,6 +288,9 @@ pub(crate) fn tap_contained_call(arguments: &[String]) -> bool {
 /// generated page. `--no-browser` is a different name under this screen, so
 /// it stays readable.
 pub(crate) fn tap_runs_tests_once(arguments: &[String]) -> bool {
+    if names_a_watch(arguments) {
+        return false;
+    }
     const OTHER_COMMANDS: [&str; 12] = [
         "help",
         "versions",
