@@ -35598,7 +35598,7 @@ function stageFailure(code) {
     case "mcp_initialize_failed":
       return new DiscoveryFailure("mcp_initialize_failed", "The MCP server did not complete initialization. Check that it starts in the host app and uses stdio MCP. Known tools and choices were kept.");
     case "mcp_server_exited":
-      return new DiscoveryFailure("mcp_server_exited", "The MCP server stopped before it answered. Guard lists tools in a separate run with a temporary home folder and only the environment from the host config, so a server that reads a login or settings from your home folder cannot be listed this way. Its tools still appear here as your host app uses them. Known tools and choices were kept.");
+      return new DiscoveryFailure("mcp_server_exited", "The MCP server stopped before it answered. Check that it starts in the host app. If it does, it probably reads a login or settings from your home folder: Guard lists tools in a separate run with a temporary home folder and only the environment from the host config, so it cannot list this server. Its tools still appear here as your host app uses them. Known tools and choices were kept.");
     case "mcp_protocol_unsupported":
       return new DiscoveryFailure("mcp_protocol_unsupported", "This server uses an MCP protocol version Guard does not support. Check the server and Guard versions. Known tools and choices were kept.");
     case "mcp_capability_rejected":
