@@ -259,6 +259,41 @@ fn a_typescript_lockfile_that_contradicts_the_install_is_not_routine() {
     )));
 }
 
+/// `lab` is published inside `@hapi/lab`, so npm installs it at
+/// `node_modules/@hapi/lab` and the lockfile pins it under the scoped name. A
+/// verdict that looked for `node_modules/lab` found nothing and sent every
+/// `npx lab -a @hapi/code` to a package review the project had already
+/// answered by installing and pinning the version.
+#[test]
+fn lab_is_bound_through_its_hapi_lab_package() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    runner_workspace(root, "lab", "@hapi/lab");
+    assert!(routine_local_runner(&runner_intent(
+        root,
+        "lab",
+        "@hapi/lab"
+    )));
+}
+
+/// The alias does not loosen the evidence: a `@hapi/lab` the lockfile pins at
+/// another version is still not the runner the project declared.
+#[test]
+fn a_hapi_lab_lockfile_that_contradicts_the_install_is_not_routine() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    runner_workspace(root, "lab", "@hapi/lab");
+    write(
+        &root.join("package-lock.json"),
+        r#"{"packages": {"node_modules/@hapi/lab": {"version": "24.0.0"}}}"#,
+    );
+    assert!(!routine_local_runner(&runner_intent(
+        root,
+        "lab",
+        "@hapi/lab"
+    )));
+}
+
 #[test]
 fn only_the_two_execute_managers_qualify() {
     let dir = workspace();

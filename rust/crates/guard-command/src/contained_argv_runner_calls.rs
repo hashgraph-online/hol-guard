@@ -20,7 +20,11 @@ pub(crate) fn contained_runner_call(arguments: &[String]) -> bool {
             || (tool == "qunit" && super::single_pass_runners::qunit_contained_call(rest))
             || (tool == "uvu" && super::single_pass_runners::uvu_contained_call(rest))
             || (tool == "tape" && super::single_pass_runners::tape_contained_call(rest))
-            || (tool == "tsd" && super::single_pass_runners::tsd_contained_call(rest)))
+            || (tool == "tsd" && super::single_pass_runners::tsd_contained_call(rest))
+            || (tool == "tap" && super::single_pass_runners::tap_contained_call(rest))
+            || (tool == "borp" && super::single_pass_runners::borp_contained_call(rest))
+            || (tool == "poku" && super::single_pass_runners::poku_contained_call(rest))
+            || (tool == "lab" && super::single_pass_runners::lab_contained_call(rest)))
 }
 
 /// True when a Vitest call finishes on its own.

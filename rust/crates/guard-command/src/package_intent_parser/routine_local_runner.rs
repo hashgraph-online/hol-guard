@@ -32,14 +32,18 @@ use lockfiles::locked_versions;
 /// The runners whose local identity is worth establishing: the lint, test,
 /// commit-hook and TypeScript entry points a project pins in its own manifest
 /// and runs through `bunx` or `npx` on every change.
-const ROUTINE_RUNNERS: [&str; 13] = [
+const ROUTINE_RUNNERS: [&str; 17] = [
     "ava",
+    "borp",
     "eslint",
     "jasmine",
     "jest",
+    "lab",
     "lint-staged",
     "mocha",
+    "poku",
     "qunit",
+    "tap",
     "tape",
     "tsc",
     "tsd",
@@ -96,12 +100,12 @@ pub(super) fn routine_local_runner(intent: &PackageIntent) -> bool {
     if execution.executable_name.as_deref() != Some(package_name) {
         return false;
     }
-    // The runner list names the executables a project runs, and one of them is
-    // published under another name: `tsc` ships inside `typescript`. The
-    // declared pin was already read under the dependency name, so the
-    // installed tree, the manifest key and every lockfile entry have to be
-    // read under it too, or the verdict looks for a `node_modules/tsc` that
-    // npm never creates.
+    // The runner list names the executables a project runs, and two of them
+    // are published under another name: `tsc` ships inside `typescript` and
+    // `lab` inside `@hapi/lab`. The declared pin was already read under the
+    // dependency name, so the installed tree, the manifest key and every
+    // lockfile entry have to be read under it too, or the verdict looks for a
+    // `node_modules/tsc` that npm never creates.
     let dependency_name = local_executable_package_alias(package_name);
     let Some(declared_version) = execution.declared_version.as_deref() else {
         return false;

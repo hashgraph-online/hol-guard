@@ -441,3 +441,193 @@ fn a_tape_or_tsd_word_that_leaves_the_workspace_keeps_its_review() {
         assert_eq!(reason(command), None, "{command}");
     }
 }
+
+#[test]
+fn a_tap_borp_poku_or_lab_entry_reads_as_the_project_runner() {
+    for command in [
+        "node node_modules/tap/dist/esm/run.mjs --disable-coverage test/unit.js",
+        "node ./node_modules/tap/bin/run.js --no-coverage",
+        "node node_modules/borp/borp.js",
+        "node /work/app/node_modules/poku/lib/bin/index.js test",
+        "node node_modules/@hapi/lab/bin/lab",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_tap_borp_poku_or_lab_run_inside_its_workspace_is_contained() {
+    // lab cannot watch at all, and tap, borp and poku watch only when the
+    // flag is on the line, so the plain call is the contained one for each
+    // of them. borp's reporter writes a file only when its value carries a
+    // colon destination, so a plain reporter name stays readable. tap
+    // collects coverage unless the line turns it off, so the tap run this
+    // route takes is the one that names the word.
+    for command in [
+        "npx tap --no-coverage",
+        "tap --no-cov",
+        "npx tap --disable-coverage test/unit.js",
+        "npx tap --no-coverage --jobs=4 test/",
+        "npx tap --no-coverage --no-browser",
+        "npx borp",
+        "npx borp test/unit.test.js",
+        "npx borp --coverage --reporter=spec",
+        "bunx borp",
+        "npx poku",
+        "npx poku test",
+        "npx poku --debug test",
+        "npx lab",
+        "npx lab -t 100",
+        "npx lab -r console -o stdout",
+        "npx lab -L",
+        "npx borp --reporter spec",
+        "npx borp -r spec",
+        "npx borp --reporter=tap:stdout",
+        "npx borp --reporter tap:stderr",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_tap_borp_poku_or_lab_word_that_leaves_the_run_keeps_its_review() {
+    // tap takes its command from the first positional word, so the words
+    // that print a report, build a plugin or open its repl stop a call being
+    // a test run; `--node-arg` forwards arguments to the Node that runs the
+    // tests, `--test-env` sets that process's environment, and an HTML or
+    // lcov coverage report opens a browser on the generated page.
+    //
+    // borp reads Node's own `parseArgs`, where `watch` is a boolean: it never
+    // takes the next word and `--watch=false` is rejected rather than read as
+    // off, so the name alone watches, as QUnit's does.
+    //
+    // poku reads its line itself, asking whether a word *starts with* the
+    // option's spelling, so `--watch=false` turns the watch on. Its other
+    // options end processes the run never started or load an environment
+    // file, and neither a port, a pid nor a permission name is a path the
+    // workspace screen can see.
+    //
+    // lab's `--inspect` starts the suite under Node's debugger and holds the
+    // process open on a listening port.
+    //
+    // tap declares `coverage` with `default: true`, so a line that does not
+    // turn it off collects into `.nyc_output` or `.tap` inside the project.
+    // The read-only route carries no workspace write root, so that collection
+    // would be denied part-way through the run.
+    for command in [
+        "npx tap",
+        "npx tap test/unit.js",
+        "npx tap --coverage-report=text",
+        "npx tap report",
+        "npx tap list",
+        "npx tap repl",
+        "npx tap build",
+        "npx tap --node-arg=--inspect-brk",
+        "npx tap --test-env=NODE_OPTIONS=--inspect-brk",
+        "npx tap --coverage-report=html",
+        "npx tap --coverage-report lcov",
+        "npx tap --browser=firefox",
+        "npx tap --reporter /etc/tap-reporter.js",
+        "npx borp --watch",
+        "npx borp -w",
+        "npx borp --watch=false",
+        "npx borp -wc",
+        "npx borp --reporter /etc/reporter.js",
+        "npx poku --watch",
+        "npx poku -w",
+        "npx poku --watch=false",
+        "npx poku --killPort=3000",
+        "npx poku --killRange=3000-3010",
+        "npx poku --killPid=1",
+        "npx poku --envFile=.env",
+        "npx poku --denoAllow=net",
+        "npx poku --denoDeny=env",
+        "npx lab --inspect",
+        "npx lab --inspect-brk",
+        "npx lab -L --lint-fix",
+        "npx lab --coverage-path /etc",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_tap_watch_or_a_borp_report_destination_keeps_its_review() {
+    // tap declares `watch` as a flag with the short `-w`, so a tap call that
+    // names it runs the suite and then keeps re-running it, exactly as borp's
+    // and poku's do. Each tap line here turns coverage off, so the watch is
+    // the only thing keeping it under review. borp reads a colon in a
+    // reporter value as a file to write, which the read-only route carries no
+    // root for; `stdout` and `stderr` name a stream instead, so they stay
+    // readable. Node's `parseArgs` reads a short group up to the first letter
+    // that takes a value, so `-Cr tap:results.txt` carries the same reporter
+    // as the long spelling does.
+    for command in [
+        "npx tap --no-cov --watch",
+        "npx tap --no-coverage -w",
+        "npx tap --disable-coverage -w test/unit.js",
+        "npx tap --no-cov -wj4",
+        "node node_modules/tap/bin/run.js --no-cov --watch",
+        "npx borp --reporter=tap:results.txt",
+        "npx borp --reporter tap:results.txt",
+        "npx borp -r tap:results.txt",
+        "npx borp -rtap:results.txt",
+        "npx borp -Cr tap:results.txt",
+        "npx borp -Crtap:results.txt",
+        "npx borp -oCr tap:results.txt",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_tap_line_that_turns_coverage_back_on_keeps_its_review() {
+    // Both of tap's option readers let the last spelling win, so a negation
+    // earlier on the line is not the answer. tap 16 and 17 turn the flag back
+    // on with `--cov` or `--coverage`, and tap 18 and later with
+    // `--no-disable-coverage`; each of these runs collects into `.nyc_output`
+    // or `.tap`, which the read-only route carries no write root for.
+    for command in [
+        "npx tap --no-coverage --coverage test/",
+        "npx tap --no-cov --cov",
+        "npx tap --disable-coverage --no-disable-coverage test/unit.js",
+        "node node_modules/tap/bin/run.js --no-cov --coverage",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+    // The other order is the ordinary one and stays contained.
+    for command in [
+        "npx tap --coverage --no-coverage test/",
+        "npx tap --no-disable-coverage --disable-coverage test/unit.js",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_tap_borp_poku_or_lab_lookalike_entry_reads_as_no_runner() {
+    for command in [
+        "node node_modules/xtap/dist/esm/run.mjs",
+        "node node_modules/tap/dist/cjs/run.js",
+        "node node_modules/tap/bin/run.mjs",
+        "node node_modules/xborp/borp.js",
+        "node node_modules/borp/borp.mjs",
+        "node node_modules/poku/lib/bin/index.mjs",
+        "node node_modules/lab/bin/lab",
+        "node node_modules/@hapi/lab/lib/cli.js",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}

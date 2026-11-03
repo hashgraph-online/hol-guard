@@ -206,6 +206,22 @@ pub(crate) fn script_tokens(
             let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
             crate::contained_argv::tsd_contained_call(&call)
         }
+        "tap" => {
+            let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+            crate::contained_argv::tap_contained_call(&call)
+        }
+        "borp" => {
+            let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+            crate::contained_argv::borp_contained_call(&call)
+        }
+        "poku" => {
+            let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+            crate::contained_argv::poku_contained_call(&call)
+        }
+        "lab" => {
+            let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+            crate::contained_argv::lab_contained_call(&call)
+        }
         _ => false,
     };
     let bun = program_name(runner) == "bun" && {

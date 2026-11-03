@@ -15,8 +15,9 @@ mod tests;
 mod tsx_tests;
 
 use crate::contained_argv::{
-    ava_contained_call, contained_runner_call, jasmine_contained_call, jest_contained_call,
-    mocha_contained_call, npm_exec_inert_option, qunit_contained_call, tape_contained_call,
+    ava_contained_call, borp_contained_call, contained_runner_call, jasmine_contained_call,
+    jest_contained_call, lab_contained_call, mocha_contained_call, npm_exec_inert_option,
+    poku_contained_call, qunit_contained_call, tap_contained_call, tape_contained_call,
     tsd_contained_call, uvu_contained_call,
 };
 use crate::contained_node_tool::{entry_tool, supported_tool_in, writes_or_chains, ToolMode};
@@ -531,6 +532,10 @@ fn local_runner_entry_call(arguments: &[String]) -> bool {
         || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_uvu_entry(&entry.replace('\\', "/")) && uvu_contained_call(rest))
         || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_tape_entry(&entry.replace('\\', "/")) && tape_contained_call(rest))
         || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_tsd_entry(&entry.replace('\\', "/")) && tsd_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_tap_entry(&entry.replace('\\', "/")) && tap_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_borp_entry(&entry.replace('\\', "/")) && borp_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_poku_entry(&entry.replace('\\', "/")) && poku_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_lab_entry(&entry.replace('\\', "/")) && lab_contained_call(rest))
 }
 
 /// The mode the supported tool behind this command runs in, read through the
@@ -812,6 +817,10 @@ pub(super) fn readonly_test_reason(
         "uvu" => uvu_contained_call(arguments),
         "tape" => tape_contained_call(arguments),
         "tsd" => tsd_contained_call(arguments),
+        "tap" => tap_contained_call(arguments),
+        "borp" => borp_contained_call(arguments),
+        "poku" => poku_contained_call(arguments),
+        "lab" => lab_contained_call(arguments),
         "node" | "nodejs" => local_runner_entry_call(arguments),
         _ => false,
     };
