@@ -16,6 +16,7 @@ from .approval_context import build_runtime_launch_identity
 from .command_model import parse_shell_command
 from .local_cli_identity import identify_unlisted_cli
 from .local_cli_script_source import (
+    ScriptSourceUnavailableError,
     local_import_paths,
     read_local_module,
     read_script_source,
@@ -43,12 +44,19 @@ def script_may_serve_mcp(command: str, *, cwd: Path, home_dir: Path | None, guar
         return False
     if identity.runner is not None:
         return True
-    launched = _launched_script(command, cwd=cwd, home_dir=home_dir)
+    launched = _launched_script(command, cwd=cwd, home_dir=home_dir, guard_home=guard_home)
     if launched is None:
         return False
     if launched == "":
         return True
-    text = read_script_source(launched, shebang_only=False)
+    try:
+        return _source_serves_mcp(identity.name, launched, guard_home)
+    except ScriptSourceUnavailableError:
+        return False
+
+
+def _source_serves_mcp(name: str, launched: str, guard_home: Path) -> bool:
+    text = read_script_source(launched, shebang_only=False, guard_home=guard_home)
     if text is None:
         return False
     reads_evidence = _resident_reads_mcp_evidence()
@@ -56,17 +64,17 @@ def script_may_serve_mcp(command: str, *, cwd: Path, home_dir: Path | None, guar
         return False
     if not reads_evidence:
         return True
-    invocation = (identity.name,)
+    invocation = (name,)
     read = _source_read(text, invocation, guard_home)
     if read is None:
         return False
     if read.mcp_server:
         return True
-    modules = local_import_paths(launched, read.imports)
+    modules = local_import_paths(launched, read.imports, guard_home=guard_home)
     if read.entry_point is not None and not modules:
         return _package_serves_mcp(read.entry_point, launched, text, invocation, guard_home)
     for module in modules:
-        module_text = read_local_module(module, launched)
+        module_text = read_local_module(module, launched, guard_home=guard_home)
         if module_text is None:
             continue
         imported = _source_read(module_text, invocation, guard_home)
@@ -97,13 +105,13 @@ def _package_serves_mcp(module: str, wrapper: str, text: str, invocation: tuple[
         queue, seen = [str(entry)], {str(entry)}
         while queue:
             path = queue.pop(0)
-            source = read_local_module(path, str(anchor))
+            source = read_local_module(path, str(anchor), guard_home=guard_home)
             read = _source_read(source, invocation, guard_home) if source is not None else None
             if read is None:
                 continue
             if read.mcp_server:
                 return True
-            for imported in _package_imports(path, read.imports, site, parts[0]):
+            for imported in _package_imports(path, read.imports, site, parts[0], guard_home):
                 if imported not in seen and len(seen) < MAX_PACKAGE_FILES:
                     seen.add(imported)
                     queue.append(imported)
@@ -111,7 +119,7 @@ def _package_serves_mcp(module: str, wrapper: str, text: str, invocation: tuple[
     return False
 
 
-def _package_imports(path: str, imports: tuple[str, ...], site: Path, top: str) -> tuple[str, ...]:
+def _package_imports(path: str, imports: tuple[str, ...], site: Path, top: str, guard_home: Path) -> tuple[str, ...]:
     """The modules of package ``top`` that the file at ``path`` imports.
 
     The resident reports ``from .server import serve`` as ``./server.py``,
@@ -129,7 +137,7 @@ def _package_imports(path: str, imports: tuple[str, ...], site: Path, top: str) 
         f"./{entry[len(top) + 3 :]}" if entry.startswith(f"./{top}/") else f"./{(folder / entry[2:]).as_posix()}"
         for entry in imports
     ]
-    return local_import_paths(str(initializer), entries)
+    return local_import_paths(str(initializer), entries, guard_home=guard_home)
 
 
 def _site_packages(wrapper: str, text: str) -> list[Path]:
@@ -149,7 +157,7 @@ def _site_packages(wrapper: str, text: str) -> list[Path]:
     return found
 
 
-def _launched_script(command: str, *, cwd: Path, home_dir: Path | None) -> str | None:
+def _launched_script(command: str, *, cwd: Path, home_dir: Path | None, guard_home: Path) -> str | None:
     """The script ``command`` runs, ``""`` for a compiled program, or None when unknown.
 
     The launch identity says which: an interpreter's script argument, a file
@@ -176,7 +184,7 @@ def _launched_script(command: str, *, cwd: Path, home_dir: Path | None) -> str |
     if entrypoint.get("status") != "verified" or not isinstance(kind, str) or not kind.endswith("-script"):
         return None
     path = executable.get("path") if kind == "direct-script" else entrypoint.get("path")
-    return path if isinstance(path, str) and safe_probe_path(path) else None
+    return path if isinstance(path, str) and safe_probe_path(path, guard_home=guard_home) else None
 
 
 def _resident_reads_mcp_evidence() -> bool | None:

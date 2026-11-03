@@ -537,9 +537,9 @@ function given the arguments), the options it checks for, the commands a
 parser library declares (Commander, yargs, argparse, Click, Typer), the
 `./`-relative modules it imports, and whether anything in it handles `--help`:
 `none`, `script` (the code checks for the flag itself) or `framework` (a parser
-library that answers `--help` for each subcommand). Python
-(`local_cli_script_source.py`) only finds the files: the verified script, and
-at most four imported modules that resolve, through symlinks, to script files
+library that answers `--help` for each subcommand). The
+`local_cli_script_source` kind (`local_cli_script_source.rs`) only finds and
+reads the files: the verified script, and at most four imported modules that resolve, through symlinks, to script files
 inside the script's own folder. On the answer it runs nothing for `none`, only
 the top-level `--help` for `script`, and nested `<command> --help` probes only
 for `framework`. A parser in the entry script answers only for the commands

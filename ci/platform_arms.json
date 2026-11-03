@@ -1427,6 +1427,22 @@
    "body": "fc902ad11bdf"
   },
   {
+   "file": "rust/crates/guard-runtime/src/local_cli_script_source.rs",
+   "item": "fn open_no_follow(path: &Path) -> std::io::Result<File>",
+   "verdict": "windows-equivalent",
+   "note": "Windows opens the module with `File::open`, which follows a final link, just as Python passed `O_NOFOLLOW` only where it exists. The read is still refused unless the opened handle's file id (`handle_file_id`) matches the file its resolved path names (`regular_file_id`) and that path stays inside the script's folder, so a link swapped in toward another file is not read.",
+   "cfg": "not(unix)",
+   "body": "108e0c44a91d"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/local_cli_script_source.rs",
+   "item": "fn same_file(_opened: &File, _resolved: &Path) -> bool",
+   "verdict": "other-platform",
+   "note": "Unix compares device and inode and Windows compares file ids in their own arms; this arm is left for a target that is neither and has no file identity, so it answers false and no module is read.",
+   "cfg": "not(any(unix, windows))",
+   "body": "ca96ea88330e"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/local_store_read_cache.rs",
    "item": "fn file_key(_store_path: &Path) -> Option<FileKey>",
    "verdict": "windows-unsupported",
