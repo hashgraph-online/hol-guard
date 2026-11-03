@@ -192,7 +192,12 @@ def _apply_mcp_plan(
     if not isinstance(plan, dict) or set(plan) != set(_PLAN_KEYS):
         raise ValueError(_MALFORMED)
     key, source, refresh, add, fields = (cast(dict[str, object], plan)[name] for name in _PLAN_KEYS)
-    servers = {} if source is None else payload.get(source) if source in _MCP_KEYS else None
+    if source is None:
+        servers: object = {}
+    elif source in _MCP_KEYS:
+        servers = payload.get(source)
+    else:
+        servers = None
     configs: list[tuple[str, Any]] = list(cast(dict[str, object], servers).items()) if isinstance(servers, dict) else []
     rows, pairs = _list(refresh), _list(fields)
     if (
@@ -496,10 +501,13 @@ class CopilotHarnessAdapter(HarnessAdapter):
         plans, mcp_notes = _plan_mcp_targets(
             context, [(path, item[4]) for path, item in zip(target_mcp_paths, gathered, strict=True)], managed_servers
         )
-        for target_mcp_path, (backup_path, state_path, target_before, original_text, mcp_payload), plan in zip(
-            target_mcp_paths, gathered, plans, strict=True
+        # Every plan is checked and applied in memory before the first write, so
+        # a malformed plan for a later target leaves every file untouched.
+        for item, plan in zip(gathered, plans, strict=True):
+            _apply_mcp_plan(context, plan, item[4], managed_servers)
+        for target_mcp_path, (backup_path, state_path, target_before, original_text, mcp_payload) in zip(
+            target_mcp_paths, gathered, strict=True
         ):
-            _apply_mcp_plan(context, plan, mcp_payload, managed_servers)
             if prepared_files is None:
                 target_mcp_path.parent.mkdir(parents=True, exist_ok=True)
                 commit_copilot_target_and_state(

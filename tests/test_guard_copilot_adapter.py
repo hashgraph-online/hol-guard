@@ -659,6 +659,27 @@ def test_copilot_install_keeps_target_specific_workspace_servers_distinct(tmp_pa
     assert "--arg=ide-server.js" in ide_args
 
 
+def test_copilot_install_writes_no_mcp_target_when_a_later_plan_is_malformed(tmp_path, monkeypatch):
+    context = _build_context(tmp_path)
+    workspace_cli_mcp_path = context.workspace_dir / ".mcp.json"
+    workspace_mcp_path = context.workspace_dir / ".vscode" / "mcp.json"
+    _write_json(workspace_cli_mcp_path, {"mcpServers": {"cli_lab": {"command": "python", "args": ["cli.py"]}}})
+    _write_json(workspace_mcp_path, {"servers": {"ide_lab": {"command": "node", "args": ["ide.js"]}}})
+    before = {path: path.read_bytes() for path in (workspace_cli_mcp_path, workspace_mcp_path)}
+    plan_targets = copilot_module._plan_mcp_targets
+
+    def malformed_last(*args, **kwargs):
+        plans, notes = plan_targets(*args, **kwargs)
+        return [*plans[:-1], {}], notes
+
+    monkeypatch.setattr(copilot_module, "_plan_mcp_targets", malformed_last)
+
+    with pytest.raises(ValueError):
+        CopilotHarnessAdapter().install(context)
+
+    assert {path: path.read_bytes() for path in before} == before
+
+
 def test_copilot_install_refreshes_existing_guard_proxy_entries_to_current_interpreter(tmp_path):
     context = _build_context(tmp_path)
     adapter = CopilotHarnessAdapter()
