@@ -48,8 +48,16 @@ def status(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Re
 
     profile = store.load(args.profile)
     requested = args.cloud_workspace
-    secrets = store.load_secrets(args.profile) if profile is not None else None
-    if profile is None or secrets is None:
+    # `--offline` reads only the profile file: opening the secret store can take
+    # a lock and fix permissions, and the offline view never sends the sign-in.
+    if profile is None:
+        access_token = None
+    elif args.offline:
+        access_token = "" if store.has_saved_secret(args.profile) else None
+    else:
+        secrets = store.load_secrets(args.profile)
+        access_token = secrets.access_token if secrets is not None else None
+    if profile is None or access_token is None:
         return reply(
             0,
             f"Not signed in (profile {args.profile}). Run `{_login_hint(args.profile, requested)}`.",
@@ -59,9 +67,12 @@ def status(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Re
             included_actions="not_available_yet",
         )
     state = "expired" if profile.is_expired() else "signed_in"
-    service, connection = _live_checks(profile, secrets.access_token, offline=args.offline)
+    service, connection = _live_checks(profile, access_token, offline=args.offline)
     fields: dict[str, object] = {
         "state": state,
+        # Offline, the sign-in comes from the profile file alone; the saved
+        # secret it names may be gone or unreadable.
+        "secret_checked": not args.offline,
         **_profile_fields(profile),
         "checked_at": checked_at(),
         "service": service.as_dict(),
