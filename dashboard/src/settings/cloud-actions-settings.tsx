@@ -38,6 +38,17 @@ function CommandLine({ label, command }: { label: string; command: string }) {
   );
 }
 
+function Reconnect({ connection }: { connection: CloudActionsConnection }) {
+  const command = cloudActionsReconnectCommand(connection);
+  if (command !== null) return <CommandLine label="To reconnect, run this in a terminal" command={command} />;
+  return (
+    <p className="mt-2 text-sm text-slate-700">
+      To reconnect, run <code className="font-mono text-xs">hol-guard connect</code> with{" "}
+      <code className="font-mono text-xs">--connect-url</code> set to the Guard Cloud connect page on {connection.site}.
+    </p>
+  );
+}
+
 function CloudPages({ connection }: { connection: CloudActionsConnection }) {
   const links = cloudActionsLinks(connection);
   if (links.length === 0) return null;
@@ -106,9 +117,7 @@ export function CloudActionsConnectionCard({
         <p className="mt-2 text-sm text-slate-600">{connection.check.message}</p>
       ) : null}
       {copy.remedy !== null ? <p className="mt-2 text-sm text-slate-700">{copy.remedy}</p> : null}
-      {copy.reconnect ? (
-        <CommandLine label="To reconnect, run this in a terminal" command={cloudActionsReconnectCommand(connection)} />
-      ) : null}
+      {copy.reconnect ? <Reconnect connection={connection} /> : null}
       <CloudPages connection={connection} />
     </div>
   );

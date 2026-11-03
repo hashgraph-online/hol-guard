@@ -21,6 +21,7 @@ const SITE_PATTERN = /^[A-Za-z0-9.-]{1,253}(?::\d{1,5})?$/;
 // Guard Cloud is reached over https; plain http is only accepted for this computer.
 // `hol-guard connect` opens this unless told otherwise.
 const DEFAULT_CONNECT_URL = "https://hol.org/guard/connect";
+const DEFAULT_CONNECT_SITE = "hol.org";
 const CLOUD_URL_PATTERN = /^(?:https:\/\/[A-Za-z0-9.-]{1,253}|http:\/\/(?:127\.0\.0\.1|localhost|host\.docker\.internal))(?::\d{1,5})?$/;
 // Guard Cloud's pages sit at the site itself or under one short path such as /points.
 const CLOUD_BASE_PATH_PATTERN = /^(?:\/[a-z0-9-]{1,32})?$/;
@@ -195,10 +196,17 @@ export function cloudActionsCurrentState(connection: Pick<CloudActionsConnection
 }
 
 /** The command that connects this computer again to the same Guard Cloud and workspace. */
+/**
+ * The command that reconnects to the same Guard Cloud and workspace, or null when the
+ * site is known but its connect page is not, so no command can name it safely.
+ */
 export function cloudActionsReconnectCommand(
-  connection: Pick<CloudActionsConnection, "workspace" | "cloudBaseUrl"> | null,
-): string {
+  connection: Pick<CloudActionsConnection, "workspace" | "site" | "cloudBaseUrl"> | null,
+): string | null {
   if (connection === null) return CLOUD_ACTIONS_CONNECT_COMMAND;
+  if (connection.cloudBaseUrl === null && connection.site !== null && connection.site !== DEFAULT_CONNECT_SITE) {
+    return null;
+  }
   const parts = [CLOUD_ACTIONS_CONNECT_COMMAND];
   const connectUrl = connection.cloudBaseUrl === null ? null : `${connection.cloudBaseUrl}/guard/connect`;
   if (connectUrl !== null && connectUrl !== DEFAULT_CONNECT_URL) parts.push(`--connect-url ${connectUrl}`);

@@ -2736,6 +2736,7 @@ const MAX_MESSAGE_CHARS = 240;
 const WORKSPACE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SITE_PATTERN = /^[A-Za-z0-9.-]{1,253}(?::\d{1,5})?$/;
 const DEFAULT_CONNECT_URL = "https://hol.org/guard/connect";
+const DEFAULT_CONNECT_SITE = "hol.org";
 const CLOUD_URL_PATTERN = /^(?:https:\/\/[A-Za-z0-9.-]{1,253}|http:\/\/(?:127\.0\.0\.1|localhost|host\.docker\.internal))(?::\d{1,5})?$/;
 const CLOUD_BASE_PATH_PATTERN = /^(?:\/[a-z0-9-]{1,32})?$/;
 function isRecord(value) {
@@ -2850,6 +2851,9 @@ function cloudActionsCurrentState(connection) {
 }
 function cloudActionsReconnectCommand(connection) {
   if (connection === null) return CLOUD_ACTIONS_CONNECT_COMMAND;
+  if (connection.cloudBaseUrl === null && connection.site !== null && connection.site !== DEFAULT_CONNECT_SITE) {
+    return null;
+  }
   const parts = [CLOUD_ACTIONS_CONNECT_COMMAND];
   const connectUrl = connection.cloudBaseUrl === null ? null : `${connection.cloudBaseUrl}/guard/connect`;
   if (connectUrl !== null && connectUrl !== DEFAULT_CONNECT_URL) parts.push(`--connect-url ${connectUrl}`);
@@ -2928,6 +2932,20 @@ function CommandLine({ label: label2, command }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block overflow-x-auto whitespace-pre rounded-md bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark", children: command })
   ] });
 }
+function Reconnect({ connection }) {
+  const command = cloudActionsReconnectCommand(connection);
+  if (command !== null) return /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "To reconnect, run this in a terminal", command });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-slate-700", children: [
+    "To reconnect, run ",
+    /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "font-mono text-xs", children: "hol-guard connect" }),
+    " with",
+    " ",
+    /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "font-mono text-xs", children: "--connect-url" }),
+    " set to the Guard Cloud connect page on ",
+    connection.site,
+    "."
+  ] });
+}
 function CloudPages({ connection }) {
   const links = cloudActionsLinks(connection);
   if (links.length === 0) return null;
@@ -2980,7 +2998,7 @@ function CloudActionsConnectionCard({
     ] }),
     connection.check.message !== null && state === connection.check.state ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: connection.check.message }) : null,
     copy.remedy !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-700", children: copy.remedy }) : null,
-    copy.reconnect ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "To reconnect, run this in a terminal", command: cloudActionsReconnectCommand(connection) }) : null,
+    copy.reconnect ? /* @__PURE__ */ jsxRuntimeExports.jsx(Reconnect, { connection }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(CloudPages, { connection })
   ] });
 }

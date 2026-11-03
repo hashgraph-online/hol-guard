@@ -94,9 +94,18 @@ assert(
   "reconnecting names the same Guard Cloud and workspace",
 );
 assert(
-  cloudActionsReconnectCommand({ workspace: "ws_beta", cloudBaseUrl: "https://hol.org" }) ===
+  cloudActionsReconnectCommand({ workspace: "ws_beta", site: "hol.org", cloudBaseUrl: "https://hol.org" }) ===
     "hol-guard connect --cloud-workspace ws_beta",
   "the default Guard Cloud needs no address",
+);
+assert(
+  cloudActionsReconnectCommand({ workspace: "ws_beta", site: "cloud.example.test:8443", cloudBaseUrl: null }) === null,
+  "a known site without a known connect page gets no command that would open another Guard Cloud",
+);
+assert(
+  cloudActionsReconnectCommand({ workspace: "ws_beta", site: "hol.org", cloudBaseUrl: null }) ===
+    "hol-guard connect --cloud-workspace ws_beta",
+  "the default site still gets a command",
 );
 assert(cloudActionsReconnectCommand(null) === "hol-guard connect", "connecting needs no options");
 
@@ -237,6 +246,15 @@ assert(!/sign[ -]?in again/i.test(visible(changedHtml)), "reconnecting is never 
 const offHtml = render({ status: normalizeCloudActionsStatus(payload({ ...connected, state: "off" })) });
 assert(offHtml.includes(">Off on this computer<") && offHtml.includes(">Off<"), "Cloud actions left off are labelled");
 assert(offHtml.includes("/points/guard/connect --cloud-workspace ws_beta"), "turning them on is reconnecting");
+
+const unknownBase = normalizeCloudActionsStatus(payload({ ...connected, state: "off", cloud_base_url: "https://elsewhere.test" }));
+assert(unknownBase?.connection?.cloudBaseUrl === null, "a base on another site is not trusted");
+const unknownBaseHtml = render({ status: unknownBase });
+assert(!unknownBaseHtml.includes("--cloud-workspace"), "no copyable command when the connect page is unknown");
+assert(
+  visible(unknownBaseHtml).includes("connect page on cloud.example.test:8443"),
+  "reconnect guidance names the site instead",
+);
 
 assert(render({ retryAfterSeconds: 12 }).includes("Check again in 12s"), "the wait is shown on the button");
 assert(render({ checking: true }).includes("Checking..."), "checking state");
