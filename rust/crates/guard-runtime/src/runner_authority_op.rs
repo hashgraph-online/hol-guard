@@ -129,6 +129,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "consumer_mode_contract" => crate::consumer_mode_contract::dispatch(args),
         "surface_server_handshake" => crate::surface_server_handshake::dispatch(args),
         "trust_attestation_shape" => crate::trust_attestation_shape::dispatch(args),
+        "review_event_decode" => crate::review_event_decode::dispatch(args),
         "review_policy_memory_plan" => crate::review_policy_memory_plan::dispatch(args),
         "contained_denial_note" => crate::contained_denial_note::dispatch(args),
         "detector_authority" => detector::detector_authority(args),

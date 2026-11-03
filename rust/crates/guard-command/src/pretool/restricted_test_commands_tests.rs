@@ -245,6 +245,78 @@ fn a_mocha_run_that_watches_or_leaves_its_workspace_keeps_its_review() {
 }
 
 #[test]
+fn a_relative_ava_entry_reads_as_the_project_runner() {
+    for command in [
+        // AVA moved its entry twice without renaming the package, so all
+        // three spellings name the runner a workspace may hold.
+        "node node_modules/ava/entrypoints/cli.js",
+        "node ./node_modules/ava/entrypoints/cli.mjs test/unit.js",
+        "node /work/app/node_modules/ava/cli.js",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn an_ava_run_that_does_not_watch_is_contained() {
+    // AVA runs its suite once and exits, so the plain call is the contained
+    // one. It reads yargs, so a declared boolean spends the next word:
+    // `--watch false` and `--watch=false` both finish, and `--no-watch` reads
+    // as `nowatch`, which names no option this screen models.
+    for command in [
+        "npx ava",
+        "ava",
+        "ava test/unit.js",
+        "npx ava --tap",
+        "npx ava --serial --verbose",
+        "npx ava --concurrency 2 test/unit.js",
+        "npx ava -c 2",
+        "npx ava --watch=false",
+        "npx ava --watch false",
+        "npx ava --no-watch",
+        "npx ava -- --watch",
+        "bunx ava --fail-fast",
+        "node node_modules/ava/entrypoints/cli.js --fail-fast",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn an_ava_run_that_watches_or_leaves_its_workspace_keeps_its_review() {
+    // `debug` starts AVA under an inspector and waits for it, `reset-cache`
+    // clears the precompiler cache rather than running tests, `-w` is AVA's
+    // short `--watch`, and `--node-arguments` hands its value to the worker's
+    // Node, which has a watch mode and a debugger of its own.
+    for command in [
+        "npx ava --watch",
+        "npx ava -w",
+        "npx ava --watch=true",
+        "npx ava --watch true",
+        // yargs compares the value exactly, so `0` names no boolean and the
+        // option keeps the default its presence sets.
+        "npx ava --watch=0",
+        "npx ava debug",
+        "npx ava debug test/unit.js",
+        "npx ava reset-cache",
+        "npx ava --config /etc/ava.config.js",
+        "npx ava --node-arguments=--inspect-brk",
+        "npx ava --node-arguments --inspect-brk",
+        "node node_modules/ava/entrypoints/cli.js --watch",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
+
+#[test]
 fn a_lookalike_entry_reads_as_no_runner() {
     for command in [
         "node xnode_modules/vitest/vitest.mjs run",
@@ -257,6 +329,9 @@ fn a_lookalike_entry_reads_as_no_runner() {
         "node node_modules/vitest/dist/cli.mjs run",
         "node node_modules/xmocha/bin/mocha",
         "node node_modules/mocha/bin/mocha.sh",
+        "node node_modules/xava/entrypoints/cli.js",
+        "node node_modules/ava/entrypoints/cli.cjs",
+        "node node_modules/ava/entrypoints/main.js",
     ] {
         assert_eq!(reason(command), None, "{command}");
     }
