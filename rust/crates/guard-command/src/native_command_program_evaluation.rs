@@ -207,21 +207,17 @@ pub(super) fn executable_evidence(
             &contract.interspersed_options_with_values,
             &contract.interspersed_flags,
         );
-        let remaining = if contract.allow_leading_options {
-            after_leading_options(
-                &filtered,
-                &contract.leading_options_with_values,
-                &contract.interspersed_flags,
-            )
-        } else {
-            filtered.as_slice()
-        };
-        let matched = node.paths.iter().find(|path| remaining.starts_with(path));
+        let matched = node.paths.iter().find_map(|path| {
+            let remaining = remaining_for_executable_path(contract, &arguments, &filtered, path);
+            remaining
+                .starts_with(path.as_slice())
+                .then_some((path, remaining))
+        });
         let matched = matched.or_else(|| {
             contract
                 .fail_secure_unknown_options
                 .then(|| {
-                    node.paths.iter().find(|path| {
+                    node.paths.iter().find_map(|path| {
                         matches_subcommands_conservatively_with_deadline(
                             &arguments,
                             path,
@@ -229,11 +225,20 @@ pub(super) fn executable_evidence(
                             &contract.interspersed_flags,
                             deadline,
                         )
+                        .then_some((
+                            path,
+                            remaining_for_executable_path(
+                                contract,
+                                &arguments,
+                                &filtered,
+                                path,
+                            ),
+                        ))
                     })
                 })
                 .flatten()
         });
-        let Some(path) = matched else {
+        let Some((path, remaining)) = matched else {
             continue;
         };
         let flag_arguments = if contract.required_flags_in_all_arguments {
@@ -332,16 +337,41 @@ fn forbidden_flag_reached(node: &ExecutableNode, semantics: &ArgumentSemantics) 
     })
 }
 
+fn remaining_for_executable_path<'a>(
+    contract: &crate::executable_flag_contract::ExecutableFlagContract,
+    arguments: &'a [String],
+    filtered: &'a [String],
+    path: &[String],
+) -> &'a [String] {
+    let keep_terminator = path.first().map(String::as_str) == Some("--");
+    let base = if keep_terminator { arguments } else { filtered };
+    if contract.allow_leading_options {
+        after_leading_options(
+            base,
+            &contract.leading_options_with_values,
+            &contract.interspersed_flags,
+            keep_terminator,
+        )
+    } else {
+        base
+    }
+}
+
 fn after_leading_options<'a>(
     arguments: &'a [String],
     options: &BTreeSet<String>,
     flags: &BTreeSet<String>,
+    keep_option_terminator: bool,
 ) -> &'a [String] {
     let mut index = 0;
     while index < arguments.len() {
         let argument = &arguments[index];
         if argument == "--" {
-            return &arguments[index + 1..];
+            return if keep_option_terminator {
+                &arguments[index..]
+            } else {
+                &arguments[index + 1..]
+            };
         }
         if !argument.starts_with('-') {
             return &arguments[index..];
