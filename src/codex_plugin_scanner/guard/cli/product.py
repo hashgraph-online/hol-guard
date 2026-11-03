@@ -404,9 +404,6 @@ def _build_cloud_context(store: GuardStore) -> tuple[dict[str, Any], dict[str, o
         "alert_preferences_active": bool(alert_preferences),
         "watchlist_enabled": bool(alert_preferences.get("watchlistEnabled")),
         "team_alerts_enabled": bool(alert_preferences.get("teamAlertsEnabled")),
-        "team_policy_active": False,
-        "team_policy_name": None,
-        "team_policy_updated_at": None,
     }
     return facts, context
 

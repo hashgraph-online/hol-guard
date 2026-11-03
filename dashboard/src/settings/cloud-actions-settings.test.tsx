@@ -4,6 +4,7 @@ import {
   CLOUD_ACTIONS_STATUS_SCHEMA,
   cloudActionsCheckedCopy,
   cloudActionsCurrentState,
+  cloudActionsLinks,
   cloudActionsRetryAfterSeconds,
   cloudActionsSignInCommand,
   cloudActionsStateCopy,
@@ -55,6 +56,7 @@ const ended = {
   workspace: "ws_beta",
   site: "cloud.example.test:8443",
   cloud_url: "https://cloud.example.test:8443",
+  cloud_base_url: "https://cloud.example.test:8443/points",
   signed_in_at: "2026-11-01T10:00:00Z",
   expires_at: "2026-11-02T10:00:00Z",
   expired: true,
@@ -121,6 +123,45 @@ assert(
   cloudActionsSignInCommand({ profile: "default", workspace: null, cloudUrl: null }) ===
     "hol-guard cloud-actions login --cloud-url <guard-cloud-address>",
   "an unknown address is never filled in with the default site",
+);
+
+// Guard Cloud pages are offered only for a recognised site, under that same site.
+function baseOf(cloudBaseUrl: unknown, site = "cloud.example.test", cloudUrl = "https://cloud.example.test"): string | null | undefined {
+  return normalizeCloudActionsStatus(payload([{ ...connected, site, cloud_url: cloudUrl, cloud_base_url: cloudBaseUrl }]))
+    ?.signIns[0]?.cloudBaseUrl;
+}
+assert(baseOf("https://cloud.example.test") === "https://cloud.example.test", "the site itself is a base");
+assert(baseOf("https://cloud.example.test/points") === "https://cloud.example.test/points", "one short path is a base");
+assert(baseOf(null) === null, "no base when Guard does not recognise the site");
+assert(baseOf("https://other.example.test/points") === null, "a base on another site is dropped");
+assert(baseOf("https://cloud.example.test.evil.test") === null, "a base that only starts like the site is dropped");
+assert(baseOf("https://cloud.example.test@evil.test") === null, "a base with a sign-in part is dropped");
+assert(baseOf("https://cloud.example.test/points/../x") === null, "a base with more than one path part is dropped");
+assert(baseOf("https://cloud.example.test/points?x=1") === null, "a base with a query is dropped");
+assert(baseOf("https://cloud.example.test", "other.example.test", "https://other.example.test") === null, "a base must match the row's site");
+assert(baseOf("javascript:alert(1)") === null, "a script address is dropped");
+
+const links = cloudActionsLinks(second);
+assert(
+  links.map((link) => link.href).join("\n") ===
+    [
+      "https://cloud.example.test:8443/points/guard/review?workspaceId=ws_beta&tab=needs-review",
+      "https://cloud.example.test:8443/points/guard/evidence?workspaceId=ws_beta&tab=decisions&source=cloud",
+      "https://cloud.example.test:8443/points/guard/settings?tab=billing&workspaceId=ws_beta#included-actions",
+      "https://cloud.example.test:8443/points/guard/settings?tab=integrations&workspaceId=ws_beta#connected-accounts",
+    ].join("\n"),
+  "each Guard Cloud page is scoped to the sign-in's workspace",
+);
+assert(
+  links.every((link) => !/gateway|token|secret|grant|client/i.test(link.href)),
+  "links carry nothing but the site and workspace",
+);
+assert(cloudActionsLinks(first).length === 0, "no links without a recognised site");
+assert(cloudActionsLinks({ workspace: null, cloudBaseUrl: "https://hol.org" }).length === 0, "no links without a workspace");
+assert(
+  cloudActionsLinks({ workspace: "ws:a.b", cloudBaseUrl: "https://hol.org" })[0]?.href ===
+    "https://hol.org/guard/review?workspaceId=ws%3Aa.b&tab=needs-review",
+  "the workspace is encoded",
 );
 
 // A message from the daemon is bounded.
@@ -205,6 +246,18 @@ const endedLater = render({ now: AFTER_END });
 assert(!endedLater.includes(">Connected<"), "a sign-in past its end time is not shown as connected");
 assert(!endedLater.includes("Guard Cloud accepted this sign-in."), "an old answer does not contradict the current state");
 assert(html.includes(">Check now<"), "check button is offered with sign-ins");
+assert(html.includes("Open in Guard Cloud") && html.includes(">Review requests"), "Guard Cloud pages are linked for a recognised site");
+assert(
+  (html.match(/href="https:\/\/cloud\.example\.test:8443\/points\/guard\//g) ?? []).length === 4,
+  "only the recognised sign-in gets links",
+);
+assert(html.includes('rel="noopener noreferrer"'), "Guard Cloud opens without access to this page");
+assert(
+  html.includes("Approving one there never approves anything paused on this computer."),
+  "review in Guard Cloud is kept apart from local approvals",
+);
+assert(!/>\s*(Approve|Allow|Deny|Block)\b/.test(html), "no decision controls for Guard Cloud actions on this computer");
+assert(endedLater.includes("Open in Guard Cloud"), "an ended sign-in still links to Guard Cloud");
 assert(!/token|gateway|endpoint|harness|posture|receipt/i.test(html.replace(/<[^>]+>/g, " ")), "page copy stays in plain terms");
 
 assert(render({ retryAfterSeconds: 12 }).includes("Check again in 12s"), "the wait is shown on the button");

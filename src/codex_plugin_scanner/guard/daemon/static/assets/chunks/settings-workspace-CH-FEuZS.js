@@ -1,5 +1,5 @@
-import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, a9 as HiMiniCloud, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as fetchWithGuardAuth, b4 as isRecord$1, b5 as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b6 as HiMiniPauseCircle, b7 as listContextAgentSessions, h as harnessDisplayName, b8 as HiMiniLink, b9 as revokeContextAgentSession, ba as authorizeContextAgentSession, bb as ContextAssistanceApiError, bc as ask, bd as parseContextScope, be as validContextBrokerRevision, bf as isGuardDemoMode, bg as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bh as HiMiniCodeBracketSquare, bi as HiMiniFolder, u as HiMiniDocumentText, bj as HiMiniComputerDesktop, bk as HiMiniHome, k as HiMiniCheck, bl as HiMiniFolderPlus, bm as HiMiniClock, bn as commitDashboardLocation, bo as listContextWorkspaces, bp as HiMiniFolderOpen, bq as grantContextWorkspace, br as manageContextWorkspace, bs as compileWorkspaceContext, w as HiMiniArrowRight, M as HiMiniClipboardDocument, bt as HiMiniArrowLeft, bu as isCigarProducerVersion, bv as isCigarCoreLabel, bw as subscribeDashboardLocation, a5 as HiMiniSparkles, bx as HiMiniArrowUpCircle, by as parseContextAssistanceStatus, bz as isCigarBuildIdentity, bA as fetchContextInstallations, bB as HiMiniCloudArrowDown, f as fetchContextAssistance, c as controlContextAssistance, bC as HiMiniArrowDownTray, bD as downloadBlob, bE as savedEvidenceCopy, bF as guardAwareHref, bG as fetchContextData, bH as forgetContextHistory, bI as forgetSavedEvidence, bJ as resolveProtectionLevelCopy, aA as fetchSettings, bK as fetchRuntimeSnapshot, bL as clearHarnessWatchOverrides, bM as withHarnessPosturePatch, P as updateSettings, bN as clearPolicy, bO as clearReviewQueue, bP as revokeApprovalGateCooldown, bQ as disableApprovalGateTotp, bR as importSettings, bS as resetSettings, bT as enrollApprovalGateTotp, bU as verifyApprovalGateTotp, bV as clearEvidence, bW as exportDiagnostics, bX as repairApprovalCenter, bY as exportSettings, bZ as setupDesktopNotifications, a7 as EmptyState, b_ as settingsWatchBannerModel, b$ as WorkspacePageHeader, Z as WatchProtectionBanner, c0 as navigateFromAnchor, g as HiMiniChevronDown, c1 as humanizeList, c2 as isProtectionPosture, c3 as deriveProtectionPosture, c4 as normalizeHarnessPostures, c5 as approvalGateCooldownLabel } from "../guard-dashboard.js";
-import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-C6t1uvM3.js";
+import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, a9 as HiMiniCloud, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as fetchWithGuardAuth, b4 as isRecord$1, b5 as HiMiniArrowTopRightOnSquare, b6 as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b7 as HiMiniPauseCircle, b8 as listContextAgentSessions, h as harnessDisplayName, b9 as HiMiniLink, ba as revokeContextAgentSession, bb as authorizeContextAgentSession, bc as ContextAssistanceApiError, bd as ask, be as parseContextScope, bf as validContextBrokerRevision, bg as isGuardDemoMode, bh as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bi as HiMiniCodeBracketSquare, bj as HiMiniFolder, u as HiMiniDocumentText, bk as HiMiniComputerDesktop, bl as HiMiniHome, k as HiMiniCheck, bm as HiMiniFolderPlus, bn as HiMiniClock, bo as commitDashboardLocation, bp as listContextWorkspaces, bq as HiMiniFolderOpen, br as grantContextWorkspace, bs as manageContextWorkspace, bt as compileWorkspaceContext, w as HiMiniArrowRight, M as HiMiniClipboardDocument, bu as HiMiniArrowLeft, bv as isCigarProducerVersion, bw as isCigarCoreLabel, bx as subscribeDashboardLocation, a5 as HiMiniSparkles, by as HiMiniArrowUpCircle, bz as parseContextAssistanceStatus, bA as isCigarBuildIdentity, bB as fetchContextInstallations, bC as HiMiniCloudArrowDown, f as fetchContextAssistance, c as controlContextAssistance, bD as HiMiniArrowDownTray, bE as downloadBlob, bF as savedEvidenceCopy, bG as guardAwareHref, bH as fetchContextData, bI as forgetContextHistory, bJ as forgetSavedEvidence, bK as resolveProtectionLevelCopy, aA as fetchSettings, bL as fetchRuntimeSnapshot, bM as clearHarnessWatchOverrides, bN as withHarnessPosturePatch, P as updateSettings, bO as clearPolicy, bP as clearReviewQueue, bQ as revokeApprovalGateCooldown, bR as disableApprovalGateTotp, bS as importSettings, bT as resetSettings, bU as enrollApprovalGateTotp, bV as verifyApprovalGateTotp, bW as clearEvidence, bX as exportDiagnostics, bY as repairApprovalCenter, bZ as exportSettings, b_ as setupDesktopNotifications, a7 as EmptyState, b$ as settingsWatchBannerModel, c0 as WorkspacePageHeader, Z as WatchProtectionBanner, c1 as navigateFromAnchor, g as HiMiniChevronDown, c2 as humanizeList, c3 as isProtectionPosture, c4 as deriveProtectionPosture, c5 as normalizeHarnessPostures, c6 as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-DFZLvZ36.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
 import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-bAWZ8zmO.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-CjWFL3B3.js";
@@ -2735,6 +2735,7 @@ const WORKSPACE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SITE_PATTERN = /^[A-Za-z0-9.-]{1,253}(?::\d{1,5})?$/;
 const CLOUD_URL_PATTERN = /^(?:https:\/\/[A-Za-z0-9.-]{1,253}|http:\/\/(?:127\.0\.0\.1|localhost|host\.docker\.internal))(?::\d{1,5})?$/;
 const DEFAULT_CLOUD_URL = "https://hol.org";
+const CLOUD_BASE_PATH_PATTERN = /^(?:\/[a-z0-9-]{1,32})?$/;
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -2764,19 +2765,25 @@ function normalizeCheck(value) {
     message: message2 === null ? null : message2.slice(0, MAX_MESSAGE_CHARS)
   };
 }
+function cloudBase(value, cloudUrl) {
+  const base = text$1(value);
+  if (base === null || cloudUrl === null || !base.startsWith(cloudUrl)) return null;
+  return CLOUD_BASE_PATH_PATTERN.test(base.slice(cloudUrl.length)) ? base : null;
+}
 function normalizeSignIn(value) {
   if (!isRecord(value)) return null;
   const profile = text$1(value["profile"], PROFILE_PATTERN);
   const state = text$1(value["state"], /^[a-z_]{1,40}$/);
   if (profile === null || state === null) return null;
   const site = text$1(value["site"], SITE_PATTERN);
-  const cloudUrl = text$1(value["cloud_url"], CLOUD_URL_PATTERN);
+  const reported = text$1(value["cloud_url"], CLOUD_URL_PATTERN);
+  const cloudUrl = reported !== null && site !== null && reported.replace(/^https?:\/\//, "") === site ? reported : null;
   return {
     profile,
     workspace: text$1(value["workspace"], WORKSPACE_PATTERN),
     site,
-    // The address must name the same site the row shows.
-    cloudUrl: cloudUrl !== null && site !== null && cloudUrl.replace(/^https?:\/\//, "") === site ? cloudUrl : null,
+    cloudUrl,
+    cloudBaseUrl: cloudBase(value["cloud_base_url"], cloudUrl),
     signedInAt: moment(value["signed_in_at"]),
     expiresAt: moment(value["expires_at"]),
     state,
@@ -2913,6 +2920,33 @@ function cloudActionsSummary(status, now) {
   if (needsAttention === 0) return `${signedIn} on this computer.`;
   return `${signedIn} on this computer. ${needsAttention === 1 ? "1 needs" : `${needsAttention} need`} attention.`;
 }
+function cloudActionsLinks(signIn) {
+  if (signIn.workspace === null || signIn.cloudBaseUrl === null) return [];
+  const base = signIn.cloudBaseUrl;
+  const workspace = encodeURIComponent(signIn.workspace);
+  return [
+    {
+      label: "Review requests",
+      description: "Actions waiting for a decision. Approving one there never approves anything paused on this computer.",
+      href: `${base}/guard/review?workspaceId=${workspace}&tab=needs-review`
+    },
+    {
+      label: "Action history",
+      description: "What Cloud actions did and who decided.",
+      href: `${base}/guard/evidence?workspaceId=${workspace}&tab=decisions&source=cloud`
+    },
+    {
+      label: "Included actions",
+      description: "How many actions your plan includes and how many are left.",
+      href: `${base}/guard/settings?tab=billing&workspaceId=${workspace}#included-actions`
+    },
+    {
+      label: "Connected accounts",
+      description: "The accounts Cloud actions can use for this workspace.",
+      href: `${base}/guard/settings?tab=integrations&workspaceId=${workspace}#connected-accounts`
+    }
+  ];
+}
 const TONE_CLASS = {
   good: "border-emerald-200 bg-emerald-50 text-emerald-800",
   neutral: "border-slate-200 bg-slate-50 text-slate-700",
@@ -2927,6 +2961,31 @@ function CommandLine({ label: label2, command }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600", children: label2 }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block overflow-x-auto whitespace-pre rounded-md bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark", children: command })
+  ] });
+}
+function CloudPages({ signIn, headingId }) {
+  const links = cloudActionsLinks(signIn);
+  if (links.length === 0) return null;
+  const pagesId = `${headingId}-pages`;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-labelledby": pagesId, className: "mt-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { id: pagesId, className: "text-xs text-slate-600", children: "Open in Guard Cloud" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-1 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2", children: links.map((link) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "a",
+        {
+          href: link.href,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          className: "inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-brand-blue hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 sm:min-h-0",
+          children: [
+            link.label,
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { "aria-hidden": "true", className: "h-3.5 w-3.5 shrink-0" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "(opens in a new tab)" })
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600", children: link.description })
+    ] }, link.label)) })
   ] });
 }
 function CloudActionsSignInRow({
@@ -2965,7 +3024,8 @@ function CloudActionsSignInRow({
     signIn.check.message !== null && state === signIn.state ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: signIn.check.message }) : null,
     copy.remedy !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-700", children: copy.remedy }) : null,
     state === "profile_damaged" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "Sign out of this sign-in", command: cloudActionsSignOutCommand(signIn) }) : null,
-    copy.signInAgain ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "Sign in again in a terminal", command: cloudActionsSignInCommand(signIn) }) : null
+    copy.signInAgain ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "Sign in again in a terminal", command: cloudActionsSignInCommand(signIn) }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CloudPages, { signIn, headingId })
   ] });
 }
 function CloudActionsSettingsView({
@@ -3024,7 +3084,7 @@ function CloudActionsSettingsView({
         signIn.profile
       )) }) : null,
       status !== null && status.signIns.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandLine, { label: "To sign in, run this in a terminal", command: "hol-guard cloud-actions login --cloud-workspace <workspace-id>" }) : null,
-      status !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600", children: "Included actions and connected accounts are shown in Guard Cloud. This computer does not receive them yet." }) : null
+      status !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600", children: "Included actions and connected accounts are kept in Guard Cloud, not on this computer. Guard Cloud asks you to sign in to your account in the browser before it shows them." }) : null
     ] })
   ] });
 }
