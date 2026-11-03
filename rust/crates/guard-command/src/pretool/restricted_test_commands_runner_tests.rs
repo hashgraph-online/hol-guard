@@ -567,7 +567,9 @@ fn a_tap_watch_or_a_borp_report_destination_keeps_its_review() {
     // the only thing keeping it under review. borp reads a colon in a
     // reporter value as a file to write, which the read-only route carries no
     // root for; `stdout` and `stderr` name a stream instead, so they stay
-    // readable.
+    // readable. Node's `parseArgs` reads a short group up to the first letter
+    // that takes a value, so `-Cr tap:results.txt` carries the same reporter
+    // as the long spelling does.
     for command in [
         "npx tap --no-cov --watch",
         "npx tap --no-coverage -w",
@@ -578,6 +580,9 @@ fn a_tap_watch_or_a_borp_report_destination_keeps_its_review() {
         "npx borp --reporter tap:results.txt",
         "npx borp -r tap:results.txt",
         "npx borp -rtap:results.txt",
+        "npx borp -Cr tap:results.txt",
+        "npx borp -Crtap:results.txt",
+        "npx borp -oCr tap:results.txt",
     ] {
         assert_eq!(reason(command), None, "{command}");
     }

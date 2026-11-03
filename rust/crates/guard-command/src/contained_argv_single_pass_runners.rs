@@ -122,6 +122,13 @@ pub(crate) fn borp_contained_call(arguments: &[String]) -> bool {
         && reads_its_own_workspace(arguments)
 }
 
+/// borp's short options that carry no value, as its `parseArgs` configuration
+/// spells them.
+const BORP_FLAG_SHORTS: &str = "owCh";
+
+/// borp's short options that take a value.
+const BORP_VALUE_SHORTS: &str = "pctXir";
+
 /// True when no reporter on a borp line sends its output to a file.
 ///
 /// borp spells a reporter as `--reporter`, or `-r`, and reads a colon in the
@@ -140,7 +147,7 @@ pub(crate) fn borp_writes_no_report(arguments: &[String]) -> bool {
             }
             continue;
         }
-        if option_name(argument) == "reporter" || argument == "-r" {
+        if option_name(argument) == "reporter" {
             match argument.split_once('=') {
                 Some((_, value)) => {
                     if reporter_names_a_file(value) {
@@ -151,10 +158,32 @@ pub(crate) fn borp_writes_no_report(arguments: &[String]) -> bool {
             }
             continue;
         }
-        if let Some(value) = argument.strip_prefix("-r") {
-            if !value.is_empty() && !value.starts_with('-') && reporter_names_a_file(value) {
+        let Some(group) = argument
+            .strip_prefix('-')
+            .filter(|group| !group.is_empty() && !group.starts_with('-'))
+        else {
+            continue;
+        };
+        // `parseArgs` reads a short group letter by letter while the letter it
+        // is on carries no value. The first letter that takes one swallows the
+        // rest of the word, or the next word when nothing follows it, so `-Cr
+        // tap:results.txt` is a coverage flag and a reporter written to a file
+        // exactly as `--reporter tap:results.txt` is.
+        let mut letters = group.chars();
+        while let Some(letter) = letters.next() {
+            if BORP_FLAG_SHORTS.contains(letter) {
+                continue;
+            }
+            if !BORP_VALUE_SHORTS.contains(letter) {
+                break;
+            }
+            let value = letters.as_str();
+            if value.is_empty() {
+                expecting_reporter = letter == 'r';
+            } else if letter == 'r' && reporter_names_a_file(value) {
                 return false;
             }
+            break;
         }
     }
     true
