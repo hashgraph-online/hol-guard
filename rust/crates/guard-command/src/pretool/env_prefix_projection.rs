@@ -377,6 +377,10 @@ fn next_word_start(chars: &[char], mut index: usize) -> usize {
 #[path = "env_prefix_projection_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "env_prefix_value_tests.rs"]
+mod value_tests;
+
 /// Settings that only remove Git configuration sources. Isolating the global
 /// and system files leaves a subset of the configuration the unexported
 /// command sees, so a read proven helper-free without them stays helper-free.
