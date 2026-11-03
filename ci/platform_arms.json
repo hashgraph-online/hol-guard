@@ -1235,6 +1235,14 @@
    "body": "0e244582f000"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "The Python lookup it replaces returned nothing on Windows (`os.name == \"nt\"`) too: Windows resolves commands through PATH and PATHEXT alone, so availability checks keep their PATH answer. The Windows arm answers `null` for every request.",
+   "file": "rust/crates/guard-runtime/src/user_command_lookup.rs",
+   "item": "mod lookup",
+   "cfg": "not(unix)",
+   "body": "5cd90e05064a"
+  },
+  {
    "verdict": "posix-primitive",
    "note": "`ELOOP` is how `O_NOFOLLOW` reports a link on Unix. Windows opens the link itself through `FILE_FLAG_OPEN_REPARSE_POINT` instead, and the opened handle then reads as no regular file and is refused by `is_private`, so no error code needs classifying there.",
    "file": "rust/crates/guard-runtime/src/user_health_state.rs",

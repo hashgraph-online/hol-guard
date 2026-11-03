@@ -205,6 +205,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "harness_settings_file" => harness_settings_file::dispatch(args),
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
+        "user_command_lookup" => crate::user_command_lookup::dispatch(args),
         "local_mcp_probe" => crate::local_mcp_probe::dispatch(args),
         "hook_approval_wait" => crate::hook_approval_wait::dispatch(args),
         "grok_detect" => grok_detect::detect(args),
