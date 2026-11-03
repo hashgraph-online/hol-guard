@@ -15,6 +15,7 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+mod file_mutation_output;
 mod source_slice;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -689,6 +690,9 @@ fn clean_slice(request: &NativeHookRequestV1, file: &str, path: &str) -> bool {
 }
 
 fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
+    if let Some(response) = file_mutation_output::review_file_mutation(request) {
+        return response;
+    }
     let extracted = extract_payload_output(&request.payload);
     if extracted.text.is_empty() {
         if extracted.truncated {
