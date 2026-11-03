@@ -461,6 +461,13 @@ def build_fixture(root: Path) -> BenignFixture:
         _write(repository / ".circleci" / "config.yml", "version: 2.1\njobs: {}\n")
         _write(repository / ".changeset" / "config.json", '{"changelog": "@changesets/cli/changelog"}\n')
         _write(repository / ".storybook" / "settings.json", '{"framework": "react"}\n')
+        # A credential written across several lines, and one quoted word that
+        # a document writes bare when it means "nothing here".
+        _write(
+            repository / ".storybook" / "config.toml",
+            '[registry]\ntoken = """\nhunter2\n"""\n',
+        )
+        _write(repository / ".changeset" / "settings.json", '{"npmAuthToken": "null"}\n')
         # The same stem over a registry credential, for the negative beside it.
         _write(
             repository / ".cargo" / "config.toml",

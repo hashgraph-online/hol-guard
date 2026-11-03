@@ -85,16 +85,33 @@ const CREDENTIAL_WORDS: [&str; 8] = [
     "passphrase",
 ];
 
+/// The openers a placeholder is written with, each beside the delimiter that
+/// closes it.
+const PLACEHOLDER_DELIMITERS: [(&str, &str); 3] = [("${{", "}}"), ("{{", "}}"), ("${", "}")];
+
 /// The byte width of the placeholder that opens here, if one does. A CI
 /// expression and a template hole carry braces of their own, so they are
 /// recognised before a line is split on its braces.
-fn placeholder_width(rest: &str) -> Option<usize> {
-    for (open, close) in [("${{", "}}"), ("{{", "}}"), ("${", "}")] {
+///
+/// `absent` carries the closing delimiters already looked for and not found.
+/// A line is read from its start, so a delimiter missing from one position is
+/// missing from every later one, and the search is not repeated: without that
+/// record, a line of openers that never close is searched to its end once per
+/// opener, and a long line holds the read up for seconds.
+fn placeholder_width(
+    rest: &str,
+    absent: &mut [bool; PLACEHOLDER_DELIMITERS.len()],
+) -> Option<usize> {
+    for (index, (open, close)) in PLACEHOLDER_DELIMITERS.iter().enumerate() {
         let Some(body) = rest.strip_prefix(open) else {
             continue;
         };
-        if let Some(end) = body.find(close) {
-            return Some(open.len() + end + close.len());
+        if absent[index] {
+            continue;
+        }
+        match body.find(close) {
+            Some(end) => return Some(open.len() + end + close.len()),
+            None => absent[index] = true,
         }
     }
     let name = rest.strip_prefix('$')?;
@@ -118,10 +135,11 @@ const PLACEHOLDER_MASK: &str = "\u{0}";
 /// that read as a literal.
 fn mask_placeholders(line: &str) -> String {
     let mut masked = String::with_capacity(line.len());
+    let mut absent = [false; PLACEHOLDER_DELIMITERS.len()];
     let mut index = 0;
     while index < line.len() {
         let rest = &line[index..];
-        if let Some(width) = placeholder_width(rest) {
+        if let Some(width) = placeholder_width(rest, &mut absent) {
             masked.push_str(PLACEHOLDER_MASK);
             index += width;
             continue;
@@ -133,8 +151,11 @@ fn mask_placeholders(line: &str) -> String {
     masked
 }
 
-/// The key and value of one `key = value` pair, with the quoting, dashes and
-/// separators a configuration document writes around them taken off.
+/// The key and value of one `key = value` pair, with the dashes and
+/// separators a configuration document writes around them taken off. The
+/// value keeps its quoting, because a quoted word is a literal where the bare
+/// word of the same spelling is not: `null` writes down that there is nothing
+/// here, and `"null"` is a four-character password.
 fn credential_pair(segment: &str) -> Option<(String, &str)> {
     let (key, value) = segment.split_once(['=', ':'])?;
     let key = key
@@ -143,20 +164,44 @@ fn credential_pair(segment: &str) -> Option<(String, &str)> {
         .trim_matches(['"', '\''])
         .to_ascii_lowercase()
         .replace(['-', '_', '.'], "");
-    let value = value
-        .trim()
-        .trim_end_matches(',')
-        .trim_matches(['"', '\''])
-        .trim();
-    Some((key, value))
+    Some((key, value.trim().trim_end_matches(',').trim()))
+}
+
+/// Whether a value holds no credential of its own. An empty value holds none,
+/// and a hole the shell or the CI system fills in later names none — but only
+/// while the hole is the whole value, so a literal written right after one
+/// still names a credential. The bare words a document writes for "nothing
+/// here" hold none either, and only while they are bare: quoted, each is a
+/// literal like any other.
+///
+/// A value that opens a multiline literal holds its credential on the lines
+/// that follow, and this scan reads a line at a time: the opening line shows
+/// an empty value, and the value line carries no key to find it by. The
+/// opener therefore answers for the whole literal and keeps the review.
+fn holds_no_credential(value: &str) -> bool {
+    if value.starts_with("\"\"\"") || value.starts_with("'''") {
+        return false;
+    }
+    let bare = value.trim_matches(['"', '\'']).trim();
+    if bare.is_empty() || bare == PLACEHOLDER_MASK {
+        return true;
+    }
+    !written_in_quotes(value) && matches!(bare, "{}" | "[]" | "null" | "~" | "true" | "false")
+}
+
+/// Whether the value is written inside quotes of its own.
+fn written_in_quotes(value: &str) -> bool {
+    let mut characters = value.chars();
+    matches!(
+        (characters.next(), characters.next_back()),
+        (Some('"'), Some('"')) | (Some('\''), Some('\''))
+    )
 }
 
 /// Whether a line writes a literal value under one of those words. The
 /// detector answers for material it recognises by shape, and a short password
-/// has no shape to recognise, so the word beside it carries the answer. A
-/// value the shell or the CI system fills in later names no credential of its
-/// own, and an empty one holds none — but only while the hole is the whole
-/// value, so a literal written right after one still names a credential.
+/// has no shape to recognise, so the word beside it carries the answer, and
+/// `holds_no_credential` settles which values carry none.
 ///
 /// A line can carry more than one pair — an inline table, a flow mapping, a
 /// document written on one line — so every pair on it is read, and the word
@@ -175,9 +220,7 @@ fn names_a_credential_value(text: &str) -> bool {
                     return false;
                 };
                 CREDENTIAL_WORDS.iter().any(|word| key.contains(word))
-                    && !value.is_empty()
-                    && value != PLACEHOLDER_MASK
-                    && !matches!(value, "{}" | "[]" | "null" | "~" | "true" | "false")
+                    && !holds_no_credential(value)
             })
     })
 }
