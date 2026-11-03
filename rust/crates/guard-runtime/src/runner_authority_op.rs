@@ -21,6 +21,7 @@ use super::antigravity_detect;
 use super::claude_code_detect;
 use super::claude_hook_config;
 use super::cline_detect;
+use super::cline_hook_files;
 use super::cline_plugin_render;
 use super::codex_detect;
 use super::context_digest_json::write_canonical_json_with_limit;
@@ -164,6 +165,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "hermes_detect" => hermes_detect::detect(args),
         "pi_detect" => pi_detect::detect(args),
         "cline_plugin_render" => cline_plugin_render::render(args),
+        "cline_hook_files" => cline_hook_files::dispatch(args),
         "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
         "copilot_detect" => copilot_detect::detect(args),

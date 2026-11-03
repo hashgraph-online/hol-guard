@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_hooks import _worker_config
+from tests.cline_worker_config import worker_config as _worker_config
 
 
 def _context(tmp_path: Path) -> HarnessContext:
