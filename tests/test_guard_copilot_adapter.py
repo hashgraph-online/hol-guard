@@ -11,7 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import copilot as copilot_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter, _refresh_guard_proxy_entry
+from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 
 
@@ -261,34 +261,6 @@ def test_copilot_install_and_uninstall_manage_inline_config_hooks_idempotently(t
             os.environ.pop("PYTHONPATH", None)
         else:
             os.environ["PYTHONPATH"] = previous_pythonpath
-
-
-def test_refresh_guard_proxy_entry_preserves_list_form_proxy_args():
-    refreshed = _refresh_guard_proxy_entry(
-        {
-            "command": [
-                "/old/python",
-                "-m",
-                "codex_plugin_scanner.cli",
-                "guard",
-                "copilot-mcp-proxy",
-                "--server-name",
-                "danger_lab",
-            ]
-        },
-        launcher_env={"PYTHONPATH": "/tmp/src"},
-    )
-
-    assert refreshed["command"] == sys.executable
-    assert refreshed["args"] == [
-        "-m",
-        "codex_plugin_scanner.cli",
-        "guard",
-        "copilot-mcp-proxy",
-        "--server-name",
-        "danger_lab",
-    ]
-    assert refreshed["env"] == {"PYTHONPATH": "/tmp/src"}
 
 
 def test_copilot_install_migrates_legacy_workspace_hook_file_out_of_band(tmp_path):

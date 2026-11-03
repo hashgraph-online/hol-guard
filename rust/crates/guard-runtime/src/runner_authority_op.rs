@@ -27,6 +27,7 @@ use super::codex_detect;
 use super::context_digest_json::write_canonical_json_with_limit;
 use super::copilot_detect;
 use super::copilot_hook_config;
+use super::copilot_mcp_plan;
 use super::cursor_detect;
 use super::cursor_editor_plan;
 use super::cursor_hook_config;
@@ -176,6 +177,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "codex_detect" => codex_detect::detect(args),
         "copilot_detect" => copilot_detect::detect(args),
         "copilot_hook_config" => copilot_hook_config::dispatch(args),
+        "copilot_mcp_plan" => copilot_mcp_plan::plan(args),
         "claude_code_detect" => claude_code_detect::detect(args),
         "claude_hook_config" => claude_hook_config::dispatch(args),
         "cline_detect" => cline_detect::detect(args),

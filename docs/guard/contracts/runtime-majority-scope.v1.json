@@ -1388,10 +1388,17 @@
           "CopilotHarnessAdapter.uninstall",
           "CopilotHarnessAdapter._backup_path",
           "CopilotHarnessAdapter._uninstall_targets",
-          "CopilotHarnessAdapter._state_entries"
+          "CopilotHarnessAdapter._state_entries",
+          "_launch_slot",
+          "_plan_mcp_targets",
+          "_list",
+          "_strings",
+          "_increasing",
+          "_apply_mcp_plan",
+          "_refresh_guard_proxy_entry"
         ],
         "entry_points": [],
-        "reason": "Copilot adapter install, uninstall and rendering of the managed config (file I/O, backups, shim, MCP proxies), plus the helpers only they use; which hook entries are Guard's, the bash and PowerShell spellings of Guard's hook command and the workspace hook file normalization are decided by the native copilot_hook_config runner-authority kind.",
+        "reason": "Copilot adapter install, uninstall and rendering of the managed config (file I/O, backups, shim, MCP proxies), plus the helpers only they use; which hook entries are Guard's, the bash and PowerShell spellings of Guard's hook command and the workspace hook file normalization are decided by the native copilot_hook_config runner-authority kind. Each MCP target's servers key, the Guard proxies to relaunch, the managed servers to add and the install notes are planned by the native copilot_mcp_plan runner-authority kind.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
