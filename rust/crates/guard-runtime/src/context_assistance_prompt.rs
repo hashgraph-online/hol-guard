@@ -133,8 +133,9 @@ fn attach(
     let Some(walk) = left().checked_sub(MIN_WAIT) else {
         return;
     };
-    let words = terms(prompt);
-    let found = candidates(&root, &words, &phrases(prompt), walk);
+    let mut words = terms(prompt);
+    let quoted = phrases(prompt);
+    let found = candidates(&root, &words, &quoted, walk);
     if found.is_empty() {
         return;
     }
@@ -143,6 +144,8 @@ fn attach(
         return;
     }
     let deadline = Instant::now() + wait;
+    // An excerpt holding only the quoted text is still about the request.
+    words.extend(quoted);
     // The engine refuses roots like these, so the plain file list does too.
     let listed = matched(&found).filter(|_| SourceRoot::inspect(&root).is_ok());
     let request = Request {
