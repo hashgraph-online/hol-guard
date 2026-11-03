@@ -6,7 +6,8 @@
 //! time beside the sink: the names that stand transparently in front of a
 //! program live in [`crate::parser_wrappers::transparent_prefix`], and the
 //! settings a run may carry live in
-//! [`crate::command_compatibility::environment::inert_environment_name`].
+//! [`crate::command_compatibility::environment::inert_environment_name`] and
+//! [`crate::pretool::generic::inert_tool_settings::inert_tool_setting`].
 
 #[cfg(test)]
 #[path = "contained_prefix_tests.rs"]
@@ -37,11 +38,22 @@ const STEERING_NAMES: &[&str] = &[
 const PLAIN_VALUE_LIMIT: usize = 512;
 
 /// `NAME=value` whose name changes output or presentation and never which
-/// program runs or what it loads.
+/// program runs or what it loads, or a tool switch whose value passed the
+/// closed screen the review read it against.
+///
+/// The review lets a filtered profile keep a command whose settings are data
+/// only, on the reading that the profile means the same with or without them.
+/// That reading holds only if the run still receives them: a restricted launch
+/// forwards a short closed list (`forwarded_settings::forwarded_setting`), and
+/// none of the screened tool switches is on it. Carrying them here is what
+/// makes the run the command the review read, rather than the same command
+/// with its switches silently gone.
 fn inert_assignment(word: &str) -> Option<(&str, &str)> {
     let name = assignment_name(word)?;
-    crate::command_compatibility::environment::inert_environment_name(name)
-        .then(|| (name, &word[name.len() + 1..]))
+    let value = &word[name.len() + 1..];
+    let carried = crate::command_compatibility::environment::inert_environment_name(name)
+        || crate::pretool::generic::inert_tool_settings::inert_tool_setting(name, value);
+    carried.then_some((name, value))
 }
 
 /// Whether the word is a setting whose whole effect is a value the command

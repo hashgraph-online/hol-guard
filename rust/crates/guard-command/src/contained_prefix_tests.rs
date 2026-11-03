@@ -269,3 +269,67 @@ fn a_lone_inert_assignment_leaves_no_program_behind_it() {
     assert!(core.is_empty());
     assert_eq!(carried, vec![("CI".to_string(), "1".to_string())]);
 }
+
+#[test]
+fn a_screened_tool_switch_is_carried_into_the_run() {
+    let (core, carried) = split(
+        &["ESLINT_USE_FLAT_CONFIG=false", "npx", "eslint", "."],
+        true,
+    );
+
+    assert_eq!(core, words(&["npx", "eslint", "."]));
+    assert_eq!(
+        carried,
+        vec![("ESLINT_USE_FLAT_CONFIG".to_string(), "false".to_string())]
+    );
+    assert!(!dropped(
+        &["ESLINT_USE_FLAT_CONFIG=false", "npx", "eslint", "."],
+        true
+    ));
+}
+
+#[test]
+fn a_tool_switch_is_carried_under_the_name_the_command_spelled() {
+    let (_, carried) = split(
+        &["eslint_use_flat_config=false", "npm", "run", "lint"],
+        true,
+    );
+
+    assert_eq!(
+        carried,
+        vec![("eslint_use_flat_config".to_string(), "false".to_string())]
+    );
+}
+
+#[test]
+fn a_screened_option_valued_switch_is_carried_rather_than_refused() {
+    let (core, carried) = split(&["PYTEST_ADDOPTS=-q", "pytest"], true);
+
+    assert_eq!(core, words(&["pytest"]));
+    assert_eq!(
+        carried,
+        vec![("PYTEST_ADDOPTS".to_string(), "-q".to_string())]
+    );
+}
+
+#[test]
+fn a_tool_setting_whose_value_failed_the_screen_stays_in_the_command() {
+    let (core, carried) = split(
+        &[
+            "CYPRESS_INSTALL_BINARY=https://example.test/c.zip",
+            "npm",
+            "test",
+        ],
+        false,
+    );
+
+    assert_eq!(
+        core,
+        words(&[
+            "CYPRESS_INSTALL_BINARY=https://example.test/c.zip",
+            "npm",
+            "test"
+        ])
+    );
+    assert!(carried.is_empty());
+}

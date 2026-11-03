@@ -93,6 +93,11 @@ WORKSPACE_TSX_NODE_TEST_CASE = "omp-native-workspace-npx-tsx-node-test"
 # at once. Its own name carries a manager's inside it, and it installs nothing:
 # every script it names is already in the project's manifest.
 WORKSPACE_RUN_ALL_CASE = "omp-native-workspace-npm-run-all-scripts"
+# The same install, launched with the switch that stops a browser dependency
+# fetching its own copy of Chrome. The setting carries one of two words and
+# names nothing to run, so the launch has to reach the runner the unprefixed
+# spelling reaches.
+WORKSPACE_SKIP_DOWNLOAD_PREFIX_CASE = "omp-native-workspace-puppeteer-skip-download-prefix"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
@@ -114,6 +119,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_TSX_NODE_TEST_CASE,
         WORKSPACE_VITEST_FILTER_CASE,
         WORKSPACE_RUN_ALL_CASE,
+        WORKSPACE_SKIP_DOWNLOAD_PREFIX_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
