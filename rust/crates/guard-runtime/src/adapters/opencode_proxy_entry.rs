@@ -76,7 +76,7 @@ fn string_items(items: &[Value]) -> Vec<&str> {
 /// `is_guard_proxy_command`. `codex_detect::is_guard_proxy` does not read
 /// `proxy_argument_tail`'s relay form, `<launcher> mcp-relay <python> -m
 /// codex_plugin_scanner.cli guard <proxy> ...`, which never falls through.
-fn is_guard_command(command: Option<&str>, args: &[&str]) -> bool {
+pub(crate) fn is_guard_command(command: Option<&str>, args: &[&str]) -> bool {
     if let Some(launcher) = command {
         if args.len() > 2 && args[0] == NATIVE_RELAY && is_guard_launcher(launcher) {
             let relayed = &args[2..];

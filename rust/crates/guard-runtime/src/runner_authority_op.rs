@@ -51,6 +51,7 @@ use super::kimi_hook_config;
 use super::muse_detect;
 use super::oci_bundle_op as oci;
 use super::openclaw_detect;
+use super::opencode_config_normalize;
 use super::opencode_detect;
 use super::opencode_install_plan;
 use super::opencode_launch;
@@ -257,6 +258,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cursor_hook_state" => cursor_hook_state::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
+        "opencode_config_normalize" => opencode_config_normalize::dispatch(args),
         "opencode_install_plan" => opencode_install_plan::dispatch(args),
         _ => Err(ERR_KIND),
     }

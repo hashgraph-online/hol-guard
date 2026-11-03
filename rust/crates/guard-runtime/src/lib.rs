@@ -890,6 +890,11 @@ mod openclaw_detect_tests;
 mod openclaw_mcp;
 mod openclaw_skills;
 mod opencode_command_replace;
+#[path = "adapters/opencode_config_normalize.rs"]
+mod opencode_config_normalize;
+#[cfg(test)]
+#[path = "adapters/opencode_config_normalize_tests.rs"]
+mod opencode_config_normalize_tests;
 #[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
 #[path = "adapters/opencode_install_plan.rs"]
@@ -906,6 +911,8 @@ mod opencode_plugin_render;
 mod opencode_plugin_render_tests;
 #[path = "adapters/opencode_proxy_entry.rs"]
 mod opencode_proxy_entry;
+#[path = "adapters/opencode_server_id.rs"]
+mod opencode_server_id;
 mod orphaned_worker_reap;
 mod ownership_acl_verdict;
 mod package_approval_hash_op;
