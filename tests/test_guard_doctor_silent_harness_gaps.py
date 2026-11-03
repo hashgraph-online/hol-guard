@@ -6,7 +6,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.omp_code_mode import OMP_CODE_MODE_WARNING, omp_code_mode_warnings
+from codex_plugin_scanner.guard.adapters.omp_code_mode import omp_code_mode_warnings
 from codex_plugin_scanner.guard.codex_hook_trust import (
     CODEX_HOOK_TRUST_WARNING,
     apply_codex_hook_trust_doctor,
@@ -122,6 +122,10 @@ def test_doctor_keeps_broken_status_when_trust_is_stale() -> None:
     assert payload["setup_status"] == "broken"
 
 
+OMP_CODE_MODE_WARNING = (
+    "Oh My Pi Codex code mode sends every tool call through eval, which Guard reviews. "
+    "Set providers.openai-codex.codeMode to off in {path} so Guard can allow ordinary reads and edits."
+)
 _AUTO = "providers:\n  openai-codex:\n    codeMode: auto\n"
 _OFF = "providers:\n  openai-codex:\n    codeMode: off\n"
 

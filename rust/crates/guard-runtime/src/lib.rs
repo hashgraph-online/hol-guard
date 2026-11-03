@@ -842,6 +842,7 @@ mod oci_bundle_op;
 #[cfg(test)]
 mod oci_bundle_vectors_tests;
 mod oci_path;
+mod omp_code_mode;
 mod omp_yield_input_scan;
 mod onefile_extraction_reclaim;
 mod onefile_extraction_removal;
