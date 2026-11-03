@@ -299,6 +299,8 @@ mod cursor_hook_config;
 #[cfg(test)]
 #[path = "adapters/cursor_hook_config_tests.rs"]
 mod cursor_hook_config_tests;
+#[path = "adapters/cursor_hook_script.rs"]
+mod cursor_hook_script;
 #[path = "adapters/cursor_hook_state.rs"]
 mod cursor_hook_state;
 #[cfg(test)]
