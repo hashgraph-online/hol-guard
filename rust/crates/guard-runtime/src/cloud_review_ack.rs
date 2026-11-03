@@ -13,6 +13,7 @@
 
 use serde_json::{json, Map, Number, Value};
 
+use crate::cloud_request_text::py_truthy;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
@@ -216,18 +217,6 @@ fn py_equals_int(value: &Value, expected: i128) -> bool {
             None => number.as_f64() == Some(expected as f64),
         },
         _ => false,
-    }
-}
-
-/// Python truthiness of a JSON value.
-fn py_truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(flag) => *flag,
-        Value::Number(number) => number.as_f64().is_some_and(|number| number != 0.0),
-        Value::String(text) => !text.is_empty(),
-        Value::Array(items) => !items.is_empty(),
-        Value::Object(entries) => !entries.is_empty(),
     }
 }
 
