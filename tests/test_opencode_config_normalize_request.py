@@ -16,8 +16,9 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 def _fake(monkeypatch: pytest.MonkeyPatch, answer: object) -> list[dict[str, object]]:
     sent: list[dict[str, object]] = []
 
-    def fake_native(kind: str, request: dict[str, object], **_: object) -> object:
+    def fake_native(kind: str, request: dict[str, object], guard_home: Path | None = None, **_: object) -> object:
         assert kind == "opencode_config_normalize"
+        assert str(guard_home) == request["guard_home"]
         sent.append(json.loads(json.dumps(request)))
         if isinstance(answer, Exception):
             raise answer

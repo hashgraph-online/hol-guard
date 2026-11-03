@@ -208,7 +208,7 @@ def _native_normalize(
     if op is not None:
         request["op"] = op
     try:
-        return native_runner_authority("opencode_config_normalize", request)
+        return native_runner_authority("opencode_config_normalize", request, guard_home=context.guard_home)
     except NativeRunnerAuthorityError as error:
         raise OpenCodeInstallSnapshotError(f"Could not read the OpenCode config at {config_path}.") from error
 
