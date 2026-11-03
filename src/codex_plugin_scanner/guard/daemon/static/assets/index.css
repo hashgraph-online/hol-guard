@@ -7402,6 +7402,10 @@
     }
   }
 
+  .focus-visible\:ring-brand-dark:focus-visible {
+    --tw-ring-color: var(--brand-dark);
+  }
+
   .focus-visible\:ring-red-400\/40:focus-visible {
     --tw-ring-color: #ff656866;
   }

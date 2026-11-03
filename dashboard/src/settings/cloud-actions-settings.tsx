@@ -34,7 +34,7 @@ function CommandLine({ label, command }: { label: string; command: string }) {
       {/* Long commands scroll sideways on a phone, so the box takes keyboard focus. */}
       <code
         tabIndex={0}
-        className="mt-1 block overflow-x-auto whitespace-pre rounded-md bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40"
+        className="mt-1 block overflow-x-auto whitespace-pre rounded-md bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-dark"
       >
         {command}
       </code>
@@ -69,7 +69,7 @@ function CloudPages({ connection }: { connection: CloudActionsConnection }) {
               href={link.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-brand-dark underline decoration-brand-blue underline-offset-2 hover:decoration-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 sm:min-h-0"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-brand-dark underline decoration-brand-blue underline-offset-2 hover:decoration-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-dark sm:min-h-0"
             >
               {link.label}
               <HiMiniArrowTopRightOnSquare aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
