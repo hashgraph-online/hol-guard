@@ -35249,7 +35249,7 @@
       "expect": "allow"
     },
     {
-      "id": "pattern-value-quoted-debug-prefix-npm-test",
+      "id": "pattern-value-quoted-debug-prefix-npx-vitest",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -35259,13 +35259,13 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "DEBUG='app:*' npm test"
+        "command": "DEBUG='app:*' npx vitest run"
       },
       "cwd": "worktree",
       "expect": "allow"
     },
     {
-      "id": "pattern-value-brace-debug-prefix-npm-test",
+      "id": "pattern-value-brace-debug-prefix-npx-vitest",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -35275,7 +35275,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "DEBUG=app:{a,b} npm test"
+        "command": "DEBUG=app:{a,b} npx vitest run"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -35297,7 +35297,7 @@
       "expect": "allow"
     },
     {
-      "id": "pattern-value-debug-prefix-env-wrapper-npm-test",
+      "id": "pattern-value-debug-prefix-env-wrapper-npx-vitest",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -35307,7 +35307,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "env DEBUG=app:* npm test"
+        "command": "env DEBUG=app:* npx vitest run"
       },
       "cwd": "worktree",
       "expect": "allow"
