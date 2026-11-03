@@ -158,21 +158,25 @@ fn uninstall(harness: Harness, map: &Map<String, Value>) -> KindResult {
             ],
         ),
         Read::NotObject => (None, removed_notes(harness)),
-        Read::Payload(mut payload, lone) => {
-            let text = match lookup(&payload, "hooks") {
-                Some(PyVal::Dict(hooks)) => {
-                    let pruned = prune_hooks(harness, hooks)?;
-                    if pruned.is_empty() {
-                        remove_key(&mut payload, "hooks");
-                    } else {
-                        set_key(&mut payload, "hooks", PyVal::Dict(pruned));
-                    }
-                    Some(render_file(payload, lone)?)
+        Read::Payload(mut payload, lone) => match lookup(&payload, "hooks") {
+            Some(PyVal::Dict(hooks)) => {
+                let pruned = prune_hooks(harness, hooks)?;
+                if pruned.is_empty() {
+                    remove_key(&mut payload, "hooks");
+                } else {
+                    set_key(&mut payload, "hooks", PyVal::Dict(pruned));
                 }
-                _ => None,
-            };
-            (text, removed_notes(harness))
-        }
+                match render_file(payload, lone) {
+                    Ok(text) => (Some(text), removed_notes(harness)),
+                    // A lone surrogate escape has no Rust string form to write
+                    // back; the file is left as it is so the rest of the
+                    // uninstall still runs.
+                    Err(_) if lone => (None, vec![unwritable(harness)]),
+                    Err(error) => return Err(error),
+                }
+            }
+            _ => (None, removed_notes(harness)),
+        },
     };
     Ok(json!({ "text": text, "notes": notes }))
 }
@@ -270,6 +274,19 @@ fn install_notes(harness: Harness) -> Vec<&'static str> {
             MUSE_PRESERVED,
             "Approving a blocked Muse tool call resumes that exact call inside the pending hook",
         ],
+    }
+}
+
+fn unwritable(harness: Harness) -> &'static str {
+    match harness {
+        Harness::Devin => {
+            "Devin config holds a lone surrogate escape Guard cannot write back; Guard left its \
+             managed hook entries in place. Remove the entries under the hooks key manually."
+        }
+        Harness::Muse => {
+            "Muse settings hold a lone surrogate escape Guard cannot write back; Guard left its \
+             managed hook entries in place. Remove the entries under the hooks key manually."
+        }
     }
 }
 

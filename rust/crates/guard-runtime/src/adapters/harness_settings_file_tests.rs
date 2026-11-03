@@ -238,7 +238,10 @@ fn install_keeps_user_values_and_order_and_is_idempotent() {
         after["hooks"]["PostToolUse"][0]["hooks"][0]["command"],
         DEVIN_COMMAND
     );
-    assert_eq!(installed("devin", Some(first.as_str())), first);
+    // A Guard-only event is re-planned in Guard's group order, so the second
+    // install settles the order and every later one leaves the file alone.
+    let second = installed("devin", Some(first.as_str()));
+    assert_eq!(installed("devin", Some(second.as_str())), second);
 }
 
 #[test]
@@ -363,6 +366,19 @@ fn uninstall_leaves_files_it_will_not_rewrite() {
     }
     let answer = uninstall("muse", Value::Null, false);
     assert_eq!(answer, json!({ "text": null, "notes": removed }));
+    // A lone surrogate it cannot write back leaves the file, not the uninstall.
+    let content = format!(
+        "{{\"a\": \"\\ud800\", \"hooks\": {{\"PreToolUse\": [{{\"hooks\": [{{\"command\": \"{MUSE_COMMAND}\"}}]}}]}}}}"
+    );
+    let answer = uninstall("muse", encoded(Some(content.as_str())), true);
+    assert_eq!(answer["text"], Value::Null);
+    assert_eq!(
+        answer["notes"],
+        json!([
+            "Muse settings hold a lone surrogate escape Guard cannot write back; Guard left its \
+             managed hook entries in place. Remove the entries under the hooks key manually."
+        ])
+    );
 }
 
 #[test]
