@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import json
-import shlex
-import subprocess
 import sys
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING
 
 from ...ecosystems.opencode import _strip_jsonc
 from ..aibom_detection import native_adapter_detection_with_warnings
@@ -36,6 +34,7 @@ from .base import (
 )
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .codex_detect_sources import path_restorations, restore_paths
+from .copilot_hook_config import CopilotHookOwnershipError, CopilotHookPlan, plan_copilot_hooks
 from .hook_payloads import inline_hooks_payload
 from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (
@@ -51,19 +50,9 @@ from .workspace_overrides import should_skip_workspace_override
 if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
 
-_MANAGED_HOOK_EVENTS = ("userPromptSubmitted", "preToolUse", "postToolUse", "permissionRequest", "permissionRequestV2")
 _MANAGED_HOOK_FILENAME = "hol-guard-copilot.json"
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
-_HOOK_COMMANDS_FEATURE = "native-copilot-hook-commands-v1"
-_HOOK_COMMANDS_TIMEOUT_SECONDS = 10.0
-# Well inside the runtime's 1,024-command and 1 MiB request limits.
-_HOOK_COMMANDS_BATCH_COUNT = 1024
-_HOOK_COMMANDS_BATCH_BYTES = 512 * 1024
-
-
-class _ManagedHookPayload(TypedDict):
-    version: int
-    hooks: dict[str, object]
+__all__ = ["CopilotHarnessAdapter", "CopilotHookOwnershipError"]
 
 
 def _manifest_notes(payload: dict[str, object]) -> list[str]:
@@ -123,31 +112,11 @@ def _hook_command_parts(
     )
 
 
-def _hook_shell_commands(
-    context: HarnessContext,
-    *,
-    include_workspace: bool,
-    prepared_files: list[TransitionFile] | None = None,
-) -> tuple[str, str]:
-    command_parts = _hook_command_parts(context, include_workspace=include_workspace, prepared_files=prepared_files)
-    return shlex.join(command_parts), subprocess.list2cmdline(list(command_parts))
-
-
-def _hook_entry(
-    context: HarnessContext,
-    *,
-    include_workspace: bool,
-    prepared_files: list[TransitionFile] | None = None,
-) -> dict[str, object]:
-    bash_command, powershell_command = _hook_shell_commands(
-        context,
-        include_workspace=include_workspace,
-        prepared_files=prepared_files,
-    )
+def _hook_entry(context: HarnessContext, plan: CopilotHookPlan) -> dict[str, object]:
     entry: dict[str, object] = {
         "type": "command",
-        "bash": bash_command,
-        "powershell": powershell_command,
+        "bash": plan.bash,
+        "powershell": plan.powershell,
         "cwd": str(context.guard_home),
         "timeoutSec": 30,
     }
@@ -157,172 +126,7 @@ def _hook_entry(
     return entry
 
 
-class CopilotHookOwnershipError(RuntimeError):
-    """The native runtime could not say which Copilot hook commands Guard wrote."""
-
-
-def _hook_command_batches(commands: list[str]) -> list[list[str]]:
-    """Distinct *commands* in runtime-sized batches.
-
-    A command longer than one batch's byte budget is never Guard's, so it is
-    left out rather than sent.
-    """
-
-    batches: list[list[str]] = []
-    batch: list[str] = []
-    batch_bytes = 0
-    for command in dict.fromkeys(commands):
-        size = len(json.dumps(command, ensure_ascii=False).encode("utf-8")) + 1
-        if size > _HOOK_COMMANDS_BATCH_BYTES:
-            continue
-        if batch and (len(batch) == _HOOK_COMMANDS_BATCH_COUNT or batch_bytes + size > _HOOK_COMMANDS_BATCH_BYTES):
-            batches.append(batch)
-            batch, batch_bytes = [], 0
-        batch.append(command)
-        batch_bytes += size
-    if batch:
-        batches.append(batch)
-    return batches
-
-
-def _managed_hook_commands(commands: list[str], *, guard_home: Path | None) -> set[str]:
-    """The commands in *commands* that Guard wrote, as the native runtime reads them.
-
-    Raises `CopilotHookOwnershipError` when the runtime cannot answer, so an
-    install never duplicates Guard's entries and an uninstall never leaves
-    them behind.
-    """
-
-    batches = _hook_command_batches(commands)
-    if not batches:
-        return set()
-    from ..mdm.runtime_request import runtime_answer
-
-    interpreter: str | None = None
-    script: str | None = None
-    if guard_home is not None:
-        from .bounded_cli_hook_bridge import bounded_hook_script_path
-        from .cursor_hook_config import isolated_cursor_hook_python
-
-        bridge_script = bounded_hook_script_path(guard_home, "copilot")
-        interpreter = isolated_cursor_hook_python()
-        script = None if bridge_script is None else str(bridge_script)
-    managed: set[str] = set()
-    for batch in batches:
-        answer = runtime_answer(
-            _HOOK_COMMANDS_FEATURE,
-            "copilot-hook-commands",
-            {
-                "schema": "copilot-hook-commands.v1",
-                "commands": batch,
-                "interpreter": interpreter,
-                "script": script,
-            },
-            output_limit=64 * 1024,
-            timeout_seconds=_HOOK_COMMANDS_TIMEOUT_SECONDS,
-        )
-        flags = None if answer is None else answer.get("managed")
-        if not isinstance(flags, list) or len(flags) != len(batch):
-            raise CopilotHookOwnershipError(
-                "Guard could not read which Copilot hooks it installed; the native Guard runtime did not answer. "
-                "Run `hol-guard doctor copilot` and try again."
-            )
-        managed.update(command for command, flag in zip(batch, flags, strict=True) if flag is True)
-    return managed
-
-
-def _is_managed_hook_command(command: str, *, guard_home: Path | None = None) -> bool:
-    return command in _managed_hook_commands([command], guard_home=guard_home)
-
-
-def _entry_commands(entry: object) -> list[str]:
-    if not isinstance(entry, dict):
-        return []
-    return [command for key in ("command", "bash", "powershell") if isinstance(command := entry.get(key), str)]
-
-
-def _hooks_commands(hooks: dict[str, object]) -> list[str]:
-    """Every command in the managed events of one hooks object."""
-
-    return [
-        command
-        for hook_name in _MANAGED_HOOK_EVENTS
-        if isinstance(entries := hooks.get(hook_name), list)
-        for entry in entries
-        for command in _entry_commands(entry)
-    ]
-
-
-def _is_managed_hook_entry(
-    entry: object,
-    bash_command: str,
-    powershell_command: str,
-    *,
-    managed: set[str],
-) -> bool:
-    if not isinstance(entry, dict):
-        return False
-    if entry.get("bash") == bash_command and entry.get("powershell") == powershell_command:
-        return True
-    return any(
-        command in {bash_command, powershell_command} or command in managed for command in _entry_commands(entry)
-    )
-
-
-def _merge_hook_entries(
-    entries: object,
-    hook_entry: dict[str, object],
-    *,
-    managed: set[str],
-) -> list[object]:
-    normalized = list(entries) if isinstance(entries, list) else []
-    bash_command = str(hook_entry["bash"])
-    powershell_command = str(hook_entry["powershell"])
-    preserved_entries = [
-        entry
-        for entry in normalized
-        if not _is_managed_hook_entry(entry, bash_command, powershell_command, managed=managed)
-    ]
-    return [*preserved_entries, hook_entry]
-
-
-def _remove_hook_entries(
-    entries: object,
-    bash_command: str,
-    powershell_command: str,
-    *,
-    managed: set[str],
-) -> list[object]:
-    if not isinstance(entries, list):
-        return []
-    return [
-        entry
-        for entry in entries
-        if not _is_managed_hook_entry(entry, bash_command, powershell_command, managed=managed)
-    ]
-
-
 _inline_hooks_payload = inline_hooks_payload
-
-
-def _managed_hook_payload(payload: dict[str, object]) -> _ManagedHookPayload:
-    normalized_payload: _ManagedHookPayload = {"version": 1, "hooks": {}}
-    version = payload.get("version")
-    if isinstance(version, int):
-        normalized_payload["version"] = version
-    hooks = payload.get("hooks")
-    if isinstance(hooks, dict):
-        normalized_payload["hooks"] = {
-            str(hook_name): list(entries) if isinstance(entries, list) else entries
-            for hook_name, entries in hooks.items()
-        }
-        return normalized_payload
-    normalized_payload["hooks"] = {
-        str(hook_name): list(entries)
-        for hook_name, entries in payload.items()
-        if hook_name != "version" and hook_name not in _MANAGED_HOOK_EVENTS and isinstance(entries, list)
-    }
-    return normalized_payload
 
 
 def _mcp_servers_payload(target_path: Path, payload: dict[str, object]) -> dict[str, object] | None:
@@ -592,20 +396,25 @@ class CopilotHarnessAdapter(HarnessAdapter):
             else parsed(config_path)
         )
         hooks_payload = _inline_hooks_payload(config_payload)
-        managed = _managed_hook_commands(_hooks_commands(hooks_payload), guard_home=context.guard_home)
         managed_hook_path = self._hook_path(context)
-        managed_hook_payload: _ManagedHookPayload | None = None
-        workspace_managed: set[str] = set()
+        workspace_payload: dict[str, object] | None = None
         if managed_hook_path is not None:
             if context.workspace_dir is None:
                 raise ValueError("Copilot workspace hook requires a workspace root")
             _ensure_path_within_root(context.workspace_dir, managed_hook_path, label="Copilot hook")
-            managed_hook_payload = _managed_hook_payload(
-                _json_payload(managed_hook_path) if prepared_files is None else parsed(managed_hook_path),
+            workspace_payload = (
+                _json_payload(managed_hook_path) if prepared_files is None else parsed(managed_hook_path)
             )
-            workspace_managed = _managed_hook_commands(
-                _hooks_commands(managed_hook_payload["hooks"]), guard_home=context.guard_home
+        config_parts = _hook_command_parts(context, include_workspace=False, prepared_files=prepared_files)
+        workspace = (
+            None
+            if workspace_payload is None
+            else (
+                workspace_payload,
+                _hook_command_parts(context, include_workspace=True, prepared_files=prepared_files),
             )
+        )
+        config_plan, workspace_plan = plan_copilot_hooks(context.guard_home, (hooks_payload, config_parts), workspace)
         detection = self.detect(context, config_contents=config_contents)
         managed_servers = managed_stdio_servers(detection)
         skipped_servers = skipped_stdio_server_names(detection)
@@ -712,9 +521,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
         primary_target_mcp_path = target_mcp_paths[0]
         primary_backup_path = backup_paths[0]
         primary_state_path = state_paths[0]
-        hook_entry = _hook_entry(context, include_workspace=False, prepared_files=prepared_files)
-        for hook_name in _MANAGED_HOOK_EVENTS:
-            hooks_payload[hook_name] = _merge_hook_entries(hooks_payload.get(hook_name), hook_entry, managed=managed)
+        config_plan.install(_hook_entry(context, config_plan))
         if prepared_files is None:
             config_path.parent.mkdir(parents=True, exist_ok=True)
             write_text_at_authorized_path(config_path, json.dumps(config_payload, indent=2) + "\n")
@@ -722,15 +529,9 @@ class CopilotHarnessAdapter(HarnessAdapter):
             prepare_file(
                 config_path, (json.dumps(config_payload, indent=2) + "\n").encode("utf-8"), before=captured(config_path)
             )
-        if managed_hook_path is not None and managed_hook_payload is not None:
-            managed_workspace_hooks = managed_hook_payload["hooks"]
-            managed_workspace_entry = _hook_entry(context, include_workspace=True, prepared_files=prepared_files)
-            for hook_name in _MANAGED_HOOK_EVENTS:
-                managed_workspace_hooks[hook_name] = _merge_hook_entries(
-                    managed_workspace_hooks.get(hook_name),
-                    managed_workspace_entry,
-                    managed=workspace_managed,
-                )
+        if managed_hook_path is not None and workspace_plan is not None:
+            workspace_plan.install(_hook_entry(context, workspace_plan))
+            managed_hook_payload = workspace_plan.payload
             if prepared_files is None:
                 managed_hook_path.parent.mkdir(parents=True, exist_ok=True)
                 write_text_at_authorized_path(managed_hook_path, json.dumps(managed_hook_payload, indent=2) + "\n")
@@ -768,15 +569,12 @@ class CopilotHarnessAdapter(HarnessAdapter):
         config_path = self._config_path(context)
         config_payload = self._strict_json_object(config_path, label="Copilot config")
         hooks_payload = _inline_hooks_payload(config_payload)
-        managed = _managed_hook_commands(_hooks_commands(hooks_payload), guard_home=context.guard_home)
         managed_hook_path = self._hook_path(context)
-        managed_hook_payload: _ManagedHookPayload | None = None
-        workspace_managed: set[str] = set()
+        config_parts = _hook_command_parts(context, include_workspace=False)
+        workspace: tuple[dict[str, object], tuple[str, ...]] | None = None
         if managed_hook_path is not None and managed_hook_path.is_file():
-            managed_hook_payload = _managed_hook_payload(_json_payload(managed_hook_path))
-            workspace_managed = _managed_hook_commands(
-                _hooks_commands(managed_hook_payload["hooks"]), guard_home=context.guard_home
-            )
+            workspace = (_json_payload(managed_hook_path), _hook_command_parts(context, include_workspace=True))
+        config_plan, workspace_plan = plan_copilot_hooks(context.guard_home, (hooks_payload, config_parts), workspace)
         uninstall_targets = self._uninstall_targets(context)
         for state_path, target_mcp_path, backup_path in uninstall_targets:
             cleanup_complete = False
@@ -806,41 +604,16 @@ class CopilotHarnessAdapter(HarnessAdapter):
         primary_target_mcp_path = managed_config_paths[0] if managed_config_paths else ""
         primary_backup_path = backup_paths[0] if backup_paths else ""
         primary_state_path = state_paths[0] if state_paths else ""
-        bash_command, powershell_command = _hook_shell_commands(context, include_workspace=False)
         if len(remaining_state_entries) == 0:
-            for hook_name in _MANAGED_HOOK_EVENTS:
-                updated_entries = _remove_hook_entries(
-                    hooks_payload.get(hook_name),
-                    bash_command,
-                    powershell_command,
-                    managed=managed,
-                )
-                if len(updated_entries) > 0:
-                    hooks_payload[hook_name] = updated_entries
-                    continue
-                hooks_payload.pop(hook_name, None)
+            config_plan.uninstall()
             if len(hooks_payload) == 0:
                 config_payload.pop("hooks", None)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         write_text_at_authorized_path(config_path, json.dumps(config_payload, indent=2) + "\n")
-        if managed_hook_path is not None and managed_hook_payload is not None:
-            managed_workspace_hooks = managed_hook_payload["hooks"]
-            managed_bash_command, managed_powershell_command = _hook_shell_commands(
-                context,
-                include_workspace=True,
-            )
-            for hook_name in _MANAGED_HOOK_EVENTS:
-                updated_entries = _remove_hook_entries(
-                    managed_workspace_hooks.get(hook_name),
-                    managed_bash_command,
-                    managed_powershell_command,
-                    managed=workspace_managed,
-                )
-                if len(updated_entries) > 0:
-                    managed_workspace_hooks[hook_name] = updated_entries
-                    continue
-                managed_workspace_hooks.pop(hook_name, None)
-            if len(managed_workspace_hooks) > 0:
+        if managed_hook_path is not None and workspace_plan is not None:
+            workspace_plan.uninstall()
+            managed_hook_payload = workspace_plan.payload
+            if len(workspace_plan.hooks) > 0:
                 managed_hook_path.parent.mkdir(parents=True, exist_ok=True)
                 write_text_at_authorized_path(managed_hook_path, json.dumps(managed_hook_payload, indent=2) + "\n")
             else:

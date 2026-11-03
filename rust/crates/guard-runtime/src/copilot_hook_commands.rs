@@ -91,7 +91,7 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
 
 /// Whether Guard wrote `command`; `bridge` is the current `(interpreter,
 /// script)` pair of the isolated bridge.
-fn is_managed(command: &str, bridge: Option<(&str, &str)>) -> bool {
+pub(crate) fn is_managed(command: &str, bridge: Option<(&str, &str)>) -> bool {
     let lowered = command.to_lowercase();
     if LEGACY_PATTERNS
         .iter()
