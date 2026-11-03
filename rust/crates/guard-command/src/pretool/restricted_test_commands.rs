@@ -665,6 +665,15 @@ pub(super) fn readonly_test_reason(
             }
             _ => None,
         };
+        // npm reads its own configuration options anywhere on the line, so a
+        // trailing one names no test argument. Measured against npm 11.6.2,
+        // `npm test --silent`, `npm test -s` and `npm test --loglevel=error`
+        // each hand the script an empty argv, while pnpm, yarn and Bun pass
+        // the same word through to the script, so only npm's tail is peeled.
+        let rest = rest.map(|rest| match manager {
+            "npm" => crate::contained_argv::manager_reporting_options_peeled(manager, rest),
+            _ => rest,
+        });
         if rest.is_some_and(|rest| rest.is_empty() || rest.first().is_some_and(|arg| arg == "--")) {
             // This is only a routing receipt. The sink resolves the manifest,
             // rejects lifecycle/shell effects and checks the underlying runner.

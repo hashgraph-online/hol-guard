@@ -187,3 +187,43 @@ fn a_word_a_manager_does_not_alias_stays_a_script_name() {
         );
     }
 }
+
+#[test]
+fn npm_reads_its_reporting_options_after_the_script_name_too() {
+    // npm's own parser takes its configuration options anywhere on the line,
+    // so a trailing one is npm's word rather than the script's. Measured
+    // against npm 11.6.2, the test script's argv is empty for each of these
+    // runs, yet reading the tail as a test argument left the quiet spelling
+    // under review while the loud one beside it was admitted.
+    for command in [
+        "npm test --silent",
+        "npm test -s",
+        "npm test --loglevel=error",
+        "npm test --loglevel error",
+        "npm run test --silent",
+        "npm --silent test -s",
+        // npm hands the script only the words after `--`, so the tail that
+        // follows the peeled option is still the script's own.
+        "npm test --silent -- --coverage",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_package_test_readonly_containment_required"),
+            "{command}"
+        );
+    }
+    // pnpm, yarn and Bun pass the same word through to the script, where it
+    // is the runner's option and not the manager's, so those spellings still
+    // need the `--` that says so. An npm option that moves the run, and a
+    // bare word, are not reporting options at either end of the line.
+    for command in [
+        "pnpm test --silent",
+        "yarn test --silent",
+        "bun run test --silent",
+        "npm test --prefix ../other",
+        "npm test --workspaces",
+        "npm test extra",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}

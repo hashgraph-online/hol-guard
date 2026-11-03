@@ -117,6 +117,15 @@ pub(crate) fn script_tokens(
         }
         _ => return Err(invalid("Only local package test scripts are supported.")),
     };
+    // The admission peels npm's own configuration options off the tail
+    // because npm takes them anywhere on the line and forwards none of them
+    // to the script. The sink reads the same words, so the quiet spelling
+    // resolves the same script rather than being refused for an argument npm
+    // never hands it.
+    let trailing = match manager {
+        "npm" => reporting_options_peeled(manager, trailing),
+        _ => trailing,
+    };
     if trailing.first().is_some_and(|word| word != "--") {
         return Err(invalid("Test arguments must follow an explicit --."));
     }
