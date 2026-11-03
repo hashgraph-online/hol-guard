@@ -279,7 +279,10 @@ def test_delivery_stays_out_of_resolved_and_unhinted_requests() -> None:
     )
 
 
-def test_the_shape_check_keeps_its_own_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("warm", [True, False])
+def test_the_shape_check_keeps_its_own_deadline_once_the_resident_is_warm(
+    monkeypatch: pytest.MonkeyPatch, warm: bool
+) -> None:
     from codex_plugin_scanner.guard import native_runner_authority as authority
     from codex_plugin_scanner.guard.runtime import extension_coverage_hint as module
 
@@ -292,8 +295,12 @@ def test_the_shape_check_keeps_its_own_deadline(monkeypatch: pytest.MonkeyPatch)
         return {}
 
     monkeypatch.setattr(authority, "native_runner_authority", fake)
+    monkeypatch.setattr(module, "_resident_warm", lambda: warm)
     started = time.monotonic()
-    assert module.shaped_hint({"deadline-probe": started}, "coverage") is None
+    assert module.shaped_hint({"deadline-probe": [started, warm]}, "coverage") is None
     assert len(deadlines) == 1
+    if not warm:
+        assert deadlines[0] is None
+        return
     assert deadlines[0] is not None
     assert started < deadlines[0] <= time.monotonic() + module._SHAPE_BUDGET_SECONDS

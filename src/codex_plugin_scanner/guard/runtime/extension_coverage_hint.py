@@ -30,8 +30,8 @@ MAX_COVERED_SEGMENTS = 24
 MAX_SEGMENT_IDS = 12
 MAX_SEGMENT_TOTAL = 256
 _KIND = "extension_hint_shape"
-# Inside the runner allowance, so a slow check is the caller running out of
-# time and never counts against the shared resident circuit.
+# Inside the runner allowance, so a slow check against a warm resident is the
+# caller running out of time and never counts against the shared circuit.
 _SHAPE_BUDGET_SECONDS = 4.0
 
 
@@ -41,13 +41,23 @@ _SHAPES: dict[str, str] = {}
 _MAX_SHAPES = 256
 
 
+def _resident_warm() -> bool:
+    """A cold resident keeps the runner's startup allowance instead of this budget."""
+
+    from ..native_context import _native_runtime_status_memo, _resolve_digest_home
+    from ..native_resident_client import native_resident_client_ready
+
+    identity = _native_runtime_status_memo().identity
+    return identity is not None and native_resident_client_ready(identity.path, _resolve_digest_home(None))
+
+
 def _shape_answer(canonical: str, deadline_monotonic: float | None) -> str:
     cached = _SHAPES.get(canonical)
     if cached is not None:
         return cached
     from ..native_runner_authority import native_runner_authority
 
-    if deadline_monotonic is None:
+    if deadline_monotonic is None and _resident_warm():
         deadline_monotonic = time.monotonic() + _SHAPE_BUDGET_SECONDS
     answer = json.dumps(
         native_runner_authority(_KIND, {"hint": json.loads(canonical)}, deadline_monotonic=deadline_monotonic)
