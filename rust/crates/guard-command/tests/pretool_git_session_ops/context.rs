@@ -190,6 +190,10 @@ fn clone_of_a_local_repository_into_a_fresh_directory_is_quiet() {
         format!("git clone -q --no-hardlinks {primary} {copy}"),
         format!("git clone --single-branch -b main {primary} {copy}"),
         format!("git clone -n {primary} {copy}"),
+        // `--shared` borrows the source's objects instead of copying them.
+        // It names no program and runs the same checkout `--local` runs.
+        format!("git clone --shared {primary} {copy}"),
+        format!("git clone -s -q {primary} {copy}"),
     ] {
         session.assert_allow(&command, CLONE);
     }
@@ -217,6 +221,12 @@ fn clone_of_a_local_repository_into_a_fresh_directory_is_quiet() {
         format!("git clone {primary} {copy} > {home}/clone.log"),
         format!("git clone {primary} {copy} && rm -rf {primary}"),
         format!("git clone -b missing-branch {primary} {copy}"),
+        // `--no-local` sends the copy through the transport, which reads a
+        // repository this proof has not read.
+        format!("git clone --no-local {primary} {copy}"),
+        // `--reference` borrows objects from a repository the proof never
+        // named, so it is not the bounded source `--shared` borrows from.
+        format!("git clone --reference {home}/org {primary} {copy}"),
     ] {
         session.assert_not_allow(&command);
     }
