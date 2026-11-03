@@ -389,6 +389,7 @@ def _fetch_after_lapse(
     response: dict[str, object],
     *,
     refused_tokens: set[str],
+    refresh_error: Exception | None = None,
 ) -> tuple[list[str], list[bool]]:
     """Refuse the given tokens with a 401, the way Cloud answers a lapsed one."""
 
@@ -397,6 +398,8 @@ def _fetch_after_lapse(
 
     def resolve(store: object, *, force_refresh: bool = False, **_: object) -> dict[str, object]:
         refreshes.append(force_refresh)
+        if force_refresh and refresh_error is not None:
+            raise refresh_error
         return {
             "sync_url": "https://hol.org/api/guard/receipts/sync",
             "access_token": "fresh-token" if force_refresh else "lapsed-token",
@@ -457,3 +460,38 @@ def test_sync_reports_a_token_cloud_refuses_after_a_refresh(
     assert sent_tokens == ["lapsed-token", "fresh-token"]
     assert refreshes == [False, True]
     assert store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY) is None
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_sync_reports_a_refresh_that_finds_the_device_signed_out(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, signing_key: RSAPrivateKey
+) -> None:
+    # A refresh that cannot mint a token means the device was signed out
+    # mid-sync. That is a failed sync, not a skipped one, and the bundle
+    # already saved must stay in place.
+    store = _connected_store(tmp_path, monkeypatch)
+    store.set_sync_payload(
+        "supply_chain_bundle_keyring",
+        {"workspace_id": WORKSPACE_ID, "keys": [_verification_key(signing_key)]},
+        "2026-10-21T00:00:00Z",
+    )
+    earlier = _response(signing_key, generated_at=datetime.now(timezone.utc) - timedelta(minutes=10))
+    _fetch_after_lapse(monkeypatch, earlier, refused_tokens=set())
+    assert guard_runner.sync_network_protection_bundle_best_effort(store)["status"] == "synced"
+    saved = store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
+
+    response = _response(signing_key, generated_at=datetime.now(timezone.utc) - timedelta(minutes=1))
+    sent_tokens, refreshes = _fetch_after_lapse(
+        monkeypatch,
+        response,
+        refused_tokens={"lapsed-token"},
+        refresh_error=guard_runner.GuardSyncAuthorizationExpiredError("signed out"),
+    )
+
+    failed = guard_runner.sync_network_protection_bundle_best_effort(store)
+
+    assert failed is not None
+    assert failed["status"] == "failed"
+    assert sent_tokens == ["lapsed-token"]
+    assert refreshes == [False, True]
+    assert store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY) == saved
