@@ -237,7 +237,14 @@ def _summarize_harness(
     approval_flow = get_adapter(detection.harness).approval_flow(managed_install=managed_install)
     review_count = count_review_artifacts(store, detection.artifacts, detection.harness)
     managed = bool(managed_install and managed_install.get("active"))
-    guard_registered = artifacts_use_guard(detection.artifacts)
+    from ..native_runner_authority import NativeRunnerAuthorityError
+
+    try:
+        guard_registered = artifacts_use_guard(detection.artifacts)
+    except NativeRunnerAuthorityError as error:
+        # Display-only: the product copy falls back to its unavailable status too.
+        _LOGGER.debug("guard registration check unavailable: %s", error)
+        guard_registered = False
     shim_path = None
     if managed_install is not None:
         manifest = managed_install.get("manifest")
