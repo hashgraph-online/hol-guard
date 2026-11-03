@@ -573,20 +573,21 @@ Python imports report `from .server import` and `from . import server` as
 `./server.py`, beside the script.
 Python (`local_mcp_source_evidence.py`) takes the
 script from the launch identity, so `bash ship.sh` reads `ship.sh`, not the
-shell, and launches it only when the script or one of its followed `./`
+shell, and asks the `mcp_evidence` op of `local_cli_script_source`, which
+says it serves MCP only when the script or one of its followed `./`
 modules (a sibling package's `__init__.py` included) has that fact. A selected
 server, a stored observation recorded for this same launch, a package MCP
 launcher (`npx`, `uvx` and the like), a package bin run through a runner, and
 a compiled program keep the launch without a read. An entry-point wrapper whose
 import is not a `./` module beside it is launched only when the installed
-module it names shows the fact: Python finds that module in the
+module it names shows the fact: the same op finds that module in the
 `site-packages` of the environment holding the wrapper or its `#!` interpreter,
 reads its own file, then follows the imports of its own package (relative or
 by package name) up to 24 files, each opened under the package folder. Another
 module of the package, such as an optional MCP server beside a CLI's commands,
 does not count. A module it cannot find is not launched. A failed identity lookup, a
-script whose source or answer cannot be read, or a runtime whose status cannot
-be read, is not launched. A resident without the
+script whose source or answer cannot be read, a runtime whose status cannot
+be read, or a resident that cannot answer the op, is not launched. A resident without the
 feature keeps the launch, as before.
 
 Two consequences are worth naming. Discovery fails closed: a resident that
