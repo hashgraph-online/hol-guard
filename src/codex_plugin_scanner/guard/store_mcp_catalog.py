@@ -6,7 +6,7 @@ import json
 import sqlite3
 from hashlib import sha256
 
-from .runtime.local_cli_commands import slug_local_cli_command_id
+from .runtime.local_cli_commands import slug_local_cli_command_ids
 
 _MAX_SNAPSHOT_BYTES = 2_000_000
 _MAX_SNAPSHOT_TOOLS = 10_000
@@ -62,13 +62,18 @@ def acknowledge_catalog_changes(
     changes = payload.get("changes") if payload is not None else None
     if payload is None or not isinstance(changes, dict):
         return
+    listed = {key: names for key in ("added", "changed") if isinstance(names := changes.get(key), list)}
+    texts = sorted({name for names in listed.values() for name in names if isinstance(name, str)})
+    if not texts:
+        return
+    try:
+        ids = dict(zip(texts, slug_local_cli_command_ids(texts), strict=True))
+    except ValueError:
+        # Without the resident the changes stay flagged for review.
+        return
     updated = dict(changes)
-    for key in ("added", "changed"):
-        names = changes.get(key)
-        if isinstance(names, list):
-            updated[key] = [
-                name for name in names if not (isinstance(name, str) and slug_local_cli_command_id(name) in reviewed)
-            ]
+    for key, names in listed.items():
+        updated[key] = [name for name in names if not (isinstance(name, str) and ids[name] in reviewed)]
     if updated == changes:
         return
     payload["changes"] = updated

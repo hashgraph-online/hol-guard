@@ -723,6 +723,7 @@ mod local_cli_observer;
 mod local_mcp_grant_identity;
 mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
+mod local_mcp_probe;
 mod local_once_store;
 mod local_risk_report;
 mod local_skill_index;

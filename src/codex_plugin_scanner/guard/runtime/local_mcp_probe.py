@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -10,18 +9,16 @@ from pathlib import Path
 from typing import Literal
 
 from .command_model import parse_shell_command
-from .local_cli_commands import OTHER_COMMAND_ID, LocalCliCommand, slug_local_cli_command_id
+from .local_cli_commands import OTHER_COMMAND_ID, LocalCliCommand
 from .local_cli_identity import (
     UnlistedCliIdentity,
     identify_unlisted_cli,
     unlisted_cli_invocation_is_safe,
 )
 from .local_mcp_stdio import (
-    MAX_MCP_PROBE_TOOLS,
     MCP_PACKAGE_PROBE_TIMEOUT_SECONDS,
     MCP_PROBE_TIMEOUT_SECONDS,
     McpCatalogResult,
-    is_package_shim_executable,
     probe_search_path,
     run_mcp_catalog,
 )
@@ -191,41 +188,21 @@ def _timeout_for(tokens: Sequence[str], timeout: float | None) -> float:
 
 
 def _resolve_launch_argv(tokens: Sequence[str], *, cwd: Path) -> tuple[str, ...] | None:
-    first = tokens[0]
-    search_path = probe_search_path()
-    if is_package_shim_executable(first):
-        found = shutil.which(Path(first).name, path=search_path)
-        if found is None:
-            return None
-        resolved = found
-    elif Path(first).is_absolute():
-        resolved = first
-    else:
-        found = shutil.which(first, path=search_path)
-        if found is None:
-            candidate = cwd / first
-            if not candidate.is_file():
-                return None
-            resolved = str(candidate)
-        else:
-            resolved = found
-    arguments = [_absolute_existing_path(token, cwd=cwd) for token in tokens[1:]]
-    return (resolved, *arguments)
+    """The argv a probe launches, resolved by the native ``local_mcp_probe`` kind."""
+
+    request = {"op": "launch", "tokens": list(tokens), "cwd": str(cwd), "search_path": probe_search_path()}
+    argv = _ask(request).get("argv")
+    if argv is None:
+        return None
+    if not isinstance(argv, list) or not argv or not all(isinstance(token, str) for token in argv):
+        raise ValueError("MCP probe launch is unavailable")
+    return tuple(argv)
 
 
-def _absolute_existing_path(token: str, *, cwd: Path) -> str:
-    if token.startswith("-") or token.startswith("@") or "://" in token:
-        return token
-    path = Path(token)
-    if path.is_absolute():
-        return token
-    candidate = cwd / token
-    try:
-        if candidate.exists():
-            return str(candidate.resolve())
-    except OSError:
-        return token
-    return token
+def _ask(request: Mapping[str, object]) -> dict[str, object]:
+    from ..native_runner_authority import native_runner_authority
+
+    return native_runner_authority("local_mcp_probe", request)
 
 
 def _display_name(identity: McpServerIdentity, tokens: Sequence[str]) -> str:
@@ -239,36 +216,23 @@ def _example_label(tokens: Sequence[str]) -> str:
 
 
 def _tools_from_payload(raw_tools: Sequence[dict[str, object]], *, server_name: str) -> tuple[LocalCliCommand, ...]:
-    discovered: list[LocalCliCommand] = []
-    seen = {OTHER_COMMAND_ID}
-    for item in raw_tools:
-        name = item.get("name")
-        if not isinstance(name, str) or not name.strip():
-            continue
-        command_id = slug_local_cli_command_id(name)
-        if command_id in seen:
-            continue
-        seen.add(command_id)
-        description = item.get("description")
-        discovered.append(
-            LocalCliCommand(
-                command_id=command_id,
-                name=name.strip()[:120],
-                usage=name.strip()[:160],
-                description=description.strip()[:240] if isinstance(description, str) else "",
-            )
-        )
-        if len(discovered) >= MAX_MCP_PROBE_TOOLS:
-            break
-    discovered.append(
+    """Catalog rows for the listed tools, then Other tools, from the native kind."""
+
+    listed = [
+        {key: item[key] for key in ("name", "description") if isinstance(item.get(key), str)} for item in raw_tools
+    ]
+    rows = _ask({"op": "tools", "tools": listed, "server_name": server_name}).get("tools")
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        raise ValueError("MCP probe tools are unavailable")
+    return tuple(
         LocalCliCommand(
-            command_id=OTHER_COMMAND_ID,
-            name="Other tools",
-            usage=f"{server_name} …",
-            description="Any other tool this MCP server did not list.",
+            command_id=str(row["command_id"]),
+            name=str(row["name"]),
+            usage=str(row["usage"]),
+            description=str(row["description"]),
         )
+        for row in rows
     )
-    return tuple(discovered)
 
 
 def _executable_basename(value: str) -> str:

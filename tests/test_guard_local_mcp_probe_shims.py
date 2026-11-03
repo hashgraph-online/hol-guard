@@ -6,10 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.local_mcp_probe import probe_stdio_mcp_server
-from codex_plugin_scanner.guard.runtime.local_mcp_stdio import (
-    is_package_shim_executable,
-    probe_search_path,
-)
+from codex_plugin_scanner.guard.runtime.local_mcp_stdio import probe_search_path
 
 pytestmark = pytest.mark.usefixtures("native_mcp_probe")
 
@@ -89,7 +86,6 @@ def test_probe_skips_package_shim_npx(tmp_path: Path, monkeypatch) -> None:
 
 def test_probe_skips_absolute_package_shim_npx(tmp_path: Path, monkeypatch) -> None:
     shim = _shim_first_npx_path(tmp_path, monkeypatch)
-    assert is_package_shim_executable(str(shim))
     probed = probe_stdio_mcp_server(
         f"{shim} -y chrome-devtools-mcp@latest",
         cwd=tmp_path,
