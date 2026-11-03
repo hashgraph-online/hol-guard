@@ -1875,17 +1875,14 @@
         "symbols": [
           "install_cline_hooks",
           "_bounded_hook_argv",
-          "_slot_for_event",
+          "_render_hook_files",
+          "_claim_slot",
           "_worker_path",
-          "_worker_config",
-          "_write",
-          "_posix_wrapper",
-          "_ps_quote",
-          "_powershell_wrapper"
+          "_write"
         ],
         "entry_points": [],
-        "reason": "Cline native-hook install: worker configuration and launcher file writes plus the POSIX and PowerShell launcher templates.",
-        "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. The hook worker itself runs in the native runtime (cline-hook-worker); _worker_config only writes its configuration at install."
+        "reason": "Cline native-hook install: the worker configuration and launcher file writes. The native cline_hook_files kind renders both files and their digests.",
+        "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. The hook worker itself runs in the native runtime (cline-hook-worker); install only writes the configuration and launchers the native cline_hook_files kind renders."
       },
       {
         "id": "adapter-cline-plugin-setup",

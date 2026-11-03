@@ -142,6 +142,11 @@ mod cline_detect;
 #[cfg(all(test, unix))]
 #[path = "adapters/detection/cline_detect_tests.rs"]
 mod cline_detect_tests;
+#[path = "adapters/cline_hook_files.rs"]
+mod cline_hook_files;
+#[cfg(test)]
+#[path = "adapters/cline_hook_files_tests.rs"]
+mod cline_hook_files_tests;
 mod cline_hook_worker;
 #[path = "adapters/cline_plugin_render.rs"]
 mod cline_plugin_render;

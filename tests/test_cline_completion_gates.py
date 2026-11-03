@@ -14,12 +14,12 @@ import pytest
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cline import ClineHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cline_hooks import _worker_config
 from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, cline_plugin_state
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.cli.commands_support_interaction import _apps_disconnect_confirm_command
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_verification
 from codex_plugin_scanner.guard.product_model import SUPPORTED_HARNESS_VALUES
+from tests.cline_worker_config import worker_config as _worker_config
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
