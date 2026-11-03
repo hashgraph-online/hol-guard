@@ -85,6 +85,12 @@ class CloudActionsSessionStore:
             raise ValueError("invalid profile name")
         return self._root / "profiles" / f"{name}.json"
 
+    def _ensure_profiles_dir(self) -> None:
+        # Make the Cloud actions folder owner-only before the folder inside it:
+        # creating `profiles` alone would leave its new parent at the umask.
+        _ensure_private_dir(self._root)
+        _ensure_private_dir(self._root / "profiles")
+
     def _record(self, name: str) -> dict[str, object] | None:
         payload = _read_json(self._profile_path(name))
         if payload is None or payload.get("schema") != _SCHEMA:
@@ -104,7 +110,7 @@ class CloudActionsSessionStore:
         """
 
         path = self._profile_path(name)
-        _ensure_private_dir(path.parent)
+        self._ensure_profiles_dir()
         with (path.parent / f".{name}.lock").open("a+b") as handle:
             if os.name != "nt":
                 # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
@@ -174,7 +180,7 @@ class CloudActionsSessionStore:
         """
 
         path = self._profile_path(profile.name)
-        _ensure_private_dir(path.parent)
+        self._ensure_profiles_dir()
         previous_ref = self._secret_ref(profile.name)
         ref = f"cloud-actions-{profile.name}-{_secrets.token_hex(8)}"
         record = {"schema": _SCHEMA, **asdict(profile), "secret_ref": ref}
