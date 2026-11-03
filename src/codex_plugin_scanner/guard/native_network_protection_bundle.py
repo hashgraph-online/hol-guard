@@ -34,6 +34,9 @@ _REQUEST_SCHEMA = "guard-network-protection-verify-request.v1"
 _RESULT_SCHEMA = "guard-network-protection-verify-result.v1"
 _TIMEOUT_SECONDS = 15.0
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
+# The frame parser bounds every string at 4 MiB of decoded text, the response
+# text included.
+_MAX_RESPONSE_JSON_BYTES = 4 * 1024 * 1024
 
 
 class NetworkProtectionBundleUnavailableError(NetworkProtectionBundleError):
@@ -86,8 +89,11 @@ def native_verify_network_protection_response(
     }
     try:
         if NETWORK_PROTECTION_VERIFY_RESPONSE_JSON_FEATURE in features:
+            text = json.dumps(dict(response), separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+            if len(text.encode("utf-8")) > _MAX_RESPONSE_JSON_BYTES:
+                raise NetworkProtectionBundleUnavailableError("response_too_large")
             wire["response"] = None
-            wire["response_json"] = json.dumps(dict(response))
+            wire["response_json"] = text
         reply = _resident_request(
             operation="network_protection_verify",
             request=wire,

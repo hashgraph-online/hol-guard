@@ -227,6 +227,34 @@ def test_sync_saves_a_bundle_whose_threat_feed_is_wider_than_a_request_frame_arr
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_sync_names_a_bundle_too_large_for_a_request_frame(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, signing_key: RSAPrivateKey
+) -> None:
+    # The frame parser bounds a string at 4 MiB, so a larger bundle cannot reach
+    # the verifier as text. The sync says so instead of failing as an unbound reply.
+    store = _connected_store(tmp_path, monkeypatch)
+    store.set_sync_payload(
+        "supply_chain_bundle_keyring",
+        {"workspace_id": WORKSPACE_ID, "keys": [_verification_key(signing_key)]},
+        "2026-10-21T00:00:00Z",
+    )
+    huge_feed = [f"https://{index:064x}.example/" for index in range(60_000)]
+    response = _response(
+        signing_key,
+        generated_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        threatUrls={"malware_distribution": huge_feed},
+    )
+    monkeypatch.setattr(guard_runner, "_fetch_supply_chain_bundle_payload", lambda request: response)
+
+    failed = guard_runner.sync_network_protection_bundle_best_effort(store)
+
+    assert failed is not None
+    assert failed["status"] == "failed"
+    assert "response_too_large" in str(failed["error"])
+    assert store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY) is None
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_refuses_a_saved_keyring_it_cannot_read(
     tmp_path, monkeypatch: pytest.MonkeyPatch, signing_key: RSAPrivateKey
 ) -> None:
