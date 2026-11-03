@@ -3,8 +3,9 @@
 //!
 //! The prompt hook answers in time whatever happens here: the walk and the
 //! lookup share what is left of the hook's budget, the lookup runs on its own
-//! thread, a repeat of the same prompt joins the lookup already running, and
-//! anything late, failed, or off adds nothing.
+//! thread, a repeat of the same prompt joins the lookup already running, a
+//! prompt CIGAR cannot answer yet gets the matched files, and anything failed
+//! or off adds nothing.
 //! Only an allowed prompt gets context, and only for harnesses that show
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
@@ -12,15 +13,15 @@ use crate::context_assistance_engine::{admissible_paths, PickedExcerpt};
 use crate::context_assistance_prompt_files::{
     asks_for_tests, candidates, phrases, project_root, terms, test_file,
 };
-use crate::context_assistance_service::LaneMiss;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
+use lookup::{lookup, Request};
 use serde_json::Value;
-use std::collections::BTreeMap;
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::path::Path;
 use std::time::{Duration, Instant};
+
+#[path = "context_assistance_prompt_lookup.rs"]
+mod lookup;
 
 const MAX_WAIT: Duration = Duration::from_millis(2_500);
 const DEFAULT_WAIT: Duration = Duration::from_millis(2_000);
@@ -152,8 +153,9 @@ fn attach(
         words,
         found: found.clone(),
     };
-    // CIGAR still starting, or late: the matched files it would accept still
-    // save the agent a search, as long as project context is still on.
+    // CIGAR starting, busy with another prompt, or late: the matched files it
+    // would accept still save the agent a search, as long as project context
+    // is still on.
     let listed = || {
         let until = deadline + HOOK_MARGIN / 2;
         let home = store.guard_home();
@@ -210,143 +212,6 @@ fn waiting_time(budget_ms: Option<u64>) -> Duration {
             .saturating_sub(HOOK_MARGIN)
             .min(MAX_WAIT)
     })
-}
-
-struct Request {
-    root: PathBuf,
-    app: String,
-    query: String,
-    words: Vec<String>,
-    found: Vec<String>,
-}
-
-/// One lookup per project and app. A second hook for the same prompt waits
-/// on it; a different prompt meanwhile goes without rather than queueing.
-struct Flight {
-    prompt: u64,
-    lane: crate::context_assistance_service::PromptLane,
-    done: Mutex<Option<Option<String>>>,
-    ready: Condvar,
-}
-
-type Flights = Mutex<BTreeMap<(PathBuf, String), Arc<Flight>>>;
-
-fn flights() -> &'static Flights {
-    static FLIGHTS: OnceLock<Flights> = OnceLock::new();
-    FLIGHTS.get_or_init(Default::default)
-}
-
-/// CIGAR's rendered answer, `Some(None)` when it had nothing that fits, was
-/// off, failed, or another prompt holds the lookup, and `None` when CIGAR is
-/// on but still starting or did not answer before `deadline`.
-fn lookup(
-    service: &crate::context_assistance_service::Service,
-    guard_home: &Path,
-    request: Request,
-    deadline: Instant,
-) -> Option<Option<String>> {
-    let key = (request.root.clone(), request.app.clone());
-    let prompt = hashed(&request.query);
-    let flight = {
-        let Ok(running) = flights().lock() else {
-            return Some(None);
-        };
-        match running.get(&key) {
-            Some(flight) if flight.prompt == prompt => Some(Arc::clone(flight)),
-            Some(_) => return Some(None),
-            None => None,
-        }
-    };
-    if let Some(flight) = flight {
-        return answer(service, &flight, deadline);
-    }
-    let lane = match service.prompt_lane(guard_home, deadline) {
-        Ok(lane) => lane,
-        Err(LaneMiss::Starting) => return None,
-        Err(LaneMiss::Off) => return Some(None),
-    };
-    let flight = Arc::new(Flight {
-        prompt,
-        lane,
-        done: Mutex::new(None),
-        ready: Condvar::new(),
-    });
-    {
-        let Ok(mut running) = flights().lock() else {
-            return Some(None);
-        };
-        if running.contains_key(&key) {
-            return Some(None);
-        }
-        running.insert(key.clone(), Arc::clone(&flight));
-    }
-    let actor = Arc::clone(&flight.lane.actor);
-    let worker = Arc::clone(&flight);
-    let spawned = std::thread::Builder::new()
-        .name("guard-cigar-prompt".into())
-        .spawn(move || {
-            let Request {
-                root,
-                app,
-                query,
-                words,
-                found,
-            } = request;
-            let asked = words.clone();
-            let picked = actor
-                .call(move |runtime, engine| {
-                    engine
-                        .prompt_context(runtime, root, app, found.clone(), query, &asked)
-                        .map(|picked| picked.map(|picked| (picked, found)))
-                })
-                .ok()
-                .flatten();
-            let rendered = picked.and_then(|(picked, found)| render(&picked, &found, &words));
-            if let Ok(mut done) = worker.done.lock() {
-                *done = Some(rendered);
-            }
-            worker.ready.notify_all();
-            if let Ok(mut running) = flights().lock() {
-                if running
-                    .get(&key)
-                    .is_some_and(|current| Arc::ptr_eq(current, &worker))
-                {
-                    running.remove(&key);
-                }
-            }
-        });
-    if spawned.is_err() {
-        if let Ok(mut running) = flights().lock() {
-            running.retain(|_, current| !Arc::ptr_eq(current, &flight));
-        }
-        return Some(None);
-    }
-    answer(service, &flight, deadline)
-}
-
-/// The flight's answer, dropped if project context changed meanwhile.
-fn answer(
-    service: &crate::context_assistance_service::Service,
-    flight: &Flight,
-    deadline: Instant,
-) -> Option<Option<String>> {
-    let rendered = wait_for(flight, deadline)?;
-    Some(rendered.filter(|_| service.prompt_lane_current(&flight.lane)))
-}
-
-fn wait_for(flight: &Flight, deadline: Instant) -> Option<Option<String>> {
-    let mut done = flight.done.lock().ok()?;
-    while done.is_none() {
-        let left = deadline.checked_duration_since(Instant::now())?;
-        done = flight.ready.wait_timeout(done, left).ok()?.0;
-    }
-    done.clone()
-}
-
-fn hashed(text: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    text.hash(&mut hasher);
-    hasher.finish()
 }
 
 fn truncated(text: &str, max_bytes: usize) -> String {

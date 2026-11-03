@@ -224,3 +224,18 @@ fn a_new_session_wakes_project_context_only_when_it_is_on() {
         "waking never changes consent"
     );
 }
+
+#[test]
+fn a_lane_watch_waits_for_a_start_from_another_thread() {
+    let service = Service::default();
+    service.hold_start_for_tests();
+    let watch = service.lane_watch();
+    let soon = Instant::now() + Duration::from_millis(120);
+    let waited = std::thread::spawn(move || watch.wait(soon)).join().unwrap();
+    assert!(matches!(waited, Err(LaneMiss::Starting)));
+    service.end_start_for_tests();
+    assert!(
+        matches!(service.lane_watch().wait(soon), Err(LaneMiss::Off)),
+        "a start that ended without a worker is not waited on"
+    );
+}
