@@ -1,8 +1,9 @@
-import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as shellHref, c as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b4 as HiMiniPauseCircle, b5 as listContextAgentSessions, h as harnessDisplayName, b6 as HiMiniLink, b7 as revokeContextAgentSession, b8 as authorizeContextAgentSession, b9 as ContextAssistanceApiError, ba as ask, bb as parseContextScope, bc as validContextBrokerRevision, bd as isGuardDemoMode, be as fetchWithGuardAuth, bf as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bg as HiMiniCodeBracketSquare, bh as HiMiniFolder, u as HiMiniDocumentText, bi as HiMiniComputerDesktop, bj as HiMiniHome, k as HiMiniCheck, bk as HiMiniFolderPlus, bl as HiMiniClock, bm as commitDashboardLocation, bn as listContextWorkspaces, bo as HiMiniFolderOpen, bp as grantContextWorkspace, bq as manageContextWorkspace, br as compileWorkspaceContext, w as HiMiniArrowRight, M as HiMiniClipboardDocument, bs as HiMiniArrowLeft, bt as isCigarProducerVersion, bu as isCigarCoreLabel, bv as subscribeDashboardLocation, a5 as HiMiniSparkles, bw as HiMiniArrowUpCircle, bx as parseContextAssistanceStatus, by as isCigarBuildIdentity, bz as fetchContextInstallations, bA as HiMiniCloudArrowDown, f as fetchContextAssistance, a as controlContextAssistance, bB as HiMiniArrowDownTray, bC as downloadBlob, bD as savedEvidenceCopy, bE as guardAwareHref, bF as fetchContextData, bG as forgetContextHistory, bH as forgetSavedEvidence, bI as resolveProtectionLevelCopy, aA as fetchSettings, bJ as fetchRuntimeSnapshot, bK as clearHarnessWatchOverrides, bL as withHarnessPosturePatch, P as updateSettings, bM as clearPolicy, bN as clearReviewQueue, bO as revokeApprovalGateCooldown, bP as disableApprovalGateTotp, bQ as importSettings, bR as resetSettings, bS as enrollApprovalGateTotp, bT as verifyApprovalGateTotp, bU as clearEvidence, bV as exportDiagnostics, bW as repairApprovalCenter, bX as exportSettings, bY as setupDesktopNotifications, a7 as EmptyState, bZ as settingsWatchBannerModel, b_ as WorkspacePageHeader, Z as WatchProtectionBanner, b$ as navigateFromAnchor, g as HiMiniChevronDown, c0 as humanizeList, c1 as isProtectionPosture, c2 as deriveProtectionPosture, c3 as normalizeHarnessPostures, c4 as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b4 as HiMiniPauseCircle, b5 as listContextAgentSessions, h as harnessDisplayName, b6 as HiMiniLink, b7 as revokeContextAgentSession, b8 as authorizeContextAgentSession, b9 as ContextAssistanceApiError, ba as ask, bb as parseContextScope, bc as validContextBrokerRevision, bd as isGuardDemoMode, be as fetchWithGuardAuth, bf as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bg as HiMiniCodeBracketSquare, bh as HiMiniFolder, u as HiMiniDocumentText, bi as HiMiniComputerDesktop, bj as HiMiniHome, k as HiMiniCheck, bk as HiMiniFolderPlus, bl as HiMiniClock, bm as commitDashboardLocation, bn as listContextWorkspaces, bo as HiMiniFolderOpen, bp as grantContextWorkspace, bq as manageContextWorkspace, br as compileWorkspaceContext, w as HiMiniArrowRight, M as HiMiniClipboardDocument, bs as HiMiniArrowLeft, bt as isCigarProducerVersion, bu as isCigarCoreLabel, bv as subscribeDashboardLocation, a5 as HiMiniSparkles, bw as HiMiniArrowUpCircle, bx as parseContextAssistanceStatus, by as isCigarBuildIdentity, bz as fetchContextInstallations, bA as HiMiniCloudArrowDown, f as fetchContextAssistance, c as controlContextAssistance, bB as HiMiniArrowDownTray, bC as downloadBlob, bD as savedEvidenceCopy, bE as guardAwareHref, bF as fetchContextData, bG as forgetContextHistory, bH as forgetSavedEvidence, bI as resolveProtectionLevelCopy, aA as fetchSettings, bJ as fetchRuntimeSnapshot, bK as clearHarnessWatchOverrides, bL as withHarnessPosturePatch, P as updateSettings, bM as clearPolicy, bN as clearReviewQueue, bO as revokeApprovalGateCooldown, bP as disableApprovalGateTotp, bQ as importSettings, bR as resetSettings, bS as enrollApprovalGateTotp, bT as verifyApprovalGateTotp, bU as clearEvidence, bV as exportDiagnostics, bW as repairApprovalCenter, bX as exportSettings, bY as setupDesktopNotifications, a7 as EmptyState, bZ as settingsWatchBannerModel, b_ as WorkspacePageHeader, Z as WatchProtectionBanner, b$ as navigateFromAnchor, g as HiMiniChevronDown, c0 as humanizeList, c1 as isProtectionPosture, c2 as deriveProtectionPosture, c3 as normalizeHarnessPostures, c4 as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-_qdPvIXI.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
 import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-bAWZ8zmO.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-CjWFL3B3.js";
+import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-7c8X0j_V.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
   if (typeof count2 === "number" && count2 > 0) {
@@ -4917,61 +4918,6 @@ function CigarGuide({ onSelect, walkthroughs }) {
     walkthroughs
   ] });
 }
-const CIGAR_TABS = [
-  { value: "runtime", label: "Settings" },
-  { value: "access", label: "Projects & AI apps" },
-  { value: "versions", label: "Updates" },
-  { value: "data", label: "Privacy" },
-  { value: "guide", label: "Guides" }
-];
-function canStartCigar(status, dirty) {
-  return !dirty && status !== null && status.requested_enabled && status.preferences.enabled && status.effective_preferences.enabled && status.verification_permitted && Boolean(status.preferences.runtime_id) && !status.effective_enabled && status.job === null;
-}
-function cigarTabFromSearch(search) {
-  const value = new URLSearchParams(search).get("section");
-  if (value === "tutorials") return "guide";
-  return CIGAR_TABS.find((tab) => tab.value === value)?.value ?? "overview";
-}
-function cigarWaking(status) {
-  if (!status || status.effective_enabled) return false;
-  return status.diagnostic === "runtime_resting" || status.requested_enabled && status.job?.operation === "activate";
-}
-function cigarHelpsPrompts(status) {
-  const effective = status?.effective_preferences;
-  return effective?.features.agent_context === true && effective.sources.workspace_documents === true;
-}
-function cigarWillHelpPrompts(status) {
-  if (!status) return false;
-  if (cigarHelpsPrompts(status)) return true;
-  const { sources } = status.preferences;
-  return !sources.workspace_documents && !sources.source_set_id;
-}
-const PROMPT_PROMISE = "Every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it.";
-const NO_FILES_YET = "Prompts get no project files until Context for AI apps and workspace documents are on in Settings.";
-function cigarHomeCopy(status, loading, running) {
-  if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. You can keep browsing.", setupHint: false };
-  if (!status) {
-    if (loading) return { headline: "Checking CIGAR", detail: "One moment.", setupHint: false };
-    return { headline: "CIGAR status unavailable", detail: "Guard did not answer. Try refreshing the status.", setupHint: false };
-  }
-  if (status.effective_enabled) {
-    if (cigarHelpsPrompts(status)) return { headline: "CIGAR is on", detail: PROMPT_PROMISE, setupHint: false };
-    return { headline: "CIGAR is on", detail: NO_FILES_YET, setupHint: true };
-  }
-  if (cigarWaking(status)) {
-    return { headline: "CIGAR is on", detail: "It rests when nothing needs it and wakes up by itself. You do not need to turn it on again.", setupHint: false };
-  }
-  if (status.restriction && !status.effective_preferences.enabled) {
-    return { headline: "CIGAR is off", detail: "Your organization manages CIGAR on this computer.", setupHint: false };
-  }
-  if (status.requested_enabled) {
-    return { headline: "CIGAR is not running", detail: "It is saved as on but has not started. Turn it on to start it.", setupHint: false };
-  }
-  if (cigarWillHelpPrompts(status)) {
-    return { headline: "CIGAR is off", detail: "Turn it on and " + PROMPT_PROMISE.charAt(0).toLowerCase() + PROMPT_PROMISE.slice(1), setupHint: false };
-  }
-  return { headline: "CIGAR is off", detail: "Turn it on to start CIGAR. " + NO_FILES_YET, setupHint: true };
-}
 function CigarTutorials(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-walkthroughs", "aria-labelledby": "cigar-tutorials-heading", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-intro", children: [
@@ -9237,8 +9183,8 @@ function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, onNaviga
                   )
                 }
               ) : null,
-              /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsFormSection, { title: "CIGAR context assistance", description: "Optional context for reviews, AI apps, and supported execution flows.", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 py-4", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-xl text-sm text-slate-500", children: "CIGAR has its own workspace for getting started, runtime preferences, sources, app access, and data controls." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsFormSection, { title: "CIGAR", description: "Gives your AI app the project files that match what you ask.", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 py-4", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-xl text-sm text-slate-500", children: "Turn it on, pick project folders and choose which AI apps use it on the CIGAR page." }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "a",
                   {

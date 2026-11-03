@@ -178,9 +178,9 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     await page.goto("/cigar?section=runtime");
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     await page.goto("/");
-    const overview = page.getByRole("region", { name: "Context assistance overview" });
+    const overview = page.getByRole("region", { name: "CIGAR overview" });
     await expect(overview.getByRole("status")).toHaveText("Ready");
-    await overview.getByRole("button", { name: "Turn off context assistance", exact: true }).click();
+    await overview.getByRole("button", { name: "Turn off CIGAR", exact: true }).click();
     await expect(overview.getByRole("status")).toHaveText("Off");
     expect((await status()).requested_enabled).toBe(false);
     expect((await status()).runtime).toBeNull();

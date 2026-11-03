@@ -1,28 +1,37 @@
-import { r as reactExports, f as fetchContextAssistance, j as jsxRuntimeExports, c as contextStatusCopy, a as controlContextAssistance, S as SectionLabel, H as HiMiniChevronRight, b as formatRelativeTime, h as harnessDisplayName, d as formatNumber, n as normalizeHarnessSlug, e as HiMiniChevronUp, g as HiMiniChevronDown, A as ActionButton, i as HiMiniArrowPath, k as HiMiniCheck, l as HiMiniNoSymbol, m as HiMiniHandRaised, o as HiMiniArrowUpTray, p as HiMiniCube, q as HiMiniPencilSquare, s as HiMiniCommandLine, t as HiMiniMagnifyingGlass, u as HiMiniDocumentText, v as HiMiniCheckCircle, T as Tag, w as HiMiniArrowRight, x as isConnectableAppHarness, y as HiMiniLockClosed, z as getHeatmapLevel, E as EvidenceInsightsShareButton, G as GuardStatMetric, B as HomeInsightsMetrics, C as EvidenceActivityHeatmapMini, D as homeCommandActivityModel, F as createCommandActivityClient, I as fetchCommandActivityApi, J as getRecoveryCapabilities, K as resolveRecoveryInstructions, L as HiMiniShieldExclamation, M as HiMiniClipboardDocument, N as openRecoveryView, O as useReceiptAnalytics, P as updateSettings, Q as turnProtectionOnUpdate, R as useProtectionPresentationState, U as protectionHealthFor, V as unavailableProtectionHealth, W as buildHomeRuntimeErrorCopy, X as RuntimeErrorState, Y as watchBannerModel, Z as WatchProtectionBanner, _ as EvidenceInsightsShareModal, $ as OperatorHealthCard, a0 as HiMiniShieldCheck, a1 as DeviceProofCard, a2 as guardActionDisposition, a3 as approvalLeftActionStopped, a4 as guardActionActivityCopy, a5 as HiMiniSparkles, a6 as HiMiniXMark, a7 as EmptyState, a8 as resolveCloudIntelCopy, a9 as HiMiniCloud, aa as HiMiniQuestionMarkCircle, ab as useFocusTrap, ac as approvalProofRequiresPassword, ad as HiMiniExclamationTriangle, ae as HiMiniBolt, af as Badge, ag as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { r as reactExports, f as fetchContextAssistance, j as jsxRuntimeExports, c as controlContextAssistance, a as contextStatusCopy, S as SectionLabel, H as HiMiniChevronRight, b as formatRelativeTime, h as harnessDisplayName, d as formatNumber, n as normalizeHarnessSlug, e as HiMiniChevronUp, g as HiMiniChevronDown, A as ActionButton, i as HiMiniArrowPath, k as HiMiniCheck, l as HiMiniNoSymbol, m as HiMiniHandRaised, o as HiMiniArrowUpTray, p as HiMiniCube, q as HiMiniPencilSquare, s as HiMiniCommandLine, t as HiMiniMagnifyingGlass, u as HiMiniDocumentText, v as HiMiniCheckCircle, T as Tag, w as HiMiniArrowRight, x as isConnectableAppHarness, y as HiMiniLockClosed, z as getHeatmapLevel, E as EvidenceInsightsShareButton, G as GuardStatMetric, B as HomeInsightsMetrics, C as EvidenceActivityHeatmapMini, D as homeCommandActivityModel, F as createCommandActivityClient, I as fetchCommandActivityApi, J as getRecoveryCapabilities, K as resolveRecoveryInstructions, L as HiMiniShieldExclamation, M as HiMiniClipboardDocument, N as openRecoveryView, O as useReceiptAnalytics, P as updateSettings, Q as turnProtectionOnUpdate, R as useProtectionPresentationState, U as protectionHealthFor, V as unavailableProtectionHealth, W as buildHomeRuntimeErrorCopy, X as RuntimeErrorState, Y as watchBannerModel, Z as WatchProtectionBanner, _ as EvidenceInsightsShareModal, $ as OperatorHealthCard, a0 as HiMiniShieldCheck, a1 as DeviceProofCard, a2 as guardActionDisposition, a3 as approvalLeftActionStopped, a4 as guardActionActivityCopy, a5 as HiMiniSparkles, a6 as HiMiniXMark, a7 as EmptyState, a8 as resolveCloudIntelCopy, a9 as HiMiniCloud, aa as HiMiniQuestionMarkCircle, ab as useFocusTrap, ac as approvalProofRequiresPassword, ad as HiMiniExclamationTriangle, ae as HiMiniBolt, af as Badge, ag as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { ah } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module-BTPjmztc.js";
+import { c as cigarHomeCopy } from "./workspace-model-7c8X0j_V.js";
 import { B as BrandHero, a as BrandHeroFacts, b as BrandHeroBadge, u as useReducedMotion, c as brandMarkSvg } from "./brand-hero-COty1p6U.js";
 import { A as ABOUT_LOCAL_SECTION_TITLE, a as ABOUT_LOCAL_SECTION_BODY } from "./about-content-Dr9zFg1V.js";
 import { S as SUPPORTED_APPS_FULL } from "./app-catalog-Ca_M7GbC.js";
 import "./supply-chain-protection-stats-0sjO1XtL.js";
 const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
+function homeStatusLabel(props) {
+  if (props.stopping) return "Stopping";
+  if (props.status) return contextStatusCopy(props.status).label;
+  if (props.loading) return "Checking";
+  return "Unavailable";
+}
+function homeStatusCopy(props) {
+  if (props.stopping) return { headline: "Turning off CIGAR", detail: "Guard keeps protecting you as usual." };
+  if (props.error) return { headline: "CIGAR status unavailable", detail: "Guard did not answer about CIGAR. Protection keeps working." };
+  return cigarHomeCopy(props.status, props.loading, false);
+}
 function ContextHomeStatusView(props) {
-  const copy = props.status ? contextStatusCopy(props.status) : {
-    label: props.loading ? "Checking status" : "Status unavailable",
-    detail: props.loading ? "Reading local context assistance status." : "Refresh this status or open CIGAR to check context assistance."
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Context assistance overview", className: "space-y-3 rounded-xl border border-slate-200 p-4", children: [
+  const label = homeStatusLabel(props);
+  const copy = homeStatusCopy(props);
+  const canStop = props.stopAvailable ?? Boolean(props.status?.requested_enabled || props.status?.effective_enabled || props.status?.job);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "CIGAR overview", className: "space-y-3 rounded-xl border border-slate-200 p-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "CIGAR context assistance" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", className: "text-sm text-slate-600", children: props.stopping ? "Stopping" : copy.label })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: copy.headline }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", className: "text-sm text-slate-600", children: label })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: copy.detail }),
-    props.status?.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Local context is available for workspaces you authorize. Prepared context supplies supporting data; it does not approve or confirm execution." }) : null,
-    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "text-sm text-slate-600", children: "The context request did not return a verified result. Guard protection and existing approvals remain available." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: props.error ? "alert" : void 0, className: "text-sm text-slate-600", children: copy.detail }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button, type: "button", onClick: props.onOpenSettings, children: "Open CIGAR" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button, type: "button", disabled: props.loading || props.stopping, onClick: props.onRefresh, children: "Refresh context status" }),
-      props.stopAvailable ?? Boolean(props.status?.requested_enabled || props.status?.effective_enabled || props.status?.job) ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button, type: "button", disabled: props.stopping, onClick: props.onStop, children: "Turn off context assistance" }) : null
+      props.error && !props.loading ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button, type: "button", onClick: props.onRefresh, children: "Try again" }) : null,
+      canStop ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button, type: "button", disabled: props.stopping, onClick: props.onStop, children: "Turn off CIGAR" }) : null
     ] })
   ] });
 }
