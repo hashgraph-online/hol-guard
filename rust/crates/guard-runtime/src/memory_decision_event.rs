@@ -12,7 +12,7 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::claude_guard_question::python_lower;
-use crate::cloud_request_text::{optional_string, py_strip};
+use crate::cloud_request_text::{optional_string, py_strip, py_truthy};
 use crate::memory_pattern::{verdict, MemoryRequest};
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
@@ -156,7 +156,7 @@ fn envelope_display(envelope: &Map<String, Value>) -> Option<String> {
     let first = |keys: &[&str]| {
         keys.iter()
             .filter_map(|key| envelope.get(*key))
-            .find(|value| truthy(value))
+            .find(|value| py_truthy(value))
     };
     let text = |keys: &[&str]| optional_string(first(keys)).map(str::to_owned);
     let action_type = text(&["action_type", "actionType"]);
@@ -208,18 +208,6 @@ fn first_string(value: Option<&Value>) -> Option<String> {
             .find_map(|item| optional_string(Some(item)))
             .map(str::to_owned),
         _ => None,
-    }
-}
-
-/// Python truthiness of a decoded JSON value.
-fn truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(flag) => *flag,
-        Value::Number(number) => number.as_f64().is_none_or(|float| float != 0.0),
-        Value::String(text) => !text.is_empty(),
-        Value::Array(items) => !items.is_empty(),
-        Value::Object(fields) => !fields.is_empty(),
     }
 }
 
