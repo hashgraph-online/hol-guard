@@ -1,5 +1,6 @@
 use serde_json::{json, Value};
 
+use super::budget::dumps_len;
 use super::*;
 
 // Oracles below are what the Python build answered for the same rows.
@@ -145,6 +146,14 @@ fn entry_digest_and_size_match_the_python_build() {
 }
 
 #[test]
+fn a_run_cut_to_fit_the_request_is_flagged_truncated() {
+    let mut cut = run();
+    cut["findings_truncated"] = json!(true);
+    let answer = build_with(json!([worktree()]), json!([null]), json!([cut]), json!({}));
+    assert_eq!(answer["payload"]["worktrees"][0]["findingsTruncated"], true);
+}
+
+#[test]
 fn a_worktree_without_an_assessed_run_is_pending() {
     let answer = build_with(json!([worktree()]), json!([null]), json!([null]), json!({}));
     let entry = &answer["payload"]["worktrees"][0];
@@ -268,7 +277,7 @@ fn fitted(payload: &Value, limit: i64) -> Value {
     .unwrap()
 }
 
-fn shape(answer: &Value) -> Vec<(usize, bool, usize, usize)> {
+fn shape(answer: &Value) -> Vec<FitShape> {
     answer["payload"]["worktrees"]
         .as_array()
         .unwrap()
@@ -285,11 +294,17 @@ fn shape(answer: &Value) -> Vec<(usize, bool, usize, usize)> {
         .collect()
 }
 
+/// An entry after fitting: finding count, whether findings were truncated,
+/// coverage reason count and detector count.
+type FitShape = (usize, bool, usize, usize);
+/// Byte limit, entry shapes, digest and fitted payload size.
+type FitCase<'a> = (i64, &'a [FitShape], &'a str, usize);
+
 #[test]
 fn request_fit_trims_like_the_python_build() {
     let payload = fit_payload();
     assert_eq!(dumps_len(&payload), 13263);
-    let cases: [(i64, &[(usize, bool, usize, usize)], &str, usize); 5] = [
+    let cases: [FitCase; 5] = [
         (
             13263,
             &[(10, false, 8, 4), (20, false, 8, 4)],
@@ -420,18 +435,9 @@ fn timestamps_convert_only_from_non_negative_integers() {
 }
 
 #[test]
-fn json_text_escapes_like_cpython() {
-    let mut out = String::new();
-    write_json(
-        &json!({"b": [1, 2.5, 1e16, null], "a": "\"\\\n\u{1}\u{7f}\u{e9}\u{1F600}"}),
-        (",", ":"),
-        &mut out,
-    );
-    assert_eq!(
-        out,
-        r#"{"a":"\"\\\n\u0001\u007fé😀","b":[1,2.5,1e+16,null]}"#
-    );
+fn sizes_are_python_default_dumps_lengths() {
     assert_eq!(dumps_len(&json!({"a": [1, 2], "b": {}})), 22);
+    assert_eq!(dumps_len(&json!({"a": "\u{e9}\u{1F600}"})), 27);
 }
 
 #[test]

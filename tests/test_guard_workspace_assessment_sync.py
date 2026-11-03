@@ -442,3 +442,37 @@ def test_worktrees_dropped_from_a_request_are_sent_on_the_next_sync(tmp_path: Pa
     sync.commit_workspace_assessment_sent(guard_store, fitted, now=NOW)
     resent = sync.build_workspace_assessment_sync(guard_store, now="2026-10-24T12:05:00Z")
     assert resent is not None and len(resent.payload["worktrees"]) == 2
+
+
+def test_a_native_fit_failure_never_blocks_receipts(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unavailable(*_args: object, **_kwargs: object) -> object:
+        raise RuntimeError("native runtime unavailable")
+
+    monkeypatch.setattr(sync, "native_runner_authority", unavailable)
+    built = sync.WorkspaceAssessmentSyncBuild(payload={"worktrees": []}, digest="0" * 64)
+
+    assert sync.fit_workspace_assessment_to_request(built, 1024) is None
+
+
+def test_the_request_carries_a_bounded_share_of_each_runs_findings(tmp_path: Path) -> None:
+    guard_store = GuardStore(tmp_path / "home")
+    # Runtime findings keep their whole path for the location digest; 50 of
+    # them fit the storage bound but not one run's share of the request.
+    large = [
+        {
+            **finding(index),
+            "source_kind": "agent_inventory",
+            "path": f"{ROOT}/{index}/" + "p" * 2000,
+            "package_name": "n" * 300,
+        }
+        for index in range(50)
+    ]
+    assessed(guard_store, findings=large)
+
+    built = sync.build_workspace_assessment_sync(guard_store, now=NOW)
+
+    assert built is not None
+    [entry] = built.payload["worktrees"]
+    assert 0 < len(entry["findings"]) < len(large)
+    assert entry["findingsTruncated"] is True
+    assert all(len(item["packageName"]) == 256 for item in entry["findings"])

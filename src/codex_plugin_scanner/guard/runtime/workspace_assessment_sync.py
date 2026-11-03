@@ -9,6 +9,7 @@ This module reads the store and records what was delivered.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -31,6 +32,22 @@ MAX_FINDINGS_PER_WORKTREE: Final = 100
 # Receipts share the request; the whole body must stay under 256 KiB.
 MAX_SUMMARY_BYTES: Final = 128 * 1024
 MAX_REQUEST_BYTES: Final = 256 * 1024
+# The native request parser refuses anything over 4 MiB. Each assessed run's
+# findings get an equal share of that; a run cut to fit is flagged truncated,
+# so Guard Cloud never closes a finding it was not sent.
+_REQUEST_FINDINGS_SHARE: Final = 64 * 1024
+_FINDING_TEXT_FIELDS: Final = (
+    "source_kind",
+    "detector",
+    "severity",
+    "decision",
+    "ecosystem",
+    "package_name",
+    "package_version",
+    "fix_version",
+    "validation_state",
+    "lifecycle_state",
+)
 
 _WORKTREE_FIELDS: Final = (
     "codebase_key",
@@ -49,7 +66,6 @@ _RUN_FIELDS: Final = (
     "coverage",
     "started_at_ms",
     "finished_at_ms",
-    "findings",
 )
 
 
@@ -82,7 +98,7 @@ def build_workspace_assessment_sync(store: GuardStore, *, now: str) -> Workspace
         latest = reads.recent_runs(store, keys, limit=1)
         latest_runs.append({"state": latest[0].get("state")} if latest else None)
         run = assessed.get((keys.codebase_key, keys.worktree_key))
-        assessed_runs.append(None if run is None else _fields(run, _RUN_FIELDS))
+        assessed_runs.append(None if run is None else _request_run(run))
     answer = native_runner_authority(
         "workspace_assessment_build",
         {
@@ -109,9 +125,13 @@ def fit_workspace_assessment_to_request(
     again instead of treating the trimmed delivery as current for a day.
     """
 
-    return _build(
-        native_runner_authority("workspace_assessment_fit", {"payload": built.payload, "max_bytes": max_bytes})
-    )
+    try:
+        answer = native_runner_authority("workspace_assessment_fit", {"payload": built.payload, "max_bytes": max_bytes})
+    except Exception:
+        # The summary is best-effort: a native failure never blocks receipts.
+        _LOGGER.debug("Workspace assessment summary could not be fitted", exc_info=True)
+        return None
+    return _build(answer)
 
 
 def commit_workspace_assessment_sent(store: GuardStore, built: WorkspaceAssessmentSyncBuild, *, now: str) -> None:
@@ -141,6 +161,54 @@ def record_workspace_assessment_delivery(store: GuardStore, built: WorkspaceAsse
 
 def _fields(row: Mapping[str, object], fields: tuple[str, ...]) -> dict[str, object]:
     return {key: row[key] for key in fields if key in row}
+
+
+def _request_run(run: Mapping[str, object]) -> dict[str, object]:
+    """A run's fields with its findings bounded for the native request.
+
+    Only what the summary reads crosses: findings this run observed, one past
+    the per-worktree cap so the runtime still sees the cap was hit, with each
+    label already clipped to what the summary keeps.
+    """
+
+    row = _fields(run, _RUN_FIELDS)
+    stored = run.get("findings")
+    findings: list[dict[str, object]] = []
+    size = 0
+    truncated = False
+    for item in stored if isinstance(stored, list) else ():
+        if len(findings) > MAX_FINDINGS_PER_WORKTREE:
+            break
+        if not isinstance(item, Mapping) or item.get("carried_from_run_id"):
+            continue
+        finding = _request_finding(item)
+        size += len(json.dumps(finding))
+        if size > _REQUEST_FINDINGS_SHARE:
+            truncated = True
+            break
+        findings.append(finding)
+    row["findings"] = findings
+    row["findings_truncated"] = truncated
+    return row
+
+
+def _request_finding(item: Mapping[str, object]) -> dict[str, object]:
+    finding: dict[str, object] = {"finding_id": item.get("finding_id")}
+    for key in _FINDING_TEXT_FIELDS:
+        value = item.get(key)
+        finding[key] = value[:256] if isinstance(value, str) else None
+    path = item.get("path")
+    if item.get("source_kind") == "agent_inventory" and isinstance(path, str):
+        finding["path"] = path
+    finding["rule_ids"] = _request_labels(item.get("rule_ids"), 128)
+    finding["advisory_ids"] = _request_labels(item.get("advisory_ids"), 256)
+    return finding
+
+
+def _request_labels(value: object, width: int) -> object:
+    if not isinstance(value, list):
+        return None
+    return [label[:width] if isinstance(label, str) else label for label in value[:32]]
 
 
 def _build(answer: Mapping[str, object]) -> WorkspaceAssessmentSyncBuild | None:

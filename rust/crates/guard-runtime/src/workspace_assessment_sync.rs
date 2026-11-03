@@ -14,17 +14,21 @@
 //! digest are those CPython's `json.dumps` gives, so a summary built here
 //! matches the one the earlier Python build recorded as delivered.
 
-use guard_runtime_pyjson::float_repr;
 use hmac::{Hmac, Mac};
-use serde_json::{json, Map, Number, Value};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::cloud_request_text::py_truthy;
-use crate::guard_store_json::{py_prefix, py_str};
+use crate::guard_store_json::{dumps_sorted, py_prefix, py_str};
 use crate::guard_store_local_cli::parse_utc;
 use crate::policy_bundle_time::micros_to_utc_isoformat;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
+
+#[path = "workspace_assessment_budget.rs"]
+mod budget;
+
+use budget::Budget;
 
 const SCHEMA_VERSION: &str = "guard.workspace-assessment-sync.v1";
 /// Python selects at most 50 worktrees; anything past this is refused.
@@ -250,229 +254,17 @@ fn worktree_entry(
         .take(MAX_FINDINGS_PER_WORKTREE)
         .map(|item| finding(item, key))
         .collect();
-    entry["findingsTruncated"] = Value::Bool(capped || hit_cap);
+    // The request carries a bounded share of a run's findings; a run cut to
+    // fit it says so.
+    let cut = assessed.get("findings_truncated").is_some_and(py_truthy);
+    entry["findingsTruncated"] = Value::Bool(capped || hit_cap || cut);
     Ok(entry)
-}
-
-/// A JSON string as CPython's `json.dumps` writes it with `ensure_ascii`:
-/// DEL and everything above it as lowercase `\uXXXX`, surrogate pairs past
-/// the BMP.
-fn write_string(text: &str, out: &mut String) {
-    out.push('"');
-    for character in text.chars() {
-        match character {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\u{8}' => out.push_str("\\b"),
-            '\u{c}' => out.push_str("\\f"),
-            ' '..='~' => out.push(character),
-            _ => {
-                let mut units = [0u16; 2];
-                for unit in character.encode_utf16(&mut units) {
-                    out.push_str(&format!("\\u{unit:04x}"));
-                }
-            }
-        }
-    }
-    out.push('"');
-}
-
-fn write_number(number: &Number, out: &mut String) {
-    match number.as_f64().filter(|_| number.is_f64()) {
-        Some(float) => out.push_str(&float_repr(float)),
-        None => out.push_str(&number.to_string()),
-    }
-}
-
-/// CPython `json.dumps(value, sort_keys=True, separators=separators)` with
-/// `ensure_ascii`; key order never changes a size.
-fn write_json(value: &Value, separators: (&str, &str), out: &mut String) {
-    match value {
-        Value::Null => out.push_str("null"),
-        Value::Bool(true) => out.push_str("true"),
-        Value::Bool(false) => out.push_str("false"),
-        Value::Number(number) => write_number(number, out),
-        Value::String(text) => write_string(text, out),
-        Value::Array(items) => {
-            out.push('[');
-            for (index, item) in items.iter().enumerate() {
-                if index > 0 {
-                    out.push_str(separators.0);
-                }
-                write_json(item, separators, out);
-            }
-            out.push(']');
-        }
-        Value::Object(map) => {
-            let mut keys: Vec<&String> = map.keys().collect();
-            keys.sort();
-            out.push('{');
-            for (index, key) in keys.into_iter().enumerate() {
-                if index > 0 {
-                    out.push_str(separators.0);
-                }
-                write_string(key, out);
-                out.push_str(separators.1);
-                write_json(&map[key], separators, out);
-            }
-            out.push('}');
-        }
-    }
-}
-
-/// `len(json.dumps(value).encode("utf-8"))` with the default separators.
-fn dumps_len(value: &Value) -> usize {
-    let mut out = String::new();
-    write_json(value, (", ", ": "), &mut out);
-    out.len()
 }
 
 /// `_digest`: SHA-256 of the sorted, compact entries.
 fn digest(entries: &[Value]) -> String {
-    let mut out = String::new();
-    write_json(&Value::Array(entries.to_vec()), (",", ":"), &mut out);
-    hex::encode(Sha256::digest(out.as_bytes()))
-}
-
-fn findings_len(entry: &Value) -> usize {
-    entry
-        .get("findings")
-        .and_then(Value::as_array)
-        .map_or(0, Vec::len)
-}
-
-/// `_coverage`: an entry's coverage when it has a reasons list and a
-/// detector map.
-fn coverage_mut(entry: &mut Value) -> Option<&mut Map<String, Value>> {
-    let coverage = entry
-        .get_mut("assessment")?
-        .get_mut("coverage")?
-        .as_object_mut()?;
-    (coverage.get("reasons").is_some_and(Value::is_array)
-        && coverage.get("detectors").is_some_and(Value::is_object))
-    .then_some(coverage)
-}
-
-fn field_len(entry: &mut Value, field: &str) -> Option<usize> {
-    match coverage_mut(entry)?.get(field)? {
-        Value::Array(items) => Some(items.len()),
-        Value::Object(map) => Some(map.len()),
-        _ => Some(0),
-    }
-}
-
-/// The summary's entries, with each one's serialized size kept current.
-struct Budget {
-    /// The payload's size with an empty `worktrees` list, less that `[]`.
-    base: usize,
-    entries: Vec<Value>,
-    sizes: Vec<usize>,
-}
-
-impl Budget {
-    fn new(payload: &Map<String, Value>, entries: Vec<Value>) -> Self {
-        let mut shell = payload.clone();
-        shell.insert("worktrees".to_owned(), Value::Array(Vec::new()));
-        let sizes = entries.iter().map(dumps_len).collect();
-        Self {
-            base: dumps_len(&Value::Object(shell)) - 2,
-            entries,
-            sizes,
-        }
-    }
-
-    fn size(&self) -> usize {
-        let separators = 2 * self.sizes.len().saturating_sub(1);
-        self.base + 2 + self.sizes.iter().sum::<usize>() + separators
-    }
-
-    fn truncated(&mut self, index: usize) {
-        self.entries[index]["findingsTruncated"] = Value::Bool(true);
-        self.sizes[index] = dumps_len(&self.entries[index]);
-    }
-
-    /// `_fit_budget`: shrink the entries until the payload fits `limit`.
-    ///
-    /// Findings go first, lowest-ranked first. Coverage reasons and detector
-    /// states follow, and trailing worktrees are dropped last. Any entry that
-    /// loses findings or coverage detail is flagged `findingsTruncated` so the
-    /// receiver never closes findings against it. The caller checks the final
-    /// size: an empty list may still not fit.
-    fn fit(&mut self, limit: usize) {
-        while self.size() > limit {
-            if let Some(index) =
-                first_max(self.entries.iter().map(|entry| Some(findings_len(entry))))
-            {
-                if let Some(findings) = self.entries[index]
-                    .get_mut("findings")
-                    .and_then(Value::as_array_mut)
-                    .filter(|findings| !findings.is_empty())
-                {
-                    let drop = (findings.len() / 4).max(1);
-                    findings.truncate(findings.len() - drop);
-                    self.truncated(index);
-                    continue;
-                }
-            }
-            if self.trim_coverage() {
-                continue;
-            }
-            if self.entries.pop().is_none() {
-                return;
-            }
-            self.sizes.pop();
-        }
-    }
-
-    /// `_trim_coverage`: halve the longest reasons list, then the largest
-    /// detector map. False when both are empty. A detector map keeps its
-    /// first half in key order.
-    fn trim_coverage(&mut self) -> bool {
-        for field in ["reasons", "detectors"] {
-            let lengths: Vec<Option<usize>> = self
-                .entries
-                .iter_mut()
-                .map(|entry| field_len(entry, field))
-                .collect();
-            let Some(index) = first_max(lengths.into_iter()) else {
-                continue;
-            };
-            let Some(coverage) = coverage_mut(&mut self.entries[index]) else {
-                continue;
-            };
-            let Some(values) = coverage.get_mut(field) else {
-                continue;
-            };
-            match values {
-                Value::Array(items) if !items.is_empty() => items.truncate(items.len() / 2),
-                Value::Object(map) if !map.is_empty() => {
-                    let half = map.len() / 2;
-                    *map = std::mem::take(map).into_iter().take(half).collect();
-                }
-                _ => continue,
-            }
-            self.truncated(index);
-            return true;
-        }
-        false
-    }
-}
-
-/// The first index holding the largest value, as Python's `max` picks it;
-/// `None` entries take no part.
-fn first_max(values: impl Iterator<Item = Option<usize>>) -> Option<usize> {
-    let mut best: Option<(usize, usize)> = None;
-    for (index, value) in values.enumerate() {
-        if let Some(value) = value {
-            if best.is_none_or(|(_, largest)| value > largest) {
-                best = Some((index, value));
-            }
-        }
-    }
-    best.map(|(index, _)| index)
+    let text = dumps_sorted(&Value::Array(entries.to_vec())).unwrap_or_default();
+    hex::encode(Sha256::digest(text.as_bytes()))
 }
 
 /// `_due`: a changed summary is sent now, an unchanged one after a day.
