@@ -400,7 +400,11 @@ def read_codex_host_inventory(
 
 def _leaf(value: object) -> object:
     """A value Rust reads as a scalar: a container there only fails by its type."""
-    return [] if isinstance(value, list) else {} if isinstance(value, dict) else value
+    if isinstance(value, list):
+        return []
+    if isinstance(value, dict):
+        return {}
+    return value
 
 
 def _rows(value: object, keys: tuple[str, ...], width: int = _NATIVE_WIDTH) -> object:
@@ -431,8 +435,9 @@ def _narrow_read(result: object) -> tuple[object, list[int]]:
     wide: list[int] = []
     if "apps" in result:
         apps = _rows(result["apps"], ("id", "name"))
+        # A reply whose apps is not a list crosses as is, for Rust to refuse.
         rows = cast(list[object], result["apps"]) if isinstance(apps, list) else []
-        for index, (app, row) in enumerate(zip(cast(list[object], apps), rows, strict=False)):
+        for index, (app, row) in enumerate(zip(apps if isinstance(apps, list) else [], rows, strict=False)):
             key = "toolSummaries" if isinstance(row, dict) and "toolSummaries" in row else "tools"
             if not isinstance(app, dict) or not isinstance(row, dict) or key not in row:
                 continue

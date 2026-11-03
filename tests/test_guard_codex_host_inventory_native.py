@@ -180,3 +180,18 @@ def test_host_replies_wider_than_the_native_request_parser_are_still_read(tmp_pa
     assert [tool["name"] for tool in tools[4095:4097]] == ["tool_4095", "tool_4096"]
     assert len(deadlines) == 2
     assert all(isinstance(deadline, float) for deadline in deadlines)
+
+
+@pytest.mark.parametrize("apps", [None, 3, True, "apps"])
+def test_app_read_reply_whose_apps_is_not_a_list_is_refused_by_the_runtime(tmp_path, monkeypatch, apps):
+    def handler(request):
+        response = _handler(request)
+        if request["method"] == "app/read":
+            response["result"]["apps"] = apps
+        return response
+
+    with (
+        _host(tmp_path, monkeypatch, handler) as (home, _requests),
+        pytest.raises(ValueError, match="^codex_host_"),
+    ):
+        inventory.read_codex_host_inventory(codex_home=home)
