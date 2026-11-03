@@ -21,8 +21,6 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
-#[path = "contained_workspace_sink_denial.rs"]
-mod denial;
 #[path = "contained_workspace_sink_directory.rs"]
 mod directory;
 #[path = "contained_esbuild_image.rs"]

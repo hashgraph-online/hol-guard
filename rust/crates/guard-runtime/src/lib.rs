@@ -234,6 +234,7 @@ mod consumer_mode_contract;
 mod consumer_outcome;
 mod consumer_result;
 mod consumer_url;
+mod contained_denial_note;
 #[cfg(unix)]
 mod contained_op;
 mod contained_output_match;
@@ -242,6 +243,7 @@ mod contained_test_request;
 mod contained_workspace_grant_plan;
 #[cfg(unix)]
 mod contained_workspace_sink;
+mod contained_workspace_sink_denial;
 mod contained_wrapper_plan_op;
 mod content_decode;
 mod content_sensitivity_op;
