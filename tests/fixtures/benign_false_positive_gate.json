@@ -27392,14 +27392,14 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "npx tap test/"
+        "command": "npx tap --no-coverage test/"
       },
       "cwd": "parent",
       "expect": "allow",
       "requires_sandbox": true
     },
     {
-      "id": "parent-npx-tap-coverage-text",
+      "id": "parent-npx-tap-coverage-disabled",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -27409,7 +27409,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "npx tap --coverage-report=text test/unit.js"
+        "command": "npx tap --disable-coverage test/unit.js"
       },
       "cwd": "parent",
       "expect": "allow",
@@ -27499,6 +27499,38 @@
       "cwd": "parent",
       "expect": "allow",
       "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-tap-default-coverage-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tap"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-tap-coverage-text-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tap --coverage-report=text test/unit.js"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
     },
     {
       "id": "parent-npx-tap-report-reviews",

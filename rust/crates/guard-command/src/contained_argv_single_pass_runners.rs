@@ -258,12 +258,33 @@ pub(crate) fn lab_runs_once(arguments: &[String]) -> bool {
     })
 }
 
-/// True when a tap call runs its tests once, sets no environment for them,
-/// and takes everything it loads from the workspace.
+/// True when a tap call runs its tests once, writes no coverage, sets no
+/// environment for them, and takes everything it loads from the workspace.
 pub(crate) fn tap_contained_call(arguments: &[String]) -> bool {
     tap_runs_tests_once(arguments)
+        && tap_writes_no_coverage(arguments)
         && tap_sets_no_environment(arguments)
         && reads_its_own_workspace(arguments)
+}
+
+/// True when a tap line turns its coverage off.
+///
+/// tap is the one runner here that writes into the project on an ordinary
+/// run: `coverage` is declared with `default: true`, so tap 16 collects
+/// through nyc into `.nyc_output` and tap 18 and later into `.tap`. The
+/// read-only route carries no workspace write root, so that collection is
+/// denied and the run ends on a file operation the caller never asked
+/// about. A line that turns coverage off writes nothing, and that is the
+/// tap run this route takes. tap spells the word three ways: `--no-cov` and
+/// `--no-coverage` negate the flag, and tap 18 and later add
+/// `--disable-coverage`.
+pub(crate) fn tap_writes_no_coverage(arguments: &[String]) -> bool {
+    arguments.iter().any(|argument| {
+        matches!(
+            option_name(argument).as_str(),
+            "nocov" | "nocoverage" | "disablecoverage"
+        )
+    })
 }
 
 /// What this reading names is the watch, the commands that do something

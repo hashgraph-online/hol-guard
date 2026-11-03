@@ -445,8 +445,8 @@ fn a_tape_or_tsd_word_that_leaves_the_workspace_keeps_its_review() {
 #[test]
 fn a_tap_borp_poku_or_lab_entry_reads_as_the_project_runner() {
     for command in [
-        "node node_modules/tap/dist/esm/run.mjs test/unit.js",
-        "node ./node_modules/tap/bin/run.js",
+        "node node_modules/tap/dist/esm/run.mjs --disable-coverage test/unit.js",
+        "node ./node_modules/tap/bin/run.js --no-coverage",
         "node node_modules/borp/borp.js",
         "node /work/app/node_modules/poku/lib/bin/index.js test",
         "node node_modules/@hapi/lab/bin/lab",
@@ -464,14 +464,15 @@ fn a_tap_borp_poku_or_lab_run_inside_its_workspace_is_contained() {
     // lab cannot watch at all, and tap, borp and poku watch only when the
     // flag is on the line, so the plain call is the contained one for each
     // of them. borp's reporter writes a file only when its value carries a
-    // colon destination, so a plain reporter name stays readable.
+    // colon destination, so a plain reporter name stays readable. tap
+    // collects coverage unless the line turns it off, so the tap run this
+    // route takes is the one that names the word.
     for command in [
-        "npx tap",
-        "tap",
-        "npx tap test/unit.js",
-        "npx tap --jobs=4 test/",
-        "npx tap --coverage-report=text",
-        "npx tap --no-browser",
+        "npx tap --no-coverage",
+        "tap --no-cov",
+        "npx tap --disable-coverage test/unit.js",
+        "npx tap --no-coverage --jobs=4 test/",
+        "npx tap --no-coverage --no-browser",
         "npx borp",
         "npx borp test/unit.test.js",
         "npx borp --coverage --reporter=spec",
@@ -516,7 +517,15 @@ fn a_tap_borp_poku_or_lab_word_that_leaves_the_run_keeps_its_review() {
     //
     // lab's `--inspect` starts the suite under Node's debugger and holds the
     // process open on a listening port.
+    //
+    // tap declares `coverage` with `default: true`, so a line that does not
+    // turn it off collects into `.nyc_output` or `.tap` inside the project.
+    // The read-only route carries no workspace write root, so that collection
+    // would be denied part-way through the run.
     for command in [
+        "npx tap",
+        "npx tap test/unit.js",
+        "npx tap --coverage-report=text",
         "npx tap report",
         "npx tap list",
         "npx tap repl",
@@ -554,15 +563,17 @@ fn a_tap_borp_poku_or_lab_word_that_leaves_the_run_keeps_its_review() {
 fn a_tap_watch_or_a_borp_report_destination_keeps_its_review() {
     // tap declares `watch` as a flag with the short `-w`, so a tap call that
     // names it runs the suite and then keeps re-running it, exactly as borp's
-    // and poku's do. borp reads a colon in a reporter value as a file to
-    // write, which the read-only route carries no root for; `stdout` and
-    // `stderr` name a stream instead, so they stay readable.
+    // and poku's do. Each tap line here turns coverage off, so the watch is
+    // the only thing keeping it under review. borp reads a colon in a
+    // reporter value as a file to write, which the read-only route carries no
+    // root for; `stdout` and `stderr` name a stream instead, so they stay
+    // readable.
     for command in [
-        "npx tap --watch",
-        "npx tap -w",
-        "npx tap -w test/unit.js",
-        "npx tap -wj4",
-        "node node_modules/tap/bin/run.js --watch",
+        "npx tap --no-cov --watch",
+        "npx tap --no-coverage -w",
+        "npx tap --disable-coverage -w test/unit.js",
+        "npx tap --no-cov -wj4",
+        "node node_modules/tap/bin/run.js --no-cov --watch",
         "npx borp --reporter=tap:results.txt",
         "npx borp --reporter tap:results.txt",
         "npx borp -r tap:results.txt",
