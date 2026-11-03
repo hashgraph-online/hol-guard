@@ -8,11 +8,11 @@ exactly as before, and must never show a value Guard did not write.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
-import tomllib
 
 from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli import cloud_actions_host_config
@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.cli.cloud_actions_host_config import (
     plan_host_config,
     settings_path,
 )
+from codex_plugin_scanner.guard.codex_config import tomllib
 
 WS = "11111111-1111-4111-8111-111111111111"
 URL = "https://hol.org/api/guard/gateway/mcp"
@@ -301,6 +302,18 @@ def test_another_entry_for_the_same_server_is_reported_not_duplicated(
     assert payload["configured_as"] == ["guard"]
 
 
+def test_already_configured_text_names_no_sign_in_entry_that_is_not_there(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write(tmp_path, "codex", f'[mcp_servers.guard]\nurl = "{URL}"\n')
+
+    assert _configure(tmp_path, "codex", "--dry-run") == 0
+    out = capsys.readouterr().out
+
+    assert "Already set up as guard." in out
+    assert CLOUD_ACTIONS_SERVER_NAME not in out
+
+
 @pytest.mark.parametrize(
     ("tool", "content"),
     [
@@ -347,7 +360,9 @@ def test_codex_settings_are_read_with_tomli_before_python_3_11(tmp_path: Path, m
 
     def _import(name: str) -> object:
         imported.append(name)
-        return real_import("tomllib" if name == "tomli" else name)
+        if name in {"tomli", "tomllib"}:
+            return real_import("tomllib" if sys.version_info >= (3, 11) else "tomli")
+        return real_import(name)
 
     monkeypatch.setattr(cloud_actions_host_config, "sys", _Python310)
     monkeypatch.setattr(cloud_actions_host_config.importlib, "import_module", _import)

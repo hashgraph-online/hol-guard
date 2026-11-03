@@ -299,7 +299,8 @@ def _preview_text(plan: HostConfigPlan, workspace: str) -> str:
         lines.extend(f"+ {line}" for line in plan.entry_lines)
         if plan.action != "create_file":
             lines.append(f"Everything else in the file stays as it is, including {others}.")
-    if plan.action not in {"unreadable", "conflict"}:
+    # An existing entry under another name is already how the AI tool signs in.
+    if plan.action not in {"unreadable", "conflict", "already_configured"}:
         lines.append(
             f"The AI tool signs in to Guard Cloud itself; choose workspace {workspace} when it asks. "
             f"{plan.sign_in_hint}"
