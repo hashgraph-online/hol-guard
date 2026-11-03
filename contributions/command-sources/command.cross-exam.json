@@ -270,33 +270,123 @@
         "default_mode": "review",
         "safe_variants": [],
         "matcher": {
-          "op": "executable-path-set.v1",
-          "config": {
-            "allow_leading_options": false,
-            "executables": [
-              "mcp-cross-exam",
-              "mcp-cross-exam.cmd",
-              "mcp-cross-exam.exe"
-            ],
-            "fail_secure_unknown_options": false,
-            "forbidden_flags": [
-              "--help",
-              "--version"
-            ],
-            "interspersed_flags": [],
-            "interspersed_options_with_values": [],
-            "inverse_flag_pairs": [],
-            "leading_options_with_values": [],
-            "options_with_values": [],
-            "paths": [
-              [
-                "--"
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable-path-set.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mcp-cross-exam",
+                  "mcp-cross-exam.cmd",
+                  "mcp-cross-exam.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "--"
+                  ],
+                  [
+                    "--read-only",
+                    "--"
+                  ],
+                  [
+                    "--allow-writes",
+                    "--"
+                  ],
+                  [
+                    "--fail-on-incomplete",
+                    "--"
+                  ],
+                  [
+                    "--target-is-not-production",
+                    "--"
+                  ],
+                  [
+                    "--json",
+                    "--"
+                  ],
+                  [
+                    "--quiet",
+                    "--"
+                  ],
+                  [
+                    "--no-color",
+                    "--"
+                  ],
+                  [
+                    "--exit-zero",
+                    "--"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              }
+            },
+            {
+              "op": "all.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "leading-operand-count.v1",
+                  "config": {
+                    "executables": [
+                      "mcp-cross-exam",
+                      "mcp-cross-exam.cmd",
+                      "mcp-cross-exam.exe"
+                    ],
+                    "forbidden_flags": [],
+                    "minimum_operands": 1,
+                    "options_with_values": [
+                      "--cwd",
+                      "--env",
+                      "--env-from"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable-path-set.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mcp-cross-exam",
+                      "mcp-cross-exam.cmd",
+                      "mcp-cross-exam.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "--cwd"
+                      ],
+                      [
+                        "--env"
+                      ],
+                      [
+                        "--env-from"
+                      ]
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": []
+                  }
+                }
               ]
-            ],
-            "required_flags": [],
-            "required_flags_in_all_arguments": false,
-            "required_option_values": []
-          }
+            }
+          ]
         }
       },
       {
