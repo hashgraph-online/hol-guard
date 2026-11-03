@@ -46,8 +46,11 @@ def wanted(tool: str, guard_home: Path | str = "/guard-home") -> dict[str, objec
 class FakeCloud:
     workspace_id: str | None = WS
     paired: bool = True
+    origin: str = ORIGIN
     exchange_error: CloudActionsAccessError | None = None
     revoke_error: CloudActionsAccessError | None = None
+    # What the last `hol-guard connect` said about Cloud actions, as Guard Cloud sends it.
+    connect_report: dict[str, object] | None = None
     exchanged: list[str] = field(default_factory=list)
     revoked: list[str | None] = field(default_factory=list)
 
@@ -61,7 +64,7 @@ def pair(monkeypatch: pytest.MonkeyPatch, cloud: FakeCloud | None = None) -> Fak
             raise CloudActionsAccessError(
                 "not_paired", "This computer is not paired with Guard Cloud. Run hol-guard connect first."
             )
-        return CloudActionsPairing(origin=ORIGIN, workspace_id=cloud.workspace_id)
+        return CloudActionsPairing(origin=cloud.origin, workspace_id=cloud.workspace_id)
 
     def exchange(store: object, *, ai_tool: str) -> CloudActionsAccess:
         del store
@@ -87,7 +90,11 @@ def pair(monkeypatch: pytest.MonkeyPatch, cloud: FakeCloud | None = None) -> Fak
             raise CloudActionsAccessError(
                 "not_paired", "This computer is not paired with Guard Cloud. Run hol-guard connect first."
             )
-        return SimpleNamespace(guard_home=guard_home)
+        return SimpleNamespace(
+            guard_home=guard_home,
+            get_oauth_local_credential_health=lambda: {"state": "healthy", "grant_id": "grant-1"},
+            get_sync_payload=lambda _key: cloud.connect_report,
+        )
 
     monkeypatch.setattr(cloud_actions_access, "open_paired_store", open_store)
     monkeypatch.setattr(cloud_actions_access, "read_cloud_actions_pairing", read_pairing)

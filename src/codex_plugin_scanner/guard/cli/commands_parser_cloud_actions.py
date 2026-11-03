@@ -5,8 +5,8 @@ and `--workspace` keep their meanings: pairing this device, protecting local
 apps, and naming a local project folder. Here three contexts never share a
 flag:
 
-- the Guard Cloud workspace, named only by `--cloud-workspace <id>` (or the
-  positional id of `workspace select`);
+- the Guard Cloud workspace, named only by `--cloud-workspace <id>`; it
+  defaults to the one this computer is connected to with `hol-guard connect`;
 - a provider, named by its slug, and a connected account in it, named by its id;
 - a local folder, which is never accepted where a Cloud workspace is expected.
 """
@@ -21,8 +21,6 @@ from collections.abc import Callable, Sequence
 from ...argparse_utils import FriendlyArgumentParser
 
 _SLUG = re.compile(r"[a-z][a-z0-9-]{0,62}")
-_PROFILE = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
-DEFAULT_CLOUD_ACTIONS_URL = "https://hol.org"
 _LOCAL_WORKSPACE_MESSAGE = (
     "--workspace names a local project folder and does not choose a Guard Cloud workspace. Use --cloud-workspace <id>."
 )
@@ -70,24 +68,6 @@ def _slug(kind: str) -> Callable[[str], str]:
     return parse
 
 
-def profile_name(value: str) -> str:
-    if _PROFILE.fullmatch(value) is None:
-        raise argparse.ArgumentTypeError(
-            f"{value!r} is not a profile name. Use lowercase letters, digits and dashes (up to 32)."
-        )
-    return value
-
-
-def _sign_in_wait(value: str) -> int:
-    try:
-        seconds = int(value)
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"{value!r} is not a number of seconds.") from None
-    if not 30 <= seconds <= 1800:
-        raise argparse.ArgumentTypeError("--timeout must be between 30 and 1800 seconds.")
-    return seconds
-
-
 class _RejectLocalWorkspace(argparse.Action):
     """Refuse `--workspace` here instead of letting it read as a Cloud workspace."""
 
@@ -117,7 +97,7 @@ def _add_cloud_workspace(parser: argparse.ArgumentParser, *, required: bool, hel
     if help_suffix is not None:
         help_text += help_suffix
     elif not required:
-        help_text += "; defaults to the one chosen with `workspace select`"
+        help_text += "; defaults to the one this computer is connected to"
     parser.add_argument(
         "--cloud-workspace",
         dest="cloud_workspace",
@@ -128,27 +108,27 @@ def _add_cloud_workspace(parser: argparse.ArgumentParser, *, required: bool, hel
     )
 
 
-def _add_cloud_url(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--cloud-url",
-        default=DEFAULT_CLOUD_ACTIONS_URL,
-        metavar="URL",
-        help=f"Guard Cloud address (default: {DEFAULT_CLOUD_ACTIONS_URL})",
-    )
-
-
 def _add_json(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Emit the versioned JSON contract")
 
 
-def _add_profile(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--profile",
-        type=profile_name,
-        default="default",
-        help="Saved sign-in to use; each profile holds one Guard Cloud workspace (default: default)",
-    )
+def _add_guard_home(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--guard-home", help=argparse.SUPPRESS)
+
+
+def _add_removed(
+    subparsers: argparse._SubParsersAction[FriendlyArgumentParser], name: str, *options: str
+) -> FriendlyArgumentParser:
+    """Alpha-only commands, hidden from help; they accept their old options and point to `hol-guard connect`."""
+
+    parser = subparsers.add_parser(name, allow_abbrev=False)
+    parser.add_argument("removed_args", nargs="*", help=argparse.SUPPRESS)
+    for option in options:
+        parser.add_argument(option, dest=f"removed_{option.lstrip('-').replace('-', '_')}", help=argparse.SUPPRESS)
+    parser.add_argument("--no-browser", action="store_true", help=argparse.SUPPRESS)
+    _add_guard_home(parser)
+    _add_json(parser)
+    return parser
 
 
 def configure_guard_cloud_actions_parser(
@@ -168,55 +148,31 @@ def configure_guard_cloud_actions_parser(
         dest="cloud_actions_command",
         required=True,
         parser_class=FriendlyArgumentParser,
-        metavar="{login,logout,status,doctor,workspace,accounts,ai-tools}",
+        metavar="{status,doctor,accounts,ai-tools}",
     )
 
-    login = _add_parser(commands, "login", "Sign in to Guard Cloud for Cloud actions in one workspace")
-    _add_cloud_url(login)
-    _add_cloud_workspace(login, required=False)
-    login.add_argument("--no-browser", action="store_true", help="Print the sign-in link instead of opening it")
-    login.add_argument(
-        "--timeout",
-        type=_sign_in_wait,
-        default=300,
-        metavar="SECONDS",
-        help="How long to wait for the browser sign-in (default: 300)",
-    )
-    _add_profile(login)
-    _add_json(login)
+    # Alpha builds signed in separately; `hol-guard connect` now covers Cloud actions.
+    _add_removed(commands, "login", "--cloud-url", "--cloud-workspace", "--timeout", "--profile", "--workspace")
+    _add_removed(commands, "logout", "--profile")
+    _add_removed(commands, "workspace", "--profile")
 
-    logout = _add_parser(commands, "logout", "Sign out of Cloud actions and remove the saved sign-in")
-    _add_profile(logout)
-    _add_json(logout)
-
-    status = _add_parser(commands, "status", "Show Cloud actions sign-in, workspace and connected accounts")
+    status = _add_parser(commands, "status", "Show this computer's Cloud actions, workspace and connected accounts")
     _add_cloud_workspace(status, required=False)
     status.add_argument(
         "--offline", action="store_true", help="Show only what is saved on this computer; do not ask Guard Cloud"
     )
-    _add_profile(status)
+    _add_guard_home(status)
     _add_json(status)
 
-    doctor = _add_parser(commands, "doctor", "Check the Cloud actions sign-in, Guard Cloud and AI tool settings")
+    doctor = _add_parser(commands, "doctor", "Check this computer's Cloud actions, Guard Cloud and AI tool settings")
     doctor.add_argument(
         "--bundle",
         metavar="FILE",
-        help="Also save the results to a new file to share with support; it never holds the sign-in itself",
+        help="Also save the results to a new file to share with support; it never holds any access",
     )
     doctor.add_argument("--home", help=argparse.SUPPRESS)
-    _add_profile(doctor)
+    _add_guard_home(doctor)
     _add_json(doctor)
-
-    workspace = _add_parser(commands, "workspace", "Choose the Guard Cloud workspace these commands use")
-    workspace_commands = workspace.add_subparsers(
-        dest="cloud_actions_workspace_command",
-        required=True,
-        parser_class=FriendlyArgumentParser,
-    )
-    select = _add_parser(workspace_commands, "select", "Use one Guard Cloud workspace by default")
-    select.add_argument("cloud_workspace", type=cloud_workspace_id, metavar="CLOUD_WORKSPACE_ID")
-    _add_profile(select)
-    _add_json(select)
 
     accounts = _add_parser(commands, "accounts", "List, connect or disconnect connected accounts")
     account_commands = accounts.add_subparsers(
@@ -231,8 +187,8 @@ def configure_guard_cloud_actions_parser(
         account_commands, "connect", "Open Guard Cloud to sign in with a provider and connect an account"
     )
     connect.add_argument("provider", type=_slug("provider"), metavar="PROVIDER")
-    _add_cloud_workspace(connect, required=True)
-    _add_cloud_url(connect)
+    _add_cloud_workspace(connect, required=False)
+    _add_guard_home(connect)
     connect.add_argument("--no-browser", action="store_true", help="Print the link instead of opening it")
     _add_json(connect)
     disconnect = _add_parser(account_commands, "disconnect", "Disconnect one connected account")
@@ -281,9 +237,7 @@ def configure_guard_cloud_actions_parser(
 
 
 __all__ = [
-    "DEFAULT_CLOUD_ACTIONS_URL",
     "cloud_workspace_id",
     "configure_guard_cloud_actions_parser",
     "connected_account_id",
-    "profile_name",
 ]

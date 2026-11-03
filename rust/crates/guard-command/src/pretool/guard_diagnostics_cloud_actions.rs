@@ -3,23 +3,23 @@
 
 /// The two Cloud actions reads that stay on this computer.
 ///
-/// `cloud-actions status --offline` prints the saved sign-in's profile,
-/// Guard Cloud address and workspace from the local profile file, and skips
-/// both health checks, so nothing is sent. Without `--offline` the same
-/// command asks Guard Cloud whether it still accepts the saved sign-in, which
-/// stays under review.
+/// `cloud-actions status --offline` prints the Guard Cloud address, workspace
+/// and Cloud actions state from this computer's `hol-guard connect` pairing,
+/// and skips the service check, so nothing is sent and nothing is written.
+/// Without `--offline` the same command asks Guard Cloud whether it offers
+/// Cloud actions, which stays under review.
 ///
 /// `cloud-actions ai-tools configure <tool> --cloud-workspace <id> --dry-run`
 /// reads the AI tool's settings file and prints the one entry it would add.
 /// The handler branches on `--apply` before it writes or backs up anything, and
 /// the parser requires exactly one of `--dry-run` and `--apply`, so naming
-/// `--dry-run` is what proves the preview. `--home`, `--guard-home` and
-/// `--cloud-url` are refused by the exact shapes below: a preview of another
-/// home's settings, or of another address, is not the user's own setup.
+/// `--dry-run` is what proves the preview. `--home` and `--guard-home` are
+/// refused by the exact shapes below: a preview of another home's settings is
+/// not the user's own setup.
 ///
-/// `login`, `logout`, `workspace select`, `accounts`, `doctor` (which can save
-/// a bundle) and `ai-tools restore` all change saved state or talk to Guard
-/// Cloud, and are not admitted.
+/// `accounts`, `doctor` (which can save a bundle) and `ai-tools restore` all
+/// change saved state or talk to Guard Cloud, and are not admitted; nor are the
+/// removed `login`, `logout` and `workspace select`.
 pub(super) fn cloud_actions_inspection(words: &[&str]) -> bool {
     let json_flags = words.iter().filter(|word| **word == "--json").count();
     let rest: Vec<&str> = words

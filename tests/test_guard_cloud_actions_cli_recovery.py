@@ -1,9 +1,7 @@
-"""Recovery across Cloud actions commands.
+"""Recovery from an interrupted `ai-tools configure --apply`.
 
-Signing out of one profile must leave every other profile signed in, and an
-interrupted `ai-tools configure --apply` must leave the AI tool's settings
-file either as it was or recoverable with `ai-tools restore`, never changed
-with no copy to go back to.
+The AI tool's settings file must end either as it was or recoverable with
+`ai-tools restore`, never changed with no copy to go back to.
 """
 
 from __future__ import annotations
@@ -16,46 +14,9 @@ import pytest
 from codex_plugin_scanner.guard.cli import cloud_actions_host_apply
 from codex_plugin_scanner.guard.cli.cloud_actions_host_apply import apply_host_config, backups_dir, restore_host_config
 from codex_plugin_scanner.guard.cli.cloud_actions_host_config import plan_host_config
-from codex_plugin_scanner.guard.cli.cloud_actions_session import CloudActionsSessionStore
-from tests.cloud_actions_login_support import (
-    OTHER_WS,
-    WS,
-    Browser,
-    FakeCloud,
-    _cli,
-    _json_out,
-    _login,
-    browser_fixture,  # noqa: F401 -- shared fixture
-    cloud_fixture,  # noqa: F401 -- shared fixture
-)
 from tests.cloud_actions_pairing_support import URL, entry
 
 CODEX_SETTINGS = '# Hand-written; keep this comment.\nmodel = "gpt-5"\n'
-
-
-def test_signing_out_of_one_profile_leaves_the_others_signed_in(
-    cloud: FakeCloud, browser: Browser, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    assert _login(cloud, tmp_path, "--cloud-workspace", WS, "--profile", "work") == 0
-    work_tokens = set(cloud.issued)
-    cloud.overrides["workspace"] = OTHER_WS
-    assert _login(cloud, tmp_path, "--cloud-workspace", OTHER_WS, "--profile", "client") == 0
-    client_tokens = set(cloud.issued) - work_tokens
-    capsys.readouterr()
-
-    assert _cli("logout", "--profile", "work", "--guard-home", str(tmp_path), "--json") == 0
-    assert _json_out(capsys)[0]["revoked"] is True
-
-    assert {entry["token"] for entry in cloud.revocations} == work_tokens
-    store = CloudActionsSessionStore(tmp_path)
-    assert store.load("work") is None and store.load_secrets("work") is None
-    client = store.load_secrets("client")
-    assert client is not None and {client.access_token, client.refresh_token} == client_tokens
-    assert _cli("status", "--profile", "client", "--offline", "--guard-home", str(tmp_path), "--json") == 0
-    status, output = _json_out(capsys)
-    assert (status["state"], status["cloud_workspace"]) == ("signed_in", OTHER_WS)
-    for token in work_tokens | client_tokens:
-        assert token not in output
 
 
 def _seed(home: Path) -> Path:
