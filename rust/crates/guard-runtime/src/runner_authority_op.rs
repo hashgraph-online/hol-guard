@@ -40,6 +40,7 @@ use super::grok_detect;
 use super::grok_legacy_settings;
 use super::grok_user_config_op;
 use super::harness_hook_settings;
+use super::harness_settings_file;
 use super::hermes_detect;
 use super::kimi_detect;
 use super::kimi_hook_config;
@@ -193,6 +194,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "devin_detect" => devin_detect::detect(args),
         "devin_jsonc" => devin_jsonc::document(args),
         "harness_hook_settings" => harness_hook_settings::dispatch(args),
+        "harness_settings_file" => harness_settings_file::dispatch(args),
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
         "grok_detect" => grok_detect::detect(args),

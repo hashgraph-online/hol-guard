@@ -1466,12 +1466,11 @@
           "MuseHarnessAdapter.uninstall",
           "MuseHarnessAdapter._hook_command_parts",
           "MuseHarnessAdapter._managed_state_paths",
-          "_adapter_result",
-          "_write_json_atomic"
+          "_adapter_result"
         ],
         "entry_points": [],
         "reason": "Muse adapter hook install and uninstall and the settings helpers used only to write or remove that install.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_command_parts, _managed_state_paths, _adapter_result and _write_json_atomic are called only from those three methods. _bridge_timeout_seconds and the approval wait it reads stay in scope: the bounded hook refresh recomputes that timeout on every update. detect and policy_path stay in scope with the helpers they call. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_command_parts, _managed_state_paths and _adapter_result are called only from those three methods. _bridge_timeout_seconds and the approval wait it reads stay in scope: the bounded hook refresh recomputes that timeout on every update. detect and policy_path stay in scope with the helpers they call. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "approval-continuation-replay",
