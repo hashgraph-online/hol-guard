@@ -468,6 +468,11 @@ def build_fixture(root: Path) -> BenignFixture:
             '[registry]\ntoken = """\nhunter2\n"""\n',
         )
         _write(repository / ".changeset" / "settings.json", '{"npmAuthToken": "null"}\n')
+        # A mapping that leaves its value for the next line, indented deeper.
+        _write(
+            repository / ".storybook" / "config.yml",
+            "database:\n  password:\n    hunter2\n",
+        )
         # The same stem over a registry credential, for the negative beside it.
         _write(
             repository / ".cargo" / "config.toml",

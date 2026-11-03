@@ -66,6 +66,12 @@ fn a_hidden_directorys_configuration_document_reads_when_it_holds_no_credential(
         // credential like any other character does.
         "database:\n  password: hunter$2\n",
         "[registry]\ntoken = \"ab$cd\"\n",
+        // A mapping may leave its value for the next line, indented deeper.
+        // That line carries no key of its own, so the key above answers for
+        // it, quoted or bare.
+        "database:\n  password:\n    hunter2\n",
+        "database:\n  password:\n    \"hunter2\"\n",
+        "database:\n  password:\n\n    # chosen by the team\n    hunter2\n",
     ] {
         plant(&repo.join(".circleci/config.yml"), body);
         assert!(
@@ -80,6 +86,11 @@ fn a_hidden_directorys_configuration_document_reads_when_it_holds_no_credential(
         "deploy:\n  token: ${REGISTRY_TOKEN}\n",
         "[registry]\ntoken = \"{{ registry_token }}\"\n",
         "password:\n",
+        // A deeper line that is a mapping of its own is not the value the
+        // key above left empty, and a line at the same depth is the next
+        // key rather than a continuation.
+        "database:\n  password:\n    name: bob\n",
+        "database:\n  password:\n  username: bob\n",
     ] {
         plant(&repo.join(".circleci/config.yml"), body);
         assert!(

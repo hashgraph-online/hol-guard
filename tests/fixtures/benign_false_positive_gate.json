@@ -44737,6 +44737,22 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-read-repo-hidden-configuration-holding-an-indented-credential",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.storybook/config.yml"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-read-repo-hidden-configuration-holding-a-quoted-null",
       "fix_area": "negative",
       "harnesses": [

@@ -208,8 +208,9 @@ fn written_in_quotes(value: &str) -> bool {
 /// is looked for anywhere in the key rather than at its end: `secret_key` and
 /// `aws_secret_access_key` name a credential as plainly as `secret` does.
 fn names_a_credential_value(text: &str) -> bool {
-    text.lines().any(|line| {
-        let line = line.trim();
+    let lines: Vec<&str> = text.lines().collect();
+    lines.iter().enumerate().any(|(index, raw)| {
+        let line = raw.trim();
         if line.starts_with('#') || line.starts_with("//") {
             return false;
         }
@@ -219,8 +220,49 @@ fn names_a_credential_value(text: &str) -> bool {
                 let Some((key, value)) = credential_pair(segment) else {
                     return false;
                 };
-                CREDENTIAL_WORDS.iter().any(|word| key.contains(word))
-                    && !holds_no_credential(value)
+                if !CREDENTIAL_WORDS.iter().any(|word| key.contains(word)) {
+                    return false;
+                }
+                if !holds_no_credential(value) {
+                    return true;
+                }
+                value.is_empty() && carries_an_indented_value(&lines, index)
             })
     })
+}
+
+/// Whether the key on this line leaves its value for the line below. A
+/// mapping writes its value on the next line, indented deeper, and that line
+/// carries no key of its own to find it by, so the key's line answers for it:
+/// `password:` over an indented `hunter2` names the credential that
+/// `password:` alone does not.
+fn carries_an_indented_value(lines: &[&str], index: usize) -> bool {
+    let indent = indent_width(lines[index]);
+    for line in lines.iter().skip(index + 1) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
+            continue;
+        }
+        return indent_width(line) > indent && !opens_a_mapping(trimmed);
+    }
+    false
+}
+
+/// The spaces and tabs a line is written behind.
+fn indent_width(line: &str) -> usize {
+    line.len() - line.trim_start_matches([' ', '\t']).len()
+}
+
+/// Whether a deeper line is a mapping of its own rather than the value the
+/// key above it left empty. A mapping names a plain word and a colon;
+/// anything else written there is that value.
+fn opens_a_mapping(line: &str) -> bool {
+    let Some((key, _)) = line.split_once(':') else {
+        return false;
+    };
+    let key = key.trim().trim_start_matches(['-', ' ']);
+    !key.is_empty()
+        && key.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+        })
 }
