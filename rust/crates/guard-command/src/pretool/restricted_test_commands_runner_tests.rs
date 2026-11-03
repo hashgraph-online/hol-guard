@@ -342,3 +342,37 @@ fn a_lookalike_entry_reads_as_no_runner() {
         assert_eq!(reason(command), None, "{command}");
     }
 }
+
+#[test]
+fn a_jasmine_word_that_sets_the_environment_keeps_its_review() {
+    // Jasmine walks the whole line before it reads an option and writes every
+    // word that is not a long option and holds an `=` into `process.env`. Such
+    // a word names no path, so the workspace screen cannot see it, and the
+    // ones that matter choose what Node loads in the workers the run spawns.
+    for command in [
+        "npx jasmine NODE_OPTIONS=--inspect-brk",
+        "npx jasmine --parallel=2 NODE_OPTIONS=--inspect-brk",
+        "npx jasmine NODE_OPTIONS=--import=data:text/javascript,console.log(1)",
+        "npx jasmine spec/unit_spec.js JASMINE_CONFIG_PATH=spec/support/jasmine.json",
+        "npx jasmine -- NODE_OPTIONS=--inspect-brk",
+        "jasmine NODE_OPTIONS=--inspect-brk",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+
+    // A long option carrying a value is not an assignment to Jasmine, and the
+    // other two runners read their lines with ordinary parsers, so an `=` word
+    // on their lines is a file or a pattern and stays contained.
+    for command in [
+        "npx jasmine --filter=auth",
+        "npx jasmine --config=spec/support/jasmine.json",
+        "npx qunit --filter=auth",
+        "npx uvu test a=b",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}

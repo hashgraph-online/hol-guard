@@ -11,6 +11,7 @@ recognised as local rather than as a package fetched for the occasion.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -253,7 +254,14 @@ _AVA_FILES = {
 }
 
 
-def _single_pass_project(name: str, version: str, entry: str, spec: str, marker: str) -> dict[str, str]:
+def _single_pass_project(
+    name: str,
+    version: str,
+    entry: str,
+    spec: str,
+    marker: str,
+    passed: tuple[str, ...] = (),
+) -> dict[str, str]:
     """A workspace that installed one single-pass runner, and nothing else.
 
     Jasmine, QUnit and uvu install the same way: a dev dependency, a lockfile
@@ -261,6 +269,12 @@ def _single_pass_project(name: str, version: str, entry: str, spec: str, marker:
     executable npm links into `node_modules/.bin`. Only the names and the entry
     path differ, so one builder plants all three and each case keeps its own
     line to print.
+
+    `passed` names the words the scenario's own command spells after the
+    runner. A launch that lost them would still start this executable, so the
+    marker is printed only when they all arrive; otherwise the line says which
+    run actually happened, and the case fails on the effect rather than on a
+    missing file.
     """
     return {
         "package.json": (
@@ -280,7 +294,13 @@ def _single_pass_project(name: str, version: str, entry: str, spec: str, marker:
         f"node_modules/{name}/package.json": (
             f'{{"name": "{name}", "version": "{version}", "bin": {{"{name}": "{entry}"}}}}\n'
         ),
-        f"node_modules/{name}/{entry}": (f"#!/usr/bin/env node\nconsole.log('{marker}');\n"),
+        f"node_modules/{name}/{entry}": (
+            "#!/usr/bin/env node\n"
+            f"const passed = {json.dumps(list(passed))};\n"
+            "const seen = process.argv.slice(2);\n"
+            "const whole = passed.every((word) => seen.includes(word));\n"
+            f"console.log(whole ? '{marker}' : '{name}: ' + JSON.stringify(seen));\n"
+        ),
     }
 
 
@@ -295,6 +315,7 @@ _JASMINE_FILES = {
         "bin/jasmine.js",
         "spec/sample_spec.js",
         JASMINE_MARKER,
+        passed=("--filter=auth",),
     ),
     "spec/support/jasmine.json": ('{\n  "spec_dir": "spec",\n  "spec_files": ["**/*[sS]pec.js"]\n}\n'),
 }
@@ -308,13 +329,21 @@ _QUNIT_FILES = _single_pass_project(
     "bin/qunit.js",
     "test/sample.js",
     QUNIT_MARKER,
+    passed=("test/",),
 )
 
 _UVU_VERSION = "0.5.6"
 # The one line the workspace's own uvu prints, which only a real launch produces.
 UVU_MARKER = f"uvu {_UVU_VERSION}"
 # uvu publishes its executable at the package root rather than under `bin`.
-_UVU_FILES = _single_pass_project("uvu", _UVU_VERSION, "bin.js", "test/sample.js", UVU_MARKER)
+_UVU_FILES = _single_pass_project(
+    "uvu",
+    _UVU_VERSION,
+    "bin.js",
+    "test/sample.js",
+    UVU_MARKER,
+    passed=("test",),
+)
 
 
 

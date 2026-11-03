@@ -393,8 +393,8 @@ pub(crate) use runner_calls::{
     workspace_test_script,
 };
 pub(crate) use single_pass_runners::{
-    jasmine_contained_call, jasmine_runs_once, qunit_contained_call, qunit_runs_once,
-    uvu_contained_call,
+    jasmine_contained_call, jasmine_runs_once, jasmine_sets_no_environment, qunit_contained_call,
+    qunit_runs_once, uvu_contained_call,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
@@ -483,6 +483,12 @@ fn runner_tail_or_error(
                 Err(RestrictedPytestError::new(
                     VITEST_INVALID,
                     "Protected Jasmine runs specs; it does not scaffold a project.",
+                ))
+            }
+            Some("jasmine") if !jasmine_sets_no_environment(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected Jasmine takes its environment from the run, not from its arguments.",
                 ))
             }
             Some("jasmine") => Err(RestrictedPytestError::new(

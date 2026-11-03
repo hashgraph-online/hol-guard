@@ -13,7 +13,24 @@ use super::runner_calls::{option_name, reads_its_own_workspace, short_options_ca
 /// True when a Jasmine call both runs its specs once and takes everything it
 /// loads from the workspace.
 pub(crate) fn jasmine_contained_call(arguments: &[String]) -> bool {
-    jasmine_runs_once(arguments) && reads_its_own_workspace(arguments)
+    jasmine_runs_once(arguments)
+        && jasmine_sets_no_environment(arguments)
+        && reads_its_own_workspace(arguments)
+}
+
+/// True when no word on a Jasmine line sets an environment variable.
+///
+/// Before Jasmine reads a single option it walks the whole line and writes
+/// every word that is not a long option and holds an `=` into `process.env`,
+/// splitting it at the first `=`. So `NODE_OPTIONS=--import=data:...` is not
+/// a spec file to this runner, it is the environment its workers inherit, and
+/// the path screen cannot see it: neither half of such a word names a path at
+/// all. A word that chooses what Node loads is the thing the workspace screen
+/// exists to refuse, so these go to review whatever they carry.
+pub(crate) fn jasmine_sets_no_environment(arguments: &[String]) -> bool {
+    !arguments
+        .iter()
+        .any(|argument| !argument.starts_with("--") && argument.contains('='))
 }
 
 /// Jasmine has no watch mode, so the only words that stop a call being a test
