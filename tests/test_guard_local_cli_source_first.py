@@ -19,12 +19,13 @@ from codex_plugin_scanner.guard.native_local_cli_help_parse import SourceRead
 from codex_plugin_scanner.guard.runtime.local_cli_help import discover_local_cli_commands
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_cli_script_source import (
-    MAX_FOLLOWED_IMPORTS,
     local_import_paths,
     read_local_module,
 )
 
 BRIDGE = "codex_plugin_scanner.guard.native_local_cli_help_parse"
+# The native runtime follows at most this many imports per script.
+MAX_FOLLOWED_IMPORTS = 4
 
 PIN_SCRIPT = """#!/usr/bin/env node
 const [,, action] = process.argv;
