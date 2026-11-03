@@ -374,7 +374,8 @@ def _request(
 
 @pytest.fixture
 def daemon(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
-    _sign_in(tmp_path)
+    # The daemon reads the real clock, so its sign-in expires relative to it.
+    _sign_in(tmp_path, expires=datetime.now(timezone.utc) + timedelta(hours=1))
     monkeypatch.setattr(status_module, "_live_checker", _connected)
     server = GuardDaemonServer(GuardStore(tmp_path), host="127.0.0.1", port=0)
     server.start()
@@ -475,9 +476,9 @@ def test_local_approvals_keep_working_whatever_guard_cloud_says(
             lambda *_args: (CheckResult("offline", "Guard Cloud did not answer.", None),) * 2,
         )
     if cloud_answer == "expired":
-        _sign_in(tmp_path, expires=NOW - timedelta(hours=1))
+        _sign_in(tmp_path, expires=datetime.now(timezone.utc) - timedelta(hours=1))
 
-    check_status, _checked = _request(daemon.port, "/v1/cloud-actions/status", method="POST", headers=token)
+    check_status, checked = _request(daemon.port, "/v1/cloud-actions/status", method="POST", headers=token)
     status, payload = _request(
         daemon.port,
         f"/v1/requests/{pending}/approve",
@@ -486,7 +487,9 @@ def test_local_approvals_keep_working_whatever_guard_cloud_says(
         body={"scope": "artifact", "reason": "approved on this computer"},
     )
 
+    expected = {"connected": "connected", "offline": "offline", "expired": "sign_in_expired"}[cloud_answer]
     assert check_status == 200
+    assert checked["sign_ins"][0]["state"] == expected
     assert status == 200
     assert payload["resolved"] is True
     assert GuardStore(tmp_path).get_approval_request(pending)["status"] != "pending"
