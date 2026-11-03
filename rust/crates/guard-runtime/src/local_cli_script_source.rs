@@ -15,17 +15,24 @@
 //!   files that still land inside the script's folder once resolved.
 //! - `module` reads one of those modules, only when the file opened is the one
 //!   inside the script's folder; the final link is never followed.
+//! - `mcp_evidence` says whether a script serves MCP, from its own source, the
+//!   local modules it imports, or, for the wrapper pip or uv writes for an
+//!   installed command, the installed package the wrapper runs
+//!   (`local_mcp_source_evidence.py` before it moved here).
 //!
 //! Paths resolve the way Python's `Path.resolve` does, so the files named in
 //! answers are spelled as Python spelled them.
 
+use std::collections::{HashSet, VecDeque};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
+use crate::daemon_lifecycle_text::py_strip;
 use crate::guard_paths::{python_realpath, python_realpath_lax};
+use crate::local_cli_help::mcp_source_facts;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
@@ -36,6 +43,8 @@ const MAX_FOLLOWED_IMPORTS: usize = 4;
 const SCRIPT_SUFFIXES: [&str; 11] = [
     ".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".py", ".rb", ".sh", ".bash", ".zsh",
 ];
+/// Python files read from the package an entry-point wrapper runs.
+const MAX_PACKAGE_FILES: usize = 24;
 /// Kernel file systems a probe never reads, whatever links lead there.
 const KERNEL_ROOTS: [&str; 3] = ["proc", "dev", "sys"];
 
@@ -50,6 +59,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "read" => &["op", "path", "shebang_only"],
         "imports" => &["op", "script", "imports"],
         "module" => &["op", "module", "script"],
+        "mcp_evidence" => &["op", "script", "invocation"],
         _ => return Err(ERR_INVALID),
     };
     if fields.len() != keys.len() || !keys.iter().all(|key| fields.contains_key(*key)) {
@@ -66,15 +76,17 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
             Ok(json!({ "text": source }))
         }
         "imports" => {
-            let imports = fields
-                .get("imports")
-                .and_then(Value::as_array)
-                .ok_or(ERR_INVALID)?
-                .iter()
-                .map(|entry| entry.as_str().ok_or(ERR_INVALID))
-                .collect::<Result<Vec<_>, _>>()?;
+            let imports = texts(fields, "imports")?;
             let paths = local_import_paths(text(fields, "script")?, &imports);
             Ok(json!({ "paths": paths }))
+        }
+        "mcp_evidence" => {
+            let invocation: Vec<String> = texts(fields, "invocation")?
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+            let serves = script_serves_mcp(text(fields, "script")?, &invocation);
+            Ok(json!({ "serves": serves }))
         }
         _ => {
             let source = read_local_module(text(fields, "module")?, text(fields, "script")?);
@@ -85,6 +97,16 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
 
 fn text<'a>(fields: &'a Map<String, Value>, key: &str) -> Result<&'a str, &'static str> {
     fields.get(key).and_then(Value::as_str).ok_or(ERR_INVALID)
+}
+
+fn texts<'a>(fields: &'a Map<String, Value>, key: &str) -> Result<Vec<&'a str>, &'static str> {
+    fields
+        .get(key)
+        .and_then(Value::as_array)
+        .ok_or(ERR_INVALID)?
+        .iter()
+        .map(|entry| entry.as_str().ok_or(ERR_INVALID))
+        .collect()
 }
 
 fn spelled(path: &Path) -> String {
@@ -285,6 +307,174 @@ fn local_module(folder: &Path, entry: &str, script_suffix: &str) -> Option<PathB
         (is_within(&resolved, folder) && script_file && safe_probe_path(&spelled(&resolved)))
             .then_some(resolved)
     })
+}
+
+/// Whether Guard may launch `script` to ask it for MCP tools.
+///
+/// Recognizing a command as MCP launches it with its real arguments, so a
+/// script that is not a server would do its normal work. Only a script whose
+/// source, or a local module it imports, shows an MCP server is launched; for
+/// the entry-point wrapper pip or uv writes for an installed command, the
+/// installed package the wrapper runs must show one. A script whose source
+/// cannot be read is never launched.
+fn script_serves_mcp(script: &str, invocation: &[String]) -> bool {
+    let Some(text) = read_script_source(script, false) else {
+        return false;
+    };
+    let (mcp_server, entry_point, imports) = mcp_source_facts(&text, invocation);
+    if mcp_server {
+        return true;
+    }
+    let imports: Vec<&str> = imports.iter().map(String::as_str).collect();
+    let modules = local_import_paths(script, &imports);
+    if let Some(module) = entry_point.filter(|_| modules.is_empty()) {
+        return package_serves_mcp(&module, script, &text, invocation);
+    }
+    modules.iter().any(|module| {
+        read_local_module(module, script)
+            .is_some_and(|source| mcp_source_facts(&source, invocation).0)
+    })
+}
+
+/// Whether the module an entry-point wrapper runs shows an MCP server.
+///
+/// The module is looked up in the `site-packages` of the environment that
+/// holds the wrapper or its `#!` interpreter, as pip, pipx and `uv tool` lay
+/// them out. Its own file is read, then the modules of the same package it
+/// imports, up to [`MAX_PACKAGE_FILES`] in all. Another module in the package,
+/// such as an optional MCP server beside a CLI's commands, does not count. A
+/// module Guard cannot find is not launched.
+fn package_serves_mcp(module: &str, wrapper: &str, text: &str, invocation: &[String]) -> bool {
+    let parts: Vec<&str> = module.split('.').collect();
+    let top = parts[0];
+    for site in site_packages(wrapper, text) {
+        let base = parts
+            .iter()
+            .fold(site.clone(), |path, part| path.join(part));
+        let Some(entry) = [base.join("__init__.py"), base.with_extension("py")]
+            .into_iter()
+            .find(|path| is_file(path))
+        else {
+            continue;
+        };
+        let package = site.join(top).join("__init__.py");
+        let anchor = spelled(if is_file(&package) { &package } else { &entry });
+        let mut queue = VecDeque::from([spelled(&entry)]);
+        let mut seen: HashSet<String> = queue.iter().cloned().collect();
+        while let Some(path) = queue.pop_front() {
+            let Some(source) = read_local_module(&path, &anchor) else {
+                continue;
+            };
+            let (mcp_server, _, imports) = mcp_source_facts(&source, invocation);
+            if mcp_server {
+                return true;
+            }
+            for imported in package_imports(&path, &imports, &site, top) {
+                if !seen.contains(&imported) && seen.len() < MAX_PACKAGE_FILES {
+                    seen.insert(imported.clone());
+                    queue.push_back(imported);
+                }
+            }
+        }
+        return false;
+    }
+    false
+}
+
+/// The modules of package `top` that the file at `path` imports.
+///
+/// The source read reports `from .server import serve` as `./server.py`,
+/// beside `path`, and `from top.server import serve` as `./top/server.py`,
+/// under `site`. Both are read only inside the package.
+fn package_imports(path: &str, imports: &[String], site: &Path, top: &str) -> Vec<String> {
+    let initializer = site.join(top).join("__init__.py");
+    let Some(package) =
+        resolve_strict(&initializer).and_then(|file| file.parent().map(Path::to_path_buf))
+    else {
+        return Vec::new();
+    };
+    let Some(folder) = resolve_strict(Path::new(path))
+        .and_then(|file| file.parent().map(Path::to_path_buf))
+        .and_then(|folder| folder.strip_prefix(&package).ok().map(Path::to_path_buf))
+    else {
+        return Vec::new();
+    };
+    let in_top = format!("./{top}/");
+    let entries: Vec<String> = imports
+        .iter()
+        .map(|entry| match entry.strip_prefix(&in_top) {
+            Some(rest) => format!("./{rest}"),
+            None => {
+                let rest = entry.strip_prefix("./").unwrap_or(entry);
+                format!("./{}", spelled(&folder.join(rest)).replace('\\', "/"))
+            }
+        })
+        .collect();
+    let entries: Vec<&str> = entries.iter().map(String::as_str).collect();
+    local_import_paths(&spelled(&initializer), &entries)
+}
+
+/// The `site-packages` folders of the environments a wrapper may belong to.
+fn site_packages(wrapper: &str, text: &str) -> Vec<PathBuf> {
+    fn grandparent(path: &Path) -> PathBuf {
+        let up = |path: &Path| path.parent().unwrap_or(path).to_path_buf();
+        up(&up(path))
+    }
+    let wrapper_path = Path::new(wrapper);
+    let mut prefixes = vec![grandparent(wrapper_path)];
+    if let Ok(resolved) = python_realpath_lax(wrapper_path) {
+        prefixes.push(grandparent(&resolved));
+    }
+    let first = text.split('\n').next().unwrap_or("");
+    if let Some(rest) = first.strip_prefix("#!") {
+        let interpreter = py_strip(rest).split(' ').next().unwrap_or("");
+        let named_python = Path::new(interpreter)
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().starts_with("python"));
+        if interpreter.starts_with('/') && named_python {
+            prefixes.push(grandparent(Path::new(interpreter)));
+        }
+    }
+    let mut found: Vec<PathBuf> = Vec::new();
+    let mut visited: Vec<&PathBuf> = Vec::new();
+    for prefix in &prefixes {
+        if visited.contains(&prefix) {
+            continue;
+        }
+        visited.push(prefix);
+        let mut sites = python_site_folders(prefix);
+        sites.push(prefix.join("Lib").join("site-packages"));
+        for site in sites {
+            if site.is_dir() && !found.contains(&site) {
+                found.push(site);
+            }
+        }
+    }
+    found
+}
+
+/// `prefix.glob("lib/python3*/site-packages")`, in sorted order.
+fn python_site_folders(prefix: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(prefix.join("lib")) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| {
+            if cfg!(windows) {
+                name.to_lowercase().starts_with("python3")
+            } else {
+                name.starts_with("python3")
+            }
+        })
+        .collect();
+    names.sort();
+    names
+        .into_iter()
+        .map(|name| prefix.join("lib").join(name).join("site-packages"))
+        .filter(|site| site.exists())
+        .collect()
 }
 
 #[cfg(all(test, unix))]
