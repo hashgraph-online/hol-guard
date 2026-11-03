@@ -119,11 +119,13 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         | "decision_build" => crate::decision_authority_op::dispatch(kind, args),
         "cli_runtime_support" => crate::cli_runtime_support_op::dispatch(args),
         "extension_hint_shape" => crate::extension_hint_shape::dispatch(args),
+        "mcp_policy_input" => crate::mcp_policy_input::dispatch(args),
         "approval_copy" => crate::approval_copy::dispatch(args),
         "workspace_assessment_build" | "workspace_assessment_fit" => {
             crate::workspace_assessment_sync::dispatch(kind, args)
         }
         "workspace_audit_sync" => crate::workspace_audit_sync::dispatch(args),
+        "workspace_rule_findings" => crate::workspace_rule_findings::dispatch(args),
         "workspace_runtime_findings" => crate::workspace_runtime_findings::dispatch(args),
         "shell_request_authority" => crate::shell_request_authority_op::dispatch(args),
         "guard_product_copy" => crate::guard_product_copy::dispatch(args),
@@ -132,6 +134,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "trust_attestation_shape" => crate::trust_attestation_shape::dispatch(args),
         "mcp_registry_page" => crate::mcp_registry_page::dispatch(args),
         "review_event_decode" => crate::review_event_decode::dispatch(args),
+        "review_policy_memory_plan" => crate::review_policy_memory_plan::dispatch(args),
         "contained_denial_note" => crate::contained_denial_note::dispatch(args),
         "detector_authority" => detector::detector_authority(args),
         "detector_composition" => detector::detector_composition(args),

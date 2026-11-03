@@ -14,6 +14,22 @@ generated descriptor. Contributions remain **External, opt-in, and off until
 enabled**. Names, help descriptions, and MCP annotations do not establish
 safety.
 
+## Install the CLI
+
+The `hol-guard extensions` commands below ship in the released package, so generating and
+validating a kit needs no Rust toolchain:
+
+```sh
+pipx install hol-guard
+hol-guard --version
+```
+
+Connect the agent you author with, for example `hol-guard install claude-code`, so you can compare
+the current catalog with `hol-guard command explain` before you start and exercise the extension
+in that agent after it ships. See
+[Test with an installed Guard](../extensions/contributing.md#test-with-an-installed-guard).
+Repository checks that use `uv run --no-sync` still run from a source checkout.
+
 ## Canonical files
 
 For a command contribution, edit or review these files:
