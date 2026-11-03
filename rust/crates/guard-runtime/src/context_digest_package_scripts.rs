@@ -271,7 +271,7 @@ fn manifest_from_path(command_text: &str, cwd: &Path, home_dir: &Path) -> Option
 
 /// `find_nearest_package_json`: walk up at most eight directories, stopping
 /// at the home directory.
-fn find_nearest_package_json(start: &Path, home_dir: &Path) -> Option<PathBuf> {
+pub(crate) fn find_nearest_package_json(start: &Path, home_dir: &Path) -> Option<PathBuf> {
     let home = fs::canonicalize(home_dir).unwrap_or_else(|_| home_dir.to_path_buf());
     let mut current = start.to_path_buf();
     for _ in 0..MAX_WALK {

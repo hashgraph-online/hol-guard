@@ -23,6 +23,7 @@ use std::path::{Component, Path, PathBuf};
 use guard_command::codex_output_fnmatch::fnmatchcase;
 use serde_json::{json, Map, Value};
 
+use crate::context_digest_package_scripts::find_nearest_package_json;
 use crate::guard_paths::python_realpath_lax;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
@@ -33,7 +34,6 @@ const MAX_REMEMBERED: usize = 16;
 const MAX_WORKSPACES: usize = 8;
 const MAX_PATTERNS: usize = 6;
 /// Directory levels walked looking for a package.json above the working directory.
-const MAX_WALK: usize = 8;
 /// Values that stand for a class of location rather than a remembered path.
 const PATH_CLASS_TOKENS: [&str; 4] = ["unknown", "package-store", "system-bin", "user-tool"];
 
@@ -110,7 +110,7 @@ fn text(path: &Path) -> String {
 }
 
 /// The remembered project path of a package-scripts item, if it names one.
-fn remembered_path<'a>(entry: &'a Map<String, Value>) -> Option<&'a str> {
+fn remembered_path(entry: &Map<String, Value>) -> Option<&str> {
     if entry.get("surface").and_then(Value::as_str) != Some(SURFACE) {
         return None;
     }
@@ -215,13 +215,21 @@ fn workspace_package_roots(root: &Path) -> Vec<PathBuf> {
         .filter_map(Value::as_str)
         .take(MAX_PATTERNS)
         .collect();
+    let resolved_root = python_realpath_lax(root).ok();
     let mut found = Vec::new();
     for pattern in patterns {
         if pattern.contains("..") || pattern.starts_with('/') || pattern.contains("**") {
             continue;
         }
         for matched in glob(root, pattern) {
-            if is_dir(&matched) && is_file(&matched.join(MANIFEST)) {
+            // A linked package that resolves outside the project is not one
+            // of its workspaces.
+            let inside = python_realpath_lax(&matched).is_ok_and(|real| {
+                resolved_root
+                    .as_ref()
+                    .is_some_and(|root| real.starts_with(root))
+            });
+            if inside && is_dir(&matched) && is_file(&matched.join(MANIFEST)) {
                 found.push(matched);
             }
             if found.len() >= MAX_WORKSPACES {
@@ -310,26 +318,13 @@ fn name_matches(name: &str, pattern: &str) -> bool {
     }
 }
 
-/// `find_nearest_package_json` reached a package.json from `start`, stopping
-/// at the home and after a few levels.
+/// Whether `find_nearest_package_json` reaches a package.json from the
+/// resolved `start`.
 fn inside_package_project(start: &Path, home: &Path) -> bool {
-    let Ok(mut current) = python_realpath_lax(start) else {
-        return false;
-    };
-    let home = python_realpath_lax(home).ok();
-    for _ in 0..MAX_WALK {
-        if is_file(&current.join(MANIFEST)) {
-            return true;
-        }
-        if home.as_deref() == Some(current.as_path()) {
-            return false;
-        }
-        match current.parent() {
-            Some(parent) => current = parent.to_path_buf(),
-            None => return false,
-        }
-    }
-    false
+    python_realpath_lax(start)
+        .ok()
+        .and_then(|start| find_nearest_package_json(&start, home))
+        .is_some()
 }
 
 fn operator_cwd(cwd: &Path, home: &Path, requested: Option<&Path>) -> PathBuf {

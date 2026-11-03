@@ -184,6 +184,21 @@ fn workspace_patterns_that_leave_the_project_are_skipped() {
 }
 
 #[test]
+fn a_linked_workspace_package_outside_the_project_is_skipped() {
+    let (_directory, base) = base();
+    let mono = base.join("mono");
+    project(&mono, r#"{"workspaces": ["packages/*"]}"#);
+    project(&mono.join("packages/inside"), "{}");
+    project(&base.join("outside"), "{}");
+    symlink(base.join("outside"), mono.join("packages/linked")).expect("symlink");
+    let entries = json!([scripts(json!(spelled(&mono)))]);
+    assert_eq!(
+        roots(&base, false, entries),
+        [spelled(&mono), spelled(&mono.join("packages/inside"))]
+    );
+}
+
+#[test]
 fn only_six_patterns_and_eight_workspace_packages_are_read() {
     let (_directory, base) = base();
     let mono = base.join("mono");

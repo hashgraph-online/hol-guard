@@ -21,13 +21,28 @@ from .package_json_scripts import (
 _SURFACE = "package-scripts"
 _PUBLIC_SOURCE = "user-tool"
 _PATH_CLASS_TOKENS = frozenset({"unknown", "package-store", "system-bin", "user-tool"})
+# Remembered projects per request, well inside the resident's item and byte limits.
+_BATCH = 256
+# The most catalog roots the native runtime returns for one request.
+_MAX_ROOTS = 16
+
+
+def _cwd() -> tuple[str, bool]:
+    try:
+        return os.getcwd(), True
+    except OSError:
+        # The daemon's launch directory can be removed while it runs.
+        return str(Path.home().absolute()), False
 
 
 def _ask(op: str, **fields: Any) -> dict[str, Any]:
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
+    cwd, known = _cwd()
+    if not known and fields.get("include_cwd") is True:
+        fields["include_cwd"] = False
     try:
-        return native_runner_authority("package_script_memory", {"op": op, "cwd": os.getcwd(), **fields})
+        return native_runner_authority("package_script_memory", {"op": op, "cwd": cwd, **fields})
     except NativeRunnerAuthorityError as exc:
         raise RuntimeError("Package script memory requires the HOL Guard native runtime") from exc
 
@@ -36,11 +51,17 @@ def _entries(items: list[dict[str, object]]) -> list[dict[str, object]]:
     return [{key: item.get(key) for key in ("surface", "source_path", "state")} for item in items]
 
 
+def _package_batches(items: list[dict[str, object]]) -> list[list[int]]:
+    # Only package-scripts items name a project; every other item is always shown.
+    picked = [index for index, item in enumerate(items) if item.get("surface") == _SURFACE]
+    return [picked[start : start + _BATCH] for start in range(0, len(picked), _BATCH)]
+
+
 def operator_working_directory(payload: dict[str, object], *, home_dir: Path) -> Path:
     raw = payload.get("cwd")
     requested = None
     if isinstance(raw, str) and raw.strip():
-        requested = os.path.join(os.getcwd(), os.path.expanduser(raw.strip()))
+        requested = os.path.join(_cwd()[0], os.path.expanduser(raw.strip()))
     chosen = _ask("operator_cwd", home=str(home_dir.absolute()), requested=requested).get("path")
     if not isinstance(chosen, str):
         raise RuntimeError("HOL Guard native runtime returned a malformed working directory")
@@ -50,10 +71,14 @@ def operator_working_directory(payload: dict[str, object], *, home_dir: Path) ->
 def package_items_available(items: list[dict[str, object]]) -> list[bool]:
     """Whether each listed item is still shown; package scripts drop out once their manifest is gone."""
 
-    available = _ask("available", entries=_entries(items)).get("available")
-    if not isinstance(available, list) or len(available) != len(items):
-        raise RuntimeError("HOL Guard native runtime returned a malformed availability list")
-    return [value is True for value in available]
+    shown = [True] * len(items)
+    for batch in _package_batches(items):
+        available = _ask("available", entries=_entries([items[index] for index in batch])).get("available")
+        if not isinstance(available, list) or len(available) != len(batch):
+            raise RuntimeError("HOL Guard native runtime returned a malformed availability list")
+        for index, value in zip(batch, available, strict=True):
+            shown[index] = value is True
+    return shown
 
 
 def public_local_cli_item(item: dict[str, object]) -> dict[str, object]:
@@ -185,10 +210,17 @@ def _publish_root(
 
 
 def _catalog_roots(items: list[dict[str, object]], *, include_cwd: bool = True) -> list[Path]:
-    roots = _ask("roots", include_cwd=include_cwd, entries=_entries(items)).get("roots")
-    if not isinstance(roots, list) or not all(isinstance(root, str) for root in roots):
-        raise RuntimeError("HOL Guard native runtime returned malformed package roots")
-    return [Path(root) for root in roots]
+    batches = _package_batches(items) or ([[]] if include_cwd else [])
+    found: list[str] = []
+    for number, batch in enumerate(batches):
+        entries = _entries([items[index] for index in batch])
+        roots = _ask("roots", include_cwd=include_cwd and number == 0, entries=entries).get("roots")
+        if not isinstance(roots, list) or not all(isinstance(root, str) for root in roots):
+            raise RuntimeError("HOL Guard native runtime returned malformed package roots")
+        found.extend(root for root in roots if root not in found)
+        if len(found) >= _MAX_ROOTS:
+            break
+    return [Path(root) for root in found]
 
 
 def _folder_label(source_path: str | None) -> str | None:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.package_json_script_memory import (
@@ -432,7 +434,6 @@ def test_native_failure_is_reported_so_grant_callers_fail_closed(tmp_path: Path,
 
 
 def test_command_tokens_raise_on_native_failure_instead_of_generic_argv(tmp_path: Path, monkeypatch) -> None:
-    import pytest
 
     from codex_plugin_scanner.guard.native_local_cli_identity import track_local_cli_identity_failures
     from codex_plugin_scanner.guard.runtime import package_json_scripts
@@ -447,3 +448,26 @@ def test_command_tokens_raise_on_native_failure_instead_of_generic_argv(tmp_path
                 package_script_command_tokens("npm run build", cwd=project, home_dir=tmp_path)
         assert package_script_command_tokens("npm run build", cwd=project, home_dir=tmp_path) is None
     assert failures == ["native_package_json_scripts_unavailable", "native_package_json_scripts_malformed"]
+
+
+def test_availability_asks_only_about_package_items_in_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import package_json_script_memory as memory
+
+    sizes: list[int] = []
+
+    def fake(op: str, **fields: object) -> dict[str, object]:
+        entries = fields["entries"]
+        assert op == "available" and isinstance(entries, list)
+        sizes.append(len(entries))
+        return {"available": [entry["source_path"] != "/gone" for entry in entries]}
+
+    monkeypatch.setattr(memory, "_ask", fake)
+    assert memory.package_items_available([{"surface": "mcp"}]) == [True]
+    assert sizes == []
+    items: list[dict[str, object]] = [
+        {"surface": "package-scripts", "source_path": "/gone" if index == 299 else f"/p{index}"} for index in range(300)
+    ]
+    items.insert(1, {"surface": "mcp"})
+    shown = memory.package_items_available(items)
+    assert sizes == [256, 44]
+    assert shown[1] is True and shown[-1] is False and shown.count(False) == 1
