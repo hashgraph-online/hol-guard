@@ -109,7 +109,7 @@ class _Builder:
         return current
 
     def _launch(self, spec: list[object]) -> list[str]:
-        if len(spec) != 3 or type(spec[1]) is not int or spec[2] not in _LAUNCHES:
+        if len(spec) != 3 or type(spec[1]) is not int or not isinstance(spec[2], str) or spec[2] not in _LAUNCHES:
             raise _malformed("a launch spec is not [launch, server, companion|override]")
         index = spec[1]
         if not 0 <= index < len(self._servers):

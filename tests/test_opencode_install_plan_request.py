@@ -185,6 +185,8 @@ def test_specs_build_new_dicts_over_the_users_own_values(monkeypatch: pytest.Mon
         _answer(permission=["object", [], "extra"]),
         _answer(mcp=["object", [["k", ["launch", 0, "other"]]]]),
         _answer(mcp=["object", [["k", ["launch", 3, "companion"]]]]),
+        _answer(mcp=["object", [["k", ["launch", 0, []]]]]),
+        _answer(mcp=["object", [["k", ["launch", 0, {}]]]]),
         _answer(overlay=[]),
         _answer(overlay="object"),
     ],
