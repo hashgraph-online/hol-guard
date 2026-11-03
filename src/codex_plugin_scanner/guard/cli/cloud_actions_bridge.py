@@ -181,7 +181,7 @@ class CloudActionsBridge:
         self._write({"jsonrpc": "2.0", "id": request_id, "error": _error(_JSONRPC_SERVER_ERROR, message)})
 
     def _write(self, message: object) -> None:
-        line = json.dumps(message, separators=(",", ":"), ensure_ascii=False)
+        line = json.dumps(message, separators=(",", ":"))
         with self._write_lock:
             self._output.write(line + "\n")
             self._output.flush()

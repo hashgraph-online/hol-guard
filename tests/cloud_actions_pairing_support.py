@@ -69,7 +69,10 @@ def pair(monkeypatch: pytest.MonkeyPatch, cloud: FakeCloud | None = None) -> Fak
         if cloud.exchange_error is not None:
             raise cloud.exchange_error
         return CloudActionsAccess(
-            access_token="exchanged-access", expires_at=time.time() + 300, workspace_id=WS, scopes=("gateway:invoke",)
+            access_token="exchanged-access",
+            expires_at=time.time() + 300,
+            workspace_id=cloud.workspace_id or WS,
+            scopes=("gateway:invoke",),
         )
 
     def revoke(store: object, *, ai_tool: str | None) -> list[str]:

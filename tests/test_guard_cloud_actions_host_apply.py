@@ -230,6 +230,25 @@ def test_a_refused_access_writes_nothing(
     assert _records(guard_home, "cursor") == []
 
 
+def test_apply_refuses_another_workspace_when_the_pairing_names_none(
+    cloud: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home, guard_home = tmp_path / "home", tmp_path / "guard"
+    path = _seed(home, "codex")
+    before = path.read_bytes()
+    cloud.workspace_id = None
+    other = "22222222-2222-4222-8222-222222222222"
+
+    result, payload = _run(
+        capsys, home, guard_home, "ai-tools", "configure", "codex", "--cloud-workspace", other, "--apply"
+    )
+
+    assert result != 0
+    assert (payload["reason"], payload["written"], payload["paired_workspace"]) == ("workspace_mismatch", False, WS)
+    assert path.read_bytes() == before
+    assert _records(guard_home, "codex") == []
+
+
 def test_restore_ends_the_ai_tools_access(cloud: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     home, guard_home = tmp_path / "home", tmp_path / "guard"
     _ = _seed(home, "codex")

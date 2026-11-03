@@ -80,7 +80,7 @@ def _access_refused(error: CloudActionsAccessError, reply: _Reply, **fields: obj
     )
 
 
-def _apply_ai_tool(plan: HostConfigPlan, store: GuardStore, reply: _Reply) -> int:
+def _apply_ai_tool(plan: HostConfigPlan, store: GuardStore, reply: _Reply, *, wanted: str | None = None) -> int:
     from . import cloud_actions_access
     from .cloud_actions_host_apply import HostConfigWriteError, apply_host_config
 
@@ -110,6 +110,19 @@ def _apply_ai_tool(plan: HostConfigPlan, store: GuardStore, reply: _Reply) -> in
     except cloud_actions_access.CloudActionsAccessError as error:
         return _access_refused(error, reply, written=False, **fields)
     fields["cloud_workspace"] = access.workspace_id
+    # A pairing saved without a workspace is only checked here, against the access Guard Cloud gave.
+    if wanted and (access.workspace_id or "").lower() != wanted.lower():
+        fields["cloud_workspace"] = wanted
+        return reply(
+            CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT,
+            f"This computer's Cloud actions access is for workspace {access.workspace_id}, not {wanted}. "
+            "Nothing was changed.",
+            state="failed",
+            reason="workspace_mismatch",
+            paired_workspace=access.workspace_id,
+            written=False,
+            **fields,
+        )
     if not plan.changes:
         return reply(
             0,
@@ -276,7 +289,7 @@ def configure_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
     entry = bridge_entry(args.ai_tool, guard_home=guard_home)
     plan = plan_host_config(args.ai_tool, path=path, entry=entry, url=pairing.gateway_url)
     if args.apply:
-        return _apply_ai_tool(plan, store, reply)
+        return _apply_ai_tool(plan, store, reply, wanted=getattr(args, "cloud_workspace", None))
     return reply(
         CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT if plan.action in {"conflict", "unreadable"} else 0,
         _preview_text(plan),

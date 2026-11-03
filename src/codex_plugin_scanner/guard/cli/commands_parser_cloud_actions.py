@@ -112,9 +112,11 @@ def _add_parser(
     return parser
 
 
-def _add_cloud_workspace(parser: argparse.ArgumentParser, *, required: bool) -> None:
+def _add_cloud_workspace(parser: argparse.ArgumentParser, *, required: bool, help_suffix: str | None = None) -> None:
     help_text = "Guard Cloud workspace ID (not a local folder)"
-    if not required:
+    if help_suffix is not None:
+        help_text += help_suffix
+    elif not required:
         help_text += "; defaults to the one chosen with `workspace select`"
     parser.add_argument(
         "--cloud-workspace",
@@ -247,7 +249,11 @@ def configure_guard_cloud_actions_parser(
     configure = _add_parser(tool_commands, "configure", "Preview or apply an AI tool's Cloud actions settings")
     configure.add_argument("ai_tool", type=_slug("AI tool"), metavar="AI_TOOL")
     # Optional: the workspace is the one this computer is paired with; naming it only checks that.
-    _add_cloud_workspace(configure, required=False)
+    _add_cloud_workspace(
+        configure,
+        required=False,
+        help_suffix="; optional, fails if this computer is paired with another workspace",
+    )
     mode = configure.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="Show the exact changes without writing them")
     mode.add_argument("--apply", action="store_true", help="Write the changes, keeping a backup")
