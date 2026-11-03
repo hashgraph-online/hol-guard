@@ -119,6 +119,10 @@ def _which_from_user_directories(
     nothing found here is ever executed. No answer finds nothing.
     """
 
+    # The runtime never finds a command on Windows or one with a separator, so
+    # those skip the call.
+    if os.name == "nt" or "/" in command:
+        return None
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     request = {

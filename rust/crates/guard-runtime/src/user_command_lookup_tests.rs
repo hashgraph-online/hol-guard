@@ -107,7 +107,7 @@ fn installer_directories_are_searched_under_any_path_with_the_same_checks() {
         json!(spelled(&executable))
     );
     chmod(&installer, 0o777);
-    assert_eq!(find(&home, LAUNCHD_PATH, &[&installer]), Value::Null);
+    assert_eq!(find(&home, &terminal, &[&installer]), Value::Null);
     // A relative directory would resolve against the resident's cwd.
     assert_eq!(
         find(&home, &terminal, &[Path::new(".guardtestcli-code/bin")]),
