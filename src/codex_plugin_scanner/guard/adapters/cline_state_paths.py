@@ -31,13 +31,13 @@ def bound_cline_state_paths(
 ) -> tuple[dict[str, Path], dict[str, Path]]:
     """The launcher and worker paths recorded at install that still bind to their slots."""
 
+    paths, workers = _recorded(state.get("paths")), _recorded(state.get("workers"))
+    if paths is None and workers is None:
+        # Nothing was recorded, so nothing can bind.
+        return {}, {}
     root = state.get("root")
     answer = ask_cline_paths(
-        context,
-        "state_paths",
-        paths=_recorded(state.get("paths")),
-        workers=_recorded(state.get("workers")),
-        root=root if isinstance(root, str) else None,
+        context, "state_paths", paths=paths, workers=workers, root=root if isinstance(root, str) else None
     )
     return _bound(answer.get("paths")), _bound(answer.get("workers"))
 
