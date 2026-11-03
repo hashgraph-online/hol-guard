@@ -133,6 +133,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
             crate::workspace_assessment_sync::dispatch(kind, args)
         }
         "workspace_audit_sync" => crate::workspace_audit_sync::dispatch(args),
+        "workspace_fix_verify" => crate::workspace_fix_verify::dispatch(args),
         "workspace_rule_findings" => crate::workspace_rule_findings::dispatch(args),
         "workspace_runtime_findings" => crate::workspace_runtime_findings::dispatch(args),
         "workspace_findings_carry" => crate::workspace_findings_carry::dispatch(args),
