@@ -103,8 +103,8 @@ fn config_layers(
 fn effective_mode(layers: &[PathBuf]) -> Option<(String, PathBuf)> {
     layers
         .iter()
-        .filter_map(|path| code_mode(path).map(|mode| (mode, path.clone())))
-        .last()
+        .rev()
+        .find_map(|path| code_mode(path).map(|mode| (mode, path.clone())))
 }
 
 /// `omp_code_mode_value`: the configured mode, or `None` when the file is

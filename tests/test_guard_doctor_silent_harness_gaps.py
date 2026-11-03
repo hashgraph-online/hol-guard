@@ -185,6 +185,16 @@ def test_omp_code_mode_honors_agent_dir_environment(tmp_path: Path) -> None:
     ]
 
 
+def test_omp_code_mode_resolves_a_relative_agent_dir_against_the_caller(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    custom = _write(tmp_path / "agent/config.yml", _AUTO)
+    monkeypatch.chdir(tmp_path)
+    assert omp_code_mode_warnings(tmp_path / "home", environ={"PI_CODING_AGENT_DIR": "agent"}) == [
+        OMP_CODE_MODE_WARNING.format(path=custom)
+    ]
+
+
 def test_omp_diagnostics_include_warning(tmp_path: Path) -> None:
     home = tmp_path / "home"
     config = _write(home / ".omp/agent/config.yml", _AUTO)
