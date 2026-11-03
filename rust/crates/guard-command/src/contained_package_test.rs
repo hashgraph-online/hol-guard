@@ -185,6 +185,21 @@ pub(crate) fn script_tokens(
         let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
         ava_contained_call(&call)
     };
+    let single_pass = match program_name(runner) {
+        "jasmine" => {
+            let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+            crate::contained_argv::jasmine_contained_call(&call)
+        }
+        "qunit" => {
+            let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+            crate::contained_argv::qunit_contained_call(&call)
+        }
+        "uvu" => {
+            let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+            crate::contained_argv::uvu_contained_call(&call)
+        }
+        _ => false,
+    };
     let bun = program_name(runner) == "bun" && {
         let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
         match call.split_first() {
@@ -198,7 +213,7 @@ pub(crate) fn script_tokens(
             .collect();
         tsx_test_invocation(&call).ok().flatten().is_some()
     };
-    if !node && !vitest && !jest && !mocha && !ava && !bun && !tsx {
+    if !node && !vitest && !jest && !mocha && !ava && !single_pass && !bun && !tsx {
         // A project may name a read-only tool run for the suite it checks,
         // such as a `test:types` entry holding `tsc --noEmit`. The words the
         // manifest declares are the run either way, so the body goes back as
