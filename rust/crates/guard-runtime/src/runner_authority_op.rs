@@ -28,6 +28,7 @@ use super::context_digest_json::write_canonical_json_with_limit;
 use super::copilot_detect;
 use super::copilot_hook_config;
 use super::cursor_detect;
+use super::cursor_editor_plan;
 use super::cursor_hook_config;
 use super::devin_detect;
 use super::devin_jsonc;
@@ -185,6 +186,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "openclaw_detect" => openclaw_detect::detect(args),
         "cursor_detect" => cursor_detect::detect(args),
         "cursor_hook_config" => cursor_hook_config::dispatch(args),
+        "cursor_editor_plan" => cursor_editor_plan::plan(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
         _ => Err(ERR_KIND),
