@@ -110,16 +110,17 @@ def _decode_body(raw: bytes) -> object:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
         return None
+    # Deep nesting raises RecursionError and an overlong integer raises a plain ValueError.
     try:
         return json.loads(text)
-    except json.JSONDecodeError:
+    except (ValueError, RecursionError):
         pass
     data = [line[5:].strip() for line in text.splitlines() if line.startswith("data:")]
     if not data:
         return None
     try:
         return json.loads(data[0])
-    except json.JSONDecodeError:
+    except (ValueError, RecursionError):
         return None
 
 
@@ -209,7 +210,8 @@ def _classify_ping_reply(body: object, status: int) -> HealthCheck:
     if isinstance(body, dict) and body.get("jsonrpc") == "2.0":
         if "result" in body and body.get("id") == _PING_ID:
             return HealthCheck("connected", "Guard Cloud accepted this sign-in.", status, (("actions", "available"),))
-        if _rpc_error_code(body) == _METHOD_NOT_FOUND and body.get("id") in {_PING_ID, None}:
+        reply_id = body.get("id")
+        if _rpc_error_code(body) == _METHOD_NOT_FOUND and (reply_id is None or reply_id == _PING_ID):
             return HealthCheck(
                 "connected",
                 "Guard Cloud accepted this sign-in. Actions are not available on this Guard Cloud yet.",

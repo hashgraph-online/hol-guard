@@ -151,6 +151,27 @@ _PING_RESULT = b'{"jsonrpc": "2.0", "id": "hol-guard-status", "result": {}}'
             None,
         ),
         ("application/json", b'{"jsonrpc": "2.0", "id": "other", "result": {}}', "unexpected_answer", None),
+        (
+            "application/json",
+            b'{"jsonrpc": "2.0", "id": ["hol-guard-status"], "error": {"code": -32601, "message": "no"}}',
+            "unexpected_answer",
+            None,
+        ),
+        ("application/json", b"[" * 60_000, "unexpected_answer", None),
+        ("application/json", b"1" * 5_000, "unexpected_answer", None),
+        ("text/event-stream", b"data: " + b"[" * 60_000 + b"\n\n", "unexpected_answer", None),
+    ],
+    ids=[
+        "json-ping-reply",
+        "event-stream-ping-reply",
+        "proxy-page",
+        "empty-body",
+        "rpc-error",
+        "other-id",
+        "unhashable-id",
+        "deep-nesting",
+        "overlong-integer",
+        "event-stream-deep-nesting",
     ],
 )
 def test_status_trusts_a_success_status_only_with_a_ping_reply(
