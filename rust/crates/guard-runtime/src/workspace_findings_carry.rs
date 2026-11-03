@@ -15,6 +15,7 @@
 
 use serde_json::{json, Map, Value};
 
+use crate::cloud_request_text::py_truthy;
 use crate::guard_store_json::{dumps_sorted, py_str};
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
@@ -85,7 +86,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         let mut entry = item.clone();
         let origin = item
             .get("carried_from_run_id")
-            .filter(|origin| truthy(origin))
+            .filter(|origin| py_truthy(origin))
             .unwrap_or(&run_id)
             .clone();
         entry.insert("carried_from_run_id".to_owned(), origin);
@@ -144,18 +145,6 @@ fn finding_id(item: &Map<String, Value>) -> Value {
 fn size(item: &Map<String, Value>) -> Result<u64, &'static str> {
     let text = dumps_sorted(&Value::Object(item.clone())).ok_or(ERR_INVALID)?;
     Ok((text.len() as u64).saturating_add(1))
-}
-
-/// Python truthiness, for the `or` that picks a finding's original run.
-fn truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(flag) => *flag,
-        Value::Number(number) => number.as_f64().is_some_and(|number| number != 0.0),
-        Value::String(text) => !text.is_empty(),
-        Value::Array(items) => !items.is_empty(),
-        Value::Object(fields) => !fields.is_empty(),
-    }
 }
 
 #[cfg(test)]

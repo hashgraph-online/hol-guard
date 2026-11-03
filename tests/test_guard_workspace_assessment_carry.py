@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -286,7 +287,10 @@ def test_runs_finished_in_the_same_millisecond_carry_from_the_one_queued_last(
     # pick the later run.
     store = admitted(tmp_path)
     ids = iter(["f" * 32, "e" * 32, "0" * 32])
-    monkeypatch.setattr(assessments.uuid, "uuid4", lambda: SimpleNamespace(hex=next(ids)))
+    fresh = uuid.uuid4
+    # Native requests draw their ids from the same function once the run ids
+    # are spent.
+    monkeypatch.setattr(assessments.uuid, "uuid4", lambda: SimpleNamespace(hex=next(ids, None) or fresh().hex))
     assess(store, outcome("completed", [finding("a" * 32)], ci_workflow_v1="complete"), at=T0)
     second = assess(store, outcome("completed", [finding("b" * 32)], ci_workflow_v1="complete"), at=T0)
 
