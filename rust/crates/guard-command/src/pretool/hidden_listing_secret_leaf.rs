@@ -43,14 +43,79 @@ fn configuration_document_is_clean(canonical: &Path, name: &str) -> bool {
     {
         return false;
     }
-    let Ok(text) = std::fs::read_to_string(canonical) else {
+    let Some(text) = bounded_document_text(canonical) else {
         return false;
     };
+    if names_a_credential_value(&text) {
+        return false;
+    }
     // The real name can make the detector stricter as well as more lenient,
     // so both readings have to come back clean.
     ["", name].iter().all(|label| {
         guard_scanner::secret_detection::scan_secret_text(&text, label, "hidden-document", None, 1)
             .findings
             .is_empty()
+    })
+}
+
+/// The document's text, read under the limit whatever the file does after its
+/// size was taken. A file that grew past the limit in between is no longer the
+/// bounded document this rule reads, so it keeps its review.
+fn bounded_document_text(canonical: &Path) -> Option<String> {
+    use std::io::Read;
+
+    let file = std::fs::File::open(canonical).ok()?;
+    let mut text = String::new();
+    let read = file
+        .take(CONFIGURATION_READ_LIMIT + 1)
+        .read_to_string(&mut text)
+        .ok()?;
+    (read as u64 <= CONFIGURATION_READ_LIMIT).then_some(text)
+}
+
+/// The words a credential is written under, spelled without separators.
+const CREDENTIAL_WORDS: [&str; 8] = [
+    "password",
+    "passwd",
+    "secret",
+    "token",
+    "apikey",
+    "credential",
+    "privatekey",
+    "passphrase",
+];
+
+/// Whether a line writes a literal value under one of those words. The
+/// detector answers for material it recognises by shape, and a short password
+/// has no shape to recognise, so the word beside it carries the answer. A
+/// value the shell or the CI system fills in later names no credential of its
+/// own, and an empty one holds none.
+fn names_a_credential_value(text: &str) -> bool {
+    text.lines().any(|line| {
+        let line = line.trim();
+        if line.starts_with('#') || line.starts_with("//") {
+            return false;
+        }
+        let Some((key, value)) = line.split_once(['=', ':']) else {
+            return false;
+        };
+        let key = key
+            .trim()
+            .trim_start_matches(['-', ' '])
+            .trim_matches(['"', '\''])
+            .to_ascii_lowercase()
+            .replace(['-', '_', '.'], "");
+        if !CREDENTIAL_WORDS.iter().any(|word| key.ends_with(word)) {
+            return false;
+        }
+        let value = value
+            .trim()
+            .trim_end_matches(',')
+            .trim_matches(['"', '\''])
+            .trim();
+        !value.is_empty()
+            && !value.contains('$')
+            && !value.contains("{{")
+            && !matches!(value, "{}" | "[]" | "null" | "~" | "true" | "false")
     })
 }

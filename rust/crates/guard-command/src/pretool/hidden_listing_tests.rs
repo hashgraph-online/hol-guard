@@ -322,6 +322,31 @@ fn a_hidden_directorys_configuration_document_reads_when_it_holds_no_credential(
         plant(&repo.join(document), "{}\n");
         assert!(!read(&repo.join(document), &home, &repo), "{document}");
     }
+    // A credential short enough to have no shape the detector recognises is
+    // still written under a word that names it, so the word holds the review.
+    for body in [
+        "database:\n  password: hunter2\n",
+        "[registry]\napi_key = \"abc123\"\n",
+        "passphrase: letmein\n",
+    ] {
+        plant(&repo.join(".circleci/config.yml"), body);
+        assert!(
+            !read(&repo.join(".circleci/config.yml"), &home, &repo),
+            "{body}"
+        );
+    }
+    // A value the CI system fills in later names no credential of its own.
+    for body in [
+        "deploy:\n  token: ${{ secrets.NPM_TOKEN }}\n",
+        "[registry]\ntoken = \"$CARGO_REGISTRY_TOKEN\"\n",
+        "password:\n",
+    ] {
+        plant(&repo.join(".circleci/config.yml"), body);
+        assert!(
+            read(&repo.join(".circleci/config.yml"), &home, &repo),
+            "{body}"
+        );
+    }
     std::fs::remove_dir_all(root).unwrap();
 }
 
