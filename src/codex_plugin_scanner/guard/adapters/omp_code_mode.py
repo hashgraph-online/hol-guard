@@ -22,11 +22,11 @@ def omp_code_mode_warnings(
 
     env = os.environ if environ is None else environ
     agent_dir = env.get("PI_CODING_AGENT_DIR")
+    # The resident has its own working directory, so every relative path is
+    # resolved here, against the caller's.
     request = {
-        "home": str(home_dir),
-        "workspace": None if workspace_dir is None else str(workspace_dir),
-        # The resident has its own working directory, so a relative agent dir
-        # is resolved here, against the caller's.
+        "home": str(home_dir.absolute()),
+        "workspace": None if workspace_dir is None else str(workspace_dir.absolute()),
         "agentDir": str(Path(agent_dir).expanduser().absolute()) if agent_dir else None,
         "configDir": env.get("PI_CONFIG_DIR"),
     }
