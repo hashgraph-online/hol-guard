@@ -38,6 +38,9 @@ def test_new_contribution_notifies_only_reviewed_numeric_ids() -> None:
     assert "setup guide and blog content" in body
     assert "verified publisher badge toolkit" in body
     assert "claiming alone does not publish" in body
+    assert "## Try it in your agent" in body
+    assert "hol-guard command controls apply command.example --target-kind extension --state enabled" in body
+    assert "hol-guard receipts" in body
     assert "trust score" not in body
     assert "installs" not in body
 
