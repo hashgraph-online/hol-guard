@@ -24,9 +24,11 @@ use super::cline_detect;
 use super::cline_hook_files;
 use super::cline_plugin_render;
 use super::codex_detect;
+use super::codex_remote_launch;
 use super::context_digest_json::write_canonical_json_with_limit;
 use super::copilot_detect;
 use super::copilot_hook_config;
+use super::copilot_lifecycle_state;
 use super::copilot_mcp_plan;
 use super::cursor_detect;
 use super::cursor_editor_plan;
@@ -166,6 +168,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "oci_evidence_verdict" => oci::oci_evidence_verdict(args),
         "oci_bundle_digest" => oci::oci_bundle_digest(args),
         "oci_bundle_plan" => oci::oci_bundle_plan(args),
+        "isolation_provider" => crate::isolation_provider_registry::dispatch(args),
         "aibom_trust_claims" => crate::aibom_trust_claims::dispatch(args),
         "aibom_workspace_artifacts" => aibom::workspace_artifacts(args),
         "aibom_workspace_plan" => aibom::workspace_merge_plan(args),
@@ -184,6 +187,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "codex_host_inventory" => crate::codex_host_inventory::dispatch(args),
         "copilot_detect" => copilot_detect::detect(args),
         "copilot_hook_config" => copilot_hook_config::dispatch(args),
+        "copilot_lifecycle_state" => copilot_lifecycle_state::dispatch(args),
         "copilot_mcp_plan" => copilot_mcp_plan::plan(args),
         "claude_code_detect" => claude_code_detect::detect(args),
         "claude_hook_config" => claude_hook_config::dispatch(args),
@@ -196,6 +200,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
         "local_mcp_probe" => crate::local_mcp_probe::dispatch(args),
+        "hook_approval_wait" => crate::hook_approval_wait::dispatch(args),
         "grok_detect" => grok_detect::detect(args),
         "grok_legacy_settings" => grok_legacy_settings::dispatch(args),
         "grok_user_config" => grok_user_config_op::dispatch(args),
@@ -204,6 +209,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "muse_detect" => muse_detect::detect(args),
         "openclaw_detect" => openclaw_detect::detect(args),
         "cursor_detect" => cursor_detect::detect(args),
+        "codex_remote_launch" => codex_remote_launch::dispatch(args),
         "cursor_hook_config" => cursor_hook_config::dispatch(args),
         "cursor_editor_plan" => cursor_editor_plan::plan(args),
         "cursor_hook_script" => cursor_hook_script::dispatch(args),

@@ -194,7 +194,6 @@ def test_wait_for_socket_rejects_trusted_stale_socket(
         listener.close()
         monkeypatch.setattr(codex_remote_control, "_REMOTE_CONTROL_READY_TIMEOUT_SECONDS", 0.01)
 
-        assert codex_remote_control._socket_is_trusted(socket_path) is True
         assert codex_remote_control._wait_for_socket(socket_path) is False
 
 
@@ -208,27 +207,6 @@ def test_wait_for_socket_accepts_trusted_live_socket() -> None:
             assert codex_remote_control._wait_for_socket(socket_path) is True
         finally:
             listener.close()
-
-
-def test_wait_for_socket_retries_transient_os_error(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    calls = 0
-
-    def fake_trust_check(_socket_path: Path) -> bool:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise OSError("socket is being created")
-        return True
-
-    monkeypatch.setattr(codex_remote_control, "_socket_is_trusted", fake_trust_check)
-    monkeypatch.setattr(codex_remote_control, "_socket_is_live", lambda _path: True)
-    monkeypatch.setattr(codex_remote_control, "_REMOTE_CONTROL_READY_TIMEOUT_SECONDS", 0.2)
-
-    assert codex_remote_control._wait_for_socket(tmp_path / "app-server.sock") is True
-    assert calls == 2
 
 
 def test_direct_app_server_uses_private_control_directory(
@@ -307,6 +285,51 @@ def test_direct_app_server_recovers_when_pid_marker_is_stale(
     assert started is True
     assert launches == 1
     assert (socket_path.parent / "hol-guard-app-server.pid").read_text(encoding="utf-8") == "9876"
+
+
+def test_direct_app_server_keeps_tracking_when_the_resident_cannot_identify_it(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    socket_path = tmp_path / "home" / ".codex" / "app-server-control" / "app-server-control.sock"
+    socket_path.parent.mkdir(parents=True)
+    pid_path = socket_path.parent / "hol-guard-app-server.pid"
+    pid_path.write_text("4321", encoding="utf-8")
+
+    def fail_popen(*_args, **_kwargs):
+        raise AssertionError("an unidentified tracked server must not be replaced")
+
+    monkeypatch.setattr(codex_remote_control, "_wait_for_socket", lambda _path: False)
+    monkeypatch.setattr(codex_remote_control.os, "kill", lambda _pid, _signal: None)
+    monkeypatch.setattr(codex_remote_control, "_tracked_process_command", lambda _pid: "codex app-server")
+    monkeypatch.setattr(codex_remote_control, "_ask", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fail_popen)
+
+    started = codex_remote_control._start_direct_app_server(
+        executable_prefix=("codex",),
+        socket_path=socket_path,
+        environment={},
+    )
+
+    assert started is False
+    assert pid_path.read_text(encoding="utf-8") == "4321"
+
+
+def test_launch_preparation_selects_only_among_previewed_argv(tmp_path: Path, monkeypatch) -> None:
+    answers = iter([{}, {"tails": [["--remote", "unix:///x.sock", "fix"], ["fix"]]}])
+    monkeypatch.setattr(codex_remote_control, "_ask", lambda *_args, **_kwargs: next(answers))
+    monkeypatch.setattr(codex_remote_control, "_start_direct_app_server", lambda **_kwargs: True)
+    home = tmp_path / "home"
+
+    previewed = codex_remote_control.guarded_codex_launch_command_candidates(
+        executable="codex", home_dir=home, passthrough_args=["fix"]
+    )
+    prepared = codex_remote_control.guarded_codex_launch_command(
+        executable="codex", home_dir=home, passthrough_args=["fix"]
+    )
+
+    assert previewed == (["codex", "fix"],)
+    assert prepared == ["codex", "fix"]
 
 
 def test_direct_app_server_stops_matching_dead_listener_before_replacement(

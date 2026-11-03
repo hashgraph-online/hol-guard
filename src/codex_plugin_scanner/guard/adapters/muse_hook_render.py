@@ -36,11 +36,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..native_hook_render import native_muse_bridge
+from . import hook_approval_wait
 
 if TYPE_CHECKING:
     from ..store import GuardStore
 
-_MUSE_WAITABLE_ACTIONS = frozenset({"review", "require-reapproval"})
 # Only these events decide whether something runs. The rest report on work
 # that already happened or on the session itself, so a resident that cannot
 # answer has nothing to refuse there -- and exit 2 on ``Stop`` would keep the
@@ -80,23 +80,6 @@ def muse_bridge_response(
     return json.dumps(document, ensure_ascii=True, separators=(",", ":")), "", exit_code
 
 
-def approval_request_ids(response: Mapping[str, object]) -> list[str]:
-    """Approval request ids named by a daemon review answer."""
-
-    ids: list[str] = []
-    for key in ("primary_approval_request_id", "approval_request_id", "guardApprovalRequestId"):
-        value = response.get(key)
-        if isinstance(value, str) and value.strip() and value.strip() not in ids:
-            ids.append(value.strip())
-    requests = response.get("approval_requests")
-    if isinstance(requests, list):
-        for item in requests:
-            value = item.get("request_id") or item.get("id") if isinstance(item, Mapping) else item
-            if isinstance(value, str) and value.strip() and value.strip() not in ids:
-                ids.append(value.strip())
-    return ids
-
-
 def apply_muse_pretool_approval_wait(
     response: dict[str, object],
     *,
@@ -106,63 +89,28 @@ def apply_muse_pretool_approval_wait(
 ) -> dict[str, object]:
     """Wait for a queued Muse approval and rewrite the answer in place.
 
-    Mirrors ``apply_grok_pretool_approval_wait``: an approval lets the
-    original ``PreToolUse`` call proceed unchanged (approval resume); a
-    denial keeps it blocked; a still-pending approval returns the review
-    unchanged so Muse shows the block and the saved approval answers the
-    retry.
+    Mirrors ``apply_grok_pretool_approval_wait`` (``hook_approval_wait`` plans
+    and settles it): an approval lets the original ``PreToolUse`` call proceed
+    (approval resume); a denial keeps it blocked; a still-pending approval
+    returns the review unchanged so the saved approval answers the retry.
     """
 
-    if _compact(event_name) != "pretooluse":
-        return response
-    if str(response.get("policy_action") or "") not in _MUSE_WAITABLE_ACTIONS:
-        return response
-    request_ids = approval_request_ids(response)
-    if not request_ids or timeout_seconds <= 0:
+    request_ids, seconds = hook_approval_wait.plan_wait(
+        "muse", event_name=event_name, response=response, timeout_seconds=timeout_seconds
+    )
+    if not request_ids:
         return response
     from ..approvals import wait_for_approval_requests
 
-    wait_result = wait_for_approval_requests(
-        store=store,
-        request_ids=request_ids,
-        timeout_seconds=timeout_seconds,
-    )
+    wait_result = wait_for_approval_requests(store=store, request_ids=request_ids, timeout_seconds=seconds)
     response["approval_wait"] = wait_result
-    if not bool(wait_result.get("resolved")):
-        response["review_hint"] = (
-            "Approval is still pending in HOL Guard. Approve it, and Muse will resume this exact tool call."
-        )
-        return response
-    items = wait_result.get("items")
-    resolved = [item for item in (items if isinstance(items, list) else []) if isinstance(item, dict)]
-    if not resolved or any(str(item.get("resolution_action")) != "allow" for item in resolved):
-        blocked = dict(response)
-        blocked["decision"] = "deny"
-        blocked["policy_action"] = "block"
-        blocked["review_hint"] = "HOL Guard kept this Muse action blocked."
-        hook_specific = blocked.get("hookSpecificOutput")
-        if isinstance(hook_specific, Mapping):
-            rewritten = dict(hook_specific)
-            rewritten["permissionDecision"] = "deny"
-            blocked["hookSpecificOutput"] = rewritten
-        return blocked
-    allowed = dict(response)
-    allowed["decision"] = "allow"
-    allowed["policy_action"] = "allow"
-    allowed.pop("reason", None)
-    allowed["browser_resolution_request_id"] = request_ids[0]
-    allowed["review_hint"] = "Approval received in HOL Guard. Muse is resuming this action."
-    hook_specific = allowed.get("hookSpecificOutput")
-    if isinstance(hook_specific, Mapping):
-        rewritten = dict(hook_specific)
-        rewritten.pop("permissionDecision", None)
-        rewritten.pop("permissionDecisionReason", None)
-        allowed["hookSpecificOutput"] = rewritten
-    return allowed
+    _, fields, edits = hook_approval_wait.settle_wait("muse", wait_result=wait_result, request_id=request_ids[0])
+    answer = hook_approval_wait.rewrite_answer(edits, response) or response
+    answer.update(fields)
+    return answer
 
 
 __all__ = [
     "apply_muse_pretool_approval_wait",
-    "approval_request_ids",
     "muse_bridge_response",
 ]

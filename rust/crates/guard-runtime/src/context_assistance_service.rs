@@ -22,7 +22,7 @@ mod execution;
 mod lifecycle;
 #[path = "context_assistance_service_prompt.rs"]
 mod prompt;
-pub(crate) use prompt::PromptLane;
+pub(crate) use prompt::{LaneMiss, PromptLane};
 #[path = "context_assistance_service_status.rs"]
 mod status;
 #[path = "context_assistance_service_upgrade.rs"]

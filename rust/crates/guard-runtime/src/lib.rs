@@ -187,6 +187,8 @@ mod codex_identity;
 mod codex_live_operation;
 mod codex_live_wait_build;
 mod codex_proxy;
+#[path = "adapters/codex_remote_launch.rs"]
+mod codex_remote_launch;
 mod codex_request_resume_busy;
 mod codex_request_resume_op;
 mod codex_request_resume_store;
@@ -274,6 +276,11 @@ mod copilot_hook_config;
 #[cfg(test)]
 #[path = "adapters/copilot_hook_config_tests.rs"]
 mod copilot_hook_config_tests;
+#[path = "adapters/copilot_lifecycle_state.rs"]
+mod copilot_lifecycle_state;
+#[cfg(test)]
+#[path = "adapters/copilot_lifecycle_state_tests.rs"]
+mod copilot_lifecycle_state_tests;
 #[path = "adapters/copilot_mcp_plan.rs"]
 mod copilot_mcp_plan;
 #[cfg(test)]
@@ -620,6 +627,8 @@ mod hermes_yaml_resolve;
 #[path = "adapters/hook_adapter_op.rs"]
 mod hook_adapter_op;
 mod hook_approval_context;
+#[path = "adapters/hook_approval_wait.rs"]
+mod hook_approval_wait;
 mod hook_artifact_compose_codex_live_allow;
 mod hook_artifact_compose_op;
 mod hook_artifact_compose_package_firewall;
@@ -706,6 +715,7 @@ mod inventory_scan_targets_op;
 mod inventory_snapshot_digest_op;
 mod inventory_source_evidence_op;
 mod inventory_url_redaction_op;
+mod isolation_provider_registry;
 #[path = "adapters/detection/kimi_detect.rs"]
 mod kimi_detect;
 #[path = "adapters/detection/kimi_hook_config.rs"]

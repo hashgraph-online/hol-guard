@@ -89,8 +89,8 @@ def test_grok_bridge_rewrites_daemon_review_after_wait(
 
     monkeypatch.setattr(
         grok_approval_resume,
-        "wait_for_grok_live_approval",
-        lambda **_kwargs: "allow",
+        "wait_for_approval_requests",
+        lambda **_kwargs: {"resolved": True, "pending_request_ids": [], "items": [{"resolution_action": "allow"}]},
     )
     stdout, _stderr, code = bounded_cli_hook_daemon._apply_grok_bridge_approval_wait(
         guard_home=tmp_path / "guard-home",

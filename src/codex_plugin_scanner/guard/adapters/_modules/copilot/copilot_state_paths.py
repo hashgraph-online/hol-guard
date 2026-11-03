@@ -1,4 +1,4 @@
-"""Validated lifecycle path recovery for Copilot adapter state."""
+"""Copilot lifecycle state I/O; the native ``copilot_lifecycle_state`` kind decides what to trust."""
 
 from __future__ import annotations
 
@@ -7,13 +7,14 @@ import json
 import os
 import stat
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from functools import wraps
 from hashlib import sha256
 from pathlib import Path
 from typing import BinaryIO, Protocol
 
+from .....path_support import resolves_within_root
 from .....safe_output import write_text_atomic_no_follow
 from ....daemon.file_locking import try_lock_daemon_file
 from ....mdm.file_lock import release_file_lock
@@ -216,20 +217,6 @@ def copilot_lifecycle_uninstall(method: Callable[..., dict[str, object]]) -> Cal
     return wrapped
 
 
-def _valid_backup_envelope(path: Path) -> bool:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return False
-    if not isinstance(payload, dict) or set(payload) != {"existed", "content"}:
-        return False
-    existed = payload.get("existed")
-    content = payload.get("content")
-    if type(existed) is not bool:
-        return False
-    return isinstance(content, str) if existed else content is None
-
-
 def _target_identity(target_path: Path) -> tuple[int, int] | None:
     try:
         metadata = target_path.lstat()
@@ -356,6 +343,27 @@ def commit_copilot_target_and_state(
         raise
 
 
+def _lifecycle_state(context: HarnessContext, request: Mapping[str, object]) -> dict[str, object]:
+    """The native verdict; no answer refuses the change, as authentication does.
+
+    Reading no answer as "not Guard's own" would overwrite or skip a real backup.
+    """
+
+    from ....native_adapter_state_integrity import AdapterStateIntegrityUnavailableError
+    from ....native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        return native_runner_authority("copilot_lifecycle_state", request, guard_home=context.guard_home)
+    except NativeRunnerAuthorityError as error:
+        raise AdapterStateIntegrityUnavailableError from error
+
+
+def _spelling(path: Path | None) -> str | None:
+    """A path as ``pathlib.Path`` equality compares it on this host."""
+
+    return None if path is None else os.path.normcase(str(path))
+
+
 def copilot_state_authorizes_backup_reuse(
     context: HarnessContext,
     *,
@@ -367,25 +375,41 @@ def copilot_state_authorizes_backup_reuse(
     """Return whether authenticated durable state binds this target to this backup."""
 
     payload = _json_payload(state_path) if state_payload is None else state_payload
-    if not adapter_state_is_authenticated(context.guard_home, harness="copilot", payload=payload):
-        return False
-    authenticated_target = authenticated_adapter_path(
-        context.guard_home,
-        harness="copilot",
-        payload=payload,
-        field="managed_config_path",
-    )
-    authenticated_backup = authenticated_adapter_path(
-        context.guard_home,
-        harness="copilot",
-        payload=payload,
-        field="backup_path",
-    )
-    if authenticated_target != target_path.resolve() or authenticated_backup != backup_path.resolve():
-        return False
-    if backup_path.is_symlink() or not backup_path.is_file() or not _valid_backup_envelope(backup_path):
+    recorded = [
+        authenticated_adapter_path(context.guard_home, harness="copilot", payload=payload, field=field)
+        for field in ("managed_config_path", "backup_path")
+    ]
+    expected = [_spelling(target_path.resolve()), _spelling(backup_path.resolve())]
+    recorded_spellings = [_spelling(path) for path in recorded]
+    request = {
+        "action": "backup_reuse",
+        "recorded": recorded_spellings,
+        "expected": expected,
+        "backup": str(backup_path),
+    }
+    decision = _lifecycle_state(context, request).get("decision")
+    if decision == "refuse":
         raise RuntimeError("Guard refused to overwrite an unreadable Copilot backup.")
-    return True
+    if decision not in {"reuse", "replace"}:
+        raise ValueError("Copilot backup reuse answer is malformed")
+    return decision == "reuse"
+
+
+def _state_targets(context: HarnessContext, payload: dict[str, object]) -> list[tuple[str, list[str], Path, Path]]:
+    """Each config a state file may name: its source, spellings, path and root."""
+
+    global_target = context.home_dir / ".copilot" / "mcp-config.json"
+    spellings = [str(global_target), str(global_target.resolve())]
+    targets = [("global", spellings, global_target, context.home_dir)]
+    recorded = authenticated_adapter_path(context.guard_home, harness="copilot", payload=payload, field="workspace_dir")
+    current = context.workspace_dir
+    bases = [] if recorded is None else [("recorded", recorded, recorded)]
+    if current is not None:
+        bases += [("current", base, current) for base in dict.fromkeys((current, current.resolve()))]
+    for source, base, root in bases:
+        for target in (base / ".mcp.json", base / ".vscode" / "mcp.json"):
+            targets.append((source, [str(target)], target, root))
+    return targets
 
 
 def validated_copilot_state_entries(
@@ -396,81 +420,45 @@ def validated_copilot_state_entries(
 ) -> list[CopilotStateEntry]:
     state_dir = context.guard_home / "managed" / "copilot"
     _ensure_path_within_root(context.guard_home, state_dir, label="Copilot state")
-    entries: list[CopilotStateEntry] = []
+    found: list[tuple[Path, dict[str, object], list[tuple[Path, Path]]]] = []
+    requests: list[dict[str, object]] = []
+    errors: dict[tuple[int, int], Exception] = {}
     for state_path in sorted(state_dir.glob("*.state.json")):
-        entry = _validated_entry(
-            context,
-            state_path,
-            _json_payload(state_path),
-            state_path_for=state_path_for,
-            backup_path_for=backup_path_for,
-        )
-        if entry is not None:
-            entries.append(entry)
+        payload = _json_payload(state_path)
+        if not adapter_state_is_authenticated(context.guard_home, harness="copilot", payload=payload):
+            continue
+        candidates: list[dict[str, object]] = []
+        named: list[tuple[Path, Path]] = []
+        for slot, (source, spellings, target, root) in enumerate(_state_targets(context, payload)):
+            paths: dict[str, object] | None = None
+            backup = target
+            try:
+                state, backup = state_path_for(target, context), backup_path_for(target, context)
+                paths = {
+                    "owned": all(resolves_within_root(context.guard_home, path) for path in (state, backup)),
+                    "state": _spelling(state.resolve()),
+                    "backup": [str(backup), str(backup.resolve())],
+                }
+            except (OSError, RuntimeError) as error:
+                errors[len(found), slot] = error
+            contained = resolves_within_root(root, target)
+            candidates.append({"source": source, "keys": spellings, "contained": contained, "paths": paths})
+            named.append((target, backup))
+        fields = [payload.get(key) for key in ("managed_config_path", "backup_path")]
+        requests.append({"state": _spelling(state_path.resolve()), "fields": fields, "candidates": candidates})
+        found.append((state_path, payload, named))
+    if not found:
+        return []
+    verdicts = _lifecycle_state(context, {"action": "state_entries", "entries": requests}).get("entries")
+    if not isinstance(verdicts, list) or len(verdicts) != len(found):
+        raise ValueError("Copilot state entries answer is malformed")
+    entries: list[CopilotStateEntry] = []
+    for index, ((state_path, payload, named), verdict) in enumerate(zip(found, verdicts, strict=True)):
+        if isinstance(verdict, dict) and (index, verdict.get("raise")) in errors:
+            raise errors[index, verdict["raise"]]
+        if verdict is None:
+            continue
+        if type(verdict) is not int or not 0 <= verdict < len(named):
+            raise ValueError("Copilot state entries answer is malformed")
+        entries.append((state_path, *named[verdict], payload))
     return entries
-
-
-def _validated_entry(
-    context: HarnessContext,
-    state_path: Path,
-    payload: dict[str, object],
-    *,
-    state_path_for: PathFactory,
-    backup_path_for: PathFactory,
-) -> CopilotStateEntry | None:
-    authenticated = adapter_state_is_authenticated(
-        context.guard_home,
-        harness="copilot",
-        payload=payload,
-    )
-    if not authenticated:
-        return None
-    managed_value = payload.get("managed_config_path")
-    backup_value = payload.get("backup_path")
-    if not isinstance(managed_value, str) or not isinstance(backup_value, str):
-        return None
-    if not managed_value or not backup_value or "\x00" in managed_value or "\x00" in backup_value:
-        return None
-    global_target = context.home_dir / ".copilot" / "mcp-config.json"
-    target_paths = {
-        str(global_target): (global_target, context.home_dir),
-        str(global_target.resolve()): (global_target, context.home_dir),
-    }
-    workspace = authenticated_adapter_path(
-        context.guard_home,
-        harness="copilot",
-        payload=payload,
-        field="workspace_dir",
-    )
-    if workspace is not None:
-        target_paths[str(workspace / ".mcp.json")] = (workspace / ".mcp.json", workspace)
-        target_paths[str(workspace / ".vscode" / "mcp.json")] = (workspace / ".vscode" / "mcp.json", workspace)
-    elif context.workspace_dir is not None:
-        for workspace in {context.workspace_dir, context.workspace_dir.resolve()}:
-            target_paths[str(workspace / ".mcp.json")] = (workspace / ".mcp.json", context.workspace_dir)
-            target_paths[str(workspace / ".vscode" / "mcp.json")] = (
-                workspace / ".vscode" / "mcp.json",
-                context.workspace_dir,
-            )
-    managed_entry = target_paths.get(managed_value)
-    if managed_entry is None:
-        return None
-    managed_path, managed_root = managed_entry
-    try:
-        _ensure_path_within_root(managed_root, managed_path, label="Copilot managed config")
-    except ValueError:
-        return None
-
-    expected_state = state_path_for(managed_path, context)
-    expected_backup = backup_path_for(managed_path, context)
-    try:
-        _ensure_path_within_root(context.guard_home, expected_state, label="Copilot state")
-        _ensure_path_within_root(context.guard_home, expected_backup, label="Copilot backup")
-    except ValueError:
-        return None
-    if state_path.resolve() != expected_state.resolve() or backup_value not in {
-        str(expected_backup),
-        str(expected_backup.resolve()),
-    }:
-        return None
-    return state_path, managed_path, expected_backup, payload

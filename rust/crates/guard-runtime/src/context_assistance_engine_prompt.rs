@@ -58,6 +58,40 @@ fn bytes(file: &AdmittedFile) -> usize {
     file.documents.iter().map(|doc| doc.text.len()).sum()
 }
 
+/// The matched files CIGAR would take into an automatic scope, for a prompt
+/// that arrives while CIGAR is starting or busy. It applies the engine's own
+/// checks: the app, the project root, the workspace's setting and each file's
+/// source screen. It stops at `until` and names paths only, never file text.
+pub(crate) fn admissible_paths(
+    home: &std::path::Path,
+    workspace: &std::path::Path,
+    app: &str,
+    found: &[String],
+    limit: usize,
+    until: Instant,
+) -> Vec<String> {
+    if crate::guard_config_harness::canonical_harness_id(app) != Some(app) {
+        return Vec::new();
+    }
+    let Ok(root) = SourceRoot::inspect(workspace) else {
+        return Vec::new();
+    };
+    let permitted = !root.path().starts_with(home)
+        && effective(home, &root).is_ok_and(|policy| {
+            policy.features.agent_context && policy.sources.workspace_documents
+        });
+    if !permitted {
+        return Vec::new();
+    }
+    found
+        .iter()
+        .take_while(|_| Instant::now() < until)
+        .filter(|relative| stamp(&root, relative).is_some() && root.read(relative).is_ok())
+        .take(limit)
+        .cloned()
+        .collect()
+}
+
 /// Reads the wanted files that are not in the scope yet. A file the source
 /// screen refuses (a secret, a key, binary text) is simply left out.
 fn admit(

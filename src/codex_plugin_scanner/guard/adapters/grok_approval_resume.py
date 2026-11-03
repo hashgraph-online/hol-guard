@@ -1,4 +1,4 @@
-"""Grok live-hook approval wait and resume metadata."""
+"""Grok live-hook approval wait; ``hook_approval_wait`` decides it, this keeps the store."""
 
 from __future__ import annotations
 
@@ -7,17 +7,12 @@ from datetime import datetime, timedelta, timezone
 
 from ..approvals import wait_for_approval_requests
 from ..store import GuardStore
+from . import hook_approval_wait
 from .grok_config import (
     GROK_APPROVAL_WAIT_MAX_SECONDS,
     GROK_HOOK_INTERNAL_TIMEOUT_SECONDS,
     GROK_PRETOOL_HOOK_TIMEOUT_SECONDS,
 )
-
-_GROK_WAITABLE_ACTIONS = frozenset({"review", "require-reapproval"})
-
-
-def grok_live_approval_wait_seconds(configured_timeout: int) -> int:
-    return min(max(configured_timeout, 0), GROK_APPROVAL_WAIT_MAX_SECONDS)
 
 
 def wait_for_grok_live_approval(
@@ -37,24 +32,29 @@ def wait_for_grok_live_approval(
     """
 
     del json_mode
-    canonical_event = event_name.replace("_", "").replace("-", "").lower()
-    if canonical_event != "pretooluse":
-        return None
-    if policy_action not in _GROK_WAITABLE_ACTIONS:
-        return None
-    request_ids = _approval_request_ids(response_payload)
+    return _wait(event_name, policy_action, response_payload, store, timeout_seconds, payload)[0]
+
+
+def _wait(
+    event_name: str,
+    policy_action: str,
+    response_payload: dict[str, object],
+    store: GuardStore,
+    timeout_seconds: int,
+    payload: Mapping[str, object] | None,
+) -> tuple[str | None, Mapping[str, object]]:
+    answer = {**response_payload, "policy_action": policy_action}
+    request_ids, wait_timeout_seconds = hook_approval_wait.plan_wait(
+        "grok", event_name=event_name, response=answer, timeout_seconds=timeout_seconds
+    )
     if not request_ids:
-        return None
-    wait_timeout_seconds = grok_live_approval_wait_seconds(timeout_seconds)
-    if wait_timeout_seconds <= 0:
-        return None
-    now = _now()
+        return None, {}
     _mark_grok_operations_waiting(
         store,
         request_ids=request_ids,
         payload=payload if payload is not None else response_payload,
         wait_timeout_seconds=wait_timeout_seconds,
-        now=now,
+        now=_now(),
     )
     wait_result = wait_for_approval_requests(
         store=store,
@@ -62,19 +62,9 @@ def wait_for_grok_live_approval(
         timeout_seconds=wait_timeout_seconds,
     )
     response_payload["approval_wait"] = wait_result
-    if not bool(wait_result.get("resolved")):
-        response_payload["review_hint"] = (
-            "Approval is still pending in HOL Guard. Approve it, and Grok will resume this exact tool call."
-        )
-        return None
-    wait_items = wait_result.get("items")
-    resolved_items = [item for item in (wait_items if isinstance(wait_items, list) else []) if isinstance(item, dict)]
-    if not resolved_items or any(str(item.get("resolution_action")) != "allow" for item in resolved_items):
-        response_payload["review_hint"] = "HOL Guard kept this Grok action blocked."
-        return "block"
-    response_payload["browser_resolution_request_id"] = request_ids[0]
-    response_payload["review_hint"] = "Approval received in HOL Guard. Grok is resuming this action."
-    return "allow"
+    decision, fields, edits = hook_approval_wait.settle_wait("grok", wait_result=wait_result, request_id=request_ids[0])
+    response_payload.update(fields)
+    return decision, edits
 
 
 def _mark_grok_operations_waiting(
@@ -127,24 +117,6 @@ def _mark_grok_operations_waiting(
         )
 
 
-def _approval_request_ids(payload: Mapping[str, object]) -> list[str]:
-    queued = payload.get("approval_requests")
-    ids: list[str] = []
-    if isinstance(queued, list):
-        for item in queued:
-            if isinstance(item, dict):
-                request_id = _optional_string(item.get("request_id"))
-                if request_id is not None:
-                    ids.append(request_id)
-    if ids:
-        return ids
-    for key in ("primary_approval_request_id", "approval_request_id", "guardApprovalRequestId"):
-        request_id = _optional_string(payload.get(key))
-        if request_id is not None:
-            return [request_id]
-    return []
-
-
 def _existing_request_ids(operation: Mapping[str, object], request_id: str) -> list[str]:
     approval_request_ids = operation.get("approval_request_ids")
     if isinstance(approval_request_ids, list):
@@ -171,38 +143,8 @@ def apply_grok_pretool_approval_wait(
     """Wait on a native or daemon Grok review and rewrite allow/deny JSON."""
 
     policy_action = str(response.get("policy_action") or "")
-    decision = wait_for_grok_live_approval(
-        event_name=event_name,
-        policy_action=policy_action,
-        response_payload=response,
-        store=store,
-        timeout_seconds=timeout_seconds,
-        json_mode=False,
-        payload=response,
-    )
-    if decision == "allow":
-        allowed = dict(response)
-        allowed["decision"] = "allow"
-        allowed["policy_action"] = "allow"
-        allowed.pop("reason", None)
-        hook_specific = allowed.get("hookSpecificOutput")
-        if isinstance(hook_specific, Mapping):
-            rewritten = dict(hook_specific)
-            rewritten["permissionDecision"] = "allow"
-            rewritten.pop("permissionDecisionReason", None)
-            allowed["hookSpecificOutput"] = rewritten
-        return allowed
-    if decision == "block":
-        blocked = dict(response)
-        blocked["decision"] = "deny"
-        blocked["policy_action"] = "block"
-        hook_specific = blocked.get("hookSpecificOutput")
-        if isinstance(hook_specific, Mapping):
-            rewritten = dict(hook_specific)
-            rewritten["permissionDecision"] = "deny"
-            blocked["hookSpecificOutput"] = rewritten
-        return blocked
-    return response
+    _, edits = _wait(event_name, policy_action, response, store, timeout_seconds, response)
+    return hook_approval_wait.rewrite_answer(edits, response) or response
 
 
 def _now() -> str:
@@ -214,6 +156,5 @@ __all__ = [
     "GROK_HOOK_INTERNAL_TIMEOUT_SECONDS",
     "GROK_PRETOOL_HOOK_TIMEOUT_SECONDS",
     "apply_grok_pretool_approval_wait",
-    "grok_live_approval_wait_seconds",
     "wait_for_grok_live_approval",
 ]
