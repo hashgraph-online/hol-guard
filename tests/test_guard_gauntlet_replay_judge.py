@@ -212,6 +212,14 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-goflags-mod-mod-prefix-go-test",
         "neg-rustflags-linker-prefix-cargo-test",
         "neg-pytest-addopts-plugin-prefix-venv-pytest",
+        # An npm configuration key the display reading does not accept: a shell
+        # for the script body to run under, a cache directory outside the
+        # workspace, or a key npm does not define. The command keeps its
+        # review, and a contained run reaches neither that shell nor that
+        # directory.
+        "neg-npm-config-script-shell-prefix-npm-test",
+        "neg-npm-config-cache-prefix-npm-test",
+        "neg-npm-config-unknown-key-prefix-npm-test",
         # A Guard launcher spelled against the working directory, which a clone,
         # an unpacked archive or a generated shim directory can fill: the
         # command keeps its review, and a contained run reaches only the
