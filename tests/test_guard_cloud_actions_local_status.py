@@ -1,0 +1,238 @@
+"""The local dashboard's view of Cloud actions sign-ins.
+
+`GET /v1/cloud-actions/status` reads saved sign-ins and the last check without
+calling Guard Cloud; `POST` runs one check a minute. The tests check that every
+answer is labelled with its age, that nothing secret or path-like leaves the
+daemon, and that a Cloud actions sign-in can never stand in for the daemon's
+own token.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import urllib.error
+import urllib.request
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from codex_plugin_scanner.guard.cli.cloud_actions_session import (
+    CloudActionsProfile,
+    CloudActionsSecrets,
+    CloudActionsSessionStore,
+)
+from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon import cloud_actions_status as status_module
+from codex_plugin_scanner.guard.daemon.cloud_actions_status import (
+    CheckResult,
+    CloudActionsCheckedRecentlyError,
+    check_cloud_actions,
+    cloud_actions_local_status,
+)
+from codex_plugin_scanner.guard.store import GuardStore
+
+NOW = datetime(2026, 11, 3, 12, 0, tzinfo=timezone.utc)
+ACCESS = "cloud-actions-access-canary-3c9d"
+REFRESH = "cloud-actions-refresh-canary-81aa"
+WS = "11111111-1111-4111-8111-111111111111"
+
+
+def _sign_in(home: Path, name: str = "default", *, expires: datetime | None = None, signed_in: str = "") -> None:
+    store = CloudActionsSessionStore(home)
+    profile = CloudActionsProfile(
+        name=name,
+        issuer="https://cloud.example.test:8443",
+        resource="https://cloud.example.test:8443/api/guard/gateway/mcp",
+        client_id="client-1",
+        workspace_id=WS,
+        scopes=("guard:gateway",),
+        expires_at=(expires or NOW + timedelta(hours=1)).isoformat().replace("+00:00", "Z"),
+        grant_id="grant-1",
+        signed_in_at=signed_in or "2026-11-03T11:00:00Z",
+    )
+    with store.lock(name):
+        store.save(profile, CloudActionsSecrets(access_token=ACCESS, refresh_token=REFRESH))
+
+
+def _connected(_profile: CloudActionsProfile, access: str) -> tuple[CheckResult, CheckResult]:
+    assert access == ACCESS
+    return (
+        CheckResult("current", "Guard Cloud offers Cloud actions as this sign-in expects.", 200),
+        CheckResult("connected", "Guard Cloud accepted this sign-in.", 501),
+    )
+
+
+def _assert_nothing_private(payload: object, home: Path) -> None:
+    text = json.dumps(payload)
+    for secret in (ACCESS, REFRESH, "secret_ref", "cloud-actions-default-", str(home), "/api/guard/gateway"):
+        assert secret not in text
+
+
+def test_no_sign_ins_reports_nothing_and_no_numbers(tmp_path: Path) -> None:
+    payload = cloud_actions_local_status(tmp_path, now=NOW)
+
+    assert payload["sign_ins"] == []
+    assert payload["included_actions"] == "not_available_yet"
+    assert payload["accounts"] == "not_available_yet"
+    assert payload["next_check_allowed_at"] is None
+
+
+def test_saved_sign_in_is_shown_unchecked_with_host_only(tmp_path: Path) -> None:
+    _sign_in(tmp_path)
+
+    payload = cloud_actions_local_status(tmp_path, now=NOW)
+
+    assert payload["sign_ins"] == [
+        {
+            "profile": "default",
+            "workspace": WS,
+            "site": "cloud.example.test:8443",
+            "signed_in_at": "2026-11-03T11:00:00Z",
+            "expires_at": "2026-11-03T13:00:00Z",
+            "expired": False,
+            "state": "not_checked",
+            "check": {"state": "not_checked"},
+        }
+    ]
+    _assert_nothing_private(payload, tmp_path)
+
+
+def test_check_is_saved_privately_and_labelled_stale_after_five_minutes(tmp_path: Path) -> None:
+    _sign_in(tmp_path)
+
+    checked = check_cloud_actions(tmp_path, now=NOW, checker=_connected)
+    later = cloud_actions_local_status(tmp_path, now=NOW + timedelta(minutes=5, seconds=1))
+
+    row = checked["sign_ins"][0]
+    assert row["state"] == "connected"
+    assert row["check"]["checked_at"] == "2026-11-03T12:00:00Z"
+    assert row["check"]["stale"] is False
+    assert later["sign_ins"][0]["check"]["stale"] is True
+    assert later["sign_ins"][0]["state"] == "connected"
+    cache = tmp_path / "cloud-actions" / "last-check.json"
+    assert ACCESS not in cache.read_text() and REFRESH not in cache.read_text()
+    if os.name != "nt":
+        assert cache.stat().st_mode & 0o077 == 0
+    _assert_nothing_private(checked, tmp_path)
+    _assert_nothing_private(later, tmp_path)
+
+
+def test_checks_run_at_most_once_a_minute(tmp_path: Path) -> None:
+    _sign_in(tmp_path)
+    check_cloud_actions(tmp_path, now=NOW, checker=_connected)
+
+    with pytest.raises(CloudActionsCheckedRecentlyError) as error:
+        check_cloud_actions(tmp_path, now=NOW + timedelta(seconds=20), checker=_connected)
+
+    assert error.value.retry_after_seconds == 40
+    again = check_cloud_actions(tmp_path, now=NOW + timedelta(seconds=61), checker=_connected)
+    assert again["sign_ins"][0]["check"]["checked_at"] == "2026-11-03T12:01:01Z"
+
+
+def test_offline_answer_is_reported_as_offline(tmp_path: Path) -> None:
+    _sign_in(tmp_path)
+
+    def offline(_profile: CloudActionsProfile, _access: str) -> tuple[CheckResult, CheckResult]:
+        result = CheckResult("offline", "Guard Cloud could not be reached.")
+        return result, result
+
+    payload = check_cloud_actions(tmp_path, now=NOW, checker=offline)
+
+    row = payload["sign_ins"][0]
+    assert row["state"] == "offline"
+    assert row["check"]["connection"] == {"state": "offline", "message": "Guard Cloud could not be reached."}
+
+
+def test_a_new_sign_in_drops_the_previous_check(tmp_path: Path) -> None:
+    _sign_in(tmp_path)
+    check_cloud_actions(tmp_path, now=NOW, checker=_connected)
+    _sign_in(tmp_path, signed_in="2026-11-03T12:00:30Z")
+
+    payload = cloud_actions_local_status(tmp_path, now=NOW + timedelta(seconds=40))
+
+    assert payload["sign_ins"][0]["state"] == "not_checked"
+    assert payload["sign_ins"][0]["check"] == {"state": "not_checked"}
+
+
+def test_expiry_after_the_last_check_wins(tmp_path: Path) -> None:
+    _sign_in(tmp_path, expires=NOW + timedelta(minutes=2))
+    check_cloud_actions(tmp_path, now=NOW, checker=_connected)
+
+    payload = cloud_actions_local_status(tmp_path, now=NOW + timedelta(minutes=3))
+
+    assert payload["sign_ins"][0]["state"] == "sign_in_expired"
+    assert payload["sign_ins"][0]["expired"] is True
+
+
+def test_missing_secret_or_damaged_profile_is_profile_damaged(tmp_path: Path) -> None:
+    _sign_in(tmp_path)
+    _sign_in(tmp_path, "work")
+    profiles = tmp_path / "cloud-actions" / "profiles"
+    record = json.loads((profiles / "default.json").read_text())
+    record["secret_ref"] = "cloud-actions-default-0000000000000000"
+    (profiles / "default.json").write_text(json.dumps(record))
+    (profiles / "work.json").write_text("{not json")
+
+    payload = cloud_actions_local_status(tmp_path, now=NOW)
+
+    states = {row["profile"]: row["state"] for row in payload["sign_ins"]}
+    assert states == {"default": "profile_damaged", "work": "profile_damaged"}
+    _assert_nothing_private(payload, tmp_path)
+
+
+def _request(
+    port: int, path: str, *, method: str = "GET", headers: dict[str, str] | None = None
+) -> tuple[int, dict[str, Any]]:
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        data=b"{}" if method == "POST" else None,
+        headers={"Content-Type": "application/json", **(headers or {})},
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read().decode("utf-8"))
+
+
+@pytest.fixture
+def daemon(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    _sign_in(tmp_path)
+    monkeypatch.setattr(status_module, "_live_checker", _connected)
+    server = GuardDaemonServer(GuardStore(tmp_path), host="127.0.0.1", port=0)
+    server.start()
+    try:
+        yield server
+    finally:
+        server.stop()
+
+
+@pytest.mark.parametrize("method", ["GET", "POST"])
+def test_a_cloud_actions_sign_in_cannot_authorize_the_daemon(daemon: Any, tmp_path: Path, method: str) -> None:
+    for headers in ({"Authorization": f"Bearer {ACCESS}"}, {"X-Guard-Token": ACCESS}, {"X-Guard-Token": REFRESH}):
+        status, payload = _request(daemon.port, "/v1/cloud-actions/status", method=method, headers=headers)
+        assert status == 401, headers
+        _assert_nothing_private(payload, tmp_path)
+    assert not (tmp_path / "cloud-actions" / "last-check.json").exists()
+
+
+def test_daemon_serves_the_projection_and_one_check_a_minute(daemon: Any, tmp_path: Path) -> None:
+    token = {"X-Guard-Token": daemon._server.auth_token}
+
+    read_status, read = _request(daemon.port, "/v1/cloud-actions/status", headers=token)
+    check_status, checked = _request(daemon.port, "/v1/cloud-actions/status", method="POST", headers=token)
+    again_status, again = _request(daemon.port, "/v1/cloud-actions/status", method="POST", headers=token)
+
+    assert read_status == 200
+    assert read["sign_ins"][0]["state"] == "not_checked"
+    assert check_status == 200
+    assert checked["sign_ins"][0]["state"] == "connected"
+    assert checked["sign_ins"][0]["check"]["stale"] is False
+    assert again_status == 429
+    assert again["error"] == "checked_recently"
+    for payload in (read, checked, again):
+        _assert_nothing_private(payload, tmp_path)
