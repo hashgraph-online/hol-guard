@@ -108,6 +108,25 @@ fn text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
+/// `PurePath.is_relative_to`, case-blind on Windows as `pathlib` is.
+fn within(path: &Path, root: &Path) -> bool {
+    if cfg!(windows) {
+        PathBuf::from(path_key(path)).starts_with(path_key(root))
+    } else {
+        path.starts_with(root)
+    }
+}
+
+/// How `pathlib` compares a path: case-blind on Windows.
+fn path_key(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    if cfg!(windows) {
+        text.to_lowercase()
+    } else {
+        text.into_owned()
+    }
+}
+
 fn is_symlink(path: &Path) -> bool {
     std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink())
 }
@@ -168,9 +187,7 @@ impl Cline {
             return None;
         }
         let candidate = python_realpath_lax(Path::new(value)).ok()?;
-        candidate
-            .starts_with(&self.home_resolved)
-            .then_some(candidate)
+        within(&candidate, &self.home_resolved).then_some(candidate)
     }
 
     /// `cline_data_dir`: `CLINE_DATA_DIR`, then the legacy `CLINE_DIR`, then
@@ -263,7 +280,7 @@ impl Cline {
         }
         let parent = current.parent().unwrap_or(&current);
         let resolved = python_realpath_lax(parent).map_err(|_| ESCAPES.to_owned())?;
-        if resolved.starts_with(&self.home_resolved) || resolved.starts_with(&self.guard_resolved) {
+        if within(&resolved, &self.home_resolved) || within(&resolved, &self.guard_resolved) {
             Ok(current)
         } else {
             Err(ESCAPES.to_owned())
@@ -283,9 +300,7 @@ impl Cline {
             .check(&recorded.join(format!("PreToolUse{HOOK_SUFFIX}")))
             .ok()?;
         let resolved = python_realpath(checked.parent()?).ok().flatten()?;
-        resolved
-            .starts_with(&self.home_resolved)
-            .then_some(resolved)
+        within(&resolved, &self.home_resolved).then_some(resolved)
     }
 
     /// `canonical_cline_state_path` for each event of one recorded group.
@@ -340,7 +355,7 @@ impl Cline {
         candidates.iter().find_map(|candidate| {
             self.check(candidate).ok()?;
             let resolved = python_realpath(candidate).ok().flatten()?;
-            (resolved == recorded).then_some(resolved)
+            (path_key(&resolved) == path_key(&recorded)).then_some(resolved)
         })
     }
 

@@ -32,7 +32,7 @@ def ask_cline_paths(context: HarnessContext, op: str, **fields: Any) -> dict[str
         **fields,
     }
     try:
-        answer = native_runner_authority("cline_paths", request)
+        answer = native_runner_authority("cline_paths", request, guard_home=context.guard_home)
     except NativeRunnerAuthorityError as exc:
         raise RuntimeError("Cline paths require the HOL Guard native runtime") from exc
     refusal = answer.get("refusal")
