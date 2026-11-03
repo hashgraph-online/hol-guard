@@ -2932,7 +2932,7 @@ function ContextSettingsControls(props) {
           SettingsToggleRow,
           {
             label: "Context for AI apps",
-            description: "Add the project files that match each prompt in Claude Code, Codex and Pi, and allow context tools for apps you authorize. Sharing between agents is a separate choice.",
+            description: "Add the project files that match each prompt in Claude Code, Codex, Pi and Oh My Pi, and allow context tools for apps you authorize. Sharing between agents is a separate choice.",
             checked: value.features.agent_context,
             disabled: editingDisabled,
             onChange: (agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })
@@ -2942,7 +2942,7 @@ function ContextSettingsControls(props) {
           SettingsToggleRow,
           {
             label: "Allow selected workspace documents",
-            description: "With Context for AI apps on, prompts in Claude Code, Codex and Pi get the files in their project that match them. To limit one app to exact files, pick a project folder under Projects & AI apps and choose that app.",
+            description: "With Context for AI apps on, prompts in Claude Code, Codex, Pi and Oh My Pi get the files in their project that match them. To limit one app to exact files, pick a project folder under Projects & AI apps and choose that app.",
             checked: value.sources.workspace_documents,
             disabled: editingDisabled,
             onChange: (workspace_documents) => props.onChange({ ...value, sources: {
@@ -4946,7 +4946,7 @@ function cigarWillHelpPrompts(status) {
   const { sources } = status.preferences;
   return !sources.workspace_documents && !sources.source_set_id;
 }
-const PROMPT_PROMISE = "Every prompt you send in Claude Code, Codex or Pi gets the few project files that match it.";
+const PROMPT_PROMISE = "Every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it.";
 const NO_FILES_YET = "Prompts get no project files until Context for AI apps and workspace documents are on in Settings.";
 function cigarHomeCopy(status, loading, running) {
   if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. You can keep browsing.", setupHint: false };
@@ -5646,7 +5646,7 @@ function CigarSetupProof({ setup, gate }) {
       mode: "verify-save",
       gate,
       title: "Approve turning on CIGAR",
-      detail: "Guard will download CIGAR, make sure it is the approved copy and start it on this computer. After that, each prompt you send in Claude Code, Codex or Pi gets the few files from that project that match it. CIGAR skips secrets, keys, generated folders and anything the project's .gitignore files leave out. Turn off Context for AI apps in Settings to stop it. One approval covers everything.",
+      detail: "Guard will download CIGAR, make sure it is the approved copy and start it on this computer. After that, each prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few files from that project that match it. CIGAR skips secrets, keys, generated folders and anything the project's .gitignore files leave out. Turn off Context for AI apps in Settings to stop it. One approval covers everything.",
       confirmLabel: "Turn on CIGAR",
       error: run.phase === "proof" ? run.error : null,
       pending: false,

@@ -32,7 +32,7 @@ assert.equal(homeCopy(off).headline, "CIGAR is off");
 assert.equal(homeCopy(saved).headline, "CIGAR is not running", "a saved preference is not proof that CIGAR is on");
 assert.equal(homeCopy({ ...saved, last_check: ready.runtime }).headline, "CIGAR is not running",
   "a cached compilation check must not complete activation");
-const promise = /Every prompt you send in Claude Code, Codex or Pi gets the few project files that match it\./;
+const promise = /Every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it\./;
 const noFiles = /Prompts get no project files until Context for AI apps and workspace documents are on in Settings\./;
 const withFiles = (agentContext: boolean, documents: boolean) => parseContextAssistanceStatus({ ...ready, effective_preferences: { ...ready.effective_preferences,
   features: { ...ready.effective_preferences.features, agent_context: agentContext },
@@ -103,7 +103,7 @@ assert.doesNotMatch(render(), /Runtime controls|Workspace access|Context data/, 
 assert.match(render(), /<button type="button" class="cigar-advanced-toggle" aria-expanded="false"/);
 assert.match(render(), /<strong>Advanced<\/strong>/);
 assert.match(render(), /CIGAR is off/);
-assert.match(render(), /Turn it on and every prompt you send in Claude Code, Codex or Pi gets the few project files that match it\./);
+assert.match(render(), /Turn it on and every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it\./);
 assert.match(render(), /Skips secrets, keys, hidden files and anything your \.gitignore leaves out\./);
 assert.match(render(), /Adds nothing when nothing matches\./);
 assert.doesNotMatch(render(), /only the folders you pick|reads only/i, "copy must match how prompts are matched to the project");

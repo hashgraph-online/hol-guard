@@ -17,7 +17,7 @@ PRELUDE = """
 const callbacks = {}, payloads = [], FOUND = FOUND_TEXT;
 const GUARD_CONFIG_PATH = '/fixture/settings.json';
 const GUARD_TIMEOUT_MS = TIMEOUT_VALUE, GUARD_DEADLINE_RESERVE_MS = 10;
-let inputApprovalResumeGeneration = 0, setupDelayMs = 0;
+let inputApprovalResumeGeneration = 0, setupDelayMs = 0, idle = true;
 const pi = {
   on(name, callback) { callbacks[name] = callback; },
   sendUserMessage(text) { resumed.push(text); },
@@ -48,11 +48,11 @@ async function runGuard(payload) {
   return {decision: 'allow', hookSpecificOutput: {hookEventName: 'UserPromptSubmit',
     additionalContext: FOUND + ' ' + payload.prompt}};
 }
-const ctx = {cwd: '/fixture', ui: {notify() {}}};
+const ctx = {cwd: '/fixture', ui: {notify() {}}, isIdle: () => idle};
 const start = (prompt) => callbacks.before_agent_start({type: 'before_agent_start', prompt}, ctx);
-const turn = async (text, source = 'interactive') => ({
+const turn = async (text, source = 'interactive', expanded = text) => ({
   input: await callbacks.input({text, source}, ctx),
-  start: await start(text),
+  start: await start(expanded),
 });
 """
 
@@ -104,17 +104,28 @@ const matched = await turn('fix the cart total');
 const again = await start('fix the cart total');
 const empty = await turn('no match');
 const blocked = await turn('protected');
+// Pi expands a skill command or prompt template before the turn starts.
+const skill = await turn('/skill:review fix the cart', 'interactive', 'Review carefully. fix the cart');
+const template = await turn('/cart-fix', 'interactive', 'Fix the cart total rounding.');
+// A turn that runs a different prompt gets nothing.
+await callbacks.input({text: 'fix the theme', source: 'interactive'}, ctx);
+const other = await turn('summarize the release notes', 'extension');
 // A prompt sent while the agent is busy is queued and starts no turn of its
 // own; its files must not reach the next turn, which runs another prompt.
-await callbacks.input({text: 'fix the theme', source: 'interactive'}, ctx);
+idle = false;
+await callbacks.input({text: '/skill:review fix the theme', source: 'interactive'}, ctx);
+idle = true;
 const later = await turn('summarize the release notes', 'extension');
-console.log(JSON.stringify({matched, again, empty, blocked, later, payloads}));
+console.log(JSON.stringify({matched, again, empty, blocked, skill, template, other, later, payloads}));
 """,
     )
     assert result["matched"] == {"input": {"action": "continue"}, "start": context_message("fix the cart total")}
     assert "again" not in result, "context is handed on once"
     assert result["empty"] == {"input": {"action": "continue"}}
     assert result["blocked"] == {"input": {"action": "handled", "handled": True}}
+    assert result["skill"] == {"input": {"action": "continue"}, "start": context_message("/skill:review fix the cart")}
+    assert result["template"] == {"input": {"action": "continue"}, "start": context_message("/cart-fix")}
+    assert result["other"] == {"input": {"action": "continue"}}
     assert result["later"] == {"input": {"action": "continue"}}
     reviewed = [payload for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
     assert reviewed and all(payload["guard_prompt_context"] is True for payload in reviewed)
