@@ -166,9 +166,15 @@ fn tsx_test_script_args(name: &str, arguments: &[String]) -> bool {
     let (flags, rest) = rest.split_at(crate::contained_argv::tsx_runner_flag_count(rest));
     let named = |script: &String| crate::contained_argv::workspace_test_script(script);
     if crate::contained_argv::tsx_runner_test_mode(flags) {
-        // Node runs each remaining word as a test file of its own, so a word
-        // outside the workspace is code the run loads rather than inert argv.
-        return !rest.is_empty() && rest.iter().all(named);
+        // Node runs each remaining word as a test file of its own, walks a
+        // directory for the files inside it, or discovers them itself when the
+        // run names none. A word that leaves the workspace is code the run
+        // loads rather than inert argv, so the path still has to stay inside
+        // it -- but which leaf names count as tests is Node's own business,
+        // and `node --test` already takes the same paths without asking.
+        return rest
+            .iter()
+            .all(|value| crate::contained_argv::workspace_script_path(value));
     }
     matches!(rest, [script, ..] if named(script))
 }
