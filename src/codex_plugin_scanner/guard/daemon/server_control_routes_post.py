@@ -173,6 +173,12 @@ class _ControlPostRoutes:
         if parsed.path == "/v1/cloud-review":
             self._handle_cloud_review_settings(payload)
             return
+        if parsed.path == "/v1/cloud-actions/status":
+            # Loaded here so hook paths never import the sign-in modules.
+            from .cloud_actions_status_http import handle_cloud_actions_check
+
+            handle_cloud_actions_check(self, payload)
+            return
         if parsed.path == "/v1/read-state":
             self._handle_read_state_update(payload)
             return

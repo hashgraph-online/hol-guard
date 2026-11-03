@@ -15,19 +15,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ..store import GuardStore
 
-_ITEM_KINDS = {
-    "skill": "skill",
-    "skill_file": "skill",
-    "mcp_server": "mcp_server",
-    "plugin": "plugin",
-    "plugin-file": "plugin",
-    "extension": "plugin",
-    "package": "package",
-    "hook": "hook",
-    "guard_hook": "hook",
-}
-# Scope names a local source can carry; the native runtime maps each to its contract source.
-ITEM_SOURCE_SCOPES = frozenset({"marketplace", "project", "workspace", "global", "user", "lockfile", "config"})
 # The native request parser refuses any JSON array or object wider than this, so
 # rows and tracked items cross in chunks the runtime joins back in order.
 _NATIVE_JSON_WIDTH = 4096
@@ -44,12 +31,6 @@ _ROW_FIELDS = (
     "artifact_hash",
     "source_scope",
 )
-
-
-def inventory_item_kind(artifact_type: object) -> str | None:
-    """Contract kind of a local inventory artifact type, or ``None`` when it is not reported."""
-
-    return _ITEM_KINDS.get(str(artifact_type or ""))
 
 
 def projected_rows(rows: Iterable[Mapping[str, object]]) -> list[list[dict[str, object]]]:

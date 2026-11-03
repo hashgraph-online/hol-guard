@@ -15,7 +15,7 @@ use crate::runner_authority_op::ERR_INVALID;
 
 const MAX_NAME_CHARS: usize = 200;
 
-const HARNESS_IDS: [&str; 18] = [
+pub(super) const HARNESS_IDS: [&str; 18] = [
     "antigravity",
     "claude-code",
     "cline",
@@ -36,7 +36,7 @@ const HARNESS_IDS: [&str; 18] = [
     "zcode",
 ];
 
-fn item_kind(artifact_type: &str) -> Option<&'static str> {
+pub(super) fn item_kind(artifact_type: &str) -> Option<&'static str> {
     Some(match artifact_type {
         "skill" | "skill_file" => "skill",
         "mcp_server" => "mcp_server",
@@ -59,7 +59,7 @@ fn item_source(scope: &str) -> &'static str {
 }
 
 /// `str(value or "")`.
-fn text_or_empty(value: Option<&Value>) -> String {
+pub(super) fn text_or_empty(value: Option<&Value>) -> String {
     match value {
         Some(value) if py_truthy(value) => py_str(value).unwrap_or_default(),
         _ => String::new(),
@@ -76,7 +76,7 @@ pub(super) fn timestamp(value: Option<&Value>) -> Option<i64> {
     value.filter(|value| value.is_string()).and_then(parse_utc)
 }
 
-fn normalized_timestamp(value: Option<&Value>) -> Option<String> {
+pub(super) fn normalized_timestamp(value: Option<&Value>) -> Option<String> {
     iso(timestamp(value)?)
 }
 

@@ -735,6 +735,7 @@ mod local_cli_hook_contained;
 mod local_cli_hook_op;
 mod local_cli_identify;
 mod local_cli_observer;
+mod local_cli_script_source;
 mod local_mcp_grant_identity;
 mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;

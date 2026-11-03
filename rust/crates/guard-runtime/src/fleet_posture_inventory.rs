@@ -21,6 +21,8 @@ use crate::guard_store_local_cli::parse_utc;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
+#[path = "fleet_posture_aibom.rs"]
+mod aibom;
 #[path = "fleet_posture_plan.rs"]
 mod plan;
 #[path = "fleet_posture_selection.rs"]
@@ -305,6 +307,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "fleet_inventory_rows" => reportable_rows(args),
         "fleet_inventory_items" => items(args),
         "fleet_posture_build" => build(args),
+        "fleet_aibom_rows" => aibom::dispatch(args),
         _ => Err(ERR_INVALID),
     }
 }

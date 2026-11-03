@@ -206,6 +206,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
         "omp_code_mode" => crate::omp_code_mode::dispatch(args),
+        "local_cli_script_source" => crate::local_cli_script_source::dispatch(args),
         "local_mcp_probe" => crate::local_mcp_probe::dispatch(args),
         "hook_approval_wait" => crate::hook_approval_wait::dispatch(args),
         "grok_detect" => grok_detect::detect(args),
@@ -220,9 +221,10 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cursor_hook_config" => cursor_hook_config::dispatch(args),
         "cursor_editor_plan" => cursor_editor_plan::plan(args),
         "cursor_hook_script" => cursor_hook_script::dispatch(args),
-        "fleet_inventory_rows" | "fleet_inventory_items" | "fleet_posture_build" => {
-            crate::fleet_posture_inventory::dispatch(kind, args)
-        }
+        "fleet_inventory_rows"
+        | "fleet_inventory_items"
+        | "fleet_posture_build"
+        | "fleet_aibom_rows" => crate::fleet_posture_inventory::dispatch(kind, args),
         "cursor_hook_state" => cursor_hook_state::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
