@@ -41,6 +41,19 @@ pub(crate) fn local_package_entry(entry: &str, package_entry: &str) -> bool {
         .is_some_and(|prefix| prefix.is_empty() || prefix.ends_with('/'))
 }
 
+/// The same local path, reached through the link npm writes for a package's
+/// declared `bin`. Every installer puts `node_modules/.bin/<binary>` there
+/// pointing at the file the package publishes, and a shell that runs
+/// `./node_modules/.bin/vitest` starts exactly the entry
+/// `node_modules/vitest/vitest.mjs` names, so a command that hands that link
+/// to `node` names the installed entry too. The link is read as a name here,
+/// never followed: the sink canonicalizes it against the entry it resolved
+/// from the package itself, so a link pointing somewhere else resolves to a
+/// different file and the run is refused.
+pub(crate) fn local_bin_entry(entry: &str, binary: &str) -> bool {
+    local_package_entry(entry, &format!(".bin/{binary}"))
+}
+
 /// Whether a Prettier command asks only whether the files are formatted.
 /// `--check` and `--list-different` print and exit; every other spelling may
 /// reach `--write`, which rewrites each file it visits.
@@ -126,10 +139,11 @@ pub(crate) fn supported_tool_declared(
 pub(crate) fn entry_tool(entry: &str) -> &'static str {
     TOOL_ENTRIES
         .iter()
-        .find(|(_, entries)| {
+        .find(|(tool, entries)| {
             entries
                 .iter()
                 .any(|published| local_package_entry(entry, published))
+                || local_bin_entry(entry, tool)
         })
         .map_or("", |(tool, _)| *tool)
 }

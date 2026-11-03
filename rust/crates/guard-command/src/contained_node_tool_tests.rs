@@ -211,6 +211,34 @@ fn node_started_on_a_published_entrypoint_resolves_the_tool_it_is() {
 }
 
 #[test]
+fn node_started_on_the_installer_link_resolves_the_same_tool() {
+    // npm links `node_modules/.bin/tsc` to the entry TypeScript publishes, so
+    // the two spellings start one run. The sink canonicalizes the link against
+    // the entry it resolved from the package, which is what keeps a link
+    // pointing elsewhere from reaching this tool's profile.
+    let routed = route(&["node", "node_modules/.bin/tsc", "--noEmit"]);
+    match &routed {
+        NodeToolRoute::Tool {
+            name,
+            expected_entry,
+            ..
+        } => {
+            assert_eq!(*name, "tsc");
+            assert_eq!(expected_entry.as_deref(), Some("node_modules/.bin/tsc"));
+        }
+        other => panic!("expected a tool, got {other:?}"),
+    }
+    assert_eq!(entry_tool("node_modules/.bin/eslint"), "eslint");
+    assert_eq!(entry_tool("./node_modules/.bin/prettier"), "prettier");
+    assert_eq!(entry_tool("dashboard/node_modules/.bin/vite"), "vite");
+    // Vitest is a runner, not one of the tools this table names, and its link
+    // must not be read as Vite's.
+    assert_eq!(entry_tool("node_modules/.bin/vitest"), "");
+    assert_eq!(entry_tool("node_modules/.bin/webpack"), "");
+    assert_eq!(entry_tool("vendored/.bin/tsc"), "");
+}
+
+#[test]
 fn a_bounded_heap_option_is_carried_and_an_unbounded_one_is_refused() {
     match &route(&[
         "node",
