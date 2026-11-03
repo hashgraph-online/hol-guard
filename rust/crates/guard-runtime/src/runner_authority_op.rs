@@ -119,6 +119,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         | "decision_legacy"
         | "decision_build" => crate::decision_authority_op::dispatch(kind, args),
         "cli_runtime_support" => crate::cli_runtime_support_op::dispatch(args),
+        "extension_hint_shape" => crate::extension_hint_shape::dispatch(args),
         "mcp_output" => crate::mcp_output::dispatch(args),
         "memory_decision_receipt" => crate::memory_decision_receipt::dispatch(args),
         "cli_profiles" => crate::cli_profiles::dispatch(args),

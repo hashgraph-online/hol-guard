@@ -84,6 +84,13 @@ def _snapshot(health: AuthorityHealth = AuthorityHealth.PROTECTED) -> ExtensionC
     )
 
 
+@pytest.fixture(autouse=True)
+def _checked_hint(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The runtime owns the hint shape check, and these tests stand in for the
+    # resident it would ask, so the check accepts exactly the well-formed hint.
+    monkeypatch.setattr(client, "validated_extension_allow_hint", lambda value: dict(HINT) if value == HINT else None)
+
+
 def _approval(hint: object = HINT, *, status: str = "pending") -> dict[str, object]:
     return {"request_id": "req-1", "status": status, "extension_allow_hint": hint}
 

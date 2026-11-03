@@ -398,6 +398,7 @@ mod extension_control_preview_op;
 mod extension_control_proof;
 mod extension_control_terminal_op;
 mod extension_coverage_hint;
+mod extension_hint_shape;
 mod fleet_posture_inventory;
 /// Parser entry points for `rust/fuzz`; see `fuzz_entry.rs`.
 #[cfg(any(test, feature = "fuzzing"))]
