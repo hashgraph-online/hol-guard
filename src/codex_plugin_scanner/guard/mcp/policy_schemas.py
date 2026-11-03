@@ -53,10 +53,12 @@ class GetPolicyCreationInput:
 
 def _checked(tool: str, arguments: dict[str, object]) -> dict[str, Any]:
     policy_yaml = arguments.get("policyYaml")
-    # More characters than the byte limit is always too large, and stays out of
-    # the bounded request to the runtime.
-    if tool != "get_policy_creation" and isinstance(policy_yaml, str) and len(policy_yaml) > MAX_POLICY_BYTES:
-        raise PolicyToolError(POLICY_TOO_LARGE, "policyYaml exceeds the maximum document size.")
+    # Oversize text stays out of the bounded request. An ASCII stand-in just
+    # past the limit, blank exactly when the policy is, keeps every earlier
+    # refusal (unknown keys, type, blank text) ahead of the size one.
+    if isinstance(policy_yaml, str) and len(policy_yaml.encode("utf-8", "surrogatepass")) > MAX_POLICY_BYTES:
+        stand_in = ("x" if policy_yaml.strip() else " ") * (MAX_POLICY_BYTES + 1)
+        arguments = {**arguments, "policyYaml": stand_in}
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     try:

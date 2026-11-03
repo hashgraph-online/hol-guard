@@ -384,14 +384,26 @@ class TestPolicySchemas:
         assert exc.value.code == "invalid_arguments"
         assert exc.value.message == "Unknown arguments: ['alpha', 'zeta']"
 
-    def test_an_oversize_policy_never_reaches_the_runtime(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        def unreachable(*_args: object, **_kwargs: object) -> dict[str, object]:
-            raise AssertionError("runtime called")
+    def test_an_oversize_policy_reaches_the_runtime_as_a_stand_in(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        sent: list[int] = []
+        real = native_runner_authority.native_runner_authority
 
-        monkeypatch.setattr(native_runner_authority, "native_runner_authority", unreachable)
-        with pytest.raises(PolicyToolError) as exc:
-            parse_validate_policy_input({"policyYaml": "x" * (MAX_POLICY_BYTES + 1)})
-        assert exc.value.code == "policy_too_large"
+        def spy(kind: str, args: dict[str, object]) -> dict[str, object]:
+            sent.append(len(str(args["arguments"].get("policyYaml"))))  # type: ignore[union-attr]
+            return real(kind, args)
+
+        monkeypatch.setattr(native_runner_authority, "native_runner_authority", spy)
+        oversize = "\u00e9" * (MAX_POLICY_BYTES // 2 + 1)
+        cases = [
+            ({"policyYaml": oversize}, "policyYaml exceeds the maximum document size."),
+            ({"policyYaml": oversize, "zeta": 1}, "Unknown arguments: ['zeta']"),
+            ({"policyYaml": " " * (MAX_POLICY_BYTES + 1)}, "policyYaml must not be empty."),
+        ]
+        for arguments, message in cases:
+            with pytest.raises(PolicyToolError) as exc:
+                parse_validate_policy_input(arguments)
+            assert exc.value.message == message
+        assert sent == [MAX_POLICY_BYTES + 1] * 3
 
     def test_a_runtime_that_cannot_check_the_arguments_fails_retryable(
         self, store: GuardStore, monkeypatch: pytest.MonkeyPatch
