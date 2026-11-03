@@ -57,6 +57,13 @@ with both choices. A prompt that asks to switch Guard off or to override
 trusted instructions, or whose risk Guard cannot classify, is still held, and
 its notice says nothing is waiting for approval.
 
+Two limits follow from this. An agent can answer a prompt that asks for a
+secret from text already in its conversation without a tool call, so no review
+follows. That text reached the conversation through a reviewed read or the
+person's own paste, and the reply goes only to the person who asked. Grok has
+no field for a notice on a prompt it sends, so a flagged prompt there passes
+without one. The tool call it leads to is still reviewed.
+
 ## What the hash covers
 
 When Guard can prove what a command runs, the approval token is the strong

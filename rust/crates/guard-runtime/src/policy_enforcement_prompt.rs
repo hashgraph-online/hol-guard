@@ -9,11 +9,18 @@
 //! files and running subprocesses. A block, a sandbox requirement, a request to
 //! switch Guard off, an attempt to override trusted instructions and a prompt
 //! with no classified intent still stop the prompt.
+//!
+//! The deferral accepts two limits. An agent can answer a prompt that asks for
+//! a secret from text already in its conversation with no tool call, so no
+//! review follows; that text reached the conversation through a reviewed read
+//! or the person's own paste, and the reply goes only to the person who asked.
+//! A harness with no notice field on a sent prompt (Grok) sends it silently;
+//! the tool call it leads to is still reviewed.
 
 use guard_contracts::{NativePromptRiskClassV1, PreToolActionTypeV1, PreToolResultV1};
 
 /// What the harness shows for a prompt Guard flagged and sent.
-const PROMPT_REVIEW_NOTICE: &str = "HOL Guard flagged this prompt and sent it. Guard will ask before the agent takes the sensitive action it leads to; approve that request with Allow once or Always allow if you meant it.";
+const PROMPT_REVIEW_NOTICE: &str = "HOL Guard flagged this prompt and sent it. If the agent runs a tool to act on it, Guard asks first; approve that request with Allow once or Always allow if you meant it.";
 
 /// Sends a prompt held only for review, with Guard's notice as its reason.
 pub(super) fn defer_prompt_review(output: &mut PreToolResultV1) {
