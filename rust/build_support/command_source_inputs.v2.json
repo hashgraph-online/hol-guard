@@ -90,6 +90,7 @@
       "src/command_tokens.rs",
       "src/contained_argv.rs",
       "src/contained_argv_runner_calls.rs",
+      "src/contained_argv_single_pass_runners.rs",
       "src/contained_git.rs",
       "src/contained_node_tool.rs",
       "src/contained_package_test.rs",

@@ -338,6 +338,9 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
                 "ava/cli.js",
             ],
         ),
+        "jasmine" => ("jasmine/package.json", &["jasmine/bin/jasmine.js"]),
+        "qunit" => ("qunit/package.json", &["qunit/bin/qunit.js"]),
+        "uvu" => ("uvu/package.json", &["uvu/bin.js"]),
         _ => ("vitest/vitest.mjs", &["vitest/vitest.mjs"]),
     };
     let modules = nearest_project_root(cwd, workspace, &format!("node_modules/{installed}"))?
@@ -389,6 +392,9 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
                 "jest" => "Jest is not installed inside this workspace. Guard did not download or execute a replacement.",
                 "mocha" => "Mocha is not installed inside this workspace. Guard did not download or execute a replacement.",
                 "ava" => "AVA is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "jasmine" => "Jasmine is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "qunit" => "QUnit is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "uvu" => "uvu is not installed inside this workspace. Guard did not download or execute a replacement.",
                 _ => "Vitest is not installed inside this workspace. Guard did not download or execute a replacement.",
             },
         ));

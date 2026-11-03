@@ -15,7 +15,10 @@ pub(crate) fn contained_runner_call(arguments: &[String]) -> bool {
         if (tool == "vitest" && vitest_runs_once(rest))
             || (tool == "jest" && jest_contained_call(rest))
             || (tool == "mocha" && mocha_contained_call(rest))
-            || (tool == "ava" && ava_contained_call(rest)))
+            || (tool == "ava" && ava_contained_call(rest))
+            || (tool == "jasmine" && super::single_pass_runners::jasmine_contained_call(rest))
+            || (tool == "qunit" && super::single_pass_runners::qunit_contained_call(rest))
+            || (tool == "uvu" && super::single_pass_runners::uvu_contained_call(rest)))
 }
 
 /// True when a Vitest call finishes on its own.
@@ -93,7 +96,7 @@ fn vitest_asked_not_to_watch(arguments: &[String]) -> bool {
 /// letter at a time, so `-uw` carries it too. A word attached to a short
 /// option that happens to hold a `w` is read as carrying it as well, which
 /// leaves that call at review rather than running it unwatched.
-fn short_options_carry_watch(argument: &str) -> bool {
+pub(super) fn short_options_carry_watch(argument: &str) -> bool {
     short_options_carry(argument, 'w')
 }
 
@@ -260,7 +263,7 @@ fn literal_boolean(value: &str) -> Option<bool> {
 /// The option an argument names, lowercased and without its separators or its
 /// value, so `--watch-all=false` and `--watchAll` both read as `watchall`. An
 /// argument that is not a long option names nothing.
-fn option_name(argument: &str) -> String {
+pub(super) fn option_name(argument: &str) -> String {
     let Some(flag) = argument.strip_prefix("--") else {
         return String::new();
     };

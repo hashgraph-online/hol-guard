@@ -622,16 +622,6 @@
       "note": "Renders the policy row the resident filed, and refuses any reply that is not a resident allow."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/workspace_rule_findings.py",
-      "func": "_finding",
-      "root": "none",
-      "reading": "labels-finding",
-      "actions": [
-        "warn"
-      ],
-      "note": "A scan finding's own decision field, next to its severity and lifecycle state."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/workspace_secret_findings.py",
       "func": "_finding",
       "root": "none",
