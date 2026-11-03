@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.secureinput",
+  "version": "1.0.0",
+  "name": "SecureInput MCP",
+  "description": "Local-first MCP server that collects API keys, passwords, and tokens in an inline MCP App form or a paired 127.0.0.1 browser page instead of the chat, then delivers them to a local command through stdin or environment variables, or writes them to a .env file. request_secret and submit_inline_secret lead to command execution or .env writes and require review; status, check, and cancel tools inherit Guard policy. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.r69shabh",
+    "displayName": "SecureInput (@r69shabh)",
+    "url": "https://github.com/r69shabh/secureinput"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#2F4060"
+  },
+  "homepage": "https://github.com/r69shabh/secureinput",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "secureinput"
+  },
+  "riskClasses": [
+    "external-command-execution",
+    "local-file-write",
+    "localhost-listener"
+  ],
+  "tools": [
+    {
+      "name": "request_secret",
+      "state": "review"
+    },
+    {
+      "name": "submit_inline_secret",
+      "state": "review"
+    },
+    {
+      "name": "check_secret_request",
+      "state": "inherit"
+    },
+    {
+      "name": "inline_request_status",
+      "state": "inherit"
+    },
+    {
+      "name": "cancel_secret_request",
+      "state": "inherit"
+    },
+    {
+      "name": "secureinput_status",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/r69shabh/secureinput",
+    "https://github.com/r69shabh/secureinput/blob/main/docs/security-model.md",
+    "https://github.com/r69shabh/secureinput/blob/main/SECURITY.md",
+    "https://github.com/r69shabh/secureinput/releases"
+  ],
+  "saferAlternatives": [
+    "Keep request_secret on Review: its delivery block names the command, arguments, working directory, or .env path that will receive the value. Check that destination before approving.",
+    "Use the paired browser input mode (secureinput settings --input-mode browser) to see SecureInput's own destination and risk review; the compact inline form submits on Enter.",
+    "Leave return delivery disabled (the default) so secret values are not sent back in MCP tool results.",
+    "Start the daemon with secureinput serve --root <project-dir> (repeatable) so commands and .env writes stay inside the intended project directories; the default allowed root is the home directory."
+  ]
+}
