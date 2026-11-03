@@ -122,6 +122,57 @@ def test_an_interrupt_right_after_the_move_puts_the_earlier_file_back(
     assert list(backups_dir(guard_home, "codex").glob("*")) == []
 
 
+def test_an_edit_after_an_interrupted_move_is_kept_and_restore_stays_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _seed(tmp_path)
+    guard_home = tmp_path / "guard"
+    plan = plan_host_config("codex", path=path, url=URL)
+    real = cloud_actions_host_apply.replace_file
+    edited = b'model = "gpt-5"\n# The AI tool wrote this after Guard.\n'
+
+    def moved_edited_then_interrupted(source: Path, destination: Path) -> None:
+        real(source, destination)
+        if destination == path:
+            destination.write_bytes(edited)
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(cloud_actions_host_apply, "replace_file", moved_edited_then_interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        _ = apply_host_config(plan, guard_home=guard_home)
+
+    # Guard does not overwrite an edit it did not make, and keeps its copy.
+    assert path.read_bytes() == edited
+    assert _strays(path.parent) == []
+    assert list(backups_dir(guard_home, "codex").glob("*.json"))
+
+
+def test_an_interrupt_before_the_move_leaves_another_writers_settings_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _seed(tmp_path)
+    guard_home = tmp_path / "guard"
+    plan = plan_host_config("codex", path=path, url=URL)
+    assert plan.after is not None
+    real = cloud_actions_host_apply.replace_file
+
+    def written_elsewhere_then_interrupted(source: Path, destination: Path) -> None:
+        if destination != path:
+            real(source, destination)
+            return
+        # Another apply wrote the same settings; this one never moved its file.
+        destination.write_bytes(plan.after or b"")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cloud_actions_host_apply, "replace_file", written_elsewhere_then_interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        _ = apply_host_config(plan, guard_home=guard_home)
+
+    assert path.read_bytes() == plan.after
+    assert _strays(path.parent) == []
+    assert list(backups_dir(guard_home, "codex").glob("*")) == []
+
+
 @pytest.mark.skipif(os.name == "nt", reason="POSIX directory permissions")
 def test_a_settings_folder_guard_cannot_write_is_left_alone(tmp_path: Path) -> None:
     path = _seed(tmp_path)
