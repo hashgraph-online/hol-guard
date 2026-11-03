@@ -438,6 +438,41 @@ def _package_manager_launch_environment(
     return {**environment, "PATH": launch_path}
 
 
+def _block_unidentified_npm_package(evaluation: Any) -> Any:
+    """Terminal block when npm would install a package Guard cannot name.
+
+    A review of the command's runner would approve a different package.
+    ``block`` is not an approval.
+    """
+
+    message = "npm configuration adds a package to this npx command, and Guard could not read that package's name."
+    copy = evaluation.user_copy
+    return replace(
+        evaluation,
+        decision="block",
+        policy_action="block",
+        reasons=(
+            {
+                "code": "npm_config_package_unidentified",
+                "message": message,
+                "severity": "high",
+                "source": "guard-local",
+            },
+        ),
+        packages=tuple({**dict(item), "decision": "block"} for item in getattr(evaluation, "packages", ())),
+        risk_summary=message,
+        user_copy=type(copy)(
+            title="Package request blocked",
+            summary=message,
+            next_step="Name the package with --package, or make the npm package setting readable, then retry.",
+            dashboard_url=None,
+            harness_message=message,
+        ),
+        review_settlement=("block", message),
+        record_monitor_evidence=False,
+    )
+
+
 @binds_store_guard_home
 def _build_package_protect_authority(
     *,
@@ -474,6 +509,9 @@ def _build_package_protect_authority(
     )
     if intent is None:
         return None
+    unidentified_npm_package = any(
+        target.source_invalid_reason == "npm_config_package_unidentified" for target in intent.targets
+    )
     if intent.routine_local_runner:
         # A runner the project already pins locally fetches nothing: the native
         # parser resolved the executable inside the installed package and read
@@ -500,6 +538,8 @@ def _build_package_protect_authority(
         external_archive_network_authorized=external_archive_network_authorized,
         retain_external_archive_blob=external_archive_network_authorized,
     )
+    if unidentified_npm_package:
+        evaluation = _block_unidentified_npm_package(evaluation)
     try:
         executable = sanitized_intent.command_tokens[0] if sanitized_intent.command_tokens else None
         executable_args = sanitized_intent.command_tokens[1:] if executable is not None else ()

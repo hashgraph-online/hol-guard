@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard import local_supply_chain, native_policy_snapsho
 class _Intent:
     redacted_command: str
     routine_local_runner: bool = False
+    targets: tuple = ()
 
 
 class _ArtifactBuiltError(Exception):

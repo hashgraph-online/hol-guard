@@ -145,18 +145,28 @@ def _resident_request(
 def _resident_environment(environment: Mapping[str, str] | None) -> dict[str, str] | None:
     """The environment the resident must resolve the launch in.
 
-    The resident is long-lived, so its own ``PATH`` is the one it was spawned
-    with.  A caller that passes no environment still means the ambient one this
-    decision is being made in — the Python baseline resolves the manager from
-    ``os.environ`` — and a manager the resident cannot reproduce (`npx` absent
-    from a spawn-time ``PATH``) makes the launch evidence incomplete and sends
-    a contained TypeScript typecheck back to review.  Bind the caller's ``PATH``
-    whenever it is not already part of the request.
+    The resident is long-lived, so its own ``PATH`` and home are the ones it
+    was spawned with.  A caller that passes no environment still means the
+    ambient one this decision is being made in — the Python baseline resolves
+    the manager from ``os.environ`` — and a manager the resident cannot
+    reproduce (`npx` absent from a spawn-time ``PATH``) makes the launch
+    evidence incomplete and sends a contained TypeScript typecheck back to
+    review.  Bind the caller's ``PATH`` whenever it is not already part of the
+    request, and bind ``HOME`` when the caller passed no environment so npm
+    reads that caller's user config.
     """
 
     ambient_path = os.environ.get("PATH")
     if environment is None:
-        return {"PATH": ambient_path} if ambient_path else None
+        # npm reads the user config from the caller's home. The resident
+        # process can have a different home, so that home travels with PATH.
+        ambient: dict[str, str] = {}
+        if ambient_path:
+            ambient["PATH"] = ambient_path
+        home = os.environ.get("HOME")
+        if home:
+            ambient["HOME"] = home
+        return ambient or None
     if "PATH" in environment or not ambient_path:
         return dict(environment)
     return {**environment, "PATH": ambient_path}
