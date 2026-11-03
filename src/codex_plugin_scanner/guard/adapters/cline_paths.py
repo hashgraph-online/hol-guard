@@ -1,113 +1,79 @@
-"""Resolve Cline-owned data, hook, and plugin locations without executing Cline."""
+"""Resolve Cline-owned data, hook, and plugin locations without executing Cline.
+
+The native ``cline_paths`` kind owns the destination checks; this module reads
+the environment overrides and the working directory the resident cannot see.
+"""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 from .base import HarnessContext
 
 
-def _safe_configured_data_dir(context: HarnessContext, value: str) -> Path | None:
-    candidate = Path(value).expanduser().resolve(strict=False)
-    home = context.home_dir.resolve(strict=False)
-    if candidate == home or candidate.is_relative_to(home):
-        return candidate
-    return None
+def _configured(variable: str) -> str:
+    value = os.environ.get(variable, "").strip()
+    return os.path.join(os.getcwd(), os.path.expanduser(value)) if value else ""
+
+
+def ask_cline_paths(context: HarnessContext, op: str, **fields: Any) -> dict[str, Any]:
+    """One ``cline_paths`` answer; a refusal or an unavailable runtime raises ``RuntimeError``."""
+
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    request = {
+        "op": op,
+        "home": str(context.home_dir.absolute()),
+        "guard_home": str(context.guard_home.absolute()),
+        "cwd": os.getcwd(),
+        "data_dirs": [_configured("CLINE_DATA_DIR"), _configured("CLINE_DIR")],
+        **fields,
+    }
+    try:
+        answer = native_runner_authority("cline_paths", request)
+    except NativeRunnerAuthorityError as exc:
+        raise RuntimeError("Cline paths require the HOL Guard native runtime") from exc
+    refusal = answer.get("refusal")
+    if isinstance(refusal, str):
+        raise RuntimeError(refusal)
+    return answer
+
+
+def _path(value: object) -> Path:
+    if not isinstance(value, str):
+        raise RuntimeError("HOL Guard native runtime returned a malformed Cline path")
+    return Path(value)
 
 
 def cline_data_dir(context: HarnessContext) -> Path:
-    """Resolve a writable Cline data directory across current and legacy hosts.
+    """Cline's data directory; an override counts only while it stays inside the home."""
 
-    Environment overrides are honored only when they remain inside the user's
-    home. This prevents an inherited environment variable from redirecting
-    Guard-managed hook/plugin writes to an arbitrary filesystem location.
-    """
-
-    for variable in ("CLINE_DATA_DIR", "CLINE_DIR"):
-        configured = os.environ.get(variable, "").strip()
-        if configured:
-            safe = _safe_configured_data_dir(context, configured)
-            if safe is not None:
-                return safe
-    return context.home_dir / ".cline"
+    return _path(ask_cline_paths(context, "roots").get("data_dir"))
 
 
 def cline_hook_roots(context: HarnessContext) -> tuple[Path, ...]:
     """Return global hook roots used by Cline UI and data-dir based runtimes."""
 
-    data_hooks = cline_data_dir(context) / "hooks"
-    candidates = (
-        context.home_dir / "Documents" / "Cline" / "Hooks",
-        data_hooks,
-        context.home_dir / ".cline" / "hooks",
-    )
-    configured = any(
-        os.environ.get(variable, "").strip()
-        and _safe_configured_data_dir(context, os.environ[variable].strip()) == cline_data_dir(context)
-        for variable in ("CLINE_DATA_DIR", "CLINE_DIR")
-    )
-    if configured:
-        candidates = (data_hooks, *candidates)
-    unique: list[Path] = []
-    seen: set[str] = set()
-    for path in candidates:
-        key = str(path)
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(path)
-    return tuple(unique)
+    roots = ask_cline_paths(context, "roots").get("hook_roots")
+    return tuple(_path(root) for root in (roots if isinstance(roots, list) and roots else (None,)))
 
 
 def cline_plugin_root(context: HarnessContext) -> Path:
     """Return the Guard-owned plugin root under Cline's selected data directory."""
 
-    root = cline_data_dir(context) / "plugins" / "hol-guard"
-    ensure_safe_cline_destination(context, root / "index.js")
-    return root
+    return _path(ask_cline_paths(context, "plugin_root").get("path"))
 
 
 def ensure_safe_cline_destination(context: HarnessContext, path: Path) -> Path:
     """Validate nodes from the trusted root down and return the rebuilt destination."""
 
-    if ".." in path.parts or "\x00" in os.fspath(path):
-        raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
-    home = context.home_dir.resolve(strict=False)
-    guard_home = context.guard_home.resolve(strict=False)
-    roots = (home, guard_home, context.home_dir.absolute(), context.guard_home.absolute())
-    destination = Path(os.path.abspath(path))
-    for root in roots:
-        try:
-            relative = destination.relative_to(root)
-        except ValueError:
-            continue
-        if not relative.parts:
-            continue
-        return _checked_cline_destination(root, relative, home, guard_home)
-    raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
-
-
-def _checked_cline_destination(root: Path, relative: Path, home: Path, guard_home: Path) -> Path:
-    """Build each filesystem operand from its trusted parent and a single basename."""
-
-    current = root
-    if current.is_symlink():
-        raise RuntimeError(f"Cline destination parent is a symlink: {current}")
-    for part in relative.parts:
-        name = os.path.basename(part)
-        if name != part or name in {"", ".", ".."}:
-            raise RuntimeError("Cline destination contains an unsafe path component")
-        current = current / name
-        if current.is_symlink():
-            raise RuntimeError(f"Cline destination is a symlink: {current}")
-    resolved_parent = current.parent.resolve(strict=False)
-    if not (resolved_parent.is_relative_to(home) or resolved_parent.is_relative_to(guard_home)):
-        raise RuntimeError("Cline destination escapes Guard-managed or configured Cline roots")
-    return current
+    return _path(ask_cline_paths(context, "check", path=os.fspath(path)).get("path"))
 
 
 __all__ = [
+    "ask_cline_paths",
     "cline_data_dir",
     "cline_hook_roots",
     "cline_plugin_root",
