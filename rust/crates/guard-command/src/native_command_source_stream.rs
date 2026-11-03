@@ -170,7 +170,7 @@ pub fn compile_source_stream(
 
 /// Each binding contribution extends exactly one extension in the same
 /// stream, at most once, and an action ID names one hosted action stream-wide.
-fn resolve_bindings<'a>(
+pub(super) fn resolve_bindings<'a>(
     bindings: &'a [(usize, cloud_binding::CloudBindingContribution)],
     commands: &[Vec<u8>],
     servers: &[Vec<u8>],
