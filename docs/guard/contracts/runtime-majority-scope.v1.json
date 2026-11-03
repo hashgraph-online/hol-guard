@@ -1908,12 +1908,12 @@
           "install_cline_mcp_proxies",
           "restore_cline_mcp_proxies",
           "_proxy_entry",
-          "_managed_server",
+          "_proxy_plan",
           "_backup_path",
           "_atomic_write_bytes"
         ],
         "entry_points": [],
-        "reason": "Cline MCP settings rewrite to the Guard proxy on install and restore on uninstall.",
+        "reason": "Cline MCP settings rewrite to the Guard proxy on install and restore on uninstall; _proxy_plan asks the native cline_install_plan kind which servers to proxy.",
         "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
