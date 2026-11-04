@@ -34,7 +34,7 @@ from .connector_fixtures import (
     stage_connector_case,
     state_digest,
 )
-from .evidence import sha256_bytes
+from .evidence import execution_error_chain, sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
 from .fixtures import (
     create_fixture,
@@ -344,7 +344,9 @@ def run_harness_case(
                 raise RuntimeError("installed Guard changed during the session")
     except Exception as exc:
         case["execution_error"] = type(exc).__name__
-        (private / "execution-error.txt").write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
+        chain = execution_error_chain(exc, replacements)
+        case["execution_error_chain"] = chain
+        (private / "execution-error.txt").write_text("\n".join(chain) + "\n", encoding="utf-8")
     finally:
         try:
             if seed is not None:
