@@ -1,0 +1,1630 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "Heaven write request",
+            "Heaven flow run",
+            "Heaven bench load test",
+            "Heaven request with TLS verification disabled"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews Heaven CLI commands that send write requests, run request workflows, generate load, or disable TLS verification.",
+          "ecosystem_ids": [
+            "heaven"
+          ],
+          "executables": [
+            "heaven",
+            "hv"
+          ],
+          "extension_id": "command.heavens",
+          "homepage": "https://github.com/Nonsense0909688/Heavens",
+          "icon": {
+            "background": "#0F172A",
+            "kind": "react-icon",
+            "name": "HiMiniCommandLine"
+          },
+          "license": "MIT",
+          "name": "Heaven command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "Heaven write request"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `heaven post|put|patch|delete`, which sends a state-changing HTTP request to the active or specified environment. Protected environments prompt a human, but non-interactive agent sessions bypass that review path. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "example_command": "heaven delete /users/42 --env prod",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Heaven write request",
+              "permission_id": "command.heavens.permission.write-request",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Send the equivalent GET request first to confirm the target resource and environment.",
+                "Run against a dev or staging environment. The `--protected` prompt is interactive only and does not gate noninteractive agent runs."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Heaven flow run"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `heaven flow FILE.json`, which executes a chain of requests defined in a file, including write methods, with values extracted between steps. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "example_command": "heaven flow checkout.json --env staging",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Heaven flow run",
+              "permission_id": "command.heavens.permission.flow-run",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Read the flow file and check every step's method and URL before running it.",
+                "Run the flow against a non-production environment first."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Heaven bench load test"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `heaven bench`, which sends many concurrent requests to a target and can overload a service or trigger rate limits. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "example_command": "heaven bench get /health -n 500 -c 25",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Heaven bench load test",
+              "permission_id": "command.heavens.permission.bench",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Start with a small request count and low concurrency (for example -n 10 -c 2).",
+                "Only benchmark systems you own or are authorized to load-test, and avoid production."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Heaven request with TLS verification disabled"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies Heaven commands run with `--insecure` or `-k`, which skips TLS certificate verification and exposes the request and any credentials to interception. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "example_command": "heaven get https://staging.example.com/users --insecure",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Heaven request with TLS verification disabled",
+              "permission_id": "command.heavens.permission.insecure-tls",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Install or trust the correct CA certificate instead of disabling verification.",
+                "Never combine --insecure with --bearer, --basic, or other credentials."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [
+            ".heaven"
+          ],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.heaven",
+            "url": "https://github.com/Nonsense0909688/Heavens"
+          },
+          "reference_urls": [
+            "https://github.com/Nonsense0909688/Heavens",
+            "https://github.com/Nonsense0909688/Heavens/blob/main/DOCS.md"
+          ],
+          "required": false,
+          "risk_classes": [
+            "execution"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "Heaven write request"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `heaven post|put|patch|delete`, which sends a state-changing HTTP request to the active or specified environment. Protected environments prompt a human, but non-interactive agent sessions bypass that review path. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "family": null,
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "heaven",
+                        "heaven.cmd",
+                        "heaven.exe",
+                        "hv",
+                        "hv.cmd",
+                        "hv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--header",
+                        "-H",
+                        "--query",
+                        "-q",
+                        "--env",
+                        "-e",
+                        "--var",
+                        "-v",
+                        "--json",
+                        "--data",
+                        "-d",
+                        "--form",
+                        "-F",
+                        "--upload",
+                        "--bearer",
+                        "--basic",
+                        "--timeout",
+                        "-t",
+                        "--output-file",
+                        "-o",
+                        "--output",
+                        "--expect-status",
+                        "--expect-json",
+                        "--expect-contains",
+                        "--expect-time",
+                        "-n",
+                        "-c",
+                        "--max-p95",
+                        "--limit",
+                        "--search",
+                        "--base-url",
+                        "--requires-env",
+                        "--ignore"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "post",
+                        "put",
+                        "patch",
+                        "delete"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "permission_id": "command.heavens.permission.write-request",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.heavens.write-request",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "heaven",
+                            "heaven.cmd",
+                            "heaven.exe",
+                            "hv",
+                            "hv.cmd",
+                            "hv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--header",
+                            "-H",
+                            "--query",
+                            "-q",
+                            "--env",
+                            "-e",
+                            "--var",
+                            "-v",
+                            "--json",
+                            "--data",
+                            "-d",
+                            "--form",
+                            "-F",
+                            "--upload",
+                            "--bearer",
+                            "--basic",
+                            "--timeout",
+                            "-t",
+                            "--output-file",
+                            "-o",
+                            "--output",
+                            "--expect-status",
+                            "--expect-json",
+                            "--expect-contains",
+                            "--expect-time",
+                            "-n",
+                            "-c",
+                            "--max-p95",
+                            "--limit",
+                            "--search",
+                            "--base-url",
+                            "--requires-env",
+                            "--ignore"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "post",
+                            "put",
+                            "patch",
+                            "delete"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "heaven",
+                            "heaven.cmd",
+                            "heaven.exe",
+                            "hv",
+                            "hv.cmd",
+                            "hv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--header",
+                            "-H",
+                            "--query",
+                            "-q",
+                            "--env",
+                            "-e",
+                            "--var",
+                            "-v",
+                            "--json",
+                            "--data",
+                            "-d",
+                            "--form",
+                            "-F",
+                            "--upload",
+                            "--bearer",
+                            "--basic",
+                            "--timeout",
+                            "-t",
+                            "--output-file",
+                            "-o",
+                            "--output",
+                            "--expect-status",
+                            "--expect-json",
+                            "--expect-contains",
+                            "--expect-time",
+                            "-n",
+                            "-c",
+                            "--max-p95",
+                            "--limit",
+                            "--search",
+                            "--base-url",
+                            "--requires-env",
+                            "--ignore"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "post",
+                            "put",
+                            "patch",
+                            "delete"
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "title": "Heaven write-request help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Send the equivalent GET request first to confirm the target resource and environment.",
+                "Run against a dev or staging environment. The `--protected` prompt is interactive only and does not gate noninteractive agent runs."
+              ],
+              "severity": "high",
+              "title": "Heaven write request (POST/PUT/PATCH/DELETE)"
+            },
+            {
+              "action_classes": [
+                "Heaven flow run"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `heaven flow FILE.json`, which executes a chain of requests defined in a file, including write methods, with values extracted between steps. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "family": null,
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "heaven",
+                        "heaven.cmd",
+                        "heaven.exe",
+                        "hv",
+                        "hv.cmd",
+                        "hv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--header",
+                        "-H",
+                        "--query",
+                        "-q",
+                        "--env",
+                        "-e",
+                        "--var",
+                        "-v",
+                        "--json",
+                        "--data",
+                        "-d",
+                        "--form",
+                        "-F",
+                        "--upload",
+                        "--bearer",
+                        "--basic",
+                        "--timeout",
+                        "-t",
+                        "--output-file",
+                        "-o",
+                        "--output",
+                        "--expect-status",
+                        "--expect-json",
+                        "--expect-contains",
+                        "--expect-time",
+                        "-n",
+                        "-c",
+                        "--max-p95",
+                        "--limit",
+                        "--search",
+                        "--base-url",
+                        "--requires-env",
+                        "--ignore"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "flow"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "permission_id": "command.heavens.permission.flow-run",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.heavens.flow-run",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "heaven",
+                            "heaven.cmd",
+                            "heaven.exe",
+                            "hv",
+                            "hv.cmd",
+                            "hv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--header",
+                            "-H",
+                            "--query",
+                            "-q",
+                            "--env",
+                            "-e",
+                            "--var",
+                            "-v",
+                            "--json",
+                            "--data",
+                            "-d",
+                            "--form",
+                            "-F",
+                            "--upload",
+                            "--bearer",
+                            "--basic",
+                            "--timeout",
+                            "-t",
+                            "--output-file",
+                            "-o",
+                            "--output",
+                            "--expect-status",
+                            "--expect-json",
+                            "--expect-contains",
+                            "--expect-time",
+                            "-n",
+                            "-c",
+                            "--max-p95",
+                            "--limit",
+                            "--search",
+                            "--base-url",
+                            "--requires-env",
+                            "--ignore"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "flow"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "heaven",
+                            "heaven.cmd",
+                            "heaven.exe",
+                            "hv",
+                            "hv.cmd",
+                            "hv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--header",
+                            "-H",
+                            "--query",
+                            "-q",
+                            "--env",
+                            "-e",
+                            "--var",
+                            "-v",
+                            "--json",
+                            "--data",
+                            "-d",
+                            "--form",
+                            "-F",
+                            "--upload",
+                            "--bearer",
+                            "--basic",
+                            "--timeout",
+                            "-t",
+                            "--output-file",
+                            "-o",
+                            "--output",
+                            "--expect-status",
+                            "--expect-json",
+                            "--expect-contains",
+                            "--expect-time",
+                            "-n",
+                            "-c",
+                            "--max-p95",
+                            "--limit",
+                            "--search",
+                            "--base-url",
+                            "--requires-env",
+                            "--ignore"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "flow"
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "title": "Heaven flow-run help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Read the flow file and check every step's method and URL before running it.",
+                "Run the flow against a non-production environment first."
+              ],
+              "severity": "high",
+              "title": "Heaven flow run"
+            },
+            {
+              "action_classes": [
+                "Heaven bench load test"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `heaven bench`, which sends many concurrent requests to a target and can overload a service or trigger rate limits. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "family": null,
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "heaven",
+                        "heaven.cmd",
+                        "heaven.exe",
+                        "hv",
+                        "hv.cmd",
+                        "hv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--header",
+                        "-H",
+                        "--query",
+                        "-q",
+                        "--env",
+                        "-e",
+                        "--var",
+                        "-v",
+                        "--json",
+                        "--data",
+                        "-d",
+                        "--form",
+                        "-F",
+                        "--upload",
+                        "--bearer",
+                        "--basic",
+                        "--timeout",
+                        "-t",
+                        "--output-file",
+                        "-o",
+                        "--output",
+                        "--expect-status",
+                        "--expect-json",
+                        "--expect-contains",
+                        "--expect-time",
+                        "-n",
+                        "-c",
+                        "--max-p95",
+                        "--limit",
+                        "--search",
+                        "--base-url",
+                        "--requires-env",
+                        "--ignore"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "bench"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "permission_id": "command.heavens.permission.bench",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.heavens.bench",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "heaven",
+                            "heaven.cmd",
+                            "heaven.exe",
+                            "hv",
+                            "hv.cmd",
+                            "hv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--header",
+                            "-H",
+                            "--query",
+                            "-q",
+                            "--env",
+                            "-e",
+                            "--var",
+                            "-v",
+                            "--json",
+                            "--data",
+                            "-d",
+                            "--form",
+                            "-F",
+                            "--upload",
+                            "--bearer",
+                            "--basic",
+                            "--timeout",
+                            "-t",
+                            "--output-file",
+                            "-o",
+                            "--output",
+                            "--expect-status",
+                            "--expect-json",
+                            "--expect-contains",
+                            "--expect-time",
+                            "-n",
+                            "-c",
+                            "--max-p95",
+                            "--limit",
+                            "--search",
+                            "--base-url",
+                            "--requires-env",
+                            "--ignore"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "bench"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "heaven",
+                            "heaven.cmd",
+                            "heaven.exe",
+                            "hv",
+                            "hv.cmd",
+                            "hv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--header",
+                            "-H",
+                            "--query",
+                            "-q",
+                            "--env",
+                            "-e",
+                            "--var",
+                            "-v",
+                            "--json",
+                            "--data",
+                            "-d",
+                            "--form",
+                            "-F",
+                            "--upload",
+                            "--bearer",
+                            "--basic",
+                            "--timeout",
+                            "-t",
+                            "--output-file",
+                            "-o",
+                            "--output",
+                            "--expect-status",
+                            "--expect-json",
+                            "--expect-contains",
+                            "--expect-time",
+                            "-n",
+                            "-c",
+                            "--max-p95",
+                            "--limit",
+                            "--search",
+                            "--base-url",
+                            "--requires-env",
+                            "--ignore"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "bench"
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "title": "Heaven bench help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Start with a small request count and low concurrency (for example -n 10 -c 2).",
+                "Only benchmark systems you own or are authorized to load-test, and avoid production."
+              ],
+              "severity": "medium",
+              "title": "Heaven bench load test"
+            },
+            {
+              "action_classes": [
+                "Heaven request with TLS verification disabled"
+              ],
+              "default_mode": "review",
+              "description": "Identifies Heaven commands run with `--insecure` or `-k`, which skips TLS certificate verification and exposes the request and any credentials to interception. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "family": null,
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "heaven",
+                        "heaven.cmd",
+                        "heaven.exe",
+                        "hv",
+                        "hv.cmd",
+                        "hv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--header",
+                        "-H",
+                        "--query",
+                        "-q",
+                        "--env",
+                        "-e",
+                        "--var",
+                        "-v",
+                        "--json",
+                        "--data",
+                        "-d",
+                        "--form",
+                        "-F",
+                        "--upload",
+                        "--bearer",
+                        "--basic",
+                        "--timeout",
+                        "-t",
+                        "--output-file",
+                        "-o",
+                        "--output",
+                        "--expect-status",
+                        "--expect-json",
+                        "--expect-contains",
+                        "--expect-time",
+                        "-n",
+                        "-c",
+                        "--max-p95",
+                        "--limit",
+                        "--search",
+                        "--base-url",
+                        "--requires-env",
+                        "--ignore"
+                      ],
+                      "required_flags": [
+                        "--insecure"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "get",
+                        "post",
+                        "put",
+                        "patch",
+                        "delete",
+                        "head",
+                        "options",
+                        "run",
+                        "replay",
+                        "compare",
+                        "flow",
+                        "bench"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "heaven",
+                        "heaven.cmd",
+                        "heaven.exe",
+                        "hv",
+                        "hv.cmd",
+                        "hv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--header",
+                        "-H",
+                        "--query",
+                        "-q",
+                        "--env",
+                        "-e",
+                        "--var",
+                        "-v",
+                        "--json",
+                        "--data",
+                        "-d",
+                        "--form",
+                        "-F",
+                        "--upload",
+                        "--bearer",
+                        "--basic",
+                        "--timeout",
+                        "-t",
+                        "--output-file",
+                        "-o",
+                        "--output",
+                        "--expect-status",
+                        "--expect-json",
+                        "--expect-contains",
+                        "--expect-time",
+                        "-n",
+                        "-c",
+                        "--max-p95",
+                        "--limit",
+                        "--search",
+                        "--base-url",
+                        "--requires-env",
+                        "--ignore"
+                      ],
+                      "required_flags": [
+                        "-k"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "get",
+                        "post",
+                        "put",
+                        "patch",
+                        "delete",
+                        "head",
+                        "options",
+                        "run",
+                        "replay",
+                        "compare",
+                        "flow",
+                        "bench"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "permission_id": "command.heavens.permission.insecure-tls",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.heavens.insecure-tls",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "heaven",
+                            "heaven.cmd",
+                            "heaven.exe",
+                            "hv",
+                            "hv.cmd",
+                            "hv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--header",
+                            "-H",
+                            "--query",
+                            "-q",
+                            "--env",
+                            "-e",
+                            "--var",
+                            "-v",
+                            "--json",
+                            "--data",
+                            "-d",
+                            "--form",
+                            "-F",
+                            "--upload",
+                            "--bearer",
+                            "--basic",
+                            "--timeout",
+                            "-t",
+                            "--output-file",
+                            "-o",
+                            "--output",
+                            "--expect-status",
+                            "--expect-json",
+                            "--expect-contains",
+                            "--expect-time",
+                            "-n",
+                            "-c",
+                            "--max-p95",
+                            "--limit",
+                            "--search",
+                            "--base-url",
+                            "--requires-env",
+                            "--ignore"
+                          ],
+                          "required_flags": [
+                            "--insecure",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "get",
+                            "post",
+                            "put",
+                            "patch",
+                            "delete",
+                            "head",
+                            "options",
+                            "run",
+                            "replay",
+                            "compare",
+                            "flow",
+                            "bench"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "heaven",
+                            "heaven.cmd",
+                            "heaven.exe",
+                            "hv",
+                            "hv.cmd",
+                            "hv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--header",
+                            "-H",
+                            "--query",
+                            "-q",
+                            "--env",
+                            "-e",
+                            "--var",
+                            "-v",
+                            "--json",
+                            "--data",
+                            "-d",
+                            "--form",
+                            "-F",
+                            "--upload",
+                            "--bearer",
+                            "--basic",
+                            "--timeout",
+                            "-t",
+                            "--output-file",
+                            "-o",
+                            "--output",
+                            "--expect-status",
+                            "--expect-json",
+                            "--expect-contains",
+                            "--expect-time",
+                            "-n",
+                            "-c",
+                            "--max-p95",
+                            "--limit",
+                            "--search",
+                            "--base-url",
+                            "--requires-env",
+                            "--ignore"
+                          ],
+                          "required_flags": [
+                            "--insecure",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "get",
+                            "post",
+                            "put",
+                            "patch",
+                            "delete",
+                            "head",
+                            "options",
+                            "run",
+                            "replay",
+                            "compare",
+                            "flow",
+                            "bench"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "heaven",
+                            "heaven.cmd",
+                            "heaven.exe",
+                            "hv",
+                            "hv.cmd",
+                            "hv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--header",
+                            "-H",
+                            "--query",
+                            "-q",
+                            "--env",
+                            "-e",
+                            "--var",
+                            "-v",
+                            "--json",
+                            "--data",
+                            "-d",
+                            "--form",
+                            "-F",
+                            "--upload",
+                            "--bearer",
+                            "--basic",
+                            "--timeout",
+                            "-t",
+                            "--output-file",
+                            "-o",
+                            "--output",
+                            "--expect-status",
+                            "--expect-json",
+                            "--expect-contains",
+                            "--expect-time",
+                            "-n",
+                            "-c",
+                            "--max-p95",
+                            "--limit",
+                            "--search",
+                            "--base-url",
+                            "--requires-env",
+                            "--ignore"
+                          ],
+                          "required_flags": [
+                            "-k",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "get",
+                            "post",
+                            "put",
+                            "patch",
+                            "delete",
+                            "head",
+                            "options",
+                            "run",
+                            "replay",
+                            "compare",
+                            "flow",
+                            "bench"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "heaven",
+                            "heaven.cmd",
+                            "heaven.exe",
+                            "hv",
+                            "hv.cmd",
+                            "hv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--header",
+                            "-H",
+                            "--query",
+                            "-q",
+                            "--env",
+                            "-e",
+                            "--var",
+                            "-v",
+                            "--json",
+                            "--data",
+                            "-d",
+                            "--form",
+                            "-F",
+                            "--upload",
+                            "--bearer",
+                            "--basic",
+                            "--timeout",
+                            "-t",
+                            "--output-file",
+                            "-o",
+                            "--output",
+                            "--expect-status",
+                            "--expect-json",
+                            "--expect-contains",
+                            "--expect-time",
+                            "-n",
+                            "-c",
+                            "--max-p95",
+                            "--limit",
+                            "--search",
+                            "--base-url",
+                            "--requires-env",
+                            "--ignore"
+                          ],
+                          "required_flags": [
+                            "-k",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "get",
+                            "post",
+                            "put",
+                            "patch",
+                            "delete",
+                            "head",
+                            "options",
+                            "run",
+                            "replay",
+                            "compare",
+                            "flow",
+                            "bench"
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "title": "Heaven insecure-tls help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Install or trust the correct CA certificate instead of disabling verification.",
+                "Never combine --insecure with --bearer, --basic, or other credentials."
+              ],
+              "severity": "high",
+              "title": "Heaven request with TLS verification disabled"
+            }
+          ],
+          "safer_alternatives": [
+            "Use GET requests and `heaven compare` to inspect state before any write.",
+            "Target dev or staging. The `--protected` prompt is interactive only and does not gate noninteractive agent runs."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.aether-vault",
+          "command.agentbridge",
+          "command.agenticjobs",
+          "command.agentsocks",
+          "command.agi-memory",
+          "command.ai-dev",
+          "command.answerloops",
+          "command.appimg",
+          "command.batterycontrol",
+          "command.blitcp",
+          "command.blkcp",
+          "command.claude-tmux",
+          "command.cloudg",
+          "command.codesage",
+          "command.codex-migrate",
+          "command.cogext",
+          "command.crisp-tui",
+          "command.cs",
+          "command.ctty",
+          "command.dataman",
+          "command.dearmour",
+          "command.digline",
+          "command.dispat",
+          "command.envseal",
+          "command.errand",
+          "command.faf-cli",
+          "command.formicx",
+          "command.genclave",
+          "command.gitsync",
+          "command.golive",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.hashdup",
+          "command.heavens",
+          "command.iterlay",
+          "command.keibidrop",
+          "command.kelados",
+          "command.kim",
+          "command.kindling",
+          "command.kintsua",
+          "command.kranz",
+          "command.librarybridge",
+          "command.llmrig",
+          "command.macscope",
+          "command.master-of",
+          "command.mcp-agent-wire",
+          "command.mcp-agenthub",
+          "command.mcp-architecture-intelligence-platform",
+          "command.mcp-asdecided",
+          "command.mcp-aseprite",
+          "command.mcp-askjev",
+          "command.mcp-authyouragent",
+          "command.mcp-axpilot",
+          "command.mcp-azure-vm-pricing",
+          "command.mcp-brickproof-adb",
+          "command.mcp-ccm",
+          "command.mcp-cf-mail-mcp",
+          "command.mcp-ci-guard",
+          "command.mcp-clipugc",
+          "command.mcp-codex-claude-bridge",
+          "command.mcp-compose-bridge",
+          "command.mcp-contribos",
+          "command.mcp-dchub",
+          "command.mcp-debuganything",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-fetchsandbox",
+          "command.mcp-filesystem",
+          "command.mcp-ftp",
+          "command.mcp-g-krusch",
+          "command.mcp-garmin-coach-mcp",
+          "command.mcp-google-mcp-universal",
+          "command.mcp-google-workspace.gmail",
+          "command.mcp-halflife",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-jd-church-website-audit",
+          "command.mcp-kranz",
+          "command.mcp-krusch",
+          "command.mcp-krusch-agentic-proxy",
+          "command.mcp-krusch-context-mcp",
+          "command.mcp-krusch-git",
+          "command.mcp-kuuhaku",
+          "command.mcp-lattice-talk",
+          "command.mcp-leadline",
+          "command.mcp-loomdesk",
+          "command.mcp-mac-address-lookup",
+          "command.mcp-mail-server",
+          "command.mcp-melra",
+          "command.mcp-musiccontext",
+          "command.mcp-nuvui",
+          "command.mcp-obsidian-kanban",
+          "command.mcp-openscreenshot",
+          "command.mcp-ops-brain",
+          "command.mcp-pc-control",
+          "command.mcp-pinpoint",
+          "command.mcp-plim",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-quidli-connect",
+          "command.mcp-raw-browser",
+          "command.mcp-reaper",
+          "command.mcp-remote-pc-mcp",
+          "command.mcp-repo-notebook",
+          "command.mcp-run",
+          "command.mcp-seahorse",
+          "command.mcp-seminara",
+          "command.mcp-seq-mcp",
+          "command.mcp-setup-doctor",
+          "command.mcp-tether",
+          "command.mcp-thingery",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.mcp-xrpl-token-guard",
+          "command.mcp-xrpl-trading-lab",
+          "command.mcpguard",
+          "command.netdoctor",
+          "command.noodle",
+          "command.ollama",
+          "command.omairc",
+          "command.probe",
+          "command.pyrig",
+          "command.redpen",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.repro-surgeon",
+          "command.rls-saboteur",
+          "command.routed",
+          "command.rungs",
+          "command.salesforce.sf",
+          "command.seatbelt-guard",
+          "command.shellroute",
+          "command.showtime",
+          "command.simgit",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.skills-check-updates",
+          "command.snoboard",
+          "command.storage-clearer",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vaultsync",
+          "command.vttforge",
+          "command.where-are-we",
+          "command.x402shield",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.digitalocean",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "heavens delete /users/42 --env prod",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.heavens"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "case-1",
+      "rule_id": "command.heavens.write-request"
+    },
+    {
+      "command": "heavens flow checkout.json --env staging",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.heavens"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "case-2",
+      "rule_id": "command.heavens.flow-run"
+    },
+    {
+      "command": "heavens bench get /health -n 500 -c 25",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.heavens"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "case-3",
+      "rule_id": "command.heavens.bench"
+    },
+    {
+      "command": "heavens get https://staging.example.com/users --insecure",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.heavens"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "case-4",
+      "rule_id": "command.heavens.insecure-tls"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}
