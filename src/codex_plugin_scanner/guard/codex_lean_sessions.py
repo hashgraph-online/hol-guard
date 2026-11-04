@@ -13,6 +13,8 @@ from __future__ import annotations
 import importlib
 import json
 import sys
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TextIO
 
@@ -32,18 +34,22 @@ class LeanSessionsError(Exception):
         self.code = code
 
 
-def config_path(home_dir: Path) -> Path:
-    return home_dir / ".codex" / "config.toml"
+def config_path(home_dir: Path, environ: Mapping[str, str] | None = None) -> Path:
+    """The config file Codex reads: `CODEX_HOME` when the environment sets
+    it, as Codex does, else `~/.codex`."""
+
+    base = (environ or {}).get("CODEX_HOME", "").strip()
+    return (Path(base).expanduser() if base else home_dir / ".codex") / "config.toml"
 
 
-def status(home_dir: Path, guard_home: Path) -> dict[str, object]:
-    path = config_path(home_dir)
+def status(home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None = None) -> dict[str, object]:
+    path = config_path(home_dir, environ)
     _text, payload = _read_config(path)
     return _view(path, payload.get(KEY), _recorded(guard_home))
 
 
-def enable(home_dir: Path, guard_home: Path) -> dict[str, object]:
-    path = config_path(home_dir)
+def enable(home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None = None) -> dict[str, object]:
+    path = config_path(home_dir, environ)
     with _locked(guard_home, path):
         text, payload = _read_config(path)
         current, recorded = payload.get(KEY), _recorded(guard_home)
@@ -53,12 +59,16 @@ def enable(home_dir: Path, guard_home: Path) -> dict[str, object]:
         # config is untouched and status reads "off", never a value nobody owns.
         _write_record(guard_home, LIMIT)
         payload[KEY] = LIMIT
-        _write_config(path, payload, text)
+        try:
+            _write_config(path, payload, text)
+        except BaseException:
+            _clear_record(guard_home)
+            raise
         return _view(path, LIMIT, LIMIT)
 
 
-def disable(home_dir: Path, guard_home: Path) -> dict[str, object]:
-    path = config_path(home_dir)
+def disable(home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None = None) -> dict[str, object]:
+    path = config_path(home_dir, environ)
     with _locked(guard_home, path):
         text, payload = _read_config(path)
         current, recorded = payload.get(KEY), _recorded(guard_home)
@@ -139,10 +149,19 @@ def _clear_record(guard_home: Path) -> None:
     _record_path(guard_home).unlink(missing_ok=True)
 
 
-def _locked(guard_home: Path, path: Path):
+@contextmanager
+def _locked(guard_home: Path, path: Path) -> Iterator[None]:
     """Hold the same lock Guard's Codex install takes, so the two never write
-    the config file at the same time."""
+    the config file at the same time, and finish an interrupted hook install
+    first: its recovery checks the config is as it left it."""
 
+    from .codex_hook_file_integrity import CodexHookIntegrityError
+    from .codex_hook_recovery import recover_hook_publication
     from .codex_install_transaction import codex_install_transaction
 
-    return codex_install_transaction(guard_home, path, actor="lean-sessions")
+    with codex_install_transaction(guard_home, path, actor="lean-sessions"):
+        try:
+            recover_hook_publication(guard_home)
+        except CodexHookIntegrityError as error:
+            raise LeanSessionsError("codex_hooks_need_recovery") from error
+        yield

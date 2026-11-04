@@ -111,8 +111,56 @@ def test_a_config_guard_cannot_read_is_left_alone(tmp_path: Path) -> None:
     assert path.read_bytes() == before
 
 
+def test_codex_home_from_the_environment_is_the_config_changed(tmp_path: Path) -> None:
+    home, guard = homes(tmp_path)
+    codex_home = tmp_path / "codex-home"
+    environ = {"CODEX_HOME": str(codex_home)}
+
+    state = lean.enable(home, guard, environ)
+
+    assert state["config_path"] == str(codex_home / "config.toml")
+    assert tomllib.loads((codex_home / "config.toml").read_text(encoding="utf-8")) == {lean.KEY: lean.LIMIT}
+    assert not lean.config_path(home).exists()
+    assert lean.disable(home, guard, environ)["state"] == "off"
+
+
+def test_a_failed_config_write_leaves_no_ownership_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home, guard = homes(tmp_path)
+    path = write_config(home, USER_CONFIG)
+
+    def refuse(*_args: object, **_kwargs: object) -> None:
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(lean, "_write_config", refuse)
+    with pytest.raises(PermissionError):
+        lean.enable(home, guard)
+
+    assert lean._recorded(guard) is None
+    assert path.read_text(encoding="utf-8") == USER_CONFIG
+
+
+def test_an_interrupted_hook_install_stops_the_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import codex_hook_recovery
+    from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
+
+    home, guard = homes(tmp_path)
+    path = write_config(home, USER_CONFIG)
+
+    def blocked(_home: Path) -> bool:
+        raise CodexHookIntegrityError("codex_hook_recovery_config_conflict", "needs recovery")
+
+    monkeypatch.setattr(codex_hook_recovery, "recover_hook_publication", blocked)
+    with pytest.raises(lean.LeanSessionsError) as raised:
+        lean.enable(home, guard)
+
+    assert raised.value.code == "codex_hooks_need_recovery"
+    assert path.read_text(encoding="utf-8") == USER_CONFIG
+    assert lean._recorded(guard) is None
+
+
 def run(argv: list[str], home: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[int, str]:
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
     monkeypatch.setenv("USERPROFILE", str(home))
     parser = argparse.ArgumentParser()
     add_guard_root_parser(parser)

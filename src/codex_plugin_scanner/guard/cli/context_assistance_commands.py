@@ -119,6 +119,7 @@ def run_context_command(
 
 
 def _run_lean(args: argparse.Namespace, output: TextIO) -> int:
+    import os
     from pathlib import Path
 
     from ..codex_lean_sessions import LeanSessionsError, disable, enable, render, status
@@ -126,7 +127,7 @@ def _run_lean(args: argparse.Namespace, output: TextIO) -> int:
 
     operation = {"on": enable, "off": disable, "status": status}[args.lean_action]
     try:
-        state = operation(Path.home(), resolve_guard_home(args.guard_home))
+        state = operation(Path.home(), resolve_guard_home(args.guard_home), os.environ)
     except LeanSessionsError as error:
         return _lean_failure(args, output, error.code)
     except TimeoutError:
