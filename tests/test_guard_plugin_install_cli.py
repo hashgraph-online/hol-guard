@@ -461,6 +461,30 @@ def test_claude_code_installing_another_commit_is_rolled_back(
     assert install.recorded_installs(guard_home) == {}
 
 
+def test_claude_code_install_is_rolled_back_when_its_commit_cannot_be_read(
+    spec_file: Path, runtimes: FakeRuntimes, guard_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An install whose commit Guard cannot read back is not left in place."""
+
+    read = install.claude_state
+
+    def claude_state(*args: object, **kwargs: object) -> dict[str, object]:
+        if any(argv[:3] == ["claude", "plugin", "install"] for argv in runtimes.ran):
+            raise install._StoppedError("failed", "native_plugin_kit_unavailable")
+        return read(*args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(install, "claude_state", claude_state)
+    exit_code, _output, error = _install(spec_file, "--apply", "--yes", "--runtime", "claude-code")
+    assert exit_code != 0
+    assert "native_plugin_kit_unavailable" in error
+    assert "could not check which commit Claude Code installed" in error
+    assert runtimes.ran[-2:] == [
+        ["claude", "plugin", "uninstall", "toolgate@acme"],
+        ["claude", "plugin", "marketplace", "remove", "acme"],
+    ]
+    assert install.recorded_installs(guard_home) == {}
+
+
 def test_claude_code_already_at_another_commit_is_left_as_it_is(
     spec_file: Path, runtimes: FakeRuntimes, guard_home: Path
 ) -> None:

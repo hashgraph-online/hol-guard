@@ -1023,8 +1023,13 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
         return added
     try:
         found = _claude_install(claude_state(context.home, plugin_id))
-    except _StoppedError:
-        found = None
+    except _StoppedError as stop:
+        undone = _undo(program, ["claude", "plugin", "uninstall", plugin_id], context) + undo_marketplace()
+        raise _StoppedError(
+            "failed",
+            f"{stop} Guard could not check which commit Claude Code installed, so "
+            + (f"it tried to remove the plugin.{undone}" if undone else "it removed the plugin again."),
+        ) from None
     if found is None:
         raise _StoppedError(
             "failed",
