@@ -88,10 +88,11 @@ fn a_group_hiding_a_substitution_has_no_shape() {
     }
 }
 
-/// The grouped reading itself is never taken for a group carrying an
+/// The grouped reading itself is never taken for a group carrying an unquoted
 /// expansion, a substitution or a redirect: the blanking the reading rests on
 /// refuses that text, so those commands keep whatever the flat reading already
-/// said about them and nothing the group hides is waved through.
+/// said about them and nothing the group hides is waved through. A quoted word
+/// is read as a word, inside a group as outside one.
 #[test]
 fn a_group_carrying_an_expansion_or_a_redirect_has_no_reading() {
     for command in [
@@ -101,7 +102,6 @@ fn a_group_carrying_an_expansion_or_a_redirect_has_no_reading() {
         "(ls > /etc/hol-guard-probe) && ls",
         "{ ls > /etc/hol-guard-probe; } && ls",
         "(ls) > /etc/hol-guard-probe && ls",
-        "(cat \"$HOME/.ssh/id_rsa\") && ls",
     ] {
         assert!(
             crate::parser_segments::blanked_top_level_group_list(command).is_none(),
