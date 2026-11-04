@@ -39,8 +39,8 @@ pub(super) fn request_payload_identity(
     let Some(record) = payload.as_object() else {
         return Err("native_hook_payload_invalid".to_owned());
     };
-    // Event aliases and adapter timestamps are transport metadata, not request
-    // semantics. Event aliases are validated for agreement by
+    // Event aliases, adapter timestamps and the HTTP deadline hint are
+    // transport metadata, not request semantics. Event aliases are validated by
     // `authoritative_event`, then omitted here so a harness spelling change
     // cannot change an otherwise identical request. Timestamps are removed
     // only at the envelope root: a nested timestamp may be an actual tool
@@ -60,8 +60,17 @@ pub(super) fn request_payload_identity(
         "createdAt",
         "received_at",
         "receivedAt",
+        "guard_remaining_ms",
     ] {
         identity.remove(key);
+    }
+    // Each Codex hook bridge stamps its own process and wait budget. A retry
+    // starts another bridge, and live-decision revalidates the prepared input
+    // without the HTTP hint. None of these fields changes the reviewed action.
+    // Keep nested tool arguments and other harnesses' fields committed.
+    if harness == "codex" && event == "PreToolUse" {
+        identity.remove(crate::codex_hook_bridge::BROWSER_WAIT_PROCESS_KEY);
+        identity.remove(crate::codex_hook_bridge::BROWSER_WAIT_TIMEOUT_KEY);
     }
     // A retry of an unchanged action mints a new transport call ID: Pi's
     // `tool_call_id`, and the `tool_use_id` Claude Code, Codex and Cursor stamp

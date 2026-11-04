@@ -231,6 +231,58 @@ fn anchor_binds_the_action_it_was_approved_for() {
     assert_ne!(anchor(&other_harness, &published), baseline);
 }
 
+#[test]
+fn codex_approval_reaches_a_new_bridge_process_and_live_revalidation() {
+    let published = snapshot();
+    let mut request = review_envelope();
+    request.0.harness = "codex".into();
+    request.0.raw_payload["session_id"] = serde_json::json!("session-one");
+    request.0.raw_payload["tool_use_id"] = serde_json::json!("call-first");
+    request.0.raw_payload["guard_remaining_ms"] = serde_json::json!(60_000);
+    request.0.raw_payload["guard_codex_browser_wait_process"] =
+        serde_json::json!({"pid": 101, "startToken": "first"});
+    request.0.raw_payload["guard_codex_browser_wait_timeout_seconds"] = serde_json::json!(120);
+    let baseline = anchor(&request, &published);
+
+    let mut retry = request.0.clone();
+    retry.raw_payload["tool_use_id"] = serde_json::json!("call-retry");
+    retry.raw_payload["guard_remaining_ms"] = serde_json::json!(59_700);
+    retry.raw_payload["guard_codex_browser_wait_process"] =
+        serde_json::json!({"pid": 102, "startToken": "retry"});
+    retry.raw_payload["guard_codex_browser_wait_timeout_seconds"] = serde_json::json!(90);
+    assert_eq!(anchor(&retry, &published), baseline);
+
+    // The bridge sends its prepared input to live-decision, before the
+    // HTTP transport adds the remaining-time hint.
+    let mut completion = request.0.clone();
+    completion
+        .raw_payload
+        .as_object_mut()
+        .unwrap()
+        .remove("guard_remaining_ms");
+    assert_eq!(anchor(&completion, &published), baseline);
+
+    retry.raw_payload["session_id"] = serde_json::json!("session-other");
+    assert_ne!(anchor(&retry, &published), baseline);
+}
+
+#[test]
+fn codex_wait_metadata_is_transport_only_at_the_payload_root() {
+    let published = snapshot();
+    let mut request = review_envelope();
+    request.0.harness = "codex".into();
+    let baseline = anchor(&request, &published);
+    for key in [
+        "guard_remaining_ms",
+        "guard_codex_browser_wait_process",
+        "guard_codex_browser_wait_timeout_seconds",
+    ] {
+        let mut argument = request.0.clone();
+        argument.raw_payload["tool_input"][key] = serde_json::json!(1);
+        assert_ne!(anchor(&argument, &published), baseline, "{key}");
+    }
+}
+
 /// The model emits a new tool-use block for its retry, so Claude Code stamps
 /// the retry with a new `tool_use_id`. The approval the user gave for the
 /// command has to reach it, and only it: another command or another session

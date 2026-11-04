@@ -42,6 +42,7 @@ def test_lane_catalog_carries_retry_and_bash_lifecycle_cases():
     scenarios = load_catalog(APPROVAL_RETRY_CATALOG)
     by_id = {scenario.id: scenario for scenario in scenarios}
     assert set(by_id) == {
+        "approved-retry-scratch-directory-removal",
         "approved-retry-identical-command",
         "approved-retry-env-prefixed-command",
         "approved-retry-reworded-command",
