@@ -51,13 +51,18 @@ USER_BLOCK_REASON = "native_review_user_block"
 GRANT_REASON = "Gauntlet operator approved the reviewed action"
 
 
-def write_review_config(guard_home: Path, *, file_tool: bool = False) -> dict[str, Any]:
+def write_review_config(guard_home: Path, *, file_tool: bool = False, intrinsic_review: bool = False) -> dict[str, Any]:
     """Raise the fixture's review floor before its daemon starts.
 
     ``file_tool`` picks the floor that reaches the case's own action: the default floor
     for a case whose repeated action is a file-tool call, the subprocess floor otherwise.
     """
     guard_home.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if intrinsic_review:
+        # Removal already needs review. A blanket subprocess floor would also
+        # hold its successful PostToolUse and make the agent retry after deletion.
+        (guard_home / "config.toml").write_text('mode = "enforce"\nblocked_request_mode = "ask"\n', encoding="utf-8")
+        return {"intrinsic_review": True, "blocked_request_mode": "ask"}
     setting = "default_action" if file_tool else "subprocess_action"
     config = FILE_REVIEW_CONFIG if file_tool else REVIEW_CONFIG
     (guard_home / "config.toml").write_text(config, encoding="utf-8", newline="\n")

@@ -14,6 +14,7 @@ from .approval_retry_action import input_path, pinned_file_tool
 from .approval_retry_bash import BASH_LIFECYCLE_ORACLE, stage
 from .approval_retry_bash import assessment as bash_assessment
 from .approval_retry_bash import evidence as bash_evidence
+from .approval_retry_removal import CASE as SCRATCH_REMOVAL_CASE
 from .approval_retry_removal import assessment as scratch_removal_assessment
 from .approval_retry_removal import collect as collect_scratch_removal
 from .approval_retry_removal import stage as stage_scratch_removal
@@ -43,7 +44,11 @@ class OmpReview:
         stage_scratch_removal(fixture.workspace, scenario.id, case)
         # The floor has to reach the case's own action: a file-tool call is not a
         # subprocess, so the shell floor would leave its read unreviewed.
-        case["review_policy"] = write_review_config(self.guard_home, file_tool="bash" not in scenario.required_tools)
+        case["review_policy"] = write_review_config(
+            self.guard_home,
+            file_tool="bash" not in scenario.required_tools,
+            intrinsic_review=scenario.id == SCRATCH_REMOVAL_CASE,
+        )
 
     def approver(self, worker: Any) -> ReviewApprover:
         self.known_ids = {

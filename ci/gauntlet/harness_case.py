@@ -17,6 +17,7 @@ from .approval_retry import ReviewApprover, write_review_config
 from .approval_retry_bash import BASH_LIFECYCLE_ORACLE
 from .approval_retry_bash import evidence as bash_lifecycle_evidence
 from .approval_retry_bash import stage as stage_bash_lifecycle
+from .approval_retry_removal import CASE as SCRATCH_REMOVAL_CASE
 from .approval_retry_removal import collect as collect_scratch_removal
 from .approval_retry_removal import stage as stage_scratch_removal
 from .approval_rows import approval_rows
@@ -222,7 +223,11 @@ def run_harness_case(
                 # path has no other way in, because a hard block never queues an approval.
                 # A case whose repeated action is a file-tool call needs the default floor;
                 # the subprocess floor the shell cases raise never reaches a file tool.
-                case["review_policy"] = write_review_config(guard_home, file_tool="bash" not in scenario.required_tools)
+                case["review_policy"] = write_review_config(
+                    guard_home,
+                    file_tool="bash" not in scenario.required_tools,
+                    intrinsic_review=scenario.id == SCRATCH_REMOVAL_CASE,
+                )
             if CONNECTOR_PROFILE in scenario.profiles:
                 connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
                 connector_state = state_digest(connector.state_dir)
