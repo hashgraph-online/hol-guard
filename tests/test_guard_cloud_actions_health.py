@@ -30,6 +30,7 @@ from tests.cloud_actions_pairing_support import WS, FakeCloud, pair
 
 RESOURCE_PATH = "/api/guard/gateway/mcp"
 ACCESS = "exchanged-access"
+_REAL_RENEWAL_REFUSED = status_commands._renewal_refused  # pyright: ignore[reportPrivateUsage]
 _NOT_YET = {"jsonrpc": "2.0", "id": "hol-guard-status", "error": {"code": -32601, "message": "Method not found"}}
 
 
@@ -99,6 +100,8 @@ def cloud() -> Iterator[StandIn]:
 @pytest.fixture
 def paired(cloud: StandIn, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeCloud:
     monkeypatch.setenv("HOME", str(tmp_path / "user"))
+    # Guard Cloud renews this computer's access unless a test says otherwise.
+    monkeypatch.setattr(status_commands, "_renewal_refused", lambda _store: None)
     return pair(monkeypatch, FakeCloud(origin=cloud.origin))
 
 
@@ -313,6 +316,33 @@ def test_doctor_without_a_configured_ai_tool_exchanges_nothing(
 
     assert (code, payload["result"]) == (0, "ok")
     assert payload["checks"]["access"]["state"] == "not_checked"
+    assert paired.exchanged == [] and cloud.posts == []
+
+
+def test_doctor_without_an_ai_tool_asks_to_connect_again_after_revocation(
+    cloud: StandIn,
+    paired: FakeCloud,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from codex_plugin_scanner.guard.daemon import cloud_actions_status
+    from codex_plugin_scanner.guard.runtime import runner
+
+    def refresh(_store: object, *, force_refresh: bool = False, **_kwargs: object) -> dict[str, object]:
+        assert force_refresh
+        raise runner.GuardSyncAuthorizationExpiredError(runner._guard_oauth_reconnect_after_revoked_message())  # pyright: ignore[reportPrivateUsage]
+
+    monkeypatch.setattr(runner, "_resolve_guard_sync_auth_context", refresh)
+    monkeypatch.setattr(status_commands, "_renewal_refused", _REAL_RENEWAL_REFUSED)
+
+    code, payload, _ = _doctor(tmp_path, capsys)
+
+    assert (code, payload["result"]) == (4, "needs_connect")
+    assert payload["checks"]["access"] == {
+        "state": "reconnect",
+        "message": cloud_actions_status._RECONNECT_MESSAGE,  # pyright: ignore[reportPrivateUsage]
+    }
     assert paired.exchanged == [] and cloud.posts == []
 
 
