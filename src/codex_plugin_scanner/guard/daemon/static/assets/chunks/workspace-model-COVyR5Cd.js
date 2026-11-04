@@ -31,7 +31,7 @@ function cigarWillHelpPrompts(status) {
 const PROMPT_PROMISE = "Every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it.";
 const NO_FILES_YET = "Prompts get no project files yet, because reading project files is off.";
 function cigarHomeCopy(status, loading, running) {
-  if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. You can keep browsing.", setupHint: false };
+  if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. If you leave this page, it finishes when you come back.", setupHint: false };
   if (!status) {
     if (loading) return { headline: "Checking CIGAR", detail: "One moment.", setupHint: false };
     return { headline: "CIGAR status unavailable", detail: "Guard did not answer. Try refreshing the status.", setupHint: false };

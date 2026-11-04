@@ -27,6 +27,8 @@ export type CigarSetupRun = {
   stages: CigarSetupStage[];
   /** False only when the saved preference already permits a start, which needs no proof. */
   approval: boolean;
+  /** A safety check this tab already prepared; setup commits it instead of starting another. */
+  commit?: { job_id: string; expected_generation: string; reconnect: boolean };
 };
 export type CigarSetupPlan = { kind: "ready" } | { kind: "blocked"; block: CigarSetupBlock } | CigarSetupRun;
 
@@ -37,14 +39,17 @@ const blocked = (title: string, detail: string, tab?: CigarTab, wait?: boolean):
  * Choose the shortest path from native metadata. Every input is something
  * Guard already reported; the plan never invents a build, a URL or a path.
  */
-export function planCigarSetup(data: CigarVersionsData, options: { locked: boolean; dirty: boolean }): CigarSetupPlan {
+export function planCigarSetup(data: CigarVersionsData, options: { locked: boolean; dirty: boolean; adopt?: string | null }): CigarSetupPlan {
   const { state, catalog } = data;
   if (state.effective_enabled) return { kind: "ready" };
   if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
-  if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
-  if (data.jobs.some((job) => job.phase === "recovery_required")) {
-    return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
-  }
+  // Committing a held job needs the same clearance as any commit; a lock leaves it to the checks below.
+  const adopted = options.adopt && !cigarSetupHold(state, options)
+    ? planCigarAdopt(data.jobs.find((job) => job.job_id === options.adopt), state)
+    : null;
+  if (adopted) return adopted;
+  const busy = cigarBusyHold(state, data.jobs);
+  if (busy) return busy;
   if (options.locked || (state.restriction && !state.effective_preferences.enabled)) {
     // A managed computer can still start the selection its administrator already turned on.
     return planCigarStart(state, false) ?? blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
@@ -83,7 +88,47 @@ export function planCigarSetup(data: CigarVersionsData, options: { locked: boole
     approval: true };
 }
 
+/** A safety check this tab prepared that Guard still holds open: finish it rather than wait for it to expire. */
+export function planCigarAdopt(job: CigarVersionJob | undefined, state: ContextAssistanceStatus): CigarSetupRun | null {
+  if (state.effective_enabled || state.job || job?.family !== "selection" || !canCommitCigarJob(job, state)) return null;
+  return { kind: "run", runtime_id: job.target_runtime_id, build_id: null, interpreter_id: null, python_build_id: null,
+    stages: ["check", "start"], approval: true,
+    commit: { job_id: job.job_id, expected_generation: job.expected_generation, reconnect: job.reconnect_required } };
+}
+
+/** A running or paused task owns the selection, so nothing else may start until it settles. */
+function cigarBusyHold(state: ContextAssistanceStatus, jobs: CigarVersionJob[]): CigarSetupPlan | null {
+  if (state.job || jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
+  if (jobs.some((job) => job.phase === "recovery_required")) {
+    return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
+  }
+  return null;
+}
+
+/** Unsaved settings and an administrator's lock stop every path, including finishing a prepared check. */
+export function cigarSetupHold(state: ContextAssistanceStatus, options: { locked: boolean; dirty: boolean }): CigarSetupPlan | null {
+  if (state.effective_enabled) return null;
+  if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
+  if (options.locked || (state.restriction && !state.effective_preferences.enabled)) {
+    return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
+  }
+  return null;
+}
+
 /** A saved, selected preference can start without version metadata (for example on an older daemon). */
+// Without the version list: a lock or unsaved change stops adopting a held job, but a managed
+// computer can still start the selection its administrator already turned on.
+export function planCigarHeldJob(job: CigarVersionJob | undefined, state: ContextAssistanceStatus,
+  status: ContextAssistanceStatus | null, options: { locked: boolean; dirty: boolean }): CigarSetupPlan | null {
+  if (state.effective_enabled) return null;
+  if (options.dirty) return cigarSetupHold(state, options);
+  const busy = cigarBusyHold(state, job ? [job] : []);
+  if (busy) return busy;
+  const hold = cigarSetupHold(state, options);
+  if (!hold) return planCigarAdopt(job, state);
+  return planCigarStart(status, options.dirty) ? null : hold;
+}
+
 export function planCigarStart(status: ContextAssistanceStatus | null, dirty: boolean): CigarSetupRun | null {
   return status && canStartCigar(status, dirty) ? { kind: "run", runtime_id: status.preferences.runtime_id, build_id: null,
     interpreter_id: null, python_build_id: null, stages: ["start"], approval: false } : null;
@@ -207,7 +252,11 @@ export async function runCigarSetup(plan: CigarSetupRun, initial: ContextAssista
     state = next;
   }
   if (!runtime) throw new CigarSetupError("download", "Guard did not report an installed CIGAR copy.");
-  if (state.preferences.runtime_id !== runtime) {
+  if (plan.commit) {
+    deps.onStage("check");
+    const committed = await follow(deps, "check", { action: "commit", ...plan.commit }, proof, (item) => item.phase === "completed");
+    state = committed.state;
+  } else if (state.preferences.runtime_id !== runtime) {
     deps.onStage("check");
     const id = cigarVersionJobId();
     const ready = await follow(deps, "check",

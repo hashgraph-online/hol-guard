@@ -1,9 +1,9 @@
-import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, a9 as HiMiniCloud, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as fetchWithGuardAuth, b4 as isRecord$1, b5 as HiMiniArrowTopRightOnSquare, b6 as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b7 as HiMiniPauseCircle, h as harnessDisplayName, b8 as listContextAgentSessions, b9 as HiMiniLink, ba as revokeContextAgentSession, bb as grantContextWorkspace, bc as authorizeContextAgentSession, bd as ContextAssistanceApiError, be as ask, bf as parseContextScope, bg as validContextBrokerRevision, bh as isGuardDemoMode, bi as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bj as HiMiniCodeBracketSquare, bk as HiMiniFolder, u as HiMiniDocumentText, bl as HiMiniComputerDesktop, bm as HiMiniHome, k as HiMiniCheck, bn as HiMiniFolderPlus, bo as HiMiniClock, bp as listContextWorkspaces, bq as HiMiniFolderOpen, br as manageContextWorkspace, bs as compileWorkspaceContext, w as HiMiniArrowRight, bt as HiMiniChatBubbleLeftEllipsis, bu as HiMiniDocumentMagnifyingGlass, bv as HiMiniPower, bw as HiMiniEyeSlash, bx as HiMiniCpuChip, by as HiMiniAcademicCap, aa as HiMiniQuestionMarkCircle, M as HiMiniClipboardDocument, bz as HiMiniArrowLeft, bA as isCigarProducerVersion, bB as isCigarCoreLabel, a5 as HiMiniSparkles, bC as subscribeDashboardLocation, bD as HiMiniChatBubbleLeftRight, bE as HiMiniArrowUpCircle, bF as parseContextAssistanceStatus, bG as isCigarBuildIdentity, bH as fetchContextInstallations, bI as HiMiniCloudArrowDown, f as fetchContextAssistance, c as controlContextAssistance, bJ as commitDashboardLocation, bK as HiMiniArrowDownTray, bL as downloadBlob, bM as savedEvidenceCopy, bN as guardAwareHref, bO as fetchContextData, bP as forgetContextHistory, bQ as forgetSavedEvidence, bR as resolveProtectionLevelCopy, aA as fetchSettings, bS as fetchRuntimeSnapshot, bT as clearHarnessWatchOverrides, bU as withHarnessPosturePatch, P as updateSettings, bV as clearPolicy, bW as clearReviewQueue, bX as revokeApprovalGateCooldown, bY as disableApprovalGateTotp, bZ as importSettings, b_ as resetSettings, b$ as enrollApprovalGateTotp, c0 as verifyApprovalGateTotp, c1 as clearEvidence, c2 as exportDiagnostics, c3 as repairApprovalCenter, c4 as exportSettings, c5 as setupDesktopNotifications, a7 as EmptyState, c6 as settingsWatchBannerModel, c7 as WorkspacePageHeader, Z as WatchProtectionBanner, c8 as navigateFromAnchor, g as HiMiniChevronDown, c9 as humanizeList, ca as isProtectionPosture, cb as deriveProtectionPosture, cc as normalizeHarnessPostures, cd as approvalGateCooldownLabel } from "../guard-dashboard.js";
-import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-0zM1Juyt.js";
+import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, a9 as HiMiniCloud, aY as TabBar, H as HiMiniChevronRight, aZ as SelectMenu, S as SectionLabel, ab as useFocusTrap, a_ as fetchCloudReviewSettings, i as HiMiniArrowPath, a6 as HiMiniXMark, a$ as ApprovalProofFieldInputs, b0 as isApprovalProofSubmitDisabled, b1 as buildApprovalProofCredentials, b2 as changeCloudReviewSettings, b3 as fetchWithGuardAuth, b4 as isRecord$1, b5 as HiMiniArrowTopRightOnSquare, b6 as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ad as HiMiniExclamationTriangle, b7 as HiMiniPauseCircle, h as harnessDisplayName, b8 as listContextAgentSessions, b9 as HiMiniLink, ba as revokeContextAgentSession, bb as grantContextWorkspace, bc as authorizeContextAgentSession, bd as ContextAssistanceApiError, be as ask, bf as parseContextScope, bg as validContextBrokerRevision, bh as isGuardDemoMode, bi as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bj as HiMiniCodeBracketSquare, bk as HiMiniFolder, u as HiMiniDocumentText, bl as HiMiniComputerDesktop, bm as HiMiniHome, k as HiMiniCheck, bn as HiMiniFolderPlus, bo as HiMiniClock, bp as listContextWorkspaces, bq as HiMiniFolderOpen, br as manageContextWorkspace, bs as compileWorkspaceContext, w as HiMiniArrowRight, bt as HiMiniChatBubbleLeftEllipsis, bu as HiMiniDocumentMagnifyingGlass, bv as HiMiniPower, bw as HiMiniEyeSlash, bx as HiMiniCpuChip, by as HiMiniAcademicCap, aa as HiMiniQuestionMarkCircle, M as HiMiniClipboardDocument, bz as HiMiniArrowLeft, bA as isCigarProducerVersion, bB as isCigarCoreLabel, a5 as HiMiniSparkles, bC as subscribeDashboardLocation, bD as HiMiniChatBubbleLeftRight, bE as HiMiniArrowUpCircle, bF as parseContextAssistanceStatus, bG as isCigarBuildIdentity, bH as fetchContextInstallations, bI as HiMiniCloudArrowDown, bJ as turnOnJob, bK as shouldResumeTurnOn, bL as turnOnRequestedAt, bM as forgetTurnOn, bN as rememberTurnOn, bO as forgetTurnOnClick, bP as rememberTurnOnJob, f as fetchContextAssistance, c as controlContextAssistance, bQ as commitDashboardLocation, bR as HiMiniArrowDownTray, bS as downloadBlob, bT as savedEvidenceCopy, bU as guardAwareHref, bV as fetchContextData, bW as forgetContextHistory, bX as forgetSavedEvidence, bY as resolveProtectionLevelCopy, aA as fetchSettings, bZ as fetchRuntimeSnapshot, b_ as clearHarnessWatchOverrides, b$ as withHarnessPosturePatch, P as updateSettings, c0 as clearPolicy, c1 as clearReviewQueue, c2 as revokeApprovalGateCooldown, c3 as disableApprovalGateTotp, c4 as importSettings, c5 as resetSettings, c6 as enrollApprovalGateTotp, c7 as verifyApprovalGateTotp, c8 as clearEvidence, c9 as exportDiagnostics, ca as repairApprovalCenter, cb as exportSettings, cc as setupDesktopNotifications, a7 as EmptyState, cd as settingsWatchBannerModel, ce as WorkspacePageHeader, Z as WatchProtectionBanner, cf as navigateFromAnchor, g as HiMiniChevronDown, cg as humanizeList, ch as isProtectionPosture, ci as deriveProtectionPosture, cj as normalizeHarnessPostures, ck as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-5oF57AlU.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
-import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-C0X7QXA-.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-o4J5gv4p.js";
-import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-Do0eMrgH.js";
+import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-CFbrhi6J.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-BJqRCi0R.js";
+import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-COVyR5Cd.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
   if (typeof count2 === "number" && count2 > 0) {
@@ -5114,7 +5114,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "size-4" }),
             "Refresh list"
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: locked || scopes.length === 0, onClick: () => manage("clear"), children: "Remove all projects" })
+          scopes.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: locked, onClick: () => manage("clear"), children: "Remove all projects" }) : null
         ] }) : null
       ] }),
       !listable ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty, children: "Turn on CIGAR to pick project folders. Folders you already picked come back when it is on." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -5123,7 +5123,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
         !loaded ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: empty, children: "Loading your folders…" }) : scopes.length === 0 ? !error && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: empty, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolderOpen, { "aria-hidden": "true", className: "mx-auto mb-2 size-6 text-brand-dark/35" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No projects yet." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/60", children: "You don't need one: CIGAR finds the project each app is open in. Add one below to pick the exact files." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/60", children: "Add one below only if you want to pick the exact files." })
         ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: `${id2}-query`, className: fieldLabel, children: "Try it: what would you ask your AI?" }),
@@ -5898,10 +5898,10 @@ function planCigarSetup(data, options) {
   const { state, catalog } = data;
   if (state.effective_enabled) return { kind: "ready" };
   if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
-  if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
-  if (data.jobs.some((job) => job.phase === "recovery_required")) {
-    return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
-  }
+  const adopted = options.adopt && !cigarSetupHold(state, options) ? planCigarAdopt(data.jobs.find((job) => job.job_id === options.adopt), state) : null;
+  if (adopted) return adopted;
+  const busy = cigarBusyHold(state, data.jobs);
+  if (busy) return busy;
   if (options.locked || state.restriction && !state.effective_preferences.enabled) {
     return planCigarStart(state, false) ?? blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
   }
@@ -5948,6 +5948,43 @@ function planCigarSetup(data, options) {
     stages: [...pythonBuild ? ["python"] : [], "download", "check", "start"],
     approval: true
   };
+}
+function planCigarAdopt(job, state) {
+  if (state.effective_enabled || state.job || job?.family !== "selection" || !canCommitCigarJob(job, state)) return null;
+  return {
+    kind: "run",
+    runtime_id: job.target_runtime_id,
+    build_id: null,
+    interpreter_id: null,
+    python_build_id: null,
+    stages: ["check", "start"],
+    approval: true,
+    commit: { job_id: job.job_id, expected_generation: job.expected_generation, reconnect: job.reconnect_required }
+  };
+}
+function cigarBusyHold(state, jobs) {
+  if (state.job || jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
+  if (jobs.some((job) => job.phase === "recovery_required")) {
+    return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
+  }
+  return null;
+}
+function cigarSetupHold(state, options) {
+  if (state.effective_enabled) return null;
+  if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
+  if (options.locked || state.restriction && !state.effective_preferences.enabled) {
+    return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
+  }
+  return null;
+}
+function planCigarHeldJob(job, state, status, options) {
+  if (state.effective_enabled) return null;
+  if (options.dirty) return cigarSetupHold(state, options);
+  const busy = cigarBusyHold(state, job ? [job] : []);
+  if (busy) return busy;
+  const hold = cigarSetupHold(state, options);
+  if (!hold) return planCigarAdopt(job, state);
+  return planCigarStart(status, options.dirty) ? null : hold;
 }
 function planCigarStart(status, dirty) {
   return status && canStartCigar(status, dirty) ? {
@@ -6070,7 +6107,11 @@ async function runCigarSetup(plan, initial2, deps, proof) {
     state = next;
   }
   if (!runtime) throw new CigarSetupError("download", "Guard did not report an installed CIGAR copy.");
-  if (state.preferences.runtime_id !== runtime) {
+  if (plan.commit) {
+    deps.onStage("check");
+    const committed = await follow(deps, "check", { action: "commit", ...plan.commit }, proof, (item) => item.phase === "completed");
+    state = committed.state;
+  } else if (state.preferences.runtime_id !== runtime) {
     deps.onStage("check");
     const id2 = cigarVersionJobId();
     const ready = await follow(
@@ -7660,6 +7701,16 @@ async function cancelJob(job) {
     }
   }
 }
+async function fetchOwnJob(signal) {
+  const id2 = turnOnJob();
+  if (!id2) return null;
+  try {
+    const reply = await requestCigarVersions({ action: "job", job_id: id2 }, void 0, signal);
+    return { job: parseCigarVersionJob(reply.result), state: reply.state };
+  } catch {
+    return null;
+  }
+}
 const wait = (ms, signal) => new Promise((resolve) => {
   const timer = setTimeout(resolve, ms);
   signal.addEventListener("abort", () => {
@@ -7671,6 +7722,7 @@ function useCigarOneClick(options) {
   const [data, setData] = reactExports.useState(null);
   const [loadError, setLoadError] = reactExports.useState(null);
   const [run, setRun] = reactExports.useState({ phase: "idle" });
+  const [own, setOwn] = reactExports.useState(null);
   const controller = reactExports.useRef(null);
   const activeJob = reactExports.useRef(null);
   const starting = reactExports.useRef(false);
@@ -7685,8 +7737,12 @@ function useCigarOneClick(options) {
       if (!mounted.current || current !== revision.current) return;
       setData(value);
       setLoadError(null);
+      setOwn(null);
     } catch (cause) {
+      const job = await fetchOwnJob(AbortSignal.timeout(15e3));
       if (!mounted.current || current !== revision.current) return;
+      setOwn(job);
+      if (job) latest.current.publish(job.state);
       setLoadError(cause instanceof Error ? cause.message : "Guard did not report CIGAR setup details.");
     }
   }, []);
@@ -7700,15 +7756,31 @@ function useCigarOneClick(options) {
     };
   }, [refresh]);
   const plan = reactExports.useMemo(
-    () => data ? planCigarSetup({ ...data, state: options.status ?? data.state }, { locked: options.locked, dirty: options.dirty }) : planCigarStart(options.status, options.dirty),
-    [data, options.status, options.locked, options.dirty]
+    () => data ? planCigarSetup({ ...data, state: options.status ?? data.state }, { locked: options.locked, dirty: options.dirty, adopt: turnOnJob() }) : (own && planCigarHeldJob(own.job, options.status ?? own.state, options.status, options)) ?? planCigarStart(options.status, options.dirty),
+    [data, own, options.status, options.locked, options.dirty]
   );
-  const waiting = run.phase === "idle" && plan?.kind === "blocked" && plan.block.wait === true;
+  const waiting = run.phase === "idle" && (plan?.kind === "blocked" && plan.block.wait === true || data === null && own !== null && cigarJobPending(own.job));
   reactExports.useEffect(() => {
     if (!waiting) return;
     const timer = setInterval(() => void refresh(), 3e3);
     return () => clearInterval(timer);
   }, [waiting, refresh]);
+  const resumed = reactExports.useRef(false);
+  const resume = (data !== null || own !== null) && run.phase === "idle" && !resumed.current && options.active && !options.disabled && shouldResumeTurnOn(
+    turnOnRequestedAt(),
+    Date.now(),
+    options.status ?? data?.state ?? own?.state ?? null,
+    plan,
+    options.gate?.enabled === true
+  );
+  reactExports.useEffect(() => {
+    if (!resume) return;
+    resumed.current = true;
+    void execute();
+  }, [resume]);
+  reactExports.useEffect(() => {
+    if (options.status?.effective_enabled) forgetTurnOn();
+  }, [options.status?.effective_enabled]);
   async function execute(proof) {
     if (running.current || latest.current.disabled || !latest.current.active) return;
     running.current = true;
@@ -7719,23 +7791,39 @@ function useCigarOneClick(options) {
     let stage = null;
     let planned = null;
     let progressed = false;
+    rememberTurnOn(Date.now());
     try {
+      let failure2 = null;
       const fresh = await loadCigarVersionsData(abort.signal).catch((cause) => {
-        if (planCigarStart(latest.current.status, latest.current.dirty)) return null;
-        throw cause;
+        failure2 = cause;
+        return null;
       });
       if (abort.signal.aborted) throw new CigarSetupStopped();
+      let initial2 = fresh?.state ?? latest.current.status;
+      let next = null;
       if (fresh) {
         setData(fresh);
         latest.current.publish(fresh.state);
+        next = planCigarSetup(fresh, { locked: latest.current.locked, dirty: latest.current.dirty, adopt: turnOnJob() });
+      } else {
+        const job = await fetchOwnJob(abort.signal);
+        if (abort.signal.aborted) throw new CigarSetupStopped();
+        next = job && planCigarHeldJob(job.job, job.state, latest.current.status, latest.current);
+        if (job && next) {
+          initial2 = job.state;
+          latest.current.publish(job.state);
+        }
+        next ??= planCigarStart(latest.current.status, latest.current.dirty);
+        if (!next) throw failure2;
       }
-      const initial2 = fresh?.state ?? latest.current.status;
-      const next = fresh ? planCigarSetup(fresh, { locked: latest.current.locked, dirty: latest.current.dirty }) : planCigarStart(latest.current.status, latest.current.dirty);
       if (!next || next.kind !== "run" || !initial2) {
+        if (next?.kind === "blocked") forgetTurnOnClick();
+        else forgetTurnOn();
         setRun({ phase: "idle" });
         return;
       }
       if (latest.current.gate?.enabled && next.approval && !proof) {
+        forgetTurnOnClick();
         setRun({ phase: "proof", plan: next, error: null });
         return;
       }
@@ -7772,6 +7860,7 @@ function useCigarOneClick(options) {
         stopped: () => abort.signal.aborted,
         onJob: (id2) => {
           activeJob.current = id2;
+          if (id2 && stage === "check") rememberTurnOnJob(id2);
         },
         onStage: (value) => {
           stage = value;
@@ -7785,9 +7874,12 @@ function useCigarOneClick(options) {
           if (mounted.current) latest.current.onSaved(config, previous);
         }
       });
+      forgetTurnOn();
       if (mounted.current) setRun({ phase: "idle" });
     } catch (cause) {
       if (!mounted.current) return;
+      if (cause instanceof CigarSetupError && cause.needsProof) forgetTurnOnClick();
+      else forgetTurnOn();
       if (cause instanceof CigarSetupStopped || abort.signal.aborted) setRun({ phase: "idle" });
       else if (cause instanceof CigarSetupError && cause.needsProof) {
         const error = progressed ? "Your approval expired while Guard was working. The finished steps are kept. Approve once more to finish." : proof ? "That approval did not work. Try again." : null;
@@ -7815,10 +7907,14 @@ function useCigarOneClick(options) {
     busy: run.phase === "running",
     start: () => void execute(),
     confirm: (proof) => void execute(proof),
-    cancelProof: () => setRun({ phase: "idle" }),
+    cancelProof: () => {
+      forgetTurnOn();
+      setRun({ phase: "idle" });
+    },
     dismiss: () => setRun({ phase: "idle" }),
     /** Stop always wins: abort in-flight polling so no later step runs. */
     stop: () => {
+      forgetTurnOn();
       const job = activeJob.current, turnOff = starting.current;
       activeJob.current = null;
       starting.current = false;
