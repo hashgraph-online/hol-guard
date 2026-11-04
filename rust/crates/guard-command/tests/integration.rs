@@ -57,6 +57,7 @@ pub mod package_request_redaction_parity;
 pub mod portable_command_source_fixtures;
 pub mod pretool_agent_metadata;
 pub mod pretool_bare_assignment_lists;
+pub mod pretool_blank_structured_field;
 pub mod pretool_brew_reads;
 pub mod pretool_bun_eval;
 pub mod pretool_cd_canonical_workspace;
