@@ -305,6 +305,7 @@ impl CloudContext<'_> {
             Some(self.workspace_fingerprint),
             self.bundle_meta,
             &self.failure_decision(),
+            self.fail_closed_decision(),
         ) {
             return (Some(failed), None);
         }
