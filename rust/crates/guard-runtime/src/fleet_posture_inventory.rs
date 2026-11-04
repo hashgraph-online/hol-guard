@@ -25,6 +25,8 @@ use crate::runner_authority_op::{KindResult, ERR_INVALID};
 mod aibom;
 #[path = "fleet_posture_plan.rs"]
 mod plan;
+#[path = "fleet_posture_sections.rs"]
+mod sections;
 #[path = "fleet_posture_selection.rs"]
 mod selection;
 #[path = "fleet_posture_tools.rs"]
@@ -307,6 +309,8 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "fleet_inventory_items" => items(args),
         "fleet_posture_build" => build(args),
         "fleet_aibom_rows" => aibom::dispatch(args),
+        "fleet_policy_section" => sections::policy(args),
+        "fleet_runtime_posture" => sections::runtimes(args),
         _ => Err(ERR_INVALID),
     }
 }
