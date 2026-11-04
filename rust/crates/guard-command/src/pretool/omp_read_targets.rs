@@ -230,6 +230,15 @@ fn bounded_selector_path(
         return BoundedSelectorPath::NotSelector;
     }
     let path = value.strip_prefix(r"\\?\").unwrap_or(value);
+    // A URL is never a selector. Split at its last colon, `file://host/a.md`
+    // reads as base `file` plus a "selector" that only looked like one when
+    // the path held a digit; otherwise the URL text passed as a project path.
+    let file_url = path
+        .split_once(':')
+        .is_some_and(|(scheme, rest)| scheme.eq_ignore_ascii_case("file") && rest.starts_with('/'));
+    if path.contains("://") || file_url {
+        return BoundedSelectorPath::Unsupported;
+    }
     let Some((base, selector)) = path.rsplit_once(':') else {
         return BoundedSelectorPath::NotSelector;
     };
@@ -268,7 +277,7 @@ fn bounded_selector_path(
         Err(_) => {}
     }
 
-    if base.is_empty() || base.contains("://") || path.split(['/', '\\']).any(|part| part == "..") {
+    if base.is_empty() || path.split(['/', '\\']).any(|part| part == "..") {
         return if selector_like {
             BoundedSelectorPath::Unsupported
         } else {
