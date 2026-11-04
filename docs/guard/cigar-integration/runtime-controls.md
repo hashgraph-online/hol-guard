@@ -38,6 +38,8 @@ Codex sends the whole conversation with every model call, so a long session keep
 
 Guard records the value it wrote and only ever removes that value. If your config already sets a limit, or you change Guard's value later, the command reports `yours` and leaves the file as it is. The edit keeps your comments and layout, takes the same lock as Guard's Codex hook install, and refuses to write over a config file it cannot parse. This command edits the Codex config directly and does not need the CIGAR service to be running.
 
+The dashboard's CIGAR **Settings** tab has the same control as a switch, **Keep long Codex sessions lean**. It shows the current state, asks for the approval Guard requires for settings changes when an approval gate is on, and shows `yours` as a locked switch with the limit your config already sets.
+
 Keep Guard's desktop app or daemon running for `check`, `start` and context tools. These commands control the existing service; they do not launch a persistent Guard host. If a standalone CLI invocation accepts a job but subsequent status reports `runtime_not_verified`, open Guard and explicitly start assistance again. Off-state status and runtime listing remain available.
 
 ## Runtime requirement
