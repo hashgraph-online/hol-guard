@@ -22050,6 +22050,19 @@
       "expect": "allow"
     },
     {
+      "id": "omp-glob-blank-path",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "path": ""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "omp-glob-recursive-sh",
       "fix_area": "omp",
       "harnesses": [
