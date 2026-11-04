@@ -83,6 +83,7 @@ class Cloud:
     answers: list[object] = field(default_factory=list)
     requests: list[urllib.request.Request] = field(default_factory=list)
     proofs: list[str | None] = field(default_factory=list)
+    proof_tokens: list[object] = field(default_factory=list)
 
     def urlopen(self, request: urllib.request.Request, timeout: float) -> io.BytesIO:
         del timeout
@@ -121,6 +122,7 @@ def cloud(monkeypatch: pytest.MonkeyPatch) -> Cloud:
     def sign(**kwargs: object) -> str:
         nonce = kwargs["nonce"]
         fake.proofs.append(nonce if isinstance(nonce, str) else None)
+        fake.proof_tokens.append(kwargs.get("access_token"))
         return f"proof-{len(fake.proofs)}"
 
     monkeypatch.setattr(runner, "_sign_guard_dpop_proof", sign)
@@ -146,6 +148,8 @@ def test_exchange_names_the_ai_tool_and_signs_with_the_pairing_key(store: GuardS
         "resource": RESOURCE,
         "requested_application_id": "codex",
     }
+    # Guard Cloud checks the proof's ath against the subject token.
+    assert cloud.proof_tokens == ["pairing-access"]
 
 
 def test_exchange_answers_a_proof_nonce_challenge(store: GuardStore, cloud: Cloud) -> None:

@@ -72,12 +72,19 @@ def disable(home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None 
     with _locked(guard_home, path):
         text, payload = _read_config(path)
         current, recorded = payload.get(KEY), _recorded(guard_home, path)
-        if recorded is not None and current == recorded:
-            del payload[KEY]
-            _write_config(path, payload, text)
-            current = None
-        _write_record(guard_home, path, None)
-        return _view(path, current, None)
+        if recorded is None or current != recorded:
+            _write_record(guard_home, path, None)
+            return _view(path, current, None)
+        del payload[KEY]
+        _write_config(path, payload, text)
+        # A record left behind would claim a value the user sets later, so a
+        # failed removal puts the config back as it was.
+        try:
+            _write_record(guard_home, path, None)
+        except BaseException:
+            _restore_config(path, text)
+            raise
+        return _view(path, None, None)
 
 
 def render(state: dict[str, object], output: TextIO) -> None:
@@ -125,6 +132,13 @@ def _write_config(path: Path, payload: dict[str, object], original: str | None) 
     from .codex_hook_integrity import atomic_write_text
 
     atomic_write_text(path, dump_toml(payload, original=original), mode=0o600)
+
+
+def _restore_config(path: Path, original: str | None) -> None:
+    from .codex_hook_integrity import atomic_write_text
+
+    if original is not None:
+        atomic_write_text(path, original, mode=0o600)
 
 
 def _record_path(guard_home: Path) -> Path:

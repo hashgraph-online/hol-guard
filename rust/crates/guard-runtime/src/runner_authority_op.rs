@@ -290,6 +290,10 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
         "dashboard_reconnect" => {
             crate::dashboard_reconnect::dispatch(&request.args, &request.guard_home)
         }
+        // The saved Cloud actions check lives in that home.
+        "cloud_actions_status" => {
+            crate::cloud_actions_status::dispatch(&request.args, &request.guard_home)
+        }
         _ => dispatch(&request.kind, &request.args),
     }
 }
