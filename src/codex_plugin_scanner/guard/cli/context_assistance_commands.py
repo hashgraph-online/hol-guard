@@ -27,6 +27,14 @@ def configure_context_parser(subparsers: argparse._SubParsersAction[argparse.Arg
         action.add_argument("--guard-home", default=argparse.SUPPRESS)
         action.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
 
+    lean = actions.add_parser(
+        "lean", help="Have Codex sum up older turns sooner, so long sessions stay small (on, off or status)"
+    )
+    lean.set_defaults(context_kind="lean")
+    lean.add_argument("lean_action", nargs="?", choices=("on", "off", "status"), default="status")
+    lean.add_argument("--guard-home", default=argparse.SUPPRESS)
+    lean.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+
     from .context_assistance_versions_commands import configure
 
     configure(actions)
@@ -42,6 +50,8 @@ def run_context_command(
     from ..native_context_assistance import ContextAssistanceError, control
 
     output = output_stream if output_stream is not None else sys.stdout
+    if args.context_kind == "lean":
+        return _run_lean(args, output)
     try:
         home = resolve_guard_home(args.guard_home)
         if args.context_kind == "versions":
@@ -106,3 +116,33 @@ def run_context_command(
         file=output,
     )
     return 0
+
+
+def _run_lean(args: argparse.Namespace, output: TextIO) -> int:
+    from pathlib import Path
+
+    from ..codex_lean_sessions import LeanSessionsError, disable, enable, render, status
+    from ..config import resolve_guard_home
+
+    operation = {"on": enable, "off": disable, "status": status}[args.lean_action]
+    try:
+        state = operation(Path.home(), resolve_guard_home(args.guard_home))
+    except LeanSessionsError as error:
+        return _lean_failure(args, output, error.code)
+    except TimeoutError:
+        return _lean_failure(args, output, "codex_config_busy")
+    except (OSError, RuntimeError, ValueError):
+        return _lean_failure(args, output, "codex_config_unavailable")
+    if args.json:
+        print(json.dumps(state, sort_keys=True), file=output)
+    else:
+        render(state, output)
+    return 0
+
+
+def _lean_failure(args: argparse.Namespace, output: TextIO, code: str) -> int:
+    if args.json:
+        print(json.dumps({"schema": "guard-codex-lean-sessions.v1", "status": "error", "code": code}), file=output)
+    else:
+        print(f"Guard could not change the Codex config ({code}). Nothing was changed.", file=output)
+    return 1
