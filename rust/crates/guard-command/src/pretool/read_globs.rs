@@ -95,7 +95,11 @@ fn unmatched_pattern_read(value: &str, context: super::super::PathContext<'_>) -
         let Some(name) = name.to_str() else {
             return false;
         };
-        if wildcard_matches(pattern.as_bytes(), name.as_bytes()) {
+        // `?` matches one byte here and one character in a UTF-8 shell, so a
+        // non-ASCII name this matcher passes over may be the very name the
+        // shell expands the pattern to. The expanded proof refuses such a
+        // directory for the same reason.
+        if !name.is_ascii() || wildcard_matches(pattern.as_bytes(), name.as_bytes()) {
             return false;
         }
     }

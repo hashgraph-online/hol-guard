@@ -243,5 +243,13 @@ fn an_unmatched_pattern_reads_nothing() {
     std::fs::create_dir_all(workspace.join("sub/nested")).unwrap();
     assert!(!super::bounded_glob_file_read_target("sub/*ed", reader));
 
+    // `?` matches one byte here and one character in a UTF-8 shell, so a
+    // directory holding a non-ASCII name is one this proof cannot answer
+    // for: `?.pem` finds no byte-level match while the shell expands it to
+    // the credential beside it.
+    std::fs::write(workspace.join("sub/\u{e9}.pem"), "key\n").unwrap();
+    assert!(!super::bounded_glob_file_read_target("sub/?.pem", reader));
+    assert!(!super::bounded_glob_file_read_target("sub/*.md", reader));
+
     let _ = std::fs::remove_dir_all(&root);
 }
