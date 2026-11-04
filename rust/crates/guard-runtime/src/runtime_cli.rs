@@ -110,6 +110,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = desktop_core_onedir::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if trust_attestation_key::is_command(command) && flag == "--stdin" => {
+            let response = trust_attestation_key::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if codex_hook_trust::is_command(command) && flag == "--stdin" => {
             let response = codex_hook_trust::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

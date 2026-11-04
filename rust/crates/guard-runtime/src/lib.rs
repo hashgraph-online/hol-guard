@@ -1114,6 +1114,7 @@ mod system_proxies;
 mod temporary_mcp_grant;
 mod tool_action_identity_op;
 mod totp;
+mod trust_attestation_key;
 mod trust_attestation_shape;
 mod trust_attestation_verify_op;
 #[cfg(test)]

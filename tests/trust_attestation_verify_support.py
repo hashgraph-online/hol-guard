@@ -9,6 +9,7 @@ client to pin what the op decides against attestations Guard signed.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,8 +24,7 @@ from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GuardTrustAttestationSigningConfig,
     GuardTrustAttestationVerificationKey,
-    _load_private_key,
-    _public_key_fingerprint,
+    _normalize_pem,
 )
 
 TRUST_ATTESTATION_VERIFY_FEATURE = "trust-attestation-verify-v1"
@@ -114,7 +114,7 @@ class GuardTrustAttestationVerificationPolicy:
 def build_trust_attestation_verification_key(
     config: GuardTrustAttestationSigningConfig,
 ) -> GuardTrustAttestationVerificationKey:
-    private_key = _load_private_key(config.private_key_pem)
+    private_key = serialization.load_pem_private_key(config.private_key_pem.encode("utf-8"), password=None)
     public_key_pem = (
         private_key.public_key()
         .public_bytes(
@@ -127,9 +127,15 @@ def build_trust_attestation_verification_key(
     return GuardTrustAttestationVerificationKey(
         key_id=config.active_key_id,
         public_key_pem=public_key_pem,
-        fingerprint_sha256=_public_key_fingerprint(public_key_pem),
+        fingerprint_sha256=public_key_fingerprint(public_key_pem),
         public_jwk_thumbprint=config.public_jwk_thumbprint,
     )
+
+
+def public_key_fingerprint(public_key_pem: str) -> str:
+    """The SHA-256 of the normalized PEM, which an envelope pins its key by."""
+
+    return hashlib.sha256(_normalize_pem(public_key_pem).encode("utf-8")).hexdigest()
 
 
 def _verification_key_wire(key: GuardTrustAttestationVerificationKey) -> dict[str, object]:
