@@ -107,7 +107,8 @@ enum Request {
         public_jwk_thumbprint: Option<String>,
         payloads: Vec<Signable>,
     },
-    Generate,
+    // A struct variant: serde ignores unknown fields on a unit variant.
+    Generate {},
     Persistent {
         guard_home: PathBuf,
     },
@@ -132,7 +133,7 @@ enum PrivateKey {
 
 enum Signer {
     Rsa(Box<BlindedSigningKey<Sha256>>),
-    P256(EcdsaKeyPair),
+    P256(Box<EcdsaKeyPair>),
 }
 
 /// A key with the PEM it was read from or written as.
@@ -179,7 +180,7 @@ fn answer(request: Request) -> Value {
             public_jwk_thumbprint.as_deref(),
             &payloads,
         ),
-        Request::Generate => generate().and_then(|held| described(&held)),
+        Request::Generate {} => generate().and_then(|held| described(&held)),
         Request::Persistent { guard_home } => persistent_key(&guard_home)
             .ok_or(KEY_UNAVAILABLE)
             .and_then(|held| described(&held)),
@@ -241,7 +242,7 @@ fn signer(key: PrivateKey, algorithm: &str) -> Result<Signer, &'static str> {
             ))))
         }
         (RSA_PSS_SHA256, _) => Err(MUST_BE_RSA),
-        (ECDSA_P256_SHA256, PrivateKey::P256(pair)) => Ok(Signer::P256(pair)),
+        (ECDSA_P256_SHA256, PrivateKey::P256(pair)) => Ok(Signer::P256(Box::new(pair))),
         (ECDSA_P256_SHA256, PrivateKey::OtherCurve(_) | PrivateKey::UnsupportedCurve) => {
             Err(MUST_BE_P256)
         }
