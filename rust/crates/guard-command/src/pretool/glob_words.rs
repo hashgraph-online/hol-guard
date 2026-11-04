@@ -370,20 +370,72 @@ mod tests {
     }
 }
 
-/// Whether a `printf` may assign a shell variable rather than only print:
-/// `-v NAME`, or a `%n` conversion, which stores a count in the variable it
-/// names. The parsed format is read, so quoting split across the option
-/// (`"-"v`) is seen as the shell sees it. Any leading option, or a format the
-/// shell builds from an expansion, counts as one that may.
+/// Whether a `printf` segment may assign a shell variable rather than only
+/// print. See [`printf_assigns`].
 pub(super) fn printf_sets_variable(segment: &CommandSegmentV1) -> bool {
-    let printf = segment
+    segment
         .executable
         .as_deref()
-        .is_some_and(|executable| super::executable_basename(executable) == "printf");
-    printf
-        && segment.arguments.first().is_some_and(|format| {
-            format.starts_with('-') || format.contains(['$', '`']) || format_counts(format)
-        })
+        .is_some_and(|executable| super::executable_basename(executable) == "printf")
+        && printf_assigns(&segment.text)
+}
+
+/// Whether the `printf` in `text` may assign a shell variable: `-v NAME`, or
+/// a `%n` conversion, which stores a count in the variable it names. printf
+/// reads options only before its format and stops at `--`, so a `-v` after
+/// either is printed data. The shell removes quoting anywhere in a word, so
+/// `"-"v` and `-''v` reach printf as `-v`. Any other leading option, or a
+/// format the shell builds from an expansion, counts as one that may; `$`
+/// inside single quotes is printed as written.
+pub(super) fn printf_assigns(text: &str) -> bool {
+    let words = shell_words(text);
+    let Some(at) = words
+        .iter()
+        .position(|(word, _)| word == "printf" || word.ends_with("/printf"))
+    else {
+        return true;
+    };
+    let mut arguments = words[at + 1..].iter();
+    let mut format = arguments.next();
+    if format.is_some_and(|(word, expands)| word == "--" && !expands) {
+        format = arguments.next();
+    } else if format.is_some_and(|(word, _)| word.starts_with('-')) {
+        return true;
+    }
+    format.is_some_and(|(word, expands)| *expands || format_counts(word))
+}
+
+/// The words of `text`, each with its quoting removed and whether any of it
+/// expands: a `$` or backquote outside single quotes.
+fn shell_words(text: &str) -> Vec<(String, bool)> {
+    let mut words = Vec::new();
+    let (mut word, mut expands, mut started) = (String::new(), false, false);
+    let (mut single, mut double) = (false, false);
+    let mut characters = text.chars();
+    while let Some(character) = characters.next() {
+        match character {
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            '\\' if !single => word.extend(characters.next()),
+            '$' | '`' if !single => {
+                expands = true;
+                word.push(character);
+            }
+            character if character.is_whitespace() && !single && !double => {
+                if started {
+                    words.push((std::mem::take(&mut word), expands));
+                }
+                (expands, started) = (false, false);
+                continue;
+            }
+            character => word.push(character),
+        }
+        started = true;
+    }
+    if started {
+        words.push((word, expands));
+    }
+    words
 }
 
 /// Whether a printf format holds a `%n` conversion, after any flags, width,

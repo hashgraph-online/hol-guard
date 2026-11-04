@@ -432,30 +432,13 @@ pub(super) fn command_word_changes_shell_state(stage: &str) -> bool {
     let head = command_head(stage);
     STATE_CHANGING.contains(&head)
         || head.contains(['\'', '"', '\\', '$'])
-        || (head == "printf" && printf_assigns(stage))
+        || (head == "printf" && super::glob_words::printf_assigns(stage))
         || head.split_once('=').is_some_and(|(name, _)| {
             !name.is_empty()
                 && name
                     .bytes()
                     .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
         })
-}
-
-/// `printf -v NAME`: printf reads options only before its format, so a
-/// `-v` later on is printed data (`printf '%s\n' -version`). The shell
-/// removes quoting anywhere in the word, so `"-"v`, `-''v` and `-"v"` all
-/// reach printf as `-v`; the option is read from the word with its quotes
-/// and backslashes taken out.
-fn printf_assigns(stage: &str) -> bool {
-    let mut words = stage.split_whitespace().skip_while(|word| *word == "!");
-    words.next();
-    words.next().is_some_and(|word| {
-        let unquoted: String = word
-            .chars()
-            .filter(|character| !matches!(character, '\'' | '"' | '\\'))
-            .collect();
-        unquoted.starts_with("-v")
-    })
 }
 
 /// Whether the text runs an arithmetic expansion (`$((...))` or `$[...]`),

@@ -436,6 +436,7 @@ fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
         "wc -l \"$HOME/.zshrc\" && git status --short --branch",
         // A `-v` after the format is printed data, not printf's option.
         "printf '%s\\n' -version; git status --short",
+        "printf -- '%s\\n' hello; git status --short",
     ] {
         assert_ne!(reason(&home, &repository, command), FLOOR, "{command}");
     }

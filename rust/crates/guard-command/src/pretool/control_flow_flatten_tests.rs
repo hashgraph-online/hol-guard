@@ -424,6 +424,9 @@ fn split_quoted_printf_option_still_assigns() {
         "printf \"-\"v NAME value",
         "printf -''v NAME value",
         "printf -\"v\" NAME value",
+        "printf '-''v' PATH '%s'",
+        "printf 'x%n' PATH",
+        "printf \"a $f\" PATH",
     ] {
         assert!(super::command_word_changes_shell_state(text), "{text}");
     }
@@ -431,6 +434,10 @@ fn split_quoted_printf_option_still_assigns() {
         "printf '%s\\n' -version",
         "printf -- -v",
         "printf '%s' value",
+        "printf -- '%s\\n' hello",
+        "printf '$HOME'",
+        "printf '%s %s\\n' \"$a\" \"$b\"",
+        "printf '%%n'",
     ] {
         assert!(!super::command_word_changes_shell_state(text), "{text}");
     }
