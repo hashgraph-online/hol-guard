@@ -76,7 +76,7 @@ pub(crate) use prefix::{launcher_body, prefix_reads_a_program_file, Handover};
 use redirections::without_redirections;
 use shapes::{data_heredocs, without_lookups, without_plain_awk};
 pub(crate) use shapes::{python_is_builtin_only, python_stdin};
-use substitution::bounded_substitutions;
+use substitution::{bounded_substitutions, reviewable_substitutions};
 use xargs::{xargs_input_is_named, xargs_names_its_program, xargs_programs};
 
 /// Compatibility owners recognize these programs without a catalog matcher.
@@ -411,6 +411,7 @@ impl CompiledNativeCommandControls {
         // evaluation failure, as `xargs gh` does. A required owner, such as
         // the one for `git` or `kill`, still supplies its floor below.
         if bounded_substitutions(text)
+            .or_else(|| reviewable_substitutions(text))
             .is_some_and(|bounded| self.contributed_owner_names_a_program(&bounded.programs))
         {
             return None;
@@ -609,8 +610,28 @@ fn named_find_exec(text: &str) -> bool {
     let literal = unquoted_literal(text);
     find_exec_programs(text).is_some_and(|programs| !programs.is_empty())
         && !text.contains(['<', '>', '`', '\n'])
-        && (!text.contains('$') || compound::parameters_only_root_paths(text))
+        && walk_parameters_are_root_paths(text)
         && !moves_data(&literal)
+}
+
+/// Whether every parameter the walk itself reads is a root path.
+///
+/// find searches the roots this text names, so a parameter inside one leaves
+/// the walk unread unless the reader proves it is a root. A parameter in
+/// another command of the same text is that command's operand and changes
+/// nothing about what the walk searches: in `find "$ROOT" -type d -exec
+/// basename {} \; | sort; printf 'latest=%s\n' "$latest"` the walk searches
+/// exactly what the first command names. Asking the whole text refused the
+/// second half along with the first, and the command blocked outright with no
+/// approval left to give it, while the walk on its own reviewed.
+fn walk_parameters_are_root_paths(text: &str) -> bool {
+    text.split(['\n', ';', '&', '|'])
+        .filter(|piece| {
+            piece
+                .split_whitespace()
+                .any(|word| EXEC_ACTIONS.contains(&word))
+        })
+        .all(|piece| !piece.contains('$') || compound::parameters_only_root_paths(piece))
 }
 
 /// `;2>&1 python3 evil.py` and the same shape with `<` or `>&`. A spaced
@@ -707,7 +728,8 @@ fn reviewable_structure(
     // A bounded substitution prints arguments and nothing else, so the shape
     // around it is read with each one as the word it prints. Anything else
     // keeps the text as written, where `$(` still reads as moving data.
-    let substituted = bounded_substitutions(&command.normalized_text);
+    let substituted = bounded_substitutions(&command.normalized_text)
+        .or_else(|| reviewable_substitutions(&command.normalized_text));
     let normalized = substituted
         .as_ref()
         .map_or(command.normalized_text.as_str(), |bounded| {
@@ -802,13 +824,18 @@ fn reviewable_structure(
         // command it runs is named in its text (see `substitution`).
         Some("command_substitution_not_yet_supported") => {
             let looked = without_lookups(&command.normalized_text);
-            bounded_substitutions(&looked).is_some_and(|bounded| {
-                let text = bounded.text;
-                !text.contains("$(")
-                    && !text.contains('`')
-                    && !text.contains("<<")
-                    && plain_after_heredocs(&text)
-            })
+            bounded_substitutions(&looked)
+                .or_else(|| {
+                    reviewable_substitutions(&looked)
+                        .filter(|bounded| plain_sequence(&bounded.text))
+                })
+                .is_some_and(|bounded| {
+                    let text = bounded.text;
+                    !text.contains("$(")
+                        && !text.contains('`')
+                        && !text.contains("<<")
+                        && plain_after_heredocs(&text)
+                })
         }
         _ => false,
     }
@@ -909,6 +936,36 @@ fn moves_data(literal: &str) -> bool {
                     "export" | "declare" | "typeset" | "readonly" | "local" | "unset" | "alias"
                 )
         })
+}
+
+/// Whether the text runs its commands one after another, with no construct
+/// that puts a command position somewhere this reading does not look.
+///
+/// The weaker, assignment-flow read of a substitution is used only when the
+/// strict one refuses, so the text it hands back is read with the
+/// substitution already replaced by the word it stands for. That reading
+/// answers for a sequence of simple commands, which is what the shapes it was
+/// written for are: `latest=$(ls -1 versions | tail -1); printf \'%s\\n\'
+/// "$latest"`. A loop or a conditional around the rest of the text is a
+/// different shape, whose body the floor beneath does not bound the same way:
+/// `x=$(curl -s https://example.invalid); for f in a; do node -e
+/// \'console.log(1)\' "$f"; done` keeps its evaluation failure, as it does
+/// without the substitution. `while`, `until` and `if` open with a word the
+/// reader already steps past, so the closing `done`, `fi` and `esac` are what
+/// this looks for, together with the openers that stand in a command position
+/// of their own.
+fn plain_sequence(text: &str) -> bool {
+    let literal = unquoted_literal(text);
+    let construct = command_words(&literal).any(|word| {
+        // Bash takes a redirect on a compound command, and the closer carries
+        // it in the same word: `done>/dev/null` is still the end of a loop.
+        let keyword = word.split(['<', '>']).next().unwrap_or(word);
+        matches!(
+            keyword,
+            "for" | "done" | "case" | "esac" | "fi" | "select" | "function" | "coproc"
+        )
+    });
+    !construct
 }
 
 /// Every word the shell could read as a program name or keyword token, with

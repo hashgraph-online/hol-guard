@@ -118,6 +118,12 @@ fn a_trailing_subshell_group_plans_as_the_command_list_it_runs() {
     for (grouped, plain) in [
         ("(npm run build)", "npm run build"),
         ("(cd web && npm run build)", "cd web && npm run build"),
+        // A list of groups is read as that list with the brackets blanked,
+        // which is how the decision that routed it here read it.
+        (
+            "(cd web && npm run build) && echo done",
+            "cd web && npm run build && echo done",
+        ),
     ] {
         let group = exact_shape(grouped, &root).unwrap_or_else(|| panic!("no shape for {grouped}"));
         let list = exact_shape(plain, &root).unwrap_or_else(|| panic!("no shape for {plain}"));
@@ -127,11 +133,7 @@ fn a_trailing_subshell_group_plans_as_the_command_list_it_runs() {
         assert_eq!(group.read_files, list.read_files, "{grouped}");
     }
     // A group Guard cannot read whole is no more plannable than before.
-    for text in [
-        "(cd web && npm run build) && echo done",
-        "( )",
-        "(npm run build",
-    ] {
+    for text in ["( )", "(npm run build"] {
         assert!(exact_shape(text, &root).is_none(), "{text}");
     }
     let _ = std::fs::remove_dir_all(&root);

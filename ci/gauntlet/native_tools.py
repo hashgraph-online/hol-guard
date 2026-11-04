@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from .blank_search import BLANK_SEARCH_PATH_CASE, blank_search_path_error
 from .catalog import Scenario
 from .command_outputs import _text
 from .input_evidence import post_input_matches
@@ -723,6 +724,8 @@ def native_tools_scope_error(
     if scenario.id == GITHUB_LOOKUP_CASE and (scope := _github_lookup_error(calls, require_call=False)):
         return scope
     if scenario.id == BACKGROUND_READ_CASE and (scope := _background_read_error(calls, require_steps=False)):
+        return scope
+    if scenario.id == BLANK_SEARCH_PATH_CASE and (scope := blank_search_path_error(calls)):
         return scope
     if guard_denied:
         return None

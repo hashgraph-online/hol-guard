@@ -159,11 +159,44 @@ fn accept_entry(entry: &Path, home: Option<&Path>, workspace: &Path) -> Option<V
                 _ => canonical.clone(),
             };
             if owned_and_sealed(&root) && !forbidden(&root, Some(home)) {
-                return Some(vec![root]);
+                // A version manager's prefix holds venvs of its own, and one
+                // of those can name a different version's install as its
+                // `home`. The grant stops at this prefix, so without the
+                // venv's own roots that interpreter stays unreachable.
+                let mut roots = vec![root.clone()];
+                roots.extend(external_venv(&canonical, workspace));
+                return Some(roots);
             }
         }
     }
-    user_tool()
+    // A venv activated outside the workspace reaches this far as an ordinary
+    // sealed tool directory, which grants the `bin` the session resolves
+    // `python3` in but not the interpreter that launcher links out to. The
+    // sandbox could then not start it, so the run was reviewed. Granted only
+    // alongside the tool directory, so a venv whose ancestry is not sealed
+    // gets no grant at all.
+    let mut roots = user_tool()?;
+    roots.extend(external_venv(&canonical, workspace));
+    Some(roots)
+}
+
+/// An external venv's own root and the interpreter install it runs, each
+/// sealed against every account but this one and root.
+fn external_venv(entry: &Path, workspace: &Path) -> Vec<PathBuf> {
+    let roots = super::venv::external_venv_roots(entry, workspace);
+    // The interpreter needs every root it was given; a run that can start but
+    // cannot read its standard library would fail inside the sandbox instead.
+    // Every ancestor too: a sealed directory below one another account can
+    // write can be renamed away and answered with different contents, and
+    // `approved_user_python_runtime` reads a managed prefix's name only.
+    if roots.is_empty()
+        || !roots
+            .iter()
+            .all(|root| root.ancestors().all(owned_and_sealed))
+    {
+        return Vec::new();
+    }
+    roots
 }
 
 /// The developer directory a `/usr/bin` shim forwards into: the one
@@ -623,6 +656,141 @@ mod tests {
         let mut expected = vec!["/usr/bin".to_owned(), "/bin".to_owned()];
         super::super::developer_shim::developer_tools_ahead_of_shims(&mut expected);
         assert_eq!(path, expected.join(":"));
+    }
+
+    /// A scratch tree whose ancestry is sealed, so a tool directory below it
+    /// is granted at all. `/tmp` is world-writable on Linux, where the crate
+    /// directory serves instead; with no sealed base there is nothing to
+    /// measure, and CI must provide one.
+    struct Scratch(PathBuf);
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn scratch() -> Option<Scratch> {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let bases = [
+            std::env::temp_dir(),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+        ];
+        let Some(base) = bases
+            .iter()
+            .filter_map(|base| base.canonicalize().ok())
+            .find(|base| base.ancestors().all(owned_and_sealed))
+        else {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "the venv exec-root tests need a sealed scratch base on CI"
+            );
+            eprintln!("skipping venv exec-root test: no sealed scratch base");
+            return None;
+        };
+        let root = base.join(format!(
+            ".scratch-venv-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
+        Some(Scratch(root.canonicalize().unwrap()))
+    }
+
+    /// A trusted interpreter install the host really has, so a venv may name
+    /// it as its `home` the way one made from the system Python does.
+    fn trusted_interpreter_home() -> Option<PathBuf> {
+        Path::new("/usr/bin/python3")
+            .is_file()
+            .then(|| Path::new("/usr/bin").canonicalize().ok())
+            .flatten()
+    }
+
+    /// A session that activated a venv outside the workspace resolves a bare
+    /// `python3` to that venv's launcher, which is a symlink to an
+    /// interpreter installed elsewhere. Granting the `bin` directory alone
+    /// left the sandbox unable to start it, so `python3 -m unittest` in the
+    /// workspace was judged unreachable and reviewed instead of contained.
+    #[test]
+    fn an_external_venv_grants_its_interpreter_install() {
+        let Some(interpreter) = trusted_interpreter_home() else {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "the venv exec-root tests need a trusted /usr/bin/python3 on CI"
+            );
+            return;
+        };
+        let Some(scratch) = scratch() else {
+            return;
+        };
+        let home = scratch.0.join("home");
+        let workspace = scratch.0.join("workspace");
+        let venv = scratch.0.join("venv");
+        let bin = venv.join("bin");
+        for directory in [&home, &workspace, &bin, &venv.join("lib/python3")] {
+            fs::create_dir_all(directory).unwrap();
+        }
+        symlink("/usr/bin/python3", bin.join("python3")).unwrap();
+        fs::write(
+            venv.join("pyvenv.cfg"),
+            format!("home = {}\n", interpreter.display()),
+        )
+        .unwrap();
+        let (roots, path) = workspace_exec_roots(
+            &bin.to_string_lossy(),
+            Some(&home),
+            &workspace,
+            None,
+            false,
+            false,
+            false,
+        );
+        // The venv itself, for the packages the run imports, and the install
+        // its launcher links out to, for the interpreter and its library.
+        let granted = super::venv::external_venv_roots(&bin, &workspace);
+        assert!(roots.contains(&venv), "{roots:?} from {granted:?}");
+        assert!(roots.contains(&interpreter), "{roots:?} from {granted:?}");
+        // Kept in place on the sandbox PATH, so a bare `python3` resolves
+        // inside the sandbox to the launcher the session resolved outside it.
+        assert!(
+            path.split(':').any(|entry| Path::new(entry) == bin),
+            "{path}"
+        );
+    }
+
+    /// The grant is a venv's, not any sealed directory's: a `bin` whose
+    /// parent holds something no venv holds keeps the tool directory alone.
+    #[test]
+    fn a_directory_that_is_not_a_venv_grants_no_install() {
+        let (Some(scratch), Some(interpreter)) = (scratch(), trusted_interpreter_home()) else {
+            return;
+        };
+        let home = scratch.0.join("home");
+        let workspace = scratch.0.join("workspace");
+        let tools = scratch.0.join("tools");
+        let bin = tools.join("bin");
+        for directory in [&home, &workspace, &bin] {
+            fs::create_dir_all(directory).unwrap();
+        }
+        fs::write(tools.join("notes.txt"), "").unwrap();
+        fs::write(
+            tools.join("pyvenv.cfg"),
+            format!("home = {}\n", interpreter.display()),
+        )
+        .unwrap();
+        let (roots, _) = workspace_exec_roots(
+            &bin.to_string_lossy(),
+            Some(&home),
+            &workspace,
+            None,
+            false,
+            false,
+            false,
+        );
+        assert!(roots.contains(&bin), "{roots:?}");
+        assert!(!roots.contains(&tools), "{roots:?}");
     }
 
     #[test]

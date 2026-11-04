@@ -266,6 +266,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-device-key-metadata-v1",
     "native-cloud-actions-connect-v1",
     "native-registry-trust-v1",
+    "native-cloud-actions-health-v1",
     "native-windows-process-lifecycle-v1",
     "native-local-skill-index-v1",
     "native-cloud-actions-host-config-v1",
@@ -297,6 +298,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-integrity-snapshot-v1",
     "native-orphaned-worker-reap-v1",
     "native-codex-hook-trust-v1",
+    "native-trust-attestation-key-v1",
     "native-local-authority-integrity-v1",
     "native-storage-retention-v1",
     "native-resident-state-prune-v1",
@@ -318,4 +320,5 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-agent-safety-guidance-v1",
     "native-guard-shim-profile-v1",
     "native-durable-runtime-collapse-v1",
+    "native-verified-github-read-v1",
 ];

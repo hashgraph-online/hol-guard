@@ -11,7 +11,7 @@ use std::time::{Instant, SystemTime};
 
 #[path = "context_assistance_engine_quick.rs"]
 mod quick;
-pub(crate) use quick::quick_excerpts;
+pub(crate) use quick::{project_context_on, quick_excerpts};
 
 /// The graph holds 128 sources, Guard's own included, and a removed file
 /// still counts until the graph is rebuilt.
@@ -61,30 +61,6 @@ fn stamp(root: &SourceRoot, relative: &str) -> Option<Stamp> {
 
 fn bytes(file: &AdmittedFile) -> usize {
     file.documents.iter().map(|doc| doc.text.len()).sum()
-}
-
-/// The matched files CIGAR would take into an automatic scope, for a prompt
-/// that arrives while CIGAR is starting or busy. It applies the engine's own
-/// checks: the app, the project root, the workspace's setting and each file's
-/// source screen. It stops at `until` and names paths only, never file text.
-pub(crate) fn admissible_paths(
-    home: &std::path::Path,
-    workspace: &std::path::Path,
-    app: &str,
-    found: &[String],
-    limit: usize,
-    until: Instant,
-) -> Vec<String> {
-    let Some(root) = quick::screened(home, workspace, app) else {
-        return Vec::new();
-    };
-    found
-        .iter()
-        .take_while(|_| Instant::now() < until)
-        .filter(|relative| stamp(&root, relative).is_some() && root.read(relative).is_ok())
-        .take(limit)
-        .cloned()
-        .collect()
 }
 
 /// CIGAR's picks, led by the walk's best file when CIGAR left it out. The walk
@@ -205,6 +181,21 @@ impl Engine {
                 .find(|file| &file.relative_path == first)
         });
         Ok(Some(led_by(picked, lead, words)))
+    }
+
+    /// Records this worker's hand picks for prompts Guard reads itself.
+    pub(super) fn publish_hands(&self) {
+        let picked = (self.scopes.iter())
+            .filter(|(id, scope)| !self.auto.contains(id) && !scope.revoked)
+            .map(|(_, scope)| quick::Hand {
+                root: scope.root.path().to_path_buf(),
+                app: scope.app.clone(),
+                files: (scope.sources.values())
+                    .map(|file| file.relative_path.clone())
+                    .collect(),
+            })
+            .collect();
+        quick::publish(&self.home, picked);
     }
 
     /// Before a hand-picked grant: drop the automatic scope for the same

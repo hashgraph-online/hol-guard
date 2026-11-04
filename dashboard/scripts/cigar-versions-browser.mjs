@@ -97,6 +97,7 @@ try {
       preferences: metadataOrder ? { ...Object.fromEntries(Object.entries(state.preferences).reverse()), features: { ...state.preferences.features, execution_context: false } } : state.preferences,
       installation_options: installations } });
     if (url.pathname === "/v1/context-assistance") return route.fulfill({ json: state });
+    if (url.pathname === "/v1/context-assistance/codex-lean") return route.fulfill({ json: { state: "off", limit: null } });
     if (url.pathname === "/v1/context-assistance/stop") {
       state = { ...state, availability: "off", diagnostic: null, requested_enabled: false, effective_enabled: false, runtime: null, last_check: null, job: null, qualification: null,
         generation: String(BigInt(state.generation) + 1n), preferences: { ...state.preferences, enabled: false }, effective_preferences: { ...state.effective_preferences, enabled: false } };
@@ -146,7 +147,7 @@ try {
   pass("Workspace opening reads registered metadata without SDK effects");
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Local runtime", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Choose or switch runtime", exact: true }).click();
+  await page.getByRole("button", { name: "Change version", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Updates", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("heading", { name: "Versions", exact: true }).waitFor();
   pass("Runtime preferences route selection to Versions without drafting or starting a replacement");

@@ -435,8 +435,8 @@ pub(crate) use command_parse_surface::{
     parse_posix_command, uncertain, Quote, RawSegment,
 };
 pub use command_parse_surface::{
-    parse_command, CanonicalCommandV1, CommandModelRequestV1, CommandSegmentV1, CommandSpanV1,
-    MAX_COMMAND_BYTES, MAX_COMMAND_SEGMENTS, MAX_COMMAND_TOKENS,
+    inline_shell_script_text, parse_command, CanonicalCommandV1, CommandModelRequestV1,
+    CommandSegmentV1, CommandSpanV1, MAX_COMMAND_BYTES, MAX_COMMAND_SEGMENTS, MAX_COMMAND_TOKENS,
 };
 pub use critical_floor_context::critical_floor_action;
 
