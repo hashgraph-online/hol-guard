@@ -61,6 +61,14 @@ fn inert_assignment(word: &str) -> Option<(&str, &str)> {
 /// environment filter would drop it before the run ever saw it. A value that
 /// opens with `-` would be read as an option once the word is gone, and one
 /// carrying any other character is not a plain value.
+///
+/// The pathname and brace characters are plain here because a shell applies
+/// neither field splitting nor pathname expansion to an assignment's value:
+/// `REPORT_DIR=reports/*` is the eleven characters it is written as. The set
+/// is the one the review screens the same word against in
+/// `pretool::env_prefix_reviewed::data_character`; the two must agree, or a
+/// command the review granted a read-only profile arrives here with its
+/// setting still in front of the program and the planners refuse it.
 fn plain_data_setting(word: &str) -> bool {
     let Some(name) = assignment_name(word) else {
         return false;
@@ -75,7 +83,20 @@ fn plain_data_setting(word: &str) -> bool {
             byte.is_ascii_alphanumeric()
                 || matches!(
                     byte,
-                    b'/' | b'.' | b'_' | b'+' | b'@' | b':' | b',' | b'%' | b'-'
+                    b'/' | b'.'
+                        | b'_'
+                        | b'+'
+                        | b'@'
+                        | b':'
+                        | b','
+                        | b'%'
+                        | b'-'
+                        | b'*'
+                        | b'?'
+                        | b'['
+                        | b']'
+                        | b'{'
+                        | b'}'
                 )
         })
 }

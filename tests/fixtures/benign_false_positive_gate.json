@@ -38085,6 +38085,70 @@
       "expect": "allow"
     },
     {
+      "id": "pattern-value-report-dir-prefix-npx-jest-no-local-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "REPORT_DIR=reports/* npx jest --ci"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "pattern-value-debug-prefix-npx-jest-no-local-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "DEBUG=app:* npx jest --ci"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-pattern-value-substitution-debug-prefix-npx-jest-no-local-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "DEBUG=$(id) npx jest --ci"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-separator-value-debug-prefix-npx-jest-no-local-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "DEBUG='app:*;id' npx jest --ci"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
+    },
+    {
       "id": "pattern-value-quoted-debug-prefix-npx-vitest",
       "fix_area": "shell",
       "harnesses": [
