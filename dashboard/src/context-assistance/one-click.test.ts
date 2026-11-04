@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import type { GuardContextAssistanceConfig } from "../guard-types";
 import { ContextAssistanceApiError } from "./api";
 import {
-  CigarSetupError, CigarSetupStopped, cigarSetupHold, planCigarAdopt, planCigarSetup, planCigarStart, runCigarSetup,
+  CigarSetupError, CigarSetupStopped, cigarSetupHold, planCigarAdopt, planCigarHeldJob, planCigarSetup, planCigarStart, runCigarSetup,
   type CigarSetupDeps, type CigarSetupRun, type CigarSetupStage,
 } from "./one-click";
 import { parseContextAssistanceStatus } from "./status";
@@ -130,6 +130,10 @@ assert.equal(cigarSetupHold(off, { locked: false, dirty: false }), null);
 assert.equal(cigarSetupHold(ready, { locked: true, dirty: true }), null, "nothing to hold once CIGAR is on");
 const heldAdopt = planCigarSetup(data({ state: off, jobs: [prepared] }), { locked: false, dirty: true, adopt: "dashboard:mine" });
 assert.ok(heldAdopt.kind === "blocked" && heldAdopt.block.title === "Save your changes first");
+// A lock stops adopting the held job but leaves the managed start; unsaved settings stop both.
+assert.equal(planCigarHeldJob(prepared, off, saved, { locked: true, dirty: false }), null, "a managed computer falls through to its saved start");
+assert.ok(planCigarHeldJob(prepared, off, off, { locked: true, dirty: false })?.kind === "blocked", "no saved selection keeps the lock");
+assert.ok(planCigarHeldJob(prepared, off, saved, { locked: false, dirty: true })?.kind === "blocked", "unsaved settings stay a hard hold");
 
 // Running: a fake Guard that answers each step the way the daemon does.
 type Script = { calls: string[]; stages: CigarSetupStage[]; jobs: (string | null)[]; saved: GuardContextAssistanceConfig[] };

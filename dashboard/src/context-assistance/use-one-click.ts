@@ -3,7 +3,7 @@ import type { GuardApprovalGatePublicConfig, GuardContextAssistanceConfig } from
 import { controlContextAssistance, fetchContextAssistance } from "./api";
 import { saveCigarPreference } from "./one-click-api";
 import {
-  CigarSetupError, CigarSetupStopped, cigarSetupHold, planCigarAdopt, planCigarSetup, planCigarStart, runCigarSetup,
+  CigarSetupError, CigarSetupStopped, planCigarHeldJob, planCigarSetup, planCigarStart, runCigarSetup,
   type CigarSetupPlan, type CigarSetupRun, type CigarSetupStage,
 } from "./one-click";
 import type { ContextAssistanceStatus } from "./types";
@@ -98,7 +98,7 @@ export function useCigarOneClick(options: Options) {
 
   const plan: CigarSetupPlan | null = useMemo(() => data
     ? planCigarSetup({ ...data, state: options.status ?? data.state }, { locked: options.locked, dirty: options.dirty, adopt: turnOnJob() })
-    : (own && (cigarSetupHold(options.status ?? own.state, options) ?? planCigarAdopt(own.job, options.status ?? own.state)))
+    : (own && planCigarHeldJob(own.job, options.status ?? own.state, options.status, options))
       ?? planCigarStart(options.status, options.dirty),
   [data, own, options.status, options.locked, options.dirty]);
 
@@ -151,7 +151,7 @@ export function useCigarOneClick(options: Options) {
       } else {
         const job = await fetchOwnJob(abort.signal);
         if (abort.signal.aborted) throw new CigarSetupStopped();
-        next = job && (cigarSetupHold(job.state, latest.current) ?? planCigarAdopt(job.job, job.state));
+        next = job && planCigarHeldJob(job.job, job.state, latest.current.status, latest.current);
         if (job && next) { initial = job.state; latest.current.publish(job.state); }
         next ??= planCigarStart(latest.current.status, latest.current.dirty);
         if (!next) throw failure;

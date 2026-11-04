@@ -109,6 +109,15 @@ export function cigarSetupHold(state: ContextAssistanceStatus, options: { locked
 }
 
 /** A saved, selected preference can start without version metadata (for example on an older daemon). */
+// Without the version list: a lock or unsaved change stops adopting a held job, but a managed
+// computer can still start the selection its administrator already turned on.
+export function planCigarHeldJob(job: CigarVersionJob | undefined, state: ContextAssistanceStatus,
+  status: ContextAssistanceStatus | null, options: { locked: boolean; dirty: boolean }): CigarSetupPlan | null {
+  const hold = cigarSetupHold(state, options);
+  if (!hold) return planCigarAdopt(job, state);
+  return planCigarStart(status, options.dirty) ? null : hold;
+}
+
 export function planCigarStart(status: ContextAssistanceStatus | null, dirty: boolean): CigarSetupRun | null {
   return status && canStartCigar(status, dirty) ? { kind: "run", runtime_id: status.preferences.runtime_id, build_id: null,
     interpreter_id: null, python_build_id: null, stages: ["start"], approval: false } : null;

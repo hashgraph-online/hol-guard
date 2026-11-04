@@ -5972,6 +5972,11 @@ function cigarSetupHold(state, options) {
   }
   return null;
 }
+function planCigarHeldJob(job, state, status, options) {
+  const hold = cigarSetupHold(state, options);
+  if (!hold) return planCigarAdopt(job, state);
+  return planCigarStart(status, options.dirty) ? null : hold;
+}
 function planCigarStart(status, dirty) {
   return status && canStartCigar(status, dirty) ? {
     kind: "run",
@@ -7742,7 +7747,7 @@ function useCigarOneClick(options) {
     };
   }, [refresh]);
   const plan = reactExports.useMemo(
-    () => data ? planCigarSetup({ ...data, state: options.status ?? data.state }, { locked: options.locked, dirty: options.dirty, adopt: turnOnJob() }) : (own && (cigarSetupHold(options.status ?? own.state, options) ?? planCigarAdopt(own.job, options.status ?? own.state))) ?? planCigarStart(options.status, options.dirty),
+    () => data ? planCigarSetup({ ...data, state: options.status ?? data.state }, { locked: options.locked, dirty: options.dirty, adopt: turnOnJob() }) : (own && planCigarHeldJob(own.job, options.status ?? own.state, options.status, options)) ?? planCigarStart(options.status, options.dirty),
     [data, own, options.status, options.locked, options.dirty]
   );
   const waiting = run.phase === "idle" && (plan?.kind === "blocked" && plan.block.wait === true || data === null && own !== null && cigarJobPending(own.job));
@@ -7794,7 +7799,7 @@ function useCigarOneClick(options) {
       } else {
         const job = await fetchOwnJob(abort.signal);
         if (abort.signal.aborted) throw new CigarSetupStopped();
-        next = job && (cigarSetupHold(job.state, latest.current) ?? planCigarAdopt(job.job, job.state));
+        next = job && planCigarHeldJob(job.job, job.state, latest.current.status, latest.current);
         if (job && next) {
           initial2 = job.state;
           latest.current.publish(job.state);
