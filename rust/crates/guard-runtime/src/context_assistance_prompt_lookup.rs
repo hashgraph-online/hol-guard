@@ -2,7 +2,8 @@
 //! its own thread, so a hook never waits past its budget. A prompt that finds
 //! CIGAR still starting leaves a warm-up behind: it waits for the worker and
 //! loads the project, so the next prompt gets code instead of a file list.
-use super::render;
+use super::{render, Rendered, Span};
+use crate::context_assistance_engine::PickedExcerpt;
 use crate::context_assistance_service::{LaneMiss, LaneWatch, PromptLane, Service};
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -31,17 +32,23 @@ pub(super) struct Request {
     pub(super) query: String,
     pub(super) words: Vec<String>,
     pub(super) found: Vec<String>,
+    /// What earlier prompts of the session were shown.
+    pub(super) earlier: Vec<Span>,
 }
 
 type Key = (PathBuf, String);
 
+/// CIGAR's excerpts for a prompt, with the files the prompt matched.
+type Picked = Option<Arc<(Vec<PickedExcerpt>, Vec<String>)>>;
+
 /// One lookup per project and app. A second hook for the same prompt waits
 /// on it; a different prompt meanwhile gets the matched files rather than
-/// queueing.
+/// queueing. The flight holds CIGAR's excerpts, not rendered text, so each
+/// hook renders them against its own session.
 struct Flight {
     prompt: u64,
     lane: PromptLane,
-    done: Mutex<Option<Option<String>>>,
+    done: Mutex<Option<Picked>>,
     ready: Condvar,
 }
 
@@ -66,9 +73,16 @@ pub(super) fn lookup(
     guard_home: &Path,
     request: Request,
     deadline: Instant,
-) -> Result<Option<String>, Miss> {
+) -> Result<Option<Rendered>, Miss> {
     let key = (request.root.clone(), request.app.clone());
     let prompt = hashed(&request.query);
+    let words = request.words.clone();
+    let earlier = request.earlier.clone();
+    let rendered = |flight: &Flight| {
+        answer(service, flight, deadline)
+            .map(|picked| picked.and_then(|found| render(&found.0, &found.1, &words, &earlier)))
+            .ok_or(Miss::Pending)
+    };
     let flight = {
         let Ok(running) = flights().lock() else {
             return Ok(None);
@@ -80,7 +94,7 @@ pub(super) fn lookup(
         }
     };
     if let Some(flight) = flight {
-        return answer(service, &flight, deadline).ok_or(Miss::Pending);
+        return rendered(&flight);
     }
     // The lane keeps at least half of what is left, so a short or late wait
     // still finds out whether CIGAR is on.
@@ -95,7 +109,7 @@ pub(super) fn lookup(
         Err(LaneMiss::Off) => return Ok(None),
     };
     let flight = launch(key, prompt, lane, request).ok_or(Miss::Pending)?;
-    answer(service, &flight, deadline).ok_or(Miss::Pending)
+    rendered(&flight)
 }
 
 /// Waits on its own thread for a worker that is still starting, then runs
@@ -157,19 +171,18 @@ fn launch(key: Key, prompt: u64, lane: PromptLane, request: Request) -> Option<A
                 query,
                 words,
                 found,
+                ..
             } = request;
-            let asked = words.clone();
             let picked = actor
                 .call(move |runtime, engine| {
                     engine
-                        .prompt_context(runtime, root, app, found.clone(), query, &asked)
-                        .map(|picked| picked.map(|picked| (picked, found)))
+                        .prompt_context(runtime, root, app, found.clone(), query, &words)
+                        .map(|picked| picked.map(|picked| Arc::new((picked, found))))
                 })
                 .ok()
                 .flatten();
-            let rendered = picked.and_then(|(picked, found)| render(&picked, &found, &words));
             if let Ok(mut done) = worker.done.lock() {
-                *done = Some(rendered);
+                *done = Some(picked);
             }
             worker.ready.notify_all();
             if let Ok(mut running) = flights().lock() {
@@ -190,13 +203,13 @@ fn launch(key: Key, prompt: u64, lane: PromptLane, request: Request) -> Option<A
     Some(flight)
 }
 
-/// The flight's answer, dropped if project context changed meanwhile.
-fn answer(service: &Service, flight: &Flight, deadline: Instant) -> Option<Option<String>> {
-    let rendered = wait_for(flight, deadline)?;
-    Some(rendered.filter(|_| service.prompt_lane_current(&flight.lane)))
+/// The flight's excerpts, dropped if project context changed meanwhile.
+fn answer(service: &Service, flight: &Flight, deadline: Instant) -> Option<Picked> {
+    let picked = wait_for(flight, deadline)?;
+    Some(picked.filter(|_| service.prompt_lane_current(&flight.lane)))
 }
 
-fn wait_for(flight: &Flight, deadline: Instant) -> Option<Option<String>> {
+fn wait_for(flight: &Flight, deadline: Instant) -> Option<Picked> {
     let mut done = flight.done.lock().ok()?;
     while done.is_none() {
         let left = deadline.checked_duration_since(Instant::now())?;
