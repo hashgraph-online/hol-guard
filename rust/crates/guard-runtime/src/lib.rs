@@ -1001,6 +1001,7 @@ mod protection_health_report_op;
 mod proxy_credentials;
 use guard_runtime_pyjson as pyjson;
 mod receipt_embedded_scripts;
+mod registry_trust;
 #[cfg(test)]
 mod registry_vectors_tests;
 mod release_feed_op;
