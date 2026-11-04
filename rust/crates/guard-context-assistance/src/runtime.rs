@@ -17,6 +17,12 @@ use std::time::Duration;
 #[path = "release_verification.rs"]
 mod release_verification;
 
+/// The first reply includes interpreter start-up and the SDK import. A cold
+/// start on a slow host (x64 under ARM64 emulation, or a fresh install that
+/// antivirus is still scanning) takes several seconds, so this matches the
+/// interpreter probe's budget. It never runs on the synchronous hook path.
+const STARTUP_RPC_TIMEOUT: Duration = process::PROBE_TIMEOUT;
+
 // Windows reports the host processor from `platform.machine()`, so an x64
 // interpreter emulated on an ARM64 PC would claim arm64; the build tag names
 // the interpreter itself.
@@ -233,7 +239,7 @@ impl VerifiedRuntime {
         }
         let mut process =
             JsonProcess::spawn_cancellable(&selection, expected.bridge()?, Arc::clone(&cancel))?;
-        let doctor = process.rpc(json!({"op": "doctor"}), Duration::from_secs(5))?;
+        let doctor = process.rpc(json!({"op": "doctor"}), STARTUP_RPC_TIMEOUT)?;
         let features = verify_doctor_for(&doctor, &expected)?;
         // Detect package or executable replacement during handshake/import.
         if crate::artifacts::inspect_cancellable(
