@@ -215,6 +215,7 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
         "rust/crates/guard-command/src/command_evaluation_compose.rs",
         "rust/crates/guard-command/src/command_evaluation_support.rs",
         "rust/crates/guard-runtime/src/command_effect.rs",
+        "rust/crates/guard-runtime/src/verified_github_read.rs",
         "src/codex_plugin_scanner/guard/native_command_effect.py",
         "tests/guard_command_corpus_native.py",
         "tests/guard_command_corpus_native_contract.py",
