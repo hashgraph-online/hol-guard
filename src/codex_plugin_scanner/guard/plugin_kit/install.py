@@ -59,7 +59,6 @@ _SPEC_RETRY_SECONDS = 2.0
 #: How long a fetch runs before Guard says it is waiting (terminal only).
 _PROGRESS_AFTER_SECONDS = 1.0
 _SHA256 = re.compile(r"[0-9a-f]{64}")
-_COMMIT = re.compile(r"[0-9a-f]{40}")
 
 EXIT_FAILED = 1
 EXIT_USAGE = 2
@@ -653,127 +652,70 @@ def _ran(completed: runner.Completed, argv: Sequence[str], reply: Mapping[str, A
     raise _StoppedError("failed", f"{argv[0]} exited with {completed.returncode}{detail}", completed.returncode)
 
 
-def _read_json(path: Path) -> Any:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-
-
 def claude_home(environ: Mapping[str, str] | None = None) -> Path:
     configured = (os.environ if environ is None else environ).get("CLAUDE_CONFIG_DIR", "").strip()
     return Path(configured) if configured else Path.home() / ".claude"
 
 
-def _claude_marketplace_source(home: Path, name: str) -> str | None:
-    """The GitHub repository a known Claude Code marketplace comes from, ``""`` for
-    any other source, or None when no marketplace has that name."""
+def claude_state(home: Path, plugin_id: str | None = None, marketplace: str | None = None) -> dict[str, Any]:
+    """What Claude Code recorded, as the native Kit reads it: ``record`` is
+    ``read`` or ``unreadable``; ``user_plugins`` and ``plugins`` (any scope)
+    list plugin ids; ``entry`` is the user's install of ``plugin_id`` (its
+    ``commit``, ``version`` and ``source_command``); ``marketplace`` is the
+    known marketplace's ``source`` repository (``""`` for any other source),
+    its checkout's ``head`` and the install ``command`` it declares."""
 
-    known = _read_json(home / "plugins" / "known_marketplaces.json")
-    entry = known.get(name) if isinstance(known, dict) else None
-    if not isinstance(entry, dict):
-        return None
-    source = entry.get("source")
-    if not isinstance(source, dict):
-        return ""
-    if isinstance(source.get("repo"), str):
-        return source["repo"].lower()
-    url = source.get("url")
-    match = re.fullmatch(r"https://github\.com/([^/]+/[^/]+?)(?:\.git)?/?", url) if isinstance(url, str) else None
-    return match.group(1).lower() if match else ""
+    from .cli import PluginKitNativeError, kit_request
 
-
-def _claude_record(home: Path) -> dict[str, Any] | None:
-    """Claude Code's installed plugins by id: empty when it has no record yet,
-    None when the record exists but cannot be read, so callers never mistake
-    an unreadable record for "nothing installed"."""
-
-    path = home / "plugins" / "installed_plugins.json"
+    request: dict[str, object] = {"command": "claude", "home": str(home.absolute())}
+    if plugin_id is not None:
+        request["plugin_id"] = plugin_id
+    if marketplace is not None:
+        request["marketplace"] = marketplace
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return {}
-    except (OSError, ValueError):
-        return None
-    plugins = data.get("plugins", {}) if isinstance(data, dict) else None
-    return plugins if isinstance(plugins, dict) else None
+        return kit_request(request)
+    except PluginKitNativeError as error:
+        raise _StoppedError("failed", str(error)) from None
 
 
 def _claude_unreadable(home: Path) -> str:
     return f"Guard could not read Claude Code's plugin record ({home / 'plugins' / 'installed_plugins.json'})"
 
 
-def _claude_install(home: Path, plugin_id: str) -> tuple[bool, str | None] | None:
+def _claude_install(state: Mapping[str, Any]) -> tuple[bool, str | None] | None:
     """Whether Claude Code has the plugin for the user and the commit it
     installed, or None when its record cannot be read."""
 
-    plugins = _claude_record(home)
-    if plugins is None:
+    if state.get("record") != "read":
         return None
-    entries = plugins.get(plugin_id)
-    for entry in entries if isinstance(entries, list) else []:
-        if isinstance(entry, dict) and entry.get("scope") == "user":
-            commit = entry.get("gitCommitSha")
-            return True, commit if isinstance(commit, str) else None
-    return False, None
+    entry = state.get("entry")
+    if not isinstance(entry, dict):
+        return False, None
+    commit = entry.get("commit")
+    return True, commit if isinstance(commit, str) else None
 
 
-def _claude_source_command(home: Path, plugin_id: str) -> str | None:
-    """The command Claude Code ran to install the plugin for the user, for a
-    plugin whose marketplace declares one; such a record has no commit."""
-
-    entries = (_claude_record(home) or {}).get(plugin_id)
-    for entry in entries if isinstance(entries, list) else []:
-        if isinstance(entry, dict) and entry.get("scope") == "user":
-            command = entry.get("sourceCommand")
-            return command if isinstance(command, str) else None
-    return None
+def _claude_entry(state: Mapping[str, Any], key: str) -> str | None:
+    entry = state.get("entry")
+    value = entry.get(key) if isinstance(entry, dict) else None
+    return value if isinstance(value, str) else None
 
 
-def _claude_checkout_command(home: Path, marketplace: str, plugin_id: str) -> str | None:
-    """The install command Claude Code's checkout of a marketplace declares
-    for a plugin, or None when it declares none or cannot be read."""
-
-    known = _read_json(home / "plugins" / "known_marketplaces.json")
-    entry = known.get(marketplace) if isinstance(known, dict) else None
-    root = entry.get("installLocation") if isinstance(entry, dict) else None
-    if not isinstance(root, str) or not os.path.isabs(root):
-        return None
-    catalog = _read_json(Path(root) / ".claude-plugin" / "marketplace.json")
-    plugins = catalog.get("plugins") if isinstance(catalog, dict) else None
-    name = plugin_id.rsplit("@", 1)[0]
-    for plugin in plugins if isinstance(plugins, list) else []:
-        if not isinstance(plugin, dict) or plugin.get("name") != name:
-            continue
-        source = plugin.get("source")
-        if isinstance(source, dict) and source.get("source") == "command":
-            command = source.get("command")
-            return command if isinstance(command, str) else None
-    return None
-
-
-def _claude_marketplace_head(home: Path, name: str) -> str | None:
-    """The commit Claude Code's checkout of a marketplace is at."""
-
-    known = _read_json(home / "plugins" / "known_marketplaces.json")
-    entry = known.get(name) if isinstance(known, dict) else None
-    root = entry.get("installLocation") if isinstance(entry, dict) else None
-    return git_head(Path(root)) if isinstance(root, str) and os.path.isabs(root) else None
+def _claude_marketplace(state: Mapping[str, Any], key: str) -> str | None:
+    market = state.get("marketplace")
+    value = market.get(key) if isinstance(market, dict) else None
+    return value if isinstance(value, str) else None
 
 
 def _claude_plugins(home: Path, *, any_scope: bool = False) -> set[str] | None:
     """Plugin ids Claude Code has installed for the user (with ``any_scope``,
     for a project or folder too), or None when its record cannot be read."""
 
-    plugins = _claude_record(home)
-    if plugins is None:
+    try:
+        listed = claude_state(home).get("plugins" if any_scope else "user_plugins")
+    except _StoppedError:
         return None
-    return {
-        plugin_id
-        for plugin_id, entries in plugins.items()
-        if isinstance(entries, list)
-        and any(isinstance(e, dict) and (any_scope or e.get("scope") == "user") for e in entries)
-    }
+    return {plugin for plugin in listed if isinstance(plugin, str)} if isinstance(listed, list) else None
 
 
 def _codex_plugins(program: runner.Program) -> set[str] | None:
@@ -847,7 +789,10 @@ def _drop_marketplace(
     argv = [str(part) for part in remove]
     recorded = step.get("marketplace_repository")
     if runtime == "claude-code" and isinstance(recorded, str):
-        current = _claude_marketplace_source(context.home, marketplace)
+        try:
+            current = _claude_marketplace(claude_state(context.home, marketplace=marketplace), "source")
+        except _StoppedError:
+            current = None
         if current is None:
             return ""
         if current != recorded.lower():
@@ -875,32 +820,15 @@ def _drop_marketplace(
 
 
 def git_head(root: Path) -> str | None:
-    """The commit a checkout is at, read from its files without running git."""
+    """The commit a checkout is at, read by the native Kit from its files without running git."""
 
-    git = root / ".git"
+    from .cli import PluginKitNativeError, kit_request
+
     try:
-        if git.is_file():
-            pointer = git.read_text(encoding="utf-8").strip()
-            if not pointer.startswith("gitdir:"):
-                return None
-            git = (root / pointer[len("gitdir:") :].strip()).resolve()
-        head = (git / "HEAD").read_text(encoding="utf-8").strip()
-        if _COMMIT.fullmatch(head):
-            return head
-        if not head.startswith("ref: refs/") or ".." in head:
-            return None
-        ref = head[len("ref: ") :]
-        loose = git / ref
-        if loose.is_file():
-            commit = loose.read_text(encoding="utf-8").strip()
-            return commit if _COMMIT.fullmatch(commit) else None
-        for line in (git / "packed-refs").read_text(encoding="utf-8").splitlines():
-            commit, _, name = line.partition(" ")
-            if name == ref and _COMMIT.fullmatch(commit):
-                return commit
-    except (OSError, UnicodeDecodeError):
+        commit = kit_request({"command": "git_head", "root": str(root)}).get("commit")
+    except PluginKitNativeError:
         return None
-    return None
+    return commit if isinstance(commit, str) else None
 
 
 @dataclass
@@ -951,25 +879,26 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
     marketplace, plugin_id = str(step.get("marketplace")), str(step.get("plugin_id"))
     expected = step.get("expected_commit")
     remove_marketplace = ["claude", "plugin", "marketplace", "remove", marketplace]
-    source = _claude_marketplace_source(context.home, marketplace)
+    state = claude_state(context.home, plugin_id, marketplace)
+    source = _claude_marketplace(state, "source")
     if source is not None and source != str(add[-1]).lower():
         raise _StoppedError(
             "blocked",
             f"Claude Code already has a marketplace named {marketplace} from another source, "
             "so Guard did not install from it.",
         )
-    found = _claude_install(context.home, plugin_id)
+    found = _claude_install(state)
     if found is None:
         raise _StoppedError("failed", f"{_claude_unreadable(context.home)}, so it changed nothing.")
     had_plugin, prior = found
-    ran = _claude_source_command(context.home, plugin_id) if had_plugin and prior is None else None
+    ran = _claude_entry(state, "source_command") if had_plugin and prior is None else None
     if ran is not None:
         # Installed earlier by running its declared command: such a record keeps
         # the command, not a commit, so the marketplace checkout it came from is
         # the only commit there is to hold against the one HOL scanned, and the
         # command it recorded has to be the one that checkout declares.
-        head = _claude_marketplace_head(context.home, marketplace)
-        if ran != _claude_checkout_command(context.home, marketplace, plugin_id):
+        head = _claude_marketplace(state, "head")
+        if ran != _claude_marketplace(state, "command"):
             raise _StoppedError(
                 "blocked",
                 f"Claude Code already has {plugin_id}, installed by running a command that is not the one "
@@ -1010,7 +939,11 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
             return runner.run(program, arguments, capture=True)
         except runner.RunnerError as error:
             undone = ""
-            if (_claude_install(context.home, plugin_id) or (True, None))[0]:
+            try:
+                present = (_claude_install(claude_state(context.home, plugin_id)) or (True, None))[0]
+            except _StoppedError:
+                present = True
+            if present:
                 undone = _undo(program, ["claude", "plugin", "uninstall", plugin_id], context)
             undone += undo_marketplace()
             raise runner.RunnerError(
@@ -1040,7 +973,7 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
         # Running the command is not undoable, so hold the checkout that
         # declares it against the scanned commit before it runs; the check
         # after the install still catches a checkout moved while it ran.
-        head = _claude_marketplace_head(context.home, marketplace)
+        head = _claude_marketplace(claude_state(context.home, marketplace=marketplace), "head")
         if expected and head != expected:
             raise _StoppedError(
                 "blocked",
@@ -1059,8 +992,8 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
         # HOL scanned the marketplace that declares the command, so check the
         # command Claude Code ran is the one shown and its checkout of that
         # marketplace is at the scanned commit.
-        ran = _claude_source_command(context.home, plugin_id)
-        head = _claude_marketplace_head(context.home, marketplace)
+        state = claude_state(context.home, plugin_id, marketplace)
+        ran, head = _claude_entry(state, "source_command"), _claude_marketplace(state, "head")
         if ran == declared and (not expected or head == expected):
             return added
         problem = (
@@ -1077,7 +1010,7 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
         )
     if not expected:
         return added
-    found = _claude_install(context.home, plugin_id)
+    found = _claude_install(claude_state(context.home, plugin_id))
     if found is None:
         raise _StoppedError(
             "failed",
