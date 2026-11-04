@@ -796,9 +796,17 @@ def add_workspace_node_runtime(home: Path, scenario_id: str | None) -> None:
     """Give the fixture home the nvm Node install the contained runner trusts.
 
     The read-only runner profile runs the workspace's entry point under Node,
-    and it accepts only a Node that the request's own home or a system prefix
-    owns. The host's Node is copied, not linked, so nothing the fixture does
-    can reach the file the host runs.
+    and it accepts only a Node a caller's home or a system prefix owns. The
+    host's Node is copied, not linked, so nothing the fixture does can reach
+    the file the host runs.
+
+    The release's own ``npm`` prefix is copied beside it. A real install keeps
+    ``lib/node_modules/npm`` next to ``bin/node``, and the wrappers an agent
+    reaches ``npx`` through read ``npx-cli.js`` out of that prefix, relative
+    to whichever Node they resolved. A fixture that plants the binary alone is
+    not the layout it claims to be, and an ``npx`` run inside containment
+    failed with "Unable to locate npx-cli.js" rather than running the
+    workspace's tool.
     """
     if scenario_id not in WORKSPACE_RUNNER_CASES:
         return
@@ -811,9 +819,46 @@ def add_workspace_node_runtime(home: Path, scenario_id: str | None) -> None:
     ).stdout.strip()
     if not _NODE_VERSION.fullmatch(version):
         raise RuntimeError(f"Node reported an unexpected version for the fixture toolchain: {version}")
-    target = home / _NODE_VERSIONS / version / "bin" / "node"
+    prefix = home / _NODE_VERSIONS / version
+    target = prefix / "bin" / "node"
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, target)
+    _add_node_package_manager(source.parent.parent, prefix)
+
+
+def _add_node_package_manager(source_prefix: Path, prefix: Path) -> None:
+    """Copy the host release's own ``npm`` into the fixture's Node prefix.
+
+    The ``bin`` entries npm installs are links to a CLI file under the same
+    prefix. Both relative and absolute spellings are rewritten against the
+    fixture's own prefix, so a case never reaches back into the host's npm
+    tree. A host without a bundled npm leaves the prefix as it is: the cases
+    that need one fail on their own evidence rather than on a fixture that
+    quietly planted the host's.
+    """
+    package_manager = source_prefix / "lib/node_modules/npm"
+    if not package_manager.is_dir():
+        return
+    installed = prefix / "lib/node_modules/npm"
+    installed.parent.mkdir(parents=True, exist_ok=True)
+    if not installed.exists():
+        shutil.copytree(package_manager, installed, symlinks=True)
+    for name in ("npm", "npx"):
+        entry = source_prefix / "bin" / name
+        target = prefix / "bin" / name
+        if not entry.exists() or target.exists():
+            continue
+        if not entry.is_symlink():
+            shutil.copy2(entry, target)
+            continue
+        resolved = Path(os.readlink(entry))
+        if not resolved.is_absolute():
+            resolved = (source_prefix / "bin" / resolved).resolve()
+        try:
+            inside = resolved.relative_to(source_prefix.resolve())
+        except ValueError:
+            continue
+        target.symlink_to(os.path.relpath(prefix / inside, target.parent))
 
 
 def home_bun_bin(home: Path) -> Path | None:
