@@ -28578,7 +28578,8 @@
         "command": "(cd dashboard && ./node_modules/.bin/vite build) && (cd src && ls)"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "neg-subshell-group-list-upload",
@@ -30413,7 +30414,8 @@
         "command": "for d in dashboard src; do (cd \"$d\" && ls); done"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "control-flow-if-branch-subshell-linked-modules-build",
@@ -30429,7 +30431,8 @@
         "command": "if [ -d dashboard ]; then (cd dashboard && ./node_modules/.bin/vite build); fi"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "session-for-loop-bare-glob-echo",
@@ -43054,7 +43057,8 @@
         "command": "{ cd dashboard && ./node_modules/.bin/vite build; } && echo done"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "brace-group-leading-conditional-ls",
