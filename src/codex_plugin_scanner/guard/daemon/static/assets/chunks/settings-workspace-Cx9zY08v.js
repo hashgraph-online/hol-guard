@@ -3,7 +3,7 @@ import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRe
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
 import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-C0X7QXA-.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-o4J5gv4p.js";
-import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-Do0eMrgH.js";
+import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-COVyR5Cd.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
   if (typeof count2 === "number" && count2 > 0) {
@@ -4613,9 +4613,9 @@ function valid(value) {
   const row2 = value;
   return typeof row2.workspace === "string" && row2.workspace.length > 0 && typeof row2.app === "string" && row2.app.length > 0 && Array.isArray(row2.files) && row2.files.length <= MAX_FILES && row2.files.every((file) => typeof file === "string" && file.length > 0);
 }
-function readRecentProjects(store = browserStore()) {
+function readRecentProjects(store2 = browserStore()) {
   try {
-    const parsed2 = JSON.parse(store?.getItem(RECENT_PROJECTS_KEY) ?? "[]");
+    const parsed2 = JSON.parse(store2?.getItem(RECENT_PROJECTS_KEY) ?? "[]");
     if (!Array.isArray(parsed2)) return [];
     const seen = /* @__PURE__ */ new Set();
     return parsed2.filter(valid).filter((row2) => !seen.has(row2.workspace) && Boolean(seen.add(row2.workspace))).slice(0, MAX_RECENT_PROJECTS).map((row2) => ({ workspace: row2.workspace, files: [...row2.files], app: row2.app }));
@@ -4623,22 +4623,22 @@ function readRecentProjects(store = browserStore()) {
     return [];
   }
 }
-function write(rows, store) {
+function write(rows, store2) {
   try {
-    store?.setItem(RECENT_PROJECTS_KEY, JSON.stringify(rows));
+    store2?.setItem(RECENT_PROJECTS_KEY, JSON.stringify(rows));
   } catch {
   }
   return rows;
 }
-function rememberProject(project, store = browserStore()) {
+function rememberProject(project, store2 = browserStore()) {
   const row2 = { workspace: project.workspace, files: project.files.slice(0, MAX_FILES), app: project.app };
-  return write([row2, ...readRecentProjects(store).filter((item) => item.workspace !== row2.workspace)].slice(0, MAX_RECENT_PROJECTS), store);
+  return write([row2, ...readRecentProjects(store2).filter((item) => item.workspace !== row2.workspace)].slice(0, MAX_RECENT_PROJECTS), store2);
 }
-function clearRecentProjects(store = browserStore()) {
-  return write([], store);
+function clearRecentProjects(store2 = browserStore()) {
+  return write([], store2);
 }
-function forgetProject(workspace, store = browserStore()) {
-  return write(readRecentProjects(store).filter((item) => item.workspace !== workspace), store);
+function forgetProject(workspace, store2 = browserStore()) {
+  return write(readRecentProjects(store2).filter((item) => item.workspace !== workspace), store2);
 }
 function presetFolders(preset) {
   const folders = preset.filter((relative) => relative.includes("/")).map((relative) => relative.slice(0, relative.lastIndexOf("/")));
@@ -7647,6 +7647,40 @@ function CodexLeanSessions({ gate, disabled }) {
     )
   ] });
 }
+const KEY = "hol-guard.cigar.turn-on-requested";
+const RESUME_WINDOW_MS = 30 * 6e4;
+function store() {
+  try {
+    return typeof window === "undefined" ? null : window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+function rememberTurnOn(now, storage = store()) {
+  try {
+    storage?.setItem(KEY, String(now));
+  } catch {
+  }
+}
+function forgetTurnOn(storage = store()) {
+  try {
+    storage?.removeItem(KEY);
+  } catch {
+  }
+}
+function turnOnRequestedAt(storage = store()) {
+  try {
+    const value = Number(storage?.getItem(KEY) ?? NaN);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function shouldResumeTurnOn(requestedAt, now, status, plan, approvalRequired) {
+  if (requestedAt === null || now - requestedAt > RESUME_WINDOW_MS || now < requestedAt) return false;
+  if (!status || status.effective_enabled || plan?.kind !== "run") return false;
+  return !(approvalRequired && plan.approval);
+}
 async function cancelJob(job) {
   const deadline = AbortSignal.timeout(15e3);
   for (let attempt = 0; attempt < 6 && !deadline.aborted; attempt++) {
@@ -7707,6 +7741,16 @@ function useCigarOneClick(options) {
     const timer = setInterval(() => void refresh(), 3e3);
     return () => clearInterval(timer);
   }, [waiting, refresh]);
+  const resumed = reactExports.useRef(false);
+  const resume = data !== null && run.phase === "idle" && !resumed.current && options.active && !options.disabled && shouldResumeTurnOn(turnOnRequestedAt(), Date.now(), options.status ?? data?.state ?? null, plan, options.gate?.enabled === true);
+  reactExports.useEffect(() => {
+    if (!resume) return;
+    resumed.current = true;
+    void execute();
+  }, [resume]);
+  reactExports.useEffect(() => {
+    if (options.status?.effective_enabled) forgetTurnOn();
+  }, [options.status?.effective_enabled]);
   async function execute(proof) {
     if (running.current || latest.current.disabled || !latest.current.active) return;
     running.current = true;
@@ -7739,6 +7783,7 @@ function useCigarOneClick(options) {
       }
       planned = next;
       stages = next.stages;
+      rememberTurnOn(Date.now());
       setRun({ phase: "running", stages, stage: stages[0] });
       let credentials = proof;
       const spend = () => {
@@ -7783,9 +7828,11 @@ function useCigarOneClick(options) {
           if (mounted.current) latest.current.onSaved(config, previous);
         }
       });
+      forgetTurnOn();
       if (mounted.current) setRun({ phase: "idle" });
     } catch (cause) {
       if (!mounted.current) return;
+      forgetTurnOn();
       if (cause instanceof CigarSetupStopped || abort.signal.aborted) setRun({ phase: "idle" });
       else if (cause instanceof CigarSetupError && cause.needsProof) {
         const error = progressed ? "Your approval expired while Guard was working. The finished steps are kept. Approve once more to finish." : proof ? "That approval did not work. Try again." : null;
@@ -7817,6 +7864,7 @@ function useCigarOneClick(options) {
     dismiss: () => setRun({ phase: "idle" }),
     /** Stop always wins: abort in-flight polling so no later step runs. */
     stop: () => {
+      forgetTurnOn();
       const job = activeJob.current, turnOff = starting.current;
       activeJob.current = null;
       starting.current = false;

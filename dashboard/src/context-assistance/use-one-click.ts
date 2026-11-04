@@ -7,6 +7,7 @@ import {
   type CigarSetupPlan, type CigarSetupRun, type CigarSetupStage,
 } from "./one-click";
 import type { ContextAssistanceStatus } from "./types";
+import { forgetTurnOn, rememberTurnOn, shouldResumeTurnOn, turnOnRequestedAt } from "./setup-resume";
 import { requestCigarVersions } from "./versions-api";
 import { loadCigarVersionsData, type CigarVersionsData } from "./versions-data";
 import type { ContextProof } from "./workspaces-api";
@@ -88,6 +89,22 @@ export function useCigarOneClick(options: Options) {
     return () => clearInterval(timer);
   }, [waiting, refresh]);
 
+  // Leaving the page stops the steps this page drives. Coming back finishes a
+  // recent click, reusing whatever Guard already prepared, so it never lands on Off.
+  const resumed = useRef(false);
+  const resume = data !== null && run.phase === "idle" && !resumed.current && options.active && !options.disabled
+    && shouldResumeTurnOn(turnOnRequestedAt(), Date.now(), options.status ?? data?.state ?? null, plan, options.gate?.enabled === true);
+  useEffect(() => {
+    if (!resume) return;
+    resumed.current = true;
+    void execute();
+    // execute reads the latest options itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resume]);
+  useEffect(() => {
+    if (options.status?.effective_enabled) forgetTurnOn();
+  }, [options.status?.effective_enabled]);
+
   async function execute(proof?: ContextProof) {
     if (running.current || latest.current.disabled || !latest.current.active) return;
     running.current = true;
@@ -110,6 +127,7 @@ export function useCigarOneClick(options: Options) {
       if (!next || next.kind !== "run" || !initial) { setRun({ phase: "idle" }); return; }
       if (latest.current.gate?.enabled && next.approval && !proof) { setRun({ phase: "proof", plan: next, error: null }); return; }
       planned = next; stages = next.stages;
+      rememberTurnOn(Date.now());
       setRun({ phase: "running", stages, stage: stages[0] });
       // A TOTP code is single use; Guard accepts its recent same-session proof for the later steps.
       let credentials = proof;
@@ -146,9 +164,12 @@ export function useCigarOneClick(options: Options) {
         onState: (state) => { if (mounted.current && !abort.signal.aborted) latest.current.publish(state); },
         onSaved: (config, previous) => { if (mounted.current) latest.current.onSaved(config, previous); },
       });
+      forgetTurnOn();
       if (mounted.current) setRun({ phase: "idle" });
     } catch (cause) {
+      // Unmounting aborts the steps; keep the click so the page can finish it later.
       if (!mounted.current) return;
+      forgetTurnOn();
       if (cause instanceof CigarSetupStopped || abort.signal.aborted) setRun({ phase: "idle" });
       else if (cause instanceof CigarSetupError && cause.needsProof) {
         // The next attempt re-plans from fresh metadata, so finished steps (Python, the download) are reused.
@@ -177,6 +198,7 @@ export function useCigarOneClick(options: Options) {
     dismiss: () => setRun({ phase: "idle" }),
     /** Stop always wins: abort in-flight polling so no later step runs. */
     stop: () => {
+      forgetTurnOn();
       const job = activeJob.current, turnOff = starting.current;
       activeJob.current = null; starting.current = false;
       controller.current?.abort();
