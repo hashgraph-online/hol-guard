@@ -18,6 +18,8 @@ use serde_json::{json, Value};
 use crate::approval_gate_consumers as consumers;
 use crate::approval_gate_enrollment as enrollment;
 use crate::approval_gate_grants::{ApprovalGateErrorV1, ApprovalGateGrantV1, ApprovalGateGrants};
+use crate::approval_gate_pulse as pulse;
+use crate::approval_gate_pulse_enrollment as pulse_enrollment;
 use crate::approval_gate_settings as settings;
 use crate::approval_gate_state::{epoch, optional_int, optional_string};
 use crate::approval_gate_verify::{verify_or_raise_locked, ApprovalGateInputV1};
@@ -54,6 +56,9 @@ fn input_from_wire(w: &ApprovalGateInputWireV1) -> ApprovalGateInputV1 {
         use_cooldown: w.use_cooldown,
         revoke_cooldown: w.revoke_cooldown,
         require_fresh_totp: w.require_fresh_totp,
+        pulse_request_id: w.pulse_request_id.clone(),
+        pulse_agent_key: w.pulse_agent_key.clone(),
+        pulse_recovery_code: w.pulse_recovery_code.clone(),
     }
 }
 
@@ -384,6 +389,56 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
                 .or_else(|| pstr(params, "password"))
                 .ok_or_else(|| missing("password"))?;
             Ok(settings::create_verifier(password)?)
+        }
+        ApprovalGateMethodV1::PulseRequest => pulse::pulse_request(
+            &guard_home,
+            request.purpose.as_deref().unwrap_or("approval_decision"),
+            request.strict,
+            pstr(params, "action"),
+            pstr(params, "scope"),
+            pstr(params, "subject"),
+            pstr(params, "session_nonce"),
+            pstr(params, "verdict"),
+            &params
+                .and_then(|p| p.get("batch_request_ids"))
+                .and_then(Value::as_array)
+                .map(|ids| {
+                    ids.iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+            now,
+        ),
+        ApprovalGateMethodV1::PulsePoll => {
+            let request_id = pstr(params, "request_id").ok_or_else(|| missing("request_id"))?;
+            pulse::pulse_poll(&guard_home, request_id, now)
+        }
+        ApprovalGateMethodV1::BeginPulseEnrollment => pulse_enrollment::begin_pulse_enrollment(
+            &guard_home,
+            input_ref,
+            params
+                .and_then(|p| p.get("authorize_only"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            now,
+        ),
+        ApprovalGateMethodV1::ConfirmPulseEnrollment => pulse_enrollment::confirm_pulse_enrollment(
+            &guard_home,
+            grants,
+            pstr(params, "request_id").ok_or_else(|| missing("request_id"))?,
+            params
+                .and_then(|p| p.get("cooldown_seconds"))
+                .and_then(Value::as_i64)
+                .unwrap_or(0),
+            now,
+        ),
+        ApprovalGateMethodV1::DisablePulse => {
+            pulse_enrollment::disable_pulse(&guard_home, grants, grant_ref, now)
+        }
+        ApprovalGateMethodV1::RecoverPulse => {
+            pulse_enrollment::recover_pulse(&guard_home, grants, input_ref, now)
         }
         ApprovalGateMethodV1::AuditPayload => Ok(json!({"approval_gate": {
             "purpose": request.purpose,
