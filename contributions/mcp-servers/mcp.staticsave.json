@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.staticsave",
+  "version": "1.0.0",
+  "name": "StaticSave MCP Server",
+  "description": "Hosted StaticSave MCP server at https://mcp.staticsave.com. Hosts static files, module folders, and Base64 images with instant global CDN delivery. Mutations are create_file, update_file, delete_file, create_folder, delete_folder; inspections are list_files, list_folders, get_account_info. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "com.staticsave",
+    "displayName": "StaticSave",
+    "url": "https://staticsave.com"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCloud",
+    "background": "#0F172A"
+  },
+  "homepage": "https://staticsave.com",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://mcp.staticsave.com",
+    "serverNames": [
+      "staticsave"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-shared-state-write"
+  ],
+  "tools": [
+    {
+      "name": "get_account_info",
+      "state": "allow"
+    },
+    {
+      "name": "list_folders",
+      "state": "allow"
+    },
+    {
+      "name": "list_files",
+      "state": "allow"
+    },
+    {
+      "name": "create_temporary_file",
+      "state": "allow"
+    },
+    {
+      "name": "create_folder",
+      "state": "review"
+    },
+    {
+      "name": "create_file",
+      "state": "review"
+    },
+    {
+      "name": "update_file",
+      "state": "review"
+    },
+    {
+      "name": "delete_file",
+      "state": "review"
+    },
+    {
+      "name": "delete_folder",
+      "state": "block"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://staticsave.com",
+    "https://mcp.staticsave.com",
+    "https://staticsave.com/mcp-server"
+  ],
+  "saferAlternatives": [
+    "create_file rejects duplicate filenames to prevent accidental overwrites; inspect existing assets first via list_files and their public CDN URLs before calling update_file.",
+    "Use create_temporary_file to preview or test assets with a 24-hour auto-expiry before writing permanent production assets.",
+    "Keep delete_folder and delete_file on Block or Review unless unattended asset removal is explicitly intended."
+  ]
+}
