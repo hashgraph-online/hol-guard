@@ -449,3 +449,15 @@ def test_events_too_large_for_one_native_request_are_offered_in_halves(monkeypat
     with pytest.raises(CloudReviewEventTooLargeError):
         select_review_event_batch(events, CloudReviewBatchLimits(events=4))
     assert offered == [4, 2, 1]
+
+
+def test_a_window_too_large_only_once_escaped_is_offered_in_halves() -> None:
+    # Each event is 600 KB of UTF-8 but 1.8 MB once JSON escapes it: the window
+    # fits the UTF-8 envelope and only the canonical request bound refuses it.
+    events: list[dict[str, object]] = [
+        {"eventId": f"event-{index}", "localStreamSequence": index, "padding": "\u00e9" * 300_000}
+        for index in range(1, 4)
+    ]
+
+    with pytest.raises(CloudReviewEventTooLargeError):
+        select_review_event_batch(events, CloudReviewBatchLimits(events=3))
