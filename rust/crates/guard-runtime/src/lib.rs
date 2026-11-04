@@ -169,6 +169,7 @@ mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
 mod cloud_actions_access;
 mod cloud_actions_connect;
+mod cloud_actions_health;
 mod cloud_actions_host_config;
 mod cloud_actions_status;
 mod cloud_exception_lift;
@@ -181,6 +182,7 @@ mod cloud_request_text;
 #[cfg(test)]
 mod cloud_request_vectors_tests;
 mod cloud_review_ack;
+mod cloud_review_event;
 mod cloud_sync_privacy;
 mod codex_app_server_socket;
 #[path = "adapters/detection/codex_detect.rs"]
@@ -1112,6 +1114,7 @@ mod system_proxies;
 mod temporary_mcp_grant;
 mod tool_action_identity_op;
 mod totp;
+mod trust_attestation_key;
 mod trust_attestation_shape;
 mod trust_attestation_verify_op;
 #[cfg(test)]
@@ -1119,6 +1122,7 @@ mod trust_attestation_verify_op;
 mod unique_nanos;
 mod user_command_lookup;
 mod user_health_state;
+mod verified_github_read;
 mod verified_read_decision_op;
 #[cfg(unix)]
 mod verified_read_execute;

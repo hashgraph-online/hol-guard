@@ -102,8 +102,16 @@ pub(super) fn run() -> Result<(), String> {
             let response = contained_output_match::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if verified_github_read::is_command(command) && flag == "--stdin" => {
+            let response = verified_github_read::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if desktop_core_onedir::is_command(command) && flag == "--stdin" => {
             let response = desktop_core_onedir::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if trust_attestation_key::is_command(command) && flag == "--stdin" => {
+            let response = trust_attestation_key::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if codex_hook_trust::is_command(command) && flag == "--stdin" => {
@@ -198,6 +206,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if cloud_actions_connect::is_command(command) && flag == "--stdin" => {
             let response = cloud_actions_connect::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if cloud_actions_health::is_command(command) && flag == "--stdin" => {
+            let response = cloud_actions_health::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if hermes_file_inspect::is_command(command) && flag == "--stdin" => {

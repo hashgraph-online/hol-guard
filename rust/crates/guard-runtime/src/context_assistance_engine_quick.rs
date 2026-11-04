@@ -1,11 +1,13 @@
 //! Code for a prompt that arrives while CIGAR is still starting, such as the
 //! first prompt of a session. Guard reads the matched files itself, through
 //! the checks an automatic scope applies, and shows the part of each that
-//! holds the most of the prompt's words. A folder picked in the dashboard
-//! keeps to its picked files, as it does once CIGAR is up.
+//! holds the most of the prompt's words. Files picked by hand, in the
+//! dashboard or for an app, keep the read to those files, as they do for
+//! CIGAR.
 use super::*;
 use crate::policy_store::context_assistance_registry::picked;
 use std::path::Path;
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 /// Files read for one prompt, so the read stays inside the hook's budget.
@@ -48,6 +50,57 @@ const MODIFIERS: [&str; 11] = [
     "protected ",
     "abstract ",
 ];
+
+/// Files picked by hand for one project in a running worker, and the app
+/// they were picked for.
+pub(super) struct Hand {
+    pub(super) root: PathBuf,
+    pub(super) app: String,
+    pub(super) files: Vec<String>,
+}
+
+type Hands = Mutex<BTreeMap<PathBuf, Vec<Hand>>>;
+
+/// Each Guard home's hand picks as of its worker's last request, so a prompt
+/// Guard reads itself while CIGAR is busy keeps to the files CIGAR would use.
+/// A worker that stops leaves its last record, which can only narrow what
+/// Guard reads, until the next worker replaces it.
+fn hands() -> &'static Hands {
+    static HANDS: OnceLock<Hands> = OnceLock::new();
+    HANDS.get_or_init(Default::default)
+}
+
+pub(super) fn publish(home: &Path, picked: Vec<Hand>) {
+    if let Ok(mut all) = hands().lock() {
+        all.insert(home.to_path_buf(), picked);
+    }
+}
+
+/// The files CIGAR keeps to for `app` in `root`: a running pick for that
+/// app, else a dashboard pick, else none. A record Guard cannot read keeps
+/// to no files at all.
+fn kept_to(home: &Path, root: &Path, app: &str) -> Option<Vec<String>> {
+    let live = {
+        let Ok(all) = hands().lock() else {
+            return Some(Vec::new());
+        };
+        all.get(home).and_then(|picked| {
+            picked
+                .iter()
+                .filter(|hand| hand.root == root)
+                .filter_map(|hand| Some((pick_rank(&hand.app, app, hand.files.len())?, hand)))
+                .min_by_key(|(rank, _)| *rank)
+                .map(|(_, hand)| hand.files.clone())
+        })
+    };
+    live.or_else(|| picked_files(home, root))
+}
+
+/// Whether `app` may still draw on `workspace`, checked again after a read
+/// in case project context was turned off for it meanwhile.
+pub(crate) fn project_context_on(home: &Path, workspace: &Path, app: &str) -> bool {
+    screened(home, workspace, app).is_some()
+}
 
 /// The project root a prompt may draw on: an agent app, a folder outside
 /// Guard's home, and agent context on with workspace files for that folder.
@@ -170,7 +223,7 @@ pub(crate) fn quick_excerpts(
     let Some(root) = screened(home, workspace, app) else {
         return (parts, names);
     };
-    let chosen = picked_files(home, root.path());
+    let chosen = kept_to(home, root.path(), app);
     let allowed = found
         .iter()
         .filter(|relative| chosen.as_ref().is_none_or(|files| files.contains(relative)));

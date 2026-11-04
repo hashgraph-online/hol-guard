@@ -45,6 +45,10 @@ assert.deepEqual(planCigarSetup(data({ state: ready }), open), { kind: "ready" }
 assert.equal(planCigarSetup(data(), { ...open, dirty: true }).kind, "blocked");
 const managed = planCigarSetup(data(), { ...open, locked: true });
 assert.ok(managed.kind === "blocked" && /organization/.test(managed.block.title));
+const stoppedManaged = planCigarSetup(data({ state: { ...ready, effective_enabled: false, runtime: null } }), { ...open, locked: true });
+assert.deepEqual(stoppedManaged.kind === "run" ? stoppedManaged.stages : stoppedManaged, ["start"],
+  "a managed computer still starts the selection its administrator turned on, without changing preferences");
+assert.equal((stoppedManaged as CigarSetupRun).approval, false);
 const upstream = planCigarSetup(data({ catalog: bundled }), open);
 assert.ok(upstream.kind === "run" && upstream.build_id === bundled.builds[0].identity.build_id,
   "the bundled catalog entry installs by one click; installation checks each feature on this computer");
@@ -93,6 +97,14 @@ const job = (patch: Record<string, unknown>) => parseCigarVersionJob({ job_id: "
   activation_granted: false, ...patch });
 const busy = planCigarSetup(data({ jobs: [job({ schema: "guard-cigar-catalog-refresh-job.v1", operation: "refresh_catalog" })] }), open);
 assert.ok(busy.kind === "blocked" && busy.block.title === "CIGAR is busy");
+const stopped = { ...ready, effective_enabled: false, runtime: null };
+const busyManaged = planCigarSetup(data({ state: stopped, jobs: [job({ schema: "guard-cigar-catalog-refresh-job.v1", operation: "refresh_catalog" })] }),
+  { ...open, locked: true });
+assert.ok(busyManaged.kind === "blocked" && busyManaged.block.title === "CIGAR is busy", "a managed start waits for a running task too");
+const pausedManaged = planCigarSetup(data({ state: stopped, jobs: [job({ schema: "guard-cigar-catalog-refresh-job.v1", operation: "refresh_catalog",
+  phase: "recovery_required", code: "recovery_required", worker_live: false })] }), { ...open, locked: true });
+assert.ok(pausedManaged.kind === "blocked" && pausedManaged.block.title === "An earlier setup did not finish" && pausedManaged.block.tab === "versions",
+  "a paused task blocks a managed start and says why");
 
 // Coming back to a safety check this tab prepared commits it instead of waiting for it to expire.
 const prepared = job({ schema: "guard-cigar-switch-job.v1", operation: "select", job_id: "dashboard:mine", phase: "ready", code: "ready",

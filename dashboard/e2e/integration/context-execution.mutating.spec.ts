@@ -34,7 +34,7 @@ test("execution opt-in and browser approvals reach the installed native executor
     // builtins. Approvals themselves must come through the browser below.
     expect(sink("allow-once", "configure")).toMatchObject({ code: 0, execution_review_required: true });
     await page.goto("/cigar?section=runtime");
-    await page.getByRole("button", { name: "Refresh runtime list", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh versions", exact: true }).click();
     const enabled = page.getByRole("switch", { name: "Use CIGAR on this machine", exact: true });
     await expect(enabled).toHaveAttribute("aria-checked", "false");
     await enabled.click();
@@ -49,7 +49,7 @@ test("execution opt-in and browser approvals reach the installed native executor
     await page.keyboard.press("Space");
     await save(page, state);
     expect((await status()).effective_enabled).toBe(false);
-    await page.getByRole("button", { name: "Start context assistance", exact: true }).click();
+    await page.getByRole("button", { name: "Turn on CIGAR", exact: true }).click();
     await expect.poll(async () => (await status()).execution_ready, { timeout: 90_000 }).toBe(true);
     const ready = await status();
     expect(ready.runtime?.interpreter.version.slice(0, 2)).toEqual([3, 14]);

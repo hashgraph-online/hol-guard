@@ -16,7 +16,7 @@ import secrets
 import threading
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from .decisions import AUTHORITATIVE_DECISION_INCONSISTENT
@@ -233,13 +233,19 @@ def cloud_sync_receipt_payloads(
     return payloads
 
 
-def cloud_review_event_display(item: Mapping[str, object], *, redaction_level: str) -> dict[str, Any]:
-    """Display command/summary/provenance plus the safe request payload."""
+def cloud_review_event(
+    item: Mapping[str, object], *, redaction_level: str, event: Mapping[str, object]
+) -> dict[str, object]:
+    """The Cloud review event for a request row and the facts Python read beside it."""
 
     answer = _call(
         "cloud_review_event_display",
-        {"item": project_request_row(item), "redaction_level": redaction_level},
+        {"item": project_request_row(item), "redaction_level": redaction_level, "event": event},
     )
-    if not isinstance(answer.get("payload"), dict) or not isinstance(answer.get("display_command"), str):
+    built: object = answer.get("event")
+    if len(answer) != 1 or not isinstance(built, dict):
         raise _invalid()
-    return answer
+    event_body = cast(dict[str, object], built)
+    if not isinstance(event_body.get("requestPayload"), dict):
+        raise _invalid()
+    return event_body

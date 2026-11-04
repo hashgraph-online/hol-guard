@@ -42,13 +42,19 @@ const blocked = (title: string, detail: string, tab?: CigarTab, wait?: boolean):
 export function planCigarSetup(data: CigarVersionsData, options: { locked: boolean; dirty: boolean; adopt?: string | null }): CigarSetupPlan {
   const { state, catalog } = data;
   if (state.effective_enabled) return { kind: "ready" };
-  const held = cigarSetupHold(state, options);
-  if (held) return held;
-  const adopted = options.adopt ? planCigarAdopt(data.jobs.find((job) => job.job_id === options.adopt), state) : null;
+  if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
+  // Committing a held job needs the same clearance as any commit; a lock leaves it to the checks below.
+  const adopted = options.adopt && !cigarSetupHold(state, options)
+    ? planCigarAdopt(data.jobs.find((job) => job.job_id === options.adopt), state)
+    : null;
   if (adopted) return adopted;
   if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
   if (data.jobs.some((job) => job.phase === "recovery_required")) {
     return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
+  }
+  if (options.locked || (state.restriction && !state.effective_preferences.enabled)) {
+    // A managed computer can still start the selection its administrator already turned on.
+    return planCigarStart(state, false) ?? blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
   }
   const selected = state.preferences.runtime_id;
   const installed = data.installations;

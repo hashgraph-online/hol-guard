@@ -30,6 +30,7 @@ from tests.cloud_actions_pairing_support import WS, FakeCloud, pair
 
 RESOURCE_PATH = "/api/guard/gateway/mcp"
 ACCESS = "exchanged-access"
+_REAL_RENEWAL_REFUSED = status_commands._renewal_refused  # pyright: ignore[reportPrivateUsage]
 _NOT_YET = {"jsonrpc": "2.0", "id": "hol-guard-status", "error": {"code": -32601, "message": "Method not found"}}
 
 
@@ -99,6 +100,8 @@ def cloud() -> Iterator[StandIn]:
 @pytest.fixture
 def paired(cloud: StandIn, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeCloud:
     monkeypatch.setenv("HOME", str(tmp_path / "user"))
+    # Guard Cloud renews this computer's access unless a test says otherwise.
+    monkeypatch.setattr(status_commands, "_renewal_refused", lambda _store: None)
     return pair(monkeypatch, FakeCloud(origin=cloud.origin))
 
 
@@ -316,6 +319,33 @@ def test_doctor_without_a_configured_ai_tool_exchanges_nothing(
     assert paired.exchanged == [] and cloud.posts == []
 
 
+def test_doctor_without_an_ai_tool_asks_to_connect_again_after_revocation(
+    cloud: StandIn,
+    paired: FakeCloud,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from codex_plugin_scanner.guard.daemon import cloud_actions_status
+    from codex_plugin_scanner.guard.runtime import runner
+
+    def refresh(_store: object, *, force_refresh: bool = False, **_kwargs: object) -> dict[str, object]:
+        assert force_refresh
+        raise runner.GuardSyncAuthorizationExpiredError(runner._guard_oauth_reconnect_after_revoked_message())  # pyright: ignore[reportPrivateUsage]
+
+    monkeypatch.setattr(runner, "_resolve_guard_sync_auth_context", refresh)
+    monkeypatch.setattr(status_commands, "_renewal_refused", _REAL_RENEWAL_REFUSED)
+
+    code, payload, _ = _doctor(tmp_path, capsys)
+
+    assert (code, payload["result"]) == (4, "needs_connect")
+    assert payload["checks"]["access"] == {
+        "state": "reconnect",
+        "message": cloud_actions_status._RECONNECT_MESSAGE,  # pyright: ignore[reportPrivateUsage]
+    }
+    assert paired.exchanged == [] and cloud.posts == []
+
+
 def test_doctor_asks_to_connect_again_when_guard_cloud_refuses_the_access(
     cloud: StandIn, paired: FakeCloud, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -466,3 +496,16 @@ def test_a_bundle_that_would_hold_the_access_is_not_written(tmp_path: Path) -> N
 
     assert reason is not None
     assert not bundle.exists()
+
+
+def test_a_reply_the_native_runtime_cannot_read_is_not_reported_as_an_answer(
+    cloud: StandIn, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", lambda *_a, **_k: None)
+
+    service = cloud_actions_health.check_service(CloudActionsPairing(cloud.origin, WS))
+    connection = cloud_actions_health.check_connection(CloudActionsPairing(cloud.origin, WS), ACCESS, WS)
+
+    assert (service.state, service.ok, service.http_status) == ("native_unavailable", False, 200)
+    assert (connection.state, connection.ok, connection.http_status) == ("native_unavailable", False, 501)
+    assert "hol-guard doctor" in connection.message
