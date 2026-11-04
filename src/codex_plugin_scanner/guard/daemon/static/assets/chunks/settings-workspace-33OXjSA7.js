@@ -5895,10 +5895,8 @@ const blocked = (title, detail, tab, wait2) => ({ kind: "blocked", block: { titl
 function planCigarSetup(data, options) {
   const { state, catalog } = data;
   if (state.effective_enabled) return { kind: "ready" };
-  if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
-  if (options.locked || state.restriction && !state.effective_preferences.enabled) {
-    return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
-  }
+  const held = cigarSetupHold(state, options);
+  if (held) return held;
   const adopted = options.adopt ? planCigarAdopt(data.jobs.find((job) => job.job_id === options.adopt), state) : null;
   if (adopted) return adopted;
   if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
@@ -5961,6 +5959,14 @@ function planCigarAdopt(job, state) {
     approval: true,
     commit: { job_id: job.job_id, expected_generation: job.expected_generation, reconnect: job.reconnect_required }
   };
+}
+function cigarSetupHold(state, options) {
+  if (state.effective_enabled) return null;
+  if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
+  if (options.locked || state.restriction && !state.effective_preferences.enabled) {
+    return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
+  }
+  return null;
 }
 function planCigarStart(status, dirty) {
   return status && canStartCigar(status, dirty) ? {
@@ -7732,7 +7738,7 @@ function useCigarOneClick(options) {
     };
   }, [refresh]);
   const plan = reactExports.useMemo(
-    () => data ? planCigarSetup({ ...data, state: options.status ?? data.state }, { locked: options.locked, dirty: options.dirty, adopt: turnOnJob() }) : (own && planCigarAdopt(own.job, options.status ?? own.state)) ?? planCigarStart(options.status, options.dirty),
+    () => data ? planCigarSetup({ ...data, state: options.status ?? data.state }, { locked: options.locked, dirty: options.dirty, adopt: turnOnJob() }) : (own && (cigarSetupHold(options.status ?? own.state, options) ?? planCigarAdopt(own.job, options.status ?? own.state))) ?? planCigarStart(options.status, options.dirty),
     [data, own, options.status, options.locked, options.dirty]
   );
   const waiting = run.phase === "idle" && (plan?.kind === "blocked" && plan.block.wait === true || data === null && own !== null && cigarJobPending(own.job));
@@ -7784,7 +7790,7 @@ function useCigarOneClick(options) {
       } else {
         const job = await fetchOwnJob(abort.signal);
         if (abort.signal.aborted) throw new CigarSetupStopped();
-        next = job && planCigarAdopt(job.job, job.state);
+        next = job && (cigarSetupHold(job.state, latest.current) ?? planCigarAdopt(job.job, job.state));
         if (job && next) {
           initial2 = job.state;
           latest.current.publish(job.state);
@@ -7793,7 +7799,8 @@ function useCigarOneClick(options) {
         if (!next) throw failure2;
       }
       if (!next || next.kind !== "run" || !initial2) {
-        forgetTurnOn();
+        if (next?.kind === "blocked") forgetTurnOnClick();
+        else forgetTurnOn();
         setRun({ phase: "idle" });
         return;
       }
