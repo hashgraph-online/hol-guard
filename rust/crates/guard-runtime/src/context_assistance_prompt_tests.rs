@@ -99,6 +99,26 @@ fn a_file_this_prompt_did_not_rank_must_mention_two_of_its_words() {
 }
 
 #[test]
+fn a_passing_match_gives_way_to_code_about_the_request() {
+    let picked = [
+        excerpt(
+            "src/types.py",
+            "class Choice:\n    def convert(self, value):\n        self.fail(invalid_choice)",
+        ),
+        excerpt("src/progress.py", "raise ValueError('bad length')"),
+    ];
+    let found = words(&["src/types.py", "src/progress.py"]);
+    let asked = words(&["choice", "invalid", "value", "convert", "suggest"]);
+    let rendered = render(&picked, &found, &asked).unwrap();
+    assert!(rendered.contains("src/types.py (lines"), "{rendered}");
+    assert!(!rendered.contains("src/progress.py (lines"), "{rendered}");
+
+    // On its own, the passing match is still the best there is.
+    let alone = render(&picked[1..], &found, &asked).unwrap();
+    assert!(alone.contains("src/progress.py (lines"), "{alone}");
+}
+
+#[test]
 fn matching_code_is_rendered_as_file_contents_with_other_matches_listed() {
     let picked = [
         excerpt(
