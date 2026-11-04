@@ -151,6 +151,35 @@ fn a_docstring_example_or_local_binding_does_not_beat_the_real_definition() {
     assert_eq!(best_part(&rust, &words).unwrap().1.start_line, 10);
 }
 
+/// A `/*` inside a string or at the end of a line comment opens no block
+/// comment, so the definitions after it still count.
+#[test]
+fn a_comment_mark_inside_a_string_or_line_comment_hides_nothing() {
+    let words = vec!["cart".to_owned(), "total".to_owned()];
+    let rust = file(
+        "src/cart.rs",
+        &[
+            ("// cart total notes\n", 1),
+            (
+                "const GLOB: &str = \"src/**/*.rs\"; // matches a/*\nfn cart_total() {}\n",
+                10,
+            ),
+        ],
+    );
+    assert_eq!(best_part(&rust, &words).unwrap().1.start_line, 10);
+    let block = file(
+        "src/cart.ts",
+        &[
+            ("// cart total notes\n", 1),
+            (
+                "/**\n * function cart_total\n */\nfunction cart_total() {}\n",
+                10,
+            ),
+        ],
+    );
+    assert_eq!(best_part(&block, &words).unwrap().1.start_line, 10);
+}
+
 /// A prose file's wrapped lines that start with `module` or `type` are words,
 /// so the part with the most of the prompt's words leads, as before.
 #[test]

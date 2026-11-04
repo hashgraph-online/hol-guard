@@ -29,9 +29,9 @@ const DEFINERS: [&str; 13] = [
 /// Words that bind a value: a definition only at a file's top level, since
 /// inside a function they name a local.
 const BINDERS: [&str; 3] = ["const ", "let ", "var "];
-/// Marks that open or close a docstring or block comment, whose lines are
-/// text about the code, not definitions.
-const QUOTES: [&str; 4] = ["\"\"\"", "'''", "/*", "*/"];
+/// Marks that open and close a docstring, whose lines are text about the
+/// code, not definitions.
+const DOCSTRINGS: [&str; 2] = ["\"\"\"", "'''"];
 /// Prose files, whose lines read as words, not definitions.
 const PROSE: [&str; 6] = ["md", "markdown", "mdx", "txt", "rst", "adoc"];
 /// Modifiers that may come before a definer.
@@ -72,16 +72,33 @@ pub(super) fn said(text: &str, words: &[String]) -> usize {
 /// How many of `words` the text's definition lines name, leaving out lines
 /// inside a docstring or block comment.
 fn defined(text: &str, words: &[String]) -> usize {
-    let mut quoted = false;
+    let mut closer: Option<&str> = None;
     let mut definitions = Vec::new();
     for line in text.lines() {
-        if !quoted && definition(line) {
-            definitions.push(line);
-        }
-        let marks: usize = QUOTES.iter().map(|mark| line.matches(mark).count()).sum();
-        quoted ^= marks % 2 == 1;
+        closer = match closer {
+            Some(mark) => (!line.contains(mark)).then_some(mark),
+            None => {
+                if definition(line) {
+                    definitions.push(line);
+                }
+                opened(line)
+            }
+        };
     }
     said(&definitions.join("\n"), words)
+}
+
+/// The mark that closes a docstring or block comment `line` leaves open. A
+/// block comment opens only at the start of a line, so a `/*` inside a
+/// string such as a glob, or at the end of a line comment, opens nothing.
+fn opened(line: &str) -> Option<&'static str> {
+    let comment = line.trim_start().strip_prefix("/*");
+    if comment.is_some_and(|rest| !rest.contains("*/")) {
+        return Some("*/");
+    }
+    DOCSTRINGS
+        .into_iter()
+        .find(|mark| line.matches(mark).count() % 2 == 1)
 }
 
 /// A line that opens a function, type or top-level value definition.
