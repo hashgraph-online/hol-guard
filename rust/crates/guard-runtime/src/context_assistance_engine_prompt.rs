@@ -9,6 +9,10 @@
 use super::*;
 use std::time::{Instant, SystemTime};
 
+#[path = "context_assistance_engine_quick.rs"]
+mod quick;
+pub(crate) use quick::quick_excerpts;
+
 /// The graph holds 128 sources, Guard's own included, and a removed file
 /// still counts until the graph is rebuilt.
 const MAX_SOURCES: usize = 96;
@@ -71,19 +75,9 @@ pub(crate) fn admissible_paths(
     limit: usize,
     until: Instant,
 ) -> Vec<String> {
-    if crate::guard_config_harness::canonical_harness_id(app) != Some(app) {
-        return Vec::new();
-    }
-    let Ok(root) = SourceRoot::inspect(workspace) else {
+    let Some(root) = quick::screened(home, workspace, app) else {
         return Vec::new();
     };
-    let permitted = !root.path().starts_with(home)
-        && effective(home, &root).is_ok_and(|policy| {
-            policy.features.agent_context && policy.sources.workspace_documents
-        });
-    if !permitted {
-        return Vec::new();
-    }
     found
         .iter()
         .take_while(|_| Instant::now() < until)
@@ -108,43 +102,16 @@ fn led_by(
     lead: Option<&AdmittedFile>,
     words: &[String],
 ) -> Vec<PickedExcerpt> {
-    let Some(file) = lead else {
+    let Some((score, part)) = lead.and_then(|file| quick::best_part(file, words)) else {
         return picked;
     };
-    let said = |text: &str| {
-        let text = text.to_lowercase();
-        words.iter().filter(|w| text.contains(w.as_str())).count()
-    };
-    let best = file
-        .documents
-        .iter()
-        .map(|doc| (said(&doc.text), doc))
-        .filter(|(score, _)| *score > 0)
-        .max_by_key(|(score, doc)| (*score, std::cmp::Reverse(doc.start_line)));
-    let Some((score, doc)) = best else {
-        return picked;
-    };
-    let start = u64::from(doc.start_line);
-    let lines = doc.text.lines().count().max(1) as u64;
-    let end = start + lines - 1;
-    let of_file = || {
-        picked
-            .iter()
-            .filter(|excerpt| excerpt.path == file.relative_path)
-    };
-    let covered = of_file().any(|excerpt| excerpt.start_line <= end && excerpt.end_line >= start);
-    if covered || of_file().any(|excerpt| said(&excerpt.text) > score) {
+    let of_file = || picked.iter().filter(|excerpt| excerpt.path == part.path);
+    let covered = of_file()
+        .any(|excerpt| excerpt.start_line <= part.end_line && excerpt.end_line >= part.start_line);
+    if covered || of_file().any(|excerpt| quick::said(&excerpt.text, words) > score) {
         return picked;
     }
-    picked.insert(
-        0,
-        PickedExcerpt {
-            path: file.relative_path.clone(),
-            start_line: start,
-            end_line: end,
-            text: doc.text.clone(),
-        },
-    );
+    picked.insert(0, part);
     picked
 }
 

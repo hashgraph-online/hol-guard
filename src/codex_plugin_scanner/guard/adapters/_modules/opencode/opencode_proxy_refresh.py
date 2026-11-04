@@ -60,12 +60,7 @@ def refresh_opencode_proxy_launchers(context: HarnessContext, *, warnings: list[
 
 
 def _refresh_locked(context: HarnessContext, *, warnings: list[str] | None = None) -> int:
-    from .opencode_install_snapshot import (
-        OpenCodeInstallSnapshotError,
-        _binding_matches_native,
-        _scope_for,
-        _verified_proxy_binding,
-    )
+    from .opencode_install_snapshot import OpenCodeInstallSnapshotError, _refreshable_proxy_names, _scope_for
 
     writes: list[tuple[Path, bytes, bytes, int]] = []
     refreshed = 0
@@ -91,22 +86,10 @@ def _refresh_locked(context: HarnessContext, *, warnings: list[str] | None = Non
         if not isinstance(mcp, dict):
             continue
         changed = False
-        for name, entry in mcp.items():
-            if not isinstance(name, str) or not isinstance(entry, dict):
-                continue
-            binding = _verified_proxy_binding(
-                name,
-                entry,
-                context=context,
-                scope=_scope_for(context, path),
-                expected_config_path=path,
-            )
-            if binding is None:
-                continue
-            native = mcp.get(binding.native_name)
-            if isinstance(native, dict) and (
-                native.get("type", "local") not in {"local", "stdio"} or not _binding_matches_native(binding, native)
-            ):
+        names = _refreshable_proxy_names(payload, context=context, scope=_scope_for(context, path), config_path=path)
+        for name in names:
+            entry = mcp.get(name)
+            if not isinstance(entry, dict):
                 continue
             _, args = _command_parts(entry)
             proxy_args = list(args[args.index("opencode-mcp-proxy") :])

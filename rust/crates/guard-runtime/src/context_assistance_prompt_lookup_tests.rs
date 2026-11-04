@@ -22,14 +22,14 @@ fn a_prompt_that_finds_cigar_starting_leaves_one_warm_up_for_the_next() {
     let service = Service::default();
     service.hold_start_for_tests();
     let ask = |query: &str| {
-        let soon = Instant::now() + Duration::from_millis(120);
+        let soon = Instant::now() + Duration::from_millis(120) + READ_RESERVE;
         lookup(&service, home.path(), request(project.path(), query), soon)
     };
 
     assert_eq!(
         ask("fix the cart"),
-        None,
-        "a starting CIGAR leaves the prompt the matched files"
+        Err(Miss::Starting),
+        "a starting CIGAR leaves the prompt to Guard's own read"
     );
     assert!(
         warming_now(&key),
@@ -37,8 +37,8 @@ fn a_prompt_that_finds_cigar_starting_leaves_one_warm_up_for_the_next() {
     );
     assert_eq!(
         ask("cart tax"),
-        None,
-        "a later prompt still gets the matched files"
+        Err(Miss::Starting),
+        "a later prompt is still told CIGAR is starting"
     );
 
     service.end_start_for_tests();
@@ -52,7 +52,7 @@ fn a_prompt_that_finds_cigar_starting_leaves_one_warm_up_for_the_next() {
     }
     assert_eq!(
         ask("fix the cart"),
-        Some(None),
+        Ok(None),
         "CIGAR neither starting nor running adds nothing"
     );
     assert!(

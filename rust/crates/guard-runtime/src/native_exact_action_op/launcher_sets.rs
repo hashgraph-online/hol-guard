@@ -73,6 +73,7 @@ const EXTRA_MUTABLE_LAUNCHERS: &[&str] = &[
     "borp",
     "poku",
     "lab",
+    "cucumber-js",
     "rake",
     "gradle",
     "mvn",

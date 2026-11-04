@@ -354,6 +354,10 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
         "borp" => ("borp/package.json", &["borp/borp.js"]),
         "poku" => ("poku/package.json", &["poku/lib/bin/index.js"]),
         "lab" => ("@hapi/lab/package.json", &["@hapi/lab/bin/lab"]),
+        "cucumber-js" => (
+            "@cucumber/cucumber/package.json",
+            &["@cucumber/cucumber/bin/cucumber.js"],
+        ),
         _ => ("vitest/vitest.mjs", &["vitest/vitest.mjs"]),
     };
     let modules = nearest_project_root(cwd, workspace, &format!("node_modules/{installed}"))?
@@ -414,6 +418,7 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
                 "borp" => "borp is not installed inside this workspace. Guard did not download or execute a replacement.",
                 "poku" => "poku is not installed inside this workspace. Guard did not download or execute a replacement.",
                 "lab" => "lab is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "cucumber-js" => "cucumber-js is not installed inside this workspace. Guard did not download or execute a replacement.",
                 _ => "Vitest is not installed inside this workspace. Guard did not download or execute a replacement.",
             },
         ));

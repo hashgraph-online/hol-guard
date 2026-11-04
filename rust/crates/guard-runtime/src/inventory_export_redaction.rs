@@ -11,7 +11,7 @@
 //! walks the caller's value with them.
 //!
 //! Values travel as JSON text so the parse keeps their key order: the export
-//! keeps the order its producer wrote. Two operations are served:
+//! keeps the order its producer wrote. Three operations are served:
 //!
 //! * `{"op": "safe_json", "value": <JSON text>, "parent_key": str,
 //!   "parent_sensitive": bool}` answers `{"value": <JSON text>}`, the value
@@ -19,6 +19,8 @@
 //! * `{"op": "assert_payload_safe", "payload": <JSON text>}` answers
 //!   `{"safe": bool}`, whether `json.dumps(payload, sort_keys=True)` text is
 //!   free of private paths, credential values and secret assignments.
+//! * `{"op": "item_description", ...}` answers `{"description": str}`, an
+//!   inventory item's exported description (see `inventory_item_description`).
 
 use std::collections::HashMap;
 
@@ -31,6 +33,9 @@ use crate::hook_env_stamp::{dumps, float_text, write_string};
 use crate::pyjson::{self, in_surrogate_plane, PyVal};
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
+
+#[path = "inventory_item_description.rs"]
+mod item_description;
 
 const SAFE_JSON_KEYS: [&str; 4] = ["op", "value", "parent_key", "parent_sensitive"];
 const ASSERT_KEYS: [&str; 2] = ["op", "payload"];
@@ -62,6 +67,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
             dumps_sorted_spaced(&payload, mapped, &mut encoded);
             Ok(json!({ "safe": encoded_payload_is_safe(&encoded) }))
         }
+        Some("item_description") => item_description::dispatch(fields),
         _ => Err(ERR_INVALID),
     }
 }

@@ -24,7 +24,8 @@ List them any time with `hol-guard policy init --list`.
 
 ## Keeping the two in step
 
-The CLI starters live in `src/codex_plugin_scanner/guard/policy_starters.py`. When a starter is added,
-renamed or changed in Policy Studio, change the matching entry there and update the table above. The
+The CLI starters live in `rust/crates/guard-command/src/policy_document_starters.rs`. When a starter is
+added, renamed or changed in Policy Studio, change the matching entry there, update its rendered text in
+`rust/crates/guard-command/testdata/policy_starters/starter_vectors.json` and update the table above. The
 parity tests render every starter and run its example tests, so a starter whose examples drift from its
 rules fails the build.

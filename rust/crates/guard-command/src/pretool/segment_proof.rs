@@ -139,6 +139,14 @@ pub(crate) fn benign_command_segments(
                         | "paste"
                         | "join"
                         | "column"
+                        | "nl"
+                        | "tac"
+                        | "rev"
+                        | "fold"
+                        | "expand"
+                        | "unexpand"
+                        | "fmt"
+                        | "comm"
                 ))
                 // A file operand prints a source line on a syntax error, so it
                 // gets the same session proof as `cat`.
@@ -524,7 +532,8 @@ pub(super) fn exact_safe_segment_with_context(
                 context,
             )
         }
-        "sort" | "uniq" | "cut" | "tr" | "paste" | "join" | "column" => {
+        "sort" | "uniq" | "cut" | "tr" | "paste" | "join" | "column" | "nl" | "tac" | "rev"
+        | "fold" | "expand" | "unexpand" | "fmt" | "comm" => {
             (segment.pipeline_index > 0
                 && super::stdin_filters::safe_arguments(basename, &segment.arguments))
                 || super::stdin_filters::safe_file_arguments(basename, &segment.arguments, context)
