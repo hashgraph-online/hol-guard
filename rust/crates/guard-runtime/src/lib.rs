@@ -398,6 +398,7 @@ mod extension_control_mutation_op;
 mod extension_control_op;
 mod extension_control_prepared_op;
 mod extension_control_preview_op;
+mod extension_control_projection_op;
 mod extension_control_proof;
 mod extension_control_terminal_op;
 mod extension_coverage_hint;

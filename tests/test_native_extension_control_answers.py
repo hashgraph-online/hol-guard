@@ -8,6 +8,7 @@ the bridge builds is pinned in ``test_native_extension_control.py``.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -19,6 +20,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 from tests.native_extension_control_support import (
     COMPOSED,
     EXTENSION,
+    PERMISSION,
     UNBOUND_DIGEST,
     bound_reply,
     echo_answers,
@@ -216,3 +218,89 @@ def test_a_failed_later_request_fails_the_whole_question(monkeypatch: pytest.Mon
     with pytest.raises(bridge.NativeExtensionControlError):
         bridge.resolve_scenarios(make_registry(), (scenario,))
     assert len(asked) == 2
+
+
+def _projection_registry() -> Any:
+    registry = make_registry()
+    permission = registry.permissions[0]
+    registry.permissions = (type(permission)(**vars(permission), configurable=False, fixed_reason="Always reviewed."),)
+    return registry
+
+
+def _projected_extension(extension_id: str, **overrides: object) -> dict[str, object]:
+    entry: dict[str, object] = {
+        "extension_id": extension_id,
+        "effective_state": "allowed",
+        "local_state": "inherited",
+        "managed_state": "inherited",
+        "required": False,
+        "reason_codes": [],
+    }
+    entry.update(overrides)
+    return entry
+
+
+def _projected_permission(**overrides: object) -> dict[str, object]:
+    entry: dict[str, object] = {
+        "permission_id": PERMISSION,
+        "extension_id": EXTENSION,
+        "effective_state": "blocked",
+        "local_state": "disabled",
+        "managed_state": "inherited",
+        "configurable": False,
+        "fixed_reason": "Always reviewed.",
+        "reason_codes": ["control.disabled-permission"],
+    }
+    entry.update(overrides)
+    return entry
+
+
+def _projection_payload(
+    extensions: list[dict[str, object]] | None = None, permissions: list[dict[str, object]] | None = None
+) -> dict[str, object]:
+    return {
+        "kind": "project",
+        "extensions": extensions
+        if extensions is not None
+        else [_projected_extension(EXTENSION), _projected_extension("command.shell", required=True)],
+        "permissions": permissions if permissions is not None else [_projected_permission()],
+    }
+
+
+def test_a_projection_is_asked_with_the_permission_facts_and_presented(monkeypatch: pytest.MonkeyPatch) -> None:
+    asked: list[dict[str, object]] = []
+
+    def answer(request: dict[str, object]) -> dict[str, object]:
+        asked.append(request)
+        return bound_reply(request, _projection_payload())
+
+    resident_answers(monkeypatch, answer)
+
+    extensions, permissions = bridge.project_extension_controls(_projection_registry(), (make_layer(),), None)
+
+    query = asked[0]["query"]
+    assert isinstance(query, dict)
+    assert query["kind"] == "project"
+    assert query["permission_facts"] == [{"configurable": False, "fixed_reason": "Always reviewed."}]
+    assert query["authority_failure"] is None
+    assert [item["extension_id"] for item in extensions] == [EXTENSION, "command.shell"]
+    assert permissions == [_projected_permission()]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        _projection_payload(extensions=[_projected_extension(EXTENSION)]),
+        _projection_payload(extensions=[_projected_extension("command.shell"), _projected_extension(EXTENSION)]),
+        _projection_payload(permissions=[_projected_permission(effective_state="maybe")]),
+        _projection_payload(permissions=[_projected_permission(local_state="on")]),
+        _projection_payload(permissions=[_projected_permission(reason_codes=[1])]),
+        _projection_payload(permissions=[{**_projected_permission(), "evidence": "x"}]),
+        {"kind": "project", "extensions": []},
+    ],
+)
+def test_a_malformed_projection_raises(monkeypatch: pytest.MonkeyPatch, payload: dict[str, object]) -> None:
+    resident_answers(monkeypatch, lambda request: bound_reply(request, payload))
+
+    with pytest.raises(bridge.NativeExtensionControlError):
+        bridge.project_extension_controls(_projection_registry(), (make_layer(),), None)

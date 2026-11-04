@@ -470,6 +470,88 @@ def resolve_scenarios(
     )
 
 
+# The most extensions and permissions one projection lists (``MAX_EXTENSIONS`` and
+# ``MAX_PERMISSIONS`` in ``extension_control_projection_op.rs``).
+_MAX_PROJECTED_EXTENSIONS: Final = 512
+_MAX_PROJECTED_PERMISSIONS: Final = 4096
+_EFFECTIVE_STATES: Final = frozenset({"allowed", "blocked"})
+_LAYER_STATES: Final = frozenset({"enabled", "disabled", "inherited"})
+_PROJECTED_EXTENSION_FIELDS: Final = {
+    "extension_id": str,
+    "effective_state": str,
+    "local_state": str,
+    "managed_state": str,
+    "required": bool,
+    "reason_codes": list,
+}
+_PROJECTED_PERMISSION_FIELDS: Final = {
+    "permission_id": str,
+    "extension_id": str,
+    "effective_state": str,
+    "local_state": str,
+    "managed_state": str,
+    "configurable": bool,
+    "fixed_reason": _OPT_STR,
+    "reason_codes": list,
+}
+
+
+def _projected(value: object, fields: Mapping[str, Any], ids: Sequence[str], key: str) -> list[dict[str, object]]:
+    if not isinstance(value, list) or len(value) != len(ids):
+        raise _invalid()
+    entries: list[dict[str, object]] = []
+    for raw, expected in zip(value, ids, strict=True):
+        entry = _shape(raw, fields)
+        if (
+            entry[key] != expected
+            or entry["effective_state"] not in _EFFECTIVE_STATES
+            or entry["local_state"] not in _LAYER_STATES
+            or entry["managed_state"] not in _LAYER_STATES
+        ):
+            raise _invalid()
+        entries.append({**entry, "reason_codes": list(_strings(entry["reason_codes"]))})
+    return entries
+
+
+def project_extension_controls(
+    registry: CommandSafetyExtensionRegistry,
+    layers: Sequence[ExtensionControlLayer],
+    authority_failure: ResolverFailureCode | None,
+    *,
+    guard_home: Path | None = None,
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Every extension and permission's effective state, as the Extension Control Center lists them.
+
+    The resident resolves each one for command evaluation against ``layers``
+    and reports what the local and the managed layer set on it; a larger
+    registry is cut to the first 512 extensions and 4096 permissions.
+    """
+
+    query: dict[str, object] = {
+        "kind": "project",
+        "registry": _registry_wire(registry, trust_classes=True),
+        "permission_facts": [
+            {"configurable": permission.configurable, "fixed_reason": permission.fixed_reason}
+            for permission in registry.permissions
+        ],
+        "layers": [_layer_wire(layer) for layer in layers],
+        "authority_failure": None if authority_failure is None else authority_failure.value,
+    }
+    if _wire_bytes(query) > _MAX_BATCH_BYTES:
+        raise _too_large()
+    extension_ids = [extension.extension_id for extension in registry.extensions[:_MAX_PROJECTED_EXTENSIONS]]
+    permission_ids = [permission.permission_id for permission in registry.permissions[:_MAX_PROJECTED_PERMISSIONS]]
+    return _ask(
+        query,
+        guard_home,
+        {"extensions": list, "permissions": list},
+        lambda payload: (
+            _projected(payload["extensions"], _PROJECTED_EXTENSION_FIELDS, extension_ids, "extension_id"),
+            _projected(payload["permissions"], _PROJECTED_PERMISSION_FIELDS, permission_ids, "permission_id"),
+        ),
+    )
+
+
 def preview_control_mutation(
     registry: CommandSafetyExtensionRegistry,
     current_layers: Sequence[ExtensionControlLayer],

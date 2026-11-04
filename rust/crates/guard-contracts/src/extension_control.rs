@@ -60,6 +60,45 @@ pub struct ExtensionControlRegistryV1 {
     pub permissions: Vec<ExtensionControlRegistryPermissionV1>,
 }
 
+/// Whether a local control may change one registry permission, and why not.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlPermissionFactsV1 {
+    pub configurable: bool,
+    pub fixed_reason: Option<String>,
+}
+
+/// One extension's effective state, as the Extension Control Center shows it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlProjectedExtensionV1 {
+    pub extension_id: String,
+    /// `allowed` or `blocked`.
+    pub effective_state: String,
+    /// The local layer's control on it: `enabled`, `disabled` or `inherited`.
+    pub local_state: String,
+    /// The managed layer's control on it, read the same way.
+    pub managed_state: String,
+    pub required: bool,
+    /// The resolver's factor codes and `resolver.`-prefixed failure codes,
+    /// sorted and unique.
+    pub reason_codes: Vec<String>,
+}
+
+/// One permission's effective state, as the Extension Control Center shows it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlProjectedPermissionV1 {
+    pub permission_id: String,
+    pub extension_id: String,
+    pub effective_state: String,
+    pub local_state: String,
+    pub managed_state: String,
+    pub configurable: bool,
+    pub fixed_reason: Option<String>,
+    pub reason_codes: Vec<String>,
+}
+
 /// One resolution asked against a scenario's layers.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -95,6 +134,16 @@ pub enum ExtensionControlQueryV1 {
     Resolve {
         registry: ExtensionControlRegistryV1,
         scenarios: Vec<ExtensionControlScenarioV1>,
+    },
+    /// The effective state of the registry's leading extensions and
+    /// permissions, each resolved for command evaluation against `layers`.
+    /// `permission_facts` holds one entry per registry permission, in order.
+    Project {
+        registry: ExtensionControlRegistryV1,
+        permission_facts: Vec<ExtensionControlPermissionFactsV1>,
+        layers: Vec<NativeExtensionControlLayerV1>,
+        /// As in [`ExtensionControlScenarioV1::authority_failure`].
+        authority_failure: Option<String>,
     },
     /// The digest that identifies the runtime snapshot of one authority view.
     SnapshotDigest {
@@ -252,6 +301,11 @@ pub enum ExtensionControlPayloadV1 {
     },
     Resolve {
         scenarios: Vec<ExtensionControlScenarioResultV1>,
+    },
+    /// The answer to `project`, in registry order.
+    Project {
+        extensions: Vec<ExtensionControlProjectedExtensionV1>,
+        permissions: Vec<ExtensionControlProjectedPermissionV1>,
     },
     SnapshotDigest {
         digest: String,
