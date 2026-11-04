@@ -304,6 +304,42 @@ fn contained_target_answers_the_sink() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+#[test]
+fn contained_target_reads_a_bounded_inline_shell_as_its_script() {
+    // The review reads `bash -ec 'pytest -q'` as `pytest -q`, so the sink has
+    // to plan that script or it refuses the run the review sent it.
+    for (text, script) in [
+        ("bash -ec 'pytest -q'", "pytest -q"),
+        ("sh -c 'pytest -q'", "pytest -q"),
+        ("bash -e -c 'pytest -q'", "pytest -q"),
+        // The sink re-authorizes the script on its own, so a chained script
+        // is projected here and refused there.
+        ("bash -ec 'pytest -q && rm -rf x'", "pytest -q && rm -rf x"),
+    ] {
+        let input = json!({ "text": text });
+        assert_eq!(
+            evaluate("contained_target", &input).unwrap()["value"],
+            json!(script),
+            "{text}"
+        );
+    }
+    // A shell that reads more than its script, a script that expands, or a
+    // command with no shell in front stays whole.
+    for text in [
+        "bash -lc 'pytest -q'",
+        "zsh -c 'pytest -q'",
+        "bash -c 'pytest \"$X\"'",
+        "pytest -q",
+    ] {
+        let input = json!({ "text": text });
+        assert_eq!(
+            evaluate("contained_target", &input).unwrap()["value"],
+            Value::Null,
+            "{text}"
+        );
+    }
+}
+
 #[path = "contained_argv_program_tests.rs"]
 mod program;
 #[path = "contained_argv_script_tests.rs"]

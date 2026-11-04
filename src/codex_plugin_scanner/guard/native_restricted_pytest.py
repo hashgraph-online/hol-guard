@@ -168,7 +168,8 @@ def contained_target(command: str, *, cwd: Path | None = None, home_dir: Path | 
     The native scan owns the reading: a trailing subshell or brace group is the
     command list inside it, and an activation has to resolve to a marked
     environment's own script, its text has to bound the programs it can run,
-    and only then does the command after it carry the verdict.
+    and only then does the command after it carry the verdict. A bounded inline
+    shell such as ``bash -ec 'pytest -q'`` is the script it holds.
     """
     try:
         value = restricted_native(
