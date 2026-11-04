@@ -213,6 +213,23 @@ def test_only_cloud_actions_access_for_the_paired_workspace_is_accepted(answer: 
     assert error.value.reason == "access_invalid"
 
 
+def test_no_access_is_accepted_without_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+
+    def unavailable(*_: object, **__: object) -> dict[str, object]:
+        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+
+    with pytest.raises(CloudActionsAccessError) as error:
+        _ = read_cloud_actions_access(_answer(), pairing=PAIRING, now=0)
+    refusal = urllib.error.HTTPError(TOKEN_ENDPOINT, 400, "Bad Request", Message(), None)
+    refused = access._exchange_refused(refusal, {"error": "invalid_grant"})  # pyright: ignore[reportPrivateUsage]
+
+    assert error.value.reason == "native_unavailable"
+    assert refused.reason == "native_unavailable"
+
+
 def test_an_unpaired_computer_has_no_pairing(store: GuardStore, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(GuardStore, "get_oauth_local_credential_health", lambda self: {"state": "missing"})
 

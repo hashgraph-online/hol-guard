@@ -281,6 +281,9 @@ fn a_repositorys_own_documents_read_from_hidden_directories() {
 #[path = "hidden_listing_git_tests.rs"]
 mod git_tests;
 
+#[path = "hidden_listing_secret_leaf_tests.rs"]
+mod secret_leaf_tests;
+
 #[path = "hidden_listing_marker_tests.rs"]
 mod marker_tests;
 
