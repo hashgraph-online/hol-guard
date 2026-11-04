@@ -638,6 +638,7 @@ fn bun_installed_by_a_version_manager_runs_contained() {
 
 #[test]
 fn a_runtime_under_any_consulted_home_resolves() {
+    use super::contained::{managed_runtime, manager_roots, NODE_MANAGER_ROOTS};
     // The request HOME and the account HOME are both consulted. A supervised
     // session whose HOME is not the account's own was the reported failure:
     // the only Node on the machine sat under the second home and the

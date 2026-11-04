@@ -101,7 +101,7 @@ fn request_home(home: Option<&Path>) -> Option<PathBuf> {
 /// `~/.hol-guard/package-shims/bin` holds shims that hand a launch back to
 /// Guard instead of running the runtime, and `~/.claude`, `~/.codex` and
 /// `~/.omp` hold agent state; no entry here can spell any of them.
-const NODE_MANAGER_ROOTS: &[&str] = &[
+pub(super) const NODE_MANAGER_ROOTS: &[&str] = &[
     ".nvm/versions/node",
     ".fnm/node-versions",
     ".local/share/fnm/node-versions",
@@ -143,7 +143,7 @@ fn runtime_homes(home: Option<&Path>) -> Vec<PathBuf> {
 /// against are canonical too: a home whose `.nvm` is a link, which is how
 /// several dotfile managers lay a profile out, otherwise never matched the
 /// path the runtime actually resolved to.
-fn manager_roots(homes: &[PathBuf], relatives: &[&str]) -> Vec<PathBuf> {
+pub(super) fn manager_roots(homes: &[PathBuf], relatives: &[&str]) -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
     for home in homes {
         for relative in relatives {
@@ -161,7 +161,7 @@ fn manager_roots(homes: &[PathBuf], relatives: &[&str]) -> Vec<PathBuf> {
 /// of `roots`: `<root>/<version>/bin/<name>`, or the extra `installation`
 /// level fnm writes. Only those two shapes, so a program that merely happens
 /// to sit somewhere inside a manager's tree is not reached through this rule.
-fn managed_runtime(executable: &Path, roots: &[PathBuf]) -> bool {
+pub(super) fn managed_runtime(executable: &Path, roots: &[PathBuf]) -> bool {
     static VERSION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^v?\d+(\.\d+){0,2}$").unwrap());
     let Some(parent) = executable.parent() else {
         return false;
