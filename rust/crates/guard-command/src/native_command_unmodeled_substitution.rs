@@ -270,9 +270,10 @@ fn command_continues(chars: &[char], start: usize) -> bool {
         .iter()
         .take_while(|value| !matches!(**value, ';' | '&' | '|' | '\n'))
         .collect();
-    rest.split_once(char::is_whitespace)
-        .map(|(_, following)| following)
-        .unwrap_or_default()
+    let Some((_, following)) = rest.split_once(char::is_whitespace) else {
+        return false;
+    };
+    following
         .split_whitespace()
         .any(|raw| !is_assignment(raw) && !SHELL_PREFIXES.contains(&program_name(raw).as_str()))
 }
@@ -297,7 +298,7 @@ fn expands_a_name(piece: &str, names: &BTreeSet<String>) -> bool {
             start += 1;
             // `${#NAME}` is the value's length and `${!NAME}` reads the name
             // the value holds: the parameter still follows the operator.
-            while matches!(chars.get(start), Some('#' | '!')) {
+            while matches!(chars.get(start), Some(&('#' | '!'))) {
                 start += 1;
             }
         }
