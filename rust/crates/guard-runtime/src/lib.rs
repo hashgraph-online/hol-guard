@@ -863,6 +863,7 @@ mod network_protection;
 mod network_protection_verify_op;
 mod network_status_build;
 mod network_status_validation;
+mod oauth_package_firewall_entitlement;
 mod oauth_refresh;
 mod oauth_secret_authority;
 mod oci_bundle_evidence;
