@@ -36239,7 +36239,7 @@
     },
     {
       "id": "neg-zstdcat-aggregated-output-flag",
-      "kind": "negative",
+      "fix_area": "negative",
       "harnesses": [
         "codex",
         "zcode",
@@ -36248,10 +36248,10 @@
         "cursor"
       ],
       "tool": "shell",
-      "cwd": "worktree",
-      "input": {
+      "tool_input": {
         "command": "zstdcat -T4o decoded.txt README.md | grep -c $USER"
       },
+      "cwd": "worktree",
       "expect": "not_allow"
     },
     {
