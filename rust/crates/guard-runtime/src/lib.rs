@@ -398,6 +398,7 @@ mod edge_receipt;
 mod edge_review_evidence;
 mod edge_structured;
 mod encrypted_secret_store;
+mod exact_cloud_review;
 mod extension_allow_hint_op;
 mod extension_control_authority_op;
 mod extension_control_mutation_op;
