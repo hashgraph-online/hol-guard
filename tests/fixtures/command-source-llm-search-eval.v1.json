@@ -211,12 +211,7 @@
                         "--python",
                         "-p",
                         "--index",
-                        "--default-index",
-                        "--repo",
-                        "--pr",
-                        "--id",
-                        "--token-env",
-                        "--api-url"
+                        "--default-index"
                       ],
                       "leading_subcommands": [],
                       "package": "llm-search-eval",
@@ -252,12 +247,7 @@
                         "--python",
                         "-p",
                         "--index",
-                        "--default-index",
-                        "--repo",
-                        "--pr",
-                        "--id",
-                        "--token-env",
-                        "--api-url"
+                        "--default-index"
                       ],
                       "leading_subcommands": [
                         "tool",
@@ -584,50 +574,7 @@
                         "--python",
                         "-p",
                         "--index",
-                        "--default-index",
-                        "--queries",
-                        "-q",
-                        "--products",
-                        "-p",
-                        "--qrels",
-                        "--system",
-                        "-s",
-                        "--judge",
-                        "--aggregate",
-                        "--min-votes",
-                        "--model",
-                        "--base-url",
-                        "--api-key-env",
-                        "--timeout",
-                        "--cache",
-                        "--concurrency",
-                        "--calibration-sample",
-                        "--pairwise-judge",
-                        "--pairwise",
-                        "--pairwise-k",
-                        "--pairwise-cache",
-                        "--price",
-                        "--price-file",
-                        "--max-cost",
-                        "--max-tokens",
-                        "--max-judgments",
-                        "--metrics",
-                        "--primary",
-                        "--depth",
-                        "--threshold",
-                        "--gain",
-                        "--baseline",
-                        "--permutations",
-                        "--seed",
-                        "--bootstrap",
-                        "--confidence",
-                        "--sample",
-                        "--stratify",
-                        "--min-per-stratum",
-                        "--output-dir",
-                        "-o",
-                        "--format",
-                        "--title"
+                        "--default-index"
                       ],
                       "leading_subcommands": [],
                       "package": "llm-search-eval",
@@ -665,50 +612,7 @@
                         "--python",
                         "-p",
                         "--index",
-                        "--default-index",
-                        "--queries",
-                        "-q",
-                        "--products",
-                        "-p",
-                        "--qrels",
-                        "--system",
-                        "-s",
-                        "--judge",
-                        "--aggregate",
-                        "--min-votes",
-                        "--model",
-                        "--base-url",
-                        "--api-key-env",
-                        "--timeout",
-                        "--cache",
-                        "--concurrency",
-                        "--calibration-sample",
-                        "--pairwise-judge",
-                        "--pairwise",
-                        "--pairwise-k",
-                        "--pairwise-cache",
-                        "--price",
-                        "--price-file",
-                        "--max-cost",
-                        "--max-tokens",
-                        "--max-judgments",
-                        "--metrics",
-                        "--primary",
-                        "--depth",
-                        "--threshold",
-                        "--gain",
-                        "--baseline",
-                        "--permutations",
-                        "--seed",
-                        "--bootstrap",
-                        "--confidence",
-                        "--sample",
-                        "--stratify",
-                        "--min-per-stratum",
-                        "--output-dir",
-                        "-o",
-                        "--format",
-                        "--title"
+                        "--default-index"
                       ],
                       "leading_subcommands": [
                         "tool",
@@ -905,50 +809,7 @@
                         "--python",
                         "-p",
                         "--index",
-                        "--default-index",
-                        "--queries",
-                        "-q",
-                        "--products",
-                        "-p",
-                        "--qrels",
-                        "--system",
-                        "-s",
-                        "--judge",
-                        "--aggregate",
-                        "--min-votes",
-                        "--model",
-                        "--base-url",
-                        "--api-key-env",
-                        "--timeout",
-                        "--cache",
-                        "--concurrency",
-                        "--calibration-sample",
-                        "--pairwise-judge",
-                        "--pairwise",
-                        "--pairwise-k",
-                        "--pairwise-cache",
-                        "--price",
-                        "--price-file",
-                        "--max-cost",
-                        "--max-tokens",
-                        "--max-judgments",
-                        "--metrics",
-                        "--primary",
-                        "--depth",
-                        "--threshold",
-                        "--gain",
-                        "--baseline",
-                        "--permutations",
-                        "--seed",
-                        "--bootstrap",
-                        "--confidence",
-                        "--sample",
-                        "--stratify",
-                        "--min-per-stratum",
-                        "--output-dir",
-                        "-o",
-                        "--format",
-                        "--title"
+                        "--default-index"
                       ],
                       "leading_subcommands": [],
                       "package": "llm-search-eval",
@@ -986,50 +847,7 @@
                         "--python",
                         "-p",
                         "--index",
-                        "--default-index",
-                        "--queries",
-                        "-q",
-                        "--products",
-                        "-p",
-                        "--qrels",
-                        "--system",
-                        "-s",
-                        "--judge",
-                        "--aggregate",
-                        "--min-votes",
-                        "--model",
-                        "--base-url",
-                        "--api-key-env",
-                        "--timeout",
-                        "--cache",
-                        "--concurrency",
-                        "--calibration-sample",
-                        "--pairwise-judge",
-                        "--pairwise",
-                        "--pairwise-k",
-                        "--pairwise-cache",
-                        "--price",
-                        "--price-file",
-                        "--max-cost",
-                        "--max-tokens",
-                        "--max-judgments",
-                        "--metrics",
-                        "--primary",
-                        "--depth",
-                        "--threshold",
-                        "--gain",
-                        "--baseline",
-                        "--permutations",
-                        "--seed",
-                        "--bootstrap",
-                        "--confidence",
-                        "--sample",
-                        "--stratify",
-                        "--min-per-stratum",
-                        "--output-dir",
-                        "-o",
-                        "--format",
-                        "--title"
+                        "--default-index"
                       ],
                       "leading_subcommands": [
                         "tool",
@@ -1576,6 +1394,19 @@
       "rule_id": "command.llm-search-eval.comment"
     },
     {
+      "command": "uvx -q llm-search-eval comment gate.md --pr 42",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-uvx-quiet",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
       "command": "sudo llm-search-eval comment gate.md",
       "disabled_permissions": [],
       "enabled_extensions": [
@@ -1832,6 +1663,80 @@
         0
       ],
       "id": "judge-uv-tool-run",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uvx -q llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --judge openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-uvx-quiet",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uv -q tool run llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --judge openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-uv-tool-run-quiet",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uvx --quiet llm-search-eval@0.4.0 run -q q.jsonl -p p.jsonl -s a=a.jsonl -s b=b.jsonl --pairwise-judge openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-uvx-quiet-pairwise",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uvx -p 3.12 llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --judge openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-uvx-python-short",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uvx -q llm-search-eval estimate -q q.jsonl -p p.jsonl -s a=a.jsonl --judge openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "estimate-uvx-quiet-not-matched",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uv -q tool run llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --qrels qrels.tsv",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "run-uv-tool-run-quiet-gold-labels-only",
       "rule_id": "command.llm-search-eval.judge"
     },
     {
