@@ -168,6 +168,7 @@ mod cline_plugin_render_tests;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
 mod cloud_actions_access;
+mod cloud_actions_host_config;
 mod cloud_actions_status;
 mod cloud_exception_lift;
 mod cloud_receipt_payload;

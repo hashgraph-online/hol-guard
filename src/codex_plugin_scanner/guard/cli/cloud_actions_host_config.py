@@ -5,8 +5,9 @@ preview reads that file and works out the single entry Guard would add or
 change, named `hol-guard-cloud`. It renders the whole file as it would be
 written and checks that, apart from that entry, it reads back exactly as
 before: other servers, their environment values, Guard Local's own entries
-and every unrelated setting. Nothing is written here; cloud_actions_host_apply
-writes the rendered file.
+and every unrelated setting. Guard's native runtime does the rendering and
+that check; this module reads the file and hands it over. Nothing is written
+here; cloud_actions_host_apply writes the rendered file.
 
 The entry starts `hol-guard cloud-actions bridge <ai-tool>`, which the AI
 tool launches like any local MCP server. The bridge obtains short-lived Cloud
@@ -19,26 +20,38 @@ recognised so they can be replaced or put back.
 
 from __future__ import annotations
 
-import importlib
 import json
 import sys
-import urllib.parse
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
-
-from .cloud_actions_host_config_toml import UnreadableSettingsError as _UnreadableError
-from .cloud_actions_host_config_toml import render_toml_edit, render_toml_removal
+from typing import Final, Literal, cast
 
 CLOUD_ACTIONS_SERVER_NAME = "hol-guard-cloud"
 _MAX_SETTINGS_BYTES = 32 * 1024 * 1024
+_FEATURE: Final = "native-cloud-actions-host-config-v1"
+_COMMAND: Final = "cloud-actions-host-config"
+_TIMEOUT_SECONDS: Final = 30.0
+# The rendered file, at most six times longer once escaped as JSON.
+_OUTPUT_LIMIT: Final = 6 * _MAX_SETTINGS_BYTES + 1024 * 1024
+_NATIVE_UNAVAILABLE: Final = "Guard's native runtime is not available, so the settings file was left as it is."
+_PLAN_ACTIONS: Final = frozenset(
+    {"create_file", "add", "update", "unchanged", "already_configured", "conflict", "unreadable"}
+)
 
 PlanAction = Literal["create_file", "add", "update", "unchanged", "already_configured", "conflict", "unreadable"]
 
 
 class AiToolNotSupportedError(ValueError):
     """The named AI tool has no Cloud actions setup."""
+
+
+class HostConfigNativeUnavailableError(ValueError):
+    """Guard's native runtime could not render the settings change."""
+
+
+class _UnreadableError(ValueError):
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,48 +185,36 @@ def plan_host_config(ai_tool: str, *, path: Path, entry: Mapping[str, object], u
 
     try:
         before = _read_bounded(path)
+        text = _text(before) if before is not None else None
     except _UnreadableError as error:
         return plan("unreadable", other_entries=0, problem=str(error))
-    if before is None:
-        after = _render_new(tool, wanted)
-        return plan("create_file", other_entries=0, after=after)
-    try:
-        document = _parse(tool, before)
-        servers = _servers(tool, document)
-    except _UnreadableError as error:
-        return plan("unreadable", other_entries=0, problem=str(error), before=before)
-    others = {name: value for name, value in servers.items() if name != CLOUD_ACTIONS_SERVER_NAME}
-    existing = servers.get(CLOUD_ACTIONS_SERVER_NAME)
-    if existing is not None:
-        current = _guard_fields(tool, existing)
-        if current is None:
-            return plan(
-                "conflict",
-                other_entries=len(others),
-                problem=f"An entry named {CLOUD_ACTIONS_SERVER_NAME} already exists with other settings.",
-                before=before,
-            )
-        if current == wanted:
-            return plan("unchanged", other_entries=len(others), before=before, after=before)
-        current_url = current.get("url")
-        previous_url = _display_url(current_url) if isinstance(current_url, str) else None
+    request = {"op": "plan", "ai_tool": tool.slug, "before": text, "entry": wanted, "url": url}
+    answer = _native_answer(request)
+    action = answer.get("action") if answer is not None else None
+    if answer is None or action not in _PLAN_ACTIONS:
+        return plan("unreadable", other_entries=0, problem=_NATIVE_UNAVAILABLE, before=before)
+    after = answer.get("after")
+    if isinstance(after, str):
+        after_bytes = after.encode()
+    elif action == "unchanged":
+        after_bytes = before
     else:
-        previous_url = None
-    # Another entry already reaching this server is left as the one in use,
-    # so pointing ours at it too would not add a second connection.
-    same_server = tuple(sorted(name for name, value in others.items() if _points_at(value, url)))
-    if same_server:
-        return plan("already_configured", other_entries=len(others), configured_as=same_server, before=before)
-    try:
-        after = _render_edit(tool, before, wanted)
-        _check_only_guard_entry_changed(tool, before, after, wanted)
-    except UnicodeEncodeError:
-        problem = "The settings file holds text that cannot be written back unchanged."
-        return plan("unreadable", other_entries=len(others), problem=problem, before=before)
-    except _UnreadableError as error:
-        return plan("unreadable", other_entries=len(others), problem=str(error), before=before)
-    action: PlanAction = "update" if existing is not None else "add"
-    return plan(action, other_entries=len(others), previous_url=previous_url, before=before, after=after)
+        after_bytes = None
+    previous_url = answer.get("previous_url")
+    problem = answer.get("problem")
+    others = answer.get("other_entries")
+    configured_as = answer.get("configured_as")
+    return plan(
+        cast(PlanAction, action),
+        other_entries=others if isinstance(others, int) else 0,
+        previous_url=previous_url if isinstance(previous_url, str) else None,
+        configured_as=tuple(name for name in configured_as if isinstance(name, str))
+        if isinstance(configured_as, list)
+        else (),
+        problem=problem if isinstance(problem, str) else None,
+        before=before,
+        after=after_bytes,
+    )
 
 
 def render_entry_undo(
@@ -223,30 +224,47 @@ def render_entry_undo(
 
     Only Guard's entry changes, and only while it is still exactly `written`;
     anything else edited since stays as it is. Raises ValueError when that
-    cannot be done exactly.
+    cannot be done exactly, HostConfigNativeUnavailableError when the native
+    runtime could not be asked.
     """
 
     tool = _tool(ai_tool)
     try:
-        entry = _servers(tool, _parse(tool, current)).get(CLOUD_ACTIONS_SERVER_NAME)
-        if entry is None or _guard_fields(tool, entry) != dict(written):
-            raise _UnreadableError(f"The {CLOUD_ACTIONS_SERVER_NAME} entry changed after Guard wrote it.")
-        prior_document = _parse(tool, prior) if prior is not None else {}
-        prior_entry = _servers(tool, prior_document).get(CLOUD_ACTIONS_SERVER_NAME)
-        if prior_entry is not None:
-            prior_fields = _guard_fields(tool, prior_entry)
-            if prior_fields is None:
-                raise _UnreadableError(f"The earlier {CLOUD_ACTIONS_SERVER_NAME} entry was not one Guard wrote.")
-            after = _render_edit(tool, current, prior_fields)
-            _check_only_guard_entry_changed(tool, current, after, prior_fields)
-            return after, False
-        after = _render_removal(tool, current, drop_empty_table=tool.table not in prior_document)
-        _check_guard_entry_removed(tool, current, after)
-        return after, True
-    except UnicodeEncodeError:
-        raise ValueError("The settings file holds text that cannot be written back unchanged.") from None
+        request = {
+            "op": "undo",
+            "ai_tool": tool.slug,
+            "current": _text(current),
+            "written": dict(written),
+            "prior": _text(prior) if prior is not None else None,
+        }
     except _UnreadableError as error:
         raise ValueError(str(error)) from None
+    answer = _native_answer(request)
+    if answer is None:
+        raise HostConfigNativeUnavailableError(_NATIVE_UNAVAILABLE)
+    after, removed, problem = answer.get("after"), answer.get("removed"), answer.get("problem")
+    if isinstance(after, str) and isinstance(removed, bool):
+        return after.encode(), removed
+    if isinstance(problem, str):
+        raise ValueError(problem)
+    raise HostConfigNativeUnavailableError(_NATIVE_UNAVAILABLE)
+
+
+def _text(raw: bytes) -> str:
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise _UnreadableError("The settings file is not UTF-8 text.") from None
+
+
+def _native_answer(request: Mapping[str, object]) -> dict[str, object] | None:
+    from ..mdm.runtime_request import runtime_answer
+
+    try:
+        encoded = json.dumps(request, sort_keys=True)
+    except (TypeError, ValueError):
+        return None
+    return runtime_answer(_FEATURE, _COMMAND, encoded, output_limit=_OUTPUT_LIMIT, timeout_seconds=_TIMEOUT_SECONDS)
 
 
 def _tool(ai_tool: str) -> _AiTool:
@@ -262,63 +280,9 @@ def _wanted_entry(tool: _AiTool, fields: Mapping[str, object]) -> dict[str, obje
     return {"type": "http" if "url" in fields else "stdio", **fields}
 
 
-def _guard_fields(tool: _AiTool, entry: Mapping[str, object]) -> dict[str, object] | None:
-    """The fields of an entry shaped exactly like one Guard writes, else None.
-
-    That is the bridge launch for this AI tool, or the address-only entry an
-    earlier alpha wrote.
-    """
-
-    fields = {key: value for key, value in entry.items() if key != "type"}
-    if tool.typed:
-        if entry.get("type") != ("http" if "url" in fields else "stdio"):
-            return None
-    elif "type" in entry:
-        return None
-    if set(fields) == {"url"}:
-        return fields if isinstance(fields["url"], str) else None
-    if set(fields) != {"command", "args"}:
-        return None
-    command, args = fields["command"], fields["args"]
-    if not isinstance(command, str) or not isinstance(args, list):
-        return None
-    values: list[str] = [value for value in args if isinstance(value, str)]  # pyright: ignore[reportUnknownVariableType]
-    if len(values) != len(args) or not _names_bridge(values, tool.slug):  # pyright: ignore[reportUnknownArgumentType]
-        return None
-    return {"command": command, "args": values}
-
-
-def _names_bridge(args: list[str], ai_tool: str) -> bool:
-    wanted = [*_BRIDGE_ARGS, ai_tool]
-    return any(args[index : index + len(wanted)] == wanted for index in range(len(args)))
-
-
 def _toml_lines(fields: Mapping[str, object]) -> tuple[str, ...]:
     # JSON string and array syntax is valid TOML for the plain strings Guard writes.
     return tuple(f"{key} = {json.dumps(value)}" for key, value in fields.items())
-
-
-def _points_at(entry: object, url: str) -> bool:
-    if not isinstance(entry, Mapping):
-        return False
-    value = entry.get("url")  # pyright: ignore[reportUnknownMemberType]
-    return isinstance(value, str) and value.rstrip("/") == url.rstrip("/")
-
-
-def _display_url(value: str) -> str | None:
-    """Show only scheme, host and path of an address Guard did not write."""
-
-    try:
-        parts = urllib.parse.urlsplit(value)
-        port = parts.port
-    except ValueError:
-        return None
-    host = parts.hostname or ""
-    if ":" in host:
-        host = f"[{host}]"
-    if port is not None:
-        host = f"{host}:{port}"
-    return urllib.parse.urlunsplit((parts.scheme, host, parts.path, "", ""))
 
 
 def _read_bounded(path: Path) -> bytes | None:
@@ -344,145 +308,11 @@ def read_settings_bytes(path: Path) -> bytes | None:
         raise ValueError(str(error)) from None
 
 
-def _parse(tool: _AiTool, raw: bytes) -> dict[str, object]:
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        raise _UnreadableError("The settings file is not UTF-8 text.") from None
-    if tool.file_format == "toml":
-        tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
-        try:
-            return tomllib.loads(text)
-        except tomllib.TOMLDecodeError:
-            raise _UnreadableError("The settings file is not valid TOML.") from None
-    if not text.strip():
-        return {}
-    try:
-        payload = json.loads(text, object_pairs_hook=_refuse_duplicate_keys)
-    except _UnreadableError:
-        raise
-    except ValueError:
-        raise _UnreadableError("The settings file is not valid JSON.") from None
-    if not isinstance(payload, dict):
-        raise _UnreadableError("The settings file does not hold a JSON object.")
-    return payload  # pyright: ignore[reportUnknownVariableType]
-
-
-def _refuse_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    # Rewriting would silently keep only the last of the repeated keys.
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise _UnreadableError("The settings file repeats a key, so rewriting it could change what it means.")
-        result[key] = value
-    return result
-
-
-def _servers(tool: _AiTool, document: Mapping[str, object]) -> dict[str, Mapping[str, object]]:
-    servers = document.get(tool.table)
-    if servers is None:
-        return {}
-    if not isinstance(servers, Mapping):
-        raise _UnreadableError(f"{tool.table} in the settings file is not a table of servers.")
-    result: dict[str, Mapping[str, object]] = {}
-    for name, value in servers.items():  # pyright: ignore[reportUnknownVariableType]
-        if isinstance(name, str):
-            result[name] = value if isinstance(value, Mapping) else {}  # pyright: ignore[reportUnknownArgumentType]
-    return result
-
-
-def _render_new(tool: _AiTool, fields: Mapping[str, object]) -> bytes:
-    if tool.file_format == "toml":
-        return "\n".join((f"[{tool.table}.{CLOUD_ACTIONS_SERVER_NAME}]", *_toml_lines(fields), "")).encode()
-    payload = {tool.table: {CLOUD_ACTIONS_SERVER_NAME: _wanted_entry(tool, fields)}}
-    return (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode()
-
-
-def _render_edit(tool: _AiTool, before: bytes, fields: Mapping[str, object]) -> bytes:
-    text = before.decode("utf-8")
-    if tool.file_format == "toml":
-        return render_toml_edit(tool.table, CLOUD_ACTIONS_SERVER_NAME, text, fields).encode()
-    document = json.loads(text) if text.strip() else {}
-    servers = document.get(tool.table)
-    if not isinstance(servers, dict):
-        servers = {}
-        document[tool.table] = servers
-    servers[CLOUD_ACTIONS_SERVER_NAME] = _wanted_entry(tool, fields)
-    return _dump_json_like(document, text)
-
-
-def _dump_json_like(document: object, text: str) -> bytes:
-    """Render `document` with the indentation and line endings of `text`."""
-
-    newline = "\r\n" if "\r\n" in text else "\n"
-    rendered = json.dumps(document, indent=_json_indent(text), ensure_ascii=False)
-    if newline != "\n":
-        rendered = rendered.replace("\n", newline)
-    if text.endswith(("\n", "\r\n")) or not text.strip():
-        rendered += newline
-    return rendered.encode()
-
-
-def _render_removal(tool: _AiTool, current: bytes, *, drop_empty_table: bool) -> bytes:
-    text = current.decode("utf-8")
-    if tool.file_format == "toml":
-        return render_toml_removal(
-            tool.table, CLOUD_ACTIONS_SERVER_NAME, text, drop_empty_table=drop_empty_table
-        ).encode()
-    document = json.loads(text)
-    servers = document[tool.table]
-    del servers[CLOUD_ACTIONS_SERVER_NAME]
-    if not servers and drop_empty_table:
-        del document[tool.table]
-    return _dump_json_like(document, text)
-
-
-def _json_indent(text: str) -> int | str:
-    for line in text.splitlines():
-        stripped = line.lstrip(" \t")
-        if stripped and stripped != line:
-            prefix = line[: len(line) - len(stripped)]
-            return prefix if "\t" in prefix else len(prefix)
-    return 2
-
-
-def _check_guard_entry_removed(tool: _AiTool, before: bytes, after: bytes) -> None:
-    old = _parse(tool, before)
-    new = _parse(tool, after)
-    if CLOUD_ACTIONS_SERVER_NAME in _servers(tool, new):
-        raise _UnreadableError("Guard could not edit the settings file without changing other settings.")
-    if _without_guard_entry(tool, new) != _without_guard_entry(tool, old):
-        raise _UnreadableError("Guard could not edit the settings file without changing other settings.")
-
-
-def _check_only_guard_entry_changed(tool: _AiTool, before: bytes, after: bytes, fields: Mapping[str, object]) -> None:
-    """Refuse a rendering that changes anything but Guard's own entry."""
-
-    old = _parse(tool, before)
-    new = _parse(tool, after)
-    new_servers = new.get(tool.table)
-    if not isinstance(new_servers, dict) or new_servers.get(CLOUD_ACTIONS_SERVER_NAME) != _wanted_entry(tool, fields):
-        raise _UnreadableError("Guard could not edit the settings file without changing other settings.")
-    if _without_guard_entry(tool, new) != _without_guard_entry(tool, old):
-        raise _UnreadableError("Guard could not edit the settings file without changing other settings.")
-
-
-def _without_guard_entry(tool: _AiTool, document: dict[str, object]) -> dict[str, object]:
-    rest = dict(document)
-    servers = rest.get(tool.table)
-    if isinstance(servers, dict):
-        remaining = {key: value for key, value in servers.items() if key != CLOUD_ACTIONS_SERVER_NAME}  # pyright: ignore[reportUnknownVariableType]
-        if remaining:
-            rest[tool.table] = remaining
-        else:
-            rest.pop(tool.table)
-    return rest
-
-
 __all__ = [
     "CLOUD_ACTIONS_SERVER_NAME",
     "SUPPORTED_AI_TOOLS",
     "AiToolNotSupportedError",
+    "HostConfigNativeUnavailableError",
     "HostConfigPlan",
     "bridge_entry",
     "plan_host_config",
