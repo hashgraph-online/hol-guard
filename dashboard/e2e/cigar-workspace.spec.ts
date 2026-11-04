@@ -157,7 +157,7 @@ for (const width of [1440, 790, 390, 320]) {
     await expect(page.getByText("Turn on CIGAR first", { exact: true })).toBeVisible();
     await page.keyboard.press("ArrowRight");
     await expect(page.getByRole("tab", { name: "Settings", exact: true })).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByText("Selected runtime", { exact: true })).toBeVisible();
+    await expect(page.getByText("CIGAR version", { exact: true })).toBeVisible();
     await page.getByRole("tab", { name: "Home", exact: true }).click();
     await page.getByRole("button", { name: /Pick the exact files for a project/ }).click();
     await expect(page.getByRole("tab", { name: "Projects", exact: true })).toHaveAttribute("aria-selected", "true");

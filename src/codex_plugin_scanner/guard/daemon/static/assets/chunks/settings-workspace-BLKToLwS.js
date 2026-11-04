@@ -3228,6 +3228,14 @@ function platformLabel(platform2) {
   const chip2 = arm && os !== "darwin" ? "Arm" : ARCH[arch];
   return chip2 ? name + " · " + chip2 : name;
 }
+const sentence = (text2) => text2.charAt(0).toUpperCase() + text2.slice(1);
+function describe$1(id2, installations, selected) {
+  if (!id2) return "Not set up yet";
+  if (installations === null) return "Looking up version details";
+  if (!selected) return "Picked, but not found on this computer";
+  const sdk = selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : "";
+  return sdk + "Python " + selected.python_version.join(".") + " · " + platformLabel(selected.platform);
+}
 function CigarRuntimeSelection(props) {
   const id2 = props.status?.preferences.runtime_id ?? props.value.runtime_id;
   const selected = props.installations?.find((item) => item.runtime_id === id2);
@@ -3235,28 +3243,19 @@ function CigarRuntimeSelection(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 py-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-x-6 gap-y-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-[1_1_16rem]", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-body font-medium text-brand-dark", children: "Selected runtime" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 break-all font-mono text-sm text-brand-dark/80", children: id2 || "None yet" }),
-        selected ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "guard-settings-caption mt-0.5 text-slate-500", children: [
-          selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : "",
-          "Python ",
-          selected.python_version.join("."),
-          " · ",
-          platformLabel(selected.platform),
-          " · ",
-          installationLabel(selected.qualification)
-        ] }) : null
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-body font-medium text-brand-dark", children: "CIGAR version" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-brand-dark/80", children: describe$1(id2, props.installations ?? null, selected) }),
+        selected ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption mt-0.5 text-slate-500", children: sentence(installationLabel(selected.qualification)) }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-        props.onManage ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onManage, children: "Choose or switch runtime" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: versionButton, href: shellHref("/cigar?section=versions"), children: "Choose or switch runtime" }),
-        props.installations !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionQuiet, disabled: props.disabled, onClick: props.onRefresh, children: "Refresh runtime list" }) : null
+        props.onManage ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onManage, children: "Change version" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: versionButton, href: shellHref("/cigar?section=versions"), children: "Change version" }),
+        props.installations !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionQuiet, disabled: props.disabled, onClick: props.onRefresh, children: "Refresh versions" }) : null
       ] })
     ] }),
     props.installations?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "CIGAR is not set up on this computer yet. Turn on CIGAR at the top of this page and Guard sets it up for you." }) : null,
-    props.installations?.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption text-slate-500", children: "Switch to another CIGAR build in Updates. Your current build and data stay as they are until the new one is ready." }) : null,
     pending ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A pending runtime choice is in this form. Use the current selection before preparing a different runtime in Updates." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onRestore, children: "Use current selection" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "This form has a different version picked than the one in use. Keep the current version here, then switch versions in Updates." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onRestore, children: "Keep current version" })
     ] }) : null
   ] });
 }
@@ -3303,29 +3302,30 @@ function ContextSettingsControls(props) {
   const attention = !running && Boolean(status?.requested_enabled && !status.job);
   const [Icon, tone] = markerFor(running, attention);
   const effective = status?.effective_preferences ?? value;
+  const runtimeId = status?.preferences.runtime_id || value?.runtime_id;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("section", { "aria-labelledby": titleId, className: "guard-surface-in rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-x-6 gap-y-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-[1_1_20rem] items-start gap-3.5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-10 shrink-0 items-center justify-center rounded-full " + tone, children: props.loading || status?.job ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-5 motion-safe:animate-spin" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "size-5" }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-1.5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: titleId, className: "text-lg font-semibold tracking-[-0.01em] text-brand-dark", children: runtime ? "CIGAR " + runtime.package_version : "CIGAR runtime" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: titleId, className: "text-lg font-semibold tracking-[-0.01em] text-brand-dark", children: runtime ? "CIGAR " + runtime.package_version : "CIGAR" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-[62ch] text-sm leading-6 text-brand-dark/75", role: "status", "aria-live": "polite", children: availabilityText(props.loading, statusCopy) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "CIGAR uses its own copy of Python 3.14. Guard sets it up for you when you click Turn on CIGAR." })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: [
-        status?.requested_enabled && !status.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        !props.headerControls && status?.requested_enabled && !status.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
             type: "button",
             className: versionPrimary,
             disabled: checkDisabled || !status.effective_preferences.enabled,
             onClick: () => props.onControl("activate"),
-            children: "Start context assistance"
+            children: "Start CIGAR"
           }
         ) : null,
-        value?.runtime_id ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: checkDisabled, onClick: () => props.onControl("recheck"), children: "Check selected runtime" }) : null,
-        !stopped ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled, onClick: () => props.onControl("stop"), children: "Turn off now" }) : null,
+        value?.runtime_id ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: checkDisabled, onClick: () => props.onControl("recheck"), children: "Check CIGAR" }) : null,
+        !props.headerControls && !stopped ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled, onClick: () => props.onControl("stop"), children: "Turn off now" }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
@@ -3344,11 +3344,12 @@ function ContextSettingsControls(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR needs attention" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: props.error })
     ] }) : null,
-    props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: note, children: "Save settings before checking or starting this runtime." }) : null,
+    props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: note, children: "Save settings before checking or starting CIGAR." }) : null,
     props.locked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: note, children: "Your organization manages these preferences. You can still turn context assistance off." }) : null,
     status?.restriction ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: note, children: "Policy restrictions apply. Your saved choices are retained; effective limits are shown below." }) : null,
+    props.lean,
     value ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(SettingsFormSection, { title: "Runtime", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(SettingsFormSection, { title: "This computer", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           SettingsToggleRow,
           {
@@ -3575,6 +3576,7 @@ function ContextSettingsControls(props) {
                 " seconds"
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { term: "Storage", children: value.storage.mode === "memory" ? "Memory only" : "Private persistence requested" }),
+              runtimeId ? /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { term: "Runtime ID", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-all font-mono text-xs", children: runtimeId }) }) : null,
               runtime ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs(Fact, { term: "Last verified Python", children: [
                   runtime.interpreter.version.join("."),
@@ -5896,12 +5898,12 @@ function planCigarSetup(data, options) {
   const { state, catalog } = data;
   if (state.effective_enabled) return { kind: "ready" };
   if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
-  if (options.locked || state.restriction && !state.effective_preferences.enabled) {
-    return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
-  }
   if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
   if (data.jobs.some((job) => job.phase === "recovery_required")) {
     return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
+  }
+  if (options.locked || state.restriction && !state.effective_preferences.enabled) {
+    return planCigarStart(state, false) ?? blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
   }
   const selected = state.preferences.runtime_id;
   const installed = data.installations;
@@ -8017,6 +8019,8 @@ function ContextAssistanceSettings(props) {
       locked: props.locked,
       dirty,
       error: workspace ? null : error,
+      headerControls: workspace,
+      lean: workspace ? /* @__PURE__ */ jsxRuntimeExports.jsx(CodexLeanSessions, { gate: props.gate ?? null, disabled: props.disabled }) : void 0,
       onChange: props.onChange,
       onRefresh: () => void refresh(),
       onChooseRuntime: () => void perform("installations"),
@@ -8057,10 +8061,7 @@ function ContextAssistanceSettings(props) {
         setup,
         allowFiles,
         stopAvailable: Boolean(value?.enabled || saved?.enabled || status?.job || status?.effective_enabled || error),
-        controls: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8", children: [
-          controls,
-          /* @__PURE__ */ jsxRuntimeExports.jsx(CodexLeanSessions, { gate: props.gate ?? null, disabled: props.disabled })
-        ] }),
+        controls,
         access,
         data: props.data,
         versions: /* @__PURE__ */ jsxRuntimeExports.jsx(
