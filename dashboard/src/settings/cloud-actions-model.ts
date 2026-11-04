@@ -165,6 +165,12 @@ const STATE_COPY: Record<string, CloudActionsStateCopy> = {
     remedy: "Guard Cloud changed what Cloud actions offer. Reconnect this computer to pick up the change.",
     reconnect: true,
   },
+  reconnect: {
+    label: "Reconnect",
+    tone: "attention",
+    remedy: "Guard Cloud no longer accepts this computer's connection. Connect this computer again.",
+    reconnect: true,
+  },
   unexpected_answer: {
     label: "Unexpected answer",
     tone: "neutral",
@@ -190,8 +196,12 @@ export function cloudActionsStateCopy(state: string): CloudActionsStateCopy {
   return STATE_COPY[state] ?? UNKNOWN_STATE;
 }
 
-/** The state to show: Cloud actions left off on this computer outrank what Guard Cloud offers. */
+/**
+ * The state to show: Cloud actions left off on this computer outrank what Guard Cloud offers,
+ * but a connection Guard Cloud refused outranks both, since turning them on needs a new connection.
+ */
 export function cloudActionsCurrentState(connection: Pick<CloudActionsConnection, "setting" | "check">): string {
+  if (connection.check.state === "reconnect") return "reconnect";
   return connection.setting === "off" ? "off" : connection.check.state;
 }
 
@@ -252,7 +262,10 @@ export function cloudActionsSummary(status: CloudActionsStatus): string {
   const connection = status.connection;
   if (connection === null) return "This computer is not connected to Guard Cloud.";
   const where = connection.workspace === null ? "Connected to Guard Cloud." : `Connected to workspace ${connection.workspace}.`;
-  const copy = cloudActionsStateCopy(cloudActionsCurrentState(connection));
+  const state = cloudActionsCurrentState(connection);
+  // A revoked connection is not "connected"; say so instead of naming the workspace.
+  if (state === "reconnect") return "Guard Cloud no longer accepts this computer's connection.";
+  const copy = cloudActionsStateCopy(state);
   return copy.tone === "attention" ? `${where} Cloud actions need attention.` : where;
 }
 

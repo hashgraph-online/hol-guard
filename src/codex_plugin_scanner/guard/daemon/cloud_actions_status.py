@@ -5,8 +5,10 @@ sign-in. `GET /v1/cloud-actions/status` reads the pairing, what the last
 connect said about Cloud actions, and the last saved check. It never calls
 Guard Cloud, so it answers offline and fast. `POST /v1/cloud-actions/status`
 asks Guard Cloud whether it offers Cloud actions (the public description, the
-same check as `hol-guard cloud-actions status`), at most once a minute, and
-saves the answer.
+same check as `hol-guard cloud-actions status`) and whether it still accepts
+this computer's connection, at most once a minute, and saves the answer. The
+saved answer names the connection it was made for, so connecting again starts
+fresh.
 
 The projection is deliberately narrow: the workspace, the Guard Cloud site
 (host only), whether Cloud actions are on for this computer, and a state code.
@@ -54,12 +56,17 @@ class CheckResult:
 @dataclass(frozen=True)
 class _Pairing:
     origin: str
+    grant_id: str | None
     workspace_id: str | None
     cloud_actions: str
 
 
 # Argument: the Guard Cloud origin to ask.
 Checker = Callable[[str], CheckResult]
+# Returns a result only when Guard Cloud refused the connection; None when it accepted or could not tell.
+PairingChecker = Callable[[GuardStore], "CheckResult | None"]
+
+_RECONNECT_MESSAGE = "Guard Cloud refused to renew this computer's access."
 
 
 class CloudActionsCheckBusyError(RuntimeError):
@@ -103,10 +110,12 @@ def _pairing(store: GuardStore) -> _Pairing | None:
         pairing = read_cloud_actions_pairing(store)
     except CloudActionsAccessError:
         return None
-    grant_id = store.get_oauth_local_credential_health().get("grant_id")
-    report = read_cloud_actions_connect_report(store, grant_id=grant_id if isinstance(grant_id, str) else None)
+    health_grant_id = store.get_oauth_local_credential_health().get("grant_id")
+    grant_id = health_grant_id if isinstance(health_grant_id, str) else None
+    report = read_cloud_actions_connect_report(store, grant_id=grant_id)
     return _Pairing(
         origin=pairing.origin,
+        grant_id=grant_id,
         workspace_id=pairing.workspace_id or (report["workspace_id"] if report is not None else None),
         cloud_actions=report["status"] if report is not None else "unknown",
     )
@@ -133,6 +142,7 @@ def _projection(store: GuardStore, pairing: _Pairing | None, moment: datetime) -
         if pairing is None
         else {
             "origin": pairing.origin,
+            "grant_id": pairing.grant_id,
             "workspace_id": pairing.workspace_id,
             "cloud_actions": pairing.cloud_actions,
             "cloud_base_url": _cloud_base_url(pairing.origin),
@@ -159,10 +169,35 @@ def _live_checker(origin: str) -> CheckResult:
     return CheckResult(service.state, service.message, service.http_status)
 
 
+def _live_pairing_checker(store: GuardStore) -> CheckResult | None:
+    """Renew the connection's access; Guard Cloud refuses it once the connection is revoked."""
+
+    from ..runtime import runner
+
+    try:
+        runner._resolve_guard_sync_auth_context(store, force_refresh=True)  # pyright: ignore[reportPrivateUsage]
+    except runner.GuardSyncAuthorizationExpiredError as error:
+        # Only an invalid_grant answer proves the connection was revoked. A rejected request,
+        # a malformed answer or a signing failure is not proof; leave the service answer.
+        rejected = isinstance(error, runner._GuardOAuthRefreshRejectedError)  # pyright: ignore[reportPrivateUsage]
+        revoked = runner._oauth_authorization_error_requires_fresh_sign_in(error)  # pyright: ignore[reportPrivateUsage]
+        return CheckResult("reconnect", _RECONNECT_MESSAGE) if revoked and not rejected else None
+    except (RuntimeError, OSError, ValueError):
+        # Unreachable, rate limited or an unexpected answer: the service check already says what it can.
+        return None
+    return None
+
+
 def check_cloud_actions(
-    store: GuardStore, *, now: datetime | None = None, checker: Checker | None = None
+    store: GuardStore,
+    *,
+    now: datetime | None = None,
+    checker: Checker | None = None,
+    pairing_checker: PairingChecker | None = None,
 ) -> dict[str, object]:
-    """Ask Guard Cloud whether it offers Cloud actions, save the answer, and return the projection.
+    """Ask Guard Cloud about Cloud actions and this connection, save the answer, and return the projection.
+
+    A refused connection outranks the service answer: reconnecting is the only way forward.
 
     Raises CloudActionsNotPairedError without a pairing, CloudActionsCheckedRecentlyError
     within a minute of the last check, CloudActionsCheckBusyError while another check runs,
@@ -181,9 +216,14 @@ def check_cloud_actions(
         if isinstance(retry_after, int):
             raise CloudActionsCheckedRecentlyError(retry_after)
         service = (checker or _live_checker)(pairing.origin)
+        if service.state != "offline":
+            refused = (pairing_checker or _live_pairing_checker)(store)
+            if refused is not None:
+                service = refused
         entry = {"state": service.state, "message": service.message, "http_status": service.http_status}
+        record = {"op": "record", "origin": pairing.origin, "grant_id": pairing.grant_id}
         try:
-            _native(store, {"op": "record", "origin": pairing.origin, "checked_at": _utc(moment), "service": entry})
+            _native(store, {**record, "checked_at": _utc(moment), "service": entry})
         except CloudActionsStatusUnavailableError as error:
             raise OSError("check_not_saved") from error
         return cloud_actions_local_status(store, now=moment)

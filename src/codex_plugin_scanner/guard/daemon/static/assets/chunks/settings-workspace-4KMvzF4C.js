@@ -2824,6 +2824,12 @@ const STATE_COPY = {
     remedy: "Guard Cloud changed what Cloud actions offer. Reconnect this computer to pick up the change.",
     reconnect: true
   },
+  reconnect: {
+    label: "Reconnect",
+    tone: "attention",
+    remedy: "Guard Cloud no longer accepts this computer's connection. Connect this computer again.",
+    reconnect: true
+  },
   unexpected_answer: {
     label: "Unexpected answer",
     tone: "neutral",
@@ -2847,6 +2853,7 @@ function cloudActionsStateCopy(state) {
   return STATE_COPY[state] ?? UNKNOWN_STATE;
 }
 function cloudActionsCurrentState(connection) {
+  if (connection.check.state === "reconnect") return "reconnect";
   return connection.setting === "off" ? "off" : connection.check.state;
 }
 function cloudActionsReconnectCommand(connection) {
@@ -2889,7 +2896,9 @@ function cloudActionsSummary(status) {
   const connection = status.connection;
   if (connection === null) return "This computer is not connected to Guard Cloud.";
   const where = connection.workspace === null ? "Connected to Guard Cloud." : `Connected to workspace ${connection.workspace}.`;
-  const copy = cloudActionsStateCopy(cloudActionsCurrentState(connection));
+  const state = cloudActionsCurrentState(connection);
+  if (state === "reconnect") return "Guard Cloud no longer accepts this computer's connection.";
+  const copy = cloudActionsStateCopy(state);
   return copy.tone === "attention" ? `${where} Cloud actions need attention.` : where;
 }
 function cloudActionsLinks(connection) {

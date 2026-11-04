@@ -179,7 +179,7 @@ assert(cloudActionsCurrentState(connection) === "current", "the service answer i
 assert(cloudActionsCurrentState({ setting: "off", check: connection.check }) === "off", "off on this computer comes first");
 
 // Every state has plain copy; none of them blames local protection or mentions a separate sign-in.
-for (const state of ["current", "not_checked", "offline", "not_turned_on", "changed", "unexpected_answer", "off"]) {
+for (const state of ["current", "not_checked", "offline", "not_turned_on", "changed", "reconnect", "unexpected_answer", "off"]) {
   const copy = cloudActionsStateCopy(state);
   assert(copy.label !== "Unknown", `${state} has a label`);
   const words = `${copy.label} ${copy.remedy ?? ""}`;
@@ -188,6 +188,7 @@ for (const state of ["current", "not_checked", "offline", "not_turned_on", "chan
 }
 assert(cloudActionsStateCopy("something_new").label === "Unknown", "unknown states are not guessed");
 assert(cloudActionsStateCopy("changed").reconnect && cloudActionsStateCopy("changed").label === "Reconnect", "a changed service asks to reconnect");
+assert(cloudActionsStateCopy("reconnect").reconnect && cloudActionsStateCopy("reconnect").label === "Reconnect", "a revoked connection asks to reconnect");
 assert(cloudActionsStateCopy("off").reconnect, "Cloud actions left off are turned on by reconnecting");
 assert(!cloudActionsStateCopy("offline").reconnect, "reconnecting does not fix being offline");
 
@@ -197,6 +198,11 @@ assert(cloudActionsRetryAfterSeconds(null, NOW) === 0, "no wait without a check"
 assert(cloudActionsSummary(status) === "Connected to workspace ws_beta.", "summary names the workspace");
 const changed = normalizeCloudActionsStatus(payload(withCheck({ ...connected.check, service: { state: "changed", message: "Guard Cloud now describes a different Cloud actions address." } })));
 assert(changed !== null && cloudActionsSummary(changed) === "Connected to workspace ws_beta. Cloud actions need attention.", "summary flags attention");
+const revoked = normalizeCloudActionsStatus(payload(withCheck({ ...connected.check, service: { state: "reconnect", message: "Guard Cloud no longer accepts this computer's connection. Connect this computer again." } })));
+assert(revoked !== null && cloudActionsSummary(revoked) === "Guard Cloud no longer accepts this computer's connection.", "a revoked connection is not called connected");
+const revokedOff = normalizeCloudActionsStatus(payload(withCheck({ ...connected.check, service: { state: "reconnect", message: "refused" } }, { state: "off" })));
+assert(revokedOff?.connection !== null && revokedOff?.connection !== undefined && cloudActionsCurrentState(revokedOff.connection) === "reconnect", "a revoked connection outranks Cloud actions left off");
+assert(revokedOff !== null && cloudActionsSummary(revokedOff) === "Guard Cloud no longer accepts this computer's connection.", "a revoked connection left off is not called connected");
 
 function render(overrides: Partial<Parameters<typeof CloudActionsSettingsView>[0]> = {}): string {
   return renderToStaticMarkup(
