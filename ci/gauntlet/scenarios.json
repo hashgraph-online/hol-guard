@@ -1173,6 +1173,9 @@
       "prompt": "Run the tests of only the one workspace package the pattern selects: run the listed command once, exactly as written, and tell me what it printed. A message that the package manager or the package is missing is a valid result: report it and stop.",
       "commands": [
         "bun --filter app test"
+      ],
+      "benign_exit_commands": [
+        "bun --filter app test"
       ]
     },
     {
@@ -2867,6 +2870,10 @@
       "oracle": "commands",
       "commands": [
         "rg --files -g '**/*.md'",
+        "rg -n \"TODO\" -g '**/*.{md,yml}' .",
+        "grep -rn 'TODO' --include='**/*.md' src"
+      ],
+      "benign_exit_commands": [
         "rg -n \"TODO\" -g '**/*.{md,yml}' .",
         "grep -rn 'TODO' --include='**/*.md' src"
       ],
