@@ -371,3 +371,88 @@ fn a_value_a_contributed_extension_receives_keeps_the_evaluation_failure() {
         assert_eq!(decision(&controls, command).1, FAILED, "{command}");
     }
 }
+
+#[test]
+fn a_quoted_assignment_keeps_its_value_readable() {
+    // `latest="$(...)"` closes its quote after the `)`. Reading that quote as
+    // a following program made the everyday spelling of a standalone
+    // assignment look like a prefix, so the value was never followed and the
+    // command kept the block this pass exists to remove.
+    let command = r#"latest="$(cat VERSION)"; printf '%s' "$latest""#;
+    assert!(bounded_substitutions(command).is_none(), "{command}");
+    let bounded = reviewable_substitutions(command).unwrap();
+    for program in ["cat", "printf"] {
+        assert!(bounded.programs.contains(program), "{program}: {command}");
+    }
+    // A quote does not turn a prefix into a standalone assignment either.
+    let command = r#"GH_HOST="$(cat host.txt)" gh pr list"#;
+    assert!(reviewable_substitutions(command).is_none(), "{command}");
+}
+
+#[test]
+fn a_value_read_through_a_parameter_operator_keeps_its_owner() {
+    let controls = controls(github("enabled", None), false);
+    // A saved value is read through every parameter operator, not only as
+    // `$NAME` and `${NAME}`. Missing one of these spellings would drop `gh`
+    // from the owners and hand a review card to text the extension that owns
+    // `gh` has never read.
+    for command in [
+        r#"TARGET=$(cat id); gh pr view "${TARGET:-fallback}""#,
+        r#"TARGET=$(cat id); gh pr view "${TARGET%%/*}""#,
+        r#"TARGET=$(cat id); gh pr view "${#TARGET}""#,
+    ] {
+        let bounded = reviewable_substitutions(command).unwrap();
+        assert!(bounded.programs.contains("gh"), "{command}");
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+    }
+}
+
+#[test]
+fn a_value_a_subshell_receives_keeps_its_owner() {
+    // A bracket is not a program. Reading `(gh` or `{` as the receiver handed
+    // the owner check a name no extension can own, so the contributed-owner
+    // refusal was skipped for an ordinary grouping.
+    for command in [
+        r#"TARGET=$(cat id); (gh pr view $TARGET)"#,
+        r#"TARGET=$(cat id); { gh pr view $TARGET; }"#,
+    ] {
+        let bounded = reviewable_substitutions(command).unwrap();
+        assert!(bounded.programs.contains("gh"), "{command}");
+    }
+}
+
+#[test]
+fn a_statement_whose_receiver_cannot_be_named_is_not_read() {
+    // A value read by a statement that names no program it reaches, or that
+    // builds the program position out of the value itself, leaves the owner
+    // unread, and an unread owner is the evaluation failure this pass keeps.
+    for command in [
+        r#"latest=$(cat id); $latest --help"#,
+        r#"latest=$(cat id); "$latest" --help"#,
+        r#"latest=$(cat id); TAG=$latest"#,
+    ] {
+        assert!(reviewable_substitutions(command).is_none(), "{command}");
+    }
+}
+
+#[test]
+fn a_walk_without_a_placeholder_is_still_read_as_a_walk() {
+    // find ends an `-exec` body at a `;` however it is spelled, so a body
+    // written with a quoted terminator and no `{}` is the same walk as
+    // `-exec basename {} \;`. Reading it only when a brace or an escape is
+    // present let an interpreter in the exec position past both the walk
+    // reader and the interpreter screen.
+    for command in [
+        r#"latest=$(find . -name '*.js' -exec node run.js ';'); printf '%s' "$latest""#,
+        r#"latest=$(find . -type d -exec sh -c 'echo x' ';'); printf '%s' "$latest""#,
+        r#"latest=$(find . -type d -exec $TOOL ';'); printf '%s' "$latest""#,
+    ] {
+        assert!(bounded_substitutions(command).is_none(), "{command}");
+        assert!(reviewable_substitutions(command).is_none(), "{command}");
+    }
+    let command = r#"latest=$(find . -type d -exec basename x ';'); printf '%s' "$latest""#;
+    let bounded = reviewable_substitutions(command).unwrap();
+    for program in ["basename", "find", "printf"] {
+        assert!(bounded.programs.contains(program), "{program}: {command}");
+    }
+}

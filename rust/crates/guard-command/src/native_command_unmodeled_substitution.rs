@@ -245,7 +245,7 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
             _ => word.push(character),
         }
     }
-    programs.extend(value_consumers(text, &assigned));
+    programs.extend(value_consumers(text, &assigned)?);
     Some(BoundedSubstitutions {
         text: out,
         programs,
@@ -259,13 +259,61 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
 /// command beside it as a setting that program reads, which is neither a value
 /// this reader follows nor an argument, so the two shapes are told apart by
 /// what comes after the assignment rather than by what came before it.
+///
+/// The lookahead starts at the word *after* the one the substitution sits in.
+/// `latest="$(cat VERSION)"` closes its quote after the `)`, and reading that
+/// quote as a following program made an everyday spelling of a standalone
+/// assignment look like a prefix, so the value was never followed and the
+/// command kept the block this pass exists to remove.
 fn command_continues(chars: &[char], start: usize) -> bool {
     let rest: String = chars[start.min(chars.len())..]
         .iter()
         .take_while(|value| !matches!(**value, ';' | '&' | '|' | '\n'))
         .collect();
-    rest.split_whitespace()
+    rest.split_once(char::is_whitespace)
+        .map(|(_, following)| following)
+        .unwrap_or_default()
+        .split_whitespace()
         .any(|raw| !is_assignment(raw) && !SHELL_PREFIXES.contains(&program_name(raw).as_str()))
+}
+
+/// Whether the text expands a parameter one of `names` holds.
+///
+/// A saved value is read as `$NAME`, as `${NAME}` and through every parameter
+/// operator — `${NAME:-fallback}`, `${NAME%%/*}`, `${#NAME}` — so the name is
+/// taken out of the reference rather than matched against two spellings.
+/// Missing a reference drops the receiver that owns the value, which is the
+/// one thing this pass may not do.
+fn expands_a_name(piece: &str, names: &BTreeSet<String>) -> bool {
+    let chars: Vec<char> = piece.chars().collect();
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] != '$' {
+            index += 1;
+            continue;
+        }
+        let mut start = index + 1;
+        if chars.get(start) == Some(&'{') {
+            start += 1;
+            // `${#NAME}` is the value's length and `${!NAME}` reads the name
+            // the value holds: the parameter still follows the operator.
+            while matches!(chars.get(start), Some('#' | '!')) {
+                start += 1;
+            }
+        }
+        let mut end = start;
+        while chars
+            .get(end)
+            .is_some_and(|value| value.is_ascii_alphanumeric() || *value == '_')
+        {
+            end += 1;
+        }
+        if names.contains(&chars[start..end].iter().collect::<String>()) {
+            return true;
+        }
+        index = end.max(index + 1);
+    }
+    false
 }
 
 /// The programs the text hands a value one of `names` holds.
@@ -274,25 +322,41 @@ fn command_continues(chars: &[char], start: usize) -> bool {
 /// those are its receivers: `TARGET=$(cat id); gh pr view $TARGET` hands the
 /// output to `gh` exactly as `gh pr view "$(cat id)"` does, and the owner that
 /// judges `gh` arguments still refuses text it cannot read.
-fn value_consumers(text: &str, names: &BTreeSet<String>) -> BTreeSet<String> {
+///
+/// A statement that reads the value without naming the program it reaches is
+/// `None`: an owner this reader cannot name is exactly the evaluation failure
+/// the pass has to keep. A subshell or a brace group around the statement is
+/// read through, because `(gh pr view $TARGET)` runs `gh` and taking the
+/// bracket as the receiver would hand the owner check a name no extension can
+/// own.
+fn value_consumers(text: &str, names: &BTreeSet<String>) -> Option<BTreeSet<String>> {
     let mut consumers = BTreeSet::new();
-    for piece in text.split(['\n', ';', '&', '|']) {
-        if !names.iter().any(|name| {
-            piece.contains(&format!("${name}")) || piece.contains(&format!("${{{name}}}"))
-        }) {
+    for piece in text.split(['\n', ';', '&', '|', '(', ')']) {
+        if !expands_a_name(piece, names) {
             continue;
         }
+        let mut receiver = None;
         for raw in piece.split_whitespace() {
+            let raw = raw.trim_start_matches(['{', '}']);
             let name = program_name(raw);
-            if raw.starts_with('-') || is_assignment(raw) || SHELL_PREFIXES.contains(&name.as_str())
+            if raw.is_empty()
+                || raw.starts_with('-')
+                || is_assignment(raw)
+                || SHELL_PREFIXES.contains(&name.as_str())
             {
                 continue;
             }
-            consumers.insert(name);
+            // A program position built from an expansion names whatever the
+            // value holds, which is the text this reader does not have.
+            if raw.contains('$') {
+                return None;
+            }
+            receiver = Some(name);
             break;
         }
+        consumers.insert(receiver?);
     }
-    consumers
+    Some(consumers)
 }
 
 /// The program a substitution's result reaches, or `None` when this text does
@@ -380,18 +444,29 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     }
     let mut programs = Vec::new();
     let mut plain = inner.to_owned();
+    // An `-exec` action runs a program only this reader names, whatever
+    // spelling ends its body: `-exec basename {} \;` and `-exec basename ';'`
+    // are the same walk, so the brace-free one must not skip the reader that
+    // refuses an interpreter, a launcher or an expansion standing there.
+    let named = named_words(inner);
+    let walks = flow == ValueFlow::Assignments
+        && super::EXEC_ACTIONS
+            .iter()
+            .any(|action| named.contains(*action));
     if inner.contains(['{', '}', '\\']) {
         // `{}` is find's placeholder for the path it found and `\;` ends an
         // `-exec` body: neither opens a brace group nor hides punctuation, and
         // the walk's programs are the ones `find_exec_programs` already reads
         // outside a substitution. Any other brace or escape stays refused.
-        if flow != ValueFlow::Assignments {
+        if !walks {
             return None;
         }
         plain = inner.replace("{}", " ").replace("\\;", " ");
         if plain.contains(['{', '}', '\\']) {
             return None;
         }
+    }
+    if walks {
         let walked = find_exec_programs(inner)?;
         if walked.is_empty() {
             return None;
@@ -403,7 +478,7 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     // at the programs it runs, because a word such as `versions/node` inside a
     // path the substitution reads starts nothing.
     if flow != ValueFlow::Assignments
-        && named_words(inner)
+        && named
             .iter()
             .any(|name| INTERPRETERS.contains(&name.as_str()))
     {
