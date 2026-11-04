@@ -14,6 +14,9 @@ from .approval_retry_action import input_path, pinned_file_tool
 from .approval_retry_bash import BASH_LIFECYCLE_ORACLE, stage
 from .approval_retry_bash import assessment as bash_assessment
 from .approval_retry_bash import evidence as bash_evidence
+from .approval_retry_removal import assessment as scratch_removal_assessment
+from .approval_retry_removal import collect as collect_scratch_removal
+from .approval_retry_removal import stage as stage_scratch_removal
 from .approval_rows import approval_rows
 from .catalog import Scenario
 from .input_evidence import redact_value
@@ -37,6 +40,7 @@ class OmpReview:
         self.guard_home = fixture.root / "guard-home"
         self.known_ids: set[str] = set()
         stage(fixture.workspace, scenario.id)
+        stage_scratch_removal(fixture.workspace, scenario.id, case)
         # The floor has to reach the case's own action: a file-tool call is not a
         # subprocess, so the shell floor would leave its read unreviewed.
         case["review_policy"] = write_review_config(self.guard_home, file_tool="bash" not in scenario.required_tools)
@@ -65,6 +69,7 @@ class OmpReview:
         replacements: dict[str, str],
     ) -> None:
         case["approval_grants"] = redact_value(approver.report(), replacements)
+        collect_scratch_removal(self.fixture.workspace, self.scenario.id, case)
         case["approval_rows"] = approval_rows(worker.store, self.known_ids)
         if self.scenario.oracle == BASH_LIFECYCLE_ORACLE:
             case["bash_lifecycle"] = bash_evidence(
@@ -129,4 +134,4 @@ def assess(
         )
     ):
         return pinned
-    return outcome
+    return scratch_removal_assessment(scenario.id, case, outcome)

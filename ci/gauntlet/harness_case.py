@@ -17,6 +17,8 @@ from .approval_retry import ReviewApprover, write_review_config
 from .approval_retry_bash import BASH_LIFECYCLE_ORACLE
 from .approval_retry_bash import evidence as bash_lifecycle_evidence
 from .approval_retry_bash import stage as stage_bash_lifecycle
+from .approval_retry_removal import collect as collect_scratch_removal
+from .approval_retry_removal import stage as stage_scratch_removal
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import add_credential_redactions, fixture_system_context
@@ -181,6 +183,7 @@ def run_harness_case(
         "cleanup_ok": False,
         "transcript": {"calls": [], "terminal": False},
     }
+    stage_scratch_removal(fixture.workspace, scenario.id, case)
     daemon = None
     connector = None
     seed: CredentialSeed | None = None
@@ -345,6 +348,7 @@ def run_harness_case(
             case["credential_write_back_error"] = type(exc).__name__
         finally:
             case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+            collect_scratch_removal(fixture.workspace, scenario.id, case)
             if connector is not None:
                 case["filesystem"].update(connector_checks(connector, connector_state))
             remove_scratch_checkout(fixture.root)
