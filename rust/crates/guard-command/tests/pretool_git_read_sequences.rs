@@ -386,3 +386,63 @@ fn an_explicit_git_allow_does_not_settle_a_glob_that_names_a_secret() {
         assert_eq!(action(&home, &repository, command), "allow", "{command}");
     }
 }
+
+// A toolchain inventory prints what is installed before it looks at the
+// repository, and spells the files it reads through `$HOME`. That spelling
+// leaves the step without the path proof the wider read checks want, which
+// also answers what a read may disclose. This floor asks only whether the
+// step could have rewritten the configuration the later Git read runs under,
+// and a program that opens its operands to read them could not, wherever
+// those operands are.
+#[test]
+fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
+    let root = std::env::temp_dir().join(format!("guard home read order {}", std::process::id()));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    for directory in [&home, &repository] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let home = home.canonicalize().unwrap();
+    let repository = repository.canonicalize().unwrap();
+    std::fs::create_dir_all(home.join(".github").join("workflows")).unwrap();
+    std::fs::write(
+        home.join(".github").join("workflows").join("nightly.yml"),
+        "name: nightly\njobs:\n  build:\n    runs-on: ubuntu-latest\n",
+    )
+    .unwrap();
+    std::fs::write(
+        home.join(".zshrc"),
+        "export PATH=\"$HOME/.local/bin:$PATH\"\n",
+    )
+    .unwrap();
+    git(&repository, &home, &["init", "--quiet"]);
+    git(
+        &repository,
+        &home,
+        &["config", "user.email", "fixture@example.test"],
+    );
+    git(&repository, &home, &["config", "user.name", "fixture"]);
+    std::fs::write(repository.join("package.json"), "{}\n").unwrap();
+    git(&repository, &home, &["add", "-A"]);
+    git(&repository, &home, &["commit", "--quiet", "-m", "fixture"]);
+
+    for command in [
+        "cat \"$HOME/.github/workflows/nightly.yml\"; git status --short",
+        "printf '%s\\n' '--- workflow ---'; \
+         cat \"$HOME/.github/workflows/nightly.yml\"; \
+         printf '%s\\n' '--- repo state ---'; git status --short",
+        "head -20 \"$HOME/.zshrc\"; git log --oneline -5",
+        "wc -l \"$HOME/.zshrc\" && git status --short --branch",
+    ] {
+        assert_ne!(reason(&home, &repository, command), FLOOR, "{command}");
+    }
+    // The same read with an output redirect puts a file where the later read
+    // may look, so it keeps the floor's review.
+    let redirected = "cat \"$HOME/.github/workflows/nightly.yml\" > notes.txt; git status --short";
+    assert_ne!(
+        action(&home, &repository, redirected),
+        "allow",
+        "{redirected}"
+    );
+}
