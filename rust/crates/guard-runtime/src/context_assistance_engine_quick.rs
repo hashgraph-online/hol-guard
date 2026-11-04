@@ -10,6 +10,39 @@ use std::time::Instant;
 
 /// Files read for one prompt, so the read stays inside the hook's budget.
 const MAX_FILES: usize = 3;
+/// Words that open a definition line, after any modifiers.
+const DEFINERS: [&str; 16] = [
+    "def ",
+    "class ",
+    "fn ",
+    "function ",
+    "func ",
+    "struct ",
+    "enum ",
+    "trait ",
+    "impl ",
+    "interface ",
+    "type ",
+    "const ",
+    "let ",
+    "var ",
+    "mod ",
+    "module ",
+];
+/// Modifiers that may come before a definer.
+const MODIFIERS: [&str; 11] = [
+    "export ",
+    "default ",
+    "pub ",
+    "pub(crate) ",
+    "pub(super) ",
+    "async ",
+    "static ",
+    "public ",
+    "private ",
+    "protected ",
+    "abstract ",
+];
 
 /// The project root a prompt may draw on: an agent app, a folder outside
 /// Guard's home, and agent context on with workspace files for that folder.
@@ -31,15 +64,35 @@ pub(super) fn said(text: &str, words: &[String]) -> usize {
     words.iter().filter(|w| text.contains(w.as_str())).count()
 }
 
-/// The part of `file` that holds the most of `words`, the earliest on a tie,
-/// with how many it holds. `None` when no part holds any.
+/// How many of `words` the text's definition lines name.
+fn defined(text: &str, words: &[String]) -> usize {
+    let definitions: Vec<&str> = text.lines().filter(|line| definition(line)).collect();
+    said(&definitions.join("\n"), words)
+}
+
+/// A line that opens a function, type or value definition.
+fn definition(line: &str) -> bool {
+    let mut rest = line.trim_start();
+    while let Some(after) = MODIFIERS
+        .iter()
+        .find_map(|modifier| rest.strip_prefix(modifier))
+    {
+        rest = after;
+    }
+    DEFINERS.iter().any(|definer| rest.starts_with(definer))
+}
+
+/// The part of `file` that defines the most of `words`, then holds the most
+/// of them, the earliest on a tie, with how many it holds. A part that
+/// defines what the prompt asks about beats one that only mentions it, such
+/// as a module's opening comment. `None` when no part holds any.
 pub(super) fn best_part(file: &AdmittedFile, words: &[String]) -> Option<(usize, PickedExcerpt)> {
-    let (score, doc) = file
+    let (_, score, doc) = file
         .documents
         .iter()
-        .map(|doc| (said(&doc.text, words), doc))
-        .filter(|(score, _)| *score > 0)
-        .max_by_key(|(score, doc)| (*score, std::cmp::Reverse(doc.start_line)))?;
+        .map(|doc| (defined(&doc.text, words), said(&doc.text, words), doc))
+        .filter(|(_, score, _)| *score > 0)
+        .max_by_key(|(names, score, doc)| (*names, *score, std::cmp::Reverse(doc.start_line)))?;
     let start = u64::from(doc.start_line);
     let lines = doc.text.lines().count().max(1) as u64;
     Some((

@@ -87,6 +87,36 @@ fn the_best_part_holds_the_most_words_and_the_earliest_wins_a_tie() {
     assert!(best_part(&none, &words).is_none());
 }
 
+#[test]
+fn the_part_that_defines_the_words_beats_an_opening_comment_that_names_them() {
+    let words = vec!["cart".to_owned(), "total".to_owned()];
+    let cart = file(
+        "src/cart.py",
+        &[
+            (
+                "\"\"\"Cart helpers: the cart total, taxes and discounts.\"\"\"\nimport math\n",
+                1,
+            ),
+            ("    # cart total\n    return 0\n", 12),
+            ("async def cart_total(items):\n    return sum(items)\n", 30),
+        ],
+    );
+    let (score, part) = best_part(&cart, &words).unwrap();
+    assert_eq!(score, 2);
+    assert_eq!(part.start_line, 30);
+    for line in [
+        "export default async function cartTotal() {",
+        "  pub(crate) fn cart_total() -> u64 {",
+        "class CartTotal:",
+        "export const cartTotal = 0;",
+    ] {
+        assert!(definition(line), "{line}");
+    }
+    for line in ["// cart total", "return cartTotal;", "exported total"] {
+        assert!(!definition(line), "{line}");
+    }
+}
+
 /// The first prompt of a session, with CIGAR still starting, gets the code
 /// it is about instead of a list of file names.
 #[test]
