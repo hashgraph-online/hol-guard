@@ -159,7 +159,13 @@ fn accept_entry(entry: &Path, home: Option<&Path>, workspace: &Path) -> Option<V
                 _ => canonical.clone(),
             };
             if owned_and_sealed(&root) && !forbidden(&root, Some(home)) {
-                return Some(vec![root]);
+                // A version manager's prefix holds venvs of its own, and one
+                // of those can name a different version's install as its
+                // `home`. The grant stops at this prefix, so without the
+                // venv's own roots that interpreter stays unreachable.
+                let mut roots = vec![root.clone()];
+                roots.extend(external_venv(&canonical, workspace));
+                return Some(roots);
             }
         }
     }
@@ -180,7 +186,14 @@ fn external_venv(entry: &Path, workspace: &Path) -> Vec<PathBuf> {
     let roots = super::venv::external_venv_roots(entry, workspace);
     // The interpreter needs every root it was given; a run that can start but
     // cannot read its standard library would fail inside the sandbox instead.
-    if roots.is_empty() || !roots.iter().all(|root| owned_and_sealed(root)) {
+    // Every ancestor too: a sealed directory below one another account can
+    // write can be renamed away and answered with different contents, and
+    // `approved_user_python_runtime` reads a managed prefix's name only.
+    if roots.is_empty()
+        || !roots
+            .iter()
+            .all(|root| root.ancestors().all(owned_and_sealed))
+    {
         return Vec::new();
     }
     roots
