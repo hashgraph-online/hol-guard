@@ -11,7 +11,7 @@ use std::time::Instant;
 /// Files read for one prompt, so the read stays inside the hook's budget.
 const MAX_FILES: usize = 3;
 /// Words that open a definition line, after any modifiers.
-const DEFINERS: [&str; 16] = [
+const DEFINERS: [&str; 13] = [
     "def ",
     "class ",
     "fn ",
@@ -23,12 +23,17 @@ const DEFINERS: [&str; 16] = [
     "impl ",
     "interface ",
     "type ",
-    "const ",
-    "let ",
-    "var ",
     "mod ",
     "module ",
 ];
+/// Words that bind a value: a definition only at a file's top level, since
+/// inside a function they name a local.
+const BINDERS: [&str; 3] = ["const ", "let ", "var "];
+/// Marks that open or close a docstring or block comment, whose lines are
+/// text about the code, not definitions.
+const QUOTES: [&str; 4] = ["\"\"\"", "'''", "/*", "*/"];
+/// Prose files, whose lines read as words, not definitions.
+const PROSE: [&str; 6] = ["md", "markdown", "mdx", "txt", "rst", "adoc"];
 /// Modifiers that may come before a definer.
 const MODIFIERS: [&str; 11] = [
     "export ",
@@ -64,14 +69,24 @@ pub(super) fn said(text: &str, words: &[String]) -> usize {
     words.iter().filter(|w| text.contains(w.as_str())).count()
 }
 
-/// How many of `words` the text's definition lines name.
+/// How many of `words` the text's definition lines name, leaving out lines
+/// inside a docstring or block comment.
 fn defined(text: &str, words: &[String]) -> usize {
-    let definitions: Vec<&str> = text.lines().filter(|line| definition(line)).collect();
+    let mut quoted = false;
+    let mut definitions = Vec::new();
+    for line in text.lines() {
+        if !quoted && definition(line) {
+            definitions.push(line);
+        }
+        let marks: usize = QUOTES.iter().map(|mark| line.matches(mark).count()).sum();
+        quoted ^= marks % 2 == 1;
+    }
     said(&definitions.join("\n"), words)
 }
 
-/// A line that opens a function, type or value definition.
+/// A line that opens a function, type or top-level value definition.
 fn definition(line: &str) -> bool {
+    let top_level = !line.starts_with(char::is_whitespace);
     let mut rest = line.trim_start();
     while let Some(after) = MODIFIERS
         .iter()
@@ -80,17 +95,30 @@ fn definition(line: &str) -> bool {
         rest = after;
     }
     DEFINERS.iter().any(|definer| rest.starts_with(definer))
+        || (top_level && BINDERS.iter().any(|binder| rest.starts_with(binder)))
+}
+
+/// Whether `path` names a prose file.
+fn prose(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| PROSE.contains(&extension.to_ascii_lowercase().as_str()))
 }
 
 /// The part of `file` that defines the most of `words`, then holds the most
 /// of them, the earliest on a tie, with how many it holds. A part that
 /// defines what the prompt asks about beats one that only mentions it, such
-/// as a module's opening comment. `None` when no part holds any.
+/// as a module's opening comment. A prose file keeps to the word count.
+/// `None` when no part holds any.
 pub(super) fn best_part(file: &AdmittedFile, words: &[String]) -> Option<(usize, PickedExcerpt)> {
+    let code = !prose(Path::new(&file.relative_path));
     let (_, score, doc) = file
         .documents
         .iter()
-        .map(|doc| (defined(&doc.text, words), said(&doc.text, words), doc))
+        .map(|doc| {
+            let names = if code { defined(&doc.text, words) } else { 0 };
+            (names, said(&doc.text, words), doc)
+        })
         .filter(|(_, score, _)| *score > 0)
         .max_by_key(|(names, score, doc)| (*names, *score, std::cmp::Reverse(doc.start_line)))?;
     let start = u64::from(doc.start_line);

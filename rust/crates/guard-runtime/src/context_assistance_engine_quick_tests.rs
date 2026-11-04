@@ -112,9 +112,58 @@ fn the_part_that_defines_the_words_beats_an_opening_comment_that_names_them() {
     ] {
         assert!(definition(line), "{line}");
     }
-    for line in ["// cart total", "return cartTotal;", "exported total"] {
+    for line in [
+        "// cart total",
+        "return cartTotal;",
+        "exported total",
+        "    let total = cart.len();",
+        "  const cartTotal = 0;",
+    ] {
         assert!(!definition(line), "{line}");
     }
+}
+
+/// A docstring's example and a local binding are not where the prompt's
+/// words are defined.
+#[test]
+fn a_docstring_example_or_local_binding_does_not_beat_the_real_definition() {
+    let words = vec!["cart".to_owned(), "total".to_owned()];
+    let cart = file(
+        "src/cart.py",
+        &[
+            (
+                "\"\"\"Cart helpers.\n\nExample:\n\ndef cart_total(items):\n    ...\n\"\"\"\n",
+                1,
+            ),
+            ("def checkout(cart):\n    total = 0\n", 10),
+            ("def cart_total(items):\n    return sum(items)\n", 30),
+        ],
+    );
+    assert_eq!(best_part(&cart, &words).unwrap().1.start_line, 30);
+    let words = vec!["cart".to_owned(), "total".to_owned(), "items".to_owned()];
+    let rust = file(
+        "src/cart.rs",
+        &[
+            ("fn checkout() {\n    let cart_total = 0;\n}\n", 1),
+            ("// cart total over items\nfn sum_items() {}\n", 10),
+        ],
+    );
+    assert_eq!(best_part(&rust, &words).unwrap().1.start_line, 10);
+}
+
+/// A prose file's wrapped lines that start with `module` or `type` are words,
+/// so the part with the most of the prompt's words leads, as before.
+#[test]
+fn a_prose_file_keeps_to_the_word_count() {
+    let words = vec!["cart".to_owned(), "total".to_owned(), "tax".to_owned()];
+    let notes = file(
+        "docs/cart.md",
+        &[
+            ("module that computes the cart\n", 1),
+            ("The cart total includes tax.\n", 5),
+        ],
+    );
+    assert_eq!(best_part(&notes, &words).unwrap().1.start_line, 5);
 }
 
 /// The first prompt of a session, with CIGAR still starting, gets the code
