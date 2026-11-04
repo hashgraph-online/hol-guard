@@ -56,7 +56,7 @@ pub(crate) fn benign_command_segments(
         .map(|(index, segment)| {
             // `$((PATH=10))` assigns as it expands, which a later step sees.
             let assigns = index + 1 < model.segments.len()
-                && super::control_flow_flatten::runs_arithmetic(&segment.text);
+                && super::control_flow_flatten::arithmetic_assigns(&segment.text);
             (index == 0 && cwd.is_some())
                 || (!assigns
                     && exact_safe_segment_with_context(model, segment, false, proof_context))

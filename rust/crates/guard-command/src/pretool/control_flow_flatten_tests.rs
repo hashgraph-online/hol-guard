@@ -415,6 +415,28 @@ fn arithmetic_is_read_where_the_shell_runs_it() {
     }
 }
 
+#[test]
+fn only_assigning_arithmetic_changes_later_steps() {
+    for text in [
+        "cat package.json $((PATH=10))",
+        "echo $((x+=1))",
+        "echo $((i++))",
+        "echo $[PATH=10]",
+        "echo $((x<<=1))",
+    ] {
+        assert!(super::arithmetic_assigns(text), "{text}");
+    }
+    for text in [
+        "sleep $(( (1 + 1) * 2 ))",
+        "echo $((a == b))",
+        "echo $((a <= b))",
+        "echo $((a != b))",
+        "echo '$((PATH=10))'",
+    ] {
+        assert!(!super::arithmetic_assigns(text), "{text}");
+    }
+}
+
 /// The shell removes quoting inside a word, so a split-quoted `-v` is still
 /// printf's assigning option, while a `-v` after the format is printed data.
 #[test]

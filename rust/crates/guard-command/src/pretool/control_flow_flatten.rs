@@ -446,10 +446,36 @@ pub(super) fn command_word_changes_shell_state(stage: &str) -> bool {
 /// backslash is printed as written and runs nothing; double quotes still
 /// expand. ANSI-C quoting (`$'...'`) escapes its own quotes, so text with
 /// it is read whole.
-pub(super) fn runs_arithmetic(text: &str) -> bool {
+#[cfg(test)]
+fn runs_arithmetic(text: &str) -> bool {
+    arithmetic_start(text).is_some()
+}
+
+/// Whether arithmetic in `text` can assign (`$((PATH=10))`, `$((i++))`), so a later step sees it.
+pub(super) fn arithmetic_assigns(text: &str) -> bool {
+    let Some(start) = arithmetic_start(text) else {
+        return false;
+    };
+    let rest = text[start..].as_bytes();
+    (0..rest.len()).any(|index| {
+        let before = |back: usize| index.checked_sub(back).map(|at| rest[at]);
+        match rest[index] {
+            b'+' | b'-' => rest.get(index + 1) == Some(&rest[index]),
+            b'=' => {
+                rest.get(index + 1) != Some(&b'=')
+                    && !matches!(before(1), Some(b'=' | b'!'))
+                    && !(matches!(before(1), Some(b'<' | b'>')) && before(2) != before(1))
+            }
+            _ => false,
+        }
+    })
+}
+
+fn arithmetic_start(text: &str) -> Option<usize> {
     let forms = |rest: &str| rest.starts_with("$((") || rest.starts_with("$[");
     if text.contains("$'") {
-        return (0..text.len()).any(|index| text.is_char_boundary(index) && forms(&text[index..]));
+        return (0..text.len())
+            .find(|&index| text.is_char_boundary(index) && forms(&text[index..]));
     }
     let bytes = text.as_bytes();
     let (mut single, mut double, mut index) = (false, false, 0);
@@ -458,12 +484,12 @@ pub(super) fn runs_arithmetic(text: &str) -> bool {
             b'\'' if !double => single = !single,
             b'"' if !single => double = !double,
             b'\\' if !single => index += 1,
-            b'$' if !single && forms(&text[index..]) => return true,
+            b'$' if !single && forms(&text[index..]) => return Some(index),
             _ => {}
         }
         index += 1;
     }
-    false
+    None
 }
 
 /// Consume `keyword` followed by whitespace.
