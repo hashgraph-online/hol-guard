@@ -13,7 +13,10 @@
 //! The check passes when the sandbox denies outbound network and denies
 //! writes to the user's home, `/tmp`, the user's temporary directory and the
 //! directory around the workspace, and, for any profile but the workspace
-//! one, to the workspace too. Anything it cannot confirm fails it.
+//! one, to the workspace too. Anything it cannot confirm fails it. Each
+//! answer covers the named directory only, not a writable path nested below
+//! it, so the hook also requires a turn with no extra writable roots and
+//! never sends an escalated call here.
 
 pub(crate) const CHECK_COMMAND: &str = "codex-sandbox-check";
 /// The one contained profile that lets a call write in the workspace.

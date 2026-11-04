@@ -16,10 +16,14 @@
 //! The turn's sandbox is not proof that this one call runs in it: Codex
 //! starts a call outside it when the user approves an escalation, when an
 //! exec-policy rule trusts the command, or when it retries a call without
-//! the sandbox, and the hook sees none of that. So the call is rewritten to
+//! the sandbox, and the hook sees none of that. A call that asks for an
+//! escalation keeps Guard's own answer. Any other call is rewritten to
 //! start with `codex-sandbox-check`, which asks the kernel about the
 //! process the shell actually runs in, and the shell runs the original
-//! command only when the check passes.
+//! command only when the check passes. The check asks about a fixed set of
+//! directories, not every path below them, so a writable root the user
+//! adds deeper inside one of them is caught only by the turn's recorded
+//! `writable_roots`.
 //!
 //! The hook payload does not say which sandbox the turn uses, so the turn's
 //! `turn_context` record is read from the session transcript Codex names
@@ -85,6 +89,9 @@ pub(super) fn turn(payload: &PyVal) -> Turn {
     ) else {
         return Turn::Unknown;
     };
+    if escalated(payload) {
+        return Turn::Unknown;
+    }
     let Some(tail) = transcript_tail(Path::new(transcript)) else {
         return Turn::Unknown;
     };
@@ -93,6 +100,19 @@ pub(super) fn turn(payload: &PyVal) -> Turn {
         .filter(|line| line.contains("turn_context") && line.contains(turn_id))
         .find_map(|line| turn_policy(line, turn_id))
         .unwrap_or(Turn::Unknown)
+}
+
+/// A call that asks Codex to run it outside the sandbox. It keeps Guard's
+/// own answer, whatever the check would say: the check only asks about the
+/// directories it names, so an escalation that widens writes elsewhere
+/// would not show in its answer.
+fn escalated(payload: &PyVal) -> bool {
+    let Some(input) = first(payload, &["tool_input", "toolInput"]) else {
+        return false;
+    };
+    let permissions = text(input, "sandbox_permissions");
+    permissions.is_some_and(|value| value != "use_default")
+        || input.get("with_escalated_permissions") == Some(&PyVal::Bool(true))
 }
 
 /// The last `TAIL_BYTES` of a regular, non-symlinked transcript file,

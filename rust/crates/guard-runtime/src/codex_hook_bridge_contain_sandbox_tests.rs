@@ -137,6 +137,31 @@ fn the_latest_context_for_the_turn_wins() {
 }
 
 #[test]
+fn a_call_that_asks_to_leave_the_sandbox_is_unknown() {
+    for input in [
+        r#"{"command":"ls","sandbox_permissions":"require_escalated"}"#,
+        r#"{"command":"ls","with_escalated_permissions":true}"#,
+    ] {
+        let (_directory, payload) = session(&[context("t2", WORKSPACE_WRITE)], "t2", input);
+        assert_eq!(turn(&payload), Turn::Unknown, "{input}");
+    }
+    let input = r#"{"command":"ls","sandbox_permissions":"use_default"}"#;
+    let (_directory, payload) = session(&[context("t2", WORKSPACE_WRITE)], "t2", input);
+    assert_eq!(turn(&payload), Turn::WorkspaceWrite);
+    let camel = serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "toolInput": {"command": "ls", "sandbox_permissions": "require_escalated"},
+        "transcript_path": "/unused/rollout.jsonl",
+        "turn_id": "t2",
+    });
+    let payload = parse_mapping_lone_surrogates(&camel.to_string())
+        .unwrap()
+        .value;
+    assert!(escalated(&payload), "the camel-case input is read too");
+}
+
+#[test]
 fn a_missing_relative_or_unreadable_transcript_is_unknown() {
     let (directory, _) = session(&[context("t2", WORKSPACE_WRITE)], "t2", COMMAND);
     for transcript in [

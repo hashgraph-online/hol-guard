@@ -6,8 +6,8 @@
 //! error, so only 1 counts as a denial here.
 //!
 //! A path check answers 1 for a path that does not exist, sandbox or not,
-//! so only an existing directory is asked about. Seatbelt write rules name
-//! subpaths, so a directory's own answer is its contents' answer too.
+//! so only an existing directory is asked about. The answer covers that
+//! directory alone: a profile can still allow writes to a path below it.
 //! `file-write-create` answers 1 for the per-user temporary directory even
 //! where writes there are allowed, so a write counts as denied only when
 //! both creating and writing data are.
