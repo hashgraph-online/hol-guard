@@ -61,3 +61,13 @@ fn a_prompt_that_finds_cigar_starting_leaves_one_warm_up_for_the_next() {
         "no warm-up waits on a worker that is off"
     );
 }
+
+#[test]
+fn a_wait_on_cigar_leaves_guard_time_to_read_the_files_itself() {
+    let now = Instant::now();
+    let ample = now + Duration::from_secs(2);
+    assert_eq!(short_of(ample, now), ample - READ_RESERVE);
+    let short = now + Duration::from_millis(200);
+    assert_eq!(short_of(short, now), now + Duration::from_millis(100));
+    assert_eq!(short_of(now, now + Duration::from_millis(5)), now);
+}

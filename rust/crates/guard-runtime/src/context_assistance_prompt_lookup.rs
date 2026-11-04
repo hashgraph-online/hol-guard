@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 /// How long a warm-up waits for a starting worker before giving up.
 const WARM_WAIT: Duration = Duration::from_secs(60);
 /// What a prompt keeps of its wait, at most, to read the matched files
-/// itself when CIGAR is still starting.
+/// itself when CIGAR is starting, busy or late.
 const READ_RESERVE: Duration = Duration::from_millis(300);
 
 /// Why CIGAR gave a prompt no answer.
@@ -79,7 +79,7 @@ pub(super) fn lookup(
     let words = request.words.clone();
     let earlier = request.earlier.clone();
     let rendered = |flight: &Flight| {
-        answer(service, flight, deadline)
+        answer(service, flight, short_of(deadline, Instant::now()))
             .map(|picked| picked.and_then(|found| render(&found.0, &found.1, &words, &earlier)))
             .ok_or(Miss::Pending)
     };
@@ -96,11 +96,7 @@ pub(super) fn lookup(
     if let Some(flight) = flight {
         return rendered(&flight);
     }
-    // The lane keeps at least half of what is left, so a short or late wait
-    // still finds out whether CIGAR is on.
-    let left = deadline.saturating_duration_since(Instant::now());
-    let lane_until = deadline - READ_RESERVE.min(left / 2);
-    let lane = match service.prompt_lane(guard_home, lane_until) {
+    let lane = match service.prompt_lane(guard_home, short_of(deadline, Instant::now())) {
         Ok(lane) => lane,
         Err(LaneMiss::Starting) => {
             warm_when_ready(service.lane_watch(), key, request);
@@ -216,6 +212,14 @@ fn wait_for(flight: &Flight, deadline: Instant) -> Option<Picked> {
         done = flight.ready.wait_timeout(done, left).ok()?.0;
     }
     done.clone()
+}
+
+/// When a wait on CIGAR gives up: early enough before `deadline` for Guard
+/// to read the matched files itself. A wait keeps at least half of what is
+/// left, so a short or late one still finds out whether CIGAR is on.
+fn short_of(deadline: Instant, now: Instant) -> Instant {
+    let left = deadline.saturating_duration_since(now);
+    deadline - READ_RESERVE.min(left / 2)
 }
 
 fn hashed(text: &str) -> u64 {

@@ -171,10 +171,11 @@ fn attach(
     };
     let until = deadline + HOOK_MARGIN / 2;
     let home = store.guard_home();
-    // CIGAR still starting, as on a session's first prompt: Guard reads the
-    // matched files CIGAR would accept and shows their best parts itself,
-    // naming only files that passed the same checks. Project context is
-    // checked again after the read, so a stop meanwhile sends nothing.
+    // CIGAR still starting, busy with another prompt, or still loading the
+    // project, as on a session's first prompt: Guard reads the matched files
+    // CIGAR would accept and shows their best parts itself, naming only files
+    // that passed the same checks. Project context is checked again after the
+    // read, so a stop meanwhile sends nothing.
     let read = || {
         service
             .prompt_context_chosen()
@@ -182,9 +183,8 @@ fn attach(
             .and_then(|(picked, names)| render(&picked, &names, &words, &earlier))
             .filter(|_| service.prompt_context_chosen())
     };
-    // CIGAR busy with another prompt, or late: the matched files it would
-    // accept still save the agent a search, as long as project context is
-    // still on.
+    // No time left to read: the matched files CIGAR would accept still save
+    // the agent a search, as long as project context is still on.
     let listed = || {
         service
             .prompt_context_chosen()
@@ -193,8 +193,7 @@ fn attach(
     };
     let context = match lookup(service, home, request, deadline) {
         Ok(context) => context,
-        Err(Miss::Starting) => read().or_else(listed),
-        Err(Miss::Pending) => listed(),
+        Err(Miss::Starting | Miss::Pending) => read().or_else(listed),
     };
     let Some(context) = context else {
         return;
