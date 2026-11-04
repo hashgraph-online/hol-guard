@@ -33,7 +33,7 @@ static PRERELEASE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 /// `clip`: the first `limit` characters.
-fn clip(text: &str, limit: usize) -> String {
+pub(super) fn clip(text: &str, limit: usize) -> String {
     text.chars().take(limit).collect()
 }
 

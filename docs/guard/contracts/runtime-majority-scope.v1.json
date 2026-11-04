@@ -1061,7 +1061,6 @@
           "_MODE_ACRONYMS",
           "_SEVERITY_COLORS",
           "_KNOWN_MANAGED_INSTALL_MODES",
-          "_protect_guidance_lines",
           "_plain_text_protect",
           "_render_detect",
           "_render_start",

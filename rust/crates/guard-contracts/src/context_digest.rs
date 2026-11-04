@@ -443,6 +443,13 @@ pub enum ContextDigestKindV1 {
     GenericHookApprovalContext {
         inputs: Value,
     },
+    /// Compose a consumer artifact's saved-approval context (identity and
+    /// launch, content, capabilities, sandbox) for a detected or removed
+    /// artifact and return its token. The caller supplies the normalized
+    /// paths, the policy component and the detector telemetry.
+    ConsumerApprovalContextToken {
+        request: Value,
+    },
     /// The bin a package-runner command launches (`npx wrangler` names
     /// `wrangler`). `None` for anything that is not a runner launch, and for
     /// every selector form that runs something other than the named bin.

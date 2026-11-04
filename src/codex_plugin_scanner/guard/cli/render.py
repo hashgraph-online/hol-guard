@@ -416,36 +416,6 @@ def _safe_json_output_text(command: str, payload: PayloadDict) -> str:
     return _render_redacted_json_payload(sanitized_payload)
 
 
-def _protect_guidance_lines(payload: PayloadDict) -> list[str]:
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
-    user_copy_map = _coerce_object_dict(user_copy)
-    lines: list[str] = []
-    harness_message = str(user_copy_map.get("harness_message") or "").strip()
-    if harness_message:
-        lines.append(harness_message)
-
-    next_step = str(user_copy_map.get("next_step") or "").strip()
-    if next_step and next_step not in harness_message:
-        lines.append(f"Next step: {next_step}")
-
-    signed_url = payload.get("_ephemeral_signed_approval_url")
-    if isinstance(signed_url, str) and signed_url.strip():
-        dashboard_url = signed_url.strip()
-    elif (
-        "dashboard_url" in user_copy_map
-        and user_copy_map.get("dashboard_url") is None
-        and not payload.get("primary_approval_url")
-    ):
-        dashboard_url = ""
-    else:
-        dashboard_url = str(payload.get("primary_approval_url") or user_copy_map.get("dashboard_url") or "").strip()
-    if dashboard_url and not any(dashboard_url in line for line in lines):
-        lines.append(f"Review: {dashboard_url}")
-
-    return lines
-
-
 def _plain_text_protect(payload: PayloadDict) -> str:
     if str(payload.get("mode") or "") == "status":
         lines = ["HOL Guard install protection is active."]
@@ -481,7 +451,7 @@ def _plain_text_protect(payload: PayloadDict) -> str:
     if reason:
         lines.append(f"Reason: {reason}")
 
-    lines.extend(human_protect_guidance(payload, _protect_guidance_lines(payload))[1])
+    lines.extend(human_protect_guidance(payload)[1])
     return "\n".join(lines)
 
 
@@ -2513,7 +2483,7 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
             ):
                 body.add_row("Next", "Run hol-guard connect to sign in, then retry this install.")
     console.print(Panel(body, title="Install protection", border_style="cyan"))
-    guidance_title, guidance = human_protect_guidance(payload, _protect_guidance_lines(payload))
+    guidance_title, guidance = human_protect_guidance(payload)
     if guidance:
         guidance_text, signed_approval_url = _protect_harness_message_for_render(payload, "\n".join(guidance))
         console.print(

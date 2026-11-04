@@ -21,6 +21,8 @@
 //!   free of private paths, credential values and secret assignments.
 //! * `{"op": "item_description", ...}` answers `{"description": str}`, an
 //!   inventory item's exported description (see `inventory_item_description`).
+//! * `{"op": "artifact_metadata", ...}` answers `{"metadata": [<JSON text>]}`,
+//!   the metadata each artifact exports (see `inventory_artifact_metadata`).
 
 use std::collections::HashMap;
 
@@ -34,6 +36,8 @@ use crate::pyjson::{self, in_surrogate_plane, PyVal};
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
+#[path = "inventory_artifact_metadata.rs"]
+mod artifact_metadata;
 #[path = "inventory_item_description.rs"]
 mod item_description;
 
@@ -68,6 +72,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
             Ok(json!({ "safe": encoded_payload_is_safe(&encoded) }))
         }
         Some("item_description") => item_description::dispatch(fields),
+        Some("artifact_metadata") => artifact_metadata::dispatch(fields),
         _ => Err(ERR_INVALID),
     }
 }

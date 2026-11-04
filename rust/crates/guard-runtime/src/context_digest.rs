@@ -832,6 +832,9 @@ fn evaluate_request(
         ContextDigestKindV1::GenericHookApprovalContext { inputs } => {
             result.token = Some(crate::hook_approval_context::generic_hook_token(inputs)?);
         }
+        ContextDigestKindV1::ConsumerApprovalContextToken { request } => {
+            result.token = Some(crate::consumer_approval_context::consumer_token(request)?);
+        }
         ContextDigestKindV1::PackageRunnerTarget { tokens } => {
             result.package_runner_target =
                 crate::native_exact_action_op::runner_bin::package_runner_target(tokens);

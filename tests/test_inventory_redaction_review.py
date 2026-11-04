@@ -42,10 +42,11 @@ def test_sensitive_ancestor_does_not_disable_unsafe_key_redaction() -> None:
 
 
 def test_an_export_asks_for_every_metadata_value_in_the_prefetched_batch(monkeypatch, tmp_path) -> None:
-    """Pin that the batch covers the walk: one request, then no further asks."""
+    """Pin that the batch covers the walk: one request of each kind, then no further asks."""
     from dataclasses import dataclass, field
     from pathlib import Path
 
+    from codex_plugin_scanner.guard import inventory_contract_redaction as redaction
     from codex_plugin_scanner.guard import native_inventory_url_redaction as native_url
     from codex_plugin_scanner.guard.inventory_contract_redaction import (
         _is_supported_scanner_run,
@@ -63,6 +64,16 @@ def test_an_export_asks_for_every_metadata_value_in_the_prefetched_batch(monkeyp
         return ["redacted" for _ in tasks]
 
     monkeypatch.setattr(native_url, "_answers", answers)
+    metadata_requests: list[list[str]] = []
+
+    def export_redaction(args: dict[str, object]) -> dict[str, object]:
+        assert args["op"] == "artifact_metadata"
+        entries = args["artifacts"]
+        assert isinstance(entries, list)
+        metadata_requests.append(entries)
+        return {"metadata": ["{}" for _ in entries]}
+
+    monkeypatch.setattr(redaction, "_native_export_redaction", export_redaction)
 
     @dataclass
     class Artifact:
@@ -144,6 +155,9 @@ def test_an_export_asks_for_every_metadata_value_in_the_prefetched_batch(monkeyp
         "the batch asked about a run the export never redacts"
     )
     assert prefetched_tasks == len(requests[0])
+    # Both artifacts' metadata went in one request, and the export asked for
+    # neither again.
+    assert [len(entries) for entries in metadata_requests] == [2]
 
 
 def test_an_oversized_payload_is_checked_in_parts_that_keep_every_match(monkeypatch) -> None:
@@ -180,3 +194,98 @@ def test_an_oversized_key_is_checked_alone(monkeypatch) -> None:
     tainted = {"meta": {long_key + " /Users/someone/x": 1}}
     with pytest.raises(ValueError, match="unsafe payload"):
         redaction._assert_serialized_inventory_payload_safe(tainted)
+
+
+def test_artifact_metadata_is_sent_as_json_text_and_a_bad_answer_fails_closed(monkeypatch) -> None:
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    import pytest
+
+    from codex_plugin_scanner.guard import inventory_contract_redaction as redaction
+    from codex_plugin_scanner.guard.native_inventory_url_redaction import NativeInventoryUrlRedactionError
+
+    sent: list[dict[str, object]] = []
+    answer: dict[str, object] = {"metadata": ['{"artifactType":"skill"}']}
+
+    def export_redaction(args: dict[str, object]) -> dict[str, object]:
+        sent.append(args)
+        return answer
+
+    monkeypatch.setattr(redaction, "_native_export_redaction", export_redaction)
+    artifact = SimpleNamespace(
+        artifact_type="skill",
+        metadata={1: (Path("/agent/a"), "b"), "1": {"n": 2}},
+        config_path=Path("/agent/config"),
+        command="node",
+        url=None,
+    )
+    home = Path("/agent/home")
+    assert redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None) == {"artifactType": "skill"}
+    (request,) = sent
+    assert request["op"] == "artifact_metadata"
+    assert request["home_dir"] == str(home)
+    assert request["workspace_dir"] is None
+    entries = request["artifacts"]
+    assert isinstance(entries, list)
+    assert json.loads(entries[0]) == {
+        "metadata": {"1": {"n": 2}},
+        "artifact_type": "skill",
+        "config_path": None,
+        "command": "node",
+        "url": None,
+        "transport": None,
+    }
+    assert request["window"] is None
+    bad_answers: tuple[dict[str, object], ...] = (
+        {"metadata": []},
+        {"metadata": ["[]"]},
+        {"metadata": [1]},
+        {"metadata": ["{not json"]},
+        {},
+    )
+    for bad in bad_answers:
+        answer = bad
+        with pytest.raises(NativeInventoryUrlRedactionError):
+            redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None)
+
+
+def test_a_large_artifact_is_answered_in_windows(monkeypatch) -> None:
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    import pytest
+
+    from codex_plugin_scanner.guard import inventory_contract_redaction as redaction
+    from codex_plugin_scanner.guard.native_inventory_url_redaction import NativeInventoryUrlRedactionError
+
+    monkeypatch.setattr(redaction, "_METADATA_BUDGET", 16)
+    monkeypatch.setattr(redaction, "_METADATA_WINDOW", 7)
+    whole = json.dumps({"tools": ["\u00e9" * 5, "x" * 20], "artifactType": "mcp_server"}, ensure_ascii=False)
+    windows: list[object] = []
+    answer_total = len(whole)
+
+    def export_redaction(args: dict[str, object]) -> dict[str, object]:
+        window = args["window"]
+        assert isinstance(window, dict)
+        assert len(args["artifacts"]) == 1
+        windows.append(window)
+        start, length = window["start"], window["length"]
+        return {"metadata": [whole[start : start + length]], "total": answer_total}
+
+    monkeypatch.setattr(redaction, "_native_export_redaction", export_redaction)
+    artifact = SimpleNamespace(artifact_type="mcp_server", metadata={"tools": ["a"] * 40})
+    home = Path("/agent/home")
+    assert redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None) == json.loads(whole)
+    assert [window["start"] for window in windows] == list(range(0, len(whole), 7))
+
+    # A total that moves between windows, or a window that makes no progress, fails closed.
+    totals = iter((len(whole), len(whole) + 1))
+    monkeypatch.setattr(redaction, "_native_export_redaction", lambda args: {"metadata": ["x"], "total": next(totals)})
+    with pytest.raises(NativeInventoryUrlRedactionError):
+        redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None)
+    monkeypatch.setattr(redaction, "_native_export_redaction", lambda args: {"metadata": [""], "total": 5})
+    with pytest.raises(NativeInventoryUrlRedactionError):
+        redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None)

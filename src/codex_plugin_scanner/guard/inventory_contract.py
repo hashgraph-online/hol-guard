@@ -79,8 +79,6 @@ from .inventory_contract_redaction import _safe_artifact_metadata as _safe_artif
 from .inventory_contract_redaction import _safe_finding_text as _safe_finding_text
 from .inventory_contract_redaction import _safe_json as _safe_json
 from .inventory_contract_redaction import _safe_source_detail as _safe_source_detail
-from .inventory_contract_redaction import _sanitize_paths as _sanitize_paths
-from .inventory_contract_redaction import classify_endpoint_host as classify_endpoint_host
 from .inventory_contract_redaction import redact_headers as redact_headers
 from .inventory_contract_redaction import redact_local_path as redact_local_path
 from .inventory_contract_redaction import redact_url as redact_url

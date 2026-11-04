@@ -102,6 +102,8 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
     match kind {
         "approval_wait_hint" => crate::blocked_request_mode::wait_hint_projection(args),
         "approval_link" => crate::approval_link::dispatch(args),
+        "protect_approval_plan" => crate::protect_approval_plan::dispatch(args),
+        "protect_guidance" => crate::protect_guidance::dispatch(args),
         "runtime_cloud_status" => crate::runtime_cloud_status::dispatch(args),
         "runtime_headline" => crate::runtime_headline::dispatch(args),
         "developer_inspection_authority" => {
@@ -257,7 +259,9 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "fleet_inventory_rows"
         | "fleet_inventory_items"
         | "fleet_posture_build"
-        | "fleet_aibom_rows" => crate::fleet_posture_inventory::dispatch(kind, args),
+        | "fleet_aibom_rows"
+        | "fleet_policy_section"
+        | "fleet_runtime_posture" => crate::fleet_posture_inventory::dispatch(kind, args),
         "cursor_hook_state" => cursor_hook_state::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),

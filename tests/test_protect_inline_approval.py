@@ -195,10 +195,11 @@ def test_request_text_cannot_restyle_the_prompt(
     assert "pkg?[2Jcleared" in shown
 
 
-def test_retry_line_is_quoted_and_names_the_manager_the_shim_wraps() -> None:
+def test_retry_line_is_quoted_and_names_the_manager_the_shim_wraps(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inline, "approval_resolution_invoked_from_agent", lambda _env: False)
     payload = _paused_payload()
     payload["request"] = {"command": ["/opt/real/bin/bun", "add", "left-pad; rm -rf ~"]}
-    assert inline.protect_command_text(payload) == "bun add 'left-pad; rm -rf ~'"
+    assert "Then run it again: bun add 'left-pad; rm -rf ~'" in _plain_text_protect(payload)
 
 
 def test_approval_made_elsewhere_while_answering_still_runs_the_install(
@@ -293,9 +294,10 @@ def test_a_resident_that_still_pauses_the_install_is_not_talked_out_of_it(
 ) -> None:
     """Only the resident lifts a pause; an approval alone never rewrites its verdict."""
 
-    assert _run_shim_protect(
-        tmp_path, terminal, monkeypatch, timeout_seconds=120, resident_lifts_the_pause=False
-    ) == (1, 2)
+    assert _run_shim_protect(tmp_path, terminal, monkeypatch, timeout_seconds=120, resident_lifts_the_pause=False) == (
+        1,
+        2,
+    )
 
 
 def test_a_zero_approval_wait_never_holds_the_install_at_a_prompt(

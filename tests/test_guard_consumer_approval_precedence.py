@@ -23,7 +23,6 @@ from codex_plugin_scanner.guard.adapters.opencode_artifacts import runtime_confi
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import evaluate_detection
-from codex_plugin_scanner.guard.consumer.service import _consumer_execution_identity
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
 from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import guard_run_launch as guard_run_launch
@@ -33,6 +32,7 @@ from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.runtime.approval_context import (
     approval_context_token_is_well_formed,
     build_approval_context_token,
+    build_runtime_launch_identity,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -59,23 +59,21 @@ def _stable_guard_run_launch_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: LaunchAdapter())
 
 
-def test_consumer_execution_identity_resolves_dot_slash_from_runtime_cwd(tmp_path: Path) -> None:
+def test_consumer_launch_identity_resolves_dot_slash_from_runtime_cwd(tmp_path: Path) -> None:
     runtime_cwd = tmp_path / "runtime"
     runtime_cwd.mkdir()
     executable = runtime_cwd / "server"
     executable.write_bytes(b"#!/bin/sh\necho runtime\n")
     executable.chmod(0o755)
 
-    identity = _consumer_execution_identity("./server --stdio", cwd=runtime_cwd)
-
-    resolved = identity["resolved"]
+    resolved = build_runtime_launch_identity("./server --stdio", cwd=runtime_cwd, launch_env=os.environ)["executable"]
     assert isinstance(resolved, dict)
     assert resolved["path"] == str(executable.resolve())
     assert resolved["launch_cwd"] == str(runtime_cwd.resolve())
     assert resolved["status"] == "verified"
 
 
-def test_consumer_execution_identity_resolves_relative_path_entries_from_runtime_cwd(
+def test_consumer_launch_identity_resolves_relative_path_entries_from_runtime_cwd(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -87,9 +85,7 @@ def test_consumer_execution_identity_resolves_relative_path_entries_from_runtime
     executable.chmod(0o755)
     monkeypatch.setenv("PATH", "bin")
 
-    identity = _consumer_execution_identity("server --stdio", cwd=runtime_cwd)
-
-    resolved = identity["resolved"]
+    resolved = build_runtime_launch_identity("server --stdio", cwd=runtime_cwd, launch_env=os.environ)["executable"]
     assert isinstance(resolved, dict)
     assert resolved["path"] == str(executable.resolve())
     assert resolved["launch_cwd"] == str(runtime_cwd.resolve())
