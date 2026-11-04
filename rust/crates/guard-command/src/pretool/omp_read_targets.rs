@@ -226,9 +226,6 @@ fn bounded_selector_path(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> BoundedSelectorPath {
-    if value.trim() != value || !verified_path_context(home_dir, cwd) {
-        return BoundedSelectorPath::NotSelector;
-    }
     let path = value.strip_prefix(r"\\?\").unwrap_or(value);
     // A URL is never a selector. Split at its last colon, `file://host/a.md`
     // reads as base `file` plus a "selector" that only looked like one when
@@ -238,6 +235,9 @@ fn bounded_selector_path(
         .is_some_and(|(scheme, rest)| scheme.eq_ignore_ascii_case("file") && rest.starts_with('/'));
     if path.contains("://") || file_url {
         return BoundedSelectorPath::Unsupported;
+    }
+    if value.trim() != value || !verified_path_context(home_dir, cwd) {
+        return BoundedSelectorPath::NotSelector;
     }
     let Some((base, selector)) = path.rsplit_once(':') else {
         return BoundedSelectorPath::NotSelector;

@@ -358,6 +358,13 @@ fn unresolved_file_urls_without_digits_keep_their_review() {
             decision.reason_code
         );
         assert!(!decision.explicitly_benign, "{target}");
+        // Without verified roots the URL must still never pass as a plain path.
+        let bare = crate::pretool::evaluate_pre_tool_envelope(
+            "omp",
+            "PreToolUse",
+            &serde_json::json!({"tool_name": "read", "tool_input": {"path": target}}),
+        );
+        assert_ne!(bare.minimum_action, "allow", "{target} without roots: {}", bare.reason_code);
     }
 
     let _ = std::fs::remove_dir_all(root);
