@@ -18,32 +18,27 @@ rather than inventing numbers.
 
 These routes accept only the daemon's own token or a dashboard session, like
 every other `/v1` route.
+
+The native runtime reads and writes the saved check and composes the
+projection. Python keeps the pairing read, the one-check-at-a-time lock, the
+live check of Guard Cloud and the Guard Cloud page address, which follows this
+daemon's environment.
 """
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
 import threading
 from collections.abc import Callable
-from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from urllib.parse import urlsplit
+from typing import Any
 
 from ..store import GuardStore
-from .atomic_replace import replace_file
 
 CLOUD_ACTIONS_STATUS_SCHEMA = "guard.cloud-actions.local-status.v2"
 STALE_AFTER = timedelta(minutes=5)
 CHECK_INTERVAL = timedelta(minutes=1)
 
-_CACHE_SCHEMA = "guard.cloud-actions.service-check.v1"
-_CACHE_FILE = "service-check.json"
-_MAX_CACHE_BYTES = 16 * 1024
-_MAX_MESSAGE_CHARS = 240
 _CHECK_LOCK = threading.Lock()
 
 
@@ -83,30 +78,8 @@ class CloudActionsNotPairedError(RuntimeError):
     """There is no pairing to check."""
 
 
-def _iso(moment: datetime) -> str:
-    return moment.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def _parse_iso(value: object) -> datetime | None:
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None else None
-
-
-def _site_host(origin: str) -> str | None:
-    try:
-        parts = urlsplit(origin)
-        host = parts.hostname
-        port = parts.port
-    except ValueError:
-        return None
-    if not host:
-        return None
-    return f"{host}:{port}" if port is not None else host
+class CloudActionsStatusUnavailableError(RuntimeError):
+    """The native runtime could not read or save the check."""
 
 
 def _cloud_base_url(origin: str) -> str | None:
@@ -139,81 +112,33 @@ def _pairing(store: GuardStore) -> _Pairing | None:
     )
 
 
-def _cache_path(guard_home: Path) -> Path:
-    return guard_home / "cloud-actions" / _CACHE_FILE
+def _native(store: GuardStore, args: dict[str, object]) -> dict[str, Any]:
+    """The native runtime reads and writes the saved check under the Guard home."""
 
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
-def _read_cache(guard_home: Path, origin: str) -> tuple[datetime, CheckResult] | None:
-    path = _cache_path(guard_home)
     try:
-        if path.stat().st_size > _MAX_CACHE_BYTES:
-            return None
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    # A check of another Guard Cloud says nothing about this pairing.
-    if not isinstance(payload, dict) or payload.get("schema") != _CACHE_SCHEMA or payload.get("origin") != origin:
-        return None
-    checked = _parse_iso(payload.get("checked_at"))
-    service = payload.get("service")
-    if checked is None or not isinstance(service, dict):
-        return None
-    state = service.get("state")
-    message = service.get("message")
-    status = service.get("http_status")
-    if not isinstance(state, str) or not isinstance(message, str):
-        return None
-    return checked, CheckResult(state, message[:_MAX_MESSAGE_CHARS], status if isinstance(status, int) else None)
+        return native_runner_authority("cloud_actions_status", args, guard_home=store.guard_home)
+    except NativeRunnerAuthorityError as error:
+        raise CloudActionsStatusUnavailableError("status_unavailable") from error
 
 
-def _write_cache(guard_home: Path, origin: str, checked: datetime, service: CheckResult) -> None:
-    path = _cache_path(guard_home)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if os.name != "nt":
-        # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
-        os.chmod(path.parent, 0o700)
-    text = json.dumps(
-        {"schema": _CACHE_SCHEMA, "origin": origin, "checked_at": _iso(checked), "service": _check_dict(service)}
-    )
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    temporary_path = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(text)
-        replace_file(temporary_path, path)
-    finally:
-        with suppress(OSError):
-            temporary_path.unlink()
+def _utc(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).isoformat()
 
 
-def _check_dict(check: CheckResult) -> dict[str, object]:
-    entry: dict[str, object] = {"state": check.state, "message": check.message[:_MAX_MESSAGE_CHARS]}
-    if check.http_status is not None:
-        entry["http_status"] = check.http_status
-    return entry
-
-
-def _connection(guard_home: Path, pairing: _Pairing | None, now: datetime) -> dict[str, object]:
-    if pairing is None:
-        return {"state": "not_paired", "check": {"state": "not_checked"}}
-    row: dict[str, object] = {
-        "state": pairing.cloud_actions,
-        "workspace": pairing.workspace_id,
-        "site": _site_host(pairing.origin),
-        "cloud_url": pairing.origin,
-        "cloud_base_url": _cloud_base_url(pairing.origin),
-    }
-    saved = _read_cache(guard_home, pairing.origin)
-    if saved is None:
-        row["check"] = {"state": "not_checked"}
-    else:
-        checked, service = saved
-        row["check"] = {
-            "checked_at": _iso(checked),
-            "stale": now - checked > STALE_AFTER,
-            "service": _check_dict(service),
+def _projection(store: GuardStore, pairing: _Pairing | None, moment: datetime) -> dict[str, Any]:
+    paired = (
+        None
+        if pairing is None
+        else {
+            "origin": pairing.origin,
+            "workspace_id": pairing.workspace_id,
+            "cloud_actions": pairing.cloud_actions,
+            "cloud_base_url": _cloud_base_url(pairing.origin),
         }
-    return row
+    )
+    return _native(store, {"op": "project", "pairing": paired, "now": _utc(moment)})
 
 
 def cloud_actions_local_status(store: GuardStore, *, now: datetime | None = None) -> dict[str, object]:
@@ -223,18 +148,7 @@ def cloud_actions_local_status(store: GuardStore, *, now: datetime | None = None
 
     moment = now or datetime.now(timezone.utc)
     remove_alpha_sign_ins(store.guard_home)
-    pairing = _pairing(store)
-    saved = _read_cache(store.guard_home, pairing.origin) if pairing is not None else None
-    return {
-        "schema": CLOUD_ACTIONS_STATUS_SCHEMA,
-        "generated_at": _iso(moment),
-        "stale_after_seconds": int(STALE_AFTER.total_seconds()),
-        "check_interval_seconds": int(CHECK_INTERVAL.total_seconds()),
-        "next_check_allowed_at": _iso(saved[0] + CHECK_INTERVAL) if saved is not None else None,
-        "connection": _connection(store.guard_home, pairing, moment),
-        "included_actions": "not_available_yet",
-        "accounts": "not_available_yet",
-    }
+    return _projection(store, _pairing(store), moment)["status"]
 
 
 def _live_checker(origin: str) -> CheckResult:
@@ -251,7 +165,9 @@ def check_cloud_actions(
     """Ask Guard Cloud whether it offers Cloud actions, save the answer, and return the projection.
 
     Raises CloudActionsNotPairedError without a pairing, CloudActionsCheckedRecentlyError
-    within a minute of the last check, and CloudActionsCheckBusyError while another check runs.
+    within a minute of the last check, CloudActionsCheckBusyError while another check runs,
+    OSError when the answer cannot be saved, and CloudActionsStatusUnavailableError when the
+    native runtime cannot read the saved check.
     """
 
     if not _CHECK_LOCK.acquire(blocking=False):
@@ -261,11 +177,15 @@ def check_cloud_actions(
         pairing = _pairing(store)
         if pairing is None:
             raise CloudActionsNotPairedError("not_paired")
-        saved = _read_cache(store.guard_home, pairing.origin)
-        if saved is not None and timedelta(0) <= moment - saved[0] < CHECK_INTERVAL:
-            raise CloudActionsCheckedRecentlyError(max(1, int((saved[0] + CHECK_INTERVAL - moment).total_seconds())))
+        retry_after = _projection(store, pairing, moment).get("retry_after_seconds")
+        if isinstance(retry_after, int):
+            raise CloudActionsCheckedRecentlyError(retry_after)
         service = (checker or _live_checker)(pairing.origin)
-        _write_cache(store.guard_home, pairing.origin, moment, service)
+        entry = {"state": service.state, "message": service.message, "http_status": service.http_status}
+        try:
+            _native(store, {"op": "record", "origin": pairing.origin, "checked_at": _utc(moment), "service": entry})
+        except CloudActionsStatusUnavailableError as error:
+            raise OSError("check_not_saved") from error
         return cloud_actions_local_status(store, now=moment)
     finally:
         _CHECK_LOCK.release()
