@@ -1031,10 +1031,11 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
             + (f"it tried to remove the plugin.{undone}" if undone else "it removed the plugin again."),
         ) from None
     if found is None:
+        undone = _undo(program, ["claude", "plugin", "uninstall", plugin_id], context) + undo_marketplace()
         raise _StoppedError(
             "failed",
-            f"Claude Code finished, but {_claude_unreadable(context.home)} to check which commit it installed. "
-            f"Check with: claude plugin list",
+            f"Claude Code finished, but {_claude_unreadable(context.home)} to check which commit it installed, so "
+            + (f"it tried to remove the plugin.{undone}" if undone else "it removed the plugin again."),
         )
     commit = found[1]
     if commit == expected:
