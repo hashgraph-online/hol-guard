@@ -285,6 +285,10 @@ fn command_continues(chars: &[char], start: usize) -> bool {
     };
     following
         .split_whitespace()
+        // A `#` that opens a word starts a comment, and the shell runs
+        // nothing after it: `id=$(cat id) # keep $id` is a standalone
+        // assignment, not a setting prefix for a command named `#`.
+        .take_while(|raw| !raw.starts_with('#'))
         .any(|raw| !is_assignment(raw) && !SHELL_PREFIXES.contains(&program_name(raw).as_str()))
 }
 
@@ -537,20 +541,27 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     // are the same walk, so the brace-free one must not skip the reader that
     // refuses an interpreter, a launcher or an expansion standing there.
     //
-    // An action only runs something when a `find` is there to run it. Both
-    // halves are read out of `named_words`, so a quoted spelling cannot hide
-    // either from the walk reader, and both are required, so neither
-    // `rg -- "-exec" src` nor `grep -r find src` is mistaken for a walk.
+    // An action only runs something when a walker is there to run it. The
+    // action is read out of `named_words`, so a quoted `"-exec"` cannot hide
+    // one, and the walker is read out of the command positions, because a
+    // name that is only an argument runs nothing: `rg -l -- "-exec" src` and
+    // `rg -l -- "-exec" tools/gfind` are ordinary searches.
+    //
+    // `gfind` and `/opt/homebrew/bin/gnufind` run the same walk, so every
+    // command whose name ends in `find` reaches `find_exec_programs`, which
+    // refuses the spellings it does not recognise.
     let named = named_words(inner);
-    // `gfind` and `/opt/homebrew/bin/gnufind` run the same walk, so the walk
-    // reader judges every program whose name ends in `find` and lets it refuse
-    // the ones it does not recognise. A `-exec` that no walker could be running
-    // -- `rg -l -- "-exec" src` -- is ordinary text.
     let walks = flow == ValueFlow::Assignments
-        && named.iter().any(|name| name.ends_with("find"))
         && super::EXEC_ACTIONS
             .iter()
-            .any(|action| named.contains(*action));
+            .any(|action| named.contains(*action))
+        && inner
+            .split(['\n', ';', '&', '|', '(', ')', '`'])
+            .any(|piece| {
+                let words: Vec<&str> = piece.split_whitespace().collect();
+                super::xargs::command_index(&words)
+                    .is_some_and(|index| super::command_basename(words[index]).ends_with("find"))
+            });
     if inner.contains(['{', '}', '\\']) {
         // `{}` is find's placeholder for the path it found and `\;` ends an
         // `-exec` body: neither opens a brace group nor hides punctuation, and

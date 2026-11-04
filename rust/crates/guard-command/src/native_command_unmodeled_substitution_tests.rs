@@ -578,3 +578,23 @@ fn an_escaped_space_does_not_open_a_comment() {
     let bounded = reviewable_substitutions(command).unwrap();
     assert!(bounded.programs.contains("gh"), "{command}");
 }
+
+#[test]
+fn a_search_path_that_ends_in_find_is_not_a_walk() {
+    // A name that is only an argument runs nothing, so a path such as
+    // `tools/gfind` does not put a walker in the text. Reading the walker out
+    // of every word turned an ordinary search into a block.
+    for (command, receiver) in [
+        (
+            r#"hits=$(rg -l -- '-exec' tools/gfind); printf '%s' "$hits""#,
+            "rg",
+        ),
+        (
+            r#"hits=$(grep -rl -- "-exec" bin/myfind); printf '%s' "$hits""#,
+            "grep",
+        ),
+    ] {
+        let bounded = reviewable_substitutions(command).unwrap();
+        assert!(bounded.programs.contains(receiver), "{command}");
+    }
+}
