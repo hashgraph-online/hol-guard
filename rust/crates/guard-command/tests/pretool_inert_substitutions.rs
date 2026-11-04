@@ -143,3 +143,38 @@ fn lockdown_keeps_substitutions_closed() {
         );
     }
 }
+
+#[test]
+fn heredoc_bodies_inside_substitutions_are_data_unless_a_shell_reads_them() {
+    let (root, _cleanup) = workspace("heredoc");
+    let controls = git_github_controls("default", "default");
+    // Claude Code writes commit messages this way. The body lines are the
+    // message, not commands, so the result matches the plain substitution.
+    let plain = evaluate(&root, &controls, "git commit -m \"$(echo 'Add notes')\"");
+    for command in [
+        "git commit -m \"$(cat <<'EOF'\nAdd notes\n\nSecond paragraph.\nEOF\n)\"",
+        "git commit -m \"$(cat <<EOF\nAdd notes\nEOF\n)\"",
+    ] {
+        let result = evaluate(&root, &controls, command);
+        assert_ne!(result.reason_code, EVALUATION_FAILED, "{command}");
+        assert_eq!(
+            result.minimum_action, plain.minimum_action,
+            "{command}: {}",
+            result.reason
+        );
+    }
+    // A body a shell reads is still a script, and nested substitutions in a
+    // data body still run.
+    for command in [
+        "git commit -m \"$(bash <<'EOF'\nrm -rf /\nEOF\n)\"",
+        "git commit -m \"$(sh <<'EOF'\nrm -rf /\nEOF\n)\"",
+        "git commit -m \"$(cat <<EOF\n$(cat ~/.ssh/id_rsa)\nEOF\n)\"",
+    ] {
+        let result = evaluate(&root, &controls, command);
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason
+        );
+    }
+}

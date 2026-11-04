@@ -519,13 +519,17 @@ fn segments_for_embedded(
     let mut results = Vec::new();
     let normalization = normalize_transparent_shell_command(command, cwd, home_dir);
     let heredocs = extract_heredocs(&normalization.normalized_command);
-    let redirects = extract_command_redirects(
-        &mask_heredoc_bodies(&normalization.normalized_command, &heredocs),
+    let masked_command = mask_heredoc_bodies(&normalization.normalized_command, &heredocs);
+    let redirects = extract_command_redirects(&masked_command, &heredocs);
+    let segment_source = mask_data_heredoc_bodies(
+        &normalization.normalized_command,
+        &masked_command,
         &heredocs,
+        &redirects,
     );
     let command_chars: Vec<char> = command.chars().collect();
     for (context, pipeline_index, segment_text, local_offset) in
-        execution_segment_texts(&normalization.normalized_command, execution_context)
+        execution_segment_texts(&segment_source, execution_context)
     {
         let (tokens, _exact) = shell_tokens(&segment_text);
         let command_tokens =
@@ -576,4 +580,41 @@ fn segments_for_embedded(
         });
     }
     results
+}
+
+/// Hide the bodies of heredocs that feed a non-shell command, so lines such as
+/// a commit message inside `$(cat <<'EOF' ... EOF)` are not split into
+/// segments of their own. Bodies fed to a shell stay visible because the shell
+/// runs them; the caller extracts those as `heredoc:` executions at the top
+/// level and this keeps the same reading for nested substitutions.
+fn mask_data_heredoc_bodies(
+    command: &str,
+    masked_command: &str,
+    heredocs: &[ShellHeredoc],
+    redirects: &[CommandRedirect],
+) -> String {
+    if heredocs.is_empty() {
+        return command.to_owned();
+    }
+    let owners = execution_segment_texts(masked_command, "top");
+    let data_heredocs: Vec<ShellHeredoc> = heredocs
+        .iter()
+        .filter(|heredoc| {
+            let owner = owners
+                .iter()
+                .filter(|(_, _, _, offset)| *offset <= heredoc.operator_start)
+                .last();
+            let Some((_, _, segment_text, offset)) = owner else {
+                return false;
+            };
+            let tokens = shell_tokens_without_redirects(segment_text, *offset, redirects);
+            let (_, executable_index, _) = leading_environment(&tokens);
+            match executable_name(tokens.get(executable_index).map(String::as_str)) {
+                Some(name) => !SHELL_SCRIPT_EXECUTABLES.contains(&name.as_str()),
+                None => false,
+            }
+        })
+        .cloned()
+        .collect();
+    mask_heredoc_bodies(command, &data_heredocs)
 }
