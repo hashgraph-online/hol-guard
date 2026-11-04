@@ -128,6 +128,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cli_profiles" => crate::cli_profiles::dispatch(args),
         "catalog_provenance" => crate::catalog_provenance::dispatch(args),
         "connector_regroup" => crate::connector_regroup::dispatch(args),
+        "cloud_actions_connect" => crate::cloud_actions_connect::dispatch(args),
         "mcp_policy_input" => crate::mcp_policy_input::dispatch(args),
         "mcp_tool_inventory" => crate::mcp_tool_inventory::dispatch(args),
         "approval_copy" => crate::approval_copy::dispatch(args),
