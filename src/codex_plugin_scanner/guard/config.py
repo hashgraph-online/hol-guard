@@ -52,11 +52,12 @@ def maybe_auto_revert_watch(guard_home: Path, *, now: datetime | None = None) ->
         and not config.watch_entered_at
         and config.watch_auto_revert_hours > 0
     ):
-        # An explicit Watch saved without a start time would never revert. Re-saving
-        # Watch makes the runtime stamp it now, so it reverts after the usual window.
+        # An explicit Watch saved without a start time would never revert. The runtime
+        # stamps it now, under its write lock, and only if Watch is still unstamped, so a
+        # posture saved after this read is never turned back into Watch.
         config = update_guard_settings(
             guard_home,
-            {"protection_posture": "watch"},
+            {"watch_stamp_repair": True},
             event_source="auto-revert",
             skip_approval_gate=True,
         )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import sys
 import textwrap
 from collections.abc import Callable, Mapping, Sequence
@@ -863,7 +864,19 @@ def _watch_revert_line(payload: Mapping[str, object]) -> str:
     reverts_at = payload.get("watch_reverts_at")
     if isinstance(reverts_at, str) and reverts_at:
         return f"\nwatch ends: {reverts_at} (protection turns back on)"
-    return "\nwatch ends: never on its own; run `hol-guard settings set protection protected`"
+    return f"\nwatch ends: never on its own; run `{_protection_restore_command(payload)}`"
+
+
+def _protection_restore_command(payload: Mapping[str, object]) -> str:
+    """The command that turns protection back on for the Guard home status reported."""
+
+    command = "hol-guard settings set protection protected"
+    home = payload.get("guard_home")
+    if not isinstance(home, str) or not home or home == "~/.hol-guard":
+        return command
+    # Status redacts the home under `~/`; keep the tilde outside the quotes so it expands.
+    quoted = f"~/{shlex.quote(home[2:])}" if home.startswith("~/") else shlex.quote(home)
+    return f"{command} --guard-home {quoted}"
 
 
 def _render_status(console: Console, payload: dict[str, object]) -> None:
