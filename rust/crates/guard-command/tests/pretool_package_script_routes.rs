@@ -398,6 +398,11 @@ fn a_test_run_in_a_scratch_project_outside_the_session_takes_the_package_route()
     let outside = classify_in(&session, "omp", "npm test", scratch.to_str().unwrap());
     assert_ne!(outside.decision, "allow");
     assert_ne!(outside.minimum_action, "allow");
+    // Only the package-test sandbox is rooted there: a build or a tool run in
+    // a directory no repository roots keeps the prompt it had.
+    let build = classify_in(&session, "omp", "npm run build", scratch.to_str().unwrap());
+    assert_ne!(build.reason_code, PACKAGE_TEST);
+    assert_ne!(build.reason_code, NODE_BUILD);
     if guard_command::pretool::workspace_sandbox_available() {
         // The session's own run is the answer the scratch run has to match:
         // one command, one route.

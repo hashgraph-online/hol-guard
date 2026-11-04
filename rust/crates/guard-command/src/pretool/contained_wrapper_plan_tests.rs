@@ -430,7 +430,11 @@ fn a_package_below_a_checkout_keeps_the_checkout_as_its_root() {
     std::fs::create_dir_all(&package).expect("package directory");
     std::fs::write(package.join("package.json"), "{}").expect("manifest");
     assert_eq!(
-        crate::pretool::contained_wrapper::sibling_project_root(&package, HOME),
+        crate::pretool::contained_wrapper::project_root(
+            &package,
+            HOME,
+            crate::pretool::contained_wrapper::ProjectRoots::RepositoryOrPackage
+        ),
         Some(root.clone())
     );
     let _ = std::fs::remove_dir_all(&root);
