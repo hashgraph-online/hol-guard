@@ -116,10 +116,14 @@ fn a_filter_reading_a_proven_file_needs_no_review() {
         "ul Cargo.toml",
         "ul -i -t xterm Cargo.toml",
         "tsort Cargo.toml",
-        "numfmt --to=iec Cargo.toml",
-        "numfmt --field=2 --from=auto --padding 8 Cargo.toml",
-        // `--grouping` carries no value, so the file after it is an operand.
-        "numfmt --grouping Cargo.toml",
+        // `numfmt` scales the numbers it is handed and opens no file, so its
+        // operands are numbers and the piped form carries none at all.
+        "numfmt --to=iec 1048576",
+        "numfmt --field=2 --from=auto --padding 8 1024",
+        "numfmt --to=iec 1.5K 2Gi",
+        // `--grouping` carries no value, so the number after it is an operand.
+        "numfmt --grouping 1048576",
+        "cut -d= -f2 Cargo.toml | numfmt --to=iec",
         "base64 Cargo.toml",
         "base64 -d Cargo.toml",
         "base64 -w 76 Cargo.toml",
@@ -208,7 +212,13 @@ fn a_filter_that_could_write_or_reach_further_still_takes_review() {
         "xzcat --files=list.txt Cargo.toml",
         "zcat /nonexistent-guard-fixture/secret.key",
         "ul --unknown Cargo.toml",
-        "numfmt --header=3 Cargo.toml",
+        // `numfmt` reads numbers, not files: a file operand is an invalid
+        // number rather than a read, so it earns no read proof here.
+        "numfmt --to=iec Cargo.toml",
+        "numfmt --grouping Cargo.toml",
+        "numfmt --header=3 1024",
+        "numfmt --to=iec 1.2.3",
+        "numfmt --to=iec 4Xi",
         "base64 -b Cargo.toml",
         // An operand outside the proven read scope, an option none of these
         // screens has read, and a parameter the shell has not written out.

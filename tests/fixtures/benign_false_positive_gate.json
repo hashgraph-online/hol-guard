@@ -36153,7 +36153,7 @@
       "expect": "allow"
     },
     {
-      "id": "numfmt-scale-worktree-file",
+      "id": "numfmt-scale-literal-number",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -36164,7 +36164,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "numfmt --to=iec --field=2 README.md | grep -c $USER"
+        "command": "numfmt --to=iec --field=2 1048576 | grep -c $USER"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -36221,7 +36221,7 @@
       "expect": "allow"
     },
     {
-      "id": "numfmt-grouping-reads-file",
+      "id": "numfmt-grouping-literal-number",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -36232,10 +36232,27 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "numfmt --grouping README.md | grep -c $USER"
+        "command": "numfmt --grouping 1048576 | grep -c $USER"
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "neg-numfmt-file-operand",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "numfmt --to=iec README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "neg-zstdcat-aggregated-output-flag",

@@ -222,7 +222,7 @@ const NUMFMT_READING_FLAGS: &str = "z";
 /// names a unit, a field, a format or a delimiter. `--header` is admitted
 /// only in its bare spelling: the screen cannot tell an attached count from
 /// a value taken off the next word, and reading the operand as a count would
-/// lose the file.
+/// lose the number.
 pub(super) fn safe_numfmt_arguments<'a>(
     arguments: &'a [String],
     operands: &mut Vec<&'a str>,
