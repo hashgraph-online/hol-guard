@@ -206,16 +206,23 @@ pub(super) fn safe_sed_arguments(
     // `1,12p;28,40p` prints several line ranges, as the Codex output proof
     // already allows, and `-e 5p -e 9p` is the same program. Every statement
     // must print a region named by line numbers, `$` or a `/regex/` address,
-    // so no w/W/e/r command, label or other command can join it.
-    let statements: Vec<&str> = programs
+    // so no w/W/e/r command, label or other command can join it. A `;` inside
+    // a pattern belongs to the address, and a program whose delimiter is left
+    // open is one this reading never finished, so it stays unread.
+    let statements: Option<Vec<&str>> = programs
         .iter()
-        .flat_map(|program| program.split(';'))
-        .collect();
+        .map(|program| crate::codex_output_args::sed_statements_split(program))
+        .try_fold(Vec::new(), |mut all, split| {
+            all.extend(split?);
+            Some(all)
+        });
     let bounded_print = quiet
-        && statements.len() <= MAX_PRINT_RANGES
-        && statements
-            .iter()
-            .all(|statement| bounded_print_statement(statement));
+        && statements.is_some_and(|statements| {
+            statements.len() <= MAX_PRINT_RANGES
+                && statements
+                    .iter()
+                    .all(|statement| bounded_print_statement(statement))
+        });
     // Exactly one substitution with inert flags. No e/w commands, program
     // files, in-place edits, or additional statements can enter this proof.
     let substitution = !quiet
@@ -637,70 +644,8 @@ fn safe_head_tail_with_targets(
 mod jq_stdin_boundary_tests;
 
 #[cfg(test)]
-mod sed_context_address_read_tests {
-    use super::*;
-
-    fn arguments(items: &[&str]) -> Vec<String> {
-        items.iter().map(|item| (*item).to_owned()).collect()
-    }
-
-    fn reads(items: &[&str]) -> bool {
-        let root = env!("CARGO_MANIFEST_DIR");
-        let context = super::super::PathContext {
-            home_dir: Some(root),
-            cwd: Some(root),
-            ..Default::default()
-        };
-        safe_sed_arguments(&arguments(items), false, context)
-    }
-
-    /// The segment proof read a `sed -n` address only as a line number or
-    /// `$`, so every region a reader named with a pattern left the model and
-    /// went to review. Where no contained run can rescue it -- a host with no
-    /// sandbox backend -- that review is what blocks the read outright.
-    #[test]
-    fn a_region_named_by_a_pattern_reads_like_one_named_by_line_numbers() {
-        assert!(reads(&["-n", "1,20p", "Cargo.toml"]));
-        assert!(reads(&["-n", "/export/,/^};/p", "Cargo.toml"]));
-        assert!(reads(&["-n", "/timeoutSeconds/p", "Cargo.toml"]));
-        assert!(reads(&["-n", "0,/export/p", "Cargo.toml"]));
-        assert!(reads(&[
-            "-n",
-            "/export/,/^  timeoutSeconds: 10,/p",
-            "Cargo.toml"
-        ]));
-        assert!(reads(&["-n", "/export/,$p", "Cargo.toml"]));
-        assert!(reads(&[
-            "-n",
-            "-e",
-            "/export/p",
-            "-e",
-            "40,60p",
-            "Cargo.toml"
-        ]));
-    }
-
-    /// Reading the address changes nothing about what a script may do: only
-    /// `p` prints, and anything that could write, run or reuse an unseen
-    /// regex keeps its review.
-    #[test]
-    fn a_pattern_address_never_carries_a_write_or_a_second_command() {
-        assert!(!reads(&["-n", "/export/w out.txt", "Cargo.toml"]));
-        assert!(!reads(&["-n", "/export/,/^};/w outp", "Cargo.toml"]));
-        assert!(!reads(&["-n", "/export/p;/export/w outp", "Cargo.toml"]));
-        assert!(!reads(&["-n", "/export/e id", "Cargo.toml"]));
-        assert!(!reads(&["-n", "/export/r /etc/passwd", "Cargo.toml"]));
-        assert!(!reads(&["-n", "/export/!p", "Cargo.toml"]));
-        assert!(!reads(&["-n", "//p", "Cargo.toml"]));
-        assert!(!reads(&["-n", "\\%export%p", "Cargo.toml"]));
-        assert!(!reads(&["-n", "/a/,/b/,/c/p", "Cargo.toml"]));
-        assert!(!reads(&["-n", "/export/d", "Cargo.toml"]));
-        assert!(!reads(&["-i", "/export/p", "Cargo.toml"]));
-        // A statement of digits alone keeps the stricter line rule.
-        assert!(!reads(&["-n", "0p", "Cargo.toml"]));
-        assert!(!reads(&["-n", "p", "Cargo.toml"]));
-    }
-}
+#[path = "safe_reads_sed_tests.rs"]
+mod sed_context_address_read_tests;
 
 #[cfg(test)]
 mod head_tail_plus_filename_tests {

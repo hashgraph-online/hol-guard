@@ -268,9 +268,46 @@ pub(crate) fn sed_script_is_bounded_print(script: &str) -> bool {
     if stripped.is_empty() {
         return false;
     }
-    stripped
-        .split(';')
-        .all(|part| sed_print_command_is_bounded(py_strip(part)))
+    sed_statements_split(stripped).is_some_and(|statements| {
+        statements
+            .iter()
+            .all(|part| sed_print_command_is_bounded(py_strip(part)))
+    })
+}
+
+/// The commands a script holds, split on the `;` that separates two of them.
+///
+/// Only a `;` outside a `/regex/` separates commands. A pattern may hold one
+/// of its own -- `/^};/` closes a block in ordinary source -- and splitting
+/// there would leave two halves that spell nothing and refuse a read this
+/// reading can otherwise follow. A delimiter left open at the end is a script
+/// this reading never finished, so it comes back unread: anything the split
+/// could have merged keeps its review that way.
+pub(crate) fn sed_statements_split(script: &str) -> Option<Vec<&str>> {
+    let mut parts: Vec<&str> = Vec::new();
+    let mut start = 0usize;
+    let mut in_pattern = false;
+    let mut escaped = false;
+    for (index, character) in script.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match character {
+            '\\' if in_pattern => escaped = true,
+            '/' => in_pattern = !in_pattern,
+            ';' if !in_pattern => {
+                parts.push(&script[start..index]);
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    if in_pattern || escaped {
+        return None;
+    }
+    parts.push(&script[start..]);
+    Some(parts)
 }
 
 /// One print command of a `sed -n` script: an optional address or address

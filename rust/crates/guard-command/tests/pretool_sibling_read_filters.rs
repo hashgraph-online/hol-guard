@@ -21,6 +21,8 @@ fn sibling_reads_with_multi_range_print_filters_are_allowed() {
         // A pattern address prints from the same stream a line range does.
         format!("grep -n fixture {sibling}/src/main.rs | sed -n '/fixture/p;1p'"),
         format!("sed -n '/fixture/,/^}}/p' {sibling}/src/main.rs"),
+        // A `;` inside a pattern is the address's own.
+        format!("grep -n fixture {sibling}/src/main.rs | sed -n '/fix;ture/p'"),
     ] {
         assert_decision(&cwd, &layout.home, &command, true);
     }
@@ -39,9 +41,8 @@ fn sed_programs_that_write_execute_or_match_text_stay_reviewed() {
         format!("{read} | sed -n '1p;W copy.txt'"),
         format!("{read} | sed -n '1p;e id'"),
         format!("{read} | sed -n '1p;r /etc/hosts'"),
-        // A regex address may itself hold `;`, which this reading splits on,
-        // so a pattern that carries one is never the pattern sed would run.
-        format!("{read} | sed -n '/fix;ture/p'"),
+        // A delimiter left open is a program this reading never finished.
+        format!("{read} | sed -n '/fixture;p'"),
         format!("{read} | sed -n '1p;'"),
         format!("{read} | sed -n -i '1p;2p'"),
         format!("sed -n '1p;2p' {sibling}/.env"),
