@@ -7561,17 +7561,20 @@ function CodexLeanSessions({ gate, disabled }) {
   const [saving, setSaving] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
   const [proof, setProof] = reactExports.useState(null);
+  const [attempt, setAttempt] = reactExports.useState(0);
   const demo = isGuardDemoMode();
   reactExports.useEffect(() => {
     if (demo) return;
     const controller = new AbortController();
+    setLoading(true);
+    setError(null);
     readCodexLean(controller.signal).then(setState, (cause) => {
       if (!controller.signal.aborted) setError(message(cause));
     }).finally(() => {
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => controller.abort();
-  }, [demo]);
+  }, [demo, attempt]);
   async function save(enabled, credentials) {
     setSaving(true);
     setError(null);
@@ -7607,7 +7610,10 @@ function CodexLeanSessions({ gate, disabled }) {
           onChange: change
         }
       ),
-      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "guard-settings-caption py-3 text-amber-800", children: error }) : null
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3 py-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "guard-settings-caption text-amber-800", children: error }),
+        state === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: () => setAttempt((n) => n + 1), children: "Try again" }) : null
+      ] }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       SettingsSaveProofModal,

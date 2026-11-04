@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ActionButton } from "../approval-center-primitives";
 import { isGuardDemoMode } from "../guard-demo";
 import type { GuardApprovalGatePublicConfig } from "../guard-types";
 import { SettingsSaveProofModal } from "../settings-save-proof-modal";
@@ -33,16 +34,19 @@ export function CodexLeanSessions({ gate, disabled }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [proof, setProof] = useState<Proof | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const demo = isGuardDemoMode();
 
   useEffect(() => {
     if (demo) return;
     const controller = new AbortController();
+    setLoading(true);
+    setError(null);
     readCodexLean(controller.signal).then(setState, (cause: unknown) => {
       if (!controller.signal.aborted) setError(message(cause));
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [demo]);
+  }, [demo, attempt]);
 
   async function save(enabled: boolean, credentials?: ContextProof) {
     setSaving(true);
@@ -74,7 +78,10 @@ export function CodexLeanSessions({ gate, disabled }: Props) {
       <SettingsToggleRow label="Keep long Codex sessions lean" checked={state?.state === "on"}
         description={describe(state, loading)} disabled={disabled || saving || loading || yours || state === null}
         onChange={change} />
-      {error ? <p role="alert" className="guard-settings-caption py-3 text-amber-800">{error}</p> : null}
+      {error ? <div className="flex flex-wrap items-center gap-3 py-3">
+        <p role="alert" className="guard-settings-caption text-amber-800">{error}</p>
+        {state === null ? <ActionButton variant="outline" onClick={() => setAttempt((n) => n + 1)}>Try again</ActionButton> : null}
+      </div> : null}
     </SettingsFormSection>
     <SettingsSaveProofModal open={proof !== null} mode="verify-save" gate={gate}
       title={proof?.enabled === false ? "Approve turning off lean Codex sessions" : "Approve lean Codex sessions"}
