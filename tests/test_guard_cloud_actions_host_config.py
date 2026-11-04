@@ -8,7 +8,6 @@ exactly as before, and must never show a value Guard did not write.
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -364,29 +363,6 @@ def test_unreadable_settings_are_left_alone_and_not_echoed(
     assert path.read_bytes() == before
 
 
-def test_codex_settings_are_read_with_tomli_before_python_3_11(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    class _Python310:
-        version_info = (3, 10, 14)
-
-    imported: list[str] = []
-    real_import = cloud_actions_host_config.importlib.import_module
-
-    def _import(name: str) -> object:
-        imported.append(name)
-        if name in {"tomli", "tomllib"}:
-            return real_import("tomllib" if sys.version_info >= (3, 11) else "tomli")
-        return real_import(name)
-
-    monkeypatch.setattr(cloud_actions_host_config, "sys", _Python310)
-    monkeypatch.setattr(cloud_actions_host_config.importlib, "import_module", _import)
-    path = _seed(tmp_path, "codex")
-
-    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
-
-    assert plan.action == "add"
-    assert "tomllib" not in imported and "tomli" in imported
-
-
 def test_settings_path_that_is_a_folder_is_unreadable(tmp_path: Path) -> None:
     path = tmp_path / ".cursor" / "mcp.json"
     path.mkdir(parents=True)
@@ -432,19 +408,23 @@ def test_home_option_ignores_the_ai_tool_home_variables(
     assert json.loads(capsys.readouterr().out)["settings_file"] == str(tmp_path / ".codex" / "config.toml")
 
 
-@pytest.mark.parametrize("tool", sorted(PATHS))
-def test_a_rendering_that_changes_another_entry_is_refused(
-    tool: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_without_the_native_runtime_the_preview_changes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    path = _seed(tmp_path, tool)
-    honest = cloud_actions_host_config._render_edit  # pyright: ignore[reportPrivateUsage]
+    from codex_plugin_scanner.guard.mdm import runtime_request
 
-    def lossy(ai_tool: object, before: bytes, fields: dict[str, object]) -> bytes:
-        return honest(ai_tool, before.replace(CANARY.encode(), b"changed"), fields)  # pyright: ignore[reportArgumentType]
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        return None
 
-    monkeypatch.setattr(cloud_actions_host_config, "_render_edit", lossy)
+    monkeypatch.setattr(runtime_request, "runtime_answer", unavailable)
+    path = _seed(tmp_path, "cursor")
 
-    plan = plan_host_config(tool, path=path, entry=entry(tool), url=URL)
+    plan = plan_host_config("cursor", path=path, entry=entry("cursor"), url=URL)
 
     assert plan.action == "unreadable"
     assert plan.after is None
+    assert plan.problem is not None and "native runtime" in plan.problem
+    with pytest.raises(cloud_actions_host_config.HostConfigNativeUnavailableError):
+        _ = cloud_actions_host_config.render_entry_undo(
+            "cursor", current=path.read_bytes(), written=entry("cursor"), prior=None
+        )
