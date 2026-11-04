@@ -25,9 +25,6 @@ LEDGER_SCHEMA = "hol.plugin-integrity-ledger.v1"
 LEDGER_PATH = "/api/guard/plugins/integrity-ledger"
 _LEDGER_LIMIT_BYTES = 512 * 1024
 _LEDGER_TIMEOUT_SECONDS = 10.0
-# Events that say something about one version's contents; the rest describe
-# packaging and stay on the listing page.
-_VERSION_EVENTS = {"differs", "republished", "version_withdrawn", "pinned_commit_unreachable"}
 
 
 def ledger_endpoint(spec_endpoint: str) -> str:
@@ -60,35 +57,8 @@ def fetch_listing_spec(slug: str, endpoint: str, *, overridden: bool, progress: 
         raise
 
 
-def _optional_text(value: object) -> bool:
-    return value is None or isinstance(value, str)
-
-
-def _valid_record(item: object) -> bool:
-    return (
-        isinstance(item, Mapping)
-        and isinstance(item.get("kind"), str)
-        and isinstance(item.get("channel"), str)
-        and _optional_text(item.get("version"))
-        and _optional_text(item.get("commitSha"))
-    )
-
-
-def _valid_event(item: object) -> bool:
-    channels = item.get("channels") if isinstance(item, Mapping) else None
-    return (
-        isinstance(item, Mapping)
-        and isinstance(item.get("kind"), str)
-        and isinstance(item.get("sentence"), str)
-        and _optional_text(item.get("version"))
-        and (channels is None or (isinstance(channels, list) and all(isinstance(c, str) for c in channels)))
-    )
-
-
-def fetch_ledger(slug: str, endpoint: str, *, spec_slug: object = None) -> dict[str, Any]:
-    """HOL's integrity record for ``slug``. The answer must name the listing
-    asked for (or the canonical slug its install spec gave) and carry
-    well-formed records and events; anything else is refused."""
+def fetch_ledger(slug: str, endpoint: str) -> object:
+    """HOL's integrity record for ``slug``, parsed but not yet checked; ``compare`` checks it."""
 
     url = f"{endpoint}?{urllib.parse.urlencode({'slug': slug})}"
     request = urllib.request.Request(
@@ -121,18 +91,6 @@ def fetch_ledger(slug: str, endpoint: str, *, spec_slug: object = None) -> dict[
         ledger = json.loads(raw)
     except ValueError as error:
         raise install.PluginInstallError("The integrity record from HOL was not valid JSON.") from error
-    shape_error = install.PluginInstallError("The integrity record from HOL was not in the expected shape.")
-    if not isinstance(ledger, dict) or ledger.get("schema") != LEDGER_SCHEMA:
-        raise shape_error
-    records, events = ledger.get("records"), ledger.get("events")
-    if not isinstance(records, list) or not all(_valid_record(item) for item in records):
-        raise shape_error
-    if not isinstance(events, list) or not all(_valid_event(item) for item in events):
-        raise shape_error
-    named = ledger.get("slug")
-    accepted = {value.casefold() for value in (slug, spec_slug) if isinstance(value, str) and value}
-    if not isinstance(named, str) or named.casefold() not in accepted:
-        raise install.PluginInstallError(f"HOL answered the integrity lookup for {slug} with another listing's record.")
     return ledger
 
 
@@ -155,22 +113,28 @@ def claude_installed(home: Path, plugin_id: str) -> dict[str, str | None] | None
     """The version and commit Claude Code recorded for the user's install, or
     None when it has none. Raises when its record cannot be read."""
 
-    plugins = install._claude_record(home)
-    if plugins is None:
+    try:
+        state = install.claude_state(home, plugin_id)
+    except install._StoppedError as error:
+        raise install.PluginInstallError(str(error)) from None
+    if state.get("record") != "read":
         raise install.PluginInstallError(f"{install._claude_unreadable(home)}.")
-    entries = plugins.get(plugin_id)
-    for entry in entries if isinstance(entries, list) else []:
-        if isinstance(entry, Mapping) and entry.get("scope") == "user":
-            version, commit = entry.get("version"), entry.get("gitCommitSha")
-            return {
-                "version": version if isinstance(version, str) and version else None,
-                "commit": commit if isinstance(commit, str) and commit else None,
-            }
-    return None
+    entry = state.get("entry")
+    if not isinstance(entry, dict):
+        return None
+    version, commit = entry.get("version"), entry.get("commit")
+    return {
+        "version": version if isinstance(version, str) and version else None,
+        "commit": commit if isinstance(commit, str) and commit else None,
+    }
 
 
-def compare(installed: Mapping[str, str | None], ledger: Mapping[str, Any]) -> dict[str, Any]:
-    """Hold the installed commit against what HOL recorded for its version.
+def compare(
+    installed: Mapping[str, str | None], ledger: object, *, slug: str, spec_slug: object = None
+) -> dict[str, Any]:
+    """Check the ledger names ``slug`` (or the canonical slug the install spec
+    gave) and is well formed, then hold the installed commit against what HOL
+    recorded for its version.
 
     ``status`` is ``matches``, ``differs`` (HOL recorded other commits for this
     version), ``not_recorded`` (HOL has no commit for this version yet),
@@ -179,42 +143,18 @@ def compare(installed: Mapping[str, str | None], ledger: Mapping[str, Any]) -> d
     version, so no recorded commit can be tied to the install).
     """
 
-    version, commit = installed.get("version"), installed.get("commit")
-    records = ledger.get("records")
-    commits: dict[str, list[str]] = {}
-    for item in records if isinstance(records, list) else []:
-        if not isinstance(item, Mapping) or item.get("kind") != "git_commit":
-            continue
-        if version is None or item.get("version") != version:
-            continue
-        sha, channel = item.get("commitSha"), item.get("channel")
-        if isinstance(sha, str) and sha:
-            channels = commits.setdefault(sha, [])
-            if isinstance(channel, str) and channel not in channels:
-                channels.append(channel)
-    if commit is None:
-        status = "no_commit"
-    elif version is None:
-        status = "no_version"
-    elif not commits:
-        status = "not_recorded"
-    elif commit in commits:
-        status = "matches"
-    else:
-        status = "differs"
-    raw_events = ledger.get("events")
-    events = [
-        {"kind": event.get("kind"), "version": event.get("version"), "sentence": event.get("sentence")}
-        for event in (raw_events if isinstance(raw_events, list) else [])
-        if isinstance(event, Mapping)
-        and event.get("kind") in _VERSION_EVENTS
-        and event.get("version") in (None, version)
-    ]
-    return {
-        "status": status,
-        "recorded": [{"commit": sha, "channels": ch} for sha, ch in commits.items()],
-        "events": events,
-    }
+    from .cli import PluginKitNativeError, kit_request
+
+    request = {"command": "integrity", "slug": slug, "spec_slug": spec_slug, "installed": dict(installed)}
+    try:
+        result = kit_request({**request, "ledger": ledger})
+    except PluginKitNativeError as error:
+        raise install.PluginInstallError(str(error)) from None
+    if result.get("refused") == "listing":
+        raise install.PluginInstallError(f"HOL answered the integrity lookup for {slug} with another listing's record.")
+    if not isinstance(result.get("status"), str):
+        raise install.PluginInstallError("The integrity record from HOL was not in the expected shape.")
+    return {"status": result["status"], "recorded": result.get("recorded") or [], "events": result.get("events") or []}
 
 
 def listing_releases_url(spec: Mapping[str, Any]) -> str | None:
