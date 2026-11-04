@@ -54,6 +54,27 @@ def sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
+# A setup refusal carries its status and reason code on the raised exception
+# and its causes, not in the class name, so keep a bounded, redactable chain.
+EXECUTION_ERROR_CHAIN_LINKS = 4
+EXECUTION_ERROR_CHAIN_WIDTH = 240
+
+
+def execution_error_chain(error: BaseException) -> list[str]:
+    """Describe a case's execution failure and the causes behind it.
+
+    `execution_error` records only the class name, which turns a refusal with a
+    status and a reason code into a bare `ExtensionControlApiError`. The chain
+    keeps what that name drops, bounded so a noisy cause cannot flood evidence.
+    """
+    chain: list[str] = []
+    link: BaseException | None = error
+    while link is not None and len(chain) < EXECUTION_ERROR_CHAIN_LINKS:
+        chain.append(f"{type(link).__name__}: {link}"[:EXECUTION_ERROR_CHAIN_WIDTH])
+        link = link.__cause__ or link.__context__
+    return chain
+
+
 def read_events(path: Path) -> list[dict[str, Any]]:
     """Require well-formed NDJSON; never recover by discarding broken events."""
     raw = path.read_bytes()

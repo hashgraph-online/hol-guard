@@ -212,3 +212,110 @@ def test_required_extension_controls_ask_only_for_permissions(monkeypatch):
 
     with pytest.raises(RuntimeError):
         _commit_extension_controls(daemon, "secret", "command.git", ())
+
+
+def _exported_packs(cache_root, sha, tag="macosx_11_0_arm64-dev"):
+    """Lay out one wheel cache entry the way the qualification driver does."""
+    assets = cache_root / "wheels" / f"{sha}-{tag}" / "release-assets"
+    publication = assets / f"extension-data-{sha}-0.0-000001"
+    publication.mkdir(parents=True)
+    (publication / ("pack-" + "b" * 64 + ".zip")).write_bytes(b"pack")
+    return assets
+
+
+def test_cached_release_assets_answer_a_bare_run_without_the_environment(monkeypatch, tmp_path):
+    """`ci.gauntlet run` finds the candidate's exported packs in the wheel cache.
+
+    Only `ci.gauntlet qualify` exports GUARD_GAUNTLET_RELEASE_ASSETS. A bare
+    run of a single case is started by hand, so without this the optional
+    extension an extension-control case enables is fetched from a release the
+    candidate does not have yet.
+    """
+    from ci.gauntlet import extension_adapters
+    from codex_plugin_scanner.guard.catalog_delivery import transport
+
+    sha = "a" * 40
+    _exported_packs(tmp_path, sha)
+    monkeypatch.delenv(extension_adapters.RELEASE_ASSETS_ENV, raising=False)
+    monkeypatch.setenv(extension_adapters.CACHE_ROOT_ENV, str(tmp_path))
+    monkeypatch.setattr(extension_adapters, "_installed_source_sha", lambda: sha)
+    monkeypatch.setattr(transport, "download", lambda url, maximum: b"live")
+    extension_adapters._serve_candidate_release_assets.cache_clear()
+    try:
+        extension_adapters._serve_candidate_release_assets()
+        release = "https://github.com/hashgraph-online/hol-guard/releases/download/"
+        tag = f"extension-data-{sha}-0.0-000001"
+        assert transport.download(f"{release}{tag}/pack-{'b' * 64}.zip", 16) == b"pack"
+    finally:
+        extension_adapters._serve_candidate_release_assets.cache_clear()
+
+
+def test_cached_release_assets_refuse_another_candidates_export(monkeypatch, tmp_path):
+    """An export built from a different commit is never served for this build."""
+    from ci.gauntlet import extension_adapters
+
+    _exported_packs(tmp_path, "a" * 40)
+    monkeypatch.setenv(extension_adapters.CACHE_ROOT_ENV, str(tmp_path))
+    monkeypatch.setattr(extension_adapters, "_installed_source_sha", lambda: "c" * 40)
+    assert extension_adapters._cached_release_assets() is None
+
+
+def test_cached_release_assets_need_a_published_pack_directory(monkeypatch, tmp_path):
+    """A wheel cache entry whose build exported nothing is not an export."""
+    from ci.gauntlet import extension_adapters
+
+    sha = "a" * 40
+    (tmp_path / "wheels" / f"{sha}-macosx_11_0_arm64-dev" / "release-assets").mkdir(parents=True)
+    monkeypatch.setenv(extension_adapters.CACHE_ROOT_ENV, str(tmp_path))
+    monkeypatch.setattr(extension_adapters, "_installed_source_sha", lambda: sha)
+    assert extension_adapters._cached_release_assets() is None
+
+
+def test_cached_release_assets_leave_a_released_build_to_fetch_live(monkeypatch, tmp_path):
+    """With no export and no variable, serving stays untouched and the fetch is live."""
+    from ci.gauntlet import extension_adapters
+    from codex_plugin_scanner.guard.catalog_delivery import transport
+
+    monkeypatch.delenv(extension_adapters.RELEASE_ASSETS_ENV, raising=False)
+    monkeypatch.setenv(extension_adapters.CACHE_ROOT_ENV, str(tmp_path))
+    monkeypatch.setattr(extension_adapters, "_installed_source_sha", lambda: "a" * 40)
+    monkeypatch.setattr(transport, "download", lambda url, maximum: b"live")
+    extension_adapters._serve_candidate_release_assets.cache_clear()
+    try:
+        extension_adapters._serve_candidate_release_assets()
+        assert transport.download("https://example.invalid/root.json", 16) == b"live"
+    finally:
+        extension_adapters._serve_candidate_release_assets.cache_clear()
+
+
+def test_execution_error_chain_keeps_the_refusal_behind_the_class_name():
+    """`execution_error` alone drops the status and reason code of a refusal."""
+    from ci.gauntlet.evidence import execution_error_chain
+
+    try:
+        try:
+            raise ValueError("extension release is unavailable")
+        except ValueError as cause:
+            raise RuntimeError("(503, 'pack_preparation_unavailable')") from cause
+    except RuntimeError as error:
+        chain = execution_error_chain(error)
+    assert chain[0] == "RuntimeError: (503, 'pack_preparation_unavailable')"
+    assert chain[1] == "ValueError: extension release is unavailable"
+
+
+def test_execution_error_chain_is_bounded():
+    """A long cause chain cannot flood a case's evidence."""
+    from ci.gauntlet.evidence import (
+        EXECUTION_ERROR_CHAIN_LINKS,
+        EXECUTION_ERROR_CHAIN_WIDTH,
+        execution_error_chain,
+    )
+
+    error: BaseException = RuntimeError("x" * 4000)
+    for _ in range(10):
+        wrapper = RuntimeError("y" * 4000)
+        wrapper.__cause__ = error
+        error = wrapper
+    chain = execution_error_chain(error)
+    assert len(chain) == EXECUTION_ERROR_CHAIN_LINKS
+    assert all(len(link) <= EXECUTION_ERROR_CHAIN_WIDTH for link in chain)
