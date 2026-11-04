@@ -104,7 +104,7 @@ impl Evaluation<'_> {
 
     /// Matches a launcher executable, a package token, and a fixed
     /// subcommand suffix, tolerating an npm-style `@<version-or-tag>` suffix
-    /// on the package token. Consume launcher options only while matching the
+    /// or a pip/uv-style `==<version>` pin on the package token. Consume launcher options only while matching the
     /// prefix, then inspect the untouched suffix so a command-level `--` keeps
     /// subsequent operands from being interpreted as safety flags.
     fn versioned_package_subcommand(&self, node: &VersionedPackageSubcommandNode) -> MatchResult {
@@ -113,7 +113,6 @@ impl Evaluation<'_> {
         prefix.extend(node.leading_subcommands.iter().cloned());
         prefix.push(node.package.clone());
         prefix.extend(node.subcommands.iter().cloned());
-        let package_prefix = format!("{}@", node.package);
         let mut evidence = Vec::new();
         for (index, segment) in self.command.segments.iter().enumerate() {
             self.check_deadline()?;
@@ -146,7 +145,7 @@ impl Evaluation<'_> {
                     }
                 }
                 let is_package = prefix_index == node.leading_subcommands.len()
-                    && argument.starts_with(&package_prefix);
+                    && is_versioned_package_token(argument, &node.package);
                 if !is_package && argument != &prefix[prefix_index] {
                     break;
                 }
@@ -168,6 +167,15 @@ impl Evaluation<'_> {
         }
         Ok(Arc::from(evidence))
     }
+}
+
+/// `is_versioned_package_token` - whether `argument` names `package` with a
+/// version suffix: npm-style `package@<version-or-tag>` or a pip/uv-style
+/// `package==<version>` pin. The bare package name is matched separately.
+pub(super) fn is_versioned_package_token(argument: &str, package: &str) -> bool {
+    argument
+        .strip_prefix(package)
+        .is_some_and(|rest| rest.starts_with('@') || rest.starts_with("=="))
 }
 
 /// `deadline_ok` - the shared budget check, usable without an `Evaluation`.
@@ -410,3 +418,7 @@ fn without_options(
     }
     retained
 }
+
+#[cfg(test)]
+#[path = "native_command_program_evaluation_tests.rs"]
+mod tests;
