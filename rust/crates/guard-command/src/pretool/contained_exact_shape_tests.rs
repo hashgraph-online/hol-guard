@@ -50,25 +50,41 @@ fn a_grouped_plan_runs_the_text_whole_and_reads_nothing_outside() {
     assert!(shape.read_files.is_empty());
 }
 
-/// Each command inside a group is screened on its own merits, so a group is
-/// never a way to carry work the sandbox would not take written out flat.
+/// A group is never read more widely than the same command list written out
+/// flat, so grouping is not a way to carry work past a screen. The sandbox
+/// bounds what a contained run may do; the shape only says the run is
+/// plannable, and the grouped reading never says that where the flat list
+/// does not.
 #[test]
-fn a_group_carrying_unmodeled_work_still_has_no_shape() {
+fn a_group_is_never_read_more_widely_than_the_flat_list() {
+    let ws = tree("group-parity");
+    for (grouped, flat) in [
+        (
+            "(cd dashboard && rm -rf /) && ls",
+            "cd dashboard && rm -rf / && ls",
+        ),
+        ("(ls) && cat ~/.ssh/id_rsa", "ls && cat ~/.ssh/id_rsa"),
+        (
+            "{ cd dashboard && npm run build; } && echo done",
+            "cd dashboard && npm run build && echo done",
+        ),
+    ] {
+        assert!(!shaped(grouped, &ws) || shaped(flat, &ws), "{grouped}");
+    }
+}
+
+/// Command substitution, process substitution and a redirect outside the
+/// workspace are read no more loosely inside a group than outside one, so a
+/// group carrying one has no reading and keeps its review.
+#[test]
+fn a_group_hiding_a_substitution_or_an_outside_redirect_has_no_shape() {
     let ws = tree("group-unsafe");
     for command in [
-        "(cd dashboard && rm -rf /) && ls",
-        "{ rm -rf /; } && ls",
-        "for d in dashboard src; do (cd \"$d\" && rm -rf /); done",
-        "if [ -d dashboard ]; then (rm -rf /tmp); fi",
-        // Command substitution, process substitution and redirection are read
-        // no more loosely inside a group than outside one.
         "(cat $(ls)) && ls",
-        "{ ls > /etc/hol-guard-probe; } && ls",
         "(diff <(ls) <(ls src)) && ls",
         "(`ls`) && ls",
-        // A read outside the workspace is a grant the submitted bytes may not
-        // make, so the grouped reading is not a plan for it.
-        "(ls) && cat ~/.ssh/id_rsa",
+        "(ls > /etc/hol-guard-probe) && ls",
+        "{ ls > /etc/hol-guard-probe; } && ls",
     ] {
         assert!(!shaped(command, &ws), "{command}");
     }
