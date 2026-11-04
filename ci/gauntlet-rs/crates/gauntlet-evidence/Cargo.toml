@@ -1,0 +1,19 @@
+[package]
+name = "gauntlet-evidence"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Read-only independent evidence verification for HOL Guard Gauntlet"
+
+[dependencies]
+base64 = "=0.22.1"
+gauntlet-contracts = { path = "../gauntlet-contracts" }
+ring = "=0.17.14"
+regex = "=1.13.1"
+rustix = { version = "=1.1.5", features = ["fs", "process"] }
+serde_json = { version = "=1.0.151", features = ["arbitrary_precision"] }
+sha2 = "=0.10.9"
+unicode-normalization = "=0.1.25"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
