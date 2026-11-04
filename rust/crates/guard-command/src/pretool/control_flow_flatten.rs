@@ -456,7 +456,7 @@ pub(super) fn arithmetic_assigns(text: &str) -> bool {
     let Some(start) = arithmetic_start(text) else {
         return false;
     };
-    let rest = text[start..].as_bytes();
+    let rest = &text.as_bytes()[start..];
     (0..rest.len()).any(|index| {
         let before = |back: usize| index.checked_sub(back).map(|at| rest[at]);
         match rest[index] {
