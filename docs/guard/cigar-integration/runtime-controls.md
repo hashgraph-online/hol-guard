@@ -32,6 +32,12 @@ Each accepts `--guard-home` for an explicit installation. The commands also work
 
 A successful start response can mean a background verification job was accepted. Read status for its result. A transport timeout is an unknown result: inspect status before another start request. The service does not automatically retry a mutation after an uncertain outcome.
 
+### Lean Codex sessions
+
+Codex sends the whole conversation with every model call, so a long session keeps paying for turns it has already seen. `hol-guard context lean on` sets Codex's own `model_auto_compact_token_limit` to 30,000 in `~/.codex/config.toml` (or `$CODEX_HOME/config.toml` when that is set), so Codex summarizes older turns once a session passes that size. `hol-guard context lean off` removes the value again, and `hol-guard context lean` (or `lean status`) reports the current state. `--json` gives the same state as JSON.
+
+Guard records the value it wrote and only ever removes that value. If your config already sets a limit, or you change Guard's value later, the command reports `yours` and leaves the file as it is. The edit keeps your comments and layout, takes the same lock as Guard's Codex hook install, and refuses to write over a config file it cannot parse. This command edits the Codex config directly and does not need the CIGAR service to be running.
+
 Keep Guard's desktop app or daemon running for `check`, `start` and context tools. These commands control the existing service; they do not launch a persistent Guard host. If a standalone CLI invocation accepts a job but subsequent status reports `runtime_not_verified`, open Guard and explicitly start assistance again. Off-state status and runtime listing remain available.
 
 ## Runtime requirement
