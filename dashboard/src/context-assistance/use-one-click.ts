@@ -3,13 +3,15 @@ import type { GuardApprovalGatePublicConfig, GuardContextAssistanceConfig } from
 import { controlContextAssistance, fetchContextAssistance } from "./api";
 import { saveCigarPreference } from "./one-click-api";
 import {
-  CigarSetupError, CigarSetupStopped, planCigarSetup, planCigarStart, runCigarSetup,
+  CigarSetupError, CigarSetupStopped, planCigarAdopt, planCigarSetup, planCigarStart, runCigarSetup,
   type CigarSetupPlan, type CigarSetupRun, type CigarSetupStage,
 } from "./one-click";
 import type { ContextAssistanceStatus } from "./types";
-import { forgetTurnOn, rememberTurnOn, shouldResumeTurnOn, turnOnRequestedAt } from "./setup-resume";
+import { forgetTurnOn, forgetTurnOnClick, rememberTurnOn, rememberTurnOnJob, shouldResumeTurnOn, turnOnJob, turnOnRequestedAt } from "./setup-resume";
+import { cigarJobPending } from "./versions-actions";
 import { requestCigarVersions } from "./versions-api";
 import { loadCigarVersionsData, type CigarVersionsData } from "./versions-data";
+import { parseCigarVersionJob, type CigarVersionJob } from "./versions-jobs";
 import type { ContextProof } from "./workspaces-api";
 
 export type CigarOneClickRun =
@@ -41,6 +43,20 @@ async function cancelJob(job: string) {
   }
 }
 
+type OwnJob = { job: CigarVersionJob; state: ContextAssistanceStatus };
+/**
+ * While the safety check this tab started is open, Guard answers "busy" to the
+ * full version list. The check itself can still be read and finished by id.
+ */
+async function fetchOwnJob(signal: AbortSignal): Promise<OwnJob | null> {
+  const id = turnOnJob();
+  if (!id) return null;
+  try {
+    const reply = await requestCigarVersions({ action: "job", job_id: id }, undefined, signal);
+    return { job: parseCigarVersionJob(reply.result), state: reply.state };
+  } catch { return null; }
+}
+
 const wait = (ms: number, signal: AbortSignal) => new Promise<void>((resolve) => {
   const timer = setTimeout(resolve, ms);
   signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
@@ -51,6 +67,7 @@ export function useCigarOneClick(options: Options) {
   const [data, setData] = useState<CigarVersionsData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [run, setRun] = useState<CigarOneClickRun>({ phase: "idle" });
+  const [own, setOwn] = useState<OwnJob | null>(null);
   const controller = useRef<AbortController | null>(null);
   const activeJob = useRef<string | null>(null);
   const starting = useRef(false);
@@ -63,9 +80,12 @@ export function useCigarOneClick(options: Options) {
     try {
       const value = await loadCigarVersionsData(AbortSignal.timeout(15_000));
       if (!mounted.current || current !== revision.current) return;
-      setData(value); setLoadError(null);
+      setData(value); setLoadError(null); setOwn(null);
     } catch (cause) {
+      const job = await fetchOwnJob(AbortSignal.timeout(15_000));
       if (!mounted.current || current !== revision.current) return;
+      setOwn(job);
+      if (job) latest.current.publish(job.state);
       setLoadError(cause instanceof Error ? cause.message : "Guard did not report CIGAR setup details.");
     }
   }, []);
@@ -77,12 +97,13 @@ export function useCigarOneClick(options: Options) {
   }, [refresh]);
 
   const plan: CigarSetupPlan | null = useMemo(() => data
-    ? planCigarSetup({ ...data, state: options.status ?? data.state }, { locked: options.locked, dirty: options.dirty })
-    : planCigarStart(options.status, options.dirty),
-  [data, options.status, options.locked, options.dirty]);
+    ? planCigarSetup({ ...data, state: options.status ?? data.state }, { locked: options.locked, dirty: options.dirty, adopt: turnOnJob() })
+    : (own && planCigarAdopt(own.job, options.status ?? own.state)) ?? planCigarStart(options.status, options.dirty),
+  [data, own, options.status, options.locked, options.dirty]);
 
   // A busy block clears on its own; re-check so the button comes back without a manual refresh.
-  const waiting = run.phase === "idle" && plan?.kind === "blocked" && plan.block.wait === true;
+  const waiting = run.phase === "idle" && ((plan?.kind === "blocked" && plan.block.wait === true)
+    || (data === null && own !== null && cigarJobPending(own.job)));
   useEffect(() => {
     if (!waiting) return;
     const timer = setInterval(() => void refresh(), 3_000);
@@ -92,8 +113,9 @@ export function useCigarOneClick(options: Options) {
   // Leaving the page stops the steps this page drives. Coming back finishes a
   // recent click, reusing whatever Guard already prepared, so it never lands on Off.
   const resumed = useRef(false);
-  const resume = data !== null && run.phase === "idle" && !resumed.current && options.active && !options.disabled
-    && shouldResumeTurnOn(turnOnRequestedAt(), Date.now(), options.status ?? data?.state ?? null, plan, options.gate?.enabled === true);
+  const resume = (data !== null || own !== null) && run.phase === "idle" && !resumed.current && options.active && !options.disabled
+    && shouldResumeTurnOn(turnOnRequestedAt(), Date.now(), options.status ?? data?.state ?? own?.state ?? null, plan,
+      options.gate?.enabled === true);
   useEffect(() => {
     if (!resume) return;
     resumed.current = true;
@@ -114,20 +136,29 @@ export function useCigarOneClick(options: Options) {
     let stage: CigarSetupStage | null = null;
     let planned: CigarSetupRun | null = null;
     let progressed = false;
+    // Remember the click before the first request, so leaving at any point still finishes it later.
+    rememberTurnOn(Date.now());
     try {
-      const fresh = await loadCigarVersionsData(abort.signal).catch((cause: unknown) => {
-        if (planCigarStart(latest.current.status, latest.current.dirty)) return null;
-        throw cause;
-      });
+      let failure: unknown = null;
+      const fresh = await loadCigarVersionsData(abort.signal).catch((cause: unknown) => { failure = cause; return null; });
       if (abort.signal.aborted) throw new CigarSetupStopped();
-      if (fresh) { setData(fresh); latest.current.publish(fresh.state); }
-      const initial = fresh?.state ?? latest.current.status;
-      const next = fresh ? planCigarSetup(fresh, { locked: latest.current.locked, dirty: latest.current.dirty })
-        : planCigarStart(latest.current.status, latest.current.dirty);
-      if (!next || next.kind !== "run" || !initial) { setRun({ phase: "idle" }); return; }
-      if (latest.current.gate?.enabled && next.approval && !proof) { setRun({ phase: "proof", plan: next, error: null }); return; }
+      let initial = fresh?.state ?? latest.current.status;
+      let next: CigarSetupPlan | null = null;
+      if (fresh) {
+        setData(fresh); latest.current.publish(fresh.state);
+        next = planCigarSetup(fresh, { locked: latest.current.locked, dirty: latest.current.dirty, adopt: turnOnJob() });
+      } else {
+        const job = await fetchOwnJob(abort.signal);
+        if (abort.signal.aborted) throw new CigarSetupStopped();
+        next = job && planCigarAdopt(job.job, job.state);
+        if (job && next) { initial = job.state; latest.current.publish(job.state); }
+        next ??= planCigarStart(latest.current.status, latest.current.dirty);
+        if (!next) throw failure;
+      }
+      if (!next || next.kind !== "run" || !initial) { forgetTurnOn(); setRun({ phase: "idle" }); return; }
+      // Asking for approval hands the decision back to the person; an old click must not finish it later.
+      if (latest.current.gate?.enabled && next.approval && !proof) { forgetTurnOnClick(); setRun({ phase: "proof", plan: next, error: null }); return; }
       planned = next; stages = next.stages;
-      rememberTurnOn(Date.now());
       setRun({ phase: "running", stages, stage: stages[0] });
       // A TOTP code is single use; Guard accepts its recent same-session proof for the later steps.
       let credentials = proof;
@@ -155,7 +186,10 @@ export function useCigarOneClick(options: Options) {
         sleep: (ms) => wait(ms, abort.signal),
         now: () => Date.now(),
         stopped: () => abort.signal.aborted,
-        onJob: (id) => { activeJob.current = id; },
+        onJob: (id) => {
+          activeJob.current = id;
+          if (id && stage === "check") rememberTurnOnJob(id);
+        },
         onStage: (value) => {
           stage = value;
           if (value === "start") starting.current = true;
@@ -169,7 +203,8 @@ export function useCigarOneClick(options: Options) {
     } catch (cause) {
       // Unmounting aborts the steps; keep the click so the page can finish it later.
       if (!mounted.current) return;
-      forgetTurnOn();
+      if (cause instanceof CigarSetupError && cause.needsProof) forgetTurnOnClick();
+      else forgetTurnOn();
       if (cause instanceof CigarSetupStopped || abort.signal.aborted) setRun({ phase: "idle" });
       else if (cause instanceof CigarSetupError && cause.needsProof) {
         // The next attempt re-plans from fresh metadata, so finished steps (Python, the download) are reused.
@@ -194,7 +229,7 @@ export function useCigarOneClick(options: Options) {
     busy: run.phase === "running",
     start: () => void execute(),
     confirm: (proof: ContextProof) => void execute(proof),
-    cancelProof: () => setRun({ phase: "idle" }),
+    cancelProof: () => { forgetTurnOn(); setRun({ phase: "idle" }); },
     dismiss: () => setRun({ phase: "idle" }),
     /** Stop always wins: abort in-flight polling so no later step runs. */
     stop: () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { CigarSetupRun } from "./one-click";
-import { forgetTurnOn, rememberTurnOn, shouldResumeTurnOn, turnOnRequestedAt } from "./setup-resume";
+import { forgetTurnOn, forgetTurnOnClick, rememberTurnOn, rememberTurnOnJob, shouldResumeTurnOn, turnOnJob, turnOnRequestedAt } from "./setup-resume";
 import { parseContextAssistanceStatus } from "./status";
 import type { ContextAssistanceStatus } from "./types";
 
@@ -23,6 +23,14 @@ rememberTurnOn(1_000, storage);
 assert.equal(turnOnRequestedAt(storage), 1_000);
 forgetTurnOn(storage);
 assert.equal(turnOnRequestedAt(storage), null);
+
+// The prepared safety check outlives an approval prompt but not a finished or cancelled setup.
+rememberTurnOn(2_000, storage);
+rememberTurnOnJob("dashboard:mine", storage);
+forgetTurnOnClick(storage);
+assert.deepEqual([turnOnRequestedAt(storage), turnOnJob(storage)], [null, "dashboard:mine"]);
+forgetTurnOn(storage);
+assert.equal(turnOnJob(storage), null);
 
 // Storage that throws (private windows, blocked site data) never breaks setup.
 const broken = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); }, removeItem: () => { throw new Error("blocked"); } };

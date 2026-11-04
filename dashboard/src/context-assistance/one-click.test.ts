@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import type { GuardContextAssistanceConfig } from "../guard-types";
 import { ContextAssistanceApiError } from "./api";
 import {
-  CigarSetupError, CigarSetupStopped, planCigarSetup, planCigarStart, runCigarSetup,
+  CigarSetupError, CigarSetupStopped, planCigarAdopt, planCigarSetup, planCigarStart, runCigarSetup,
   type CigarSetupDeps, type CigarSetupRun, type CigarSetupStage,
 } from "./one-click";
 import { parseContextAssistanceStatus } from "./status";
@@ -94,6 +94,24 @@ const job = (patch: Record<string, unknown>) => parseCigarVersionJob({ job_id: "
 const busy = planCigarSetup(data({ jobs: [job({ schema: "guard-cigar-catalog-refresh-job.v1", operation: "refresh_catalog" })] }), open);
 assert.ok(busy.kind === "blocked" && busy.block.title === "CIGAR is busy");
 
+// Coming back to a safety check this tab prepared commits it instead of waiting for it to expire.
+const prepared = job({ schema: "guard-cigar-switch-job.v1", operation: "select", job_id: "dashboard:mine", phase: "ready", code: "ready",
+  target_runtime_id: "cigar:installed", source_runtime_id: null, expected_generation: "7", can_commit: true, keeps_disabled: true,
+  reconnect_required: false, initial_selection: true, cleanup_pending: false, authority_restored: false });
+const adopted = planCigarSetup(data({ installations: [installation], jobs: [prepared] }), { ...open, adopt: "dashboard:mine" }) as CigarSetupRun;
+assert.equal(adopted.kind, "run");
+assert.deepEqual([adopted.runtime_id, adopted.stages, adopted.commit],
+  ["cigar:installed", ["check", "start"], { job_id: "dashboard:mine", expected_generation: "7", reconnect: false }]);
+assert.equal(planCigarSetup(data({ installations: [installation], jobs: [prepared] }), open).kind, "blocked",
+  "someone else's prepared switch still blocks setup");
+const stalePrepared = planCigarSetup(data({ installations: [installation], jobs: [prepared], state: { ...off, generation: "8" } }),
+  { ...open, adopt: "dashboard:mine" });
+assert.equal(stalePrepared.kind, "blocked", "a check prepared for an older generation is not committed");
+// Guard answers "busy" to the full version list while that check is open, so the job alone must be enough.
+assert.deepEqual(planCigarAdopt(prepared, off)?.commit, { job_id: "dashboard:mine", expected_generation: "7", reconnect: false });
+assert.equal(planCigarAdopt(prepared, ready), null, "nothing to finish once CIGAR is on");
+assert.equal(planCigarAdopt(undefined, off), null);
+
 // Running: a fake Guard that answers each step the way the daemon does.
 type Script = { calls: string[]; stages: CigarSetupStage[]; jobs: (string | null)[]; saved: GuardContextAssistanceConfig[] };
 function fakeGuard(options: { submitError?: Record<string, unknown>; failPhase?: string; neverReady?: boolean; stopAt?: string; initial?: ContextAssistanceStatus } = {}) {
@@ -165,6 +183,16 @@ function fakeGuard(options: { submitError?: Record<string, unknown>; failPhase?:
   return { deps, script, stop: () => { stopped = true; } };
 }
 const plan = install;
+
+{
+  const { deps, script } = fakeGuard();
+  const commitOnly: CigarSetupRun = { kind: "run", runtime_id: "cigar:new", build_id: null, interpreter_id: null, python_build_id: null,
+    stages: ["check", "start"], approval: true, commit: { job_id: "dashboard:mine", expected_generation: "7", reconnect: false } };
+  const result = await runCigarSetup(commitOnly, off, deps);
+  assert.equal(result.effective_enabled, true);
+  assert.deepEqual(script.calls.filter((call) => call !== "job" && call !== "status"), ["commit", "settings", "activate"],
+    "an adopted safety check is committed, not prepared again");
+}
 
 {
   const { deps, script } = fakeGuard();
