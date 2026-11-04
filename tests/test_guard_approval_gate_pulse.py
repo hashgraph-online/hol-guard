@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.approval_gate_types import (
     ApprovalGateInput,
     config_from_wire,
     input_from_mapping,
+    settings_input_from_payload,
 )
 from codex_plugin_scanner.guard.native_approval_gate import _input_to_wire
 
@@ -255,3 +256,36 @@ def test_public_config_reads_pulse_fields() -> None:
     assert config.to_dict()["pulse_cooldown_seconds"] == 900
     older = config_from_wire({k: v for k, v in config.to_dict().items() if not k.startswith("pulse_")})
     assert older is not None and older.pulse_enabled is False
+
+
+def test_a_settings_save_retry_asks_for_a_pulse_request(tmp_path: Path, resident) -> None:
+    # The dashboard retries a refused settings save with a top-level Pulse field,
+    # while the rest of the payload keeps its usual ``settings`` shape.
+    fake = resident(FakeResident([]))
+    payload = {"settings": {"approval_gate": {"enabled": True}}, "approval_gate_pulse": True}
+    gate_input = settings_input_from_payload(payload)
+    assert gate_input is not None and gate_input.pulse_mode == "defer"
+    with pytest.raises(ApprovalGateError) as raised:
+        _decide(tmp_path, gate_input)
+    assert raised.value.status == 202 and raised.value.code == "approval_gate_pulse_pending"
+    assert "pulse_request" in fake.methods()
+
+
+def test_a_settings_save_resubmit_sends_the_request_id_without_a_password() -> None:
+    payload = {
+        "settings": {"approval_gate": {"enabled": True, "password": "correct horse battery"}},
+        "approval_pulse_request_id": "azr_1",
+    }
+    gate_input = settings_input_from_payload(payload)
+    assert gate_input is not None and gate_input.pulse_request_id == "azr_1"
+    assert gate_input.pulse_mode == "off" and gate_input.password is None
+
+
+def test_a_settings_save_without_pulse_fields_is_unchanged() -> None:
+    nested = {"settings": {"approval_gate": {"password": "correct horse battery"}}}
+    assert settings_input_from_payload(nested) == input_from_mapping(
+        {"approval_gate": nested["settings"]["approval_gate"]}
+    )
+    top_level = {"settings": {"mode": "enforce"}, "approval_password": "correct horse battery"}
+    assert settings_input_from_payload(top_level) == input_from_mapping(top_level)
+    assert settings_input_from_payload({"settings": {"mode": "enforce"}}) is None

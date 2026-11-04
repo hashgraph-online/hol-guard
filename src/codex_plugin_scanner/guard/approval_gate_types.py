@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal, cast
 
 from .approval_gate_state import ApprovalGatePublicConfig, optional_bool, optional_string
@@ -170,3 +170,31 @@ def input_from_mapping(payload: object) -> ApprovalGateInput | None:
         pulse_request_id=pulse_request_id,
         pulse_mode="defer" if wants_pulse and pulse_request_id is None else "off",
     )
+
+
+def settings_input_from_payload(payload: object) -> ApprovalGateInput | None:
+    """Build gate input for a settings save.
+
+    The proof usually sits in ``settings.approval_gate``. The dashboard's Pulse
+    fields (``approval_gate_pulse`` and ``approval_pulse_request_id``) are
+    top-level, like on every other gated route, so they are applied on top.
+    """
+
+    if not isinstance(payload, dict):
+        return None
+    settings = payload.get("settings")
+    gate_payload = settings.get("approval_gate") if isinstance(settings, dict) else None
+    gate_input = input_from_mapping({"approval_gate": gate_payload}) if isinstance(gate_payload, dict) else None
+    if payload.get("approval_password") or payload.get("approval_totp_code"):
+        gate_input = input_from_mapping(payload) or gate_input
+    pulse = input_from_mapping({key: payload[key] for key in _PULSE_PAYLOAD_KEYS if key in payload})
+    if pulse is None or (pulse.pulse_mode == "off" and pulse.pulse_request_id is None):
+        return gate_input
+    base = gate_input or ApprovalGateInput()
+    if pulse.pulse_request_id is not None:
+        # The YID approval is the proof now; the resident refuses a password or code beside it.
+        base = replace(base, password=None, totp_code=None)
+    return replace(base, pulse_mode=pulse.pulse_mode, pulse_request_id=pulse.pulse_request_id)
+
+
+_PULSE_PAYLOAD_KEYS = ("approval_gate_pulse", "approval_pulse_request_id")

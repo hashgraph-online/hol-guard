@@ -23,6 +23,7 @@ from ..approval_gate import (
 from ..approval_gate import (
     validate_settings_update as validate_approval_gate_settings,
 )
+from ..approval_gate_types import settings_input_from_payload
 from ..cli.update_commands import build_guard_update_status_payload
 from ..config import (
     editable_guard_settings,
@@ -319,15 +320,7 @@ class _RepairSettingsRoutes:
         guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
         previous_redaction_level = load_guard_config(guard_home).receipt_redaction_level
         gate_payload = settings.get("approval_gate")
-        gate_input = (
-            approval_gate_input_from_mapping({"approval_gate": gate_payload})
-            if isinstance(gate_payload, dict)
-            else None
-        )
-        if payload.get("approval_password") or payload.get("approval_totp_code"):
-            proof_input = approval_gate_input_from_mapping(payload)
-            if proof_input is not None:
-                gate_input = proof_input
+        gate_input = settings_input_from_payload(payload)
         presentation_only_keys = {
             "presentation_mode",
             "presentation_mode_explicit",
