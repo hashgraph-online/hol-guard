@@ -46219,6 +46219,118 @@
       "expect": "not_allow"
     },
     {
+      "id": "read-repo-hidden-circleci-configuration",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.circleci/config.yml"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "read-repo-hidden-changeset-configuration",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.changeset/config.json"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "read-repo-hidden-storybook-settings",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.storybook/settings.json"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-read-repo-hidden-configuration-holding-a-credential",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.cargo/config.toml"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-repo-hidden-configuration-holding-a-multiline-credential",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.storybook/config.toml"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-repo-hidden-configuration-holding-an-indented-credential",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.storybook/config.yml"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-repo-hidden-configuration-holding-a-quoted-null",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.changeset/settings.json"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-read-repo-hidden-credential-store-name",
       "fix_area": "negative",
       "harnesses": [
