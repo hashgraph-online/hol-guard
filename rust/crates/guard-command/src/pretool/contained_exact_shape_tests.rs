@@ -68,6 +68,17 @@ fn a_group_is_never_read_more_widely_than_the_flat_list() {
             "{ cd dashboard && npm run build; } && echo done",
             "cd dashboard && npm run build && echo done",
         ),
+        // The loop and branch readings go through the decision's own rewrite
+        // rather than the group blanking, so they are pinned here too.
+        (
+            "for d in dashboard src; do (cd \"$d\" && rm -rf /); done",
+            "cd dashboard && rm -rf / && cd src && rm -rf /",
+        ),
+        (
+            "if [ -d dashboard ]; then (rm -rf /tmp); fi",
+            "[ -d dashboard ] && rm -rf /tmp",
+        ),
+        ("{ rm -rf /; } && ls", "rm -rf / && ls"),
     ] {
         assert!(!shaped(grouped, &ws) || shaped(flat, &ws), "{grouped}");
     }
