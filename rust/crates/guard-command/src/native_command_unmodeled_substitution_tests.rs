@@ -658,6 +658,10 @@ fn a_quoted_heredoc_that_cat_prints_reads_as_its_output() {
     let bounded =
         bounded_substitutions("git commit -m \"$(cat <<-\"EOF\"\n\tfix\n\tEOF\n)\"").unwrap();
     assert_eq!(bounded.text, "git commit -m \"guard_substituted_output\"");
+    // An unquoted delimiter folds when the body expands nothing.
+    let bounded =
+        bounded_substitutions("git commit -m \"$(cat <<EOF\nAdd notes\nEOF\n)\"").unwrap();
+    assert_eq!(bounded.text, "git commit -m \"guard_substituted_output\"");
 }
 
 #[test]
