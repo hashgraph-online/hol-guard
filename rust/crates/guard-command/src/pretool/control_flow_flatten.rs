@@ -448,48 +448,91 @@ pub(super) fn command_word_changes_shell_state(stage: &str) -> bool {
 /// it is read whole.
 #[cfg(test)]
 fn runs_arithmetic(text: &str) -> bool {
-    arithmetic_start(text).is_some()
+    any_arithmetic_body(text, |_| true)
 }
 
-/// Whether arithmetic in `text` can assign (`$((PATH=10))`, `$((i++))`), so a later step sees it.
+/// Whether arithmetic in `text` can assign (`$((PATH=10))`, `$((i++))`), so
+/// a later step sees it. A plain expansion such as `$(( (1 + 1) * 2 ))` only
+/// computes.
 pub(super) fn arithmetic_assigns(text: &str) -> bool {
-    let Some(start) = arithmetic_start(text) else {
-        return false;
-    };
-    let rest = &text.as_bytes()[start..];
-    (0..rest.len()).any(|index| {
-        let before = |back: usize| index.checked_sub(back).map(|at| rest[at]);
-        match rest[index] {
-            b'+' | b'-' => rest.get(index + 1) == Some(&rest[index]),
+    any_arithmetic_body(text, body_assigns)
+}
+
+/// Whether `reads` accepts the body of any arithmetic expansion the shell
+/// runs in `text`. Each expansion is read only to its own close, so text
+/// after it -- a later `git log --oneline`, a `--format=%H` -- is left to
+/// the step that owns it.
+fn any_arithmetic_body(text: &str, reads: impl Fn(&str) -> bool) -> bool {
+    let bytes = text.as_bytes();
+    let quoted = !text.contains("$'");
+    let (mut single, mut double, mut index) = (false, false, 0);
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\'' if quoted && !double => single = !single,
+            b'"' if quoted && !single => double = !double,
+            b'\\' if quoted && !single => index += 1,
+            b'$' if !single => {
+                if let Some((open, body)) = arithmetic_body(&text[index..]) {
+                    if reads(body) {
+                        return true;
+                    }
+                    index += open + body.len();
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    false
+}
+
+/// The arithmetic expansion opening `rest`: the width of its opener and the
+/// body up to its own close. `$((` counts parentheses, so a nested `(1 + 1)`
+/// does not end it; an unclosed expansion reads to the end of the text.
+fn arithmetic_body(rest: &str) -> Option<(usize, &str)> {
+    if let Some(inner) = rest.strip_prefix("$((") {
+        let mut depth = 2usize;
+        for (offset, character) in inner.char_indices() {
+            match character {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some((3, &inner[..offset]));
+                    }
+                }
+                _ => {}
+            }
+        }
+        return Some((3, inner));
+    }
+    let inner = rest.strip_prefix("$[")?;
+    match inner.find(']') {
+        Some(end) => Some((2, &inner[..end])),
+        None => Some((2, inner)),
+    }
+}
+
+/// Whether an arithmetic body assigns: an `=` that is not a comparison
+/// (`==`, `!=`, `<=`, `>=`, while `<<=` and `>>=` do assign), an increment
+/// or decrement, or a substitution that runs a command of its own.
+fn body_assigns(body: &str) -> bool {
+    if body.contains("$(") || body.contains('`') {
+        return true;
+    }
+    let bytes = body.as_bytes();
+    (0..bytes.len()).any(|index| {
+        let before = |back: usize| index.checked_sub(back).map(|at| bytes[at]);
+        match bytes[index] {
+            b'+' | b'-' => bytes.get(index + 1) == Some(&bytes[index]),
             b'=' => {
-                rest.get(index + 1) != Some(&b'=')
+                bytes.get(index + 1) != Some(&b'=')
                     && !matches!(before(1), Some(b'=' | b'!'))
                     && !(matches!(before(1), Some(b'<' | b'>')) && before(2) != before(1))
             }
             _ => false,
         }
     })
-}
-
-fn arithmetic_start(text: &str) -> Option<usize> {
-    let forms = |rest: &str| rest.starts_with("$((") || rest.starts_with("$[");
-    if text.contains("$'") {
-        return (0..text.len())
-            .find(|&index| text.is_char_boundary(index) && forms(&text[index..]));
-    }
-    let bytes = text.as_bytes();
-    let (mut single, mut double, mut index) = (false, false, 0);
-    while index < bytes.len() {
-        match bytes[index] {
-            b'\'' if !double => single = !single,
-            b'"' if !single => double = !double,
-            b'\\' if !single => index += 1,
-            b'$' if !single && forms(&text[index..]) => return Some(index),
-            _ => {}
-        }
-        index += 1;
-    }
-    None
 }
 
 /// Consume `keyword` followed by whitespace.

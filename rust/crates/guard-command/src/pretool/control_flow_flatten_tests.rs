@@ -415,6 +415,9 @@ fn arithmetic_is_read_where_the_shell_runs_it() {
     }
 }
 
+/// Only an assignment inside the expansion itself reaches a later step. The
+/// body ends at its own close, so an option or a `name=value` in the rest of
+/// the step is the step's own text, not arithmetic.
 #[test]
 fn only_assigning_arithmetic_changes_later_steps() {
     for text in [
@@ -423,6 +426,7 @@ fn only_assigning_arithmetic_changes_later_steps() {
         "echo $((i++))",
         "echo $[PATH=10]",
         "echo $((x<<=1))",
+        "echo $((a == b)) $((PATH=10))",
     ] {
         assert!(super::arithmetic_assigns(text), "{text}");
     }
@@ -432,6 +436,8 @@ fn only_assigning_arithmetic_changes_later_steps() {
         "echo $((a <= b))",
         "echo $((a != b))",
         "echo '$((PATH=10))'",
+        "timeout $((60 * 2)) git fetch --all",
+        "git log -n $((5)) --format=%H",
     ] {
         assert!(!super::arithmetic_assigns(text), "{text}");
     }
