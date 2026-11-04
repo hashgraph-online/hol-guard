@@ -206,6 +206,9 @@ class _ControlPostRoutes:
         if parsed.path == "/v1/approval-gate/totp/disable":
             self._handle_approval_gate_totp_disable(payload)
             return
+        if parsed.path.startswith("/v1/approval-gate/pulse/"):
+            self._handle_approval_gate_pulse_route(parsed.path.rsplit("/", 1)[-1], payload)
+            return
         if parsed.path == "/v1/daemon/repair":
             result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]
             self._write_json(result)

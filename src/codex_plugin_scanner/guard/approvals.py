@@ -1712,6 +1712,8 @@ def bulk_allow_read_only_once(
         }
 
     bulk_subject = f"approval-request-batch:{uuid.uuid5(uuid.NAMESPACE_URL, chr(0).join(sorted(eligible_ids))).hex}"
+    if approval_gate_input is not None:
+        approval_gate_input = replace(approval_gate_input, pulse_batch_request_ids=tuple(eligible_ids))
     bulk_gate_grant = require_approval_decision(
         store.guard_home,
         action=bulk_resolution_action,

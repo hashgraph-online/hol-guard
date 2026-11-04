@@ -40,14 +40,21 @@ __all__ = [
     "ApprovalGateInput",
     "ApprovalGatePublicConfig",
     "ApprovalGatePurpose",
+    "await_pulse_approval",
+    "begin_pulse_enrollment",
     "begin_totp_enrollment",
+    "confirm_pulse_enrollment",
     "confirm_totp_enrollment",
     "consume_extension_control_grant",
     "consume_local_cli_trust_grant",
+    "disable_pulse",
     "disable_totp",
     "input_from_mapping",
+    "poll_pulse_approval",
     "public_config",
     "recent_totp_satisfied",
+    "recover_pulse",
+    "request_pulse_approval",
     "require_approval_decision",
     "require_extension_control",
     "require_high_risk",
@@ -103,6 +110,10 @@ _CONFIGURATION_METHODS = frozenset(
         "begin_totp_enrollment",
         "confirm_totp_enrollment",
         "disable_totp",
+        "begin_pulse_enrollment",
+        "confirm_pulse_enrollment",
+        "disable_pulse",
+        "recover_pulse",
     }
 )
 
@@ -269,9 +280,11 @@ def require_approval_decision(
     session_nonce: str | None = None,
     now: str | None = None,
 ) -> ApprovalGateGrant | None:
-    payload = _native_or_unconfigured(
+    payload = _with_pulse(
         "require_approval_decision",
         guard_home,
+        pulse_purpose="approval_decision",
+        pulse_strict=scope == "global",
         params={"action": action, "scope": scope, "subject": subject, "session_nonce": session_nonce},
         approval_gate_input=approval_gate_input,
         approval_gate_grant=approval_gate_grant,
@@ -343,9 +356,11 @@ def require_high_risk(
     session_nonce: str | None = None,
     now: str | None = None,
 ) -> ApprovalGateGrant | None:
-    payload = _native_or_unconfigured(
+    payload = _with_pulse(
         "require_high_risk",
         guard_home,
+        pulse_purpose=purpose,
+        pulse_strict=True,
         params={"action": action, "scope": scope, "subject": subject, "session_nonce": session_nonce},
         approval_gate_input=approval_gate_input,
         approval_gate_grant=approval_gate_grant,
@@ -366,9 +381,14 @@ def require_extension_control(
 ) -> ApprovalGateGrant:
     """Issue a strict proof for one exact extension-control mutation."""
 
-    payload = _native_or_unconfigured(
+    payload = _with_pulse(
         "require_extension_control",
         guard_home,
+        pulse_purpose="extension_control_mutation",
+        pulse_strict=True,
+        # The resident binds this mutation to a fixed scope; the Pulse request
+        # must name the same one.
+        pulse_scope="extension-control-authority",
         params={"action": action, "subject": subject, "session_nonce": session_nonce},
         approval_gate_input=approval_gate_input,
         now=now,
@@ -413,9 +433,12 @@ def require_local_cli_trust(
 ) -> ApprovalGateGrant:
     """Issue a strict proof for one exact local CLI allow-list mutation."""
 
-    payload = _native_or_unconfigured(
+    payload = _with_pulse(
         "require_local_cli_trust",
         guard_home,
+        pulse_purpose="local_cli_trust_mutation",
+        pulse_strict=True,
+        pulse_scope="local-cli-allowlist",
         params={"action": action, "subject": subject, "session_nonce": session_nonce},
         approval_gate_input=approval_gate_input,
         now=now,
@@ -479,3 +502,17 @@ def validate_grant(
     )
     if payload is None:
         raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+
+
+# Pulse lives in its own module; it calls back into ``_native`` here at call
+# time, so the import sits below every name it uses.
+from .approval_gate_pulse import (  # noqa: E402
+    _with_pulse,
+    await_pulse_approval,
+    begin_pulse_enrollment,
+    confirm_pulse_enrollment,
+    disable_pulse,
+    poll_pulse_approval,
+    recover_pulse,
+    request_pulse_approval,
+)

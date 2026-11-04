@@ -9,6 +9,7 @@ import argparse
 
 from ...argparse_utils import FriendlyArgumentParser
 from ..config_constants import VALID_GUARD_ACTIONS, VALID_SECURITY_LEVELS
+from .approval_pulse_commands import add_approval_pulse_parser
 from .commands_parser_constants import _guard_risk_action_key
 from .commands_parser_helpers import *
 
@@ -391,6 +392,7 @@ def _configure_guard_policy_parsers(
     approval_totp_disable_parser.add_argument("--code", required=True)
     _add_guard_common_args(approval_totp_disable_parser, suppress_defaults=True)
     approval_totp_disable_parser.add_argument("--json", action="store_true")
+    add_approval_pulse_parser(settings_subparsers, _add_guard_common_args, FriendlyArgumentParser)
 
     exceptions_parser = guard_subparsers.add_parser("exceptions", help="List active Guard exceptions with expiry")
     exceptions_parser.add_argument("--harness")

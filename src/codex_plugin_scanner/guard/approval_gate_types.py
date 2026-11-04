@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Literal, cast
 
 from .approval_gate_state import ApprovalGatePublicConfig, optional_bool, optional_string
@@ -25,17 +26,31 @@ ApprovalGatePurpose = Literal[
     "protection_lifecycle",
 ]
 
+# How a caller takes part in a Yanez Pulse approval when the gate asks for one:
+# "off" never creates a Pulse request, "wait" creates one and waits for the
+# YID app (CLI), "defer" creates one and hands back its id to poll (dashboard).
+PulseMode = Literal["off", "wait", "defer"]
+PulseStatusCallback = Callable[[str, dict[str, object]], None]
+
 
 class ApprovalGateError(PermissionError):
     """Raised when an approval gate check fails."""
 
-    def __init__(self, code: str, message: str, *, status: int = 403) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        status: int = 403,
+        details: dict[str, object] | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.status = status
+        self.details = dict(details or {})
 
     def to_payload(self) -> dict[str, object]:
-        return {"error": self.code, "message": str(self)}
+        return {**self.details, "error": self.code, "message": str(self)}
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +64,15 @@ class ApprovalGateInput:
     use_cooldown: bool | None = None
     revoke_cooldown: bool = False
     require_fresh_totp: bool = False
+    pulse_request_id: str | None = None
+    pulse_agent_key: str | None = field(default=None, repr=False)
+    pulse_recovery_code: str | None = field(default=None, repr=False)
+    pulse_mode: PulseMode = "off"
+    # A bulk approval's request ids, so the YID app can summarize the batch.
+    # Sent only as a ``pulse_request`` parameter; the resident uses them only
+    # when they hash to the batch subject the grant is bound to.
+    pulse_batch_request_ids: tuple[str, ...] = ()
+    pulse_on_status: PulseStatusCallback | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +156,10 @@ def input_from_mapping(payload: object) -> ApprovalGateInput | None:
     password = optional_string(payload.get("approval_password")) or optional_string(gate_mapping.get("password"))
     current_password = optional_string(gate_mapping.get("current_password"))
     totp_code = optional_string(payload.get("approval_totp_code")) or optional_string(gate_mapping.get("totp_code"))
+    pulse_request_id = optional_string(payload.get("approval_pulse_request_id")) or optional_string(
+        gate_mapping.get("pulse_request_id")
+    )
+    wants_pulse = payload.get("approval_gate_pulse") is True or gate_mapping.get("pulse") is True
     return ApprovalGateInput(
         password=current_password or password,
         new_password=optional_string(gate_mapping.get("new_password")),
@@ -139,4 +167,6 @@ def input_from_mapping(payload: object) -> ApprovalGateInput | None:
         totp_code=totp_code,
         use_cooldown=optional_bool(payload.get("approval_gate_use_cooldown"), gate_mapping.get("use_cooldown")),
         revoke_cooldown=optional_bool(gate_mapping.get("revoke_cooldown"), False) is True,
+        pulse_request_id=pulse_request_id,
+        pulse_mode="defer" if wants_pulse and pulse_request_id is None else "off",
     )
