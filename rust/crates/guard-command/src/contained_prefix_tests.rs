@@ -255,6 +255,31 @@ fn a_setting_that_steers_a_run_is_no_inert_assignment() {
 }
 
 #[test]
+fn an_inert_node_options_value_is_carried_off_the_front() {
+    for value in ["--max-old-space-size=4096", "--experimental-vm-modules"] {
+        let setting = format!("NODE_OPTIONS={value}");
+        let (core, carried) = split(&[&setting, "npx", "jest", "--ci"], false);
+
+        assert_eq!(core, words(&["npx", "jest", "--ci"]), "{value}");
+        assert_eq!(
+            carried,
+            vec![("NODE_OPTIONS".to_string(), value.to_string())]
+        );
+    }
+    for value in [
+        "--import=x",
+        "--inspect",
+        "--max-old-space-size=4096 --require=x",
+    ] {
+        let setting = format!("NODE_OPTIONS={value}");
+        let (core, carried) = split(&[&setting, "npx", "jest"], true);
+
+        assert_eq!(core, words(&[&setting, "npx", "jest"]), "{value}");
+        assert!(carried.is_empty(), "{value}");
+    }
+}
+
+#[test]
 fn the_peel_stops_at_the_first_setting_it_cannot_carry() {
     let (core, carried) = split(&["CI=1", "APP_FLAG=1", "bun"], false);
 

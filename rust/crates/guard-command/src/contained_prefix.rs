@@ -38,8 +38,11 @@ const STEERING_NAMES: &[&str] = &[
 const PLAIN_VALUE_LIMIT: usize = 512;
 
 /// `NAME=value` whose name changes output or presentation and never which
-/// program runs or what it loads, or a tool switch whose value passed the
-/// closed screen the review read it against.
+/// program runs or what it loads, a tool switch whose value passed the
+/// closed screen the review read it against, or a `NODE_OPTIONS` holding only
+/// the heap, diagnostic and engine flags the review reads as inert
+/// (`NODE_OPTIONS=--max-old-space-size=4096`). A preload, loader or inspector
+/// is none of these and keeps the setting in the command.
 ///
 /// The review lets a filtered profile keep a command whose settings are data
 /// only, on the reading that the profile means the same with or without them.
@@ -52,7 +55,8 @@ fn inert_assignment(word: &str) -> Option<(&str, &str)> {
     let name = assignment_name(word)?;
     let value = &word[name.len() + 1..];
     let carried = crate::command_compatibility::environment::inert_environment_name(name)
-        || crate::pretool::generic::inert_tool_settings::inert_tool_setting(name, value);
+        || crate::pretool::generic::inert_tool_settings::inert_tool_setting(name, value)
+        || name == "NODE_OPTIONS" && guard_contracts::node_options_inert(value);
     carried.then_some((name, value))
 }
 
