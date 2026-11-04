@@ -559,8 +559,16 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
             .split(['\n', ';', '&', '|', '(', ')', '`'])
             .any(|piece| {
                 let words: Vec<&str> = piece.split_whitespace().collect();
-                super::xargs::command_index(&words)
-                    .is_some_and(|index| super::command_basename(words[index]).ends_with("find"))
+                super::xargs::command_index(&words).is_some_and(|index| {
+                    // `"find"` and `fi\nd` run the same walk, so the quoting
+                    // comes off before the name is read, exactly as
+                    // `named_words` reads the rest of the text.
+                    let unquoted: String = words[index]
+                        .chars()
+                        .filter(|character| !matches!(character, '\'' | '"' | '\\'))
+                        .collect();
+                    super::command_basename(&unquoted).ends_with("find")
+                })
             });
     if inner.contains(['{', '}', '\\']) {
         // `{}` is find's placeholder for the path it found and `\;` ends an

@@ -540,6 +540,10 @@ fn a_walk_under_another_name_is_still_read_as_a_walk() {
     for command in [
         r#"latest=$(gfind . -exec node run.js ';'); printf '%s' "$latest""#,
         r#"latest=$(/opt/homebrew/bin/gfind . -exec node run.js ';'); printf '%s' "$latest""#,
+        // Quoting the walker's own name does not hide it either.
+        r#"latest=$("find" . -exec node run.js ';'); printf '%s' "$latest""#,
+        r#"latest=$('find' . -exec node run.js ';'); printf '%s' "$latest""#,
+        r#"latest=$(fi\nd . -exec node run.js ';'); printf '%s' "$latest""#,
     ] {
         assert!(reviewable_substitutions(command).is_none(), "{command}");
     }
