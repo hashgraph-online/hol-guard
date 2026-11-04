@@ -54,8 +54,12 @@ pub(crate) fn benign_command_segments(
         .iter()
         .enumerate()
         .map(|(index, segment)| {
+            // `$((PATH=10))` assigns as it expands, which a later step sees.
+            let assigns = index + 1 < model.segments.len()
+                && super::control_flow_flatten::runs_arithmetic(&segment.text);
             (index == 0 && cwd.is_some())
-                || exact_safe_segment_with_context(model, segment, false, proof_context)
+                || (!assigns
+                    && exact_safe_segment_with_context(model, segment, false, proof_context))
         })
         .collect();
     let mut all_previous_benign = true;
@@ -351,7 +355,7 @@ pub(super) fn exact_safe_segment_with_context(
         }
         // `printf -v NAME` and `%n` assign a shell variable rather than print.
         "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" => {
-            !super::glob_words::printf_sets_variable(segment)
+            !super::printf_words::printf_sets_variable(segment)
                 && !super::control_flow_flatten::command_word_changes_shell_state(&segment.text)
                 && super::glob_words::printed_globs_listable(model, segment, context)
         }

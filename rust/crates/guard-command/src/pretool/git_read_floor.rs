@@ -267,7 +267,7 @@ fn verdict(
         // configuration Git reads; the proofs below answer only for what a
         // step writes to disk. `cd` is checked above instead.
         if super::control_flow_flatten::runs_arithmetic(&segment.text)
-            || super::glob_words::printf_sets_variable(segment)
+            || super::printf_words::printf_sets_variable(segment)
             || segment
                 .environment_names
                 .iter()

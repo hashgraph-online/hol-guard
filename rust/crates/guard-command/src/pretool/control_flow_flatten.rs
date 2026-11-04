@@ -432,7 +432,7 @@ pub(super) fn command_word_changes_shell_state(stage: &str) -> bool {
     let head = command_head(stage);
     STATE_CHANGING.contains(&head)
         || head.contains(['\'', '"', '\\', '$'])
-        || (head == "printf" && super::glob_words::printf_assigns(stage))
+        || (head == "printf" && super::printf_words::printf_assigns(stage))
         || head.split_once('=').is_some_and(|(name, _)| {
             !name.is_empty()
                 && name

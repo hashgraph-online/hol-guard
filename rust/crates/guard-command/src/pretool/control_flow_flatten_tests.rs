@@ -431,6 +431,10 @@ fn split_quoted_printf_option_still_assigns() {
         "printf > out -v PATH /tmp/tools",
         "printf -v>/dev/null PATH /tmp/tools",
         "printf $'\\x25n' PATH",
+        "printf $'\\45n' PATH",
+        "printf $'\\445n' PATH",
+        "printf $'\\u0025n' PATH",
+        "printf $'\\x2dv' PATH /tmp/tools",
         "printf \"%\\\nn\" PATH",
         "printf {-v,PATH,%s,/tmp/x}",
         "printf %[n] PATH",
@@ -448,6 +452,9 @@ fn split_quoted_printf_option_still_assigns() {
         "printf $'%s\\n' hello",
         "printf '%s\\n' hello 2>/dev/null",
         "printf 2>&1 '%s\\n' hello",
+        // A numeric escape that names a printed character assigns nothing.
+        "printf $'\\u2713 done\\n'",
+        "printf $'\\U0001F680 deploy\\n'",
     ] {
         assert!(!super::command_word_changes_shell_state(text), "{text}");
     }

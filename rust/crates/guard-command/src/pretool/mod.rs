@@ -176,6 +176,7 @@ mod path_word_reads;
 mod pip_reads;
 mod pnpm_reads;
 mod postgres_reads;
+mod printf_words;
 mod process_stops;
 mod pytest_contained;
 mod tool_bin_listing;
