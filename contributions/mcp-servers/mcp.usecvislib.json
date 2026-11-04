@@ -299,7 +299,7 @@
     "https://github.com/vulnex/usecvislib-mcp/blob/main/README.md"
   ],
   "saferAlternatives": [
-    "Prefer generate/validate/stats tools on JSON configs you already trust; they write image files under USECVISLIB_MCP_OUTPUT_DIR (default /tmp/usecvislib-mcp-output).",
+    "Prefer generate/validate/stats tools on JSON configs you already trust; they write under USECVISLIB_MCP_OUTPUT_DIR (default is a user-scoped temp path, and tools return output_path). Use a dedicated directory, or set USECVISLIB_MCP_OUTPUT_TTL_SECONDS=0, because cleanup deletes any file in that directory older than the one-hour TTL.",
     "Put analyze_binary_* and get_binary_stats on Review: they read a host file path (scoped by USECVISLIB_MCP_ALLOWED_INPUT_DIRS when set).",
     "Review batch_process, export_data, generate_report and export_maestro: they touch more files or produce larger artifacts than a single render.",
     "Install from https://github.com/vulnex/usecvislib-mcp (Apache-2.0) and launch the usecvislib-mcp console script; pin a release tag before enabling."
