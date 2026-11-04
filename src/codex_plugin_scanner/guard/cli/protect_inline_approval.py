@@ -13,9 +13,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import os
-import re
 import select
-import shlex
 import sys
 import time
 from collections.abc import Callable, Mapping
@@ -29,7 +27,16 @@ if TYPE_CHECKING:
     from ..store import GuardStore
 
 _POLL_SECONDS = 0.5
-_URL = re.compile(r"https?://[^\s<>\"'`]+")
+_GUIDANCE_KEYS = (
+    "_ephemeral_signed_approval_url",
+    "approval_request_ids",
+    "approval_resume",
+    "primary_approval_url",
+    "request",
+    "supply_chain",
+    "supply_chain_evaluation",
+    "verdict",
+)
 _ANSWERS: dict[str, tuple[str, bool] | None] = {
     "y": ("once", False),
     "yes": ("once", False),
@@ -43,17 +50,32 @@ _ANSWERS: dict[str, tuple[str, bool] | None] = {
 }
 
 
-def pending_protect_request_ids(payload: Mapping[str, object]) -> list[str]:
-    """Return the approval request ids this protect run queued, in either approval mode."""
+def protect_guidance(
+    payload: Mapping[str, object],
+    *,
+    env: Mapping[str, str] | None = None,
+    emphasis: bool = False,
+) -> dict[str, object] | None:
+    """Ask the native runtime what a paused install tells the person or agent that ran it.
 
-    queued_ids = payload.get("approval_request_ids")
-    if isinstance(queued_ids, list):
-        ids = [item for item in queued_ids if isinstance(item, str) and item]
-        if ids:
-            return ids
-    resume = payload.get("approval_resume")
-    request_id = resume.get("request_id") if isinstance(resume, Mapping) else None
-    return [request_id] if isinstance(request_id, str) and request_id else []
+    The answer carries the queued ``request_ids``, the inline ``prompt``, and the
+    guidance panel's ``title`` and ``guidance`` lines. ``None`` without the runtime.
+    """
+
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        answer = native_runner_authority(
+            "protect_guidance",
+            {
+                "payload": {key: payload.get(key) for key in _GUIDANCE_KEYS},
+                "from_agent": approval_resolution_invoked_from_agent(env if env is not None else os.environ),
+                "emphasis": emphasis,
+            },
+        )
+    except NativeRunnerAuthorityError:
+        return None
+    return answer if isinstance(answer, dict) else None
 
 
 def terminal_status_fd(env: Mapping[str, str] | None = None) -> int | None:
@@ -67,62 +89,6 @@ def terminal_status_fd(env: Mapping[str, str] | None = None) -> int | None:
         return descriptor if os.isatty(descriptor) else None
     except (OSError, OverflowError, ValueError):
         return None
-
-
-def _terminal_safe(text: str) -> str:
-    """Show control characters from request text as ``?`` so they cannot restyle the prompt."""
-
-    return "".join(character if character.isprintable() else "?" for character in text)
-
-
-def protect_command_text(payload: Mapping[str, object]) -> str:
-    """The install as a person would type it again, quoted for a POSIX shell.
-
-    The manager is named by its basename: an external-archive shim sends the
-    resolved real manager's path, and typing that would skip the shim.
-    """
-
-    request = payload.get("request")
-    command = request.get("command") if isinstance(request, Mapping) else None
-    if isinstance(command, str):
-        return _terminal_safe(command.strip())
-    if not isinstance(command, list):
-        return ""
-    argv = [part for part in command if isinstance(part, str)]
-    if not argv:
-        return ""
-    argv[0] = os.path.basename(argv[0]) or argv[0]
-    return _terminal_safe(shlex.join(argv))
-
-
-def _reason(payload: Mapping[str, object]) -> str:
-    verdict = payload.get("verdict")
-    reason = verdict.get("reason") if isinstance(verdict, Mapping) else None
-    return _terminal_safe(reason.strip()) if isinstance(reason, str) else ""
-
-
-def _prompt_text(payload: Mapping[str, object], *, emphasis: bool) -> str:
-    title = "HOL Guard paused this install before it ran."
-    if emphasis:
-        title = f"\033[1m{title}\033[0m"
-    lines = ["", title]
-    command = protect_command_text(payload)
-    if command:
-        lines.append(f"  {command}")
-    reason = _reason(payload)
-    if reason:
-        lines.append(f"  {reason}")
-    lines.extend(
-        [
-            "",
-            "  y  Allow once",
-            "  a  Always allow this exact install (Guard asks again if the package changes)",
-            "  n  Keep it blocked",
-            "",
-            "Allow this install? [y/a/N] ",
-        ]
-    )
-    return "\n".join(lines)
 
 
 def _write(descriptor: int, text: str) -> None:
@@ -213,9 +179,6 @@ def inline_package_approval(
     source_env = env if env is not None else os.environ
     if approval_resolution_invoked_from_agent(source_env):
         return None
-    request_ids = pending_protect_request_ids(payload)
-    if len(request_ids) != 1:
-        return None
     descriptor = terminal_status_fd(source_env)
     input_stream = stdin if stdin is not None else sys.stdin
     try:
@@ -224,8 +187,13 @@ def inline_package_approval(
         interactive = False
     if descriptor is None or not interactive:
         return None
-    request_id = request_ids[0]
-    _write(descriptor, _prompt_text(payload, emphasis="NO_COLOR" not in source_env))
+    guidance = protect_guidance(payload, env=source_env, emphasis="NO_COLOR" not in source_env) or {}
+    request_ids = guidance.get("request_ids")
+    prompt = guidance.get("prompt")
+    if not isinstance(request_ids, list) or len(request_ids) != 1 or not isinstance(prompt, str):
+        return None
+    request_id = str(request_ids[0])
+    _write(descriptor, prompt)
     outcome, value = _read_answer(
         stdin=input_stream,
         request_id=request_id,
@@ -263,37 +231,8 @@ def inline_package_approval(
     return {"resolved": True, "items": [{"request_id": request_id, "resolution_action": "allow"}]}
 
 
-def approval_step_lines(payload: Mapping[str, object], *, env: Mapping[str, str] | None = None) -> list[str]:
-    """Commands that approve a paused install later, for output nobody could answer inline."""
-
-    if approval_resolution_invoked_from_agent(env if env is not None else os.environ):
-        return []
-    request_ids = pending_protect_request_ids(payload)
-    if len(request_ids) != 1:
-        return []
-    verdict = payload.get("verdict")
-    action = verdict.get("action") if isinstance(verdict, Mapping) else None
-    if action not in {"review", "require-reapproval"}:
-        return []
-    request_id = request_ids[0]
-    lines = [
-        f"Approve once:   hol-guard approvals approve {request_id}",
-        f"Always allow:   hol-guard approvals approve {request_id} --remember",
-        "Or decide in the approval center: hol-guard approvals",
-    ]
-    command = protect_command_text(payload)
-    if command:
-        lines.append(f"Then run it again: {command}")
-    supply_chain = payload.get("supply_chain")
-    bundle = supply_chain.get("bundle") if isinstance(supply_chain, Mapping) else None
-    if isinstance(supply_chain, Mapping) and not (isinstance(bundle, Mapping) and bundle.get("workspace_id")):
-        lines.append("Sign in to Guard Cloud for package intelligence and phone approvals: hol-guard connect")
-    return lines
-
-
 def human_protect_guidance(
     payload: Mapping[str, object],
-    guidance: list[str],
     *,
     env: Mapping[str, str] | None = None,
 ) -> tuple[str, list[str]]:
@@ -303,29 +242,17 @@ def human_protect_guidance(
     end to a person at a terminal. The approval page link from it is kept, first.
     """
 
-    steps = approval_step_lines(payload, env=env)
-    if not steps:
-        return "Guard guidance", guidance
-    link = _approval_link(guidance)
-    return "Approve this install", [*([f"Approve in the browser: {link}"] if link else []), *steps]
-
-
-def _approval_link(guidance: list[str]) -> str:
-    """The approval page from the agent guidance, preferring its explicit review link."""
-
-    ordered = sorted(guidance, key=lambda line: not line.startswith("Review: "))
-    for line in ordered:
-        match = _URL.search(line)
-        if match:
-            return match.group(0).rstrip(".,;:)]")
-    return ""
+    answer = protect_guidance(payload, env=env) or {}
+    title = answer.get("title")
+    lines = answer.get("guidance")
+    if not isinstance(title, str) or not isinstance(lines, list):
+        return "Guard guidance", []
+    return title, [line for line in lines if isinstance(line, str)]
 
 
 __all__ = [
-    "approval_step_lines",
     "human_protect_guidance",
     "inline_package_approval",
-    "pending_protect_request_ids",
-    "protect_command_text",
+    "protect_guidance",
     "terminal_status_fd",
 ]
