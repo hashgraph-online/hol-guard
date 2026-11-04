@@ -278,16 +278,19 @@ pub(crate) fn next_settings_state(
             .as_i64()
             .filter(|s| pulse::PULSE_ALLOWED_COOLDOWNS.contains(s))
             .ok_or_else(invalid_cooldown)?;
-        if !pulse::pulse_enabled(&next_state) {
+        if pulse::pulse_enabled(&next_state) {
+            let o = next_state.as_object_mut().unwrap();
+            o.insert("pulse_cooldown_seconds".into(), Value::Number(secs.into()));
+            o.remove("pulse_cooldown");
+        } else if secs != 0 {
             return Err(err(
                 "approval_gate_pulse_not_enabled",
                 "Yanez Pulse is not the approval factor for this Guard.",
                 409,
             ));
         }
-        let o = next_state.as_object_mut().unwrap();
-        o.insert("pulse_cooldown_seconds".into(), Value::Number(secs.into()));
-        o.remove("pulse_cooldown");
+        // Without Pulse the public config reports 0, so a saved or imported
+        // config sends 0 back; that changes nothing.
     }
     if requested_enabled == Some(false) && pulse::pulse_enabled(&next_state) {
         // Turning the gate off ends Pulse too. The secrets are deleted by

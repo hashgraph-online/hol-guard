@@ -883,3 +883,24 @@ fn the_phone_sees_a_summary_of_the_stored_request_but_not_the_command() {
         assert!(!sent.contains(hidden), "leaked {hidden}: {sent}");
     }
 }
+
+#[test]
+fn a_zero_pulse_cooldown_without_pulse_changes_nothing() {
+    // The public config reports `pulse_cooldown_seconds: 0` while Pulse is off,
+    // so a settings save or import sends it back. Only a real cooldown needs Pulse.
+    let home = home("cooldown-without-pulse");
+    let validate = |cooldown: i64| {
+        send_from(
+            &home,
+            "sid=tty-1",
+            "validate_settings_update",
+            NOW,
+            json!({"params": {"cooldown_seconds": 0, "pulse_cooldown_seconds": cooldown}}),
+        )
+    };
+    let zero = validate(0);
+    assert_eq!(zero["status"], "ok", "{zero}");
+    let real = validate(900);
+    assert_eq!(code(&real), "approval_gate_pulse_not_enabled", "{real}");
+    let _ = std::fs::remove_dir_all(&home);
+}
