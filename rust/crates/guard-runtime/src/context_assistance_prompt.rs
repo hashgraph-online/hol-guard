@@ -32,7 +32,7 @@ const HOOK_MARGIN: Duration = Duration::from_millis(250);
 const MIN_WAIT: Duration = Duration::from_millis(300);
 const MIN_PROMPT_CHARS: usize = 8;
 const MAX_QUERY_BYTES: usize = 4_096;
-const MAX_CONTEXT_CHARS: usize = 12_000;
+const MAX_CONTEXT_CHARS: usize = 8_000;
 const MAX_OTHER_FILES: usize = 8;
 /// Set by a Pi or oh-my-pi Guard extension that hands prompt context to the
 /// model. An older extension leaves it out and gets no lookup it would drop.

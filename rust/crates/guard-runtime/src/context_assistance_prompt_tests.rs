@@ -121,7 +121,7 @@ fn nothing_is_added_when_no_excerpt_mentions_the_request() {
 
 #[test]
 fn rendered_context_stays_bounded() {
-    let long = "header ".repeat(1_500);
+    let long = "header ".repeat(MAX_CONTEXT_CHARS / 8);
     let picked: Vec<_> = (0..6)
         .map(|index| excerpt(&format!("src/header{index}.ts"), &long))
         .collect();
@@ -132,7 +132,7 @@ fn rendered_context_stays_bounded() {
 
 #[test]
 fn files_that_did_not_fit_are_listed_within_the_limit() {
-    let near_full = "header ".repeat(1_650);
+    let near_full = "header ".repeat(MAX_CONTEXT_CHARS / 7 - 100);
     let picked = [
         excerpt("src/header.ts", &near_full),
         excerpt("src/header-dropped.ts", &near_full),
@@ -145,7 +145,10 @@ fn files_that_did_not_fit_are_listed_within_the_limit() {
         rendered.contains("Other matching files: src/header-dropped.ts"),
         "an excerpt cut for space is still named"
     );
-    let too_big = [excerpt("src/header.ts", &"header ".repeat(2_000))];
+    let too_big = [excerpt(
+        "src/header.ts",
+        &"header ".repeat(MAX_CONTEXT_CHARS / 6),
+    )];
     assert_eq!(
         render(&too_big, &[], &words(&["header"])),
         None,
@@ -293,7 +296,7 @@ fn long_matched_paths_stay_within_the_context_limit() {
 #[test]
 fn an_excerpt_too_big_to_fit_gives_way_to_the_next_one() {
     let picked = [
-        excerpt("src/header.ts", &"header ".repeat(2_000)),
+        excerpt("src/header.ts", &"header ".repeat(MAX_CONTEXT_CHARS / 6)),
         excerpt("src/header-title.ts", "export const header = 'Title';"),
     ];
     let rendered = render(&picked, &[], &words(&["header"])).unwrap();
