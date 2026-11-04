@@ -22,8 +22,9 @@ import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
-from ..oauth_token_claims import decode_oauth_access_token_claims, oauth_claim_string
+from ..oauth_token_claims import decode_oauth_access_token_claims
 from ..store import GuardStore
 from .connect_cloud_actions import CLOUD_ACTIONS_RECONNECT_COMMAND, read_cloud_actions_connect_report
 from .oauth_client import GuardDpopKeyMaterial, guard_api_base_path, resolve_guard_oauth_client_config
@@ -32,14 +33,6 @@ CLOUD_ACTIONS_RESOURCE_PATH = "/api/guard/gateway/mcp"
 CLOUD_ACTIONS_REVOKE_PATH = "/api/guard/oauth/cloud-actions/revoke"
 TOKEN_EXCHANGE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:token-exchange"
 ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
-CLOUD_ACTIONS_SCOPES = frozenset(
-    {
-        "gateway:discover",
-        "gateway:invoke",
-        "gateway:execution.read",
-        "gateway:connection.read",
-    }
-)
 _HTTP_TIMEOUT_SECONDS = 30
 _MAX_RESPONSE_BYTES = 256 * 1024
 _MAX_NONCE_RETRIES = 3
@@ -89,6 +82,10 @@ class CloudActionsAccess:
 
 
 _NOT_PAIRED_MESSAGE = f"This computer is not paired with Guard Cloud. Run {CLOUD_ACTIONS_RECONNECT_COMMAND} first."
+_NATIVE_UNAVAILABLE_MESSAGE = (
+    "Guard's native runtime is not available, so Cloud actions access was not used. "
+    "Run hol-guard doctor, then try again."
+)
 _TURNED_OFF_MESSAGE = (
     f"Cloud actions are off for this computer. Run {CLOUD_ACTIONS_RECONNECT_COMMAND} again and choose "
     '"Let AI tools on this computer use Cloud actions".'
@@ -213,19 +210,11 @@ def exchange_cloud_actions_access(store: GuardStore, *, ai_tool: str) -> CloudAc
 
 def _exchange_refused(error: urllib.error.HTTPError, answer: object) -> CloudActionsAccessError:
     code = answer.get("error") if isinstance(answer, Mapping) else None
-    if code == "invalid_grant":
-        # The pairing is inactive, Cloud actions are off, or the member may no longer use them.
-        return CloudActionsAccessError(
-            "cloud_actions_not_allowed",
-            "Guard Cloud did not allow Cloud actions for this computer. Check that this computer is still paired "
-            f"and that your role in the workspace may use Cloud actions, then run {CLOUD_ACTIONS_RECONNECT_COMMAND} "
-            'again and choose "Let AI tools on this computer use Cloud actions".',
-        )
-    if code == "invalid_target":
-        return CloudActionsAccessError("not_available", "Cloud actions are not available on this Guard Cloud yet.")
-    if error.code in {429, 502, 503, 504}:
-        return CloudActionsAccessError("cloud_unreachable", "Guard Cloud is busy. Try again shortly.")
-    return CloudActionsAccessError("exchange_refused", f"Guard Cloud refused Cloud actions access (HTTP {error.code}).")
+    verdict = _native({"op": "refused", "status": error.code, "error": code if isinstance(code, str) else None})
+    reason, message = verdict.get("reason"), verdict.get("message")
+    if not isinstance(reason, str) or not isinstance(message, str):
+        return _native_unavailable()
+    return CloudActionsAccessError(reason, message)
 
 
 def read_cloud_actions_access(
@@ -234,45 +223,56 @@ def read_cloud_actions_access(
     pairing: CloudActionsPairing,
     now: float | None = None,
 ) -> CloudActionsAccess:
-    """Accept the answer only when it is Cloud actions access for this pairing's workspace."""
+    """Accept the answer only when it is Cloud actions access for this pairing's workspace.
 
-    access_token = payload.get("access_token")
-    token_type = payload.get("token_type")
-    expires_in = payload.get("expires_in")
-    if (
-        not isinstance(access_token, str)
-        or not access_token
-        or not isinstance(token_type, str)
-        or token_type.lower() != "bearer"
-        or not isinstance(expires_in, int)
-        or isinstance(expires_in, bool)
-        or expires_in <= 0
-    ):
-        raise CloudActionsAccessError("access_invalid", "Guard Cloud's answer was not Cloud actions access.")
-    scope_text = payload.get("scope")
-    scopes = tuple(scope_text.split()) if isinstance(scope_text, str) else ()
-    if not scopes or any(scope not in CLOUD_ACTIONS_SCOPES for scope in scopes):
-        raise CloudActionsAccessError("access_invalid", "Guard Cloud granted access other than Cloud actions.")
-    claims = decode_oauth_access_token_claims(access_token)
-    audience = claims.get("aud") if claims else None
-    if isinstance(audience, str):
-        audiences = [audience]
-    elif isinstance(audience, list):
-        audiences = audience
-    else:
-        audiences = []
-    if pairing.gateway_resource not in audiences:
-        raise CloudActionsAccessError("access_invalid", "Guard Cloud granted access for something else.")
-    workspace_id = oauth_claim_string(claims or {}, "workspace", "workspaceId")
-    if workspace_id is None or (pairing.workspace_id is not None and workspace_id.lower() != pairing.workspace_id):
-        raise CloudActionsAccessError("access_invalid", "Guard Cloud granted access for another workspace.")
+    The native runtime checks the answer and the token's claims; the token stays here.
+    """
+
+    token = payload.get("access_token")
+    claims = decode_oauth_access_token_claims(token) if isinstance(token, str) else {}
+    verdict = _native(
+        {
+            "op": "access",
+            "token": isinstance(token, str) and bool(token),
+            "token_type": payload.get("token_type"),
+            "expires_in": payload.get("expires_in"),
+            "scope": payload.get("scope"),
+            "audience": claims.get("aud"),
+            "workspace": claims.get("workspace"),
+            "resource": pairing.gateway_resource,
+            "workspace_id": pairing.workspace_id,
+        }
+    )
+    if isinstance(refused := verdict.get("refused"), str):
+        raise CloudActionsAccessError("access_invalid", refused)
+    accepted = verdict.get("accepted")
+    if not isinstance(token, str) or not isinstance(accepted, Mapping):
+        raise _native_unavailable()
+    workspace_id, scopes, expires_in = (accepted.get(key) for key in ("workspace_id", "scopes", "expires_in"))
+    if not isinstance(workspace_id, str) or not isinstance(scopes, list) or not isinstance(expires_in, int):
+        raise _native_unavailable()
     issued = time.time() if now is None else now
     return CloudActionsAccess(
-        access_token=access_token,
+        access_token=token,
         expires_at=issued + expires_in,
-        workspace_id=workspace_id.lower(),
-        scopes=scopes,
+        workspace_id=workspace_id,
+        scopes=tuple(str(scope) for scope in cast("list[object]", scopes)),
     )
+
+
+def _native(request: dict[str, object]) -> Mapping[str, object]:
+    """Ask the native ``cloud_actions_access`` kind; a request it cannot answer accepts no access."""
+
+    from ..native_runner_authority import native_runner_authority
+
+    try:
+        return native_runner_authority("cloud_actions_access", request)
+    except (ValueError, TypeError) as error:  # NativeRunnerAuthorityError is a ValueError
+        raise _native_unavailable() from error
+
+
+def _native_unavailable() -> CloudActionsAccessError:
+    return CloudActionsAccessError("native_unavailable", _NATIVE_UNAVAILABLE_MESSAGE)
 
 
 def revoke_cloud_actions_access(store: GuardStore, *, ai_tool: str | None) -> list[str]:
