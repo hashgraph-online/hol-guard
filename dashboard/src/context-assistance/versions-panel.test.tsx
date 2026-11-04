@@ -45,7 +45,8 @@ const recovery = { ...job, operation: "recover" as const, phase: "preparing_reco
   keeps_disabled: true, reconnect_required: false,
   recovery_attempt: { id: "a".repeat(32), expected_generation: job.expected_generation, started_at_ms: 500000, deadline_at_ms: 620000 } };
 assert.match(jobs(recovery), /Recovery keeps CIGAR off/);
-assert.match(jobs(job), />Working</);
+assert.match(jobs(job), />Ready to switch</, "a switch waiting for the person does not look busy");
+assert.match(jobs({ ...job, phase: "preparing", can_commit: false }), />Working</);
 const stopped = { ...job, phase: "extracting", worker_live: false, recovery_available: true, can_commit: false };
 assert.match(jobs(stopped), />Stopped partway</);
 assert.match(jobs(stopped), />Clean up<\/button>/);

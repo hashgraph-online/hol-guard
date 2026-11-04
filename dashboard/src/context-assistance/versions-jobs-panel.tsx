@@ -10,6 +10,8 @@ const operation = { install: "Download CIGAR", verify: "Check CIGAR", setup_inte
   switch: "Switch CIGAR version", rollback: "Go back to the earlier version", select: "Choose a CIGAR version", recover: "Clean up a version switch" };
 const phaseWords: Record<string, string> = { ready: "Ready", completed: "Done", cancelled: "Cancelled", failed: "Did not finish", recovery_required: "Needs cleanup" };
 export function cigarJobPhaseLabel(job: CigarVersionJob): string {
+  // Guard keeps a prepared switch's worker alive while it waits for the person to choose Switch now.
+  if (job.phase === "ready" && job.can_commit) return "Ready to switch";
   if (cigarJobPending(job)) return "Working";
   return phaseWords[job.phase] ?? "Stopped partway";
 }

@@ -6794,6 +6794,7 @@ const operation = {
 };
 const phaseWords = { ready: "Ready", completed: "Done", cancelled: "Cancelled", failed: "Did not finish", recovery_required: "Needs cleanup" };
 function cigarJobPhaseLabel(job) {
+  if (job.phase === "ready" && job.can_commit) return "Ready to switch";
   if (cigarJobPending(job)) return "Working";
   return phaseWords[job.phase] ?? "Stopped partway";
 }
