@@ -84,7 +84,7 @@ fn select(fields: &Map<String, Value>) -> KindResult {
             return Err(ERR_INVALID);
         }
         let sequence = event.get("localStreamSequence").unwrap_or(&Value::Null);
-        if !strict_int(sequence).is_some_and(|value| value > 0) {
+        if strict_int(sequence).is_none_or(|value| value <= 0) {
             return Ok(json!({ "error": ERR_SEQUENCE }));
         }
         let first = *first_sequence.get_or_insert(encoded_len(sequence)?);
