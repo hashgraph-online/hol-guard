@@ -689,3 +689,47 @@ fn a_stderr_merging_pipe_decides_like_the_pipeline_it_spells() {
 
 #[path = "native_command_compound_launch_tests.rs"]
 mod compound_launch;
+
+#[test]
+fn a_setting_prefix_does_not_hide_a_backgrounded_command_from_review() {
+    let binding = binding_with_layers(serde_json::json!([]));
+    // Starting a server on a port, backgrounding it, keeping its pid and
+    // smoke-testing it is the shape of every local integration test. The
+    // setting in front of the command moves no data the floor cannot read, so
+    // the command belongs on a review card, as the same text without it
+    // already was.
+    for command in [
+        "(PORT=39871 npm start > /tmp/app.log 2>&1 & echo $! > /tmp/app.pid)",
+        "(PORT=39871 npm start &)",
+        "(LOG_LEVEL=debug ls &)",
+    ] {
+        let result = evaluate(&binding, command);
+        assert_ne!(
+            result.reason_code, "native_command_extension_evaluation_failed",
+            "{command}"
+        );
+        assert_ne!(result.minimum_action, "allow", "{command}");
+    }
+    // A name that redirects what runs, moves a home, a config file or a trust
+    // anchor, routes a credential or carries a value this text does not hold
+    // is not a setting in that sense, and stays unread.
+    // Only the name changes across these, so the screen that reads them is
+    // name-driven and nothing else about the shape lets them through.
+    for command in [
+        "(PATH=/tmp/evil ls &)",
+        "(NODE_OPTIONS=--require ./x.js ls &)",
+        "(HOME=/tmp/fake ls &)",
+        "(GIT_SSH=/tmp/x.sh ls &)",
+        "(LD_PRELOAD=/tmp/x.so ls &)",
+        "(CURL_CA_BUNDLE=/tmp/ca.pem ls &)",
+        "(GITHUB_TOKEN=abc ls &)",
+        "(LOG_LEVEL=\"$MODE\" ls &)",
+        "(TARGET=$(cat id) ls &)",
+    ] {
+        let result = evaluate(&binding, command);
+        assert_eq!(
+            result.reason_code, "native_command_extension_evaluation_failed",
+            "{command}"
+        );
+    }
+}

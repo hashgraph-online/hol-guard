@@ -18,10 +18,20 @@
 //! background job, an expansion that builds a program name, an interpreter or
 //! a lookup the lookup reader did not prove, or fed to a launcher, a
 //! `find -exec` or an option that can stand before the program.
+//!
+//! Two reads come out of the same scan. `bounded_substitutions` answers the
+//! strict question: may the text be rewritten with the output stood in for,
+//! and whose owners does it add. `reviewable_substitutions` answers the
+//! weaker one the uncertain floor asks: can every program this text runs be
+//! named well enough to put the command on a review card. Only the second
+//! reads a value an assignment keeps, and it never lowers a floor: the
+//! uncertain floor starts at `review` and only rises, so the most a command
+//! gains by clearing it is an approval card where it had a block with
+//! nothing to answer.
 
 use std::collections::BTreeSet;
 
-use super::{is_assignment, named_words, INTERPRETERS, SHELL_PREFIXES};
+use super::{find_exec_programs, is_assignment, named_words, INTERPRETERS, SHELL_PREFIXES};
 
 /// Stands in for a bounded substitution's output: one ordinary word.
 const OUTPUT: &str = "guard_substituted_output";
@@ -41,6 +51,15 @@ const LAUNCHERS: &[&str] = &[
     "systemd-run",
 ];
 
+/// How far a substitution's output is followed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ValueFlow {
+    /// To an argument of a program this text names. The rewrite read.
+    Arguments,
+    /// Also to a value a standalone assignment keeps. The reviewability read.
+    Assignments,
+}
+
 pub(super) struct BoundedSubstitutions {
     /// The text with each bounded substitution replaced by an inert word.
     pub(super) text: String,
@@ -53,6 +72,23 @@ pub(super) struct BoundedSubstitutions {
 /// as the path it opens, or `None` when one is not bounded. Text with no
 /// substitution comes back unchanged.
 pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> {
+    scan(text, ValueFlow::Arguments)
+}
+
+/// The same read, following a value a standalone assignment keeps as well.
+///
+/// `latest=$(ls | sort -V | tail -n 1)` runs exactly the programs it names and
+/// keeps their output as a word the rest of the text expands, yet no program
+/// receives that output here, so the rewrite read stops and the command
+/// reached an evaluation failure: a block with no approval row, where the same
+/// pipeline written as an argument got a review card. The commands that expand
+/// the name are its receivers and join the owners, so a contributed extension
+/// that owns one still judges arguments this text does not hold.
+pub(super) fn reviewable_substitutions(text: &str) -> Option<BoundedSubstitutions> {
+    scan(text, ValueFlow::Assignments)
+}
+
+fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
     if text.contains("<<") || text.contains('`') {
         return None;
     }
@@ -65,6 +101,8 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
     let mut words: Vec<String> = Vec::new();
     let mut word = String::new();
     let mut redirect_target = false;
+    // The names standalone assignments gave a substitution's output.
+    let mut assigned: BTreeSet<String> = BTreeSet::new();
     let mut index = 0;
     while index < chars.len() {
         let character = chars[index];
@@ -92,17 +130,31 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
                 Some(&'(') => Some(crate::parser_segments::arithmetic_close(&chars, index)?),
                 _ => None,
             };
-            let receiver = receiving_program(&words, &word, redirect_target)?;
+            let close = match arithmetic {
+                Some(close) => close,
+                None => closing_parenthesis(&chars, index + 2)?,
+            };
+            let receiver = receiving_program(
+                &words,
+                &word,
+                redirect_target,
+                flow,
+                command_continues(&chars, close + 1),
+            )?;
+            if receiver.is_none() {
+                if let Some((name, _)) = word.split_once('=') {
+                    assigned.insert(name.to_owned());
+                }
+            }
             // Arithmetic prints a number and reaches no program of its own,
             // so it leaves the owner set the rest of the text names.
-            let (close, printed) = match arithmetic {
-                Some(close) => (close, crate::parser_segments::ARITHMETIC_VALUE),
+            let printed = match arithmetic {
+                Some(_) => crate::parser_segments::ARITHMETIC_VALUE,
                 None => {
-                    let close = closing_parenthesis(&chars, index + 2)?;
                     let inner: String = chars[index + 2..close].iter().collect();
-                    programs.extend(inner_programs(&inner)?);
-                    programs.insert(receiver);
-                    (close, OUTPUT)
+                    programs.extend(inner_programs(&inner, flow)?);
+                    programs.extend(receiver);
+                    OUTPUT
                 }
             };
             word.push_str(printed);
@@ -118,11 +170,17 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
             // characters are literal text and never run anything, and `>(cmd)`
             // writes into a program this text does not bound, so neither is
             // read here.
-            let receiver = receiving_program(&words, &word, redirect_target)?;
             let close = closing_parenthesis(&chars, index + 2)?;
+            let receiver = receiving_program(
+                &words,
+                &word,
+                redirect_target,
+                flow,
+                command_continues(&chars, close + 1),
+            )?;
             let inner: String = chars[index + 2..close].iter().collect();
-            programs.extend(inner_programs(&inner)?);
-            programs.insert(receiver);
+            programs.extend(inner_programs(&inner, flow)?);
+            programs.extend(receiver);
             word.push_str(OUTPUT);
             out.push_str(OUTPUT);
             index = close + 1;
@@ -187,10 +245,54 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
             _ => word.push(character),
         }
     }
+    programs.extend(value_consumers(text, &assigned));
     Some(BoundedSubstitutions {
         text: out,
         programs,
     })
+}
+
+/// Whether another word of the same simple command follows the position.
+///
+/// `NAME=$(...)` that stands alone keeps the output as a value the rest of the
+/// text expands. `GH_HOST=$(cat host.txt) gh pr list` hands it straight to the
+/// command beside it as a setting that program reads, which is neither a value
+/// this reader follows nor an argument, so the two shapes are told apart by
+/// what comes after the assignment rather than by what came before it.
+fn command_continues(chars: &[char], start: usize) -> bool {
+    let rest: String = chars[start.min(chars.len())..]
+        .iter()
+        .take_while(|value| !matches!(**value, ';' | '&' | '|' | '\n'))
+        .collect();
+    rest.split_whitespace()
+        .any(|raw| !is_assignment(raw) && !SHELL_PREFIXES.contains(&program_name(raw).as_str()))
+}
+
+/// The programs the text hands a value one of `names` holds.
+///
+/// A value an assignment keeps reaches the commands that expand the name, so
+/// those are its receivers: `TARGET=$(cat id); gh pr view $TARGET` hands the
+/// output to `gh` exactly as `gh pr view "$(cat id)"` does, and the owner that
+/// judges `gh` arguments still refuses text it cannot read.
+fn value_consumers(text: &str, names: &BTreeSet<String>) -> BTreeSet<String> {
+    let mut consumers = BTreeSet::new();
+    for piece in text.split(['\n', ';', '&', '|']) {
+        if !names.iter().any(|name| {
+            piece.contains(&format!("${name}")) || piece.contains(&format!("${{{name}}}"))
+        }) {
+            continue;
+        }
+        for raw in piece.split_whitespace() {
+            let name = program_name(raw);
+            if raw.starts_with('-') || is_assignment(raw) || SHELL_PREFIXES.contains(&name.as_str())
+            {
+                continue;
+            }
+            consumers.insert(name);
+            break;
+        }
+    }
+    consumers
 }
 
 /// The program a substitution's result reaches, or `None` when this text does
@@ -205,9 +307,24 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
 /// word shaped like a setting is never read as a substitution's result
 /// whatever program receives it. The POSIX dot builtin runs what it is given
 /// as shell code, exactly as `source` does, so it is refused the same way.
-fn receiving_program(words: &[String], word: &str, redirect_target: bool) -> Option<String> {
-    if redirect_target || is_assignment(word) {
+fn receiving_program(
+    words: &[String],
+    word: &str,
+    redirect_target: bool,
+    flow: ValueFlow,
+    followed: bool,
+) -> Option<Option<String>> {
+    if redirect_target {
         return None;
+    }
+    if is_assignment(word) {
+        // `NAME=$(...)` keeps the output as a value: no program receives it
+        // here. The reviewability read follows that value to the commands
+        // that expand the name; the rewrite read stops, because a prefix
+        // assignment hands the value straight to the program the rest of this
+        // command names and `env NAME=` and `make NAME=` are settings whatever
+        // program receives them.
+        return (flow == ValueFlow::Assignments && words.is_empty() && !followed).then_some(None);
     }
     let receiver = words
         .iter()
@@ -224,7 +341,7 @@ fn receiving_program(words: &[String], word: &str, redirect_target: bool) -> Opt
     {
         return None;
     }
-    Some(name)
+    Some(Some(name))
 }
 
 /// The `)` that closes a substitution opened just before `start`. A nested
@@ -254,18 +371,45 @@ fn closing_parenthesis(chars: &[char], start: usize) -> Option<usize> {
 /// A `#` is refused along with the other shell punctuation: the scan for the
 /// closing `)` does not read comments, so a `)` inside one ends the text early
 /// and the words after it would never reach this list.
-fn inner_programs(inner: &str) -> Option<Vec<String>> {
-    if inner.contains(['`', '<', '>', '(', ')', '{', '}', '\n', '\\', '#'])
+fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
+    if inner.contains(['`', '<', '>', '(', ')', '\n', '#'])
         || inner.contains("$(")
         || !expansions_are_names(inner)
-        || named_words(inner)
+    {
+        return None;
+    }
+    let mut programs = Vec::new();
+    let mut plain = inner.to_owned();
+    if inner.contains(['{', '}', '\\']) {
+        // `{}` is find's placeholder for the path it found and `\;` ends an
+        // `-exec` body: neither opens a brace group nor hides punctuation, and
+        // the walk's programs are the ones `find_exec_programs` already reads
+        // outside a substitution. Any other brace or escape stays refused.
+        if flow != ValueFlow::Assignments {
+            return None;
+        }
+        plain = inner.replace("{}", " ").replace("\\;", " ");
+        if plain.contains(['{', '}', '\\']) {
+            return None;
+        }
+        let walked = find_exec_programs(inner)?;
+        if walked.is_empty() {
+            return None;
+        }
+        programs.extend(walked);
+    }
+    // An interpreter runs text this scan does not hold. The rewrite read looks
+    // for its name anywhere in the substitution; the reviewability read looks
+    // at the programs it runs, because a word such as `versions/node` inside a
+    // path the substitution reads starts nothing.
+    if flow != ValueFlow::Assignments
+        && named_words(inner)
             .iter()
             .any(|name| INTERPRETERS.contains(&name.as_str()))
     {
         return None;
     }
-    let mut programs = Vec::new();
-    for command in split_commands(inner)? {
+    for command in split_commands(&plain)? {
         let Some(first) = command.split_whitespace().next() else {
             continue;
         };
@@ -283,6 +427,13 @@ fn inner_programs(inner: &str) -> Option<Vec<String>> {
             return None;
         }
         programs.push(name);
+    }
+    if flow == ValueFlow::Assignments
+        && programs
+            .iter()
+            .any(|name| INTERPRETERS.contains(&name.as_str()))
+    {
+        return None;
     }
     (!programs.is_empty()).then_some(programs)
 }

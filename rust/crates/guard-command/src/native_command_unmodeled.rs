@@ -76,7 +76,7 @@ pub(crate) use prefix::{launcher_body, prefix_reads_a_program_file, Handover};
 use redirections::without_redirections;
 use shapes::{data_heredocs, without_lookups, without_plain_awk};
 pub(crate) use shapes::{python_is_builtin_only, python_stdin};
-use substitution::bounded_substitutions;
+use substitution::{bounded_substitutions, reviewable_substitutions};
 use xargs::{xargs_input_is_named, xargs_names_its_program, xargs_programs};
 
 /// Compatibility owners recognize these programs without a catalog matcher.
@@ -411,6 +411,7 @@ impl CompiledNativeCommandControls {
         // evaluation failure, as `xargs gh` does. A required owner, such as
         // the one for `git` or `kill`, still supplies its floor below.
         if bounded_substitutions(text)
+            .or_else(|| reviewable_substitutions(text))
             .is_some_and(|bounded| self.contributed_owner_names_a_program(&bounded.programs))
         {
             return None;
@@ -609,8 +610,28 @@ fn named_find_exec(text: &str) -> bool {
     let literal = unquoted_literal(text);
     find_exec_programs(text).is_some_and(|programs| !programs.is_empty())
         && !text.contains(['<', '>', '`', '\n'])
-        && (!text.contains('$') || compound::parameters_only_root_paths(text))
+        && walk_parameters_are_root_paths(text)
         && !moves_data(&literal)
+}
+
+/// Whether every parameter the walk itself reads is a root path.
+///
+/// find searches the roots this text names, so a parameter inside one leaves
+/// the walk unread unless the reader proves it is a root. A parameter in
+/// another command of the same text is that command's operand and changes
+/// nothing about what the walk searches: in `find "$ROOT" -type d -exec
+/// basename {} \; | sort; printf 'latest=%s\n' "$latest"` the walk searches
+/// exactly what the first command names. Asking the whole text refused the
+/// second half along with the first, and the command blocked outright with no
+/// approval left to give it, while the walk on its own reviewed.
+fn walk_parameters_are_root_paths(text: &str) -> bool {
+    text.split(['\n', ';', '&', '|'])
+        .filter(|piece| {
+            piece
+                .split_whitespace()
+                .any(|word| EXEC_ACTIONS.contains(&word))
+        })
+        .all(|piece| !piece.contains('$') || compound::parameters_only_root_paths(piece))
 }
 
 /// `;2>&1 python3 evil.py` and the same shape with `<` or `>&`. A spaced
@@ -707,7 +728,8 @@ fn reviewable_structure(
     // A bounded substitution prints arguments and nothing else, so the shape
     // around it is read with each one as the word it prints. Anything else
     // keeps the text as written, where `$(` still reads as moving data.
-    let substituted = bounded_substitutions(&command.normalized_text);
+    let substituted = bounded_substitutions(&command.normalized_text)
+        .or_else(|| reviewable_substitutions(&command.normalized_text));
     let normalized = substituted
         .as_ref()
         .map_or(command.normalized_text.as_str(), |bounded| {
@@ -802,13 +824,15 @@ fn reviewable_structure(
         // command it runs is named in its text (see `substitution`).
         Some("command_substitution_not_yet_supported") => {
             let looked = without_lookups(&command.normalized_text);
-            bounded_substitutions(&looked).is_some_and(|bounded| {
-                let text = bounded.text;
-                !text.contains("$(")
-                    && !text.contains('`')
-                    && !text.contains("<<")
-                    && plain_after_heredocs(&text)
-            })
+            bounded_substitutions(&looked)
+                .or_else(|| reviewable_substitutions(&looked))
+                .is_some_and(|bounded| {
+                    let text = bounded.text;
+                    !text.contains("$(")
+                        && !text.contains('`')
+                        && !text.contains("<<")
+                        && plain_after_heredocs(&text)
+                })
         }
         _ => false,
     }
@@ -903,12 +927,44 @@ fn moves_data(literal: &str) -> bool {
             (is_assignment(word)
                 && !saves_job_pid(word)
                 && !assigns_nothing(word)
+                && !setting_prefix(word)
                 && !compound::binds_a_shell_variable(word))
                 || matches!(
                     word,
                     "export" | "declare" | "typeset" | "readonly" | "local" | "unset" | "alias"
                 )
         })
+}
+
+/// Whether the word sets a value the command beside it reads for itself.
+///
+/// `moves_data` asks whether this text puts data somewhere the floor cannot
+/// read. A setting prefix does not: it hands a literal to the program this
+/// text already names, and that program's owners bound it as they bound the
+/// rest. Reading every assignment as data movement left `(PORT=39871 npm
+/// start > app.log 2>&1 & echo $! > app.pid)` — a server started,
+/// backgrounded and smoke-tested over loopback, the shape of a local
+/// integration test — with a block and no approval row, while the same
+/// command without the setting reached a review card. The names that
+/// redirect what runs, that move a config file, a home or a toolchain, that
+/// inject options into the program (`PATH`, `LD_PRELOAD`, `NODE_OPTIONS`,
+/// `PYTEST_ADDOPTS`), that move a trust anchor or that route a credential
+/// are not settings in this sense and stay unread, as does a value built
+/// from an expansion. An endpoint name such as `PORT` is read here, where
+/// the only question is whether the command may be put on a review card
+/// with that setting in plain view; the screens that decide what runs
+/// unreviewed keep reading it as before.
+fn setting_prefix(word: &str) -> bool {
+    use crate::command_compatibility::environment as settings;
+    let Some((name, value)) = word.split_once('=') else {
+        return false;
+    };
+    !name.is_empty()
+        && crate::pretool::generic::chain_literals::ordinary_name(name)
+        && !settings::code_or_redirect_environment_name(name)
+        && !settings::trust_anchor_environment_name(name)
+        && !settings::credential_routing_environment_name(name)
+        && !value.contains(['$', '`', '\\', '\n', '\r'])
 }
 
 /// Every word the shell could read as a program name or keyword token, with
