@@ -95,8 +95,9 @@ fn a_saved_check_is_private_and_labelled_stale_after_five_minutes() {
         "2026-11-03T12:00:00.250+00:00",
         current(),
     );
-    let fresh = project_at(home.path(), SITE, "2026-11-03T12:05:00.250+00:00");
-    let stale = project_at(home.path(), SITE, "2026-11-03T12:05:00.251+00:00");
+    // The check is saved to the whole second, as the page shows it.
+    let fresh = project_at(home.path(), SITE, "2026-11-03T12:05:00+00:00");
+    let stale = project_at(home.path(), SITE, "2026-11-03T12:05:00.001+00:00");
     assert_eq!(
         fresh["status"]["connection"]["check"],
         json!({"checked_at": "2026-11-03T12:00:00Z", "stale": false, "service": current()})

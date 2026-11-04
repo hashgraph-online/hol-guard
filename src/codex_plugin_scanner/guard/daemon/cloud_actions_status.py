@@ -78,6 +78,10 @@ class CloudActionsNotPairedError(RuntimeError):
     """There is no pairing to check."""
 
 
+class CloudActionsStatusUnavailableError(RuntimeError):
+    """The native runtime could not read or save the check."""
+
+
 def _cloud_base_url(origin: str) -> str | None:
     """Where Guard Cloud's pages live for this pairing, or None for a site Guard does not recognise."""
 
@@ -111,9 +115,12 @@ def _pairing(store: GuardStore) -> _Pairing | None:
 def _native(store: GuardStore, args: dict[str, object]) -> dict[str, Any]:
     """The native runtime reads and writes the saved check under the Guard home."""
 
-    from ..native_runner_authority import native_runner_authority
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
-    return native_runner_authority("cloud_actions_status", args, guard_home=store.guard_home)
+    try:
+        return native_runner_authority("cloud_actions_status", args, guard_home=store.guard_home)
+    except NativeRunnerAuthorityError as error:
+        raise CloudActionsStatusUnavailableError("status_unavailable") from error
 
 
 def _utc(moment: datetime) -> str:
@@ -159,10 +166,9 @@ def check_cloud_actions(
 
     Raises CloudActionsNotPairedError without a pairing, CloudActionsCheckedRecentlyError
     within a minute of the last check, CloudActionsCheckBusyError while another check runs,
-    and OSError when the answer cannot be saved.
+    OSError when the answer cannot be saved, and CloudActionsStatusUnavailableError when the
+    native runtime cannot read the saved check.
     """
-
-    from ..native_runner_authority import NativeRunnerAuthorityError
 
     if not _CHECK_LOCK.acquire(blocking=False):
         raise CloudActionsCheckBusyError("check_running")
@@ -178,7 +184,7 @@ def check_cloud_actions(
         entry = {"state": service.state, "message": service.message, "http_status": service.http_status}
         try:
             _native(store, {"op": "record", "origin": pairing.origin, "checked_at": _utc(moment), "service": entry})
-        except NativeRunnerAuthorityError as error:
+        except CloudActionsStatusUnavailableError as error:
             raise OSError("check_not_saved") from error
         return cloud_actions_local_status(store, now=moment)
     finally:
