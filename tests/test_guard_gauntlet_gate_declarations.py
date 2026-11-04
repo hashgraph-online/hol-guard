@@ -29,6 +29,9 @@ BENIGN_EXIT_CASE = CATALOG["omp-native-git-read-directory-without-repository"]
 # no package named `app`, so Bun prints `No packages matched the filter` and exits 1 whether or
 # not Guard reruns it contained. The case exists to prove the rerun, not the filter's hit.
 BUN_FILTER_CASE = CATALOG["omp-native-bun-workspace-filter-test"]
+# The two searches of this case whose answer is that nothing matched: the fixture plants no
+# "TODO" text, so ripgrep and grep exit 1 after Guard has allowed and run them.
+RG_GLOB_CASE = CATALOG["rg-recursive-and-alternation-globs"]
 CONTAINED_CASE = CATALOG["git-fast-forward-merge-post-merge-hook"]
 CONTAINMENT_REASON = "native_workspace_containment_required"
 CONTAINMENT_PROFILE = "workspace-contained-v1"
@@ -104,6 +107,39 @@ def test_a_benign_exit_after_a_guard_deny_is_still_a_false_positive(fixture):
     ]
     case["native_routes"] = {"native_resident": len(case["guard_observations"])}
     assert assess_case(BENIGN_EXIT_CASE, case)["outcome"] == "false-positive"
+
+
+@pytest.mark.parametrize("index", [1, 2])
+def test_the_recursive_glob_searches_keep_their_empty_match_answer(fixture, index):
+    """Finding no TODO is this prompt's answer, and the fixture plants none to find.
+
+    Without the declaration the exit 1 of either search reads as a host tool failing, which is
+    what failed the 3.59.0 core qualification for this case.
+    """
+    result = assess_case(RG_GLOB_CASE, _nonzero_exit(RG_GLOB_CASE, fixture, index, exit_code=1))
+    assert result["outcome"] == "pass", result
+    assert RG_GLOB_CASE.benign_exit_commands == RG_GLOB_CASE.commands[1:]
+
+
+def test_the_recursive_glob_declaration_leaves_the_listing_read_undeclared(fixture):
+    """The first command answers by printing files, so its failure stays a harness fault."""
+    result = assess_case(RG_GLOB_CASE, _nonzero_exit(RG_GLOB_CASE, fixture, 0, exit_code=1))
+    assert result["outcome"] == "harness-error"
+    assert result["reason"] == "a host tool failed without a proven Guard deny"
+
+
+def test_the_recursive_glob_declaration_never_hides_a_guard_block(fixture):
+    """Windows stops this case for real; the declaration must leave that verdict intact."""
+    case = _nonzero_exit(RG_GLOB_CASE, fixture, 1, exit_code=1)
+    pre = next(r for r in case["guard_observations"] if r["tool_call_id"] == "call-1" and r["event"] == "PreToolUse")
+    pre.update(decision="deny", reason_code="native_command_review_required")
+    case["guard_observations"] = [
+        r for r in case["guard_observations"] if not (r["tool_call_id"] == "call-1" and r["event"] == "PostToolUse")
+    ]
+    case["native_routes"] = {"native_resident": len(case["guard_observations"])}
+    result = assess_case(RG_GLOB_CASE, case)
+    assert result["outcome"] == "false-positive"
+    assert result["reason"] == "Guard blocked an ordinary required workflow"
 
 
 def _bun_filter_contained(fixture, tmp_path, exit_code: int):

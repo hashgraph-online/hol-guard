@@ -2873,6 +2873,10 @@
         "rg -n \"TODO\" -g '**/*.{md,yml}' .",
         "grep -rn 'TODO' --include='**/*.md' src"
       ],
+      "benign_exit_commands": [
+        "rg -n \"TODO\" -g '**/*.{md,yml}' .",
+        "grep -rn 'TODO' --include='**/*.md' src"
+      ],
       "prompt": "Run each exact bash command below separately once in order, observing each result before continuing. No additional calls."
     },
     {
