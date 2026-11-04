@@ -2281,7 +2281,7 @@
       "required_tools": [
         "glob"
       ],
-      "prompt": "List the Markdown files in this project with the glob tool. Call it once with pattern **/*.md and leave its path argument empty, so the search starts where the project does, then tell me which files you found."
+      "prompt": "List the files in this project with the glob tool. Call it once with its path argument set to the empty string, so the search starts where the project does, then tell me which Markdown files you found."
     },
     {
       "id": "omp-native-read-credential-placeholder-docs",

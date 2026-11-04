@@ -182,10 +182,11 @@ fn append_strings(output: &mut Vec<String>, value: &Value) -> Result<(), Generic
         return Err(GenericExtractionError::Bounds);
     }
     match value {
+        // Only a blank string reads as absent. A null, like every other
+        // non-string value, stays malformed: the hosts this reading serves
+        // send an empty string, and a null target must not reach the
+        // read-nothing proof.
         Value::String(_) => output.extend(optional_bounded_string(value)?),
-        // A key whose value is null is present and carries nothing, the same
-        // thing a blank string says. Neither names a target.
-        Value::Null => {}
         Value::Array(items) => {
             if items.len() > MAX_PRE_TOOL_ARRAY_ITEMS {
                 return Err(GenericExtractionError::Bounds);
@@ -193,9 +194,6 @@ fn append_strings(output: &mut Vec<String>, value: &Value) -> Result<(), Generic
             for item in items {
                 if output.len() >= MAX_PRE_TOOL_STRINGS {
                     return Err(GenericExtractionError::Bounds);
-                }
-                if item.is_null() {
-                    continue;
                 }
                 output.extend(optional_bounded_string(item)?);
             }

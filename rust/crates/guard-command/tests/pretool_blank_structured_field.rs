@@ -22,7 +22,6 @@ fn a_blank_structured_field_names_nothing_rather_than_breaking_the_payload() {
         json!({"hook_event_name": "PreToolUse", "tool_name": "glob", "tool_input": {"path": "", "pattern": "**/*.md"}}),
         json!({"hook_event_name": "PreToolUse", "tool_name": "glob", "tool_input": {"path": ["", "src"]}}),
         json!({"hook_event_name": "PreToolUse", "tool_name": "grep", "tool_input": {"path": "", "pattern": "retryLimit"}}),
-        json!({"hook_event_name": "PreToolUse", "tool_name": "glob", "tool_input": {"path": null, "pattern": "**/*.md"}}),
     ] {
         let result = evaluate_pre_tool_envelope("omp", "PreToolUse", &payload);
         assert_ne!(
@@ -39,12 +38,18 @@ fn a_blank_structured_field_names_nothing_rather_than_breaking_the_payload() {
 /// had.
 #[test]
 fn unreadable_conflicting_and_oversized_payloads_still_block() {
-    let structured_path = generic(json!({"tool_name": "glob", "tool_input": {"path": {"a": 1}}}));
-    assert_eq!(structured_path.minimum_action, "block");
-    assert_eq!(
-        structured_path.reason_code,
-        "native_pre_tool_malformed_payload"
-    );
+    for unreadable in [
+        json!({"tool_name": "glob", "tool_input": {"path": {"a": 1}}}),
+        json!({"tool_name": "glob", "tool_input": {"path": null}}),
+        json!({"tool_name": "glob", "tool_input": {"path": ["src", null]}}),
+    ] {
+        let result = generic(unreadable.clone());
+        assert_eq!(result.minimum_action, "block", "{unreadable}");
+        assert_eq!(
+            result.reason_code, "native_pre_tool_malformed_payload",
+            "{unreadable}"
+        );
+    }
 
     for blank_command in [
         json!({"tool_name": "Bash", "tool_input": {"command": ""}}),
@@ -73,6 +78,12 @@ fn unreadable_conflicting_and_oversized_payloads_still_block() {
     // still needs an empty list or a null, so this call keeps its review.
     let blank_path = generic(json!({"tool_name": "Read", "tool_input": {"file_path": ""}}));
     assert_ne!(blank_path.reason_code, "native_empty_file_read_request");
+
+    // Only a blank string reads as absent. A null target is not a read of
+    // nothing either, so it can never earn that allow.
+    let null_path = generic(json!({"tool_name": "Read", "tool_input": {"file_path": null}}));
+    assert_ne!(null_path.minimum_action, "allow");
+    assert_ne!(null_path.reason_code, "native_empty_file_read_request");
 }
 
 /// A file body skips the command-size bound only because the path beside it is
@@ -80,7 +91,7 @@ fn unreadable_conflicting_and_oversized_payloads_still_block() {
 /// exemption, so an oversized body beside a blank path is still out of bounds.
 #[test]
 fn a_blank_path_does_not_exempt_the_body_beside_it_from_its_bound() {
-    for path in [json!(""), json!("   "), json!([""]), json!([]), json!(null)] {
+    for path in [json!(""), json!("   "), json!([""]), json!([])] {
         let result = generic(json!({
             "tool_name": "Edit",
             "tool_input": {"path": path, "content": "a".repeat(MAX_COMMAND_BYTES + 1)}
