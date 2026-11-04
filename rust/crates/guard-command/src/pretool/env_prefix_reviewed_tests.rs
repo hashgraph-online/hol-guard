@@ -7,6 +7,7 @@
 //! nor pathname expansion to an assignment's value, so a pattern in one is
 //! the text the program would have read and nothing more.
 
+#[cfg(unix)]
 use super::plain_data;
 
 /// `DEBUG=app:*` is how the `debug` package's own namespaces are written, and
