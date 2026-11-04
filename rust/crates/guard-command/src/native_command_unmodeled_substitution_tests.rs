@@ -456,3 +456,50 @@ fn a_walk_without_a_placeholder_is_still_read_as_a_walk() {
         assert!(bounded.programs.contains(program), "{program}: {command}");
     }
 }
+
+#[test]
+fn quoted_punctuation_does_not_cut_a_statement_in_half() {
+    // A `(`, a `)` or a `|` inside a quoted word is ordinary text. Splitting
+    // statements on it left a piece whose first word was quoting, so the
+    // receiver that owns the value went missing.
+    for (command, receiver) in [
+        (
+            r#"version=$(cat VERSION); printf "(%s)" "$version""#,
+            "printf",
+        ),
+        (
+            r#"version=$(cat VERSION); printf "a|b %s" "$version""#,
+            "printf",
+        ),
+        (
+            r#"version=$(cat VERSION); printf '(%s)' "$version""#,
+            "printf",
+        ),
+    ] {
+        let bounded = reviewable_substitutions(command).unwrap();
+        assert!(bounded.programs.contains(receiver), "{command}");
+    }
+}
+
+#[test]
+fn ordinary_text_that_looks_like_a_find_action_is_not_a_walk() {
+    // An action runs something only when a `find` is there to run it, so
+    // search text that happens to spell one is read as the argument it is.
+    for (command, receiver) in [
+        (
+            r#"matches=$(rg -l -- "-exec" src); printf '%s' "$matches""#,
+            "rg",
+        ),
+        (r#"hits=$(grep -r find src); printf '%s' "$hits""#, "grep"),
+    ] {
+        let bounded = reviewable_substitutions(command).unwrap();
+        assert!(bounded.programs.contains(receiver), "{command}");
+    }
+    // Quoting the action does not hide the walk from the reader that binds it.
+    for command in [
+        r#"latest=$(find . "-exec" node run.js ';'); printf '%s' "$latest""#,
+        r#"latest=$(find . -exec node run.js ';'); printf '%s' "$latest""#,
+    ] {
+        assert!(reviewable_substitutions(command).is_none(), "{command}");
+    }
+}

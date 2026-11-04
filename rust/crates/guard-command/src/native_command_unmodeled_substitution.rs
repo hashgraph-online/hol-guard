@@ -332,8 +332,8 @@ fn expands_a_name(piece: &str, names: &BTreeSet<String>) -> bool {
 /// own.
 fn value_consumers(text: &str, names: &BTreeSet<String>) -> Option<BTreeSet<String>> {
     let mut consumers = BTreeSet::new();
-    for piece in text.split(['\n', ';', '&', '|', '(', ')']) {
-        if !expands_a_name(piece, names) {
+    for piece in statements(text) {
+        if !expands_a_name(&piece, names) {
             continue;
         }
         let mut receiver = None;
@@ -348,8 +348,9 @@ fn value_consumers(text: &str, names: &BTreeSet<String>) -> Option<BTreeSet<Stri
                 continue;
             }
             // A program position built from an expansion names whatever the
-            // value holds, which is the text this reader does not have.
-            if raw.contains('$') {
+            // value holds, and one that is quoting alone names nothing this
+            // reader can hand an owner check.
+            if raw.contains('$') || name.is_empty() {
                 return None;
             }
             receiver = Some(name);
@@ -358,6 +359,39 @@ fn value_consumers(text: &str, names: &BTreeSet<String>) -> Option<BTreeSet<Stri
         consumers.insert(receiver?);
     }
     Some(consumers)
+}
+
+/// The text's statements, split where the shell reads a separator.
+///
+/// A `(`, a `)` or a `|` inside a quoted word is ordinary text:
+/// `printf "(%s)" "$version"` is one statement whose program is `printf`.
+/// Splitting on the parenthesis cut it in half and left a piece whose first
+/// word was quoting, so the receiver that owns the value was lost.
+fn statements(text: &str) -> Vec<String> {
+    let mut pieces = vec![String::new()];
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    for character in text.chars() {
+        if single {
+            single = character != '\'';
+        } else if escaped {
+            escaped = false;
+        } else {
+            match character {
+                '\\' => escaped = true,
+                '\'' if !double => single = true,
+                '"' => double = !double,
+                '\n' | ';' | '&' | '|' | '(' | ')' if !double => {
+                    pieces.push(String::new());
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        if let Some(piece) = pieces.last_mut() {
+            piece.push(character);
+        }
+    }
+    pieces
 }
 
 /// The program a substitution's result reaches, or `None` when this text does
@@ -449,8 +483,14 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     // spelling ends its body: `-exec basename {} \;` and `-exec basename ';'`
     // are the same walk, so the brace-free one must not skip the reader that
     // refuses an interpreter, a launcher or an expansion standing there.
+    //
+    // An action only runs something when a `find` is there to run it. Both
+    // halves are read out of `named_words`, so a quoted spelling cannot hide
+    // either from the walk reader, and both are required, so neither
+    // `rg -- "-exec" src` nor `grep -r find src` is mistaken for a walk.
     let named = named_words(inner);
     let walks = flow == ValueFlow::Assignments
+        && named.contains("find")
         && super::EXEC_ACTIONS
             .iter()
             .any(|action| named.contains(*action));
