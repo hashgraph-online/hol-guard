@@ -94,6 +94,10 @@ fn a_filter_reading_a_proven_file_needs_no_review() {
         "pr -t Cargo.toml",
         "pr -t -w 72 -l 60 Cargo.toml",
         "pr -3 Cargo.toml",
+        // `pr -s` carries its separator in the same word, so the cluster ends
+        // at it and the file after it stays an operand.
+        "pr -s, Cargo.toml",
+        "pr -ts: Cargo.toml",
         "shuf -n 3 Cargo.toml",
         "shuf --head-count=3 Cargo.toml",
         "iconv -f utf-8 -t ascii Cargo.toml",
@@ -185,9 +189,17 @@ fn a_filter_that_could_write_or_reach_further_still_takes_review() {
         "pr -s /tmp/secret.key Cargo.toml",
         "printf x | pr -s /tmp/secret.key",
         "xxd -ps /tmp/secret.key Cargo.toml",
-        // GNU `strings` reads a leading `@` operand as a file of further
-        // arguments, so the names it opens are not in this command line.
+        // GNU `strings` expands an `@` word anywhere on its command line,
+        // an option's value included, so the names it opens are not in this
+        // command line.
         "strings @args.txt",
+        "strings -n @args.txt Cargo.toml",
+        // `xxd` stops reading options at its first operand, so the `-p` here
+        // is the second operand it truncates, not a flag.
+        "xxd Cargo.toml -p",
+        // `pr -sh` sets the separator to `h`; reading the `h` as the header
+        // flag would swallow the file the next word names.
+        "pr -sh /tmp/secret.key Cargo.toml",
     ] {
         assert!(!allowed(command), "{command}");
     }

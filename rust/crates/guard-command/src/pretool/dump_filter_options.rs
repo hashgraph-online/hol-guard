@@ -8,14 +8,19 @@
 const STRINGS_READING_FLAGS: &str = "af";
 
 /// `strings` prints the printable runs of what it reads. `-n`, `-t` and `-e`
-/// name a length, a radix and an encoding. GNU `strings` also reads a leading
-/// `@` operand as a file of further arguments rather than as input, so the
-/// names it would then open are not in this command line; such an operand
-/// keeps the command under review.
+/// name a length, a radix and an encoding. GNU `strings` expands every
+/// `@`-prefixed word of its command line — an option's value as readily as an
+/// operand — into the arguments that file holds, so the names it would then
+/// open are not in this command line. Any such word keeps the command under
+/// review, and it is screened before the option line so a refusal leaves no
+/// operand behind.
 pub(super) fn safe_strings_arguments<'a>(
     arguments: &'a [String],
     operands: &mut Vec<&'a str>,
 ) -> bool {
+    if arguments.iter().any(|argument| argument.starts_with('@')) {
+        return false;
+    }
     super::stdin_filter_options::screen_options(
         arguments,
         operands,
@@ -23,7 +28,7 @@ pub(super) fn safe_strings_arguments<'a>(
         "nte",
         &["all", "print-file-name"],
         &["bytes", "radix", "encoding"],
-    ) && operands.iter().all(|operand| !operand.starts_with('@'))
+    )
 }
 
 /// The `hexdump` options that carry no value: the output formats and the
@@ -80,7 +85,10 @@ const XXD_VALUE_OPTIONS: &[&str] = &["-c", "-g", "-l", "-o", "-s"];
 /// `xxd` writes its dump to a second operand, so only one operand is proven
 /// here; the caller caps it. Every option is matched whole: a spelling this
 /// screen has not read keeps the command under review rather than being read
-/// as a cluster `xxd` would never split that way.
+/// as a cluster `xxd` would never split that way. `xxd` also stops reading
+/// options at its first operand, so a later `-p` is the output file it
+/// truncates rather than a flag; once an operand is in hand every word after
+/// it is an operand here too, and the caller's cap refuses the pair.
 pub(super) fn safe_xxd_arguments<'a>(arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
     let mut expecting_value = false;
     for argument in arguments {
@@ -92,7 +100,7 @@ pub(super) fn safe_xxd_arguments<'a>(arguments: &'a [String], operands: &mut Vec
             expecting_value = false;
             continue;
         }
-        if !value.starts_with('-') || value == "-" {
+        if !operands.is_empty() || !value.starts_with('-') || value == "-" {
             operands.push(value);
             continue;
         }
@@ -118,20 +126,26 @@ pub(super) fn safe_xxd_arguments<'a>(arguments: &'a [String], operands: &mut Vec
 }
 
 /// The `pr` options that carry no value, plus the digits of the column count
-/// `pr` spells as `-COLUMN`. `-s` is here rather than among the value flags
-/// because its separator is attached (`-s,`) and optional: reading it as a
-/// flag that takes the next word would eat the file that word names.
-const PR_READING_FLAGS: &str = "adFfJmrstT0123456789";
+/// `pr` spells as `-COLUMN`.
+const PR_READING_FLAGS: &str = "adFfJmrtT0123456789";
+
+/// `pr -s` carries its separator attached (`-s,`) or takes the default when
+/// nothing follows it, so it ends the cluster without reaching for the next
+/// word. Reading it as a plain flag would let the rest of the cluster be read
+/// as flags — `-sh` is the separator `h`, not `-s -h` — and a `-h` read there
+/// would swallow the file the following word names.
+const PR_OPTIONAL_VALUE_FLAGS: &str = "s";
 
 /// `pr` pages what it reads for printing. `-h` carries the header text, `-l`
 /// and `-w` the page geometry, and `-o` the left margin — a count, not a file
 /// to write.
 pub(super) fn safe_pr_arguments<'a>(arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
-    super::stdin_filter_options::screen_options(
+    super::stdin_filter_options::screen_options_with_optional(
         arguments,
         operands,
         PR_READING_FLAGS,
         "hlow",
+        PR_OPTIONAL_VALUE_FLAGS,
         &["show-control-chars", "omit-header", "merge", "join-lines"],
         &["header", "length", "width", "indent"],
     )
