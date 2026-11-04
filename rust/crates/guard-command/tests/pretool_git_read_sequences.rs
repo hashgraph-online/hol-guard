@@ -460,6 +460,10 @@ fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
         "./echo hello && git status --short --branch",
         "rg --pre ./echo needle package.json; git log -1",
         "rg --pre=./echo needle package.json && git status --short",
+        // `printf -v` assigns a shell variable, and a `VAR=value` head sets
+        // one for the read, so neither is a step that only prints.
+        "printf -v GIT_CONFIG_GLOBAL '/tmp/evil'; git status --short",
+        "GIT_CONFIG_GLOBAL=/tmp/evil cat package.json; git status --short",
     ] {
         assert_ne!(
             action(&home, &repository, disguised),

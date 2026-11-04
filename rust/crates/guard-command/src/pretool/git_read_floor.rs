@@ -253,20 +253,20 @@ fn verdict(
             .is_none_or(|executable| super::executable_basename(executable) != "git")
             || super::symlink_writes::current_branch_read(segment, read_context)
     });
-    // This floor asks one question of a step before a Git read: could it have
-    // changed the configuration that read runs under? A reader whose operand
-    // sits outside the workspace fails the disclosure proofs above, yet writes
-    // nothing. `creates_nothing` is the narrow write proof: no output redirect,
-    // wrapper chain or `PATH` override, and only programs with no option that
-    // names a file to write, by bare name (`./echo` is a local program). `cd`
-    // moves the directory the checks above account for, and `rg` can run a
-    // program (`--pre`, `--search-zip`, an inherited `RIPGREP_CONFIG_PATH`)
-    // that rewrites Git's configuration, so neither settles a step here.
+    // Could a step before a Git read have changed the configuration that read
+    // runs under? A reader whose operand sits outside the workspace fails the
+    // disclosure proofs above, yet writes nothing. `creates_nothing` is a
+    // narrow write proof: no redirect, wrapper chain or `PATH` override, and
+    // only programs with no option naming a file to write, by bare name
+    // (`./echo` is local). Excluded: `cd`, moving the directory the checks
+    // above account for; `rg`, running a caller-chosen program (`--pre`,
+    // `RIPGREP_CONFIG_PATH`); and a shell-state change carried into the read.
     let writes_nothing = |segment: &crate::CommandSegmentV1| {
         segment.executable.as_deref().is_some_and(|executable| {
             super::executable_basename(executable) == executable
                 && !matches!(executable, "cd" | "rg")
-        }) && !segment.path_overridden
+        }) && !super::control_flow_flatten::command_word_changes_shell_state(&segment.text)
+            && !segment.path_overridden
             && segment.wrapper_chain.is_empty()
             && segment.environment_names.is_empty()
             && super::search::grep::creates_nothing(segment)
