@@ -134,14 +134,10 @@ fn verdict(
                 || requires_review(&tail, context, deadline, execution_environment),
         );
     }
-    // Past this point every Git read is probed in one directory. A later
-    // `cd` the read prefixes above did not account for moves the reads after
-    // it somewhere this probe never looked.
-    //
+    // Past this point every Git read is probed in one directory, so a later
+    // `cd` moves reads somewhere this probe never looked. The exception is
     // `git worktree add <path> && cd <path> && ...` with only Git and GitHub
-    // after the `cd` is the exception: that Git runs in a linked worktree the
-    // worktree proof showed reads this repository's configuration, so its
-    // reads are probed here, where the checkout's configuration lives now.
+    // after: that Git runs in a worktree proven to share this configuration.
     let entered = super::worktree_add::chain::reads_in_entered_checkout(
         model,
         context,
@@ -192,16 +188,12 @@ fn verdict(
                 .filter(|executable| super::executable_basename(executable) == "git")
                 .filter(|_| !patch_check(&arguments[index], read_context))
                 .and_then(|executable| {
-                    // Git dies in its own setup on a `-C` target that holds
-                    // no repository, before it reads a pager, textconv or
-                    // filter setting, so no configured helper runs. The
-                    // probe cannot answer for that read either: there is no
-                    // repository configuration to read, and the directory
-                    // may not be there to probe in at all. Operations that
-                    // keep running without a repository, and inline `-c`
-                    // settings, are not such a route and stay probed. The
-                    // route says nothing about which Git runs, so the binary
-                    // the search path finds must still be a trusted one.
+                    // Git dies in its own setup on a `-C` target holding no
+                    // repository, before reading a pager, textconv or filter
+                    // setting, and the probe cannot answer there either.
+                    // Operations that keep running without a repository, and
+                    // inline `-c` settings, stay probed; the binary the
+                    // search path finds must still be a trusted one.
                     if super::git_helper_context::routes_to_no_repository(
                         segments[index],
                         read_context,
@@ -253,11 +245,42 @@ fn verdict(
             .is_none_or(|executable| super::executable_basename(executable) != "git")
             || super::symlink_writes::current_branch_read(segment, read_context)
     });
+    // A reader whose operand sits outside the workspace fails the disclosure
+    // proofs above, yet writes nothing. `creates_nothing` is a narrow write
+    // proof: no redirect, wrapper chain or `PATH` override, and only programs
+    // with no option naming a file to write, by bare name (`./echo` is
+    // local). Excluded: `cd`, moving the directory the checks above account
+    // for, and `rg`, running a caller-chosen program (`--pre`).
+    let writes_nothing = |segment: &crate::CommandSegmentV1| {
+        segment.executable.as_deref().is_some_and(|executable| {
+            super::executable_basename(executable) == executable
+                && !matches!(executable, "cd" | "rg")
+        }) && !segment.path_overridden
+            && segment.wrapper_chain.is_empty()
+            && segment.environment_names.is_empty()
+            && super::search::grep::creates_nothing(segment)
+    };
     let settled = |prior: usize, later: &crate::CommandSegmentV1| {
         let segment = segments[prior];
+        // A step that changes shell state (an assignment, `export`, `source`,
+        // `printf -v` or `%n`, arithmetic like `$((PATH=10))`) can name the
+        // configuration Git reads; the proofs below answer only for what a
+        // step writes to disk. `cd` is checked above instead.
+        if super::shell_arithmetic::arithmetic_assigns(&segment.text)
+            || super::printf_words::printf_sets_variable(segment)
+            || segment
+                .environment_names
+                .iter()
+                .any(|name| !crate::command_compatibility::inert_git_environment_name(name))
+            || (segment.executable.as_deref() != Some("cd")
+                && super::control_flow_flatten::command_word_changes_shell_state(&segment.text))
+        {
+            return false;
+        }
         benign.contains(&prior)
             || (prior == 0 && destination.is_some())
             || write_free(segment)
+            || writes_nothing(segment)
             || (link_settles
                 && super::symlink_writes::safe_symlink_arguments(segment, read_context))
             || super::git_remote_ops::verified_refresh(
@@ -326,14 +349,10 @@ fn verdict(
     }
 }
 
-/// The command from its only `cd` onward, when everything before the `cd`
-/// is a Git read proven helper-free in the reported directory, or a read the
-/// plain read prefix also accepts. `git log -5 && git status --short | head
-/// && cd ../other && git log -5` then gets the same floor as
-/// `cd ../other && git log -5`: a proven read writes no configuration, ref
-/// or hook the later reads could pick up. A Git write, a configuration change
-/// or anything that can run a hook leaves no proven read, so it stays in the
-/// floor's judgement of the whole command.
+/// The command from its only `cd` onward, when everything before the `cd` is
+/// a Git read proven helper-free in the reported directory, or a read the
+/// plain read prefix also accepts: such a read writes no configuration, ref
+/// or hook the later reads could pick up. Anything else stays judged whole.
 fn after_git_read_prefix(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
