@@ -364,7 +364,11 @@ fn unresolved_file_urls_without_digits_keep_their_review() {
             "PreToolUse",
             &serde_json::json!({"tool_name": "read", "tool_input": {"path": target}}),
         );
-        assert_ne!(bare.minimum_action, "allow", "{target} without roots: {}", bare.reason_code);
+        assert_ne!(
+            bare.minimum_action, "allow",
+            "{target} without roots: {}",
+            bare.reason_code
+        );
     }
 
     let _ = std::fs::remove_dir_all(root);
