@@ -329,6 +329,7 @@
       "src/pretool/curl_reads_bound.rs",
       "src/pretool/data_heredocs.rs",
       "src/pretool/dd_reads.rs",
+      "src/pretool/decompress_reads.rs",
       "src/pretool/digest_reads.rs",
       "src/pretool/directory_read_tmp_alias_tests.rs",
       "src/pretool/directory_read_tools.rs",

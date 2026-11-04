@@ -103,6 +103,27 @@ fn a_filter_reading_a_proven_file_needs_no_review() {
         "iconv -f utf-8 -t ascii Cargo.toml",
         "iconv --from-code=utf-8 --to-code=ascii -c Cargo.toml",
         "base32 Cargo.toml",
+        "zcat Cargo.toml",
+        "gzcat Cargo.toml",
+        "zcat -f -q Cargo.toml",
+        "bzcat -s Cargo.toml",
+        "xzcat -T 2 Cargo.toml",
+        "xzcat --threads=2 --format=xz Cargo.toml",
+        "zstdcat -q Cargo.toml",
+        // `zstd` carries the thread count in the same word, so the file after
+        // `-T4` stays an operand and is proven read.
+        "zstdcat -T4 Cargo.toml",
+        "ul Cargo.toml",
+        "ul -i -t xterm Cargo.toml",
+        "tsort Cargo.toml",
+        // `numfmt` scales the numbers it is handed and opens no file, so its
+        // operands are numbers and the piped form carries none at all.
+        "numfmt --to=iec 1048576",
+        "numfmt --field=2 --from=auto --padding 8 1024",
+        "numfmt --to=iec 1.5K 2Gi",
+        // `--grouping` carries no value, so the number after it is an operand.
+        "numfmt --grouping 1048576",
+        "cut -d= -f2 Cargo.toml | numfmt --to=iec",
         "base64 Cargo.toml",
         "base64 -d Cargo.toml",
         "base64 -w 76 Cargo.toml",
@@ -173,6 +194,31 @@ fn a_filter_that_could_write_or_reach_further_still_takes_review() {
         "base32 -o encoded.txt Cargo.toml",
         "base32 --output=encoded.txt Cargo.toml",
         "base64 -w notanumber Cargo.toml",
+        "zcat -o decoded.txt Cargo.toml",
+        // gzip retries a missing operand with a suffix appended, and `-S`
+        // chooses that suffix, so the name it opens is not the one proven.
+        "zcat -f --suffix=nv Cargo.tom",
+        "zcat -S nv Cargo.tom",
+        "zstdcat -D dictionary.bin Cargo.toml",
+        "zstdcat -o decoded.txt Cargo.toml",
+        // `zstd` reads only the digits of `-T` and `-M` out of the word and
+        // parses the rest as more flags, so an `-o` hidden behind one names
+        // the file it writes rather than the value the screen would read.
+        "zstdcat -To decoded.txt Cargo.toml",
+        "zstdcat -T4o decoded.txt Cargo.toml",
+        "zstdcat -M32MBo decoded.txt Cargo.toml",
+        "zstdcat -TD dictionary.bin Cargo.toml",
+        "zstdcat --threads=4o Cargo.toml",
+        "xzcat --files=list.txt Cargo.toml",
+        "zcat /nonexistent-guard-fixture/secret.key",
+        "ul --unknown Cargo.toml",
+        // `numfmt` reads numbers, not files: a file operand is an invalid
+        // number rather than a read, so it earns no read proof here.
+        "numfmt --to=iec Cargo.toml",
+        "numfmt --grouping Cargo.toml",
+        "numfmt --header=3 1024",
+        "numfmt --to=iec 1.2.3",
+        "numfmt --to=iec 4Xi",
         "base64 -b Cargo.toml",
         // An operand outside the proven read scope, an option none of these
         // screens has read, and a parameter the shell has not written out.
