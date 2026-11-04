@@ -193,37 +193,3 @@ fn a_malformed_artifact_is_refused() {
         );
     }
 }
-
-fn separate(metadata: &str) -> Value {
-    dispatch(&json!({"op": "separate_trust", "metadata": metadata})).expect("answer")
-}
-
-#[test]
-fn trust_separation_names_what_it_removes_and_appends() {
-    let answer = separate(
-        r#"{"description":"d","trustResolution":{"status":"s","metadata":{"signature":"p"}},"signature":"p","unverifiedAdapterEvidence":{"source":"adapter_metadata","verificationStatus":"unverified","trustClaims":{"verified":true,"keyId":"k"}},"trust_layers":[{"attestation":{}}]}"#,
-    );
-    assert_eq!(
-        answer["drop"],
-        r#"["trustResolution","signature","unverifiedAdapterEvidence","trust_layers"]"#
-    );
-    assert_eq!(
-        answer["evidence"],
-        r#"{"source":"adapter_metadata","verificationStatus":"unverified","affectsTrustScore":false,"trustClaims":{"verified":true,"keyId":"k","trustResolution":{"status":"s","metadata":{}},"trust_layers":[{}]}}"#
-    );
-    let plain = separate(r#"{"description":"d","\udc80":1}"#);
-    assert_eq!(plain, json!({"drop": "[]", "evidence": null}));
-    let stale = separate(r#"{"unverifiedAdapterEvidence":{"source":"other"},"n":1}"#);
-    assert_eq!(
-        stale,
-        json!({"drop": r#"["unverifiedAdapterEvidence"]"#, "evidence": null})
-    );
-    for bad in [
-        json!({"op": "separate_trust", "metadata": "[]"}),
-        json!({"op": "separate_trust", "metadata": {}}),
-        json!({"op": "separate_trust"}),
-        json!({"op": "separate_trust", "metadata": "{}", "extra": 1}),
-    ] {
-        assert_eq!(dispatch(&bad), Err(ERR_INVALID), "{bad}");
-    }
-}

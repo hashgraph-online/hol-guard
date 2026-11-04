@@ -25,12 +25,6 @@
 //! answer is `{"metadata": [<part>], "total": int}`, the part being the answer
 //! text's characters from `start`, at most `length` of them, and `total` the
 //! answer text's length in characters.
-//!
-//! `{"op": "separate_trust", "metadata": <JSON text>}` applies only the
-//! trust-claim separation, for metadata the AIBOM enrichment builds itself. It
-//! answers `{"drop": <JSON text>, "evidence": <JSON text>|null}`: the keys to
-//! remove and the `unverifiedAdapterEvidence` value to append, so the caller
-//! keeps its own values and key order for everything else.
 
 use std::path::Path;
 
@@ -54,7 +48,6 @@ const KEYS: [&str; 6] = [
     "window",
 ];
 const WINDOW_KEYS: [&str; 2] = ["start", "length"];
-const SEPARATE_KEYS: [&str; 2] = ["op", "metadata"];
 /// The most characters one window answers. Even a part made only of characters
 /// JSON writes as six-byte escapes stays well inside a response.
 const MAX_WINDOW: u64 = 256 * 1024;
@@ -160,32 +153,6 @@ pub(super) fn dispatch(fields: &Map<String, Value>) -> KindResult {
     let text = &metadata[0];
     let part: String = text.chars().skip(start).take(length).collect();
     Ok(json!({ "metadata": [part], "total": text.chars().count() }))
-}
-
-/// `separate_untrusted_adapter_trust_metadata(metadata)`, as the keys it
-/// removes and the evidence it appends.
-pub(super) fn separate_trust(fields: &Map<String, Value>) -> KindResult {
-    exact_keys(fields, &SEPARATE_KEYS)?;
-    let (metadata, mapped) = parse(text(fields, "metadata")?)?;
-    let PyVal::Dict(entries) = metadata else {
-        return Err(ERR_INVALID);
-    };
-    let dropped: Vec<PyVal> = entries
-        .iter()
-        .filter(|(key, _)| {
-            key == EVIDENCE_KEY || is_prior_proof_key(key) || is_untrusted_trust_key(key)
-        })
-        .map(|(key, _)| PyVal::Str(key.clone()))
-        .collect();
-    let mut drop = String::new();
-    dumps(&PyVal::List(dropped), false, mapped, &mut drop);
-    let separated = separate_untrusted_trust(entries);
-    let evidence = get(&separated, EVIDENCE_KEY).map(|value| {
-        let mut answer = String::new();
-        dumps(value, false, mapped, &mut answer);
-        answer
-    });
-    Ok(json!({ "drop": drop, "evidence": evidence }))
 }
 
 /// The window's start and length, in characters.

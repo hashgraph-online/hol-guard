@@ -11,7 +11,7 @@
 //! walks the caller's value with them.
 //!
 //! Values travel as JSON text so the parse keeps their key order: the export
-//! keeps the order its producer wrote. These operations are served:
+//! keeps the order its producer wrote. Three operations are served:
 //!
 //! * `{"op": "safe_json", "value": <JSON text>, "parent_key": str,
 //!   "parent_sensitive": bool}` answers `{"value": <JSON text>}`, the value
@@ -23,8 +23,6 @@
 //!   inventory item's exported description (see `inventory_item_description`).
 //! * `{"op": "artifact_metadata", ...}` answers `{"metadata": [<JSON text>]}`,
 //!   the metadata each artifact exports (see `inventory_artifact_metadata`).
-//! * `{"op": "separate_trust", ...}` answers what that metadata's trust-claim
-//!   separation removes and appends (see `inventory_artifact_metadata`).
 
 use std::collections::HashMap;
 
@@ -75,7 +73,6 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         }
         Some("item_description") => item_description::dispatch(fields),
         Some("artifact_metadata") => artifact_metadata::dispatch(fields),
-        Some("separate_trust") => artifact_metadata::separate_trust(fields),
         _ => Err(ERR_INVALID),
     }
 }
