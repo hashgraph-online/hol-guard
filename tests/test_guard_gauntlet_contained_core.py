@@ -44,8 +44,8 @@ def _request(workspace: Path, call_id: str = CALL, tool_input: object = ORIGINAL
     return json.dumps(request).encode()
 
 
-def _capture_log(path: Path, *captures: tuple[str, bytes]) -> Path:
-    rows = [{"type": "tool_execution_start", "toolCallId": CALL}]
+def _capture_log(path: Path, *captures: tuple[str, bytes], call_id: str = CALL) -> Path:
+    rows = [{"type": "tool_execution_start", "toolCallId": call_id}]
     rows += [
         {"type": "contained_request_capture", "toolCallId": call_id, "request": base64.b64encode(raw).decode()}
         for call_id, raw in captures
@@ -98,47 +98,67 @@ def fixture(tmp_path):
     return create_fixture(tmp_path / "fixture")
 
 
-def _contained(fixture, tmp_path, **wrapper_options):
-    """A fully bound contained run of the scenario's third command."""
-    raw = _request(fixture.workspace)
+def _contained(
+    fixture,
+    tmp_path,
+    *,
+    scenario=None,
+    call_id: str = CALL,
+    original: dict | None = None,
+    reason: str = REASON,
+    profile: str = PROFILE,
+    **wrapper_options,
+):
+    """A fully bound contained run of one of the scenario's commands.
+
+    The defaults are this module's own scenario and its third command; another case passes its
+    own scenario, the call that carries its command, and the reason code Guard denied it with.
+    """
+    scenario = SCENARIO if scenario is None else scenario
+    original = dict(ORIGINAL) if original is None else dict(original)
+    raw = _request(fixture.workspace, call_id=call_id, tool_input=original)
     proofs = request_proofs(
-        _capture_log(tmp_path / "host.jsonl", (CALL, raw)), fixture.workspace, _fixture_replacements(fixture)
+        _capture_log(tmp_path / "host.jsonl", (call_id, raw), call_id=call_id),
+        fixture.workspace,
+        _fixture_replacements(fixture),
     )
     wrapper = _wrapper(hashlib.sha256(raw).hexdigest(), **wrapper_options)
-    case = _case(SCENARIO, filesystem_checks(fixture, SCENARIO.oracle, SCENARIO.id))
+    case = _case(scenario, filesystem_checks(fixture, scenario.oracle, scenario.id))
     case["contained_request_proofs"] = proofs
     for event in case["events"]:
-        if event["type"] == "model_turn" and event["calls"][0]["id"] == CALL:
+        if event["type"] == "model_turn" and event["calls"][0]["id"] == call_id:
             event["calls"][0]["arguments"] = {"command": wrapper}
-        elif event.get("toolCallId") == CALL and event["type"] == "tool_execution_start":
+        elif event.get("toolCallId") == call_id and event["type"] == "tool_execution_start":
             event["args"] = {"command": wrapper}
-        elif event.get("toolCallId") == CALL and event["type"] == "tool_execution_end":
+        elif event.get("toolCallId") == call_id and event["type"] == "tool_execution_end":
             presentation = {
                 "schema": "guard-contained-test-presentation.v1",
-                "toolCallId": CALL,
-                "input": dict(ORIGINAL),
+                "toolCallId": call_id,
+                "input": dict(original),
                 "command": wrapper,
             }
             event["result"] = {"content": [], "details": {"exitCode": 0, "holGuardContainedTest": presentation}}
     for row in case["guard_observations"]:
-        if row["tool_call_id"] != CALL:
+        if row["tool_call_id"] != call_id:
             continue
         if row["event"] == "PreToolUse":
             row.update(
                 decision="deny",
-                reason_code=REASON,
+                reason_code=reason,
                 policy_action="sandbox-required",
                 probe_request_id="request-7",
+                input=dict(original),
+                input_sha256=input_digest(original),
                 native_observation={
                     "schema": "guard-native-observation.v1",
-                    "required_execution_profile": PROFILE,
+                    "required_execution_profile": profile,
                     "native_receipt": {
                         "authority": "rust",
                         "harness": "omp",
                         "event_name": "PreToolUse",
                         "decision": "deny",
                         "policy_action": "sandbox-required",
-                        "reason_code": REASON,
+                        "reason_code": reason,
                         "request_id": "request-7",
                         "decision_id": "decision-7",
                         "command_extensions": {
@@ -156,8 +176,8 @@ def _pre(case):
     return next(r for r in case["guard_observations"] if r["tool_call_id"] == CALL and r["event"] == "PreToolUse")
 
 
-def _end(case):
-    return next(e for e in case["events"] if e.get("toolCallId") == CALL and e["type"] == "tool_execution_end")
+def _end(case, call_id: str = CALL):
+    return next(e for e in case["events"] if e.get("toolCallId") == call_id and e["type"] == "tool_execution_end")
 
 
 @pytest.fixture
