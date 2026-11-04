@@ -957,8 +957,11 @@ fn moves_data(literal: &str) -> bool {
 fn plain_sequence(text: &str) -> bool {
     let literal = unquoted_literal(text);
     let construct = command_words(&literal).any(|word| {
+        // Bash takes a redirect on a compound command, and the closer carries
+        // it in the same word: `done>/dev/null` is still the end of a loop.
+        let keyword = word.split(['<', '>']).next().unwrap_or(word);
         matches!(
-            word,
+            keyword,
             "for" | "done" | "case" | "esac" | "fi" | "select" | "function" | "coproc"
         )
     });
