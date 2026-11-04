@@ -293,7 +293,7 @@ fn store_cache(path: Option<&Path>, cache: Map<String, Value>) {
     let temporary = temporary_path(path);
     let written = path
         .parent()
-        .map_or(Ok(()), |parent| fs::create_dir_all(parent))
+        .map_or(Ok(()), fs::create_dir_all)
         .and_then(|()| fs::write(&temporary, bytes))
         .and_then(|()| fs::rename(&temporary, path));
     if written.is_err() {
