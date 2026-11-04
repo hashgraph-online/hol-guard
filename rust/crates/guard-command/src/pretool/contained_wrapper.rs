@@ -131,13 +131,26 @@ fn resolved_spelling(target: &std::path::Path) -> Option<std::path::PathBuf> {
     }
 }
 
-/// The repository holding a `cd` target outside the hook workspace: the
+/// The project holding a `cd` target outside the hook workspace: the
 /// nearest ancestor with a `.git` entry, strictly below home, the system
 /// temporary directory or the user's private macOS one, and owned by the
 /// agent's user. Agents step into a
 /// sibling checkout or worktree this way; the execution sink rebases its
 /// approved root to the same directory, so the run is contained to that
 /// repository exactly as it would be from a session started there.
+///
+/// A checkout is the usual neighbour, but not every project a colleague
+/// leaves behind is one: a reproduction unpacked under a temporary root
+/// carries a manifest and no repository, and an agent asked to run its tests
+/// steps into it the same way. Such a target used to resolve to no root at
+/// all, so the read-only package-test route declined it and `npm test` fell
+/// through to the generic package prompt, while the identical command in the
+/// session's own directory ran contained. A package manifest marks the same
+/// boundary a `.git` entry does, so it roots the sandbox the same way. It is
+/// read only when no `.git` ancestor is in reach, which leaves every
+/// repository rooted exactly where it was: a package below a checkout still
+/// resolves to the checkout, so a monorepo keeps the root that holds its
+/// hoisted install.
 ///
 /// Containment is decided on resolved paths, as the retired Python lookup
 /// decided it after `Path.resolve()`: a target spelled through a link or
@@ -162,16 +175,44 @@ pub(super) fn sibling_project_root(
         .chain(super::git_routes::private_temporary_base(&resolved, uid))
         .find(|base| resolved.starts_with(base) && resolved != *base)
         .and_then(|base| {
-            target
+            let reachable: Vec<&std::path::Path> = target
                 .ancestors()
                 .take_while(|directory| {
                     resolved_spelling(directory)
                         .is_some_and(|directory| directory.starts_with(&base) && directory != base)
                 })
-                .find(|directory| directory.join(".git").symlink_metadata().is_ok())
+                .collect();
+            reachable
+                .iter()
+                .copied()
+                .find(|directory| checkout_marker(directory))
+                .or_else(|| {
+                    reachable
+                        .iter()
+                        .copied()
+                        .find(|directory| manifest_marker(directory))
+                })
                 .filter(|root| std::fs::metadata(root).is_ok_and(|meta| meta.uid() == uid))
                 .map(std::path::Path::to_path_buf)
         })
+}
+
+/// Whether `directory` is a checkout: a repository directory, or the `.git`
+/// file a linked worktree carries.
+#[cfg(unix)]
+fn checkout_marker(directory: &std::path::Path) -> bool {
+    directory.join(".git").symlink_metadata().is_ok()
+}
+
+/// Whether `directory` is a package root. The manifest must be a regular file
+/// the walk reached without following a link into it, so a link planted beside
+/// a target cannot name a directory the walk never climbed.
+#[cfg(unix)]
+fn manifest_marker(directory: &std::path::Path) -> bool {
+    directory
+        .join("package.json")
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.is_file())
 }
 
 /// Whether the verified cd `target` lies in the canonical `root`. Windows
@@ -216,7 +257,7 @@ pub(super) fn sibling_project_root(
     if !resolved.starts_with(&base) || resolved == base {
         return None;
     }
-    target
+    let reachable: Vec<&std::path::Path> = target
         .ancestors()
         .take_while(|directory| {
             // Containment is decided on canonical paths while the walk climbs
@@ -230,9 +271,37 @@ pub(super) fn sibling_project_root(
             resolved_spelling(directory)
                 .is_some_and(|directory| directory.starts_with(&base) && directory != base)
         })
-        .find(|directory| directory.join(".git").symlink_metadata().is_ok())
+        .collect();
+    reachable
+        .iter()
+        .copied()
+        .find(|directory| checkout_marker(directory))
+        .or_else(|| {
+            reachable
+                .iter()
+                .copied()
+                .find(|directory| manifest_marker(directory))
+        })
         .filter(|root| owned_by_current_user(root))
         .map(std::path::Path::to_path_buf)
+}
+
+/// Whether `directory` is a checkout: a repository directory, or the `.git`
+/// file a linked worktree carries.
+#[cfg(windows)]
+fn checkout_marker(directory: &std::path::Path) -> bool {
+    directory.join(".git").symlink_metadata().is_ok()
+}
+
+/// Whether `directory` is a package root. The manifest must be a regular file
+/// the walk reached without following a link into it, so a link planted beside
+/// a target cannot name a directory the walk never climbed.
+#[cfg(windows)]
+fn manifest_marker(directory: &std::path::Path) -> bool {
+    directory
+        .join("package.json")
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.is_file())
 }
 
 #[cfg(not(any(unix, windows)))]
