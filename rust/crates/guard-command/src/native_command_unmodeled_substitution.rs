@@ -178,6 +178,11 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
                 flow,
                 command_continues(&chars, close + 1),
             )?;
+            if receiver.is_none() {
+                if let Some((name, _)) = word.split_once('=') {
+                    assigned.insert(name.to_owned());
+                }
+            }
             let inner: String = chars[index + 2..close].iter().collect();
             programs.extend(inner_programs(&inner, flow)?);
             programs.extend(receiver);
@@ -356,6 +361,25 @@ fn value_consumers(text: &str, names: &BTreeSet<String>) -> Option<BTreeSet<Stri
             // value holds, and one that is quoting alone names nothing this
             // reader can hand an owner check.
             if raw.contains('$') || name.is_empty() {
+                return None;
+            }
+            // A construct that rebinds the value to a name this reader does
+            // not follow hands it to a program the text names nowhere this
+            // scan reads: in `for t in $TARGET; do gh pr view $t; done` the
+            // receiver is `for`, and taking that for the owner would drop
+            // `gh` from the set the owner check reads.
+            if matches!(
+                name.as_str(),
+                "for"
+                    | "select"
+                    | "set"
+                    | "read"
+                    | "mapfile"
+                    | "readarray"
+                    | "getopts"
+                    | "done"
+                    | "eval"
+            ) {
                 return None;
             }
             receiver = Some(name);

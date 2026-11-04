@@ -544,3 +544,27 @@ fn a_walk_under_another_name_is_still_read_as_a_walk() {
         assert!(reviewable_substitutions(command).is_none(), "{command}");
     }
 }
+
+#[test]
+fn a_value_a_rebinding_construct_receives_is_not_read() {
+    // `for` and its kin hand the value to a name this reader does not follow,
+    // so the program that finally receives it is named in no statement that
+    // expands the tracked name and the owner check would never see it.
+    for command in [
+        r#"TARGET=$(cat id); for t in $TARGET; do gh pr view $t; done"#,
+        r#"TARGET=$(cat id); read -r t <<< $TARGET"#,
+        r#"TARGET=$(cat id); set -- $TARGET"#,
+        r#"TARGET=$(cat id); eval $TARGET"#,
+    ] {
+        assert!(reviewable_substitutions(command).is_none(), "{command}");
+    }
+}
+
+#[test]
+fn a_process_substitution_an_assignment_keeps_names_its_receiver() {
+    // `x=<(cat id)` keeps the pipe's path exactly as `x=$(cat id)` keeps the
+    // output, so the statement that expands the name is its receiver.
+    let command = r#"pipe=<(cat id); gh pr view $pipe"#;
+    let bounded = reviewable_substitutions(command).unwrap();
+    assert!(bounded.programs.contains("gh"), "{command}");
+}
