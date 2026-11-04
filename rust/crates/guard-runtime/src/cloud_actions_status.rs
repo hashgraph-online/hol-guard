@@ -40,9 +40,12 @@ enum Request {
         pairing: Option<Pairing>,
         now: String,
     },
-    /// Save a check of `origin` made at `checked_at`.
+    /// Save a check of `origin` made at `checked_at` for the connection
+    /// `grant_id`.
     Record {
         origin: String,
+        #[serde(default)]
+        grant_id: Option<String>,
         checked_at: String,
         service: Service,
     },
@@ -52,6 +55,10 @@ enum Request {
 #[serde(deny_unknown_fields)]
 struct Pairing {
     origin: String,
+    /// The connection the pairing belongs to. A check saved for another
+    /// connection is not shown, so connecting again starts fresh.
+    #[serde(default)]
+    grant_id: Option<String>,
     workspace_id: Option<String>,
     /// What the last connect said about Cloud actions: `on`, `off` or `unknown`.
     cloud_actions: String,
@@ -91,18 +98,22 @@ pub(crate) fn dispatch(args: &Value, guard_home: &str) -> KindResult {
         }
         Request::Record {
             origin,
+            grant_id,
             checked_at,
             service,
         } => {
             let checked_at = aware_epoch_micros(&checked_at)
                 .and_then(iso)
                 .ok_or(ERR_INVALID)?;
-            let entry = json!({
+            let mut entry = json!({
                 "schema": CACHE_SCHEMA,
                 "origin": origin,
                 "checked_at": checked_at,
                 "service": check_entry(&service.state, &service.message, service.http_status.map(Value::from)),
             });
+            if let Some(grant_id) = grant_id {
+                entry["grant_id"] = Value::from(grant_id);
+            }
             write_cache(home, &entry).map_err(|_| ERR_NOT_SAVED)?;
             Ok(json!({}))
         }
@@ -112,7 +123,7 @@ pub(crate) fn dispatch(args: &Value, guard_home: &str) -> KindResult {
 /// `cloud_actions_local_status`, plus how long a new check must wait when
 /// the last one is less than a minute old.
 fn project(home: &Path, pairing: Option<&Pairing>, now: i128) -> KindResult {
-    let saved = pairing.and_then(|pairing| read_cache(home, &pairing.origin));
+    let saved = pairing.and_then(|pairing| read_cache(home, pairing));
     let elapsed = saved.as_ref().map(|saved| now - saved.checked);
     let retry_after_seconds = elapsed
         .filter(|elapsed| (0..CHECK_INTERVAL_MICROS).contains(elapsed))
@@ -159,9 +170,9 @@ fn cache_path(home: &Path) -> PathBuf {
 }
 
 /// `_read_cache`: the saved check, or `None` when it is missing, damaged,
-/// too large, or a check of another Guard Cloud, which says nothing about
-/// this pairing.
-fn read_cache(home: &Path, origin: &str) -> Option<Saved> {
+/// too large, or a check of another Guard Cloud or an earlier connection,
+/// which says nothing about this pairing.
+fn read_cache(home: &Path, pairing: &Pairing) -> Option<Saved> {
     let path = cache_path(home);
     if std::fs::metadata(&path).ok()?.len() > MAX_CACHE_BYTES {
         return None;
@@ -178,7 +189,8 @@ fn read_cache(home: &Path, origin: &str) -> Option<Saved> {
     let payload: Value = serde_json::from_slice(&bytes).ok()?;
     let payload = payload.as_object()?;
     if payload.get("schema").and_then(Value::as_str) != Some(CACHE_SCHEMA)
-        || payload.get("origin").and_then(Value::as_str) != Some(origin)
+        || payload.get("origin").and_then(Value::as_str) != Some(pairing.origin.as_str())
+        || payload.get("grant_id").and_then(Value::as_str) != pairing.grant_id.as_deref()
     {
         return None;
     }

@@ -42,7 +42,12 @@ ACCESS = "cloud-actions-access-canary-3c9d"
 
 
 def _pair(
-    monkeypatch: pytest.MonkeyPatch, home: Path, *, origin: str = SITE, report: Literal["on", "off"] | None = None
+    monkeypatch: pytest.MonkeyPatch,
+    home: Path,
+    *,
+    origin: str = SITE,
+    report: Literal["on", "off"] | None = None,
+    grant_id: str = "grant-1",
 ) -> GuardStore:
     """Pair `home` with `origin`; `report` is what connect said about Cloud actions."""
 
@@ -51,12 +56,12 @@ def _pair(
 
     monkeypatch.setattr(cloud_actions_access, "read_cloud_actions_pairing", read_pairing)
     monkeypatch.setattr(
-        GuardStore, "get_oauth_local_credential_health", lambda _self: {"state": "healthy", "grant_id": "grant-1"}
+        GuardStore, "get_oauth_local_credential_health", lambda _self: {"state": "healthy", "grant_id": grant_id}
     )
     store = GuardStore(home)
     if report is not None:
         record_cloud_actions_connect_report(
-            store, grant_id="grant-1", report={"status": report, "workspace_id": WS}, now="2026-11-03T11:00:00Z"
+            store, grant_id=grant_id, report={"status": report, "workspace_id": WS}, now="2026-11-03T11:00:00Z"
         )
     return store
 
@@ -76,6 +81,92 @@ def _unpaired(monkeypatch: pytest.MonkeyPatch, home: Path) -> GuardStore:
 def _current(origin: str) -> CheckResult:
     assert origin == SITE
     return CheckResult("current", "Guard Cloud offers Cloud actions.", 200)
+
+
+@pytest.fixture(autouse=True)
+def _connection_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Guard Cloud accepts the connection unless a test says otherwise."""
+
+    monkeypatch.setattr(status_module, "_live_pairing_checker", lambda _store: None)
+
+
+_LIVE_PAIRING_CHECKER = status_module._live_pairing_checker  # pyright: ignore[reportPrivateUsage]
+
+
+def _refresh_raising(monkeypatch: pytest.MonkeyPatch, error: Exception) -> list[bool]:
+    """Use the real connection check, with a renewal that fails with `error`."""
+    from codex_plugin_scanner.guard.runtime import runner
+
+    monkeypatch.setattr(status_module, "_live_pairing_checker", _LIVE_PAIRING_CHECKER)
+    calls: list[bool] = []
+
+    def resolve(_store: object, *, force_refresh: bool = False, **_kwargs: object) -> dict[str, object]:
+        calls.append(force_refresh)
+        raise error
+
+    monkeypatch.setattr(runner, "_resolve_guard_sync_auth_context", resolve)
+    return calls
+
+
+def test_a_revoked_connection_asks_to_reconnect(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import runner
+
+    store = _pair(monkeypatch, tmp_path, report="on")
+    calls = _refresh_raising(
+        monkeypatch,
+        runner.GuardSyncAuthorizationExpiredError(runner._guard_oauth_reconnect_after_revoked_message()),  # pyright: ignore[reportPrivateUsage]
+    )
+
+    checked = check_cloud_actions(store, now=NOW, checker=_current)
+
+    assert calls == [True]
+    assert _connection(checked)["check"]["service"] == {
+        "state": "reconnect",
+        "message": "Guard Cloud refused to renew this computer's access.",
+    }
+    _assert_nothing_private(checked, tmp_path)
+
+
+def _not_proof_of_revocation() -> list[Exception]:
+    from codex_plugin_scanner.guard.runtime import runner
+
+    expired = runner.GuardSyncAuthorizationExpiredError
+    rejected = runner._GuardOAuthRefreshRejectedError  # pyright: ignore[reportPrivateUsage]
+    reauthorize = runner._guard_oauth_reauthorization_message()  # pyright: ignore[reportPrivateUsage]
+    return [
+        RuntimeError("rate limited"),
+        OSError("unreachable"),
+        ValueError("bad answer"),
+        # A malformed renewal answer or a proof Guard could not sign.
+        expired(reauthorize),
+        expired(f"{reauthorize} could not sign the proof"),
+        # Guard Cloud refused the request for another reason than invalid_grant.
+        rejected(f"{reauthorize} Guard Cloud answered 400 invalid_request (invalid_grant hint)."),
+    ]
+
+
+@pytest.mark.parametrize("error", _not_proof_of_revocation())
+def test_a_connection_check_that_cannot_tell_keeps_the_service_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    store = _pair(monkeypatch, tmp_path, report="on")
+    _refresh_raising(monkeypatch, error)
+
+    checked = check_cloud_actions(store, now=NOW, checker=_current)
+
+    assert _connection(checked)["check"]["service"]["state"] == "current"
+
+
+def test_an_unreachable_guard_cloud_skips_the_connection_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _pair(monkeypatch, tmp_path, report="on")
+    calls = _refresh_raising(monkeypatch, RuntimeError("not reached"))
+
+    checked = check_cloud_actions(
+        store, now=NOW, checker=lambda _origin: CheckResult("offline", "Guard Cloud could not be reached.")
+    )
+
+    assert calls == []
+    assert _connection(checked)["check"]["service"]["state"] == "offline"
 
 
 def _assert_nothing_private(payload: object, home: Path) -> None:
@@ -186,6 +277,23 @@ def test_a_check_of_another_guard_cloud_is_not_shown(tmp_path: Path, monkeypatch
 
     assert _connection(payload)["check"] == {"state": "not_checked"}
     assert payload["next_check_allowed_at"] is None
+
+
+def test_reconnecting_clears_the_check_of_the_revoked_connection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _pair(monkeypatch, tmp_path, report="on")
+    check_cloud_actions(
+        store, now=NOW, checker=_current, pairing_checker=lambda _store: CheckResult("reconnect", "refused")
+    )
+    store = _pair(monkeypatch, tmp_path, report="on", grant_id="grant-2")
+
+    payload = cloud_actions_local_status(store, now=NOW + timedelta(seconds=30))
+    assert _connection(payload)["check"] == {"state": "not_checked"}
+    assert payload["next_check_allowed_at"] is None
+
+    checked = check_cloud_actions(store, now=NOW + timedelta(seconds=30), checker=_current)
+    assert _connection(checked)["check"]["service"]["state"] == "current"
 
 
 def test_a_damaged_saved_check_reads_as_not_checked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

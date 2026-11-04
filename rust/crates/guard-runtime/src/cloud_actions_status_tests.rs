@@ -143,6 +143,51 @@ fn a_check_of_another_guard_cloud_is_not_shown() {
 }
 
 #[test]
+fn connecting_again_clears_the_check_of_the_earlier_connection() {
+    let home = home();
+    let pairing_for = |grant_id: &str| {
+        let mut pairing = pairing(SITE);
+        pairing["grant_id"] = json!(grant_id);
+        pairing
+    };
+    let refused = json!({"state": "reconnect", "message": "Guard Cloud refused to renew this computer's access."});
+    let answer = run(
+        home.path(),
+        json!({"op": "record", "origin": SITE, "grant_id": "grant-1", "checked_at": NOW, "service": refused}),
+    )
+    .expect("record");
+    assert_eq!(answer, json!({}));
+    let project = |grant_id: &str| {
+        run(
+            home.path(),
+            json!({"op": "project", "pairing": pairing_for(grant_id), "now": "2026-11-03T12:00:30+00:00"}),
+        )
+        .expect("project")
+    };
+
+    let same = project("grant-1");
+    assert_eq!(
+        same["status"]["connection"]["check"]["service"]["state"],
+        "reconnect"
+    );
+    assert_eq!(same["retry_after_seconds"], 30);
+
+    let again = project("grant-2");
+    assert_eq!(
+        again["status"]["connection"]["check"],
+        json!({"state": "not_checked"})
+    );
+    assert_eq!(again["status"]["next_check_allowed_at"], Value::Null);
+    assert_eq!(again["retry_after_seconds"], Value::Null);
+
+    // A pairing that names no connection does not take a named connection's check.
+    assert_eq!(
+        project_at(home.path(), SITE, "2026-11-03T12:00:30+00:00")["status"]["connection"]["check"],
+        json!({"state": "not_checked"})
+    );
+}
+
+#[test]
 fn damaged_or_oversized_saved_checks_read_as_not_checked() {
     let home = home();
     let path = cache_path(home.path());
