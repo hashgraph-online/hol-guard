@@ -91,9 +91,11 @@ fn shell_words(text: &str) -> Vec<ShellWord> {
                     let value = u32::from_str_radix(&digits, radix).ok();
                     match value
                         .map(|value| if radix == 8 { value & 0xff } else { value })
+                        .filter(|value| *value != 0)
                         .and_then(char::from_u32)
                     {
                         Some(decoded) => word.value.push(decoded),
+                        // A NUL ends the string in bash (`$'%\0'n` is `%n`).
                         None => word.expands = true,
                     }
                 }

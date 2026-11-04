@@ -435,6 +435,8 @@ fn split_quoted_printf_option_still_assigns() {
         "printf $'\\445n' PATH",
         "printf $'\\u0025n' PATH",
         "printf $'\\x2dv' PATH /tmp/tools",
+        "printf $'%\\x00'n PATH",
+        "printf $'%\\0'n PATH",
         "printf \"%\\\nn\" PATH",
         "printf {-v,PATH,%s,/tmp/x}",
         "printf %[n] PATH",
