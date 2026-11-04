@@ -4,6 +4,7 @@ import {
   requiresSettingsSaveProof,
   resolveSettingsSaveProofKind,
   resolveSettingsSaveProofModalCopy,
+  settingsSaveProofUsesPulse,
 } from "./settings-save-proof-modal";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -141,5 +142,24 @@ assert(
   resolveSettingsSaveProofModalCopy({ mode: "maintenance", gateSettingsChanged: false, maintenanceAction: "reset-settings" }).confirmLabel === "Reset settings",
   "save-proof: reset settings maintenance copy",
 );
+
+const pulseGate: GuardApprovalGatePublicConfig = {
+  ...retainedGate, enabled: true, totp_enabled: true, pulse_enabled: true, pulse_cooldown_seconds: 0,
+};
+assert(settingsSaveProofUsesPulse(pulseGate, "verify-save"), "save-proof: Pulse handles a save");
+assert(settingsSaveProofUsesPulse(pulseGate, "maintenance"), "save-proof: Pulse handles a cleanup");
+assert(!settingsSaveProofUsesPulse(pulseGate, "change-password"), "save-proof: changing the password keeps its fields");
+assert(!settingsSaveProofUsesPulse({ ...pulseGate, pulse_enabled: false }, "verify-save"), "save-proof: no Pulse, no Pulse notice");
+assert(
+  !isSettingsSaveProofSubmitDisabled("verify-save", {}, false, true),
+  "save-proof: with Pulse the user can continue without a password or code",
+);
+const pulseMarkup = renderToStaticMarkup(createElement(SettingsSaveProofModal, {
+  open: true, mode: "verify-save", gate: pulseGate, title: "Confirm before saving", detail: "",
+  confirmLabel: "Save settings", error: null, pending: false, onCancel: () => {}, onConfirm: () => {},
+}));
+assert(pulseMarkup.includes("approve this in the YID app"), "save-proof: Pulse notice is shown");
+assert(!pulseMarkup.includes('type="password"'), "save-proof: no password field with Pulse");
+assert(!pulseMarkup.includes("Authenticator code"), "save-proof: no authenticator field with Pulse");
 
 console.log("settings-save-proof-modal.test.ts: all assertions passed");

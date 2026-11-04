@@ -11,6 +11,7 @@ import {
   redactHomeArtifactLabel,
   resolveCloudUpsellVisible,
   resolveHomeQueuedCount,
+  resolveClearDecisionsProof,
   resolveNewAppDiscoveries,
   STREAK_MILESTONE_MESSAGES,
 } from "./home-dashboard";
@@ -529,3 +530,14 @@ assert(
 assert(resolveHomeQueuedCount({ pendingCount: 12474, requestCount: 0 }) === 12474, "runtime pending count wins when the home queue payload is empty");
 assert(resolveHomeQueuedCount({ pendingCount: 0, requestCount: 5 }) === 5, "ready queue items still surface when the snapshot count is stale");
 assert(resolveHomeQueuedCount({ pendingCount: null, requestCount: null }) === 0, "missing counts stay at zero");
+
+const clearGate = {
+  enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null,
+  locked_until: null, fail_closed: false, strict_all_decisions: false, totp_enabled: false, totp_pending: false,
+};
+const pulseClear = resolveClearDecisionsProof({ ...clearGate, pulse_enabled: true, pulse_cooldown_seconds: 0 }, "", "");
+assert(pulseClear.usesPulse && !pulseClear.needsProof, "clear decisions with Pulse shows no proof fields");
+assert(!pulseClear.proofIncomplete, "clear decisions with Pulse can continue without a password or code");
+const passwordClear = resolveClearDecisionsProof(clearGate, "", "");
+assert(passwordClear.needsProof && passwordClear.needsPassword && passwordClear.proofIncomplete, "a password gate still asks for the password");
+assert(!resolveClearDecisionsProof(clearGate, "secret", "").proofIncomplete, "a typed password completes the proof");

@@ -144,8 +144,8 @@ approval shows its label without a per-action summary.
 | `approval_gate_pulse_store.rs` (new) | Transport seam, Yanez key cache (10 min), pending-request table (in memory, ≤16 per home), MAC'd Pulse cooldown record, local `jti` ledger | Resident-side state; no lock held across HTTP |
 | `approval_gate_pulse_enrollment.rs` (new) | `begin`, `confirm`, `disable`, `recover` | Enrollment needs the current factor and a verified enrollment receipt. Disabling needs a fresh Pulse grant. Recovery needs the password and the one-time code |
 | `approval_gate_pulse_summary.rs` (new) | Reads the stored approval request and reduces it to the YID app summary | What the phone shows comes from Guard's own record, never from the caller |
-| `approval_gate_pulse_summary_tests.rs` (new) | 8 tests: program names, risk level, secret filter, closed lists, store lookup | See Tests |
-| `approval_gate_pulse_tests.rs` (new) | 24 acceptance tests through the real wire op | See Tests |
+| `approval_gate_pulse_summary_tests.rs` (new) | 12 tests: program names, risk level, secret filter, closed lists, store lookup | See Tests |
+| `approval_gate_pulse_tests.rs` (new) | 32 acceptance tests through the real wire op | See Tests |
 | `approval_gate_verify.rs` | Pulse branch at the top of `verify_or_raise_locked`; Pulse fields on the gate input | Pulse replaces both factors, the way TOTP replaces the password |
 | `approval_gate_grants.rs` | A strict check accepts `["pulse"]` as well as `["password"]` | Strict purposes (settings, policy clear and similar) must work in Pulse mode. A Pulse grant can only exist in the factor generation Pulse was enrolled in |
 | `approval_gate_settings.rs` | Pulse fields in the public config; explicit `pulse_cooldown_seconds`; turning the gate off ends Pulse; revoking the cooldown also closes a Pulse cooldown; `unlock_cooldown` is refused in Pulse mode | A password must never open a window the Pulse factor guards |
@@ -217,8 +217,8 @@ Python and dashboard grant decoders keep working.
 | Suite | Count | Result |
 | --- | --- | --- |
 | `cargo test -p guard-yanez-pulse` (receipt vectors, parsers, terms and summary rows, client parsing) | 49 | pass |
-| `cargo test -p hol-guard-runtime approval_gate` (Pulse acceptance, summary, and all existing gate parity vectors) | 102 | pass |
-| `pytest tests/test_guard_approval_gate_pulse.py` (CLI/dashboard parity, defer, wait, cooldown, fixed scopes, secret handling) | 13 | pass |
+| `cargo test -p hol-guard-runtime approval_gate` (Pulse acceptance, summary, and all existing gate parity vectors) | 103 | pass |
+| `pytest tests/test_guard_approval_gate_pulse.py` (CLI/dashboard parity, defer, wait, cooldown, fixed scopes, secret handling, settings saves) | 16 | pass |
 | `tsx src/pulse-approval.test.ts` (resubmission, reject, expire, outage, pass-through, deadline, proof fields) | 6 groups | pass |
 | Existing dashboard tests: approval-gate, guard-api, queue-bulk-approve, settings-workspace, settings-save-proof-modal, approval-retry-ux | | pass |
 
