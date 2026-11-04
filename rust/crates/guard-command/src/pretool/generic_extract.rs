@@ -68,11 +68,18 @@ const FILE_BODY_KEYS: [&str; 6] = [
     "newString",
 ];
 
-/// A path key names a file when it holds a path or a nonempty list of them.
+/// A path key names a file when it holds a path, or a list that holds one.
+/// A blank string names nothing, and neither does a list of them, so the file
+/// bodies beside such a key keep their own size bound.
 fn names_path(value: &Value) -> bool {
     match value {
-        Value::String(_) => true,
-        Value::Array(items) => !items.is_empty() && items.iter().all(Value::is_string),
+        Value::String(text) => !text.trim().is_empty(),
+        Value::Array(items) => {
+            items.iter().all(Value::is_string)
+                && items
+                    .iter()
+                    .any(|item| item.as_str().is_some_and(|text| !text.trim().is_empty()))
+        }
         _ => false,
     }
 }
@@ -150,12 +157,36 @@ fn bounded_string(value: &Value) -> Result<String, GenericExtractionError> {
     Ok(text.to_owned())
 }
 
+/// A structured field whose string is empty, or holds only whitespace, names
+/// nothing. Harnesses spell "no value here" that way: Oh My Pi's `glob` sends
+/// `path: ""` for a search that starts at the workspace root. The field is
+/// present and its type is right, so the payload parses; there is simply no
+/// target in it. `Ok(None)` says so. Anything that is not a string, or a
+/// string past the command bound, keeps the error it had.
+fn optional_bounded_string(value: &Value) -> Result<Option<String>, GenericExtractionError> {
+    let text = value
+        .as_str()
+        .ok_or(GenericExtractionError::Malformed)?
+        .trim();
+    if text.is_empty() {
+        return Ok(None);
+    }
+    if text.len() > MAX_COMMAND_BYTES || text.chars().count() > MAX_COMMAND_BYTES {
+        return Err(GenericExtractionError::Bounds);
+    }
+    Ok(Some(text.to_owned()))
+}
+
 fn append_strings(output: &mut Vec<String>, value: &Value) -> Result<(), GenericExtractionError> {
     if output.len() >= MAX_PRE_TOOL_STRINGS {
         return Err(GenericExtractionError::Bounds);
     }
     match value {
-        Value::String(_) => output.push(bounded_string(value)?),
+        // Only a blank string reads as absent. A null, like every other
+        // non-string value, stays malformed: the hosts this reading serves
+        // send an empty string, and a null target must not reach the
+        // read-nothing proof.
+        Value::String(_) => output.extend(optional_bounded_string(value)?),
         Value::Array(items) => {
             if items.len() > MAX_PRE_TOOL_ARRAY_ITEMS {
                 return Err(GenericExtractionError::Bounds);
@@ -164,7 +195,7 @@ fn append_strings(output: &mut Vec<String>, value: &Value) -> Result<(), Generic
                 if output.len() >= MAX_PRE_TOOL_STRINGS {
                     return Err(GenericExtractionError::Bounds);
                 }
-                output.push(bounded_string(item)?);
+                output.extend(optional_bounded_string(item)?);
             }
         }
         _ => return Err(GenericExtractionError::Malformed),
