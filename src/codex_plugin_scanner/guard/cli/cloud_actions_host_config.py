@@ -194,6 +194,12 @@ def plan_host_config(ai_tool: str, *, path: Path, entry: Mapping[str, object], u
     if answer is None or action not in _PLAN_ACTIONS:
         return plan("unreadable", other_entries=0, problem=_NATIVE_UNAVAILABLE, before=before)
     after = answer.get("after")
+    if isinstance(after, str):
+        after_bytes = after.encode()
+    elif action == "unchanged":
+        after_bytes = before
+    else:
+        after_bytes = None
     previous_url = answer.get("previous_url")
     problem = answer.get("problem")
     others = answer.get("other_entries")
@@ -207,7 +213,7 @@ def plan_host_config(ai_tool: str, *, path: Path, entry: Mapping[str, object], u
         else (),
         problem=problem if isinstance(problem, str) else None,
         before=before,
-        after=after.encode() if isinstance(after, str) else before if action == "unchanged" else None,
+        after=after_bytes,
     )
 
 
