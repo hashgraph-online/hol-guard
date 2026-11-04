@@ -124,6 +124,19 @@ def test_codex_home_from_the_environment_is_the_config_changed(tmp_path: Path) -
     assert lean.disable(home, guard, environ)["state"] == "off"
 
 
+def test_guards_value_in_one_codex_home_is_not_claimed_in_another(tmp_path: Path) -> None:
+    home, guard = homes(tmp_path)
+    environ = {"CODEX_HOME": str(tmp_path / "codex-home")}
+    lean.enable(home, guard, environ)
+    path = write_config(home, f"{lean.KEY} = {lean.LIMIT}\n")
+
+    assert lean.status(home, guard)["state"] == "yours"
+    assert lean.disable(home, guard)["state"] == "yours"
+    assert tomllib.loads(path.read_text(encoding="utf-8")) == {lean.KEY: lean.LIMIT}
+    assert lean.status(home, guard, environ)["state"] == "on"
+    assert lean.disable(home, guard, environ)["state"] == "off"
+
+
 def test_a_failed_config_write_leaves_no_ownership_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     home, guard = homes(tmp_path)
     path = write_config(home, USER_CONFIG)
@@ -135,7 +148,7 @@ def test_a_failed_config_write_leaves_no_ownership_record(tmp_path: Path, monkey
     with pytest.raises(PermissionError):
         lean.enable(home, guard)
 
-    assert lean._recorded(guard) is None
+    assert lean._recorded(guard, path) is None
     assert path.read_text(encoding="utf-8") == USER_CONFIG
 
 
@@ -155,7 +168,7 @@ def test_an_interrupted_hook_install_stops_the_change(tmp_path: Path, monkeypatc
 
     assert raised.value.code == "codex_hooks_need_recovery"
     assert path.read_text(encoding="utf-8") == USER_CONFIG
-    assert lean._recorded(guard) is None
+    assert lean._recorded(guard, path) is None
 
 
 def run(argv: list[str], home: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[int, str]:

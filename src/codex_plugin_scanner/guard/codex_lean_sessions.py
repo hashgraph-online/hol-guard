@@ -45,24 +45,24 @@ def config_path(home_dir: Path, environ: Mapping[str, str] | None = None) -> Pat
 def status(home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None = None) -> dict[str, object]:
     path = config_path(home_dir, environ)
     _text, payload = _read_config(path)
-    return _view(path, payload.get(KEY), _recorded(guard_home))
+    return _view(path, payload.get(KEY), _recorded(guard_home, path))
 
 
 def enable(home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None = None) -> dict[str, object]:
     path = config_path(home_dir, environ)
     with _locked(guard_home, path):
         text, payload = _read_config(path)
-        current, recorded = payload.get(KEY), _recorded(guard_home)
+        current, recorded = payload.get(KEY), _recorded(guard_home, path)
         if current is not None:
             return _view(path, current, recorded)
         # The record goes first: if Guard stops between the two writes, the
         # config is untouched and status reads "off", never a value nobody owns.
-        _write_record(guard_home, LIMIT)
+        _write_record(guard_home, path, LIMIT)
         payload[KEY] = LIMIT
         try:
             _write_config(path, payload, text)
         except BaseException:
-            _clear_record(guard_home)
+            _write_record(guard_home, path, None)
             raise
         return _view(path, LIMIT, LIMIT)
 
@@ -71,12 +71,12 @@ def disable(home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None 
     path = config_path(home_dir, environ)
     with _locked(guard_home, path):
         text, payload = _read_config(path)
-        current, recorded = payload.get(KEY), _recorded(guard_home)
+        current, recorded = payload.get(KEY), _recorded(guard_home, path)
         if recorded is not None and current == recorded:
             del payload[KEY]
             _write_config(path, payload, text)
             current = None
-        _clear_record(guard_home)
+        _write_record(guard_home, path, None)
         return _view(path, current, None)
 
 
@@ -131,22 +131,46 @@ def _record_path(guard_home: Path) -> Path:
     return guard_home / _RECORD_NAME
 
 
-def _recorded(guard_home: Path) -> int | None:
+def _records(guard_home: Path) -> dict[str, int]:
+    """The value Guard wrote to each Codex config, keyed by the config's
+    path: with `CODEX_HOME`, one Guard home can edit more than one."""
+
     try:
-        value = json.loads(_record_path(guard_home).read_text(encoding="utf-8")).get("value")
+        configs = json.loads(_record_path(guard_home).read_text(encoding="utf-8")).get("configs")
     except (OSError, ValueError, AttributeError):
-        return None
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
+        return {}
+    if not isinstance(configs, dict):
+        return {}
+    return {
+        key: value
+        for key, value in configs.items()
+        if isinstance(key, str) and isinstance(value, int) and not isinstance(value, bool)
+    }
 
 
-def _write_record(guard_home: Path, value: int) -> None:
+def _record_key(path: Path) -> str:
+    return str(path.expanduser().absolute())
+
+
+def _recorded(guard_home: Path, path: Path) -> int | None:
+    return _records(guard_home).get(_record_key(path))
+
+
+def _write_record(guard_home: Path, path: Path, value: int | None) -> None:
+    """Record `value` for this config, or forget it when `value` is None."""
+
     from .codex_hook_integrity import atomic_write_text
 
-    atomic_write_text(_record_path(guard_home), json.dumps({"value": value}) + "\n", mode=0o600)
-
-
-def _clear_record(guard_home: Path) -> None:
-    _record_path(guard_home).unlink(missing_ok=True)
+    records = _records(guard_home)
+    if value is None:
+        records.pop(_record_key(path), None)
+    else:
+        records[_record_key(path)] = value
+    record = _record_path(guard_home)
+    if not records:
+        record.unlink(missing_ok=True)
+        return
+    atomic_write_text(record, json.dumps({"configs": records}, sort_keys=True) + "\n", mode=0o600)
 
 
 @contextmanager
