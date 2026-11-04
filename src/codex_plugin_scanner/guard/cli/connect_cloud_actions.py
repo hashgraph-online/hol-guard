@@ -30,6 +30,7 @@ _NATIVE_UNAVAILABLE_MESSAGE = (
     "Guard's native runtime is not available, so HOL Guard could not check Cloud actions for this pairing. "
     "Run hol-guard doctor, then try again."
 )
+_DISCONNECTED_MESSAGE = f"{_NATIVE_UNAVAILABLE_MESSAGE} HOL Guard disconnected this computer before sending anything."
 
 
 class CloudActionsConnectReport(TypedDict):
@@ -135,20 +136,25 @@ def check_connect_cloud_workspace(*, workspace_id: str | None, cloud_workspace_i
     return _problem({"op": "workspace", "workspace_id": workspace_id, "cloud_workspace_id": cloud_workspace_id})
 
 
-def check_connect_cloud_actions_declined(
-    *,
-    report: CloudActionsConnectReport | None,
-    cloud_actions_declined: bool,
-) -> str | None:
+def check_connect_cloud_actions_declined(*, summary: object, cloud_actions_declined: bool) -> str | None:
     """Return a problem message when Cloud actions came back on despite ``--no-cloud-actions``.
 
-    The caller undoes the pairing before the first sync, reports the problem and
-    exits non-zero so scripts notice. Without a report Guard Cloud did not turn
-    Cloud actions on for this pairing, which is what the option asked for.
+    ``summary`` is the connect payload's ``cloud_actions`` summary. The caller
+    undoes the pairing before the first sync, reports the problem and exits
+    non-zero so scripts notice. Without an answer Guard Cloud did not turn Cloud
+    actions on for this pairing, which is what the option asked for. An answer
+    Guard could not read disconnects the computer too.
     """
-    if not cloud_actions_declined or report is None:
+    if not cloud_actions_declined or not isinstance(summary, Mapping):
         return None
-    return _problem({"op": "declined", "report": report, "declined": True})
+    if summary.get("message") == _NATIVE_UNAVAILABLE_MESSAGE:
+        return _DISCONNECTED_MESSAGE
+    answer = _native(
+        {"op": "report", "value": {"status": summary.get("status"), "workspace_id": summary.get("workspace_id")}}
+    )
+    if answer is None:
+        return _DISCONNECTED_MESSAGE
+    return _problem({"op": "declined", "report": answer.get("report"), "declined": True})
 
 
 def _problem(request: dict[str, object]) -> str | None:
@@ -157,7 +163,7 @@ def _problem(request: dict[str, object]) -> str | None:
     problem = answer.get("problem", 0) if answer is not None else 0
     if problem is None or isinstance(problem, str):
         return problem
-    return f"{_NATIVE_UNAVAILABLE_MESSAGE} HOL Guard disconnected this computer before sending anything."
+    return _DISCONNECTED_MESSAGE
 
 
 def _native(request: dict[str, object]) -> Any:  # the one-shot command's answer, or None
