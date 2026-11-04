@@ -485,10 +485,10 @@ pub mod aibom_trust_metadata;
 pub mod archive_inspection;
 pub mod composition_rules;
 pub mod contained_argv;
-mod contained_inline_target;
 #[cfg(unix)]
 pub mod contained_execution;
 mod contained_git;
+mod contained_inline_target;
 
 /// Whether `argv` is a protected Git read the contained planner admits, for
 /// the `contained_path` fuzz target, which no operation reaches it through.
