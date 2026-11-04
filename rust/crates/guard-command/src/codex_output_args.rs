@@ -273,7 +273,10 @@ pub(crate) fn sed_script_is_bounded_print(script: &str) -> bool {
         .all(|part| sed_print_command_is_bounded(py_strip(part)))
 }
 
-fn sed_print_command_is_bounded(command: &str) -> bool {
+/// One print command of a `sed -n` script: an optional address or address
+/// range, then `p` and nothing else. The segment proof reads the same
+/// statements, so both readings accept the same addresses.
+pub(crate) fn sed_print_command_is_bounded(command: &str) -> bool {
     let Some(body) = command.strip_suffix('p') else {
         return false;
     };
