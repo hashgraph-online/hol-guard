@@ -37,6 +37,10 @@ try {
   status = 409;
   payload = { error: "codex_lean_unavailable", code: "codex_config_unreadable" };
   await assert.rejects(saveCodexLean(true), /could not read your Codex config/);
+  status = 500;
+  payload = { error: "internal" };
+  await assert.rejects(readCodexLean(), /could not check your Codex config/, "a failed read does not talk about a change");
+  await assert.rejects(saveCodexLean(true), /could not change your Codex config\. Nothing was changed/);
   status = 200;
   payload = { state: "maybe", limit: null };
   await assert.rejects(readCodexLean(), /does not understand/);

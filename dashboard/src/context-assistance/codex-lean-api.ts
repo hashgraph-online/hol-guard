@@ -17,7 +17,7 @@ function parsed(body: unknown): CodexLeanState {
   return { state, limit };
 }
 
-function failure(status: number, body: unknown): ContextAssistanceApiError {
+function failure(status: number, body: unknown, reading: boolean): ContextAssistanceApiError {
   let code = "codex_lean_unavailable";
   if (object(body) && typeof body.code === "string") code = body.code;
   else if (object(body) && typeof body.error === "string") code = body.error;
@@ -25,6 +25,7 @@ function failure(status: number, body: unknown): ContextAssistanceApiError {
   if (code === "codex_config_unreadable") return new ContextAssistanceApiError(code, "Guard could not read your Codex config, so it left it as it is. Fix the file, then try again.");
   if (code === "codex_hooks_need_recovery") return new ContextAssistanceApiError(code, "Guard's Codex setup needs a repair first. Open Apps, repair Codex, then try again.");
   if (code === "codex_config_busy") return new ContextAssistanceApiError(code, "Another change to your Codex config is in progress. Try again in a moment.");
+  if (reading) return new ContextAssistanceApiError(code, "Guard could not check your Codex config. Try again in a moment.");
   return new ContextAssistanceApiError(code, "Guard could not change your Codex config. Nothing was changed.");
 }
 
@@ -32,7 +33,7 @@ async function call(init: RequestInit, signal?: AbortSignal): Promise<CodexLeanS
   const timeout = AbortSignal.timeout(12_000);
   const response = await fetchWithGuardAuth(PATH, { ...init, cache: "no-store", signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
   const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) throw failure(response.status, body);
+  if (!response.ok) throw failure(response.status, body, init.method === "GET");
   return parsed(body);
 }
 
