@@ -412,7 +412,7 @@
                           "required_flags": [
                             "--dry-run"
                           ],
-                          "required_flags_in_all_arguments": false,
+                          "required_flags_in_all_arguments": true,
                           "required_option_values": [],
                           "subcommands": [
                             "run",
@@ -659,7 +659,7 @@
                           "required_flags": [
                             "--help"
                           ],
-                          "required_flags_in_all_arguments": false,
+                          "required_flags_in_all_arguments": true,
                           "required_option_values": [],
                           "subcommands": [
                             "run",
@@ -844,7 +844,7 @@
                           "required_flags": [
                             "-h"
                           ],
-                          "required_flags_in_all_arguments": false,
+                          "required_flags_in_all_arguments": true,
                           "required_option_values": [],
                           "subcommands": [
                             "run",
@@ -4255,7 +4255,7 @@
                           "required_flags": [
                             "--help"
                           ],
-                          "required_flags_in_all_arguments": false,
+                          "required_flags_in_all_arguments": true,
                           "required_option_values": [],
                           "subcommands": [
                             "run",
@@ -4486,7 +4486,7 @@
                           "required_flags": [
                             "-h"
                           ],
-                          "required_flags_in_all_arguments": false,
+                          "required_flags_in_all_arguments": true,
                           "required_option_values": [],
                           "subcommands": [
                             "run",
@@ -5853,6 +5853,136 @@
       "expected_action": "review",
       "expected_effective_segments": [],
       "id": "run-pairwise-without-judge-not-matched",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "llm-search-eval comment gate.md -- --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-dry-run-after-terminator",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uv run llm-search-eval comment -- --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-uv-run-dry-run-after-terminator",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uv run --no-sync llm-search-eval comment gate.md -- --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-uv-run-options-dry-run-after-terminator",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uvx llm-search-eval comment -- --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-uvx-dry-run-after-terminator",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uv tool run llm-search-eval@0.5.0 comment -- --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-uv-tool-run-dry-run-after-terminator",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "llm-search-eval comment -- --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-help-after-terminator",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uv run llm-search-eval comment -- --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-uv-run-help-after-terminator",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uvx llm-search-eval comment -- -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-uvx-help-short-after-terminator",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uv run llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --judge openai=gpt-4o-mini -- --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-uv-run-help-after-terminator",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uv tool run llm-search-eval run --judge openai=gpt-4o-mini -- -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-uv-tool-run-help-after-terminator",
       "rule_id": "command.llm-search-eval.judge"
     }
   ]

@@ -406,7 +406,7 @@
                     "required_flags": [
                       "--dry-run"
                     ],
-                    "required_flags_in_all_arguments": false,
+                    "required_flags_in_all_arguments": true,
                     "required_option_values": [],
                     "subcommands": [
                       "run",
@@ -653,7 +653,7 @@
                     "required_flags": [
                       "--help"
                     ],
-                    "required_flags_in_all_arguments": false,
+                    "required_flags_in_all_arguments": true,
                     "required_option_values": [],
                     "subcommands": [
                       "run",
@@ -838,7 +838,7 @@
                     "required_flags": [
                       "-h"
                     ],
-                    "required_flags_in_all_arguments": false,
+                    "required_flags_in_all_arguments": true,
                     "required_option_values": [],
                     "subcommands": [
                       "run",
@@ -4249,7 +4249,7 @@
                     "required_flags": [
                       "--help"
                     ],
-                    "required_flags_in_all_arguments": false,
+                    "required_flags_in_all_arguments": true,
                     "required_option_values": [],
                     "subcommands": [
                       "run",
@@ -4480,7 +4480,7 @@
                     "required_flags": [
                       "-h"
                     ],
-                    "required_flags_in_all_arguments": false,
+                    "required_flags_in_all_arguments": true,
                     "required_option_values": [],
                     "subcommands": [
                       "run",
