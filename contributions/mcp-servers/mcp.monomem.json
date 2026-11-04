@@ -3,7 +3,7 @@
   "id": "mcp.monomem",
   "version": "1.0.0",
   "name": "Monomem",
-  "description": "Self-hosted shared memory for AI coding agents: one SQLite file on the user's machine, shared by every connected tool. Each note carries a server-stamped writer, version history and undo. Reads and ordinary saves keep Guard's usual handling; deleting, replacing, merging, purging history, changing trust or quarantine, and queueing or approving tasks are gated on review. Off until you turn it on.",
+  "description": "Self-hosted shared memory for AI coding agents: one SQLite file on the user's machine, shared by every connected tool. Each note carries a server-stamped writer, version history and undo. Reads and ordinary saves keep Guard's usual handling; forgetting, replacing, merging, purging history, changing trust or quarantine, and queueing or approving tasks are gated on review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -68,12 +68,12 @@
     "https://www.npmjs.com/package/monomem"
   ],
   "saferAlternatives": [
-    "Every tool reads or writes only the local SQLite store; nothing is sent off the machine and no model is called. The server binds 127.0.0.1 by default and ships no tunnel.",
+    "Every tool reads or writes only the local SQLite store and no model is called. The one optional exception is semantic search: MONOMEM_EMBED_URL defaults to a local Ollama endpoint (localhost:11434); if an operator points it at a remote host, note and search text are sent there and Monomem prints a warning. The HTTP server binds 127.0.0.1 by default and ships no tunnel.",
     "A default install registers only ten tools (state_*, catch_up and the supersede preview/confirm/undo trio). The rest appear only when MONOMEM_TOOLS opts them in.",
-    "written_by is stamped by the server from the authenticated token, never from tool input. Give each agent its own scoped read/write token to tell writers apart.",
-    "Every write is linted: likely secrets are refused, and prompt-injection text is quarantined until an admin reviews it. memory_quarantine releases or drops held writes, so it stays on review.",
-    "Replacing a note is a two-step preview then confirm, and memory_supersede_undo reverses it. state_delete removes the note text from the database file, so it stays on review.",
+    "This entry is the stdio launch, which runs as the local operator with no token: every write is stamped written_by \"stdio\", and clients sharing it are not told apart. Over stdio the operator tools (memory_quarantine, trust_policy, memory_history_purge, memory_consolidate, task_approve) are refused unless MONOMEM_STDIO_ADMIN_TOOLS=1. Per-agent scoped tokens, with written_by stamped from the token, apply to the HTTP server (monomem serve).",
+    "Every write is linted under the default MONOMEM_LINT policy: known secret formats are refused, text that looks like prompt injection is quarantined until an operator reviews it, and bare high-entropy strings are stored with a warning. MONOMEM_LINT can loosen this (for example warn), so the guarantee holds only for the default policy.",
+    "Replacing a note is a two-step preview then confirm, and memory_supersede_undo reverses it. state_delete forgets rather than erases: the note is hidden from every agent read and its search vectors are dropped, and an operator can restore it. Permanent removal is the operator's CLI command (monomem delete); SQLite's secure_delete is on, but older copies can remain in the WAL file or in backups until those are rewritten. It stays on review because it hides memory from every connected agent.",
     "task_put can queue a command task for the separately run, unpublished command runner, and task_approve lets it run; both stay on review.",
-    "This entry matches npx monomem mcp (npx -y monomem@1.0.4 mcp as written by monomem setup). A node <path>/cli.js mcp launch, or cmd /c npx on Windows, keeps Guard's normal handling."
+    "This entry matches npx monomem mcp (npx -y monomem@<version> mcp as written by monomem setup). The catalog's package-launcher example shows only npx -y monomem; the mcp subcommand is required. A node <path>/cli.js mcp launch, or cmd /c npx on Windows, keeps Guard's normal handling."
   ]
 }
