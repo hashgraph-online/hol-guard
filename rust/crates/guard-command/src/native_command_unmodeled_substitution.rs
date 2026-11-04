@@ -245,7 +245,12 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
             _ => word.push(character),
         }
     }
-    programs.extend(value_consumers(text, &assigned)?);
+    // The rewrite read never records an assignment, so this reader is reached
+    // only by the reviewability read and the `Arguments` negatives stay exactly
+    // where they were.
+    if !assigned.is_empty() {
+        programs.extend(value_consumers(text, &assigned)?);
+    }
     Some(BoundedSubstitutions {
         text: out,
         programs,
@@ -332,7 +337,7 @@ fn expands_a_name(piece: &str, names: &BTreeSet<String>) -> bool {
 /// own.
 fn value_consumers(text: &str, names: &BTreeSet<String>) -> Option<BTreeSet<String>> {
     let mut consumers = BTreeSet::new();
-    for piece in statements(text) {
+    for piece in statements(text)? {
         if !expands_a_name(&piece, names) {
             continue;
         }
@@ -367,10 +372,25 @@ fn value_consumers(text: &str, names: &BTreeSet<String>) -> Option<BTreeSet<Stri
 /// `printf "(%s)" "$version"` is one statement whose program is `printf`.
 /// Splitting on the parenthesis cut it in half and left a piece whose first
 /// word was quoting, so the receiver that owns the value was lost.
-fn statements(text: &str) -> Vec<String> {
+///
+/// A `#` that opens a word starts a comment the shell runs nothing from, so
+/// the rest of the line is dropped rather than read as a statement whose
+/// program is `#`. Text whose quoting never closes is `None`: an open quote
+/// swallows every separator after it, and the piece holding the value would
+/// carry words belonging to statements that are not its own.
+fn statements(text: &str) -> Option<Vec<String>> {
     let mut pieces = vec![String::new()];
-    let (mut single, mut double, mut escaped) = (false, false, false);
+    let (mut single, mut double, mut escaped, mut comment) = (false, false, false, false);
+    let mut word_start = true;
     for character in text.chars() {
+        if comment {
+            if character == '\n' {
+                comment = false;
+                pieces.push(String::new());
+                word_start = true;
+            }
+            continue;
+        }
         if single {
             single = character != '\'';
         } else if escaped {
@@ -380,18 +400,24 @@ fn statements(text: &str) -> Vec<String> {
                 '\\' => escaped = true,
                 '\'' if !double => single = true,
                 '"' => double = !double,
+                '#' if !double && word_start => {
+                    comment = true;
+                    continue;
+                }
                 '\n' | ';' | '&' | '|' | '(' | ')' if !double => {
                     pieces.push(String::new());
+                    word_start = true;
                     continue;
                 }
                 _ => {}
             }
         }
+        word_start = !single && !double && character.is_whitespace();
         if let Some(piece) = pieces.last_mut() {
             piece.push(character);
         }
     }
-    pieces
+    (!single && !double).then_some(pieces)
 }
 
 /// The program a substitution's result reaches, or `None` when this text does
@@ -489,8 +515,12 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     // either from the walk reader, and both are required, so neither
     // `rg -- "-exec" src` nor `grep -r find src` is mistaken for a walk.
     let named = named_words(inner);
+    // `gfind` and `/opt/homebrew/bin/gnufind` run the same walk, so the walk
+    // reader judges every program whose name ends in `find` and lets it refuse
+    // the ones it does not recognise. A `-exec` that no walker could be running
+    // -- `rg -l -- "-exec" src` -- is ordinary text.
     let walks = flow == ValueFlow::Assignments
-        && named.contains("find")
+        && named.iter().any(|name| name.ends_with("find"))
         && super::EXEC_ACTIONS
             .iter()
             .any(|action| named.contains(*action));

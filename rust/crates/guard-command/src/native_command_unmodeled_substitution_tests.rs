@@ -503,3 +503,44 @@ fn ordinary_text_that_looks_like_a_find_action_is_not_a_walk() {
         assert!(reviewable_substitutions(command).is_none(), "{command}");
     }
 }
+
+#[test]
+fn a_comment_is_not_read_as_a_receiver() {
+    // The shell runs nothing from a `#` to the end of the line. Reading the
+    // comment as a statement took `#` for the program that receives the value
+    // and dropped the real receiver, so the owner check never saw it.
+    let command = r#"id=$(cat id) # keep $id for gh pr view"#;
+    let bounded = reviewable_substitutions(command).unwrap();
+    assert!(bounded.programs.contains("cat"), "{command}");
+    assert!(!bounded.programs.contains("#"), "{command}");
+    // A `#` that opens a word only inside a quoted one is ordinary text.
+    let command = r##"id=$(cat id); printf "#%s" "$id""##;
+    let bounded = reviewable_substitutions(command).unwrap();
+    assert!(bounded.programs.contains("printf"), "{command}");
+}
+
+#[test]
+fn text_whose_quoting_never_closes_is_not_read() {
+    // An open quote swallows every separator after it, so the piece holding
+    // the value carries words from statements that are not its own and the
+    // first of them is read as the receiver.
+    for command in [
+        r#"id=$(cat id); echo ' ; gh pr view "$id""#,
+        r#"id=$(cat id); echo " ; gh pr view $id"#,
+    ] {
+        assert!(reviewable_substitutions(command).is_none(), "{command}");
+    }
+}
+
+#[test]
+fn a_walk_under_another_name_is_still_read_as_a_walk() {
+    // `gfind` is the same walk under the spelling Homebrew installs. Keying
+    // the walk reader on the literal word `find` let the program an `-exec`
+    // runs past both that reader and the interpreter screen.
+    for command in [
+        r#"latest=$(gfind . -exec node run.js ';'); printf '%s' "$latest""#,
+        r#"latest=$(/opt/homebrew/bin/gfind . -exec node run.js ';'); printf '%s' "$latest""#,
+    ] {
+        assert!(reviewable_substitutions(command).is_none(), "{command}");
+    }
+}
