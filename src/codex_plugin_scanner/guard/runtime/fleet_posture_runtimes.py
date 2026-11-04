@@ -36,6 +36,20 @@ RUNTIMES_TTL_SECONDS = 3600
 MAX_RUNTIMES = 64
 # The native request parser refuses wider arrays; long lists cross in chunks.
 _NATIVE_JSON_WIDTH = 4096
+_MAX_UNRESOLVED_LAUNCHES = 10_000
+_MAX_ADVISORY_IDS = 16
+_MAX_ADVISORY_ID_CHARS = 128
+_RUNTIME_ROW_KEYS = (
+    "family",
+    "version",
+    "identity_assurance",
+    "executable_sha256",
+    "os",
+    "arch",
+    "location_state",
+    "reason",
+    "path",
+)
 
 
 def runtimes_section(
@@ -149,16 +163,39 @@ def project_runtime_posture(
 
     from ..native_runner_authority import native_runner_authority
 
-    request = dict(posture)
-    for key in ("runtimes", "unresolved_launches"):
-        values = request.get(key)
-        request[key] = _chunks(values) if isinstance(values, list) else None
+    # Only what the section reads crosses, so a large posture cannot push the
+    # request past the resident's frame limit: one runtime past the cap still
+    # marks the section partial, and unresolved launches are only counted.
+    request = {key: posture.get(key) for key in ("status", "error", "coverage", "candidate_limit_reached")}
+    runtimes = posture.get("runtimes")
+    rows = [_runtime_row(row) for row in runtimes if isinstance(row, Mapping)] if isinstance(runtimes, list) else None
+    request["runtimes"] = None if rows is None else _chunks(rows[: MAX_RUNTIMES + 1])
+    unresolved = posture.get("unresolved_launches")
+    count = min(len(unresolved), _MAX_UNRESOLVED_LAUNCHES) if isinstance(unresolved, list) else None
+    request["unresolved_launches"] = None if count is None else _chunks([None] * count)
     answer = native_runner_authority(
         "fleet_runtime_posture",
         {"posture": request, "hash_key": hash_key.decode("utf-8")},
         guard_home,
     )
     return cast("dict[str, object]", answer)
+
+
+def _runtime_row(row: Mapping[str, Any]) -> dict[str, object]:
+    """The fields of one runtime the section reads, with its lists reduced to what it keeps."""
+    projected: dict[str, object] = {key: row.get(key) for key in _RUNTIME_ROW_KEYS if key in row}
+    launched_by = row.get("launched_by")
+    if isinstance(launched_by, list):
+        harnesses = (entry.get("harness") for entry in launched_by if isinstance(entry, Mapping))
+        projected["launched_by"] = [
+            {"harness": harness} for harness in dict.fromkeys(harnesses) if isinstance(harness, str)
+        ]
+    matches = row.get("advisory_matches")
+    if isinstance(matches, list):
+        ids = (entry.get("advisory_id") if isinstance(entry, Mapping) else entry for entry in matches)
+        kept = (value for value in ids if isinstance(value, str) and 0 < len(value) <= _MAX_ADVISORY_ID_CHARS)
+        projected["advisory_matches"] = list(dict.fromkeys(kept))[:_MAX_ADVISORY_IDS]
+    return projected
 
 
 def _chunks(values: list[Any]) -> list[list[Any]]:
