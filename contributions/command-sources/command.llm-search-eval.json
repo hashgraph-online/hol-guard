@@ -161,7 +161,13 @@
                   "--package"
                 ],
                 "inverse_flag_pairs": [],
-                "leading_options_with_values": [],
+                "leading_options_with_values": [
+                  "--directory",
+                  "--project",
+                  "--cache-dir",
+                  "--config-file",
+                  "--color"
+                ],
                 "options_with_values": [
                   "--repo",
                   "--pr",
@@ -484,7 +490,13 @@
                   "--package"
                 ],
                 "inverse_flag_pairs": [],
-                "leading_options_with_values": [],
+                "leading_options_with_values": [
+                  "--directory",
+                  "--project",
+                  "--cache-dir",
+                  "--config-file",
+                  "--color"
+                ],
                 "options_with_values": [
                   "--queries",
                   "-q",
@@ -719,7 +731,13 @@
                   "--package"
                 ],
                 "inverse_flag_pairs": [],
-                "leading_options_with_values": [],
+                "leading_options_with_values": [
+                  "--directory",
+                  "--project",
+                  "--cache-dir",
+                  "--config-file",
+                  "--color"
+                ],
                 "options_with_values": [
                   "--queries",
                   "-q",

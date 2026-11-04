@@ -167,7 +167,13 @@
                         "--package"
                       ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
+                      "leading_options_with_values": [
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color"
+                      ],
                       "options_with_values": [
                         "--repo",
                         "--pr",
@@ -490,7 +496,13 @@
                         "--package"
                       ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
+                      "leading_options_with_values": [
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color"
+                      ],
                       "options_with_values": [
                         "--queries",
                         "-q",
@@ -725,7 +737,13 @@
                         "--package"
                       ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
+                      "leading_options_with_values": [
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color"
+                      ],
                       "options_with_values": [
                         "--queries",
                         "-q",
@@ -1355,6 +1373,19 @@
       "rule_id": "command.llm-search-eval.comment"
     },
     {
+      "command": "uv -q run llm-search-eval comment gate.md --pr 42",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-uv-quiet-run",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
       "command": "uvx llm-search-eval comment gate.md --pr 42",
       "disabled_permissions": [],
       "enabled_extensions": [
@@ -1637,6 +1668,67 @@
         0
       ],
       "id": "judge-uv-run",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uv -q run llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --judge openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-uv-quiet-run",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uv --quiet run llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl -s b=b.jsonl --pairwise-judge openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-uv-quiet-long-run-pairwise",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uv --directory eval run llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --judge openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-uv-directory-run",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uv -q run llm-search-eval estimate -q q.jsonl -p p.jsonl -s a=a.jsonl --judge openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "estimate-uv-quiet-run-not-matched",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uv -q run llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --qrels qrels.tsv",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "run-uv-quiet-run-gold-labels-only",
       "rule_id": "command.llm-search-eval.judge"
     },
     {
