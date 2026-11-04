@@ -65,9 +65,9 @@ const python = { ...catalog.interpreter_builds[0], qualification: "local_candida
 assert.match(cigarPythonBlock(catalog, python)!, /local development candidate/);
 const data: CigarVersionsData = { catalog, updates, interpreters: [], jobs: [], installations: [], state };
 const builds = renderToStaticMarkup(<CigarVersionBuildsPanel data={data} status={state} disabled={false} selectionDisabled={false} onAction={noAction} />);
-assert.match(builds, /No Python interpreter registered for this host/);
+assert.match(builds, /No Python set up yet/);
 assert.match(builds, /disabled="">Prepare this build/);
-assert.match(builds, /Build identity/);
+assert.match(builds, /Build details/);
 const preferences = renderToStaticMarkup(<CigarUpdatePreferencesPanel value={updates} builds={catalog.builds} disabled={false} onAction={noAction} />);
 assert.match(preferences, /notifications and automatic preparation are not available/);
 assert.match(preferences, /aria-disabled="true"[^>]*><span[^>]*>Notify</);
