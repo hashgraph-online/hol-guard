@@ -263,18 +263,15 @@ fn verdict(
     let settled = |prior: usize, later: &crate::CommandSegmentV1| {
         let segment = segments[prior];
         // A step that changes shell state carries into the read: an
-        // assignment, `export`, `source` or `printf -v` can name the
-        // configuration Git reads. The proofs below answer for what a step
-        // writes to disk, not for what it leaves in the shell, so they do not
-        // settle one. `cd` is excluded: the directory checks above account
-        // for it. An arithmetic expansion can assign too (`$((PATH=10))`),
-        // whatever command word it sits beside.
-        if segment.text.contains("$((")
-            || segment.text.contains("$[")
+        // assignment, `export`, `source`, `printf -v` or an arithmetic
+        // expansion (`$((PATH=10))`) can name the configuration Git reads.
+        // The proofs below answer for what a step writes to disk, not for
+        // what it leaves in the shell. `cd` is checked above instead.
+        if ["$((", "$["].iter().any(|form| segment.text.contains(form))
             || segment
-            .environment_names
-            .iter()
-            .any(|name| !crate::command_compatibility::inert_git_environment_name(name))
+                .environment_names
+                .iter()
+                .any(|name| !crate::command_compatibility::inert_git_environment_name(name))
             || (segment.executable.as_deref() != Some("cd")
                 && super::control_flow_flatten::command_word_changes_shell_state(&segment.text))
         {

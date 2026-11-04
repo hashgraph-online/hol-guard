@@ -349,6 +349,16 @@ pub(super) fn exact_safe_segment_with_context(
                 && matches!(segment.arguments.as_slice(), [target] if safe_directory_target(target))
                 && super::directory_targets::drive_targets_quoted(segment)
         }
+        // `printf -v NAME` assigns a shell variable rather than printing, and
+        // a later step, such as a Git read, can take its configuration from it.
+        "printf"
+            if segment
+                .arguments
+                .first()
+                .is_some_and(|argument| argument.starts_with("-v")) =>
+        {
+            false
+        }
         "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" => {
             super::glob_words::printed_globs_listable(model, segment, context)
         }

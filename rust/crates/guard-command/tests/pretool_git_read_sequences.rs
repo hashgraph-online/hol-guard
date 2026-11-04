@@ -464,6 +464,8 @@ fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
         // one for the read, so neither is a step that only prints.
         "printf -v GIT_CONFIG_GLOBAL '/tmp/evil'; git status --short",
         "GIT_CONFIG_GLOBAL=/tmp/evil cat package.json; git status --short",
+        // An arithmetic expansion assigns as it prints.
+        "cat package.json $((PATH=10)); git status --short",
     ] {
         assert_ne!(
             action(&home, &repository, disguised),
