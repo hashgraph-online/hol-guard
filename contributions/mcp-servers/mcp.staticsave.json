@@ -32,19 +32,19 @@
   "tools": [
     {
       "name": "get_account_info",
-      "state": "allow"
+      "state": "inherit"
     },
     {
       "name": "list_folders",
-      "state": "allow"
+      "state": "inherit"
     },
     {
       "name": "list_files",
-      "state": "allow"
+      "state": "inherit"
     },
     {
       "name": "create_temporary_file",
-      "state": "allow"
+      "state": "inherit"
     },
     {
       "name": "create_folder",
