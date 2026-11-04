@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 from . import native_inventory_url_redaction as _native_url
 from .inventory_contract_constants import (
@@ -16,6 +17,8 @@ from .inventory_contract_constants import (
 # dict or list is split by member, so neither the request nor the answer nears
 # the resident's frame limits even when every string is escaped or redacted.
 _NATIVE_VALUE_BUDGET = 128 * 1024
+# Redaction can lengthen a value several times over; the answer must still fit.
+_METADATA_BUDGET = 256 * 1024
 
 
 def redact_local_path(path: str | Path, *, home_dir: Path | None = None) -> str:
@@ -40,11 +43,6 @@ def redact_url(value: str) -> str:
     return _native_url.redact_url(value)
 
 
-def classify_endpoint_host(value: str | None) -> str:
-    """Classify an endpoint host without making a network request."""
-    return _native_url.classify_endpoint_host(value)
-
-
 def _prefetch_export_redactions(
     artifacts: tuple[object, ...],
     cisco_runs: tuple[object, ...] = (),
@@ -55,28 +53,22 @@ def _prefetch_export_redactions(
     """Answer every redaction a snapshot export makes, in batched requests.
 
     The per-value redaction below then reads the pass's answers instead of
-    asking the resident once per string. Paths dominate that count: every
-    metadata string that is not a URL is offered to the resident as a path, so
-    batching only the URLs left the walk one round trip per string.
+    asking the resident once per string, and each artifact's metadata is
+    redacted in batches of whole artifacts rather than once per artifact.
 
     A value this walk misses is still redacted; it only costs its own request.
     """
     urls: list[str] = []
-    hosts: list[str] = []
     paths: list[str] = []
     commands: list[str] = []
+    # An MCP server's tools carry its URL and command outside the metadata.
     for artifact in artifacts:
         url = getattr(artifact, "url", None)
         if isinstance(url, str) and url:
             urls.append(url)
-            hosts.append(url)
-        config_path = getattr(artifact, "config_path", None)
-        if isinstance(config_path, str) and config_path:
-            paths.append(config_path)
         command = getattr(artifact, "command", None)
         if isinstance(command, str) and command:
             commands.append(command)
-        _collect_metadata_values(getattr(artifact, "metadata", None), urls, paths)
     for run in cisco_runs:
         if not _is_supported_scanner_run(run):
             continue
@@ -89,36 +81,12 @@ def _prefetch_export_redactions(
                 paths.append(file_path)
     _native_url.prefetch(
         urls,
-        hosts,
         paths=paths,
         commands=commands,
         home_dir=home_dir,
         workspace_dir=workspace_dir,
     )
-
-
-def _collect_metadata_values(value: object, urls: list[str], paths: list[str]) -> None:
-    """Gather the strings ``_sanitize_paths`` will redact, by how it redacts them.
-
-    This mirrors that walk exactly, including the sensitive keys it replaces
-    without asking: a value gathered here that the walk never reaches would be
-    a request made for nothing, and one it reaches but this misses is the
-    unbatched round trip this exists to avoid.
-    """
-    if isinstance(value, Path):
-        paths.append(str(value))
-    elif isinstance(value, dict):
-        for key, item in value.items():
-            if not _is_sensitive_key(str(key)):
-                _collect_metadata_values(item, urls, paths)
-    elif isinstance(value, (list, tuple)):
-        for item in value:
-            _collect_metadata_values(item, urls, paths)
-    elif isinstance(value, str):
-        if "://" in value:
-            urls.append(value)
-        else:
-            paths.append(value)
+    _prefetch_artifact_metadata(artifacts, _native_url.roots(home_dir, workspace_dir))
 
 
 def _safe_source_detail(run: object) -> str:
@@ -178,52 +146,69 @@ def _safe_artifact_metadata(
     home_dir: Path,
     workspace_dir: Path | None,
 ) -> dict[str, object]:
-    """Restrict exported artifact metadata to supported fields and sanitized values."""
-    artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
-    raw_metadata = getattr(artifact, "metadata", {})
-    metadata = _sanitize_paths(raw_metadata if isinstance(raw_metadata, dict) else {}, home_dir, workspace_dir)
-    if not isinstance(metadata, dict):
-        metadata = {}
-    from .trust_metadata_boundary import separate_untrusted_adapter_trust_metadata
+    """Restrict exported artifact metadata to supported fields and sanitized values.
 
-    metadata = separate_untrusted_adapter_trust_metadata(metadata)
-    config_path = getattr(artifact, "config_path", None)
-    command = getattr(artifact, "command", None)
-    url = getattr(artifact, "url", None)
-    transport = getattr(artifact, "transport", None)
-    if isinstance(config_path, str) and config_path:
-        metadata["configPath"] = _redact_known_path(config_path, home_dir, workspace_dir)
-    if isinstance(command, str) and command:
-        metadata["command"] = _redact_command_value(command, home_dir, workspace_dir)
-    if isinstance(url, str) and url:
-        metadata["url"] = redact_url(url)
-        metadata["endpointHostClass"] = classify_endpoint_host(url)
-    if isinstance(transport, str) and transport:
-        metadata["transport"] = transport
-    metadata["artifactType"] = artifact_type
+    The native runtime redacts every value, moves adapter-authored trust claims
+    aside and adds the artifact's own fields; a pass usually has the answer.
+    """
+    entry, roots = _metadata_entry(artifact), _native_url.roots(home_dir, workspace_dir)
+    cache = _native_url.pass_answers()
+    text = cache.get(_metadata_key(entry, roots)) if cache is not None else None
+    metadata = json.loads(text if isinstance(text, str) else _native_artifact_metadata([entry], roots)[0])
+    if not isinstance(metadata, dict):
+        raise _native_url.NativeInventoryUrlRedactionError("native_inventory_url_redaction_unavailable")
     return metadata
 
 
-def _sanitize_paths(value: object, home_dir: Path, workspace_dir: Path | None) -> object:
-    """Recursively sanitize private path values in supported metadata structures."""
-    if isinstance(value, Path):
-        return _redact_known_path(str(value), home_dir, workspace_dir)
+def _prefetch_artifact_metadata(artifacts: tuple[object, ...], roots: dict[str, str | None]) -> None:
+    """Answer every artifact's metadata in requests of at most 4096 artifacts and 256 KiB."""
+    cache = _native_url.pass_answers()
+    if cache is None:
+        return
+    batches: list[list[str]] = [[]]
+    size = 0
+    for entry in dict.fromkeys(map(_metadata_entry, artifacts)):
+        if batches[-1] and (len(batches[-1]) == 4096 or size + len(entry) > _METADATA_BUDGET):
+            batches.append([])
+            size = 0
+        batches[-1].append(entry)
+        size += len(entry)
+    for batch in filter(None, batches):
+        for entry, text in zip(batch, _native_artifact_metadata(batch, roots), strict=True):
+            cache[_metadata_key(entry, roots)] = text
+
+
+def _metadata_key(entry: str, roots: dict[str, str | None]) -> tuple[str, object]:
+    return "artifact_metadata", (entry, *roots.values())
+
+
+def _metadata_entry(artifact: object) -> str:
+    """The artifact fields its exported metadata is built from, as JSON text that keeps key order."""
+    raw = getattr(artifact, "metadata", {})
+    fields = {key: getattr(artifact, key, None) for key in ("config_path", "command", "url", "transport")}
+    return json.dumps(
+        {
+            "metadata": _wire(raw if isinstance(raw, dict) else {}),
+            "artifact_type": str(getattr(artifact, "artifact_type", "unknown")),
+            **{key: value if isinstance(value, str) else None for key, value in fields.items()},
+        }
+    )
+
+
+def _wire(value: object) -> object:
+    """The value as the export saw it: string keys, tuples as lists, a path as its text."""
     if isinstance(value, dict):
-        redacted: dict[str, object] = {}
-        for key, item in value.items():
-            string_key = str(key)
-            if _is_sensitive_key(string_key):
-                redacted[string_key] = item if isinstance(item, bool) else "present_redacted"
-                continue
-            redacted[string_key] = _sanitize_paths(item, home_dir, workspace_dir)
-        return redacted
+        return {str(key): _wire(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
-        return [_sanitize_paths(item, home_dir, workspace_dir) for item in value]
-    if isinstance(value, str):
-        if "://" in value:
-            return redact_url(value)
-        return _redact_known_path(value, home_dir, workspace_dir)
-    return value
+        return [_wire(item) for item in value]
+    return str(value) if isinstance(value, Path) else value
+
+
+def _native_artifact_metadata(entries: list[str], roots: dict[str, str | None]) -> list[str]:
+    texts = _native_export_redaction({"op": "artifact_metadata", **roots, "artifacts": entries}).get("metadata")
+    if not isinstance(texts, list) or len(texts) != len(entries) or not all(isinstance(text, str) for text in texts):
+        raise _native_url.NativeInventoryUrlRedactionError("native_inventory_url_redaction_unavailable")
+    return cast("list[str]", texts)
 
 
 def _redact_known_path(value: str, home_dir: Path, workspace_dir: Path | None) -> str:
