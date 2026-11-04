@@ -12,13 +12,13 @@ export async function contextSharingFlow(page: Page, state: IntegrationState, sa
   const seed = state.seeded.context_assistance;
   const status = () => contextStatus(state);
   await page.goto("/cigar?section=runtime");
-  await page.getByRole("button", { name: "Refresh runtime list", exact: true }).click();
+  await page.getByRole("button", { name: "Refresh versions", exact: true }).click();
   for (const name of ["Use CIGAR on this machine", "Context for AI apps", "Share context between paired AI connections"]) {
     const toggle = page.getByRole("switch", { name, exact: true });
     if (await toggle.getAttribute("aria-checked") !== "true") await toggle.click();
   }
   await save(page, state);
-  await page.getByRole("button", { name: "Start context assistance", exact: true }).click();
+  await page.getByRole("button", { name: "Start CIGAR", exact: true }).click();
   await expect.poll(async () => (await status()).runtime?.shared_compile_verified, { timeout: 30_000 }).toBe(true);
   await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
   writeFileSync(resolve(state.workspace, "README.md"), "Shared deployment workspace uses a reviewed release process.\n");

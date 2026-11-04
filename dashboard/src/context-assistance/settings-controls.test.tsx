@@ -33,23 +33,26 @@ assert.doesNotMatch(everyday, />Advanced</, "Advanced is one area on the CIGAR p
 const pending = { ...ready, effective_enabled: false, availability: "checking" as const,
   runtime: null, job: { id: "4", operation: "activate" as const, phase: "verifying" as const } };
 assert.equal(buttonDisabled(render({ status: pending }), "Turn off now"), false);
-assert.equal(buttonDisabled(render({ status: pending }), "Start context assistance"), true,
+assert.equal(buttonDisabled(render({ status: pending }), "Start CIGAR"), true,
   "a pending native job cannot be started twice");
 
 const requested = { ...ready, effective_enabled: false, availability: "unavailable" as const,
   runtime: null, diagnostic: "runtime_not_verified" };
 assert.doesNotMatch(render({ status: requested }), /Ready\./);
-assert.equal(buttonDisabled(render({ status: requested, dirty: true }), "Start context assistance"), true);
-assert.equal(buttonDisabled(render({ status: requested, dirty: false }), "Start context assistance"), false);
+assert.equal(buttonDisabled(render({ status: requested, dirty: true }), "Start CIGAR"), true);
+assert.equal(buttonDisabled(render({ status: requested, dirty: false }), "Start CIGAR"), false);
+const leanFirst = render({ lean: createElement("p", null, "Lean sessions slot") });
+assert.ok(leanFirst.indexOf("Lean sessions slot") < leanFirst.indexOf(">This computer<"),
+  "the long-session switch sits right under the status card, ahead of the form");
+const raw = ready.preferences.runtime_id;
+assert.ok(raw && everyday.indexOf(raw) > everyday.indexOf(">More settings<"), "the raw runtime ID is a detail, kept under More settings");
 const noRuntime = render({ installations: [] });
 assert.match(noRuntime, /CIGAR is not set up on this computer yet\. Turn on CIGAR at the top of this page/);
-assert.doesNotMatch(noRuntime, /Switch to another CIGAR build/, "with nothing installed there is nothing to switch to");
-assert.doesNotMatch(render({ installations: null }), /Switch to another CIGAR build/, "before the list loads, or after it fails, there is nothing known to switch to");
 assert.doesNotMatch(render(), /every command/, "CIGAR's note promises nothing about how Guard decides commands");
 const blank = { ...ready.preferences, runtime_id: "" };
 const unselected = render({ value: blank, status: { ...ready, preferences: blank }, installations: [] });
-assert.doesNotMatch(unselected, />Check selected runtime</, "nothing to check before a runtime is chosen");
-assert.match(unselected, />None yet</);
+assert.doesNotMatch(unselected, />Check CIGAR</, "nothing to check before a runtime is chosen");
+assert.match(unselected, />Not set up yet</);
 assert.match(render({ status: null, error: "Status is unavailable." }), /role="alert"/);
 assert.equal(buttonDisabled(render({ status: null }), "Turn off now"), false,
   "lost availability cannot remove opt-out for an enabled saved preference");
@@ -61,8 +64,8 @@ const restricted = parseContextAssistanceStatus(receipt.restriction_observation)
 const managed = render({ value: restricted.preferences, status: restricted, locked: true });
 assert.match(managed, /preference is saved/);
 assert.equal(buttonDisabled(managed, "Turn off now"), false);
-assert.equal(buttonDisabled(managed, "Check selected runtime"), true);
-assert.equal(buttonDisabled(managed, "Start context assistance"), true);
+assert.equal(buttonDisabled(managed, "Check CIGAR"), true);
+assert.equal(buttonDisabled(managed, "Start CIGAR"), true);
 
 function executionSwitch(html: string) {
   const id = html.match(/<p id="([^"]+)"[^>]*>Associate native context with execution<\/p>/)?.[1];

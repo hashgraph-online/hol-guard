@@ -189,6 +189,7 @@ export function ContextAssistanceSettings(props: Props) {
   const controls = <ContextSettingsControls value={value} status={status} installations={installations}
     loading={loading} busy={busy} disabled={props.disabled} locked={props.locked}
     dirty={dirty} error={workspace ? null : error}
+    lean={workspace ? <CodexLeanSessions gate={props.gate ?? null} disabled={props.disabled} /> : undefined}
     onChange={props.onChange} onRefresh={() => void refresh()}
     onChooseRuntime={() => void perform("installations")} onControl={(action) => void perform(action)}
     onManageVersions={workspace ? () => {
@@ -205,7 +206,7 @@ export function ContextAssistanceSettings(props: Props) {
   return workspace ? <><CigarWorkspace status={status} installations={installations} loading={loading}
     busy={busy} disabled={props.disabled} dirty={dirty} error={error} setup={setup} allowFiles={allowFiles}
     stopAvailable={Boolean(value?.enabled || saved?.enabled || status?.job || status?.effective_enabled || error)}
-    controls={<div className="space-y-8">{controls}<CodexLeanSessions gate={props.gate ?? null} disabled={props.disabled} /></div>}
+    controls={controls}
     access={access} data={props.data}
     versions={<CigarVersionsPanel status={status} disabled={props.disabled || busy} locked={props.locked}
       dirty={dirty} gate={props.gate ?? null} captureStatus={captureVersionStatus} />}

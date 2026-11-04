@@ -4,7 +4,7 @@ Status: locally implemented and fixture-browser checked 2026-10-28; partial P8. 
 
 ## Selection stays with its owner
 
-Runtime & preferences now displays the native selected installation and offers Choose or switch runtime. The button opens Versions & updates through Guard's existing same-document navigation event, retaining the form, connection parameters and browser history. It performs no preparation or selection. Feature, source and resource preferences remain editable in their existing form. Runtime IDs are no longer offered as ordinary draft options. A draft left by an older UI can restore just the current runtime choice without discarding other preference edits.
+Runtime & preferences now displays the native selected installation and offers Change version. The button opens Versions & updates through Guard's existing same-document navigation event, retaining the form, connection parameters and browser history. It performs no preparation or selection. Feature, source and resource preferences remain editable in their existing form. Runtime IDs are no longer offered as ordinary draft options. A draft left by an older UI can restore just the current runtime choice without discarding other preference edits.
 
 The workspace listens to the shared dashboard-location event and popstate. The native owner still verifies, prepares and explicitly commits every selection exposed by this UI. UI routing does not make the older native initial/clear/reset entry points complete; their remaining data-choice/recovery work stays required.
 

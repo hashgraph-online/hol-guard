@@ -32,7 +32,7 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
   await expect(walkthrough).toBeVisible();
   const toggle = page.getByRole("switch", { name: "Use CIGAR on this machine" });
   await expect(toggle).toHaveAttribute("aria-checked", "false");
-  await page.getByRole("button", { name: "Refresh runtime list" }).click();
+  await page.getByRole("button", { name: "Refresh versions" }).click();
   await expect(page.getByLabel("Local runtime", { exact: true })).toHaveValue(String(seed.runtimeId));
   await expect(toggle).toBeEnabled();
   await toggle.focus();
@@ -191,12 +191,12 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     await page.getByRole("button", { name: /^Advanced/ }).click();
     await page.getByRole("tab", { name: "Settings", exact: true }).click();
     await expect(toggle).toHaveAttribute("aria-checked", "false");
-    await page.getByRole("button", { name: "Refresh runtime list" }).click();
+    await page.getByRole("button", { name: "Refresh versions" }).click();
     await expect(page.getByLabel("Local runtime", { exact: true })).toHaveValue(String(seed.runtimeId));
     await expect(toggle).toBeEnabled();
     await toggle.click();
     await saveWithProof(page, state);
-    await page.getByRole("button", { name: "Start context assistance" }).click();
+    await page.getByRole("button", { name: "Start CIGAR" }).click();
     await expect.poll(async () => (await status()).effective_enabled, { timeout: 30_000 }).toBe(true);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
