@@ -453,9 +453,13 @@ fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
         "#!/bin/sh\ngit config core.pager true\n",
     )
     .unwrap();
+    // ripgrep can run a program of the caller's choosing on what it searches,
+    // and that program can rewrite Git's configuration before the read.
     for disguised in [
         "./echo hello; git status --short",
         "./echo hello && git status --short --branch",
+        "rg --pre ./echo needle package.json; git log -1",
+        "rg --pre=./echo needle package.json && git status --short",
     ] {
         assert_ne!(
             action(&home, &repository, disguised),

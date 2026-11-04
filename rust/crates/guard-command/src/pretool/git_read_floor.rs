@@ -254,26 +254,18 @@ fn verdict(
             || super::symlink_writes::current_branch_read(segment, read_context)
     });
     // This floor asks one question of a step before a Git read: could it have
-    // changed the configuration that read runs under? A step that opens the
-    // paths it is given only to read them answers no, wherever those paths
-    // are. The proofs above answer a wider question that also covers what a
-    // read may disclose, so a reader whose operand sits outside the workspace
-    // -- a sibling checkout, a file under `$HOME` -- failed them and was
-    // counted as a step that could have rewritten Git's configuration. It
-    // writes nothing at all. `creates_nothing` is the narrow write proof: it
-    // refuses an output redirect, a wrapper chain and a `PATH` override, and
-    // admits only programs with no option that names a file to write. `cd` is
-    // excluded because moving the directory is exactly what the checks above
-    // this one account for.
+    // changed the configuration that read runs under? A reader whose operand
+    // sits outside the workspace fails the disclosure proofs above, yet writes
+    // nothing. `creates_nothing` is the narrow write proof: no output redirect,
+    // wrapper chain or `PATH` override, and only programs with no option that
+    // names a file to write, by bare name (`./echo` is a local program). `cd`
+    // moves the directory the checks above account for, and `rg` can run a
+    // program (`--pre`, `--search-zip`, an inherited `RIPGREP_CONFIG_PATH`)
+    // that rewrites Git's configuration, so neither settles a step here.
     let writes_nothing = |segment: &crate::CommandSegmentV1| {
         segment.executable.as_deref().is_some_and(|executable| {
-            // Only a bare name reaches this arm. `creates_nothing` admits a
-            // builtin by its basename, so a path-qualified spelling such as
-            // `./echo` would carry a local program of any behaviour -- one
-            // that can write Git's configuration -- in under a builtin's
-            // name. A bare name is the shell's own lookup, which the segment
-            // proof below already screens for an overridden `PATH`.
-            super::executable_basename(executable) == executable && executable != "cd"
+            super::executable_basename(executable) == executable
+                && !matches!(executable, "cd" | "rg")
         }) && !segment.path_overridden
             && segment.wrapper_chain.is_empty()
             && segment.environment_names.is_empty()
