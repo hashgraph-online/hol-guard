@@ -16,7 +16,7 @@ export function CigarRuntimeSelection(props: Props) {
     <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
       <div className="min-w-0 flex-[1_1_16rem]">
         <p className="guard-settings-body font-medium text-brand-dark">Selected runtime</p>
-        <p className="mt-0.5 break-all font-mono text-sm text-brand-dark/80">{id || "No runtime selected"}</p>
+        <p className="mt-0.5 break-all font-mono text-sm text-brand-dark/80">{id || "None yet"}</p>
         {selected ? <p className="guard-settings-caption mt-0.5 text-slate-500">{selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : ""}Python {selected.python_version.join(".")} · {platformLabel(selected.platform)} · {installationLabel(selected.qualification)}</p> : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -25,8 +25,8 @@ export function CigarRuntimeSelection(props: Props) {
         {props.installations !== null ? <button type="button" className={versionQuiet} disabled={props.disabled} onClick={props.onRefresh}>Refresh runtime list</button> : null}
       </div>
     </div>
-    {props.installations?.length === 0 ? <p className="text-sm text-slate-600">No registered CIGAR runtime is available in this profile. Python 3.14 may already be installed; use Updates to inspect approved builds and registration options.</p> : null}
-    <p className="guard-settings-caption text-slate-500">Choose, prepare and switch runtimes in Updates. A separate selection job protects your current runtime and data.</p>
+    {props.installations?.length === 0 ? <p className="text-sm text-slate-600">CIGAR is not set up on this computer yet. Turn on CIGAR at the top of this page and Guard sets it up for you.</p> : null}
+    {props.installations?.length === 0 ? null : <p className="guard-settings-caption text-slate-500">Switch to another CIGAR build in Updates. Your current build and data stay as they are until the new one is ready.</p>}
     {pending ? <div role="status" className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900"><p>A pending runtime choice is in this form. Use the current selection before preparing a different runtime in Updates.</p>
       <button type="button" className={versionButton} disabled={props.disabled} onClick={props.onRestore}>Use current selection</button></div> : null}
   </div>;

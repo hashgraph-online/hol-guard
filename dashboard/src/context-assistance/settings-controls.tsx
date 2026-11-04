@@ -88,7 +88,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
               <button type="button" className={versionPrimary} disabled={checkDisabled || !status.effective_preferences.enabled}
                 onClick={() => props.onControl("activate")}>Start context assistance</button>
             ) : null}
-            <button type="button" className={versionButton} disabled={checkDisabled} onClick={() => props.onControl("recheck")}>Check selected runtime</button>
+            {value?.runtime_id ? <button type="button" className={versionButton} disabled={checkDisabled} onClick={() => props.onControl("recheck")}>Check selected runtime</button> : null}
             {!stopped ? <button type="button" className={versionButton} disabled={disabled} onClick={() => props.onControl("stop")}>Turn off now</button> : null}
             <button type="button" aria-label="Refresh runtime status" title="Refresh runtime status" disabled={disabled || props.loading} onClick={props.onRefresh}
               className="inline-flex size-11 items-center justify-center rounded-lg text-brand-dark/70 hover:bg-brand-dark/[0.05] hover:text-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-50">

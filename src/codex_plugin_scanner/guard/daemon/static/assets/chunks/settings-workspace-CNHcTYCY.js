@@ -3227,7 +3227,7 @@ function CigarRuntimeSelection(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-x-6 gap-y-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-[1_1_16rem]", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-body font-medium text-brand-dark", children: "Selected runtime" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 break-all font-mono text-sm text-brand-dark/80", children: id2 || "No runtime selected" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 break-all font-mono text-sm text-brand-dark/80", children: id2 || "None yet" }),
         selected ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "guard-settings-caption mt-0.5 text-slate-500", children: [
           selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : "",
           "Python ",
@@ -3243,8 +3243,8 @@ function CigarRuntimeSelection(props) {
         props.installations !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionQuiet, disabled: props.disabled, onClick: props.onRefresh, children: "Refresh runtime list" }) : null
       ] })
     ] }),
-    props.installations?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No registered CIGAR runtime is available in this profile. Python 3.14 may already be installed; use Updates to inspect approved builds and registration options." }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption text-slate-500", children: "Choose, prepare and switch runtimes in Updates. A separate selection job protects your current runtime and data." }),
+    props.installations?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "CIGAR is not set up on this computer yet. Turn on CIGAR at the top of this page and Guard sets it up for you." }) : null,
+    props.installations?.length === 0 ? null : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption text-slate-500", children: "Switch to another CIGAR build in Updates. Your current build and data stay as they are until the new one is ready." }),
     pending ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A pending runtime choice is in this form. Use the current selection before preparing a different runtime in Updates." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onRestore, children: "Use current selection" })
@@ -3315,7 +3315,7 @@ function ContextSettingsControls(props) {
             children: "Start context assistance"
           }
         ) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: checkDisabled, onClick: () => props.onControl("recheck"), children: "Check selected runtime" }),
+        value?.runtime_id ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: checkDisabled, onClick: () => props.onControl("recheck"), children: "Check selected runtime" }) : null,
         !stopped ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled, onClick: () => props.onControl("stop"), children: "Turn off now" }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
