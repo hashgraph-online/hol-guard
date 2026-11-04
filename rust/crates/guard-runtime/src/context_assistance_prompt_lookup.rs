@@ -78,8 +78,11 @@ pub(super) fn lookup(
     let prompt = hashed(&request.query);
     let words = request.words.clone();
     let earlier = request.earlier.clone();
+    // One cutoff for every wait, so the read keeps its reserve however long
+    // the lane took.
+    let cutoff = short_of(deadline, Instant::now());
     let rendered = |flight: &Flight| {
-        answer(service, flight, short_of(deadline, Instant::now()))
+        answer(service, flight, cutoff)
             .map(|picked| picked.and_then(|found| render(&found.0, &found.1, &words, &earlier)))
             .ok_or(Miss::Pending)
     };
@@ -96,7 +99,7 @@ pub(super) fn lookup(
     if let Some(flight) = flight {
         return rendered(&flight);
     }
-    let lane = match service.prompt_lane(guard_home, short_of(deadline, Instant::now())) {
+    let lane = match service.prompt_lane(guard_home, cutoff) {
         Ok(lane) => lane,
         Err(LaneMiss::Starting) => {
             warm_when_ready(service.lane_watch(), key, request);

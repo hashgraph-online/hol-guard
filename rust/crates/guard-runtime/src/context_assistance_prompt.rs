@@ -9,7 +9,7 @@
 //! Only an allowed prompt gets context, and only for harnesses that show
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
-use crate::context_assistance_engine::{admissible_paths, quick_excerpts, PickedExcerpt};
+use crate::context_assistance_engine::{project_context_on, quick_excerpts, PickedExcerpt};
 use crate::context_assistance_prompt_files::{
     asks_for_tests, candidates, phrases, project_root, terms, test_file,
 };
@@ -173,28 +173,17 @@ fn attach(
     let home = store.guard_home();
     // CIGAR still starting, busy with another prompt, or still loading the
     // project, as on a session's first prompt: Guard reads the matched files
-    // CIGAR would accept and shows their best parts itself, naming only files
-    // that passed the same checks. Project context is checked again after the
-    // read, so a stop meanwhile sends nothing.
-    let read = || {
+    // CIGAR would accept and shows their best parts itself, or names them when
+    // no part fits. Project context is checked again after the read, so a stop
+    // meanwhile sends nothing.
+    let own_read = || {
         service
             .prompt_context_chosen()
-            .then(|| quick_excerpts(home, &root, harness, &found, &words, MAX_OTHER_FILES, until))
-            .and_then(|(picked, names)| render(&picked, &names, &words, &earlier))
-            .filter(|_| service.prompt_context_chosen())
+            .then(|| read_matched(home, &root, harness, &found, &words, &earlier, until))
+            .flatten()
+            .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness))
     };
-    // No time left to read: the matched files CIGAR would accept still save
-    // the agent a search, as long as project context is still on.
-    let listed = || {
-        service
-            .prompt_context_chosen()
-            .then(|| admissible_paths(home, &root, harness, &found, MAX_OTHER_FILES, until))
-            .and_then(|paths| matched(&paths))
-    };
-    let context = match lookup(service, home, request, deadline) {
-        Ok(context) => context,
-        Err(Miss::Starting | Miss::Pending) => read().or_else(listed),
-    };
+    let context = answered(lookup(service, home, request, deadline), own_read);
     let Some(context) = context else {
         return;
     };
@@ -202,6 +191,33 @@ fn attach(
         seen::remember(session, &context.shown);
     }
     add_context(response, &context.text);
+}
+
+/// What a prompt gets: CIGAR's answer, or Guard's own read when CIGAR is
+/// starting, busy or late.
+fn answered(
+    lookup: Result<Option<Rendered>, Miss>,
+    own_read: impl FnOnce() -> Option<Rendered>,
+) -> Option<Rendered> {
+    match lookup {
+        Ok(context) => context,
+        Err(Miss::Starting | Miss::Pending) => own_read(),
+    }
+}
+
+/// Guard's own read of the matched files CIGAR would accept: their best
+/// parts, or the names of the files it checked when no part fits.
+fn read_matched(
+    home: &Path,
+    root: &Path,
+    harness: &str,
+    found: &[String],
+    words: &[String],
+    earlier: &[Span],
+    until: Instant,
+) -> Option<Rendered> {
+    let (picked, names) = quick_excerpts(home, root, harness, found, words, MAX_OTHER_FILES, until);
+    render(&picked, &names, words, earlier).or_else(|| matched(&names))
 }
 
 /// The harness session this prompt belongs to, when its payload names one.

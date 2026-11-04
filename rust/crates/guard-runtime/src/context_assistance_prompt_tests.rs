@@ -320,20 +320,80 @@ fn an_excerpt_too_big_to_fit_gives_way_to_the_next_one() {
     assert!(rendered.len() <= MAX_CONTEXT_CHARS);
 }
 
-/// The file list that stands in while CIGAR starts goes through the engine's
-/// own checks. A fresh Guard home has project context off for every
-/// workspace, so nothing is named, even for a readable, ordinary file.
-#[test]
-fn the_starting_fallback_names_nothing_a_workspace_has_not_allowed() {
+const ON: &str = "[context_assistance]\nenabled=true\nruntime_id='selected'\n\
+[context_assistance.features]\nagent_context=true\n\
+[context_assistance.sources]\nworkspace_documents=true\nsource_set_id='selected-workspaces'\n";
+
+/// A Guard home with `config`, and a project holding `files`.
+fn project(
+    config: &str,
+    files: &[(&str, &str)],
+) -> (tempfile::TempDir, tempfile::TempDir, std::path::PathBuf) {
     let home = tempfile::tempdir().unwrap();
+    std::fs::write(home.path().join("config.toml"), config).unwrap();
     let project = tempfile::tempdir().unwrap();
     let root = crate::context_assistance_prompt_files::plain(
         std::fs::canonicalize(project.path()).unwrap(),
     );
-    std::fs::write(root.join("header.ts"), "export const header = 1;\n").unwrap();
-    let found = words(&["header.ts"]);
-    let later = Instant::now() + Duration::from_secs(5);
-    for app in ["claude-code", "Claude Code"] {
-        assert!(admissible_paths(home.path(), &root, app, &found, 8, later).is_empty());
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    for (path, text) in files {
+        std::fs::write(root.join(path), text).unwrap();
     }
+    (home, project, root)
+}
+
+/// Guard's own read for a prompt about `terms` that matched `found`.
+fn own_read(home: &Path, root: &Path, found: &[&str], terms: &[&str]) -> Option<String> {
+    let later = Instant::now() + Duration::from_secs(5);
+    let (found, terms) = (words(found), words(terms));
+    read_matched(home, root, "codex", &found, &terms, &[], later).map(|read| read.text)
+}
+
+/// A prompt sent while CIGAR is busy with another, or still loading the
+/// project as on a session's first prompt, gets the matched code from
+/// Guard's own read instead of a list of file names.
+#[test]
+fn a_prompt_cigar_is_busy_with_gets_code_not_a_file_list() {
+    let cart = "export function cartTotal() {\n  return 0;\n}\n";
+    let (home, _project, root) = project(ON, &[("src/cart.ts", cart)]);
+    let read = || {
+        let text = own_read(home.path(), &root, &["src/cart.ts"], &["cart", "total"])?;
+        Some(Rendered {
+            text,
+            shown: Vec::new(),
+        })
+    };
+    for miss in [Miss::Starting, Miss::Pending] {
+        let text = answered(Err(miss), read).unwrap().text;
+        assert!(text.contains("src/cart.ts (lines 1-"), "{text}");
+        assert!(text.contains("cartTotal"), "{text}");
+        assert!(!text.starts_with(MATCHED_HEADER), "{text}");
+    }
+    assert!(
+        answered(Ok(None), read).is_none(),
+        "CIGAR's own answer stands"
+    );
+}
+
+/// When no part of a matched file holds the prompt's words, as when only
+/// its name matched, the read names the files it already checked rather
+/// than leaving the prompt with nothing.
+#[test]
+fn a_read_that_finds_no_fitting_part_names_the_files_it_checked() {
+    let (home, _project, root) = project(ON, &[("src/cart.ts", "export const items = [];\n")]);
+    let read = own_read(home.path(), &root, &["src/cart.ts"], &["cart"]).unwrap();
+    assert_eq!(read, format!("{MATCHED_HEADER} src/cart.ts"));
+}
+
+/// Guard's own read goes through the engine's checks. A fresh Guard home has
+/// project context off for every workspace, so nothing is read or named,
+/// even for a readable, ordinary file.
+#[test]
+fn guard_reads_nothing_a_workspace_has_not_allowed() {
+    let (home, _project, root) = project("", &[("src/header.ts", "export const header = 1;\n")]);
+    assert_eq!(
+        own_read(home.path(), &root, &["src/header.ts"], &["header"]),
+        None
+    );
+    assert!(!project_context_on(home.path(), &root, "codex"));
 }
