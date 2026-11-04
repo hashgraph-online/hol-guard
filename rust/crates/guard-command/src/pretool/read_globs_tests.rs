@@ -198,3 +198,50 @@ fn a_bare_pattern_still_refuses_an_option_or_a_secret() {
 
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A pattern the shell matches nothing with hands the reader the word as it
+/// was typed, so the open fails and nothing is read: a directory that is not
+/// there, and one that holds no match, both clear the read. A match of any
+/// kind, and a command that could plant one first, keep today's answer.
+#[test]
+fn an_unmatched_pattern_reads_nothing() {
+    let root =
+        std::path::Path::new("/tmp").join(format!("guard-glob-unmatched-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let home = root.join("home");
+    let workspace = home.join("project");
+    std::fs::create_dir_all(workspace.join("sub")).unwrap();
+    std::fs::create_dir_all(workspace.join(".git")).unwrap();
+    std::fs::write(workspace.join("sub/keep.txt"), "keep\n").unwrap();
+    let home = std::fs::canonicalize(&home).unwrap();
+    let workspace = std::fs::canonicalize(&workspace).unwrap();
+    let reader = super::super::super::PathContext {
+        home_dir: home.to_str(),
+        cwd: workspace.to_str(),
+        creates_nothing: true,
+        ..Default::default()
+    };
+    let writer = super::super::super::PathContext {
+        creates_nothing: false,
+        ..reader
+    };
+
+    // A directory the command never created: the agent guessed at a layout
+    // the checkout does not have.
+    assert!(super::bounded_glob_file_read_target("nope/*", reader));
+    // A directory that is there but holds no match.
+    assert!(super::bounded_glob_file_read_target("sub/*.md", reader));
+    // The same two words from a command that could plant a match first.
+    assert!(!super::bounded_glob_file_read_target("nope/*", writer));
+    assert!(!super::bounded_glob_file_read_target("sub/*.md", writer));
+
+    // A real match is still read, and still proved by expanding the pattern.
+    assert!(super::bounded_glob_file_read_target("sub/*.txt", writer));
+
+    // A match that is a directory is not a file read, and the pattern did
+    // match, so neither proof stands.
+    std::fs::create_dir_all(workspace.join("sub/nested")).unwrap();
+    assert!(!super::bounded_glob_file_read_target("sub/*ed", reader));
+
+    let _ = std::fs::remove_dir_all(&root);
+}

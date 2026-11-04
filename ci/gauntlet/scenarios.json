@@ -765,6 +765,19 @@
       ]
     },
     {
+      "id": "omp-native-cat-temporary-scratch-patterns",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "I stage throwaway files in a scratch folder under the temporary directory, and I am not sure which of them are there. Print the sources of its optional source folder and any notes files it holds: run each listed command once, in order, exactly as written, and tell me what each one printed, including when it printed nothing. Change nothing.",
+      "commands": [
+        "cat {{stage}}/signup-funnel/src/*",
+        "cat {{stage}}/*.md"
+      ]
+    },
+    {
       "id": "omp-native-git-readonly-nested-repo",
       "expectation": "allow",
       "oracle": "native-tools",

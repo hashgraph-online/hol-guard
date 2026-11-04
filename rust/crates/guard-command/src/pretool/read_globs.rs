@@ -35,7 +35,71 @@ pub(super) fn bounded_glob_file_read_target(
     value: &str,
     context: super::super::PathContext<'_>,
 ) -> bool {
-    glob_file_matches(value, context).is_some()
+    glob_file_matches(value, context).is_some() || unmatched_pattern_read(value, context)
+}
+
+/// A pattern the shell can match nothing with, so the reader is handed the
+/// word exactly as it was typed and its open fails with `ENOENT`.
+///
+/// Agents name an optional directory of a checkout they did not write
+/// (`cat /tmp/repro/test/*`), and nothing is read when that directory holds
+/// no match or is not there at all: the same answer `absent_listing_operand`
+/// already gives a listing of a path that does not exist. The place the
+/// pattern names still has to be one this crate would read or list, so the
+/// word cannot spell a hidden or credential location, and `creates_nothing`
+/// says no other step of the same command plants an entry the pattern would
+/// match before the read runs.
+///
+/// Matching here is the same superset the expanded proof uses, so a hidden
+/// entry a `dotglob` shell would match, a non-ASCII name and an unreadable
+/// directory all keep the review rather than counting as no match.
+fn unmatched_pattern_read(value: &str, context: super::super::PathContext<'_>) -> bool {
+    if !context.creates_nothing {
+        return false;
+    }
+    let (directory, pattern, bare) = match value.rsplit_once('/') {
+        Some((directory, pattern)) => (directory, pattern, false),
+        None => (".", value, true),
+    };
+    // A bare word a reader would take for an option, or an `awk` operand for
+    // a variable assignment, is not a read; the expanded proof screens the
+    // same two shapes on each name it passes on.
+    if (bare && (value.starts_with('-') || value.contains('=')))
+        || directory.is_empty()
+        || directory.starts_with('-')
+        || directory.contains(['*', '?', '[', ']', '{', '}', '\\'])
+        || !literal_pattern(pattern)
+        || !super::verified_path_context(context.home_dir, context.cwd)
+        || !(super::bounded_read_target(directory, context.home_dir, context.cwd, true)
+            || super::super::listing_reads::absent_listing_operand(directory, context))
+    {
+        return false;
+    }
+    let Some(base) = directory_path(directory, context) else {
+        return false;
+    };
+    let entries = match std::fs::read_dir(&base) {
+        Ok(entries) => entries,
+        // Nothing is at the directory, so the pattern has nothing to match.
+        // Any other error leaves the question open and keeps the review.
+        Err(error) => return error.kind() == std::io::ErrorKind::NotFound,
+    };
+    for (inspected, entry) in entries.enumerate() {
+        let Ok(entry) = entry else {
+            return false;
+        };
+        if inspected >= MAX_ENTRIES {
+            return false;
+        }
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            return false;
+        };
+        if wildcard_matches(pattern.as_bytes(), name.as_bytes()) {
+            return false;
+        }
+    }
+    true
 }
 
 /// The words the shell passes on for `value` -- `<directory>/<name>`, or a
