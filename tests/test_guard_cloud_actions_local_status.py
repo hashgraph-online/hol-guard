@@ -90,9 +90,14 @@ def _connection_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(status_module, "_live_pairing_checker", lambda _store: None)
 
 
+_LIVE_PAIRING_CHECKER = status_module._live_pairing_checker  # pyright: ignore[reportPrivateUsage]
+
+
 def _refresh_raising(monkeypatch: pytest.MonkeyPatch, error: Exception) -> list[bool]:
+    """Use the real connection check, with a renewal that fails with `error`."""
     from codex_plugin_scanner.guard.runtime import runner
 
+    monkeypatch.setattr(status_module, "_live_pairing_checker", _LIVE_PAIRING_CHECKER)
     calls: list[bool] = []
 
     def resolve(_store: object, *, force_refresh: bool = False, **_kwargs: object) -> dict[str, object]:
@@ -106,7 +111,6 @@ def _refresh_raising(monkeypatch: pytest.MonkeyPatch, error: Exception) -> list[
 def test_a_revoked_connection_asks_to_reconnect(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.runtime import runner
 
-    monkeypatch.undo()
     store = _pair(monkeypatch, tmp_path, report="on")
     calls = _refresh_raising(
         monkeypatch,
@@ -145,7 +149,6 @@ def _not_proof_of_revocation() -> list[Exception]:
 def test_a_connection_check_that_cannot_tell_keeps_the_service_answer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: Exception
 ) -> None:
-    monkeypatch.undo()
     store = _pair(monkeypatch, tmp_path, report="on")
     _refresh_raising(monkeypatch, error)
 
@@ -155,7 +158,6 @@ def test_a_connection_check_that_cannot_tell_keeps_the_service_answer(
 
 
 def test_an_unreachable_guard_cloud_skips_the_connection_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.undo()
     store = _pair(monkeypatch, tmp_path, report="on")
     calls = _refresh_raising(monkeypatch, RuntimeError("not reached"))
 
