@@ -281,6 +281,23 @@ def test_daemon_check_before_connect_is_refused(daemon: Any, monkeypatch: pytest
     assert (status, payload["error"]) == (409, "not_paired")
 
 
+def test_daemon_answers_unavailable_when_the_native_runtime_cannot_read_the_check(
+    daemon: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, Any]:
+        raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    token = {"X-Guard-Token": daemon._server.auth_token}
+
+    for method in ("GET", "POST"):
+        status, payload = _request(daemon.port, "/v1/cloud-actions/status", method=method, headers=token)
+        assert (status, payload["error"]) == (503, "status_unavailable"), method
+        _assert_nothing_private(payload, tmp_path)
+
+
 def _pause_on_this_computer(home: Path) -> str:
     request_id = "req-local-pause"
     GuardStore(home).add_approval_request(

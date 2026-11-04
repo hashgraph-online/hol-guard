@@ -8,6 +8,10 @@ catalog identifiers and labels only, never command text. Python hands the
 resident the hint and the control view it already holds and shape-checks the
 answer; there is no Python evaluator and no fallback, so an unavailable
 resident means no recommendation.
+
+The same op labels the stored coverage hint, which extension matched which
+step, from that catalog. Coverage is advisory only: it changes nothing about
+what Guard allows, denies or asks, and the card it feeds has no approve button.
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 
 _LOGGER = logging.getLogger(__name__)
 RECOMMENDATION_SCHEMA = "guard.approval-extension-recommendation.v1"
+COVERAGE_SCHEMA: Final = "guard.approval-extension-coverage.v1"
 APPROVAL_EXTENSION_RECOMMENDATION_FEATURE: Final = "approval-extension-recommendation-v1"
 _TIMEOUT_SECONDS: Final = 3.0
 # The resident refuses a canonical request over 4 MiB; the envelope adds a
@@ -45,6 +50,7 @@ _RECOMMENDATION_FIELDS: Final = {
     "revision": int,
     "catalog_digest": str,
 }
+_COVERAGE_FIELDS: Final = {"schema": str, "catalog_digest": str, "compound": bool, "segments": list}
 _PERMISSION_FIELDS: Final = {
     "permission_id": str,
     "label": _OPT_STR,
@@ -200,4 +206,51 @@ def with_approval_extension_recommendation(
         recommendation = None
     if recommendation is not None:
         payload["extension_recommendation"] = recommendation
+    return payload
+
+
+def build_approval_extension_coverage(
+    approval: Mapping[str, object], *, guard_home: Path | None = None
+) -> dict[str, object] | None:
+    """Which extension matched which step of a pending request, as the resident labels it."""
+
+    if approval.get("status") != "pending":
+        return None
+    hint = approval.get("extension_allow_hint")
+    if not isinstance(hint, Mapping):
+        return None
+
+    def parse(payload: dict[str, Any]) -> dict[str, object] | None:
+        coverage = payload["coverage"]
+        if coverage is None:
+            return None
+        value = shape_fields(coverage, _COVERAGE_FIELDS, _invalid)
+        if value["schema"] != COVERAGE_SCHEMA or not value["segments"]:
+            raise _invalid()
+        return value
+
+    return _ask({"kind": "coverage", "hint": dict(hint)}, guard_home, {"coverage": (dict, type(None))}, parse)
+
+
+def with_approval_extension_coverage(
+    payload: dict[str, object],
+    approval: Mapping[str, object],
+    *,
+    include: bool,
+    guard_home: Path | None = None,
+) -> dict[str, object]:
+    """Add the coverage payload to a delivered approval; never fails the read."""
+
+    if not include:
+        return payload
+    try:
+        coverage = build_approval_extension_coverage(approval, guard_home=guard_home)
+    except NativeApprovalExtensionRecommendationError as error:
+        _LOGGER.warning("Extension coverage unavailable (%s)", error.code)
+        return payload
+    except (AttributeError, KeyError, RuntimeError, TypeError, ValueError) as error:
+        _LOGGER.warning("Extension coverage unavailable (%s)", type(error).__name__)
+        return payload
+    if coverage is not None:
+        payload["extension_coverage"] = coverage
     return payload

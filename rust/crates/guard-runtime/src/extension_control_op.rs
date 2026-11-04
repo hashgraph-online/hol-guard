@@ -119,6 +119,17 @@ fn decide(request: &ExtensionControlRequestV1) -> Result<ExtensionControlPayload
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(ExtensionControlPayloadV1::Resolve { scenarios })
         }
+        ExtensionControlQueryV1::Project {
+            registry,
+            layers,
+            authority_failure,
+            start,
+        } => crate::extension_control_projection_op::project(
+            registry,
+            layers,
+            authority_failure.as_deref(),
+            *start,
+        ),
         ExtensionControlQueryV1::SnapshotDigest {
             catalog_digest,
             health,
@@ -249,7 +260,7 @@ pub(crate) fn typed_layers(
         .map_err(|_| "native_extension_control_layer_invalid".to_owned())
 }
 
-fn resolve_scenario(
+pub(crate) fn resolve_scenario(
     registry: &RequestRegistry<'_>,
     scenario: &ExtensionControlScenarioV1,
 ) -> Result<ExtensionControlScenarioResultV1, String> {

@@ -90,11 +90,35 @@ pub(super) fn safe_column_arguments<'a>(
 /// One filter's option line: the flags that carry no value, the flags that
 /// do, and the long options spelled either way. Anything else is refused, so
 /// an option this screen has not read keeps the command under review.
-fn screen_options<'a>(
+pub(super) fn screen_options<'a>(
     arguments: &'a [String],
     operands: &mut Vec<&'a str>,
     reading_flags: &str,
     value_flags: &str,
+    reading_long: &[&str],
+    value_long: &[&str],
+) -> bool {
+    screen_options_with_optional(
+        arguments,
+        operands,
+        reading_flags,
+        value_flags,
+        "",
+        reading_long,
+        value_long,
+    )
+}
+
+/// The same screen for a filter with a flag whose value is attached or
+/// absent. `pr -s` carries its separator in the same word (`-s,`) or takes
+/// the default when nothing follows it, so it never reaches for the next
+/// word the way a flag that must carry a value does.
+pub(super) fn screen_options_with_optional<'a>(
+    arguments: &'a [String],
+    operands: &mut Vec<&'a str>,
+    reading_flags: &str,
+    value_flags: &str,
+    optional_value_flags: &str,
     reading_long: &[&str],
     value_long: &[&str],
 ) -> bool {
@@ -138,10 +162,11 @@ fn screen_options<'a>(
             }
             return false;
         }
-        if !screen_short_flags(
+        if !screen_short_flags_with_optional(
             &value[1..],
             reading_flags,
             value_flags,
+            optional_value_flags,
             &mut expecting_value,
         ) {
             return false;
@@ -158,6 +183,20 @@ pub(super) fn screen_short_flags(
     value_flags: &str,
     expecting_value: &mut bool,
 ) -> bool {
+    screen_short_flags_with_optional(cluster, reading_flags, value_flags, "", expecting_value)
+}
+
+/// One short cluster for a filter with a flag whose value is attached or
+/// absent. Such a flag ends the cluster either way: whatever follows it in
+/// the word is the value, and nothing following it means the default, so the
+/// next word stays an operand.
+pub(super) fn screen_short_flags_with_optional(
+    cluster: &str,
+    reading_flags: &str,
+    value_flags: &str,
+    optional_value_flags: &str,
+    expecting_value: &mut bool,
+) -> bool {
     if cluster.is_empty() {
         return false;
     }
@@ -171,6 +210,10 @@ pub(super) fn screen_short_flags(
     }
     let mut characters = cluster.chars();
     while let Some(flag) = characters.next() {
+        if optional_value_flags.contains(flag) {
+            let attached = characters.as_str();
+            return attached.is_empty() || safe_filter_value(attached);
+        }
         if reading_flags.contains(flag) {
             continue;
         }

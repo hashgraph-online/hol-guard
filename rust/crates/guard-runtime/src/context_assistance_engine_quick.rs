@@ -10,6 +10,44 @@ use std::time::Instant;
 
 /// Files read for one prompt, so the read stays inside the hook's budget.
 const MAX_FILES: usize = 3;
+/// Words that open a definition line, after any modifiers.
+const DEFINERS: [&str; 13] = [
+    "def ",
+    "class ",
+    "fn ",
+    "function ",
+    "func ",
+    "struct ",
+    "enum ",
+    "trait ",
+    "impl ",
+    "interface ",
+    "type ",
+    "mod ",
+    "module ",
+];
+/// Words that bind a value: a definition only at a file's top level, since
+/// inside a function they name a local.
+const BINDERS: [&str; 3] = ["const ", "let ", "var "];
+/// Marks that open and close a docstring, whose lines are text about the
+/// code, not definitions.
+const DOCSTRINGS: [&str; 2] = ["\"\"\"", "'''"];
+/// Prose files, whose lines read as words, not definitions.
+const PROSE: [&str; 6] = ["md", "markdown", "mdx", "txt", "rst", "adoc"];
+/// Modifiers that may come before a definer.
+const MODIFIERS: [&str; 11] = [
+    "export ",
+    "default ",
+    "pub ",
+    "pub(crate) ",
+    "pub(super) ",
+    "async ",
+    "static ",
+    "public ",
+    "private ",
+    "protected ",
+    "abstract ",
+];
 
 /// The project root a prompt may draw on: an agent app, a folder outside
 /// Guard's home, and agent context on with workspace files for that folder.
@@ -31,15 +69,75 @@ pub(super) fn said(text: &str, words: &[String]) -> usize {
     words.iter().filter(|w| text.contains(w.as_str())).count()
 }
 
-/// The part of `file` that holds the most of `words`, the earliest on a tie,
-/// with how many it holds. `None` when no part holds any.
+/// How many of `words` the text's definition lines name, leaving out lines
+/// inside a docstring or block comment.
+fn defined(text: &str, words: &[String]) -> usize {
+    let mut closer: Option<&str> = None;
+    let mut definitions = Vec::new();
+    for line in text.lines() {
+        closer = match closer {
+            Some(mark) => (!line.contains(mark)).then_some(mark),
+            None => {
+                if definition(line) {
+                    definitions.push(line);
+                }
+                opened(line)
+            }
+        };
+    }
+    said(&definitions.join("\n"), words)
+}
+
+/// The mark that closes a docstring or block comment `line` leaves open. A
+/// block comment opens only at the start of a line, so a `/*` inside a
+/// string such as a glob, or at the end of a line comment, opens nothing.
+fn opened(line: &str) -> Option<&'static str> {
+    let comment = line.trim_start().strip_prefix("/*");
+    if comment.is_some_and(|rest| !rest.contains("*/")) {
+        return Some("*/");
+    }
+    DOCSTRINGS
+        .into_iter()
+        .find(|mark| line.matches(mark).count() % 2 == 1)
+}
+
+/// A line that opens a function, type or top-level value definition.
+fn definition(line: &str) -> bool {
+    let top_level = !line.starts_with(char::is_whitespace);
+    let mut rest = line.trim_start();
+    while let Some(after) = MODIFIERS
+        .iter()
+        .find_map(|modifier| rest.strip_prefix(modifier))
+    {
+        rest = after;
+    }
+    DEFINERS.iter().any(|definer| rest.starts_with(definer))
+        || (top_level && BINDERS.iter().any(|binder| rest.starts_with(binder)))
+}
+
+/// Whether `path` names a prose file.
+fn prose(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| PROSE.contains(&extension.to_ascii_lowercase().as_str()))
+}
+
+/// The part of `file` that defines the most of `words`, then holds the most
+/// of them, the earliest on a tie, with how many it holds. A part that
+/// defines what the prompt asks about beats one that only mentions it, such
+/// as a module's opening comment. A prose file keeps to the word count.
+/// `None` when no part holds any.
 pub(super) fn best_part(file: &AdmittedFile, words: &[String]) -> Option<(usize, PickedExcerpt)> {
-    let (score, doc) = file
+    let code = !prose(Path::new(&file.relative_path));
+    let (_, score, doc) = file
         .documents
         .iter()
-        .map(|doc| (said(&doc.text, words), doc))
-        .filter(|(score, _)| *score > 0)
-        .max_by_key(|(score, doc)| (*score, std::cmp::Reverse(doc.start_line)))?;
+        .map(|doc| {
+            let names = if code { defined(&doc.text, words) } else { 0 };
+            (names, said(&doc.text, words), doc)
+        })
+        .filter(|(_, score, _)| *score > 0)
+        .max_by_key(|(names, score, doc)| (*names, *score, std::cmp::Reverse(doc.start_line)))?;
     let start = u64::from(doc.start_line);
     let lines = doc.text.lines().count().max(1) as u64;
     Some((

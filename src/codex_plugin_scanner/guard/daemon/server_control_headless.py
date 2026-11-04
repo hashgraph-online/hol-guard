@@ -437,8 +437,10 @@ class _HeadlessRoutes:
         }
 
     def _approval_with_extension_recommendation(self, approval: dict[str, object]) -> dict[str, object]:
-        from .approval_extension_coverage import with_approval_extension_coverage
-        from .approval_extension_recommendation import with_approval_extension_recommendation
+        from .approval_extension_recommendation import (
+            with_approval_extension_coverage,
+            with_approval_extension_recommendation,
+        )
 
         include = not self._is_hosted_dashboard_origin()
         api = getattr(self._daemon_server(), "extension_control_api", None)
@@ -465,7 +467,7 @@ class _HeadlessRoutes:
             include=True,
             guard_home=store.guard_home,
         )
-        payload = with_approval_extension_coverage(payload, hinted, registry=registry, include=True)
+        payload = with_approval_extension_coverage(payload, hinted, include=True, guard_home=store.guard_home)
         from ..approval_gate import public_config
         from .approval_connector_recommendation import safe_connector_recommendation
 

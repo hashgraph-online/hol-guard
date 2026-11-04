@@ -12,7 +12,8 @@
 //! extension-control mutation.
 //!
 //! A second query names which risk classes call for a caution, so the
-//! connector setup card and the extension card share one list.
+//! connector setup card and the extension card share one list. A third labels
+//! a stored coverage hint from the same catalog (`approval_extension_coverage`).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -98,9 +99,11 @@ fn evaluate_with_snapshot(
     // Bound and digest the request before any catalog work; an oversized
     // request has no digest to bind.
     let request_sha256 = bounded_digest(request)?;
-    // Only a recommend query reads a catalog; the caution list is constant.
+    // Only recommend and coverage queries read a catalog; the caution list is
+    // constant.
     let catalog = match request.query {
-        ApprovalExtensionRecommendationQueryV1::Recommend { .. } => {
+        ApprovalExtensionRecommendationQueryV1::Recommend { .. }
+        | ApprovalExtensionRecommendationQueryV1::Coverage { .. } => {
             admitted_catalog(read_snapshot())
         }
         ApprovalExtensionRecommendationQueryV1::CautionRiskClasses { .. } => None,
@@ -180,6 +183,12 @@ fn decide(
             let catalog = catalog.ok_or_else(|| CATALOG_UNAVAILABLE.to_owned())?;
             Ok(ApprovalExtensionRecommendationPayloadV1::Recommend {
                 recommendation: recommend(hint, registry_catalog_digest, snapshot, catalog)?,
+            })
+        }
+        ApprovalExtensionRecommendationQueryV1::Coverage { hint } => {
+            let catalog = catalog.ok_or_else(|| CATALOG_UNAVAILABLE.to_owned())?;
+            Ok(ApprovalExtensionRecommendationPayloadV1::Coverage {
+                coverage: crate::approval_extension_coverage::coverage(hint, catalog),
             })
         }
         ApprovalExtensionRecommendationQueryV1::CautionRiskClasses { risk_classes } => {

@@ -14,10 +14,19 @@ from .cloud_actions_status import (
     CloudActionsCheckBusyError,
     CloudActionsCheckedRecentlyError,
     CloudActionsNotPairedError,
+    CloudActionsStatusUnavailableError,
     check_cloud_actions,
 )
 
 _NO_STORE = {"Cache-Control": "no-store"}
+_UNAVAILABLE = {
+    "error": "status_unavailable",
+    "message": "Guard could not read the Cloud actions status on this computer.",
+}
+
+
+def write_cloud_actions_unavailable(handler: Any) -> None:
+    handler._write_json(_UNAVAILABLE, status=503, extra_headers=_NO_STORE)
 
 
 def handle_cloud_actions_check(handler: Any, payload: dict[str, object]) -> None:
@@ -54,6 +63,9 @@ def handle_cloud_actions_check(handler: Any, payload: dict[str, object]) -> None
             status=409,
             extra_headers=_NO_STORE,
         )
+        return
+    except CloudActionsStatusUnavailableError:
+        write_cloud_actions_unavailable(handler)
         return
     except OSError:
         handler._write_json(
