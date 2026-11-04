@@ -92,6 +92,7 @@ _rich_available = False
 if TYPE_CHECKING:
     from rich import box
     from rich.console import Console
+    from rich.markup import escape
     from rich.panel import Panel
     from rich.syntax import Syntax
     from rich.table import Table
@@ -102,6 +103,7 @@ else:
     try:
         from rich import box
         from rich.console import Console
+        from rich.markup import escape
         from rich.panel import Panel
         from rich.syntax import Syntax
         from rich.table import Table
@@ -109,6 +111,9 @@ else:
 
         _rich_available = True
     except ModuleNotFoundError:
+
+        def escape(markup: str) -> str:
+            return markup
 
         class _FallbackBox:
             SIMPLE_HEAD = "simple_head"
@@ -863,8 +868,9 @@ def _watch_revert_line(payload: Mapping[str, object]) -> str:
         return ""
     reverts_at = payload.get("watch_reverts_at")
     if isinstance(reverts_at, str) and reverts_at:
-        return f"\nwatch ends: {reverts_at} (protection turns back on)"
-    return f"\nwatch ends: never on its own; run `{_protection_restore_command(payload)}`"
+        return f"\nwatch ends: {escape(reverts_at)} (protection turns back on)"
+    # The panel parses Rich markup; a home path such as `~/[team]` must print as written.
+    return f"\nwatch ends: never on its own; run `{escape(_protection_restore_command(payload))}`"
 
 
 def _protection_restore_command(payload: Mapping[str, object]) -> str:

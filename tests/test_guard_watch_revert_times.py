@@ -102,6 +102,16 @@ def test_watch_restore_command_names_a_non_default_guard_home() -> None:
     assert "--guard-home '/srv/guard home'`" in absolute
 
 
+def test_watch_restore_command_prints_bracketed_home_literally() -> None:
+    from rich.console import Console
+
+    from codex_plugin_scanner.guard.cli.render import _watch_revert_line
+
+    console = Console(record=True, width=200)
+    console.print(_watch_revert_line({"protection": "watch", "guard_home": "/srv/[bold]team"}))
+    assert "--guard-home '/srv/[bold]team'" in console.export_text()
+
+
 def test_watch_stamp_repair_keeps_a_posture_saved_after_the_read(tmp_path: Path, monkeypatch: object) -> None:
     from datetime import datetime, timedelta, timezone
 
