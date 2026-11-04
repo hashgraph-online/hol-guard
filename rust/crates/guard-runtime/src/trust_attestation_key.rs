@@ -56,6 +56,10 @@ use zeroize::Zeroizing;
 
 use crate::daemon_lifecycle_text::py_strip;
 
+#[path = "trust_attestation_key_der.rs"]
+mod der;
+use der::{other_curve, pkcs8_curve, sec1_as_pkcs8, sec1_curve};
+
 const RSA_PSS_SHA256: &str = GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM;
 const ECDSA_P256_SHA256: &str = GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256;
 const KEY_FILE: &str = "trust_attestation_key.pem";
@@ -117,11 +121,13 @@ struct Signable {
 }
 
 /// A private key Guard can read. An EC key on a curve other than P-256 loads,
-/// as Python's loader accepts it, but signs nothing.
+/// as Python's loader accepts it, but signs nothing; only a P-384 one has a
+/// public key Guard can derive.
 enum PrivateKey {
     Rsa(Box<RsaPrivateKey>),
     P256(EcdsaKeyPair),
     OtherCurve(EcdsaKeyPair),
+    UnsupportedCurve,
 }
 
 enum Signer {
@@ -189,9 +195,10 @@ fn sign(
     payloads: &[Signable],
 ) -> Result<Value, &'static str> {
     let key = load_private_key(pem)?;
-    let public_key_pem = public_key_pem(&key)?;
-    let fingerprint = public_key_fingerprint(&public_key_pem);
+    let public_key_pem = public_key_pem(&key);
     let signer = signer(key, algorithm)?;
+    let public_key_pem = public_key_pem?;
+    let fingerprint = public_key_fingerprint(&public_key_pem);
     let mut attestations = Vec::with_capacity(payloads.len());
     for signable in payloads {
         let version = signable
@@ -235,7 +242,9 @@ fn signer(key: PrivateKey, algorithm: &str) -> Result<Signer, &'static str> {
         }
         (RSA_PSS_SHA256, _) => Err(MUST_BE_RSA),
         (ECDSA_P256_SHA256, PrivateKey::P256(pair)) => Ok(Signer::P256(pair)),
-        (ECDSA_P256_SHA256, PrivateKey::OtherCurve(_)) => Err(MUST_BE_P256),
+        (ECDSA_P256_SHA256, PrivateKey::OtherCurve(_) | PrivateKey::UnsupportedCurve) => {
+            Err(MUST_BE_P256)
+        }
         (ECDSA_P256_SHA256, PrivateKey::Rsa(_)) => Err(MUST_BE_EC),
         _ => Err(UNSUPPORTED_ALGORITHM),
     }
@@ -261,7 +270,7 @@ fn load_private_key(pem: &str) -> Result<PrivateKey, &'static str> {
         if let Ok(key) = RsaPrivateKey::from_pkcs8_der(&der) {
             return Ok(PrivateKey::Rsa(Box::new(key)));
         }
-        return ec_key(&der, &der);
+        return ec_key(&der, &der).or_else(|_| other_curve(pkcs8_curve(&der)));
     }
     if let Some(der) = pem_body(pem, PKCS1_LABEL) {
         return RsaPrivateKey::from_pkcs1_der(&der)
@@ -272,7 +281,8 @@ fn load_private_key(pem: &str) -> Result<PrivateKey, &'static str> {
         return ec_key(
             &sec1_as_pkcs8(&der, &P256_OID),
             &sec1_as_pkcs8(&der, &P384_OID),
-        );
+        )
+        .or_else(|_| other_curve(sec1_curve(&der)));
     }
     Err(KEY_UNREADABLE)
 }
@@ -294,34 +304,6 @@ fn ec_pair(
     random: &SystemRandom,
 ) -> Option<EcdsaKeyPair> {
     EcdsaKeyPair::from_pkcs8(algorithm, pkcs8, random).ok()
-}
-
-/// A SEC1 `ECPrivateKey` wrapped as the PKCS#8 document of `curve`; ring
-/// reads only PKCS#8 and rejects the document when its curve differs.
-fn sec1_as_pkcs8(sec1: &[u8], curve: &[u8]) -> Zeroizing<Vec<u8>> {
-    let mut algorithm = EC_PUBLIC_KEY_OID.to_vec();
-    algorithm.extend_from_slice(curve);
-    let mut body = Zeroizing::new(vec![0x02, 0x01, 0x00]);
-    push_der(&mut body, 0x30, &algorithm);
-    push_der(&mut body, 0x04, sec1);
-    let mut document = Zeroizing::new(Vec::new());
-    push_der(&mut document, 0x30, &body);
-    document
-}
-
-fn push_der(out: &mut Vec<u8>, tag: u8, content: &[u8]) {
-    out.push(tag);
-    let length = content.len().to_be_bytes();
-    let skip = length.iter().take_while(|byte| **byte == 0).count();
-    match u8::try_from(content.len()) {
-        Ok(short) if short < 0x80 => out.push(short),
-        _ => {
-            // At most eight length octets, so the count fits the low bits.
-            out.push(0x80 | u8::try_from(length.len() - skip).unwrap_or(0));
-            out.extend_from_slice(&length[skip..]);
-        }
-    }
-    out.extend_from_slice(content);
 }
 
 fn pem_body(pem: &str, label: &str) -> Option<Zeroizing<Vec<u8>>> {
@@ -357,6 +339,7 @@ fn public_key_pem(key: &PrivateKey) -> Result<String, &'static str> {
         PrivateKey::OtherCurve(pair) => {
             [&P384_SPKI_PREFIX[..], pair.public_key().as_ref()].concat()
         }
+        PrivateKey::UnsupportedCurve => return Err(KEY_UNREADABLE),
     };
     Ok(pem_text(PUBLIC_LABEL, &der))
 }

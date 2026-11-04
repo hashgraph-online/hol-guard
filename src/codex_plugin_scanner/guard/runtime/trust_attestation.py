@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import secrets
 from collections.abc import Mapping
@@ -26,6 +27,8 @@ _NATIVE_KEY_FEATURE = "native-trust-attestation-key-v1"
 _NATIVE_KEY_COMMAND = "trust-attestation-key"
 _NATIVE_KEY_OUTPUT_LIMIT = 16 * 1024 * 1024
 _NATIVE_KEY_TIMEOUT_SECONDS = 30.0
+# Payload bytes per sign request, leaving room under the 4 MiB native bound.
+_NATIVE_KEY_BATCH_BYTES = 3 * 1024 * 1024
 _NATIVE_KEY_UNAVAILABLE = "native_trust_attestation_key_unavailable"
 _NATIVE_KEY_INVALID = "native_trust_attestation_key_invalid"
 
@@ -122,7 +125,7 @@ def _resolve_persistent_trust_attestation_signing_config(
     restarts. Returns ``None`` if the key file cannot be created or read.
     """
     try:
-        answer = _native_key_answer({"op": "persistent", "guard_home": str(guard_home)})
+        answer = _native_key_answer({"op": "persistent", "guard_home": str(guard_home.absolute())})
     except ValueError:
         return None
     return _generated_signing_config(answer, active_key_id=active_key_id)
@@ -453,8 +456,28 @@ def _signed_attestations(
     config: GuardTrustAttestationSigningConfig,
     payloads: list[tuple[dict[str, object], str]],
 ) -> list[dict[str, object]]:
-    """The native runtime's signed envelope for each admitted payload, in order."""
+    """The native runtime's signed envelope for each admitted payload, in order.
 
+    Payloads go in batches that stay under the native request bound, since
+    each claim was admitted on its own size, not the item's.
+    """
+
+    batches: list[list[dict[str, object]]] = [[]]
+    batch_bytes = 0
+    for payload, signed_at in payloads:
+        entry: dict[str, object] = {"payload": payload, "signed_at": signed_at}
+        entry_bytes = len(json.dumps(entry, sort_keys=True))
+        if batches[-1] and batch_bytes + entry_bytes > _NATIVE_KEY_BATCH_BYTES:
+            batches.append([])
+            batch_bytes = 0
+        batches[-1].append(entry)
+        batch_bytes += entry_bytes
+    return [attestation for batch in batches if batch for attestation in _signed_batch(config, batch)]
+
+
+def _signed_batch(
+    config: GuardTrustAttestationSigningConfig, batch: list[dict[str, object]]
+) -> list[dict[str, object]]:
     answer = _native_key_answer(
         {
             "op": "sign",
@@ -462,13 +485,13 @@ def _signed_attestations(
             "algorithm": config.signature_algorithm,
             "key_id": config.active_key_id,
             "public_jwk_thumbprint": config.public_jwk_thumbprint,
-            "payloads": [{"payload": payload, "signed_at": signed_at} for payload, signed_at in payloads],
+            "payloads": batch,
         }
     )
     attestations = answer.get("attestations")
     if (
         not isinstance(attestations, list)
-        or len(attestations) != len(payloads)
+        or len(attestations) != len(batch)
         or not all(isinstance(attestation, dict) for attestation in attestations)
     ):
         raise ValueError(_NATIVE_KEY_INVALID)

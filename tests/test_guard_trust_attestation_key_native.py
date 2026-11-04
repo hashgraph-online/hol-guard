@@ -90,3 +90,60 @@ def test_without_the_runtime_nothing_is_signed(tmp_path: Path, monkeypatch: pyte
     )
     with pytest.raises(ValueError, match="native_trust_attestation_key_unavailable"):
         sign_trust_attestation(payload={}, config=_p256_config(), signed_at="2026-06-10T12:00:00Z")
+
+
+def test_a_relative_guard_home_keeps_its_key_beside_the_caller(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    config = resolve_trust_attestation_signing_config(_ENV, guard_home=Path("guard"))
+
+    assert config is not None
+    assert (tmp_path / "guard" / "trust_attestation_key.pem").read_text(encoding="utf-8") == (
+        f"{config.private_key_pem}\n"
+    )
+
+
+def test_payloads_past_one_request_are_signed_in_order_across_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+    signed: list[int] = []
+    answer = runtime_request.runtime_answer
+
+    def counted(*args: object, **kwargs: object) -> dict[str, object] | None:
+        request = args[2]
+        if isinstance(request, dict) and request.get("op") == "sign":
+            signed.append(len(request["payloads"]))
+        return answer(*args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", counted)
+    monkeypatch.setattr(trust_attestation, "_NATIVE_KEY_BATCH_BYTES", 200)
+    payloads: list[tuple[dict[str, object], str]] = [
+        ({"payloadVersion": "guard-aibom-trust-attestation.v3", "nonce": f"nonce-{index}"}, f"signed-{index}")
+        for index in range(3)
+    ]
+
+    attestations = trust_attestation._signed_attestations(_p256_config(), payloads)  # pyright: ignore[reportPrivateUsage]
+
+    assert signed == [1, 1, 1]
+    assert [attestation["signedAt"] for attestation in attestations] == ["signed-0", "signed-1", "signed-2"]
+
+
+def test_an_ec_key_on_another_curve_loads_but_signs_nothing() -> None:
+    private_key_pem = (
+        ec.generate_private_key(ec.SECP521R1())
+        .private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        .decode("ascii")
+    )
+
+    assert (
+        resolve_guard_oauth_trust_attestation_signing_config(
+            {"dpop_private_key_pem": private_key_pem, "dpop_public_jwk_thumbprint": "thumb"}
+        )
+        is not None
+    )
+    with pytest.raises(ValueError, match="must use P-256"):
+        trust_attestation._signed_attestations(  # pyright: ignore[reportPrivateUsage]
+            _p256_config(private_key_pem), [({"payloadVersion": "guard-aibom-trust-attestation.v3"}, "now")]
+        )

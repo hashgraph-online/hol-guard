@@ -191,6 +191,61 @@ fn keys_are_refused_in_python_order() {
     );
 }
 
+/// A SEC1 key on the curve `oid` names, its scalar never read.
+fn sec1_on(oid: &[u8]) -> Vec<u8> {
+    let mut parameters = vec![0xa0, u8::try_from(oid.len()).expect("oid")];
+    parameters.extend_from_slice(oid);
+    let mut body = vec![0x02, 0x01, 0x01, 0x04, 0x42];
+    body.extend([0x11; 66]);
+    body.extend(parameters);
+    let mut sec1 = vec![0x30, u8::try_from(body.len()).expect("body")];
+    sec1.extend(body);
+    sec1
+}
+
+#[test]
+fn an_ec_key_on_another_named_curve_loads_but_signs_nothing() {
+    // secp521r1, 1.3.132.0.35.
+    let p521 = [0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x23];
+    let sec1 = sec1_on(&p521);
+    let keys = [
+        pem_text(PKCS8_LABEL, &sec1_as_pkcs8(&sec1, &p521)),
+        pem_text(SEC1_LABEL, &sec1),
+    ];
+    for key in &keys {
+        assert_eq!(
+            ask(json!({"op": "load", "key": key})),
+            json!({"loaded": true})
+        );
+        for (algorithm, message) in [
+            (ECDSA_P256_SHA256, MUST_BE_P256),
+            (RSA_PSS_SHA256, MUST_BE_RSA),
+            ("ed25519", UNSUPPORTED_ALGORITHM),
+        ] {
+            assert_eq!(
+                sign_with(key, algorithm, Value::Null),
+                json!({"error": message}),
+                "{algorithm}"
+            );
+        }
+    }
+    // A P-256 key ring refuses stays unreadable, as does a curve outside
+    // the named arcs.
+    let unnamed = [0x06, 0x03, 0x2a, 0x03, 0x04];
+    for oid in [&P256_OID[..], &unnamed[..]] {
+        let sec1 = sec1_on(oid);
+        for key in [
+            pem_text(PKCS8_LABEL, &sec1_as_pkcs8(&sec1, oid)),
+            pem_text(SEC1_LABEL, &sec1),
+        ] {
+            assert_eq!(
+                ask(json!({"op": "load", "key": key})),
+                json!({"error": KEY_UNREADABLE})
+            );
+        }
+    }
+}
+
 fn reloads_as_p256(described: &Value) -> String {
     let pem = described["private_key_pem"].as_str().expect("pem");
     let key = load_private_key(pem).expect("loads");
