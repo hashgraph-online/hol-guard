@@ -8,6 +8,8 @@
 //! `updatedInput` (0.131.0 or later). An older or unknown Codex keeps the
 //! denial with an update hint; anything this module cannot reproduce keeps
 //! the denial unchanged. Native authority is rechecked by the sink.
+//! A call that Codex's own macOS sandbox already confines runs as it is,
+//! since the sink cannot start inside that sandbox (`sandbox`).
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -53,6 +55,9 @@ enum Contained {
     /// The sink runs the call; the answer's strings came from the hook
     /// input, rendered with its surrogate mapping.
     Routed(PyVal, bool),
+    /// Codex's own sandbox confines the call, and Guard's sink cannot
+    /// start inside it: the call runs as it is.
+    CodexSandbox,
 }
 
 /// `_bridge_output` for a `PreToolUse` sandbox requirement: the contained
@@ -68,6 +73,7 @@ pub(super) fn settle(
         Contained::Unchanged => (response, mapped),
         Contained::Hint => (with_update_hint(response), mapped),
         Contained::Routed(routed, unmap) => (routed, unmap),
+        Contained::CodexSandbox => (sandbox::allowed(), false),
     };
     let PyVal::Dict(entries) = &settled else {
         return Route::Respond(fail_closed(&prepared.event_name));
@@ -137,6 +143,13 @@ fn contain(
     }
     if payload.mapped && payload.collision {
         return Contained::Unchanged;
+    }
+    if routable(response, &payload.value).is_some() {
+        match sandbox::launching_turn(&payload.value) {
+            sandbox::Turn::Confined => return Contained::CodexSandbox,
+            sandbox::Turn::Networked => return Contained::Unchanged,
+            sandbox::Turn::Unknown => {}
+        }
     }
     let target = Target {
         prefix: &config.fallback_command,
@@ -268,8 +281,9 @@ fn string(text: &str) -> PyVal {
     PyVal::Str(text.to_owned())
 }
 
-/// The contained-sink rewrite for the Codex harness.
-fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) -> Option<PyVal> {
+/// The shell call's input, when the answer names the contained profile it
+/// requires and the call is a `PreToolUse` shell command.
+fn routable<'a>(response: &PyVal, payload: &'a PyVal) -> Option<&'a PyVal> {
     let profile = text(response, "reason_code")
         .and_then(guard_command::hook_responses::contained_execution_profile)?;
     if response.get("observe_mode") == Some(&PyVal::Bool(true))
@@ -277,7 +291,6 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
     {
         return None;
     }
-    let prefix = sink_prefix(target.prefix)?;
     let event = first(payload, &["hook_event_name", "hookEventName"])?.as_str()?;
     let tool = first(payload, &["tool_name", "toolName"])?.as_str()?;
     if !PRE_TOOL_EVENTS.contains(&event) || !SHELL_TOOLS.contains(&tool) {
@@ -286,6 +299,13 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
     let original = first(payload, &["tool_input", "toolInput"])?;
     original.as_dict()?;
     original.get("command")?.as_str()?;
+    Some(original)
+}
+
+/// The contained-sink rewrite for the Codex harness.
+fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) -> Option<PyVal> {
+    let original = routable(response, payload)?;
+    let prefix = sink_prefix(target.prefix)?;
     let workspace = resolved_workspace(first(payload, &["cwd", "workspace"])?.as_str()?)?;
     let snapshot = PyVal::Dict(vec![
         ("schema".to_owned(), string(REQUEST_SCHEMA)),
@@ -469,6 +489,8 @@ pub(crate) fn discard(request: &Path) {
 
 #[path = "codex_hook_bridge_contain_codex.rs"]
 mod codex;
+#[path = "codex_hook_bridge_contain_sandbox.rs"]
+mod sandbox;
 #[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_contain_tests.rs"]
 mod tests;

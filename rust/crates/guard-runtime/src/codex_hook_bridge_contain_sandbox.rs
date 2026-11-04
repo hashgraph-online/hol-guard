@@ -1,0 +1,145 @@
+//! A Codex turn that already runs inside Codex's own sandbox.
+//!
+//! Codex's `workspace-write` and `read-only` sandboxes run each shell call
+//! under a macOS Seatbelt profile. Guard's contained sink cannot start in
+//! there: the profile refuses its connection to the resident socket, and
+//! macOS refuses to apply a second Seatbelt profile inside the first. The
+//! rewrite would fail every time, so a call that Codex's sandbox already
+//! confines (writes limited to the workspace, no network) runs as it is.
+//!
+//! The hook payload does not say which sandbox the turn uses, so the turn's
+//! `turn_context` record is read from the session transcript Codex names
+//! in `transcript_path`, matched by `turn_id`. Codex keeps that file under
+//! its own home, which its sandbox does not let the agent write.
+
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
+use std::path::Path;
+
+use super::{string, text};
+use crate::codex_hook_response::PRE_TOOL_USE;
+use crate::pyjson::PyVal;
+
+const REASON: &str = "native_contained_by_codex_sandbox";
+/// How much of the transcript's end is read for the turn's context. Codex
+/// writes `turn_context` at the start of each turn, so a turn longer than
+/// this is treated as unknown and keeps Guard's own answer.
+const TAIL_BYTES: u64 = 8 * 1024 * 1024;
+const CONFINED: [&str; 2] = ["workspace-write", "read-only"];
+
+/// The sandbox a Codex turn runs its shell calls in.
+#[derive(Debug, PartialEq)]
+pub(super) enum Turn {
+    /// No sandbox, or none Guard can confirm.
+    Unknown,
+    /// Codex's sandbox confines writes to the workspace and blocks network.
+    Confined,
+    /// Codex's sandbox confines writes but lets the call reach the network.
+    Networked,
+}
+
+/// The sandbox of the turn this hook call belongs to. Only macOS is known
+/// to refuse a nested sandbox; elsewhere Guard's rewrite stands.
+pub(super) fn launching_turn(payload: &PyVal) -> Turn {
+    if !cfg!(target_os = "macos") {
+        return Turn::Unknown;
+    }
+    turn(payload)
+}
+
+/// The sandbox the payload's transcript records for its turn.
+pub(super) fn turn(payload: &PyVal) -> Turn {
+    let (Some(transcript), Some(turn_id)) = (
+        text(payload, "transcript_path"),
+        text(payload, "turn_id").filter(|turn_id| !turn_id.is_empty()),
+    ) else {
+        return Turn::Unknown;
+    };
+    if escalated(payload) {
+        return Turn::Unknown;
+    }
+    let Some(tail) = transcript_tail(Path::new(transcript)) else {
+        return Turn::Unknown;
+    };
+    tail.lines()
+        .rev()
+        .filter(|line| line.contains("turn_context") && line.contains(turn_id))
+        .find_map(|line| turn_policy(line, turn_id))
+        .unwrap_or(Turn::Unknown)
+}
+
+/// A call that asks Codex to run it outside the sandbox.
+fn escalated(payload: &PyVal) -> bool {
+    let Some(input) = payload.get("tool_input") else {
+        return false;
+    };
+    let permissions = text(input, "sandbox_permissions");
+    permissions.is_some_and(|value| value != "use_default")
+        || input.get("with_escalated_permissions") == Some(&PyVal::Bool(true))
+}
+
+/// The last `TAIL_BYTES` of a regular, non-symlinked transcript file,
+/// starting at a whole line.
+fn transcript_tail(path: &Path) -> Option<String> {
+    if !path.is_absolute() {
+        return None;
+    }
+    let metadata = std::fs::symlink_metadata(path).ok()?;
+    if !metadata.file_type().is_file() {
+        return None;
+    }
+    let mut file = File::open(path).ok()?;
+    let start = metadata.len().saturating_sub(TAIL_BYTES);
+    file.seek(SeekFrom::Start(start)).ok()?;
+    let mut bytes = Vec::new();
+    file.take(TAIL_BYTES).read_to_end(&mut bytes).ok()?;
+    if start > 0 {
+        let newline = bytes.iter().position(|byte| *byte == b'\n')?;
+        bytes.drain(..=newline);
+    }
+    Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// The sandbox of one transcript line, when it is the `turn_context` of
+/// `turn_id`.
+fn turn_policy(line: &str, turn_id: &str) -> Option<Turn> {
+    let record: serde_json::Value = serde_json::from_str(line).ok()?;
+    if record.get("type")?.as_str()? != "turn_context" {
+        return None;
+    }
+    let context = record.get("payload")?;
+    if context.get("turn_id")?.as_str()? != turn_id {
+        return None;
+    }
+    let Some(policy) = context.get("sandbox_policy") else {
+        return Some(Turn::Unknown);
+    };
+    let kind = policy.get("type").and_then(serde_json::Value::as_str);
+    if !kind.is_some_and(|kind| CONFINED.contains(&kind)) {
+        return Some(Turn::Unknown);
+    }
+    let network = policy.get("network_access");
+    if network.is_some_and(|value| value != &serde_json::Value::Bool(false)) {
+        return Some(Turn::Networked);
+    }
+    Some(Turn::Confined)
+}
+
+/// The allow that leaves the call to Codex's sandbox.
+pub(super) fn allowed() -> PyVal {
+    PyVal::Dict(vec![
+        ("policy_action".to_owned(), string("allow")),
+        ("reason_code".to_owned(), string(REASON)),
+        (
+            "hookSpecificOutput".to_owned(),
+            PyVal::Dict(vec![
+                ("hookEventName".to_owned(), string(PRE_TOOL_USE)),
+                ("permissionDecision".to_owned(), string("allow")),
+            ]),
+        ),
+    ])
+}
+
+#[cfg(test)]
+#[path = "codex_hook_bridge_contain_sandbox_tests.rs"]
+mod tests;
