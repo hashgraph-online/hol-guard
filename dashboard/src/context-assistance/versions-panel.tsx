@@ -33,17 +33,17 @@ export function CigarVersionsPanel(props: Props) {
       <p>Guard handles this for you when you turn CIGAR on. Come here only to pick a specific version, check for new ones, or go back to an earlier one. Opening this page changes nothing.</p></div>
     <CigarVersionStatusBand status={props.status} data={data} loading={versions.loading} actions={<>
       <button type="button" className={versionButton} disabled={changesDisabled || !catalog?.remote_feed_configured || !catalog.trust_configured || Boolean(catalog.feed_diagnostic)}
-        onClick={() => choose({ input: { action: "refresh_catalog", job_id: cigarVersionJobId() }, title: "Check for CIGAR catalog updates",
-          detail: "Fetch the configured signed release catalog. This does not prepare or switch an SDK." })}><HiMiniCloudArrowDown aria-hidden="true" className="size-4" />Check for catalog updates</button>
+        onClick={() => choose({ input: { action: "refresh_catalog", job_id: cigarVersionJobId() }, title: "Check for new CIGAR versions",
+          detail: "Guard downloads the signed list of CIGAR versions. Nothing is installed or switched." })}><HiMiniCloudArrowDown aria-hidden="true" className="size-4" />Check for new versions</button>
       <button type="button" className={versionQuiet} disabled={props.disabled || versions.busy || versions.loading} onClick={() => void versions.refresh()}>
-        <HiMiniArrowPath aria-hidden="true" className={"size-4" + (versions.loading ? " motion-safe:animate-spin" : "")} />Refresh versions & jobs</button>
+        <HiMiniArrowPath aria-hidden="true" className={"size-4" + (versions.loading ? " motion-safe:animate-spin" : "")} />Refresh list</button>
     </>} />
-    {versions.loading && !data ? <div role="status" className="space-y-3" aria-label="Reading CIGAR versions and job metadata…">
+    {versions.loading && !data ? <div role="status" className="space-y-3" aria-label="Loading CIGAR versions…">
       {[0, 1, 2].map((row) => <div key={row} className="h-16 rounded-2xl bg-brand-dark/[0.04] motion-safe:animate-pulse" />)}
-      <span className="sr-only">Reading CIGAR versions and job metadata…</span></div> : null}
-    {versions.busy ? <p role="status" className={notice}>Submitting the selected action. Preparation continues as a native job.</p> : null}
-    {versions.error ? <div role="alert" className="cigar-note"><strong>CIGAR updates need attention</strong><p>{versions.error}</p><p>Refresh versions and jobs before submitting another change.</p></div> : null}
-    {versions.tracking ? <p className="break-all text-xs text-brand-dark/60">Last submitted job: {versions.tracking}. Refresh jobs to confirm its outcome.</p> : null}
+      <span className="sr-only">Loading CIGAR versions…</span></div> : null}
+    {versions.busy ? <p role="status" className={notice}>Starting. Keep this page open until Guard confirms the change has started.</p> : null}
+    {versions.error ? <div role="alert" className="cigar-note"><strong>CIGAR updates need attention</strong><p>{versions.error}</p><p>Refresh the list before trying another change.</p></div> : null}
+    {versions.tracking ? <p className="break-all text-xs text-brand-dark/60">Guard is working on job {versions.tracking} and keeps going if you leave this page. Refresh the list to see how it went.</p> : null}
     {props.dirty ? <p role="status" className={notice}>You can prepare builds now. Save your CIGAR preference edits before preparing or committing a selection.</p> : null}
     {data ? <>
       {activeJobs.length ? <CigarVersionJobsPanel jobs={activeJobs} status={props.status} disabled={disabled} selectionDisabled={selectionDisabled} onAction={choose} /> : null}

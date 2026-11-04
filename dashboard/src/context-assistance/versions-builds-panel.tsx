@@ -56,13 +56,13 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
       meta={<>Core {build.identity.core_version} · {host ? "download " + versionBytes(host.download_bytes) : "not built for this computer"}{installed ? " · " + installationLabel(installed.qualification) : ""}</>}
       reason={reason ? <p id={id + "-build-reason-" + buildId} className="text-sm text-amber-800">{reason}</p> : null}
       extra={<details className="group text-xs text-brand-dark/60"><summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1 font-medium hover:text-brand-dark [&::-webkit-details-marker]:hidden">
-        <HiMiniChevronRight aria-hidden="true" className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" />Build identity</summary>
+        <HiMiniChevronRight aria-hidden="true" className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" />Build details</summary>
         <div className="mt-1 space-y-0.5 break-all pl-5 font-mono"><p id={id + "-build-id-" + buildId}>Build: {buildId}</p><p>Source: {build.identity.source_revision}</p><p>Manifest: {build.identity.manifest_sha256}</p>
           {host ? <p>Worker: {host.worker_sha256}</p> : null}</div>
       </details>}
       action={installed ? prepareSelection(installed) : <button type="button" className={versionButton} aria-describedby={reason ? id + "-build-reason-" + buildId : undefined} disabled={disabled || reason !== null || !interpreter}
         onClick={() => { if (interpreter) onAction({ input: { action: "install", job_id: cigarVersionJobId(), build_id: buildId, interpreter_id: interpreter.interpreter_id },
-          title: "Prepare CIGAR build", detail: "Download and verify this SDK in a separate managed installation. Keep the selected runtime in place." }); }}>Prepare this build</button>} />;
+          title: "Prepare this CIGAR version", detail: "Guard downloads and checks this version next to the one you have. Nothing changes until you switch." }); }}>Prepare this build</button>} />;
   });
   const looseRows = data.installations.filter((item) => !matched.has(item.runtime_id)).map((item) => <Row key={item.runtime_id}
     titleId={id + "-installed-" + item.runtime_id} title={"CIGAR " + (item.sdk_version ?? "registered bundle")} tags={inUseTag(item)}
@@ -74,11 +74,12 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
     const reason = cigarPythonBlock(catalog, build), present = data.interpreters.some((p) => p.build_id === build.build_id);
     return <Row key={build.build_id} titleId={id + "-python-" + build.build_id} describedBy={id + "-python-id-" + build.build_id}
       title={"Python " + build.python_version.join(".")} tags={<>{present ? <Tag tone="green">Ready</Tag> : null}<Tag tone="slate">{platformLabel(build.platform)}</Tag></>}
-      meta={<span id={id + "-python-id-" + build.build_id} className="break-all">{build.build_id} · download {versionBytes(build.archive_bytes)}</span>}
+      meta={<>Download {versionBytes(build.archive_bytes)}</>}
+      extra={<p id={id + "-python-id-" + build.build_id} className="break-all font-mono text-xs text-brand-dark/50">Build: {build.build_id}</p>}
       reason={reason && build.platform === catalog.host_platform ? <p id={id + "-python-reason-" + build.build_id} className="text-sm text-amber-800">{reason}</p> : null}
       action={<button type="button" className={versionButton} aria-describedby={reason && build.platform === catalog.host_platform ? id + "-python-reason-" + build.build_id : undefined} disabled={disabled || present || reason !== null}
         onClick={() => onAction({ input: { action: "setup_interpreter", job_id: cigarVersionJobId(), build_id: build.build_id },
-          title: "Prepare private Python", detail: "Download and verify the catalog's immutable Python build. Leave your system Python and current CIGAR selection unchanged." })}>{present ? "Python registered" : "Prepare private Python"}</button>} />;
+          title: "Prepare private Python", detail: "Guard downloads and checks a private copy of Python for CIGAR. Your system Python and current CIGAR version stay as they are." })}>{present ? "Python registered" : "Prepare private Python"}</button>} />;
   };
   const hostPython = catalog.interpreter_builds.filter((b) => !catalog.host_platform || b.platform === catalog.host_platform);
   const otherPython = catalog.interpreter_builds.filter((b) => catalog.host_platform && b.platform !== catalog.host_platform);
@@ -90,11 +91,11 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div><h3 id={id + "-builds"} className={versionHeading}>Versions</h3>
           <p className={versionLead}>Preparing a version downloads it next to the one you have. Nothing changes until you switch.</p></div>
-        <div className="w-full sm:w-72"><span id={id + "-python-label"} className="text-xs font-medium text-brand-dark/65">Python for SDK preparation</span>
+        <div className="w-full sm:w-72"><span id={id + "-python-label"} className="text-xs font-medium text-brand-dark/65">Python to use</span>
           <SelectMenu labelledBy={id + "-python-label"} className="mt-1.5 w-full" value={interpreter?.interpreter_id ?? ""} disabled={disabled || !registered.length}
-            placeholder="No Python interpreter registered for this host" options={pythonOptions} onChange={setPython} /></div>
+            placeholder="No Python set up yet" options={pythonOptions} onChange={setPython} /></div>
       </div>
-      {!catalog.builds.length && !data.installations.length ? <p className="rounded-2xl border border-dashed border-brand-dark/15 p-5 text-sm text-brand-dark/65">No SDK builds are available in this catalog.</p>
+      {!catalog.builds.length && !data.installations.length ? <p className="rounded-2xl border border-dashed border-brand-dark/15 p-5 text-sm text-brand-dark/65">No CIGAR versions are listed yet.</p>
         : <ul className={versionList}>{buildRows}{looseRows}</ul>}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {selectedId ? <button type="button" className={versionButton} disabled={selectionBlocked}
@@ -111,7 +112,7 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
       {hostPython.length ? <ul className={versionList}>{hostPython.map(pythonRow)}</ul> : null}
       {otherPython.length ? <details className="group">
         <summary className={summary}><HiMiniChevronRight aria-hidden="true" className="size-4 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
-          Builds for other computers <span className="font-normal text-brand-dark/50">({otherPython.length})</span></summary>
+          Python for other computers <span className="font-normal text-brand-dark/50">({otherPython.length})</span></summary>
         <ul className={versionList + " mt-2 opacity-90"}>{otherPython.map(pythonRow)}</ul>
       </details> : null}
     </section>

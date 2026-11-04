@@ -41,8 +41,15 @@ const requested = { ...ready, effective_enabled: false, availability: "unavailab
 assert.doesNotMatch(render({ status: requested }), /Ready\./);
 assert.equal(buttonDisabled(render({ status: requested, dirty: true }), "Start context assistance"), true);
 assert.equal(buttonDisabled(render({ status: requested, dirty: false }), "Start context assistance"), false);
-assert.match(render({ installations: [] }), /No registered CIGAR runtime is available/);
-assert.match(render({ installations: [] }), /Python 3\.14 may already be installed/);
+const noRuntime = render({ installations: [] });
+assert.match(noRuntime, /CIGAR is not set up on this computer yet\. Turn on CIGAR at the top of this page/);
+assert.doesNotMatch(noRuntime, /Switch to another CIGAR build/, "with nothing installed there is nothing to switch to");
+assert.doesNotMatch(render({ installations: null }), /Switch to another CIGAR build/, "before the list loads, or after it fails, there is nothing known to switch to");
+assert.doesNotMatch(render(), /every command/, "CIGAR's note promises nothing about how Guard decides commands");
+const blank = { ...ready.preferences, runtime_id: "" };
+const unselected = render({ value: blank, status: { ...ready, preferences: blank }, installations: [] });
+assert.doesNotMatch(unselected, />Check selected runtime</, "nothing to check before a runtime is chosen");
+assert.match(unselected, />None yet</);
 assert.match(render({ status: null, error: "Status is unavailable." }), /role="alert"/);
 assert.equal(buttonDisabled(render({ status: null }), "Turn off now"), false,
   "lost availability cannot remove opt-out for an enabled saved preference");

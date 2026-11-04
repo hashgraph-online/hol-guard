@@ -3227,7 +3227,7 @@ function CigarRuntimeSelection(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-x-6 gap-y-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-[1_1_16rem]", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-body font-medium text-brand-dark", children: "Selected runtime" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 break-all font-mono text-sm text-brand-dark/80", children: id2 || "No runtime selected" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 break-all font-mono text-sm text-brand-dark/80", children: id2 || "None yet" }),
         selected ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "guard-settings-caption mt-0.5 text-slate-500", children: [
           selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : "",
           "Python ",
@@ -3243,8 +3243,8 @@ function CigarRuntimeSelection(props) {
         props.installations !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionQuiet, disabled: props.disabled, onClick: props.onRefresh, children: "Refresh runtime list" }) : null
       ] })
     ] }),
-    props.installations?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No registered CIGAR runtime is available in this profile. Python 3.14 may already be installed; use Updates to inspect approved builds and registration options." }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption text-slate-500", children: "Choose, prepare and switch runtimes in Updates. A separate selection job protects your current runtime and data." }),
+    props.installations?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "CIGAR is not set up on this computer yet. Turn on CIGAR at the top of this page and Guard sets it up for you." }) : null,
+    props.installations?.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption text-slate-500", children: "Switch to another CIGAR build in Updates. Your current build and data stay as they are until the new one is ready." }) : null,
     pending ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A pending runtime choice is in this form. Use the current selection before preparing a different runtime in Updates." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onRestore, children: "Use current selection" })
@@ -3315,7 +3315,7 @@ function ContextSettingsControls(props) {
             children: "Start context assistance"
           }
         ) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: checkDisabled, onClick: () => props.onControl("recheck"), children: "Check selected runtime" }),
+        value?.runtime_id ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: checkDisabled, onClick: () => props.onControl("recheck"), children: "Check selected runtime" }) : null,
         !stopped ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled, onClick: () => props.onControl("stop"), children: "Turn off now" }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
@@ -3395,7 +3395,7 @@ function ContextSettingsControls(props) {
           SettingsToggleRow,
           {
             label: "Context for AI apps",
-            description: "Add the project files that match each prompt in Claude Code, Codex, Pi and Oh My Pi, and allow context tools for apps you authorize. Sharing between agents is a separate choice.",
+            description: "CIGAR adds relevant context to prompts in Claude Code, Codex, Pi and Oh My Pi, and apps you allow can ask it for more. Project files are included only when workspace documents are allowed below.",
             checked: value.features.agent_context,
             disabled: editingDisabled,
             onChange: (agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })
@@ -3405,7 +3405,7 @@ function ContextSettingsControls(props) {
           SettingsToggleRow,
           {
             label: "Allow selected workspace documents",
-            description: "With Context for AI apps on, prompts in Claude Code, Codex, Pi and Oh My Pi get the files in their project that match them. To choose the exact files, add the project under Projects.",
+            description: "Lets CIGAR read files in the project you are working in. To pick exactly which files, add the project under Projects.",
             checked: value.sources.workspace_documents,
             disabled: editingDisabled,
             onChange: (workspace_documents) => props.onChange({ ...value, sources: {
@@ -3420,13 +3420,13 @@ function ContextSettingsControls(props) {
             SettingsToggleRow,
             {
               label: "Share context between paired AI connections",
-              description: "Separate connections for the same app and workspace can use shared context. Notes require explicit access and your review before sharing. Saving this change ends existing context grants; pair connections again after starting the runtime.",
+              description: "Lets more than one session of the same app in a project use the same context. Notes are shared only after you review them. Changing this disconnects your apps from CIGAR; connect them again once CIGAR is running.",
               checked: value.features.shared_agents,
               disabled: editingDisabled || !value.features.agent_context || status?.capabilities?.shared_agents !== true,
               onChange: (shared_agents) => props.onChange({ ...value, features: { ...value.features, shared_agents } })
             }
           ),
-          !value.features.agent_context ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1 + " pb-3", children: "Enable Context for AI apps before choosing sharing." }) : null
+          !value.features.agent_context ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1 + " pb-3", children: "Turn on Context for AI apps first." }) : null
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group rounded-2xl border border-brand-dark/10 bg-white", children: [
@@ -3587,7 +3587,7 @@ function ContextSettingsControls(props) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ContextExecutionPanel, { status })
     ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: note, children: "Update Guard to a native core with context assistance support before choosing these settings." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "Context is supporting information. Guard keeps command protection and approval decisions in its native execution flow." })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "CIGAR only adds context. Guard's protection and approval settings stay as they are." })
   ] });
 }
 const empty$1 = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70";
@@ -6548,7 +6548,7 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
         extra: /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group text-xs text-brand-dark/60", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "inline-flex min-h-8 cursor-pointer list-none items-center gap-1 font-medium hover:text-brand-dark [&::-webkit-details-marker]:hidden", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" }),
-            "Build identity"
+            "Build details"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 space-y-0.5 break-all pl-5 font-mono", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { id: id2 + "-build-id-" + buildId, children: [
@@ -6579,8 +6579,8 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
             onClick: () => {
               if (interpreter) onAction({
                 input: { action: "install", job_id: cigarVersionJobId(), build_id: buildId, interpreter_id: interpreter.interpreter_id },
-                title: "Prepare CIGAR build",
-                detail: "Download and verify this SDK in a separate managed installation. Keep the selected runtime in place."
+                title: "Prepare this CIGAR version",
+                detail: "Guard downloads and checks this version next to the one you have. Nothing changes until you switch."
               });
             },
             children: "Prepare this build"
@@ -6626,10 +6626,13 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
           present ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "green", children: "Ready" }) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: platformLabel(build.platform) })
         ] }),
-        meta: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { id: id2 + "-python-id-" + build.build_id, className: "break-all", children: [
-          build.build_id,
-          " · download ",
+        meta: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          "Download ",
           versionBytes(build.archive_bytes)
+        ] }),
+        extra: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { id: id2 + "-python-id-" + build.build_id, className: "break-all font-mono text-xs text-brand-dark/50", children: [
+          "Build: ",
+          build.build_id
         ] }),
         reason: reason && build.platform === catalog.host_platform ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: id2 + "-python-reason-" + build.build_id, className: "text-sm text-amber-800", children: reason }) : null,
         action: /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -6642,7 +6645,7 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
             onClick: () => onAction({
               input: { action: "setup_interpreter", job_id: cigarVersionJobId(), build_id: build.build_id },
               title: "Prepare private Python",
-              detail: "Download and verify the catalog's immutable Python build. Leave your system Python and current CIGAR selection unchanged."
+              detail: "Guard downloads and checks a private copy of Python for CIGAR. Your system Python and current CIGAR version stay as they are."
             }),
             children: present ? "Python registered" : "Prepare private Python"
           }
@@ -6666,7 +6669,7 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Preparing a version downloads it next to the one you have. Nothing changes until you switch." })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full sm:w-72", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: id2 + "-python-label", className: "text-xs font-medium text-brand-dark/65", children: "Python for SDK preparation" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: id2 + "-python-label", className: "text-xs font-medium text-brand-dark/65", children: "Python to use" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             SelectMenu,
             {
@@ -6674,14 +6677,14 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
               className: "mt-1.5 w-full",
               value: interpreter?.interpreter_id ?? "",
               disabled: disabled || !registered.length,
-              placeholder: "No Python interpreter registered for this host",
+              placeholder: "No Python set up yet",
               options: pythonOptions,
               onChange: setPython
             }
           )
         ] })
       ] }),
-      !catalog.builds.length && !data.installations.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-dashed border-brand-dark/15 p-5 text-sm text-brand-dark/65", children: "No SDK builds are available in this catalog." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: versionList, children: [
+      !catalog.builds.length && !data.installations.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-dashed border-brand-dark/15 p-5 text-sm text-brand-dark/65", children: "No CIGAR versions are listed yet." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: versionList, children: [
         buildRows,
         looseRows
       ] }),
@@ -6715,7 +6718,7 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
       otherPython.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: summary, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { "aria-hidden": "true", className: "size-4 transition-transform group-open:rotate-90 motion-reduce:transition-none" }),
-          "Builds for other computers ",
+          "Python for other computers ",
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-normal text-brand-dark/50", children: [
             "(",
             otherPython.length,
@@ -7373,34 +7376,34 @@ function CigarVersionsPanel(props) {
           disabled: changesDisabled || !catalog?.remote_feed_configured || !catalog.trust_configured || Boolean(catalog.feed_diagnostic),
           onClick: () => choose({
             input: { action: "refresh_catalog", job_id: cigarVersionJobId() },
-            title: "Check for CIGAR catalog updates",
-            detail: "Fetch the configured signed release catalog. This does not prepare or switch an SDK."
+            title: "Check for new CIGAR versions",
+            detail: "Guard downloads the signed list of CIGAR versions. Nothing is installed or switched."
           }),
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowDown, { "aria-hidden": "true", className: "size-4" }),
-            "Check for catalog updates"
+            "Check for new versions"
           ]
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: versionQuiet, disabled: props.disabled || versions.busy || versions.loading, onClick: () => void versions.refresh(), children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "size-4" + (versions.loading ? " motion-safe:animate-spin" : "") }),
-        "Refresh versions & jobs"
+        "Refresh list"
       ] })
     ] }) }),
-    versions.loading && !data ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "space-y-3", "aria-label": "Reading CIGAR versions and job metadata…", children: [
+    versions.loading && !data ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "space-y-3", "aria-label": "Loading CIGAR versions…", children: [
       [0, 1, 2].map((row2) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-16 rounded-2xl bg-brand-dark/[0.04] motion-safe:animate-pulse" }, row2)),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Reading CIGAR versions and job metadata…" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Loading CIGAR versions…" })
     ] }) : null,
-    versions.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: notice, children: "Submitting the selected action. Preparation continues as a native job." }) : null,
+    versions.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: notice, children: "Starting. Keep this page open until Guard confirms the change has started." }) : null,
     versions.error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "cigar-note", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR updates need attention" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: versions.error }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Refresh versions and jobs before submitting another change." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Refresh the list before trying another change." })
     ] }) : null,
     versions.tracking ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-xs text-brand-dark/60", children: [
-      "Last submitted job: ",
+      "Guard is working on job ",
       versions.tracking,
-      ". Refresh jobs to confirm its outcome."
+      " and keeps going if you leave this page. Refresh the list to see how it went."
     ] }) : null,
     props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: notice, children: "You can prepare builds now. Save your CIGAR preference edits before preparing or committing a selection." }) : null,
     data ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
