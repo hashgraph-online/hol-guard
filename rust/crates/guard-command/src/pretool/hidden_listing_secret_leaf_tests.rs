@@ -72,6 +72,9 @@ fn a_hidden_directorys_configuration_document_reads_when_it_holds_no_credential(
         "database:\n  password:\n    hunter2\n",
         "database:\n  password:\n    \"hunter2\"\n",
         "database:\n  password:\n\n    # chosen by the team\n    hunter2\n",
+        // YAML asks for a space after the colon of a mapping, so a value
+        // holding a bare colon is a scalar rather than a key of its own.
+        "database:\n  password:\n    hunter:2\n",
     ] {
         plant(&repo.join(".circleci/config.yml"), body);
         assert!(

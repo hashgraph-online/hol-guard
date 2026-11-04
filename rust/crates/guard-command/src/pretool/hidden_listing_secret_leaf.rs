@@ -254,12 +254,17 @@ fn indent_width(line: &str) -> usize {
 }
 
 /// Whether a deeper line is a mapping of its own rather than the value the
-/// key above it left empty. A mapping names a plain word and a colon;
-/// anything else written there is that value.
+/// key above it left empty. A mapping names a plain word and a colon the
+/// document separates from what follows: YAML asks for a space after it, or
+/// the end of the line. `hunter:2` carries no separator, so it is the scalar
+/// value the key above left empty, not a key of its own.
 fn opens_a_mapping(line: &str) -> bool {
-    let Some((key, _)) = line.split_once(':') else {
+    let Some((key, rest)) = line.split_once(':') else {
         return false;
     };
+    if !(rest.is_empty() || rest.starts_with([' ', '\t'])) {
+        return false;
+    }
     let key = key.trim().trim_start_matches(['-', ' ']);
     !key.is_empty()
         && key.chars().all(|character| {
