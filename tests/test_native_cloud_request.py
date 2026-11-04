@@ -71,9 +71,29 @@ def test_typed_adapters_return_the_owner_answer() -> None:
     row = {"request_id": "r1", "harness": "codex", "policy_action": "allow", "command_text": "echo hi"}
     payload = snapshots.cloud_safe_local_request_payload(row, redaction_level="none")
     assert payload["command_text"] == "echo hi"
-    display = cloud.cloud_review_event_display(row, redaction_level="full")
-    assert display["display_provenance"] == "redacted"
-    assert display["payload"]["request_id"] == "r1"
+    continuation = {
+        "correlationId": "corr-1",
+        "capability": "native_resume",
+        "hookAttached": True,
+        "opaqueTargetId": "target-1",
+        "waitDeadline": None,
+    }
+    columns = dict.fromkeys(("updated_at", "guard_version", "first_seen_guard_version", "last_seen_guard_version"))
+    facts = {
+        "sequence": 4,
+        "event_type": "request_created",
+        "claim": None,
+        "continuation": continuation,
+        "now": "2026-11-04T02:00:00+00:00",
+        "columns": columns,
+    }
+    event = cloud.cloud_review_event(row, redaction_level="full", event=facts)
+    assert event["displayProvenance"] == "redacted"
+    assert event["requestPayload"]["request_id"] == "r1"
+    assert event["localCreatedAt"] == event["sentAt"] == "2026-11-04T02:00:00+00:00"
+    assert (event["harnessId"], event["requestKind"], event["localEventSequence"]) == ("codex", "codex", 4)
+    with pytest.raises(NativeRunnerAuthorityError):
+        cloud.cloud_review_event(row, redaction_level="full", event={**facts, "sequence": "4"})
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")

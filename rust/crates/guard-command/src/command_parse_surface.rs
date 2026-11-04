@@ -185,6 +185,19 @@ pub(crate) fn parse_inline_shell_script(
     Some(model)
 }
 
+/// The script a bounded inline shell runs, when [`parse_inline_shell_script`]
+/// models `request` from that script rather than from the shell in front.
+///
+/// The contained sink plans the program it runs from the same words the
+/// review read. For `bash -ec 'pytest -q'` the review read `pytest -q`, so a
+/// sink that split the raw text would plan `bash` instead and refuse the run
+/// the review sent it.
+pub fn inline_shell_script_text(request: &CommandModelRequestV1) -> Option<String> {
+    let raw = request.command.trim();
+    parse_inline_shell_script(request, raw)?;
+    parser_wrappers::inline_shell_script(raw)
+}
+
 pub(crate) fn parse_explicit_powershell(
     request: &CommandModelRequestV1,
     raw: &str,

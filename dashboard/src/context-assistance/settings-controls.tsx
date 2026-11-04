@@ -25,6 +25,10 @@ export type ContextSettingsControlsProps = {
   onChooseRuntime: () => void;
   onManageVersions?: () => void;
   onControl: (action: ContextControlAction) => void;
+  /** Settings that sit right under the status card, ahead of the form. */
+  lean?: ReactNode;
+  /** The page header already offers Turn on and Turn off, so this card leaves them out. */
+  headerControls?: boolean;
 };
 
 const note = "rounded-xl border border-brand-dark/10 bg-surface-1 px-4 py-3 text-sm leading-6 text-brand-dark/75";
@@ -67,6 +71,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
   const attention = !running && Boolean(status?.requested_enabled && !status.job);
   const [Icon, tone] = markerFor(running, attention);
   const effective = status?.effective_preferences ?? value;
+  const runtimeId = status?.preferences.runtime_id || value?.runtime_id;
   return (
     <div className="space-y-8">
       <section aria-labelledby={titleId} className="guard-surface-in rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-5">
@@ -76,7 +81,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
               {props.loading || status?.job ? <HiMiniArrowPath className="size-5 motion-safe:animate-spin" /> : <Icon className="size-5" />}
             </span>
             <div className="min-w-0 space-y-1.5">
-              <h3 id={titleId} className="text-lg font-semibold tracking-[-0.01em] text-brand-dark">{runtime ? "CIGAR " + runtime.package_version : "CIGAR runtime"}</h3>
+              <h3 id={titleId} className="text-lg font-semibold tracking-[-0.01em] text-brand-dark">{runtime ? "CIGAR " + runtime.package_version : "CIGAR"}</h3>
               <p className="max-w-[62ch] text-sm leading-6 text-brand-dark/75" role="status" aria-live="polite">
                 {availabilityText(props.loading, statusCopy)}
               </p>
@@ -84,12 +89,12 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {status?.requested_enabled && !status.effective_enabled ? (
+            {!props.headerControls && status?.requested_enabled && !status.effective_enabled ? (
               <button type="button" className={versionPrimary} disabled={checkDisabled || !status.effective_preferences.enabled}
-                onClick={() => props.onControl("activate")}>Start context assistance</button>
+                onClick={() => props.onControl("activate")}>Start CIGAR</button>
             ) : null}
-            {value?.runtime_id ? <button type="button" className={versionButton} disabled={checkDisabled} onClick={() => props.onControl("recheck")}>Check selected runtime</button> : null}
-            {!stopped ? <button type="button" className={versionButton} disabled={disabled} onClick={() => props.onControl("stop")}>Turn off now</button> : null}
+            {value?.runtime_id ? <button type="button" className={versionButton} disabled={checkDisabled} onClick={() => props.onControl("recheck")}>Check CIGAR</button> : null}
+            {!props.headerControls && !stopped ? <button type="button" className={versionButton} disabled={disabled} onClick={() => props.onControl("stop")}>Turn off now</button> : null}
             <button type="button" aria-label="Refresh runtime status" title="Refresh runtime status" disabled={disabled || props.loading} onClick={props.onRefresh}
               className="inline-flex size-11 items-center justify-center rounded-lg text-brand-dark/70 hover:bg-brand-dark/[0.05] hover:text-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-50">
               <HiMiniArrowPath aria-hidden="true" className="size-4" /></button>
@@ -97,12 +102,13 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
         </div>
       </section>
       {props.error ? <div role="alert" className="cigar-note"><strong>CIGAR needs attention</strong><p>{props.error}</p></div> : null}
-      {props.dirty ? <p role="status" className={note}>Save settings before checking or starting this runtime.</p> : null}
+      {props.dirty ? <p role="status" className={note}>Save settings before checking or starting CIGAR.</p> : null}
       {props.locked ? <p className={note}>Your organization manages these preferences. You can still turn context assistance off.</p> : null}
       {status?.restriction ? <p className={note}>Policy restrictions apply. Your saved choices are retained; effective limits are shown below.</p> : null}
+      {props.lean}
       {value ? (
         <>
-          <SettingsFormSection title="Runtime">
+          <SettingsFormSection title="This computer">
             <SettingsToggleRow label="Use CIGAR on this machine" checked={value.enabled}
               description="Lets CIGAR run on this computer. The Turn on CIGAR button sets this for you."
               disabled={editingDisabled || (!value.enabled && !selected)}
@@ -212,6 +218,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
                   <Fact term="Effective workspace limit">{effective.limits.max_active_workspaces}</Fact>
                   <Fact term="Effective idle shutdown">{effective.limits.idle_shutdown_seconds} seconds</Fact>
                   <Fact term="Storage">{value.storage.mode === "memory" ? "Memory only" : "Private persistence requested"}</Fact>
+                  {runtimeId ? <Fact term="Runtime ID"><span className="break-all font-mono text-xs">{runtimeId}</span></Fact> : null}
                   {runtime ? <>
                     <Fact term="Last verified Python">{runtime.interpreter.version.join(".")} · {runtime.interpreter.platform}</Fact>
                     <Fact term="Qualification">Local development candidate</Fact>

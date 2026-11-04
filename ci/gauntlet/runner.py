@@ -39,7 +39,7 @@ from .catalog import CATALOG, WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_dig
 from .cleanup import cleanup_case_resources
 from .contained_core import request_proofs
 from .decision_coverage import profile_coverage
-from .evidence import assess_case, sha256_bytes
+from .evidence import assess_case, execution_error_chain, sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
 from .fixtures import (
     create_fixture,
@@ -426,7 +426,9 @@ def run_case(
                 raise RuntimeError("installed Guard or its generated extension changed during the session")
     except Exception as exc:
         case["execution_error"] = type(exc).__name__
-        (private / "execution-error.txt").write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
+        chain = execution_error_chain(exc, replacements)
+        case["execution_error_chain"] = chain
+        (private / "execution-error.txt").write_text("\n".join(chain) + "\n", encoding="utf-8")
     finally:
         case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
         remove_scratch_checkout(fixture.root)

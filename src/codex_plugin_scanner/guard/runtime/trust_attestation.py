@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import base64
-import hashlib
+import json
 import os
 import secrets
 from collections.abc import Mapping
@@ -10,17 +9,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, padding
-from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-
 from ..native_runner_authority import (
     NativeRunnerAuthorityError,
     NativeRunnerAuthorityRefusalError,
     native_runner_authority,
 )
-from .evidence_hash import canonical_guard_evidence_payload
 
 GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3 = "guard-aibom-trust-attestation.v3"
 GUARD_TRUST_ATTESTATION_DOMAIN = "hol-guard:aibom-trust-attestation:v3"
@@ -30,6 +23,14 @@ _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 _FALSY_ENV_VALUES = frozenset({"0", "false", "no", "off"})
 _DEFAULT_TRUST_ATTESTATION_KEY_FILE = "trust_attestation_key.pem"
 _DEFAULT_TRUST_ATTESTATION_KEY_ID = "guard-aibom-trust-key-local"
+_NATIVE_KEY_FEATURE = "native-trust-attestation-key-v1"
+_NATIVE_KEY_COMMAND = "trust-attestation-key"
+_NATIVE_KEY_OUTPUT_LIMIT = 16 * 1024 * 1024
+_NATIVE_KEY_TIMEOUT_SECONDS = 30.0
+# Payload bytes per sign request, leaving room under the 4 MiB native bound.
+_NATIVE_KEY_BATCH_BYTES = 3 * 1024 * 1024
+_NATIVE_KEY_UNAVAILABLE = "native_trust_attestation_key_unavailable"
+_NATIVE_KEY_INVALID = "native_trust_attestation_key_invalid"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,10 +47,6 @@ class GuardTrustAttestationVerificationKey:
     public_key_pem: str
     fingerprint_sha256: str
     public_jwk_thumbprint: str | None = None
-
-
-def canonical_trust_attestation_payload(payload: Mapping[str, object]) -> bytes:
-    return canonical_guard_evidence_payload(payload).encode("utf-8")
 
 
 def resolve_trust_attestation_signing_config(
@@ -93,7 +90,7 @@ def resolve_guard_oauth_trust_attestation_signing_config(
     if not private_key_pem or public_jwk_thumbprint is None:
         return None
     try:
-        _load_private_key(private_key_pem)
+        _native_key_answer({"op": "load", "key": private_key_pem})
     except ValueError:
         return None
     return GuardTrustAttestationSigningConfig(
@@ -121,95 +118,53 @@ def _resolve_persistent_trust_attestation_signing_config(
     active_key_id: str,
     guard_home: Path,
 ) -> GuardTrustAttestationSigningConfig | None:
-    """Load or auto-generate a persistent EC P-256 key stored in guard_home.
+    """Load or auto-generate the persistent EC P-256 key stored in guard_home.
 
-    The key is written to ``guard_home / trust_attestation_key.pem`` with 0600
-    permissions. On subsequent runs the same key is loaded, ensuring the server
-    registers the same device key across restarts. Returns ``None`` if the key
-    file cannot be created or read.
+    The native runtime keeps the key in ``guard_home / trust_attestation_key.pem``
+    with 0600 permissions, so the server registers the same device key across
+    restarts. Returns ``None`` if the key file cannot be created or read.
     """
-    key_path = guard_home / _DEFAULT_TRUST_ATTESTATION_KEY_FILE
     try:
-        private_key_pem = key_path.read_text(encoding="utf-8").strip()
-        if not private_key_pem:
-            raise ValueError("Empty trust attestation key file")
-        private_key = _load_private_key(private_key_pem)
-    except Exception:
-        # Key file is missing, empty, or corrupted. Generate a new key
-        # using atomic exclusive creation to avoid race conditions between
-        # concurrent Guard processes. If another process already created
-        # the file, read its key instead.
-        try:
-            private_key = ec.generate_private_key(ec.SECP256R1())
-            private_key_pem = private_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption(),
-            ).decode("utf-8")
-            key_path.parent.mkdir(parents=True, exist_ok=True)
-            fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(private_key_pem)
-        except FileExistsError:
-            # Another process created the file, or the file was corrupt and
-            # already existed. Read its key; if it fails, remove and retry.
-            try:
-                private_key_pem = key_path.read_text(encoding="utf-8").strip()
-                private_key = _load_private_key(private_key_pem)
-            except Exception:
-                key_path.unlink(missing_ok=True)
-                private_key = ec.generate_private_key(ec.SECP256R1())
-                private_key_pem = private_key.private_bytes(
-                    encoding=serialization.Encoding.PEM,
-                    format=serialization.PrivateFormat.PKCS8,
-                    encryption_algorithm=serialization.NoEncryption(),
-                ).decode("utf-8")
-                fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    f.write(private_key_pem)
-        except Exception:
-            return None
-    public_key_pem = (
-        private_key.public_key()
-        .public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        )
-        .decode("utf-8")
-        .strip()
-    )
-    return GuardTrustAttestationSigningConfig(
-        active_key_id=active_key_id,
-        private_key_pem=_normalize_pem(private_key_pem),
-        public_jwk_thumbprint=_public_key_fingerprint(public_key_pem),
-        signature_algorithm=GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
-    )
+        answer = _native_key_answer({"op": "persistent", "guard_home": str(guard_home.absolute())})
+    except ValueError:
+        return None
+    return _generated_signing_config(answer, active_key_id=active_key_id)
 
 
-@lru_cache(maxsize=4)
 def _resolve_headless_short_lived_trust_attestation_signing_config(
     *,
     active_key_id: str,
+) -> GuardTrustAttestationSigningConfig | None:
+    try:
+        return _headless_short_lived_trust_attestation_signing_config(active_key_id=active_key_id)
+    except ValueError:
+        return None
+
+
+@lru_cache(maxsize=4)
+def _headless_short_lived_trust_attestation_signing_config(
+    *,
+    active_key_id: str,
 ) -> GuardTrustAttestationSigningConfig:
-    private_key = ec.generate_private_key(ec.SECP256R1())
-    private_key_pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    ).decode("utf-8")
-    public_key_pem = (
-        private_key.public_key()
-        .public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        )
-        .decode("utf-8")
-        .strip()
-    )
+    config = _generated_signing_config(_native_key_answer({"op": "generate"}), active_key_id=active_key_id)
+    if config is None:
+        raise ValueError(_NATIVE_KEY_INVALID)
+    return config
+
+
+def _generated_signing_config(
+    answer: Mapping[str, object],
+    *,
+    active_key_id: str,
+) -> GuardTrustAttestationSigningConfig | None:
+    private_key_pem = answer.get("private_key_pem")
+    fingerprint = answer.get("fingerprint_sha256")
+    if not isinstance(private_key_pem, str) or not isinstance(fingerprint, str):
+        return None
     return GuardTrustAttestationSigningConfig(
         active_key_id=active_key_id,
         private_key_pem=private_key_pem,
-        public_jwk_thumbprint=_public_key_fingerprint(public_key_pem),
+        public_jwk_thumbprint=fingerprint,
         signature_algorithm=GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
     )
 
@@ -345,14 +300,22 @@ def apply_trust_attestation_metadata(
 
     # Every payload of the item is checked before any is signed; the first
     # refusal fails the item exactly as signing it alone would.
-    private_key = _load_private_key(config.private_key_pem)
-    validated_payloads = [_admitted_payload(entry) for _, entry in signing]
-    for (claim, entry), validated in zip(signing, validated_payloads, strict=True):
+    try:
+        validated_payloads = [_admitted_payload(entry) for _, entry in signing]
+    except ValueError:
+        _raise_for_unloadable_key(config.private_key_pem)
+        raise
+    attestations = _signed_attestations(
+        config,
+        [
+            (validated, str(entry["signed_at"]))
+            for (_, entry), validated in zip(signing, validated_payloads, strict=True)
+        ],
+    )
+    for (claim, entry), attestation in zip(signing, attestations, strict=True):
         raw_claim_metadata = claim.get("metadata")
         claim_metadata = dict(raw_claim_metadata) if isinstance(raw_claim_metadata, dict) else {}
-        claim_metadata["attestation"] = _sign_validated_payload(
-            validated, private_key=private_key, config=config, signed_at=str(entry["signed_at"])
-        )
+        claim_metadata["attestation"] = attestation
         claim_metadata["attestationStatus"] = "signed"
         claim_metadata["attestationBindings"] = entry["bindings"]
         claim["metadata"] = claim_metadata
@@ -479,99 +442,94 @@ def sign_trust_attestation(
     config: GuardTrustAttestationSigningConfig,
     signed_at: str,
 ) -> dict[str, object]:
-    private_key = _load_private_key(config.private_key_pem)
-    validated_payload = _validate_attestation_payload(
-        _payload_with_signed_at(payload, signed_at), **_SIGNED_PAYLOAD_RULES
-    )
-    return _sign_validated_payload(validated_payload, private_key=private_key, config=config, signed_at=signed_at)
+    try:
+        validated_payload = _validate_attestation_payload(
+            _payload_with_signed_at(payload, signed_at), **_SIGNED_PAYLOAD_RULES
+        )
+    except ValueError:
+        _raise_for_unloadable_key(config.private_key_pem)
+        raise
+    return _signed_attestations(config, [(validated_payload, signed_at)])[0]
 
 
-def _sign_validated_payload(
-    validated_payload: Mapping[str, object],
-    *,
-    private_key: RSAPrivateKey | EllipticCurvePrivateKey,
+def _signed_attestations(
     config: GuardTrustAttestationSigningConfig,
-    signed_at: str,
-) -> dict[str, object]:
-    canonical_payload = canonical_trust_attestation_payload(validated_payload)
-    signature = _sign_payload(
-        private_key=private_key,
-        canonical_payload=canonical_payload,
-        signature_algorithm=config.signature_algorithm,
+    payloads: list[tuple[dict[str, object], str]],
+) -> list[dict[str, object]]:
+    """The native runtime's signed envelope for each admitted payload, in order.
+
+    Payloads go in batches that stay under the native request bound, since
+    each claim was admitted on its own size, not the item's.
+    """
+
+    batches: list[list[dict[str, object]]] = [[]]
+    batch_bytes = 0
+    for payload, signed_at in payloads:
+        entry: dict[str, object] = {"payload": payload, "signed_at": signed_at}
+        entry_bytes = len(json.dumps(entry, sort_keys=True))
+        if batches[-1] and batch_bytes + entry_bytes > _NATIVE_KEY_BATCH_BYTES:
+            batches.append([])
+            batch_bytes = 0
+        batches[-1].append(entry)
+        batch_bytes += entry_bytes
+    return [attestation for batch in batches if batch for attestation in _signed_batch(config, batch)]
+
+
+def _signed_batch(
+    config: GuardTrustAttestationSigningConfig, batch: list[dict[str, object]]
+) -> list[dict[str, object]]:
+    answer = _native_key_answer(
+        {
+            "op": "sign",
+            "key": config.private_key_pem,
+            "algorithm": config.signature_algorithm,
+            "key_id": config.active_key_id,
+            "public_jwk_thumbprint": config.public_jwk_thumbprint,
+            "payloads": batch,
+        }
     )
-    verification_key = _verification_key_from_private_key(
-        private_key,
-        key_id=config.active_key_id,
-        public_jwk_thumbprint=config.public_jwk_thumbprint,
+    attestations = answer.get("attestations")
+    if (
+        not isinstance(attestations, list)
+        or len(attestations) != len(batch)
+        or not all(isinstance(attestation, dict) for attestation in attestations)
+    ):
+        raise ValueError(_NATIVE_KEY_INVALID)
+    return [dict(attestation) for attestation in attestations if isinstance(attestation, dict)]
+
+
+def _raise_for_unloadable_key(private_key_pem: str) -> None:
+    """Raise the key's refusal, which comes before any payload refusal."""
+
+    try:
+        _native_key_answer({"op": "load", "key": private_key_pem})
+    except ValueError as error:
+        if str(error) != _NATIVE_KEY_UNAVAILABLE:
+            raise
+
+
+def _native_key_answer(request: dict[str, object]) -> dict[str, object]:
+    """Ask the native runtime, which alone holds the private key, to act on it.
+
+    A refusal is raised as the ``ValueError`` it names; a runtime that cannot
+    answer raises ``ValueError`` too, so signing fails closed.
+    """
+
+    from ..mdm.runtime_request import runtime_answer
+
+    answer = runtime_answer(
+        _NATIVE_KEY_FEATURE,
+        _NATIVE_KEY_COMMAND,
+        request,
+        output_limit=_NATIVE_KEY_OUTPUT_LIMIT,
+        timeout_seconds=_NATIVE_KEY_TIMEOUT_SECONDS,
     )
-    return {
-        "payloadVersion": str(validated_payload["payloadVersion"]),
-        "payloadHash": hashlib.sha256(canonical_payload).hexdigest(),
-        "signature": base64.b64encode(signature).decode("ascii"),
-        "signatureAlgorithm": config.signature_algorithm,
-        "signedAt": signed_at,
-        "keyId": verification_key.key_id,
-        "publicKeyPem": verification_key.public_key_pem,
-        "fingerprintSha256": verification_key.fingerprint_sha256,
-        **(
-            {"publicJwkThumbprint": verification_key.public_jwk_thumbprint}
-            if verification_key.public_jwk_thumbprint is not None
-            else {}
-        ),
-    }
-
-
-def _load_private_key(private_key_pem: str) -> RSAPrivateKey | EllipticCurvePrivateKey:
-    private_key = serialization.load_pem_private_key(private_key_pem.encode("utf-8"), password=None)
-    if not isinstance(private_key, (RSAPrivateKey, EllipticCurvePrivateKey)):
-        raise ValueError("Trust attestation private key must be RSA or EC")
-    return private_key
-
-
-def _verification_key_from_private_key(
-    private_key: RSAPrivateKey | EllipticCurvePrivateKey,
-    *,
-    key_id: str,
-    public_jwk_thumbprint: str | None = None,
-) -> GuardTrustAttestationVerificationKey:
-    public_key_pem = (
-        private_key.public_key()
-        .public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        )
-        .decode("utf-8")
-        .strip()
-    )
-    return GuardTrustAttestationVerificationKey(
-        key_id=key_id,
-        public_key_pem=public_key_pem,
-        fingerprint_sha256=_public_key_fingerprint(public_key_pem),
-        public_jwk_thumbprint=public_jwk_thumbprint,
-    )
-
-
-def _sign_payload(
-    *,
-    private_key: RSAPrivateKey | EllipticCurvePrivateKey,
-    canonical_payload: bytes,
-    signature_algorithm: str,
-) -> bytes:
-    if signature_algorithm == GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM:
-        if not isinstance(private_key, RSAPrivateKey):
-            raise ValueError("Trust attestation private key must be RSA")
-        return private_key.sign(
-            canonical_payload,
-            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
-            hashes.SHA256(),
-        )
-    if signature_algorithm == GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256:
-        if not isinstance(private_key, EllipticCurvePrivateKey):
-            raise ValueError("Trust attestation private key must be EC")
-        if not isinstance(private_key.curve, ec.SECP256R1):
-            raise ValueError("Trust attestation EC private key must use P-256")
-        return private_key.sign(canonical_payload, ec.ECDSA(hashes.SHA256()))
-    raise ValueError("Unsupported trust attestation signature algorithm")
+    if answer is None:
+        raise ValueError(_NATIVE_KEY_UNAVAILABLE)
+    error = answer.get("error")
+    if isinstance(error, str):
+        raise ValueError(error)
+    return answer
 
 
 def _payload_with_signed_at(
@@ -582,11 +540,6 @@ def _payload_with_signed_at(
     if isinstance(signed_at, str) and signed_at:
         enriched["signedAt"] = signed_at
     return enriched
-
-
-def _public_key_fingerprint(public_key_pem: str) -> str:
-    normalized_pem = _normalize_pem(public_key_pem)
-    return hashlib.sha256(normalized_pem.encode("utf-8")).hexdigest()
 
 
 def _sanitize_env(value: str | None) -> str:

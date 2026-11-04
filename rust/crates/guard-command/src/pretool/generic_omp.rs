@@ -237,13 +237,22 @@ pub(super) fn strict_tool_input(payload: &Value) -> Option<&Map<String, Value>> 
 }
 
 /// Optional `path` string. `Some(None)` is an absent path (workspace root).
+///
+/// A search that starts where the project does spells that as an empty
+/// argument: Oh My Pi's `glob` sends `path: ""`. The field is present and its
+/// type is right, and it names no target, so it describes the same search as
+/// a call with no `path` key at all and is read as that absent path. Blank
+/// here means empty or whitespace only, exactly as extraction reads it, so
+/// the agreement check below still compares the same values. Anything that is
+/// not a string keeps its review.
 fn input_path<'a>(
     input: &'a Map<String, Value>,
     signals: &GenericSignals,
 ) -> Option<Option<&'a str>> {
     let path = match input.get("path") {
         None => None,
-        Some(Value::String(path)) if !path.is_empty() => Some(path.as_str()),
+        Some(Value::String(path)) if path.trim().is_empty() => None,
+        Some(Value::String(path)) => Some(path.as_str()),
         Some(_) => return None,
     };
     let expected: Vec<&str> = path.into_iter().collect();

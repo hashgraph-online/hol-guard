@@ -1,5 +1,5 @@
-//! The redirect shapes and the single command group that segment splitting
-//! reads out of a command's own text.
+//! The redirect shapes, the single command group and the top-level group list
+//! that segment splitting reads out of a command's own text.
 
 use super::*;
 
@@ -326,4 +326,29 @@ fn quoted_word_end(chars: &[char], open: usize) -> Option<usize> {
         index += 1;
     }
     None
+}
+
+/// A list of top-level groups the splitter can blank, rather than one group
+/// that is the whole command. The decision reads that list.
+pub(crate) fn command_has_top_level_group_list(command: &str) -> bool {
+    blanked_top_level_group_list(command).is_some()
+}
+
+/// The command list a top-level list of groups runs: the same text with each
+/// group's brackets blanked. Every command the groups can run is still named,
+/// so reading the list screens each of them on its own merits rather than
+/// waving the wrapper through. Blanking returns `None` on an unquoted `$`, a
+/// backtick, a redirect, a process substitution or a nested bracket, so a
+/// group whose contents cannot be represented this way has no list.
+///
+/// It is a reading, not the bytes a sink runs: a directory change inside one
+/// group does not move the next element, which the blanked text no longer
+/// says. A plan built from it must therefore grant nothing outside the
+/// workspace.
+pub(crate) fn blanked_top_level_group_list(command: &str) -> Option<String> {
+    let chars: Vec<char> = command.chars().collect();
+    if sole_command_group(&chars).is_some() {
+        return None;
+    }
+    Some(blank_top_level_groups(&chars)?.into_iter().collect())
 }

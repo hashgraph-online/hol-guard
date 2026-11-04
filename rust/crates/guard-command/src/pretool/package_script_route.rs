@@ -24,9 +24,9 @@ use crate::CanonicalCommandV1;
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
 
-#[cfg(unix)]
-use super::super::contained_wrapper::sibling_project_root;
 use super::super::contained_wrapper::{contained_core, package_dir};
+#[cfg(unix)]
+use super::super::contained_wrapper::{contained_core_in, project_root, ProjectRoots};
 #[cfg(unix)]
 use super::super::executable_basename;
 use super::super::PathContext;
@@ -57,13 +57,45 @@ pub(in crate::pretool) fn contained_test_reason(
             return Some(reason);
         }
     }
-    let core = contained_core(model, context)?;
+    let Some(core) = contained_core(model, context) else {
+        // A `cd` into a project that carries a manifest and no repository
+        // roots the read-only package-test sandbox, and nothing else.
+        return package_test_in_project(model, context);
+    };
     // The core runs in its own directory, so the reading that depends on it
     // and the receipt that records it are given the same answer.
     let cwd = core_cwd(model, context);
     let reason =
         super::readonly_test_reason(&core, cwd.as_deref()).filter(|reason| *reason != GIT)?;
     resolved(&core, reason, cwd, context)
+}
+
+/// The package-test route's own reading of a `cd` target that no repository
+/// roots: a project with a manifest roots that sandbox, and the answer is
+/// kept only when the run is in fact the package `test` script. Every other
+/// route still needs a repository, so a plain neighbouring directory does not
+/// become a place to run a build or a tool.
+#[cfg(unix)]
+fn package_test_in_project(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<&'static str> {
+    let core = contained_core_in(model, context, ProjectRoots::RepositoryOrPackage)?;
+    let cwd = core_cwd(model, context);
+    let reason = super::readonly_test_reason(&core, cwd.as_deref())?;
+    if reason != PACKAGE_TEST {
+        return None;
+    }
+    resolved(&core, reason, cwd, context)
+}
+
+/// Windows has no package-test containment route, so there is nothing to root.
+#[cfg(not(unix))]
+fn package_test_in_project(
+    _model: &CanonicalCommandV1,
+    _context: PathContext<'_>,
+) -> Option<&'static str> {
+    None
 }
 
 /// The directory the wrapper core runs in: a projected `--cwd`, a verified
@@ -190,7 +222,14 @@ fn resolved(
         // script.
         return direct_tool(reason, arguments, cwd, context);
     }
-    let Some((workspace, directory)) = cwd.and_then(|cwd| locations(&cwd, context)) else {
+    // Only the package-test sandbox is rooted in a project that carries no
+    // repository.
+    let roots = if test {
+        ProjectRoots::RepositoryOrPackage
+    } else {
+        ProjectRoots::Repository
+    };
+    let Some((workspace, directory)) = cwd.and_then(|cwd| locations(&cwd, context, roots)) else {
         // No real directory to read: the sink cannot run it either, and no
         // narrower or broader execution is offered. A conventional name says
         // what the script does on its own; any other name is only as good as
@@ -257,7 +296,7 @@ fn direct_tool(
     if reason != NODE_BUILD {
         return Some(reason);
     }
-    let found = cwd.and_then(|cwd| locations(&cwd, context));
+    let found = cwd.and_then(|cwd| locations(&cwd, context, ProjectRoots::Repository));
     let roots = found
         .as_ref()
         .map(|(workspace, directory)| (directory.as_path(), workspace.as_path()));
@@ -338,13 +377,17 @@ fn build_output_allowed(arguments: &[String], roots: Option<(&Path, &Path)>) -> 
 #[cfg(unix)]
 /// The sink's approved root and the canonical run directory, or `None` when
 /// either directory does not exist.
-fn locations(cwd: &Path, context: PathContext<'_>) -> Option<(PathBuf, PathBuf)> {
+fn locations(
+    cwd: &Path,
+    context: PathContext<'_>,
+    roots: ProjectRoots,
+) -> Option<(PathBuf, PathBuf)> {
     let session = std::fs::canonicalize(context.cwd?).ok()?;
     let directory = std::fs::canonicalize(cwd).ok()?;
     let workspace = if directory.starts_with(&session) {
         session
     } else {
-        sibling_project_root(&directory, context.home_dir?)?
+        project_root(&directory, context.home_dir?, roots)?
     };
     Some((workspace, directory))
 }
