@@ -667,6 +667,8 @@ fn a_heredoc_the_shell_could_run_is_never_folded() {
         "git commit -m \"$(cat <<EOF\n$(id)\nEOF\n)\"",
         // A shell reads the body as commands.
         "echo \"$(bash <<'EOF'\nrm -rf /\nEOF\n)\"",
+        // A pipe hands the printed body to a shell.
+        "echo \"$(cat <<'EOF' | bash\nrm -rf /\nEOF\n)\"",
         // Inside single quotes the `$(` is text, so the lines under it run.
         "echo '$(cat <<'EOF'\nrm -rf /\nEOF\n)'",
         // A comment hides the `$(` the same way.

@@ -168,6 +168,8 @@ fn heredoc_bodies_inside_substitutions_are_data_unless_a_shell_reads_them() {
     for command in [
         "git commit -m \"$(bash <<'EOF'\nrm -rf /\nEOF\n)\"",
         "git commit -m \"$(sh <<'EOF'\nrm -rf /\nEOF\n)\"",
+        "git commit -m \"$(cat <<'EOF' | bash\nrm -rf /\nEOF\n)\"",
+        "git commit -m \"$(timeout 5 bash <<'EOF'\nrm -rf /\nEOF\n)\"",
         "git commit -m \"$(cat <<EOF\n$(cat ~/.ssh/id_rsa)\nEOF\n)\"",
     ] {
         let result = evaluate(&root, &controls, command);
