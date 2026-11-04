@@ -51,6 +51,8 @@ def maybe_auto_revert_watch(guard_home: Path, *, now: datetime | None = None) ->
         and config.protection_posture_explicit
         and not config.watch_entered_at
         and config.watch_auto_revert_hours > 0
+        # A Watch an administrator locked must not get an end the lock would then refuse.
+        and "protection_posture" not in config.managed_locked_settings
     ):
         # An explicit Watch saved without a start time would never revert. The runtime
         # stamps it now, under its write lock, and only if Watch is still unstamped, so a

@@ -336,9 +336,12 @@ fn previous_state(current: &Value, selected: bool) -> Value {
 /// Stamps `watch_entered_at` on an explicit Watch that has none, so the
 /// auto-revert window can start. The posture is read under the config write
 /// lock, so a Protected or Extra careful save that landed first is left alone.
+/// Only a Watch the user saved qualifies: a Watch a managed policy imposes
+/// carries no stamp, and the lock would refuse the revert a stamp leads to.
 fn repair_watch_stamp(stored: &Table, current: &Value, now: &str) -> SettingsWrite {
     let mut next = stored.clone();
-    if current_str(current, "protection_posture") == "watch"
+    if is_str(get(stored, "protection_posture"), "watch")
+        && current_str(current, "protection_posture") == "watch"
         && current_bool(current, "protection_posture_explicit")
         && current_str(current, "watch_entered_at").is_empty()
     {

@@ -260,6 +260,9 @@ def watch_revert_times(config: GuardConfig) -> dict[str, object]:
     on its own.
     """
 
+    in_watch = config.protection_posture == "watch" or "watch" in (config.harness_postures or {}).values()
+    if not in_watch:
+        return {"watch_entered_at": None, "watch_reverts_at": None, "harness_watch_reverts_at": {}}
     posture_at, deadlines = _watch_revert_deadlines(config)
     return {
         "watch_entered_at": config.watch_entered_at if config.protection_posture == "watch" else None,

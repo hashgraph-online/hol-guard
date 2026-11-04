@@ -226,3 +226,26 @@ fn watch_stamp_repair_stamps_only_an_unstamped_explicit_watch() {
         "mode = \"enforce\"\nprotection_posture = \"protected\"\n"
     );
 }
+
+#[test]
+fn watch_stamp_repair_leaves_a_managed_watch_unstamped() {
+    let managed = ManagedInput {
+        settings: json!({"protection_posture": "watch", "mode": "observe"})
+            .as_object()
+            .unwrap()
+            .clone(),
+        locked_settings: vec!["protection_posture".to_owned()],
+    };
+    let value = pyjson::parse(r#"{"watch_stamp_repair": true}"#).unwrap();
+    let Ok(computed) = compute(
+        "settings",
+        Some("telemetry = true\n"),
+        &value,
+        Some(&managed),
+        false,
+        "2026-11-04T00:00:00+00:00",
+    ) else {
+        panic!("the repair request must not be refused");
+    };
+    assert_eq!(computed.text, "telemetry = true\n");
+}
