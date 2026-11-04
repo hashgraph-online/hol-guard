@@ -738,6 +738,11 @@ fn a_setting_prefix_does_not_hide_a_backgrounded_command_from_review() {
         // the words back on spaces put it behind `echo`, where no command
         // position reads it.
         "(echo ready\nLD_PRELOAD=/tmp/payload.so ls)",
+        // `A='1 '` and `B=' y'` are each split in half by the whitespace
+        // inside them. A half whose own quoting does not close is never a
+        // setting, so dropping it can never re-pair the quotes around
+        // `LD_PRELOAD=x.so` and read it as quoted text.
+        "(A='1 ' LD_PRELOAD=x.so ls 'z' B=' y' &)",
         // The shell reads `FOO=1>>out` as a setting and a redirect glued to
         // it. Taking the whole word for a setting dropped the redirect with
         // it, and the write to a path that follows a link reached a review
