@@ -34,7 +34,7 @@ use std::collections::BTreeSet;
 use super::{find_exec_programs, is_assignment, named_words, INTERPRETERS, SHELL_PREFIXES};
 
 /// Stands in for a bounded substitution's output: one ordinary word.
-const OUTPUT: &str = "guard_substituted_output";
+pub(super) const OUTPUT: &str = "guard_substituted_output";
 
 /// Lookups the lookup reader proves on its own. One it left in place names a
 /// word it could not prove is an operand.
@@ -139,7 +139,7 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
                 &word,
                 redirect_target,
                 flow,
-                command_continues(&chars, close + 1),
+                command_continues(&chars, close + 1, double),
             )?;
             if receiver.is_none() {
                 if let Some((name, _)) = word.split_once('=') {
@@ -176,7 +176,7 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
                 &word,
                 redirect_target,
                 flow,
-                command_continues(&chars, close + 1),
+                command_continues(&chars, close + 1, double),
             )?;
             if receiver.is_none() {
                 if let Some((name, _)) = word.split_once('=') {
@@ -275,20 +275,47 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
 /// quote as a following program made an everyday spelling of a standalone
 /// assignment look like a prefix, so the value was never followed and the
 /// command kept the block this pass exists to remove.
-fn command_continues(chars: &[char], start: usize) -> bool {
-    let rest: String = chars[start.min(chars.len())..]
+fn command_continues(chars: &[char], start: usize, quoted: bool) -> bool {
+    let (mut single, mut double, mut escaped) = (false, quoted, false);
+    let mut words = vec![String::new()];
+    for character in chars.get(start.min(chars.len())..).unwrap_or_default() {
+        let character = *character;
+        if single {
+            single = character != '\'';
+        } else if escaped {
+            escaped = false;
+        } else {
+            match character {
+                '\\' => escaped = true,
+                '\'' if !double => single = true,
+                '"' => double = !double,
+                ';' | '&' | '|' | '\n' if !double => break,
+                // A `#` that opens a word starts a comment, and the shell runs
+                // nothing after it: `id=$(cat id) # keep $id` is a standalone
+                // assignment, not a setting prefix for a command named `#`.
+                // Inside quoting it is ordinary text, so the word the
+                // substitution sits in has to close before a `#` reads that
+                // way: `T="$(cat id) #s" gh pr view 12` still runs `gh`.
+                '#' if !double && words.len() > 1 && words.last().is_some_and(String::is_empty) => {
+                    break
+                }
+                _ if character.is_whitespace() && !double => {
+                    words.push(String::new());
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        if let Some(word) = words.last_mut() {
+            word.push(character);
+        }
+    }
+    // The first word is the tail of the word the substitution sits in, never a
+    // program the value is handed to.
+    words
         .iter()
-        .take_while(|value| !matches!(**value, ';' | '&' | '|' | '\n'))
-        .collect();
-    let Some((_, following)) = rest.split_once(char::is_whitespace) else {
-        return false;
-    };
-    following
-        .split_whitespace()
-        // A `#` that opens a word starts a comment, and the shell runs
-        // nothing after it: `id=$(cat id) # keep $id` is a standalone
-        // assignment, not a setting prefix for a command named `#`.
-        .take_while(|raw| !raw.starts_with('#'))
+        .skip(1)
+        .filter(|raw| !raw.is_empty())
         .any(|raw| !is_assignment(raw) && !SHELL_PREFIXES.contains(&program_name(raw).as_str()))
 }
 

@@ -520,6 +520,24 @@ fn a_comment_is_not_read_as_a_receiver() {
 }
 
 #[test]
+fn a_quoted_hash_does_not_hide_the_program_a_setting_runs() {
+    // The `#` sits inside the word the substitution sits in, so the shell
+    // reads it as ordinary text and `gh` is the program the setting runs.
+    // Stopping the lookahead there read the assignment as standalone and left
+    // `gh` out of the set the owner check reads, which skipped the refusal a
+    // contributed owner for `gh` carries.
+    for command in [
+        r#"TARGET="$(cat id) #suffix" gh pr view 12"#,
+        r#"TARGET=$(cat id)" #suffix" gh pr view 12"#,
+    ] {
+        assert!(
+            reviewable_substitutions(command).is_none_or(|bounded| bounded.programs.contains("gh")),
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn text_whose_quoting_never_closes_is_not_read() {
     // An open quote swallows every separator after it, so the piece holding
     // the value carries words from statements that are not its own and the

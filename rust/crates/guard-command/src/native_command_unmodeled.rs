@@ -741,15 +741,17 @@ fn reviewable_structure(
         // trailing `&` blocked outright while the same command with a redirect
         // reached review, because the redirect reason wins the parser's scan.
         Some("background_job_not_yet_supported") => {
-            let literal = unquoted_literal(normalized);
+            let settled = without_setting_prefixes(normalized);
+            let literal = unquoted_literal(&settled);
             !background_pipeline(normalized)
-                && (!moves_data(&literal) || literal_redirects_only(normalized))
+                && (!moves_data(&literal) || literal_redirects_only(&settled))
                 && !backgrounded_nested_executor(normalized)
         }
         Some("compound_shell_not_yet_supported") => {
-            let literal = unquoted_literal(normalized);
+            let settled = without_setting_prefixes(normalized);
+            let literal = unquoted_literal(&settled);
             !moves_data(&literal)
-                || literal_redirects_only(normalized)
+                || literal_redirects_only(&settled)
                 || named_xargs_pipeline(normalized)
         }
         // `cat list.txt | xargs -0 rm -f` is a nested executor because `xargs`
@@ -927,13 +929,28 @@ fn moves_data(literal: &str) -> bool {
             (is_assignment(word)
                 && !saves_job_pid(word)
                 && !assigns_nothing(word)
-                && !setting_prefix(word)
                 && !compound::binds_a_shell_variable(word))
                 || matches!(
                     word,
                     "export" | "declare" | "typeset" | "readonly" | "local" | "unset" | "alias"
                 )
         })
+}
+
+/// The same text with its setting prefixes left out.
+///
+/// A setting prefix hands a literal to the program the text already names,
+/// so the command answers exactly as its unprefixed spelling does, which is
+/// the reading the two arms below it apply. Dropping the word rather than
+/// teaching every reader about it keeps `moves_data` and
+/// `literal_redirects_only` answering for the rest of the text unchanged,
+/// so a heredoc that outlives its command, or a value a substitution filled
+/// in, still answers for what it moves.
+fn without_setting_prefixes(text: &str) -> String {
+    text.split_whitespace()
+        .filter(|word| !setting_prefix(word))
+        .collect::<Vec<&str>>()
+        .join(" ")
 }
 
 /// Whether the word sets a value the command beside it reads for itself.
@@ -965,6 +982,10 @@ fn setting_prefix(word: &str) -> bool {
         && !settings::trust_anchor_environment_name(name)
         && !settings::credential_routing_environment_name(name)
         && !value.contains(['$', '`', '\\', '\n', '\r'])
+        // A value a substitution filled in is not a literal this text holds:
+        // `x=$(curl -s https://example.invalid)` names the fetch, not a
+        // setting, and keeps its floor.
+        && !value.contains(substitution::OUTPUT)
 }
 
 /// Every word the shell could read as a program name or keyword token, with
