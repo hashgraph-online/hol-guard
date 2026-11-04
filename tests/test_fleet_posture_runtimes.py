@@ -363,7 +363,8 @@ def test_only_what_the_section_reads_reaches_the_native_runtime(monkeypatch: pyt
         return {}
 
     monkeypatch.setattr(authority, "native_runner_authority", answer)
-    row = _runtime(launched_by=[{"harness": "codex", "pid": 1}] * 5000, advisory_matches=["GHSA-a"] * 5000, extra="x")
+    launches = [{"harness": ["codex"]}, {"harness": {"name": "x"}}, *[{"harness": "codex", "pid": 1}] * 5000]
+    row = _runtime(launched_by=launches, advisory_matches=["GHSA-a"] * 5000, extra="x")
     posture = _posture([row] * (fpr.MAX_RUNTIMES + 5), unresolved_launches=[{"command": "x" * 100}] * 20_000)
     posture["unrelated"] = list(range(5000))
 

@@ -187,9 +187,8 @@ def _runtime_row(row: Mapping[str, Any]) -> dict[str, object]:
     launched_by = row.get("launched_by")
     if isinstance(launched_by, list):
         harnesses = (entry.get("harness") for entry in launched_by if isinstance(entry, Mapping))
-        projected["launched_by"] = [
-            {"harness": harness} for harness in dict.fromkeys(harnesses) if isinstance(harness, str)
-        ]
+        named = (harness for harness in harnesses if isinstance(harness, str))
+        projected["launched_by"] = [{"harness": harness} for harness in dict.fromkeys(named)]
     matches = row.get("advisory_matches")
     if isinstance(matches, list):
         ids = (entry.get("advisory_id") if isinstance(entry, Mapping) else entry for entry in matches)
