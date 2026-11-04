@@ -731,6 +731,10 @@ fn a_setting_prefix_does_not_hide_a_backgrounded_command_from_review() {
         "(LD_AUDIT=/tmp/audit.so ls &)",
         "(CC=/tmp/compiler make &)",
         "{ LD_PRELOAD=/tmp/x.so ls; }",
+        // A newline ends a command, so the setting belongs to `ls`. Joining
+        // the words back on spaces put it behind `echo`, where no command
+        // position reads it.
+        "(echo ready\nLD_PRELOAD=/tmp/payload.so ls)",
         // The shell reads `FOO=1>>out` as a setting and a redirect glued to
         // it. Taking the whole word for a setting dropped the redirect with
         // it, and the write to a path that follows a link reached a review

@@ -947,21 +947,40 @@ fn moves_data(literal: &str) -> bool {
 /// so a heredoc that outlives its command, or a value a substitution filled
 /// in, still answers for what it moves.
 fn without_setting_prefixes(text: &str) -> String {
-    text.split_whitespace()
-        .map(|word| {
-            // A subshell or brace group opens on the same word the setting
-            // starts: `(PORT=39871 npm start &)`. The opener is what the text
-            // around the setting is made of, so it stays.
-            let opened = word.len() - word.trim_start_matches(['(', '{']).len();
-            if setting_prefix(&word[opened..]) {
-                &word[..opened]
-            } else {
-                word
+    // Every separator the text had stays where it was. `command_words` reads
+    // a newline, a `;` and a `(` as the end of a command, so joining the
+    // words back on spaces would put `LD_PRELOAD=/tmp/x.so ls` on the same
+    // line as the command before it and leave the setting out of every
+    // command position the screens read.
+    let mut out = String::with_capacity(text.len());
+    let mut start = None;
+    for (index, character) in text.char_indices() {
+        if character.is_whitespace() {
+            if let Some(start) = start.take() {
+                out.push_str(kept_beside_a_setting(&text[start..index]));
             }
-        })
-        .filter(|word| !word.is_empty())
-        .collect::<Vec<&str>>()
-        .join(" ")
+            out.push(character);
+        } else if start.is_none() {
+            start = Some(index);
+        }
+    }
+    if let Some(start) = start {
+        out.push_str(kept_beside_a_setting(&text[start..]));
+    }
+    out
+}
+
+/// The word with its setting prefix left out, which is nothing at all unless
+/// a subshell or brace group opens on the same word: `(PORT=39871 npm start
+/// &)`. That opener is what the text around the setting is made of, so it
+/// stays.
+fn kept_beside_a_setting(word: &str) -> &str {
+    let opened = word.len() - word.trim_start_matches(['(', '{']).len();
+    if setting_prefix(&word[opened..]) {
+        &word[..opened]
+    } else {
+        word
+    }
 }
 
 /// Whether the word sets a value the command beside it reads for itself.
