@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import inspect
 import io
+import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -226,17 +228,22 @@ def _github_payloads(owner: str = "public-owner", repository: str = "public-repo
     )
 
 
-def test_owned_public_github_get_returns_silent_verified(monkeypatch: pytest.MonkeyPatch) -> None:
-    responses = iter(_github_payloads())
-    urls: list[str] = []
+def _public_get(payloads: tuple[dict[str, object], ...], urls: list[str] | None = None) -> Callable[..., bytes]:
+    responses = iter(payloads)
 
-    def public_get(url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
+    def public_get(url: str, *, timeout_seconds: float, opener: object) -> bytes:
         assert timeout_seconds == 15.0
         assert opener is not None
-        urls.append(url)
-        return next(responses)
+        if urls is not None:
+            urls.append(url)
+        return json.dumps(next(responses)).encode("utf-8")
 
-    monkeypatch.setattr(github_reads, "_public_get_json", public_get)
+    return public_get
+
+
+def test_owned_public_github_get_returns_silent_verified(monkeypatch: pytest.MonkeyPatch) -> None:
+    urls: list[str] = []
+    monkeypatch.setattr(github_reads, "_public_get", _public_get(_github_payloads(), urls))
     result = try_read_verified_public_github_pull_request("public-owner", "public-repo", 17)
 
     assert result is not None
@@ -250,30 +257,30 @@ def test_owned_public_github_get_returns_silent_verified(monkeypatch: pytest.Mon
     assert result.decision.disposition is FinalDisposition.SILENT_VERIFIED
 
 
-def test_github_executor_rejects_private_dynamic_and_drifted_reads(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_github_executor_rejects_private_dynamic_and_drifted_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     private, pull = _github_payloads()
     private["private"] = True
-    responses = iter((private, pull))
-
-    def private_get(_url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
-        del timeout_seconds, opener
-        return next(responses)
-
-    monkeypatch.setattr(github_reads, "_public_get_json", private_get)
+    monkeypatch.setattr(github_reads, "_public_get", _public_get((private, pull)))
     assert try_read_verified_public_github_pull_request("public-owner", "public-repo", 17) is None
     assert try_read_verified_public_github_pull_request("owner/value", "repo", 17) is None
     assert try_read_verified_public_github_pull_request("owner", "repo", 0) is None
     assert try_read_verified_public_github_pull_request("owner", "repo", 17, fields=("body",)) is None
 
-    responses = iter(_github_payloads())
+    ca_bundle = tmp_path / "managed-ca.pem"
+    ca_bundle.write_bytes(b"first-managed-ca")
+    policy = ManagedNetworkPolicy(proxy_mode="none", ca_bundle_path=str(ca_bundle))
+    monkeypatch.setattr(github_reads, "resolved_network_policy", lambda _policy: (policy, True))
+    monkeypatch.setattr(github_reads, "managed_opener", lambda *_args, **_kwargs: object())
+    drifting = _public_get(_github_payloads())
 
-    def drift_get(_url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
-        del timeout_seconds, opener
-        return next(responses)
+    def drift_get(url: str, *, timeout_seconds: float, opener: object) -> bytes:
+        # The managed CA bundle changes while the read is in flight.
+        ca_bundle.write_bytes(b"second-managed-ca")
+        return drifting(url, timeout_seconds=timeout_seconds, opener=opener)
 
-    monkeypatch.setattr(github_reads, "_public_get_json", drift_get)
-    digests = iter(("0" * 64, "1" * 64))
-    monkeypatch.setattr(github_reads, "_source_digest", lambda: next(digests))
+    monkeypatch.setattr(github_reads, "_public_get", drift_get)
     assert try_read_verified_public_github_pull_request("public-owner", "public-repo", 17) is None
 
 
@@ -286,13 +293,7 @@ def test_github_verified_read_proof_binds_managed_ca_contents(tmp_path: Path, mo
     monkeypatch.setattr(github_reads, "managed_opener", lambda *_args, **_kwargs: object())
 
     def read_once() -> github_reads.VerifiedGitHubReadResult:
-        responses = iter(_github_payloads())
-
-        def public_get(_url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
-            del timeout_seconds, opener
-            return next(responses)
-
-        monkeypatch.setattr(github_reads, "_public_get_json", public_get)
+        monkeypatch.setattr(github_reads, "_public_get", _public_get(_github_payloads()))
         result = try_read_verified_public_github_pull_request("public-owner", "public-repo", 17)
         assert result is not None
         return result
@@ -314,13 +315,7 @@ def test_github_verified_read_keeps_the_direct_fallback_without_a_managed_policy
         "managed_opener",
         lambda policy, **_kwargs: openers.append(policy) or object(),
     )
-    responses = iter(_github_payloads())
-
-    def public_get(_url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
-        del timeout_seconds, opener
-        return next(responses)
-
-    monkeypatch.setattr(github_reads, "_public_get_json", public_get)
+    monkeypatch.setattr(github_reads, "_public_get", _public_get(_github_payloads()))
     try_read_verified_public_github_pull_request("public-owner", "public-repo", 17)
 
     # An unmanaged default policy is not passed on, so a failed proxy lookup still goes direct.

@@ -40,7 +40,7 @@ mod policy;
 #[path = "context_assistance_engine_prompt.rs"]
 mod prompt;
 use policy::{allowed, current_sources, effective, policy_current, policy_document, revision};
-pub(crate) use prompt::{admissible_paths, quick_excerpts, PickedExcerpt};
+pub(crate) use prompt::{project_context_on, quick_excerpts, PickedExcerpt};
 #[cfg(target_os = "macos")]
 #[path = "context_assistance_engine_execution.rs"]
 mod execution;
@@ -233,6 +233,7 @@ impl Engine {
     ) -> Result<(), RuntimeError> {
         engine.expire_notes(runtime)?;
         engine.restore_picked(runtime);
+        engine.publish_hands();
         #[cfg(target_os = "macos")]
         engine.maintain_execution_lane(runtime)?;
         Ok(())
@@ -265,6 +266,16 @@ impl Engine {
     }
 
     pub(crate) fn execute(
+        &mut self,
+        runtime: &mut VerifiedRuntime,
+        request: Request,
+    ) -> Result<Value, RuntimeError> {
+        let result = self.handle(runtime, request);
+        self.publish_hands();
+        result
+    }
+
+    fn handle(
         &mut self,
         runtime: &mut VerifiedRuntime,
         request: Request,

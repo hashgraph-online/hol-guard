@@ -102,14 +102,17 @@ pub(crate) fn verified_climb_target(
         return None;
     }
     let supplied = sibling::climbed(value, std::path::Path::new(context.cwd?))?;
-    let canonical = std::fs::canonicalize(&supplied).ok()?;
-    if canonical != supplied
-        || !canonical.is_dir()
-        || !super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
+    // The climb names its directory in the spelling the harness reports, so
+    // the read screens below and every later operand proof see that spelling
+    // rather than the `\\?\` verbatim form `canonicalize` answers with on
+    // Windows, which no reported directory is written as.
+    if !sibling::own_canonical_spelling(&supplied)
+        || !supplied.is_dir()
+        || !super::read_paths::resolved_path_allowed(&supplied, context.home_dir, context.cwd)
     {
         return None;
     }
-    canonical.to_str().map(str::to_owned)
+    supplied.to_str().map(str::to_owned)
 }
 
 /// POSIX `cd` skips the CDPATH search for operands that begin with `.` or

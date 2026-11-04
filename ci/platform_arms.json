@@ -180,11 +180,11 @@
   },
   {
    "verdict": "other-platform",
-   "note": "Windows resolves a sibling repository root in its own arm above (PR #5399), so this stub is now reached only on a platform Guard does not ship for. Returning `None` there leaves such a command reviewed, which is the honest answer where there is no containment sink at all.",
+   "note": "Windows resolves a project root in its own arm above (PR #5399), so this stub is now reached only on a platform Guard does not ship for. Returning `None` there leaves such a command reviewed, which is the honest answer where there is no containment sink at all. The marker set the caller asks for changes nothing here: without an ownership check no root is proved at all.",
    "file": "rust/crates/guard-command/src/pretool/contained_wrapper.rs",
-   "item": "pub(super) fn sibling_project_root( _target: &std::path::Path, _home: &str, ) -> Option<std::path::PathBuf>",
+   "item": "pub(super) fn project_root( _target: &std::path::Path, _home: &str, _roots: ProjectRoots, ) -> Option<std::path::PathBuf>",
    "cfg": "not(any(unix, windows))",
-   "body": "5ff1fe342d3b"
+   "body": "3d7cdeb77563"
   },
   {
    "verdict": "windows-equivalent",
@@ -345,6 +345,14 @@
    "item": "pub(super) fn writable_by_anyone(_directory: &std::path::Path) -> bool",
    "cfg": "not(unix)",
    "body": "c9deb6aa42df"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Windows has no read-only package-test containment route at all: `resolved` there admits only the Node build and Node tool reasons, so no package-test receipt exists to root in a project that carries no repository. The Unix arm's wider root lookup would change nothing off Unix, and this arm returns `None` to say so.",
+   "file": "rust/crates/guard-command/src/pretool/package_script_route.rs",
+   "item": "fn package_test_in_project( _model: &CanonicalCommandV1, _context: PathContext<'_>, ) -> Option<&'static str>",
+   "cfg": "not(unix)",
+   "body": "7a7a966e8274"
   },
   {
    "file": "rust/crates/guard-command/src/pretool/package_script_route.rs",
@@ -2241,6 +2249,22 @@
    "item": "fn posix_root -- cfg! expression",
    "cfg": "unix",
    "body": "04c084f0bd0d"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Refuses a final symlink or reparse point before opening, where Python's open had no O_NOFOLLOW on Windows at all. The identity file is still required to be a regular file within its bound.",
+   "file": "rust/crates/guard-runtime/src/verified_github_read.rs",
+   "item": "fn open_without_following(path: &Path) -> std::io::Result<File>",
+   "cfg": "not(unix)",
+   "body": "ab0a6a95083b"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Stable Rust exposes no file index on Windows, so a rewrite during the read is detected by length and modification time only. A replaced executor or CA bundle still changes the content digest, which compose compares with the planned identity before any proof is composed.",
+   "file": "rust/crates/guard-runtime/src/verified_github_read.rs",
+   "item": "fn stable(metadata: &Metadata) -> (u64, Option<std::time::SystemTime>)",
+   "cfg": "not(unix)",
+   "body": "e351f21443b3"
   }
  ]
 }

@@ -96,11 +96,26 @@ pub(super) fn run(
     plan.command
         .splice(1..1, ["--require".to_owned(), preload.clone()]);
     // Vitest supplies its own worker execArgv. Only Guard-owned options,
-    // not the caller's NODE_OPTIONS or NODE_PATH, may reach those runtimes.
+    // not the caller's NODE_OPTIONS or NODE_PATH, may reach those runtimes,
+    // plus a NODE_OPTIONS the command itself wrote in front of the runner
+    // when the value holds only the inert flags the review read it as.
     let quoted = serde_json::to_string(&preload).map_err(|_| unavailable("invalid_reply"))?;
     let guard_options = environment.remove("NODE_OPTIONS").unwrap_or_default();
-    let options = format!("{guard_options} --require {quoted}");
-    environment.insert("NODE_OPTIONS".into(), options.trim().to_owned());
+    let written = plan
+        .settings
+        .iter()
+        .rev()
+        .find(|(name, _)| name == "NODE_OPTIONS")
+        .map(|(_, value)| value.as_str())
+        .filter(|value| guard_contracts::node_options_inert(value))
+        .unwrap_or_default();
+    let preload_option = format!("--require {quoted}");
+    let options = [guard_options.trim(), written, &preload_option]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    environment.insert("NODE_OPTIONS".into(), options);
     readonly::launch(
         &plan,
         &private,

@@ -746,6 +746,102 @@
       "expect": "allow_or_review"
     },
     {
+      "id": "toolchain-inventory-newest-version-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "latest=$(find \"$HOME/.toolchains/versions\" -mindepth 1 -maxdepth 1 -type d -exec basename {} \\; | sort -V | tail -n 1); printf 'latest=%s\\n' \"$latest\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "toolchain-inventory-walk-then-parameter",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find src -type d -exec basename {} \\; | sort -V; printf 'latest=%s\\n' \"$latest\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "toolchain-inventory-version-value-from-a-pipeline",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "version=$(cat package.json | head -n 20 | tail -n 1); printf 'version=%s\\n' \"$version\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "toolchain-inventory-quoted-version-value",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "version=\"$(cat package.json | head -n 20 | tail -n 1)\"; printf 'version=%s\\n' \"$version\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "toolchain-inventory-version-printed-in-parentheses",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "version=$(cat package.json | head -n 1); printf \"(%s)\\n\" \"$version\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "search-text-that-spells-a-find-action",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "matches=$(grep -rl -- \"-exec\" src); printf '%s\\n' \"$matches\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
       "id": "background-python-entry-then-wait",
       "fix_area": "shell",
       "harnesses": [
@@ -5991,6 +6087,90 @@
       },
       "cwd": "feature_app",
       "expect": "allow"
+    },
+    {
+      "id": "omp-read-file-url-sibling-checkout",
+      "fix_area": "read",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://${HOME}/other-project"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-read-file-url-sibling-note",
+      "fix_area": "read",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://${HOME}/other-project/notes.md"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-read-file-url-localhost-sibling-source",
+      "fix_area": "read",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://localhost${HOME}/other-project/src/report.ts"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-omp-read-file-url-remote-authority",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://remote.example${HOME}/other-project/notes.md"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-read-file-url-encoded-credential-directory",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://${HOME}/%2essh/id_rsa"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-read-file-url-encoded-climb-to-credential",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://${HOME}/other-project/%2e%2e/.ssh/id_rsa"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
     },
     {
       "id": "read-auth-feature-readme",
@@ -12465,6 +12645,57 @@
       "cwd": "worktree",
       "expect": "allow",
       "requires_sandbox": true
+    },
+    {
+      "id": "gauntlet-sibling-cd-jest-cat-escapes",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js --ci 2>&1 | cat -A | head -30"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "gauntlet-sibling-cd-jest-cat-nonprinting",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js --ci 2>&1 | cat -v"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-sibling-cd-jest-cat-reads-private-key",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js --ci 2>&1 | cat ${HOME}/.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "status-tail-cd-sibling-jest-entry",
@@ -28578,7 +28809,8 @@
         "command": "(cd dashboard && ./node_modules/.bin/vite build) && (cd src && ls)"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "neg-subshell-group-list-upload",
@@ -30413,7 +30645,8 @@
         "command": "for d in dashboard src; do (cd \"$d\" && ls); done"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "control-flow-if-branch-subshell-linked-modules-build",
@@ -30429,7 +30662,8 @@
         "command": "if [ -d dashboard ]; then (cd dashboard && ./node_modules/.bin/vite build); fi"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "session-for-loop-bare-glob-echo",
@@ -38085,6 +38319,70 @@
       "expect": "allow"
     },
     {
+      "id": "pattern-value-report-dir-prefix-npx-jest-no-local-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "REPORT_DIR=reports/* npx jest --ci"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "pattern-value-debug-prefix-npx-jest-no-local-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "DEBUG=app:* npx jest --ci"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-pattern-value-substitution-debug-prefix-npx-jest-no-local-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "DEBUG=$(id) npx jest --ci"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-separator-value-debug-prefix-npx-jest-no-local-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "DEBUG='app:*;id' npx jest --ci"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
+    },
+    {
       "id": "pattern-value-quoted-debug-prefix-npx-vitest",
       "fix_area": "shell",
       "harnesses": [
@@ -42990,7 +43288,8 @@
         "command": "{ cd dashboard && ./node_modules/.bin/vite build; } && echo done"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "brace-group-leading-conditional-ls",

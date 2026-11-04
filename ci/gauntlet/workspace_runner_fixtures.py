@@ -36,6 +36,10 @@ WORKSPACE_HEAP_PREFIX_CASE = "omp-native-workspace-node-options-heap-prefix"
 # The setting only turns on Node's module VM classes, so the run has to finish
 # the same way the unprefixed launch does.
 WORKSPACE_VM_MODULES_PREFIX_CASE = "omp-native-workspace-node-options-vm-modules-prefix"
+# The same install, launched with the debug namespaces a developer turns on in
+# front of it. The pattern only chooses which of the project's own loggers
+# print, so the run has to finish the same way the unprefixed launch does.
+WORKSPACE_DEBUG_PATTERN_PREFIX_CASE = "omp-native-workspace-debug-pattern-prefix-npx-jest"
 # The same install, launched with npm's own logging key written in front of
 # it. The setting only decides how much npm prints, so the run has to finish
 # the same way the unprefixed launch does.
@@ -95,6 +99,12 @@ WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
 # A filter is not a Vitest command, so the run is the same single pass the bare
 # `run` verb names.
 WORKSPACE_VITEST_FILTER_CASE = "omp-native-workspace-vitest-filter"
+# The same installed Vitest launched by a file its install wrote: Node given the
+# link npm puts in `node_modules/.bin`, and Bun given the package's own launcher.
+# Both name the workspace's runner, so the run means something only when that
+# runner is installed.
+WORKSPACE_VITEST_BIN_LINK_CASE = "omp-native-workspace-node-bin-link-runner"
+WORKSPACE_VITEST_BUN_ENTRY_CASE = "omp-native-workspace-bun-runner-entry"
 # The commit hook a project runs over its staged files. It is declared,
 # installed and pinned exactly as the linter it drives is, and it is launched
 # through npx the same way, so the verdict has the same evidence to read.
@@ -119,6 +129,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_NPM_EXEC_CASE,
         WORKSPACE_HEAP_PREFIX_CASE,
         WORKSPACE_VM_MODULES_PREFIX_CASE,
+        WORKSPACE_DEBUG_PATTERN_PREFIX_CASE,
         WORKSPACE_NPM_CONFIG_PREFIX_CASE,
         WORKSPACE_MOCHA_CASE,
         WORKSPACE_AVA_CASE,
@@ -139,6 +150,8 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_LINT_STAGED_CASE,
         WORKSPACE_TSX_NODE_TEST_CASE,
         WORKSPACE_VITEST_FILTER_CASE,
+        WORKSPACE_VITEST_BIN_LINK_CASE,
+        WORKSPACE_VITEST_BUN_ENTRY_CASE,
         WORKSPACE_RUN_ALL_CASE,
         WORKSPACE_SKIP_DOWNLOAD_PREFIX_CASE,
     }
@@ -575,6 +588,18 @@ _VITEST_FILES = {
     ),
 }
 
+# The one line the workspace's own Vitest prints for a bare `run`.
+VITEST_RUN_MARKER = f"vitest {_VITEST_VERSION} ran one pass"
+_VITEST_RUN_FILES = {
+    **_VITEST_FILES,
+    "node_modules/vitest/vitest.mjs": (
+        "#!/usr/bin/env node\n"
+        "const argv = process.argv.slice(2);\n"
+        f"console.log(argv[0] === 'run' ? '{VITEST_RUN_MARKER}'"
+        " : 'vitest: the one-pass run was not forwarded');\n"
+    ),
+}
+
 
 _LINT_STAGED_VERSION = "16.1.2"
 # The one line the workspace's own commit hook prints.
@@ -756,6 +781,18 @@ _INSTALLS = {
         VITEST_MARKER,
         entry="vitest.mjs",
     ),
+    WORKSPACE_VITEST_BIN_LINK_CASE: _Install(
+        "vitest",
+        _VITEST_RUN_FILES,
+        VITEST_RUN_MARKER,
+        entry="vitest.mjs",
+    ),
+    WORKSPACE_VITEST_BUN_ENTRY_CASE: _Install(
+        "vitest",
+        _VITEST_RUN_FILES,
+        VITEST_RUN_MARKER,
+        entry="vitest.mjs",
+    ),
 }
 
 
@@ -796,9 +833,17 @@ def add_workspace_node_runtime(home: Path, scenario_id: str | None) -> None:
     """Give the fixture home the nvm Node install the contained runner trusts.
 
     The read-only runner profile runs the workspace's entry point under Node,
-    and it accepts only a Node that the request's own home or a system prefix
-    owns. The host's Node is copied, not linked, so nothing the fixture does
-    can reach the file the host runs.
+    and it accepts only a Node a caller's home or a system prefix owns. The
+    host's Node is copied, not linked, so nothing the fixture does can reach
+    the file the host runs.
+
+    The release's own ``npm`` prefix is copied beside it. A real install keeps
+    ``lib/node_modules/npm`` next to ``bin/node``, and the wrappers an agent
+    reaches ``npx`` through read ``npx-cli.js`` out of that prefix, relative
+    to whichever Node they resolved. A fixture that plants the binary alone is
+    not the layout it claims to be, and an ``npx`` run inside containment
+    failed with "Unable to locate npx-cli.js" rather than running the
+    workspace's tool.
     """
     if scenario_id not in WORKSPACE_RUNNER_CASES:
         return
@@ -811,9 +856,46 @@ def add_workspace_node_runtime(home: Path, scenario_id: str | None) -> None:
     ).stdout.strip()
     if not _NODE_VERSION.fullmatch(version):
         raise RuntimeError(f"Node reported an unexpected version for the fixture toolchain: {version}")
-    target = home / _NODE_VERSIONS / version / "bin" / "node"
+    prefix = home / _NODE_VERSIONS / version
+    target = prefix / "bin" / "node"
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, target)
+    _add_node_package_manager(source.parent.parent, prefix)
+
+
+def _add_node_package_manager(source_prefix: Path, prefix: Path) -> None:
+    """Copy the host release's own ``npm`` into the fixture's Node prefix.
+
+    The ``bin`` entries npm installs are links to a CLI file under the same
+    prefix. Both relative and absolute spellings are rewritten against the
+    fixture's own prefix, so a case never reaches back into the host's npm
+    tree. A host without a bundled npm leaves the prefix as it is: the cases
+    that need one fail on their own evidence rather than on a fixture that
+    quietly planted the host's.
+    """
+    package_manager = source_prefix / "lib/node_modules/npm"
+    if not package_manager.is_dir():
+        return
+    installed = prefix / "lib/node_modules/npm"
+    installed.parent.mkdir(parents=True, exist_ok=True)
+    if not installed.exists():
+        shutil.copytree(package_manager, installed, symlinks=True)
+    for name in ("npm", "npx"):
+        entry = source_prefix / "bin" / name
+        target = prefix / "bin" / name
+        if not entry.exists() or target.exists():
+            continue
+        if not entry.is_symlink():
+            shutil.copy2(entry, target)
+            continue
+        resolved = Path(os.readlink(entry))
+        if not resolved.is_absolute():
+            resolved = (source_prefix / "bin" / resolved).resolve()
+        try:
+            inside = resolved.relative_to(source_prefix.resolve())
+        except ValueError:
+            continue
+        target.symlink_to(os.path.relpath(prefix / inside, target.parent))
 
 
 def home_bun_bin(home: Path) -> Path | None:

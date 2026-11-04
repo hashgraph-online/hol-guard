@@ -169,6 +169,19 @@ def _ai_tool_states(args: argparse.Namespace, url: str | None) -> dict[str, dict
     return states
 
 
+def _renewal_refused(store: GuardStore) -> str | None:
+    """Why Guard Cloud refused to renew this computer's access, or None when it renewed or could not tell.
+
+    With no AI tool set up there is no Cloud actions access to send, so this is
+    the only way doctor can notice a revoked connection.
+    """
+
+    from ..daemon.cloud_actions_status import _live_pairing_checker  # pyright: ignore[reportPrivateUsage]
+
+    refused = _live_pairing_checker(store)
+    return refused.message if refused is not None else None
+
+
 def _access_check(
     store: GuardStore, pairing: CloudActionsPairing, ai_tools: dict[str, dict[str, object]]
 ) -> tuple[HealthCheck, str | None]:
@@ -179,6 +192,9 @@ def _access_check(
 
     ai_tool = next((name for name, entry in ai_tools.items() if entry["state"] == "configured"), None)
     if ai_tool is None:
+        refused = _renewal_refused(store)
+        if refused is not None:
+            return HealthCheck("reconnect", refused), None
         return HealthCheck("not_checked", "Not checked: no AI tool is set up for Cloud actions yet."), None
     try:
         access = cloud_actions_access.exchange_cloud_actions_access(store, ai_tool=ai_tool)

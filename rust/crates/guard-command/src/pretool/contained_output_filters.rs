@@ -34,6 +34,15 @@ const CUT_SWITCHES: &str = "sn";
 /// them takes a value, attached or as the word after.
 const CUT_VALUED: &[&str] = &["-b", "-c", "-f", "-d"];
 
+/// `cat`'s switches, which only decide how the bytes it copies are spelled:
+/// `-v` prints a non-printing byte as an escape, `-E`/`-T` mark line ends and
+/// tabs, `-A` is all three, `-e` and `-t` pair `-v` with one of them, `-n`
+/// and `-b` number lines, `-s` squeezes blank runs and `-u` drops buffering.
+/// None of them takes a value and none names anything to open, so a `cat`
+/// with only these reads standard input and nothing else. Every operand,
+/// including a lone `-`, is a file `cat` opens, which `text_filter` refuses.
+const CAT_SWITCHES: &str = "AbeEnstTuv";
+
 /// Whether `value` is a count small enough to be a filter's bound.
 fn bounded_count(value: &str) -> bool {
     !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
@@ -182,6 +191,10 @@ pub(in crate::pretool) fn rejoined_stage(program: &str, arguments: &[String]) ->
         "grep" | "egrep" | "fgrep" => stdin_arguments(arguments, GREP_SWITCHES),
         "rg" => stdin_arguments(arguments, RG_SWITCHES),
         "wc" => text_filter(arguments, "clmwL", &[]),
+        // `cat` with no operand copies standard input through, and its
+        // switches only change how the bytes are spelled. Agents reach for
+        // `| cat -A` or `| cat -v` to make a runner's escape codes legible.
+        "cat" => text_filter(arguments, CAT_SWITCHES, &[]),
         "cut" => text_filter(arguments, CUT_SWITCHES, CUT_VALUED),
         // `-o` and `-T` name a file and a directory to write, and `-S` sizes a
         // buffer, so none of the three is a switch here.

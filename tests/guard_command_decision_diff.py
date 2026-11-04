@@ -139,6 +139,7 @@ _EVIDENCE_SOURCE_PATHS: Final = (
     REPO_ROOT / "rust" / "crates" / "guard-command" / "src" / "command_evaluation_compose.rs",
     REPO_ROOT / "rust" / "crates" / "guard-command" / "src" / "command_evaluation_support.rs",
     REPO_ROOT / "rust" / "crates" / "guard-runtime" / "src" / "command_effect.rs",
+    REPO_ROOT / "rust" / "crates" / "guard-runtime" / "src" / "verified_github_read.rs",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "native_command_effect.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "action_lattice.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "models.py",
