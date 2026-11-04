@@ -159,7 +159,8 @@ export type CigarSetupDeps = {
   onSaved: (config: GuardContextAssistanceConfig, previous: GuardContextAssistanceConfig) => void;
 };
 
-const JOB_LIMIT_MS = 180_000, START_LIMIT_MS = 120_000, POLL_MS = 800;
+// A busy computer can leave Guard unable to answer for a while; the job keeps running meanwhile.
+const JOB_LIMIT_MS = 180_000, START_LIMIT_MS = 120_000, POLL_MS = 800, QUIET_LIMIT_MS = 30_000;
 const failedPhases = new Set(["failed", "cancelled", "recovery_required"]);
 export const isCigarProofError = (cause: unknown) => cause instanceof ContextAssistanceApiError
   && (cause.code.startsWith("approval_gate") || cause.code === "approval_required");
@@ -174,6 +175,13 @@ function failure(stage: CigarSetupStage, cause: unknown): never {
   if (cause instanceof CigarSetupStopped || cause instanceof CigarSetupError) throw cause;
   if (isCigarProofError(cause)) throw new CigarSetupError(stage, "Guard needs your approval password to continue.", true);
   throw new CigarSetupError(stage, cause instanceof Error ? cause.message : "Guard did not confirm this step.");
+}
+
+function failedJobCopy(code: string): string {
+  if (code.endsWith("deadline_exceeded")) {
+    return "This computer took too long to finish this step, so Guard stopped it. Nothing was turned on. Try again when the computer is less busy.";
+  }
+  return "This step did not finish (" + code.replace(/_/g, " ") + "). Nothing was turned on.";
 }
 
 /** Submit once, then follow the job by id. An unknown submit outcome is observed, never resent. */
@@ -192,18 +200,19 @@ async function follow(
     uncertain = true;
   }
   const started = deps.now();
-  let misses = 0;
+  let quietSince: number | null = null;
   for (;;) {
     guard(deps);
     let reply: CigarVersionsReply | null = null;
     try {
       reply = await deps.versions({ action: "job", job_id: input.job_id });
-      misses = 0;
+      quietSince = null;
       uncertain = false;
     } catch (cause) {
       const retry = transient(cause) || (uncertain && missingJob(cause));
       if (!retry) failure(stage, cause);
-      if (++misses > 5) {
+      quietSince ??= deps.now();
+      if (deps.now() - quietSince > QUIET_LIMIT_MS) {
         throw new CigarSetupError(stage, "Guard did not confirm this step. Check Updates before trying again.");
       }
     }
@@ -214,7 +223,7 @@ async function follow(
       if (failedPhases.has(job.phase)) {
         throw new CigarSetupError(stage, job.phase === "recovery_required"
           ? "Guard paused this step so nothing breaks. Open Updates to finish or undo it."
-          : "This step did not finish (" + job.code.replace(/_/g, " ") + "). Nothing was turned on.");
+          : failedJobCopy(job.code));
       }
     }
     if (deps.now() - started > JOB_LIMIT_MS) throw new CigarSetupError(stage, "This is taking longer than expected. Guard is still working; check Updates in a minute.");
