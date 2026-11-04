@@ -14,7 +14,11 @@
 //! * a decoded target that is not valid UTF-8, or that carries a NUL or any
 //!   other control character, a backslash or surrounding whitespace, is left
 //!   unresolved;
-//! * a query or fragment changes what the host opens, so neither resolves.
+//! * a query or fragment changes what the host opens, so neither resolves;
+//! * the host rewrites some spellings before it parses the URL: it replaces a
+//!   raw Unicode space with an ASCII one, folds `.` and `..` segments (encoded
+//!   or not) lexically, and refuses an encoded `/`. A URL carrying any of those
+//!   could name one file to Guard and another to the host, so none resolves.
 //!
 //! Anything left unresolved keeps the review it has today. Resolution never
 //! decides a read on its own: the decoded path goes through exactly the same
@@ -28,7 +32,11 @@ const MAX_FILE_URL_BYTES: usize = 4096;
 /// The local filesystem path a `file://` URL denotes, or `None` when the value
 /// is not a `file://` URL or names something other than a plain local path.
 pub(in crate::pretool) fn local_file_url_path(value: &str) -> Option<String> {
-    if value.len() > MAX_FILE_URL_BYTES || value.trim() != value || value.contains('\\') {
+    if value.len() > MAX_FILE_URL_BYTES
+        || value.trim() != value
+        || value.contains('\\')
+        || value.chars().any(host_rewritten_space)
+    {
         return None;
     }
     let rest = after_file_scheme(value)?;
@@ -47,8 +55,33 @@ pub(in crate::pretool) fn local_file_url_path(value: &str) -> Option<String> {
     if !(authority.is_empty() || authority.eq_ignore_ascii_case("localhost")) {
         return None;
     }
+    // The host refuses an encoded `/`, so it never opens what Guard would read
+    // the decoded text as.
+    if encoded.to_ascii_lowercase().contains("%2f") {
+        return None;
+    }
     let decoded = decoded_path(encoded)?;
+    // The host's URL parser folds a `.` or `..` segment, encoded or not,
+    // before it reaches the filesystem, while Guard would walk it through any
+    // link it crosses. The two can land on different files, so neither
+    // spelling resolves.
+    if decoded
+        .split('/')
+        .any(|segment| segment == "." || segment == "..")
+    {
+        return None;
+    }
     Some(drive_rooted(&decoded).unwrap_or(decoded))
+}
+
+/// A raw Unicode space the host replaces with an ASCII space before it reads
+/// the URL: a no-break space, the U+2000 to U+200A run, the narrow no-break
+/// space, the medium mathematical space and the ideographic space.
+fn host_rewritten_space(character: char) -> bool {
+    matches!(
+        character,
+        '\u{00a0}' | '\u{2000}'..='\u{200a}' | '\u{202f}' | '\u{205f}' | '\u{3000}'
+    )
 }
 
 /// The part after a `file:` scheme. URL schemes are case-insensitive, so

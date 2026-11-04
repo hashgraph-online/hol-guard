@@ -84,12 +84,8 @@ fn file_urls_resolve_to_the_path_they_denote() {
             "file:///home/u/my%20project/a%2Bb.md",
             "/home/u/my project/a+b.md",
         ),
-        // Decoded before any path rule runs, so an encoded climb or hidden
-        // component is judged as the path it spells, not as opaque URL text.
-        (
-            "file:///home/u/p/%2e%2e/%2e%2e/.ssh/id_ed25519",
-            "/home/u/p/../../.ssh/id_ed25519",
-        ),
+        // Decoded before any path rule runs, so an encoded hidden component
+        // is judged as the path it spells, not as opaque URL text.
         (
             "file:///home/u/%2econfig/tool/config.toml",
             "/home/u/.config/tool/config.toml",
@@ -136,6 +132,24 @@ fn urls_that_name_no_plain_local_path_stay_unresolved() {
         "file:///home/u/%5cNOTES.md",
         "file:///home\\u/NOTES.md",
         " file:///home/u/NOTES.md",
+        // A `.` or `..` segment, encoded or not: the host folds it before it
+        // reaches the filesystem, so it may open another file than the one
+        // Guard would walk to.
+        "file:///home/u/p/%2e%2e/%2e%2e/.ssh/id_ed25519",
+        "file:///home/u/project/link/%2e%2e/safe.md",
+        "file:///home/u/project/link/%2E%2e/safe.md",
+        "file:///home/u/project/link/../safe.md",
+        "file:///home/u/project/link/.%2e/safe.md",
+        "file:///home/u/project/./safe.md",
+        "file:///home/u/project/%2e/safe.md",
+        // The host refuses an encoded `/`.
+        "file:///home/u/project%2fsafe.md",
+        "file:///home/u/project%2Fsafe.md",
+        // A raw Unicode space the host rewrites to an ASCII space first.
+        "file:///home/u/public\u{a0}notes.md",
+        "file:///home/u/public\u{2009}notes.md",
+        "file:///home/u/public\u{202f}notes.md",
+        "file:///home/u/public\u{3000}notes.md",
         // Not a `file:` URL at all.
         "https://example.test/NOTES.md",
         "/home/u/NOTES.md",
@@ -263,6 +277,23 @@ fn file_url_spellings_never_weaken_a_read_decision() {
         }
         let url = file_url(&target);
         let url_decision = read_target(&url, &home, &project);
+        // The URL earns exactly what the path it denotes earns, so a softer
+        // withholding answer -- a review where the path blocks -- fails too.
+        let denoted = local_file_url_path(&url).expect("the fixture URL names a local path");
+        let denoted_decision = read_target(&denoted, &home, &project);
+        assert_eq!(
+            (
+                url_decision.minimum_action.as_str(),
+                url_decision.reason_code.as_str(),
+                url_decision.explicitly_benign,
+            ),
+            (
+                denoted_decision.minimum_action.as_str(),
+                denoted_decision.reason_code.as_str(),
+                denoted_decision.explicitly_benign,
+            ),
+            "{url} must decide as {denoted}",
+        );
         assert_ne!(
             url_decision.minimum_action, "allow",
             "{url}: {}",
