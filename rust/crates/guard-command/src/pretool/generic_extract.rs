@@ -68,13 +68,18 @@ const FILE_BODY_KEYS: [&str; 6] = [
     "newString",
 ];
 
-/// A path key names a file when it holds a path or a nonempty list of them.
-/// A blank string names nothing, so the file bodies beside it keep their
-/// own size bound.
+/// A path key names a file when it holds a path, or a list that holds one.
+/// A blank string names nothing, and neither does a list of them, so the file
+/// bodies beside such a key keep their own size bound.
 fn names_path(value: &Value) -> bool {
     match value {
         Value::String(text) => !text.trim().is_empty(),
-        Value::Array(items) => !items.is_empty() && items.iter().all(Value::is_string),
+        Value::Array(items) => {
+            items.iter().all(Value::is_string)
+                && items
+                    .iter()
+                    .any(|item| item.as_str().is_some_and(|text| !text.trim().is_empty()))
+        }
         _ => false,
     }
 }
@@ -178,6 +183,9 @@ fn append_strings(output: &mut Vec<String>, value: &Value) -> Result<(), Generic
     }
     match value {
         Value::String(_) => output.extend(optional_bounded_string(value)?),
+        // A key whose value is null is present and carries nothing, the same
+        // thing a blank string says. Neither names a target.
+        Value::Null => {}
         Value::Array(items) => {
             if items.len() > MAX_PRE_TOOL_ARRAY_ITEMS {
                 return Err(GenericExtractionError::Bounds);
@@ -185,6 +193,9 @@ fn append_strings(output: &mut Vec<String>, value: &Value) -> Result<(), Generic
             for item in items {
                 if output.len() >= MAX_PRE_TOOL_STRINGS {
                     return Err(GenericExtractionError::Bounds);
+                }
+                if item.is_null() {
+                    continue;
                 }
                 output.extend(optional_bounded_string(item)?);
             }

@@ -38,6 +38,10 @@ SCRATCH_READ_TARGET = "{{scratch}}/notes.md"
 SESSION_EDIT_TARGET = f"{{{{home}}}}/{CHECKOUT}/src/report.ts"
 # A background shell job started with `async`, then its output read back through the host's own
 # `proc://<job id>` selector, which names the job table rather than a file.
+# A search whose ``path`` argument is left empty, which the host sends as the
+# empty string. The blank spelling is the shape under test, so a run that names
+# a folder instead never reaches it.
+BLANK_SEARCH_PATH_CASE = "omp-native-glob-empty-path-argument"
 BACKGROUND_READ_CASE = "omp-native-read-background-job-output"
 JOB_OUTPUT_PATH = re.compile(r"proc://(?P<job>[A-Za-z0-9_][A-Za-z0-9_.-]*)(?::[1-9][0-9]*-[1-9][0-9]*)?")
 # The scenario's one command is `git hash-object README.md`, so its output is a single object id.
@@ -592,6 +596,23 @@ def _credential_report_error(calls: list[dict[str, Any]], delegated: set[str], r
     return "delegated report did not answer the token and password fields"
 
 
+def _blank_search_path_error(calls: list[dict[str, Any]]) -> str | None:
+    """Return why the run never made the empty-path search this case is written for.
+
+    The blank ``path`` argument is the shape under test: a search that names a
+    folder takes the ordinary route and proves nothing here. A present argument
+    holding only whitespace, or an explicit null, is the same "no value here";
+    an omitted argument is not, because then no blank field reaches the hook.
+    """
+    for call in calls:
+        if call["name"] != "glob" or "path" not in call["args"]:
+            continue
+        path = call["args"]["path"]
+        if path is None or (isinstance(path, str) and not path.strip()):
+            return None
+    return "the glob call did not leave its path argument empty"
+
+
 def native_tools_scope_error(
     scenario: Scenario, calls: list[dict[str, Any]], case: dict[str, Any], *, guard_denied: bool = False
 ) -> str | None:
@@ -723,6 +744,8 @@ def native_tools_scope_error(
     if scenario.id == GITHUB_LOOKUP_CASE and (scope := _github_lookup_error(calls, require_call=False)):
         return scope
     if scenario.id == BACKGROUND_READ_CASE and (scope := _background_read_error(calls, require_steps=False)):
+        return scope
+    if scenario.id == BLANK_SEARCH_PATH_CASE and (scope := _blank_search_path_error(calls)):
         return scope
     if guard_denied:
         return None
