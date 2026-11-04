@@ -211,24 +211,6 @@ pub(super) fn project_root(
         })
 }
 
-/// Whether `directory` is a checkout: a repository directory, or the `.git`
-/// file a linked worktree carries.
-#[cfg(unix)]
-fn checkout_marker(directory: &std::path::Path) -> bool {
-    directory.join(".git").symlink_metadata().is_ok()
-}
-
-/// Whether `directory` is a package root. The manifest must be a regular file
-/// the walk reached without following a link into it, so a link planted beside
-/// a target cannot name a directory the walk never climbed.
-#[cfg(unix)]
-fn manifest_marker(directory: &std::path::Path) -> bool {
-    directory
-        .join("package.json")
-        .symlink_metadata()
-        .is_ok_and(|metadata| metadata.is_file())
-}
-
 /// Whether the verified cd `target` lies in the canonical `root`. Windows
 /// reports the target in the harness's drive spelling, which the directory
 /// proof checked exactly; compare its canonical (`\\?\`) form there.
@@ -292,24 +274,6 @@ pub(super) fn project_root(
         .map(std::path::Path::to_path_buf)
 }
 
-/// Whether `directory` is a checkout: a repository directory, or the `.git`
-/// file a linked worktree carries.
-#[cfg(windows)]
-fn checkout_marker(directory: &std::path::Path) -> bool {
-    directory.join(".git").symlink_metadata().is_ok()
-}
-
-/// Whether `directory` is a package root. The manifest must be a regular file
-/// the walk reached without following a link into it, so a link planted beside
-/// a target cannot name a directory the walk never climbed.
-#[cfg(windows)]
-fn manifest_marker(directory: &std::path::Path) -> bool {
-    directory
-        .join("package.json")
-        .symlink_metadata()
-        .is_ok_and(|metadata| metadata.is_file())
-}
-
 #[cfg(not(any(unix, windows)))]
 pub(super) fn project_root(
     _target: &std::path::Path,
@@ -317,6 +281,24 @@ pub(super) fn project_root(
     _roots: ProjectRoots,
 ) -> Option<std::path::PathBuf> {
     None
+}
+
+/// Whether `directory` is a checkout: a repository directory, or the `.git`
+/// file a linked worktree carries.
+#[cfg(any(unix, windows))]
+fn checkout_marker(directory: &std::path::Path) -> bool {
+    directory.join(".git").symlink_metadata().is_ok()
+}
+
+/// Whether `directory` is a package root. The manifest must be a regular file
+/// the walk reached without following a link into it, so a link planted beside
+/// a target cannot name a directory the walk never climbed.
+#[cfg(any(unix, windows))]
+fn manifest_marker(directory: &std::path::Path) -> bool {
+    directory
+        .join("package.json")
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.is_file())
 }
 
 /// The nearest root among the ancestors the walk reached, nearest first: a
