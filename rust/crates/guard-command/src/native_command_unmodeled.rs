@@ -825,7 +825,10 @@ fn reviewable_structure(
         Some("command_substitution_not_yet_supported") => {
             let looked = without_lookups(&command.normalized_text);
             bounded_substitutions(&looked)
-                .or_else(|| reviewable_substitutions(&looked))
+                .or_else(|| {
+                    reviewable_substitutions(&looked)
+                        .filter(|bounded| plain_sequence(&bounded.text))
+                })
                 .is_some_and(|bounded| {
                     let text = bounded.text;
                     !text.contains("$(")
@@ -933,6 +936,32 @@ fn moves_data(literal: &str) -> bool {
                     "export" | "declare" | "typeset" | "readonly" | "local" | "unset" | "alias"
                 )
         })
+}
+
+/// Whether the text runs its commands one after another, with no construct
+/// that puts a command position somewhere this reading does not look.
+///
+/// The weaker, assignment-flow read of a substitution is used only when the
+/// strict one refuses, so the text it hands back is read with the
+/// substitution already replaced by the word it stands for. That reading
+/// answers for a sequence of simple commands, which is what the shapes it was
+/// written for are: `latest=$(ls -1 versions | tail -1); printf \'%s\\n\'
+/// "$latest"`. A loop or a conditional around the rest of the text is a
+/// different shape, whose body the floor beneath does not bound the same way:
+/// `x=$(curl -s https://example.invalid); for f in a; do node -e
+/// \'console.log(1)\' "$f"; done` keeps its evaluation failure, as it does
+/// without the substitution. `while`, `until` and `if` open with a word the
+/// reader already steps past, so the closing `done`, `fi` and `esac` are what
+/// this looks for, together with the openers that stand in a command position
+/// of their own.
+fn plain_sequence(text: &str) -> bool {
+    let literal = unquoted_literal(text);
+    !command_words(&literal).any(|word| {
+        matches!(
+            word,
+            "for" | "done" | "case" | "esac" | "fi" | "select" | "function" | "coproc"
+        )
+    })
 }
 
 /// Every word the shell could read as a program name or keyword token, with

@@ -250,6 +250,16 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
             _ => word.push(character),
         }
     }
+    // Quoting that never closes means this reader stopped agreeing with the
+    // shell somewhere in the text, and everything after that point was copied
+    // without being read: an apostrophe in a trailing comment, as in
+    // `id=$(cat id) # don\'t` followed by `echo $(gh pr list)`, swallowed a
+    // whole second substitution and left `gh` out of the set the owner check
+    // reads. The text is refused rather than read half way, which keeps the
+    // evaluation failure it already had.
+    if single || double {
+        return None;
+    }
     // The rewrite read never records an assignment, so this reader is reached
     // only by the reviewability read and the `Arguments` negatives stay exactly
     // where they were.
@@ -410,6 +420,15 @@ fn value_consumers(text: &str, names: &BTreeSet<String>) -> Option<BTreeSet<Stri
                     | "getopts"
                     | "done"
                     | "eval"
+                    // These copy the value to a second name the tracker never
+                    // followed, so `T=$(cat id); export U=$T; gh pr view $U`
+                    // read `export` for the receiver and left `gh` out of the
+                    // set the owner check reads.
+                    | "export"
+                    | "declare"
+                    | "local"
+                    | "readonly"
+                    | "typeset"
             ) {
                 return None;
             }

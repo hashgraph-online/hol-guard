@@ -577,6 +577,30 @@ fn a_value_a_rebinding_construct_receives_is_not_read() {
         r#"TARGET=$(cat id); read -r t <<< $TARGET"#,
         r#"TARGET=$(cat id); set -- $TARGET"#,
         r#"TARGET=$(cat id); eval $TARGET"#,
+        // `export`, `declare`, `local`, `readonly` and `typeset` copy the
+        // value to a second name, and only `NAME=$(...)` is tracked, so the
+        // program that finally reads it is named in no statement this reader
+        // follows: `gh` reached no owner check at all.
+        r#"T=$(cat id); export U=$T; gh pr view $U"#,
+        r#"T=$(cat id); declare U=$T; gh pr view $U"#,
+        r#"T=$(cat id); local U=$T; gh pr view $U"#,
+        r#"T=$(cat id); readonly U=$T; gh pr view $U"#,
+        r#"T=$(cat id); typeset U=$T; gh pr view $U"#,
+    ] {
+        assert!(reviewable_substitutions(command).is_none(), "{command}");
+    }
+}
+
+#[test]
+fn quoting_that_never_closes_stops_the_read_rather_than_half_reading_it() {
+    // An apostrophe in a comment opens a quote the shell closes at the end of
+    // the line and this reader never closes at all, so everything after it was
+    // copied without being read. A whole second substitution disappeared that
+    // way, and the program it runs reached no owner check: the text is refused
+    // instead, which keeps the evaluation failure it already had.
+    for command in [
+        "id=$(cat id) # don't\necho $(gh pr list)",
+        "id=$(cat id) # say \"hi\n echo $(gh pr list)",
     ] {
         assert!(reviewable_substitutions(command).is_none(), "{command}");
     }
