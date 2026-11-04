@@ -36238,6 +36238,23 @@
       "expect": "allow"
     },
     {
+      "id": "neg-zstdcat-aggregated-output-flag",
+      "kind": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "cwd": "worktree",
+      "input": {
+        "command": "zstdcat -T4o decoded.txt README.md | grep -c $USER"
+      },
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-zstdcat-output-operand",
       "fix_area": "negative",
       "harnesses": [

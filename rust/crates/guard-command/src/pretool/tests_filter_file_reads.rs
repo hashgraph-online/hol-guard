@@ -111,9 +111,8 @@ fn a_filter_reading_a_proven_file_needs_no_review() {
         "xzcat --threads=2 --format=xz Cargo.toml",
         "zstdcat -q Cargo.toml",
         // `zstd` carries the thread count in the same word, so the file after
-        // a bare `-T` stays an operand and is proven read.
+        // `-T4` stays an operand and is proven read.
         "zstdcat -T4 Cargo.toml",
-        "zstdcat -T Cargo.toml",
         "ul Cargo.toml",
         "ul -i -t xterm Cargo.toml",
         "tsort Cargo.toml",
@@ -198,6 +197,14 @@ fn a_filter_that_could_write_or_reach_further_still_takes_review() {
         "zcat -S nv Cargo.tom",
         "zstdcat -D dictionary.bin Cargo.toml",
         "zstdcat -o decoded.txt Cargo.toml",
+        // `zstd` reads only the digits of `-T` and `-M` out of the word and
+        // parses the rest as more flags, so an `-o` hidden behind one names
+        // the file it writes rather than the value the screen would read.
+        "zstdcat -To decoded.txt Cargo.toml",
+        "zstdcat -T4o decoded.txt Cargo.toml",
+        "zstdcat -M32MBo decoded.txt Cargo.toml",
+        "zstdcat -TD dictionary.bin Cargo.toml",
+        "zstdcat --threads=4o Cargo.toml",
         "xzcat --files=list.txt Cargo.toml",
         "zcat /nonexistent-guard-fixture/secret.key",
         "ul --unknown Cargo.toml",

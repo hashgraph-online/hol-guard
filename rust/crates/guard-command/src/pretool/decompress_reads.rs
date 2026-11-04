@@ -37,6 +37,90 @@ const ZSTD_READING_FLAGS: &str = "qvfk";
 /// `zstdcat -T report.gz` its own operand and leave nothing proven read.
 const ZSTD_ATTACHED_VALUE_FLAGS: &str = "TM";
 
+/// The `zstdcat` long options that carry no value.
+const ZSTD_READING_LONG: &[&str] = &[
+    "quiet",
+    "verbose",
+    "force",
+    "keep",
+    "decompress",
+    "stdout",
+    "to-stdout",
+    "no-check",
+];
+
+/// The `zstdcat` long options that carry a thread count or a memory bound.
+const ZSTD_NUMBER_LONG: &[&str] = &["threads", "memory", "memlimit", "memlimit-decompress"];
+
+/// The compressed formats `zstd` reads. `--format` names one of them; it
+/// never names a file.
+const ZSTD_FORMATS: &[&str] = &["zstd", "gzip", "xz", "lzma", "lz4"];
+
+/// The value `zstd` takes out of the same word for `-T` and `-M`. `zstd`
+/// stops at the digits and parses whatever is left in the word as further
+/// flags, so `-To decoded.txt` is `-T` followed by the `-o` that names a file
+/// to write — a value the generic screen would have read as harmless text.
+/// Only a plain count with one of `zstd`'s size suffixes is read here.
+fn zstd_number(value: &str) -> bool {
+    let suffix = value.trim_start_matches(|character: char| character.is_ascii_digit());
+    value.len() > suffix.len() && matches!(suffix, "" | "K" | "M" | "KB" | "MB" | "KiB" | "MiB")
+}
+
+/// One `zstdcat` short cluster. A flag the screen has not read, and an
+/// attached value that is not a plain count, keep the command under review.
+fn zstd_short_cluster(cluster: &str) -> bool {
+    let mut characters = cluster.chars();
+    while let Some(flag) = characters.next() {
+        if ZSTD_READING_FLAGS.contains(flag) {
+            continue;
+        }
+        if !ZSTD_ATTACHED_VALUE_FLAGS.contains(flag) {
+            return false;
+        }
+        return zstd_number(characters.as_str());
+    }
+    !cluster.is_empty()
+}
+
+/// `zstdcat`'s option line. It is screened here rather than by the shared
+/// filter screen because `zstd` parses its short options itself: the rest of
+/// a word after `-T` or `-M` is more flags once the digits run out, not the
+/// flag's value.
+fn zstd_arguments<'a>(arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
+    let mut after_options = false;
+    for argument in arguments {
+        let value = argument.as_str();
+        if after_options || !value.starts_with('-') || value == "-" {
+            operands.push(value);
+            continue;
+        }
+        if value == "--" {
+            after_options = true;
+            continue;
+        }
+        if let Some(long) = value.strip_prefix("--") {
+            let (name, attached) = match long.split_once('=') {
+                Some((name, attached)) => (name, Some(attached)),
+                None => (long, None),
+            };
+            match (name, attached) {
+                (name, None) if ZSTD_READING_LONG.contains(&name) => continue,
+                (name, Some(attached))
+                    if ZSTD_NUMBER_LONG.contains(&name) && zstd_number(attached) =>
+                {
+                    continue
+                }
+                ("format", Some(attached)) if ZSTD_FORMATS.contains(&attached) => continue,
+                _ => return false,
+            }
+        }
+        if !zstd_short_cluster(&value[1..]) {
+            return false;
+        }
+    }
+    true
+}
+
 /// Whether this name is one of the fixed decompress-to-stdout viewers.
 pub(super) fn decompress_viewer(tool: &str) -> bool {
     matches!(
@@ -115,23 +199,7 @@ pub(super) fn decompress_arguments<'a>(
                 "check",
             ],
         ),
-        "zstdcat" => super::stdin_filter_options::screen_options_with_optional(
-            arguments,
-            operands,
-            ZSTD_READING_FLAGS,
-            "",
-            ZSTD_ATTACHED_VALUE_FLAGS,
-            &[
-                "quiet",
-                "verbose",
-                "force",
-                "keep",
-                "decompress",
-                "stdout",
-                "no-check",
-            ],
-            &["threads", "memory", "memlimit", "format"],
-        ),
+        "zstdcat" => zstd_arguments(arguments, operands),
         _ => false,
     }
 }
