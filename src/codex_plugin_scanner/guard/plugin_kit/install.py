@@ -973,7 +973,10 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
         # Running the command is not undoable, so hold the checkout that
         # declares it against the scanned commit before it runs; the check
         # after the install still catches a checkout moved while it ran.
-        head = _claude_marketplace(claude_state(context.home, marketplace=marketplace), "head")
+        try:
+            head = _claude_marketplace(claude_state(context.home, marketplace=marketplace), "head")
+        except _StoppedError as stop:
+            raise _StoppedError(stop.status, f"{stop}{undo_marketplace()}") from None
         if expected and head != expected:
             raise _StoppedError(
                 "blocked",
@@ -992,7 +995,15 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
         # HOL scanned the marketplace that declares the command, so check the
         # command Claude Code ran is the one shown and its checkout of that
         # marketplace is at the scanned commit.
-        state = claude_state(context.home, plugin_id, marketplace)
+        try:
+            state = claude_state(context.home, plugin_id, marketplace)
+        except _StoppedError as stop:
+            undone = _undo(program, ["claude", "plugin", "uninstall", plugin_id], context) + undo_marketplace()
+            raise _StoppedError(
+                "failed",
+                f"{stop} Guard could not check the install command Claude Code ran, so "
+                + (f"it tried to remove the plugin.{undone}" if undone else "it removed the plugin again."),
+            ) from None
         ran, head = _claude_entry(state, "source_command"), _claude_marketplace(state, "head")
         if ran == declared and (not expected or head == expected):
             return added
@@ -1010,7 +1021,10 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
         )
     if not expected:
         return added
-    found = _claude_install(claude_state(context.home, plugin_id))
+    try:
+        found = _claude_install(claude_state(context.home, plugin_id))
+    except _StoppedError:
+        found = None
     if found is None:
         raise _StoppedError(
             "failed",

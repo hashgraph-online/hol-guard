@@ -1422,6 +1422,31 @@ def test_a_declared_command_install_is_removed_when_it_is_not_what_guard_showed(
     assert install.recorded_installs(guard_home) == {}
 
 
+def test_a_declared_command_install_is_removed_when_its_record_cannot_be_read(
+    spec_file: Path, runtimes: FakeRuntimes, guard_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A command that ran cannot be checked without Claude Code's record, so a
+    failed read after it removes the plugin and the marketplace it added."""
+
+    read = install.claude_state
+
+    def claude_state(*args: object, **kwargs: object) -> dict[str, object]:
+        if any("--accept-command" in argv for argv in runtimes.ran):
+            raise install._StoppedError("failed", "native_plugin_kit_unavailable")
+        return read(*args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(install, "claude_state", claude_state)
+    runtimes.declared = DECLARED
+    exit_code, _output, error = _install(
+        spec_file, "--apply", "--yes", "--runtime", "claude-code", "--accept-command", DECLARED
+    )
+    assert exit_code != 0
+    assert "could not check the install command Claude Code ran" in error
+    assert ["claude", "plugin", "uninstall", "toolgate@acme"] in runtimes.ran
+    assert runtimes.ran[-1] == ["claude", "plugin", "marketplace", "remove", "acme"]
+    assert install.recorded_installs(guard_home) == {}
+
+
 def test_a_declared_command_never_runs_from_a_checkout_that_is_not_the_scanned_commit(
     spec_file: Path, runtimes: FakeRuntimes, guard_home: Path
 ) -> None:

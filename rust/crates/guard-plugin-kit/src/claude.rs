@@ -210,6 +210,10 @@ fn read_text(path: &Path) -> Option<String> {
 
 /// The commit a checkout is at, read from its `.git` files without running
 /// git: a detached `HEAD`, or the branch it names as a loose or packed ref.
+///
+/// A linked worktree's `.git` file points at its own folder under the main
+/// repository, which holds its `HEAD`; branch refs and `packed-refs` live in
+/// the folder its `commondir` names.
 pub fn head_commit(root: &Path) -> Option<String> {
     let mut git: PathBuf = root.join(".git");
     if git.is_file() {
@@ -217,6 +221,10 @@ pub fn head_commit(root: &Path) -> Option<String> {
         let target = strip(&pointer).strip_prefix("gitdir:")?;
         git = fs::canonicalize(root.join(strip(target))).ok()?;
     }
+    let common = match read_text(&git.join("commondir")) {
+        Some(common) => fs::canonicalize(git.join(strip(&common))).ok()?,
+        None => git.clone(),
+    };
     let head = read_text(&git.join("HEAD"))?;
     let head = strip(&head);
     if is_commit(head) {
@@ -226,13 +234,15 @@ pub fn head_commit(root: &Path) -> Option<String> {
         return None;
     }
     let reference = &head["ref: ".len()..];
-    let loose = git.join(reference);
-    if loose.is_file() {
+    if let Some(loose) = [git.join(reference), common.join(reference)]
+        .into_iter()
+        .find(|loose| loose.is_file())
+    {
         let commit = read_text(&loose)?;
         let commit = strip(&commit);
         return is_commit(commit).then(|| commit.to_owned());
     }
-    let packed = read_text(&git.join("packed-refs"))?;
+    let packed = read_text(&common.join("packed-refs"))?;
     packed
         .split(|c: char| {
             matches!(

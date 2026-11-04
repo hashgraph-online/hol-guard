@@ -205,6 +205,26 @@ fn git_head_follows_symbolic_packed_and_linked_refs() {
     write(&root.join("linked/.git"), "gitdir: ../repo/.git\n");
     write(&git.join("refs/heads/main"), &format!("{SCANNED}\n"));
     assert_eq!(git_head(&root.join("linked")), SCANNED);
+    // `git worktree add`: the worktree's own folder holds `HEAD` and names
+    // the shared folder its branch refs live in.
+    write(
+        &root.join("added/.git"),
+        "gitdir: ../repo/.git/worktrees/added\n",
+    );
+    write(
+        &git.join("worktrees/added/HEAD"),
+        "ref: refs/heads/feature\n",
+    );
+    write(&git.join("worktrees/added/commondir"), "../..\n");
+    assert_eq!(git_head(&root.join("added")), Value::Null);
+    write(&git.join("refs/heads/feature"), &format!("{OTHER}\n"));
+    assert_eq!(git_head(&root.join("added")), OTHER);
+    fs::remove_file(git.join("refs/heads/feature")).expect("remove");
+    write(
+        &git.join("packed-refs"),
+        &format!("{SCANNED} refs/heads/main\n{OTHER} refs/heads/feature\n"),
+    );
+    assert_eq!(git_head(&root.join("added")), OTHER);
     write(&git.join("HEAD"), "ref: refs/../../../etc/passwd\n");
     assert_eq!(git_head(&root.join("repo")), Value::Null);
     assert_eq!(git_head(&root.join("missing")), Value::Null);
