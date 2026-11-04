@@ -222,6 +222,8 @@ test("a saved runtime turns on from the top of the page and adding a project sta
   await page.getByRole("button", { name: "Open Projects", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Projects", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("No projects yet.", { exact: true })).toBeVisible();
+  // Nothing to remove yet, so no red button competes with adding the first project.
+  await expect(page.getByRole("button", { name: "Remove all projects", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Choose a project folder/ })).toBeEnabled();
   expect(calls.filter((call) => call.path === "/v1/context-assistance/activate")).toHaveLength(1);
   expect(calls.some((call) => call.path === "/v1/settings" && call.method === "POST")).toBe(false);
