@@ -36170,6 +36170,74 @@
       "expect": "allow"
     },
     {
+      "id": "neg-zcat-chosen-suffix-operand",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "zcat -f --suffix=nv README.m | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-zcat-short-suffix-operand",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "zcat -S nv README.m | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "zstdcat-attached-thread-count",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "zstdcat -T4 README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "numfmt-grouping-reads-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "numfmt --grouping README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-zstdcat-output-operand",
       "fix_area": "negative",
       "harnesses": [

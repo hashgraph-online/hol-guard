@@ -13,6 +13,12 @@
 
 /// The `zcat`/`gzcat` options that carry no value. `-l` lists a member table
 /// and `-t` tests integrity; both only print.
+///
+/// `-S`/`--suffix` is deliberately absent. When the operand names nothing,
+/// gzip retries the name with a suffix appended, and the suffix `-S` carries
+/// is the first one it tries, so `zcat -f --suffix=nv .e` opens `.env` while
+/// the read proof only ever saw `.e`. Refusing the option keeps the file gzip
+/// opens within one of the fixed compression suffixes of the proven operand.
 const GZIP_READING_FLAGS: &str = "fqvrtlnN";
 
 /// The `bzcat` options that carry no value.
@@ -24,6 +30,12 @@ const XZ_READING_FLAGS: &str = "qvQ";
 /// The `zstdcat` options that carry no value. `-D` names a dictionary file,
 /// and `-o` names one to write, so neither is here.
 const ZSTD_READING_FLAGS: &str = "qvfk";
+
+/// `zstd` reads the number for `-T` and `-M` out of the same word (`-T4`,
+/// `-M32MB`) rather than off the next one, unlike the `xz` options spelled
+/// the same way. Screening them as flags that take the next word would hand
+/// `zstdcat -T report.gz` its own operand and leave nothing proven read.
+const ZSTD_ATTACHED_VALUE_FLAGS: &str = "TM";
 
 /// Whether this name is one of the fixed decompress-to-stdout viewers.
 pub(super) fn decompress_viewer(tool: &str) -> bool {
@@ -45,7 +57,7 @@ pub(super) fn decompress_arguments<'a>(
             arguments,
             operands,
             GZIP_READING_FLAGS,
-            "S",
+            "",
             &[
                 "force",
                 "quiet",
@@ -60,7 +72,7 @@ pub(super) fn decompress_arguments<'a>(
                 "stdout",
                 "to-stdout",
             ],
-            &["suffix"],
+            &[],
         ),
         "bzcat" => super::stdin_filter_options::screen_options(
             arguments,
@@ -103,11 +115,12 @@ pub(super) fn decompress_arguments<'a>(
                 "check",
             ],
         ),
-        "zstdcat" => super::stdin_filter_options::screen_options(
+        "zstdcat" => super::stdin_filter_options::screen_options_with_optional(
             arguments,
             operands,
             ZSTD_READING_FLAGS,
-            "TM",
+            "",
+            ZSTD_ATTACHED_VALUE_FLAGS,
             &[
                 "quiet",
                 "verbose",

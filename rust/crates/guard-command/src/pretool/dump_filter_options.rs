@@ -232,7 +232,7 @@ pub(super) fn safe_numfmt_arguments<'a>(
         operands,
         NUMFMT_READING_FLAGS,
         "d",
-        &["debug", "zero-terminated", "header"],
+        &["debug", "zero-terminated", "header", "grouping"],
         &[
             "delimiter",
             "field",
@@ -241,7 +241,6 @@ pub(super) fn safe_numfmt_arguments<'a>(
             "from-unit",
             "to",
             "to-unit",
-            "grouping",
             "invalid",
             "padding",
             "round",

@@ -106,16 +106,21 @@ fn a_filter_reading_a_proven_file_needs_no_review() {
         "zcat Cargo.toml",
         "gzcat Cargo.toml",
         "zcat -f -q Cargo.toml",
-        "zcat --suffix=.gz Cargo.toml",
         "bzcat -s Cargo.toml",
         "xzcat -T 2 Cargo.toml",
         "xzcat --threads=2 --format=xz Cargo.toml",
         "zstdcat -q Cargo.toml",
+        // `zstd` carries the thread count in the same word, so the file after
+        // a bare `-T` stays an operand and is proven read.
+        "zstdcat -T4 Cargo.toml",
+        "zstdcat -T Cargo.toml",
         "ul Cargo.toml",
         "ul -i -t xterm Cargo.toml",
         "tsort Cargo.toml",
         "numfmt --to=iec Cargo.toml",
         "numfmt --field=2 --from=auto --padding 8 Cargo.toml",
+        // `--grouping` carries no value, so the file after it is an operand.
+        "numfmt --grouping Cargo.toml",
         "base64 Cargo.toml",
         "base64 -d Cargo.toml",
         "base64 -w 76 Cargo.toml",
@@ -187,6 +192,10 @@ fn a_filter_that_could_write_or_reach_further_still_takes_review() {
         "base32 --output=encoded.txt Cargo.toml",
         "base64 -w notanumber Cargo.toml",
         "zcat -o decoded.txt Cargo.toml",
+        // gzip retries a missing operand with a suffix appended, and `-S`
+        // chooses that suffix, so the name it opens is not the one proven.
+        "zcat -f --suffix=nv Cargo.tom",
+        "zcat -S nv Cargo.tom",
         "zstdcat -D dictionary.bin Cargo.toml",
         "zstdcat -o decoded.txt Cargo.toml",
         "xzcat --files=list.txt Cargo.toml",
