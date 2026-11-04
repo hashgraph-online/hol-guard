@@ -1,10 +1,12 @@
-//! `cloud_actions_connect` runner-authority kind: the Cloud actions choice
-//! made during `hol-guard connect`. Ported from `cli/connect_cloud_actions.py`
+//! `cloud-actions-connect --stdin`: the Cloud actions choice made during
+//! `hol-guard connect`. Ported from `cli/connect_cloud_actions.py`
 //! (`parse_cloud_actions_connect_report`, `cloud_actions_connect_summary`,
 //! `check_connect_cloud_workspace` and `check_connect_cloud_actions_declined`).
 //!
-//! Python keeps the stored answer next to the pairing and asks this kind what
-//! it means:
+//! A one-shot command rather than a resident kind: `hol-guard cloud-actions
+//! status --offline` reads the saved answer as a pure read and must not start
+//! a resident. Python keeps the stored answer next to the pairing and asks
+//! this command what it means:
 //!
 //! - `{"op": "report", "value"}` reads `guard_cloud_actions` from a connect
 //!   token response (or a stored answer) and answers `{"report"}`, `null`
@@ -16,11 +18,14 @@
 //!   message when the browser picked another workspace or turned Cloud actions
 //!   on despite `--no-cloud-actions`, or `null`.
 
+use std::io::Read;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::daemon_lifecycle_text::py_strip;
-use crate::runner_authority_op::{KindResult, ERR_INVALID};
+
+const MAX_REQUEST_BYTES: u64 = 64 * 1024;
 
 const CONFIGURE_COMMAND: &str = "hol-guard cloud-actions ai-tools configure <ai-tool>";
 const RECONNECT_COMMAND: &str = "hol-guard connect";
@@ -59,8 +64,30 @@ enum Request {
     },
 }
 
-pub(crate) fn dispatch(args: &Value) -> KindResult {
-    let request: Request = serde_json::from_value(args.clone()).map_err(|_| ERR_INVALID)?;
+pub(crate) fn is_command(command: &str) -> bool {
+    command == "cloud-actions-connect"
+}
+
+pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    reader
+        .take(MAX_REQUEST_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "cloud_actions_connect_request_unreadable".to_owned())?;
+    if bytes.len() as u64 > MAX_REQUEST_BYTES {
+        return Err("cloud_actions_connect_request_too_large".to_owned());
+    }
+    let request: Value = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    serde_json::to_vec(&answer(request)?)
+        .map_err(|_| "cloud_actions_connect_response_encode_failed".to_owned())
+}
+
+fn invalid() -> String {
+    "cloud_actions_connect_request_invalid".to_owned()
+}
+
+fn answer(request: Value) -> Result<Value, String> {
+    let request: Request = serde_json::from_value(request).map_err(|_| invalid())?;
     Ok(match request {
         Request::Report { value } => json!({ "report": report(&value) }),
         Request::Summary { report, paired } => summary(report.as_ref(), paired),

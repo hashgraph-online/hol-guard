@@ -147,12 +147,9 @@ def test_connect_reports_wrong_workspace_and_ignored_decline() -> None:
 
 
 def test_connect_checks_disconnect_the_computer_without_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.mdm import runtime_request
 
-    def unavailable(*_: object, **__: object) -> dict[str, object]:
-        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
-
-    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_, **__: None)
     on: CloudActionsConnectReport = {"status": "on", "workspace_id": WORKSPACE_ID}
 
     assert parse_cloud_actions_connect_report({"guard_cloud_actions": on}) is None

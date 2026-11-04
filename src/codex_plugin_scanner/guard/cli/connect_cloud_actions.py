@@ -24,6 +24,8 @@ CloudActionsConnectStatus = Literal["on", "off", "unknown"]
 CLOUD_ACTIONS_CONNECT_STATE_PREFIX = "cloud_actions_connect:"
 CLOUD_ACTIONS_CONFIGURE_COMMAND = "hol-guard cloud-actions ai-tools configure <ai-tool>"
 CLOUD_ACTIONS_RECONNECT_COMMAND = "hol-guard connect"
+_FEATURE = "native-cloud-actions-connect-v1"
+_COMMAND = "cloud-actions-connect"
 _NATIVE_UNAVAILABLE_MESSAGE = (
     "Guard's native runtime is not available, so HOL Guard could not check Cloud actions for this pairing. "
     "Run hol-guard doctor, then try again."
@@ -158,10 +160,8 @@ def _problem(request: dict[str, object]) -> str | None:
     return f"{_NATIVE_UNAVAILABLE_MESSAGE} HOL Guard disconnected this computer before sending anything."
 
 
-def _native(request: dict[str, object]) -> Any:  # the bound payload of the native kind, or None
-    from ..native_runner_authority import native_runner_authority
+def _native(request: dict[str, object]) -> Any:  # the one-shot command's answer, or None
+    # One-shot so that `cloud-actions status --offline` never starts a resident.
+    from ..mdm.runtime_request import runtime_answer
 
-    try:
-        return native_runner_authority("cloud_actions_connect", request)
-    except (ValueError, TypeError):  # NativeRunnerAuthorityError is a ValueError
-        return None
+    return runtime_answer(_FEATURE, _COMMAND, request, output_limit=4096, timeout_seconds=5.0)

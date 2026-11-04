@@ -193,6 +193,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = user_health_state::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if cloud_actions_connect::is_command(command) && flag == "--stdin" => {
+            let response = cloud_actions_connect::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if hermes_file_inspect::is_command(command) && flag == "--stdin" => {
             let response = hermes_file_inspect::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

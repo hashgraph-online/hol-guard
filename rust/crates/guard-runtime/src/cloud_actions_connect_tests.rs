@@ -1,13 +1,12 @@
 use serde_json::{json, Value};
 
-use super::dispatch;
-use crate::runner_authority_op::ERR_INVALID;
+use super::{answer as dispatch, invalid, run_command};
 
 const WS: &str = "6f1c2a52-6a4e-4b8e-9f0e-3f3d6c1b2a10";
 const OTHER_WS: &str = "0b6e7f8a-1c2d-4e3f-8a9b-0c1d2e3f4a5b";
 
 fn answer(request: Value) -> Value {
-    dispatch(&request).expect("answer")
+    dispatch(request).expect("answer")
 }
 
 #[test]
@@ -147,6 +146,22 @@ fn only_a_well_formed_request_is_answered() {
         json!({"op": "record"}),
         json!([]),
     ] {
-        assert_eq!(dispatch(&request), Err(ERR_INVALID), "{request}");
+        assert_eq!(dispatch(request.clone()), Err(invalid()), "{request}");
     }
+}
+
+#[test]
+fn the_command_answers_one_bounded_request() {
+    let answer =
+        run_command(&br#"{"op":"declined","report":null,"declined":true}"#[..]).expect("answer");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&answer).expect("json"),
+        json!({"problem": null})
+    );
+    assert_eq!(run_command(&b"not json"[..]), Err(invalid()));
+    let oversized = vec![b' '; 64 * 1024 + 1];
+    assert_eq!(
+        run_command(&oversized[..]),
+        Err("cloud_actions_connect_request_too_large".to_owned())
+    );
 }
