@@ -1055,6 +1055,9 @@ dependencies = [
 [[package]]
 name = "guard-seatbelt"
 version = "0.1.0"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "guard-secure-fs"

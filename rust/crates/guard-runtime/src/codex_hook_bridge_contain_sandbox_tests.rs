@@ -41,6 +41,7 @@ fn payload_text(transcript: &str, turn_id: &str, input: &str) -> String {
         "tool_input": serde_json::from_str::<serde_json::Value>(input).unwrap(),
         "transcript_path": transcript,
         "turn_id": turn_id,
+        "cwd": std::path::Path::new(transcript).parent(),
         "permission_mode": "bypassPermissions",
     })
     .to_string()
@@ -136,31 +137,6 @@ fn the_latest_context_for_the_turn_wins() {
 }
 
 #[test]
-fn a_call_that_asks_to_leave_the_sandbox_is_unknown() {
-    for input in [
-        r#"{"command":"ls","sandbox_permissions":"require_escalated"}"#,
-        r#"{"command":"ls","with_escalated_permissions":true}"#,
-    ] {
-        let (_directory, payload) = session(&[context("t2", WORKSPACE_WRITE)], "t2", input);
-        assert_eq!(turn(&payload), Turn::Unknown, "{input}");
-    }
-    let input = r#"{"command":"ls","sandbox_permissions":"use_default"}"#;
-    let (_directory, payload) = session(&[context("t2", WORKSPACE_WRITE)], "t2", input);
-    assert_eq!(turn(&payload), Turn::WorkspaceWrite);
-    let camel = serde_json::json!({
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "toolInput": {"command": "ls", "sandbox_permissions": "require_escalated"},
-        "transcript_path": "/unused/rollout.jsonl",
-        "turn_id": "t2",
-    });
-    let payload = parse_mapping_lone_surrogates(&camel.to_string())
-        .unwrap()
-        .value;
-    assert!(escalated(&payload), "the camel-case input is read too");
-}
-
-#[test]
 fn a_missing_relative_or_unreadable_transcript_is_unknown() {
     let (directory, _) = session(&[context("t2", WORKSPACE_WRITE)], "t2", COMMAND);
     for transcript in [
@@ -205,10 +181,11 @@ fn a_turn_context_beyond_the_read_tail_is_unknown() {
 
 #[cfg(target_os = "macos")]
 #[test]
-fn a_contained_call_in_codex_sandbox_runs_as_it_is() {
+fn a_contained_call_in_codex_sandbox_runs_behind_the_sandbox_check() {
     use std::time::{Duration, Instant};
 
     use super::super::{settle, BridgeConfig, Prepared, Route, FIXED_CODEX_APPLIES};
+    use crate::codex_hook_response::PRE_TOOL_USE;
 
     const DENY: &str = r#"{"policy_action":"sandbox-required","decision":"deny","reason_code":"native_workspace_containment_required","required_execution_profile":"workspace-contained-v1","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Run this inside the contained runner."}}"#;
     let config = BridgeConfig {
@@ -219,9 +196,11 @@ fn a_contained_call_in_codex_sandbox_runs_as_it_is() {
         fallback_command: vec!["/opt/hol-guard".to_owned(), "hook".to_owned()],
     };
     const READ_ONLY_DENY: &str = r#"{"policy_action":"sandbox-required","decision":"deny","reason_code":"native_pytest_readonly_containment_required","required_execution_profile":"pytest-readonly-v2","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Run this inside the contained runner."}}"#;
+    let (directory, _) = session(&[], "t2", COMMAND);
+    let workspace = std::fs::canonicalize(directory.path()).unwrap();
+    let transcript = workspace.join("rollout.jsonl");
     let answer = |policy: &str, deny: &str| {
-        let (directory, _) = session(&[context("t2", policy)], "t2", COMMAND);
-        let transcript = directory.path().join("rollout.jsonl");
+        std::fs::write(&transcript, format!("{}\n", context("t2", policy))).unwrap();
         let prepared = Prepared {
             event_name: PRE_TOOL_USE.to_owned(),
             data: payload_text(transcript.to_str().unwrap(), "t2", COMMAND),
@@ -234,12 +213,30 @@ fn a_contained_call_in_codex_sandbox_runs_as_it_is() {
         FIXED_CODEX_APPLIES.with(|applies| applies.set(None));
         route
     };
+    let check = shell_join(&[
+        std::env::current_exe()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned(),
+        "codex-sandbox-check".to_owned(),
+        "--profile".to_owned(),
+        "workspace-contained-v1".to_owned(),
+        "--workspace".to_owned(),
+        workspace.to_str().unwrap().to_owned(),
+    ])
+    .unwrap();
+    let allowed = serde_json::json!({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "allow",
+        "updatedInput": {"command": format!("{check} || exit 126\nhead -3 README.md")},
+    }});
+    let Route::Respond(output) = answer(WORKSPACE_WRITE, DENY) else {
+        panic!("the bridge answers the call itself");
+    };
     assert_eq!(
-        answer(WORKSPACE_WRITE, DENY),
-        Route::Respond(
-            r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}"#
-                .to_owned()
-        )
+        serde_json::from_str::<serde_json::Value>(&output).unwrap(),
+        allowed
     );
     let denied = Route::Respond(
         r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Run this inside the contained runner."}}"#

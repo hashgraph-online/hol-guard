@@ -27,6 +27,9 @@ pub(super) fn run() -> Result<(), String> {
         [command, rest @ ..] if command == contained_workspace_sink::LAUNCH_COMMAND => {
             std::process::exit(contained_workspace_sink::launch(rest))
         }
+        [command, rest @ ..] if command == codex_sandbox_check::CHECK_COMMAND => {
+            std::process::exit(codex_sandbox_check::run(rest))
+        }
         [command] if command == "capabilities" => write_json(&capabilities()),
         [command, flag] if command == "capabilities" && flag == "--json" => {
             write_json(&capabilities())

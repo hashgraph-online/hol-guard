@@ -55,9 +55,6 @@ enum Contained {
     /// The sink runs the call; the answer's strings came from the hook
     /// input, rendered with its surrogate mapping.
     Routed(PyVal, bool),
-    /// Codex's own sandbox confines the call, and Guard's sink cannot
-    /// start inside it: the call runs as it is.
-    CodexSandbox,
 }
 
 /// `_bridge_output` for a `PreToolUse` sandbox requirement: the contained
@@ -73,7 +70,6 @@ pub(super) fn settle(
         Contained::Unchanged => (response, mapped),
         Contained::Hint => (with_update_hint(response), mapped),
         Contained::Routed(routed, unmap) => (routed, unmap),
-        Contained::CodexSandbox => (sandbox::allowed(), false),
     };
     let PyVal::Dict(entries) = &settled else {
         return Route::Respond(fail_closed(&prepared.event_name));
@@ -144,11 +140,11 @@ fn contain(
     if payload.mapped && payload.collision {
         return Contained::Unchanged;
     }
-    if routable(response, &payload.value).is_some() {
+    if let Some(original) = routable(response, &payload.value) {
         let profile = text(response, "required_execution_profile");
         match sandbox::launching_turn(&payload.value) {
             sandbox::Turn::Unknown => {}
-            turn if turn.confines(profile) => return Contained::CodexSandbox,
+            turn if turn.confines(profile) => return sandbox::checked(original, &payload, profile),
             _ => return Contained::Unchanged,
         }
     }
@@ -385,7 +381,7 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
         discard(&request);
         return None;
     };
-    Some(routed_response(original, &joined))
+    Some(routed_response(original, &joined, ROUTED_REASON))
 }
 
 /// The sink's argv prefix as the shell will start it.
@@ -414,7 +410,7 @@ pub(crate) fn shell_join(command: &[String]) -> Option<String> {
 
 /// The allow that runs the `joined` command line in place of the original
 /// call.
-fn routed_response(original: &PyVal, joined: &str) -> PyVal {
+fn routed_response(original: &PyVal, joined: &str, reason: &str) -> PyVal {
     let mut updated = match original {
         PyVal::Dict(entries) => entries.clone(),
         _ => Vec::new(),
@@ -426,7 +422,7 @@ fn routed_response(original: &PyVal, joined: &str) -> PyVal {
     }
     PyVal::Dict(vec![
         ("policy_action".to_owned(), string("allow")),
-        ("reason_code".to_owned(), string(ROUTED_REASON)),
+        ("reason_code".to_owned(), string(reason)),
         (
             "hookSpecificOutput".to_owned(),
             PyVal::Dict(vec![

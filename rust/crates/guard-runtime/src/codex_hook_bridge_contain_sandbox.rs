@@ -4,13 +4,22 @@
 //! under a macOS Seatbelt profile. Guard's contained sink cannot start in
 //! there: the profile refuses its connection to the resident socket, and
 //! macOS refuses to apply a second Seatbelt profile inside the first. The
-//! rewrite would fail every time, so a call that Codex's sandbox confines
-//! at least as tightly as the profile Guard requires runs as it is: a
-//! read-only turn for any profile, a workspace-write turn with no extra
-//! writable roots that also keeps `/tmp` and `$TMPDIR` read-only only for
-//! the workspace profile, and never with network. Codex lets a
-//! workspace-write call write both temporary directories unless its config
-//! excludes them; Guard's workspace profile does not.
+//! rewrite would fail every time, so a call in a turn whose sandbox
+//! confines it at least as tightly as the profile Guard requires runs in
+//! Codex's sandbox instead: a read-only turn for any profile, a
+//! workspace-write turn with no extra writable roots that also keeps `/tmp`
+//! and `$TMPDIR` read-only only for the workspace profile, and never with
+//! network. Codex lets a workspace-write call write both temporary
+//! directories unless its config excludes them; Guard's workspace profile
+//! does not.
+//!
+//! The turn's sandbox is not proof that this one call runs in it: Codex
+//! starts a call outside it when the user approves an escalation, when an
+//! exec-policy rule trusts the command, or when it retries a call without
+//! the sandbox, and the hook sees none of that. So the call is rewritten to
+//! start with `codex-sandbox-check`, which asks the kernel about the
+//! process the shell actually runs in, and the shell runs the original
+//! command only when the check passes.
 //!
 //! The hook payload does not say which sandbox the turn uses, so the turn's
 //! `turn_context` record is read from the session transcript Codex names
@@ -21,17 +30,15 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
-use super::{string, text};
-use crate::codex_hook_response::PRE_TOOL_USE;
-use crate::pyjson::PyVal;
+use super::{first, resolved_workspace, routed_response, shell_join, text, Contained};
+use crate::codex_sandbox_check::{CHECK_COMMAND, REFUSED, WORKSPACE_PROFILE};
+use crate::pyjson::{PyVal, SurrogateMapped};
 
 const REASON: &str = "native_contained_by_codex_sandbox";
 /// How much of the transcript's end is read for the turn's context. Codex
 /// writes `turn_context` at the start of each turn, so a turn longer than
 /// this is treated as unknown and keeps Guard's own answer.
 const TAIL_BYTES: u64 = 8 * 1024 * 1024;
-/// The one contained profile that lets a call write anywhere in the workspace.
-const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
 
 /// The sandbox a Codex turn runs its shell calls in.
 #[derive(Debug, PartialEq)]
@@ -78,9 +85,6 @@ pub(super) fn turn(payload: &PyVal) -> Turn {
     ) else {
         return Turn::Unknown;
     };
-    if escalated(payload) {
-        return Turn::Unknown;
-    }
     let Some(tail) = transcript_tail(Path::new(transcript)) else {
         return Turn::Unknown;
     };
@@ -89,16 +93,6 @@ pub(super) fn turn(payload: &PyVal) -> Turn {
         .filter(|line| line.contains("turn_context") && line.contains(turn_id))
         .find_map(|line| turn_policy(line, turn_id))
         .unwrap_or(Turn::Unknown)
-}
-
-/// A call that asks Codex to run it outside the sandbox.
-fn escalated(payload: &PyVal) -> bool {
-    let Some(input) = super::first(payload, &["tool_input", "toolInput"]) else {
-        return false;
-    };
-    let permissions = text(input, "sandbox_permissions");
-    permissions.is_some_and(|value| value != "use_default")
-        || input.get("with_escalated_permissions") == Some(&PyVal::Bool(true))
 }
 
 /// The last `TAIL_BYTES` of a regular, non-symlinked transcript file,
@@ -153,19 +147,43 @@ fn turn_policy(line: &str, turn_id: &str) -> Option<Turn> {
     }
 }
 
-/// The allow that leaves the call to Codex's sandbox.
-pub(super) fn allowed() -> PyVal {
-    PyVal::Dict(vec![
-        ("policy_action".to_owned(), string("allow")),
-        ("reason_code".to_owned(), string(REASON)),
-        (
-            "hookSpecificOutput".to_owned(),
-            PyVal::Dict(vec![
-                ("hookEventName".to_owned(), string(PRE_TOOL_USE)),
-                ("permissionDecision".to_owned(), string("allow")),
-            ]),
-        ),
-    ])
+/// The allow that runs the `original` call in Codex's sandbox behind
+/// `codex-sandbox-check`, or the denial when the check cannot be named.
+pub(super) fn checked(
+    original: &PyVal,
+    payload: &SurrogateMapped,
+    profile: Option<&str>,
+) -> Contained {
+    let check = check_line(original, &payload.value, profile);
+    match check {
+        Some((check, command)) => {
+            let command = format!("{check} || exit {REFUSED}\n{command}");
+            Contained::Routed(routed_response(original, &command, REASON), payload.mapped)
+        }
+        None => Contained::Unchanged,
+    }
+}
+
+/// The check's command line, and the original command it guards.
+fn check_line<'a>(
+    original: &'a PyVal,
+    payload: &PyVal,
+    profile: Option<&str>,
+) -> Option<(String, &'a str)> {
+    let command = original.get("command")?.as_str()?;
+    let workspace = resolved_workspace(first(payload, &["cwd", "workspace"])?.as_str()?)?;
+    let executable = std::env::current_exe().ok()?;
+    executable.is_file().then_some(())?;
+    let check = [
+        executable.to_str()?,
+        CHECK_COMMAND,
+        "--profile",
+        profile?,
+        "--workspace",
+        workspace.as_str(),
+    ];
+    let check = shell_join(&check.map(str::to_owned))?;
+    Some((check, command))
 }
 
 #[cfg(test)]
