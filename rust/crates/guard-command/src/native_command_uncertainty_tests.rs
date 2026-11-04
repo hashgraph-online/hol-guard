@@ -702,6 +702,9 @@ fn a_setting_prefix_does_not_hide_a_backgrounded_command_from_review() {
         "(PORT=39871 npm start > /tmp/app.log 2>&1 & echo $! > /tmp/app.pid)",
         "(PORT=39871 npm start &)",
         "(LOG_LEVEL=debug ls &)",
+        // Single quotes make the parentheses ordinary text, so the value is
+        // a format string and not a subshell the setting opens.
+        "(LOG_FORMAT='(%level%)' npm start &)",
     ] {
         let result = evaluate(&binding, command);
         assert_ne!(

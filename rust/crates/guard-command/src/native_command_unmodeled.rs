@@ -1015,8 +1015,16 @@ fn setting_prefix(word: &str) -> bool {
         && name
             .chars()
             .all(|character| character.is_ascii_alphanumeric() || character == '_')
-        && !value.contains([
-            '$', '`', '\\', '\n', '\r', '<', '>', ';', '&', '|', '(', ')',
+        && !value.contains(['\\', '\n', '\r'])
+        // Quoting has to close inside the word, or dropping it would leave
+        // the quote it opened hanging over the rest of the text.
+        && value.matches('\'').count() % 2 == 0
+        && value.matches('"').count() % 2 == 0
+        // An operator the shell would act on is read outside quoting only:
+        // `FOO=1>>out` is a setting with a redirect glued to it, while
+        // `LOG_FORMAT='(%level%)'` is a format string and runs nothing.
+        && !unquoted_literal(value).contains([
+            '$', '`', '<', '>', ';', '&', '|', '(', ')',
         ])
         && crate::pretool::generic::chain_literals::ordinary_name(name)
         && !settings::code_or_redirect_environment_name(name)
