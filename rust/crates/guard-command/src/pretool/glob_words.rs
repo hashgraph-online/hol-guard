@@ -370,8 +370,7 @@ mod tests {
     }
 }
 
-/// Whether a `printf` segment may assign a shell variable rather than only
-/// print. See [`printf_assigns`].
+/// Whether a `printf` segment may assign a shell variable; see [`printf_assigns`].
 pub(super) fn printf_sets_variable(segment: &CommandSegmentV1) -> bool {
     segment
         .executable
@@ -380,14 +379,9 @@ pub(super) fn printf_sets_variable(segment: &CommandSegmentV1) -> bool {
         && printf_assigns(&segment.text)
 }
 
-/// Whether the `printf` in `text` may assign a shell variable: `-v NAME`, or
-/// a `%n` conversion, which stores a count in the variable it names. printf
-/// reads options only before its format and stops at `--`, so a `-v` after
-/// either is printed data. The shell removes quoting anywhere in a word, so
-/// `"-"v` and `-''v` reach printf as `-v`, and takes redirections out of the
-/// arguments wherever they stand (`printf 2>/dev/null -v PATH dir`). Any
-/// other leading option, a format the shell builds from an expansion, or a
-/// word that mixes a redirection with other text counts as one that may.
+/// Whether the `printf` in `text` may assign a variable: `-v NAME` before the format or `--`,
+/// or a `%n` conversion. Quotes are removed (`"-"v` is `-v`) and redirections dropped wherever
+/// they stand; another leading option, an expanded format or a mixed redirect word counts.
 pub(super) fn printf_assigns(text: &str) -> bool {
     let words = shell_words(text);
     let Some(at) = words
@@ -408,9 +402,7 @@ pub(super) fn printf_assigns(text: &str) -> bool {
             .trim_start_matches(|character: char| character.is_ascii_digit());
         match operator.trim_start_matches(['<', '>', '&', '|']) {
             // A bare operator (`2>`) takes the next word as its target.
-            "" => {
-                rest.next();
-            }
+            "" => drop(rest.next()),
             target if target.len() < operator.len() && !target.contains(['<', '>']) => {}
             _ => return true,
         }
@@ -429,8 +421,7 @@ pub(super) fn printf_assigns(text: &str) -> bool {
 #[derive(Default)]
 struct ShellWord {
     value: String,
-    /// A `$` or backquote outside single quotes, or an ANSI-C escape that
-    /// names a character by number (`$'\x25'`).
+    /// `$` or backquote outside single quotes, unquoted brace/glob, or numeric ANSI-C escape.
     expands: bool,
     /// An unquoted `<` or `>`.
     redirect: bool,
@@ -456,8 +447,17 @@ fn shell_words(text: &str) -> Vec<ShellWord> {
             }
             '\'' if !double => single = !single,
             '"' if !single => double = !double,
-            '\\' if !single => word.value.extend(characters.next()),
+            // A backslash-newline is a line continuation; the shell drops both.
+            '\\' if !single => match characters.next() {
+                Some('\n') => {}
+                escaped => word.value.extend(escaped),
+            },
             '$' | '`' if !single => {
+                word.expands = true;
+                word.value.push(character);
+            }
+            // Brace and glob expansion can build a word: `{-v,PATH,%s,dir}`.
+            '{' | '*' | '?' | '[' if !single && !double => {
                 word.expands = true;
                 word.value.push(character);
             }
@@ -483,8 +483,7 @@ fn shell_words(text: &str) -> Vec<ShellWord> {
     words
 }
 
-/// Whether a printf format holds a `%n` conversion, after any flags, width,
-/// precision and length modifier. `%%` prints a percent sign.
+/// Whether a printf format holds `%n` after flags, width, precision and length (`%%` is `%`).
 fn format_counts(format: &str) -> bool {
     let mut characters = format.chars();
     while characters.any(|character| character == '%') {

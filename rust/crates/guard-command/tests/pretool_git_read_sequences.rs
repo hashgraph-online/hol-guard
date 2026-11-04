@@ -473,6 +473,7 @@ fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
         "printf -''v HOME /tmp/evil; git status --short",
         "printf 'x%n' PATH; git status --short",
         "printf 2>/dev/null -v PATH /tmp/tools; git log -1",
+        "printf {-v,PATH,%s,/tmp/x}; git status --short",
         "printf '%5n' PATH; git status --short",
         // The shell joins a split-quoted option, so these still assign.
         "printf \"-\"v GIT_CONFIG_GLOBAL /tmp/evil; git status --short",

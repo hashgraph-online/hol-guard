@@ -431,6 +431,9 @@ fn split_quoted_printf_option_still_assigns() {
         "printf > out -v PATH /tmp/tools",
         "printf -v>/dev/null PATH /tmp/tools",
         "printf $'\\x25n' PATH",
+        "printf \"%\\\nn\" PATH",
+        "printf {-v,PATH,%s,/tmp/x}",
+        "printf %[n] PATH",
     ] {
         assert!(super::command_word_changes_shell_state(text), "{text}");
     }
