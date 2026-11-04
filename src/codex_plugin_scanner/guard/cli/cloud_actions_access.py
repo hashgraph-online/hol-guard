@@ -223,11 +223,7 @@ def read_cloud_actions_access(
     pairing: CloudActionsPairing,
     now: float | None = None,
 ) -> CloudActionsAccess:
-    """Accept the answer only when it is Cloud actions access for this pairing's workspace.
-
-    The native runtime checks the answer and the token's claims; the token stays here.
-    """
-
+    """Accept only Cloud actions access for this pairing's workspace; the token never leaves Python."""
     token = payload.get("access_token")
     claims = decode_oauth_access_token_claims(token) if isinstance(token, str) else {}
     verdict = _native(
@@ -261,14 +257,14 @@ def read_cloud_actions_access(
 
 
 def _native(request: dict[str, object]) -> Mapping[str, object]:
-    """Ask the native ``cloud_actions_access`` kind; a request it cannot answer accepts no access."""
+    """Ask the native ``cloud_actions_access`` kind; without an answer, callers accept no access."""
 
     from ..native_runner_authority import native_runner_authority
 
     try:
         return native_runner_authority("cloud_actions_access", request)
-    except (ValueError, TypeError) as error:  # NativeRunnerAuthorityError is a ValueError
-        raise _native_unavailable() from error
+    except (ValueError, TypeError):  # NativeRunnerAuthorityError is a ValueError
+        return {}
 
 
 def _native_unavailable() -> CloudActionsAccessError:
