@@ -130,6 +130,10 @@ pub struct CatalogExtension {
     /// extension owns (`for_action_class`).
     #[serde(default)]
     pub action_classes: Vec<String>,
+    /// The protection this extension hands its steps to, such as
+    /// `package-firewall`; absent from older pack catalogs.
+    #[serde(default)]
+    pub delegated_protection: Option<String>,
     pub rules: Vec<CatalogRule>,
     pub permissions: Vec<CatalogPermission>,
 }
