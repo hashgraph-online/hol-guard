@@ -1119,6 +1119,7 @@ mod trust_attestation_verify_op;
 mod unique_nanos;
 mod user_command_lookup;
 mod user_health_state;
+mod verified_github_read;
 mod verified_read_decision_op;
 #[cfg(unix)]
 mod verified_read_execute;

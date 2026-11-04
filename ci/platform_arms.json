@@ -2241,6 +2241,22 @@
    "item": "fn posix_root -- cfg! expression",
    "cfg": "unix",
    "body": "04c084f0bd0d"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Refuses a final symlink or reparse point before opening, where Python's open had no O_NOFOLLOW on Windows at all. The identity file is still required to be a regular file within its bound.",
+   "file": "rust/crates/guard-runtime/src/verified_github_read.rs",
+   "item": "fn open_without_following(path: &Path) -> std::io::Result<File>",
+   "cfg": "not(unix)",
+   "body": "ab0a6a95083b"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Stable Rust exposes no file index on Windows, so a rewrite during the read is detected by length and modification time only. A replaced executor or CA bundle still changes the content digest, which compose compares with the planned identity before any proof is composed.",
+   "file": "rust/crates/guard-runtime/src/verified_github_read.rs",
+   "item": "fn stable(metadata: &Metadata) -> (u64, Option<std::time::SystemTime>)",
+   "cfg": "not(unix)",
+   "body": "e351f21443b3"
   }
  ]
 }

@@ -102,6 +102,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = contained_output_match::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if verified_github_read::is_command(command) && flag == "--stdin" => {
+            let response = verified_github_read::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if desktop_core_onedir::is_command(command) && flag == "--stdin" => {
             let response = desktop_core_onedir::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
