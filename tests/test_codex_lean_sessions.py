@@ -152,6 +152,23 @@ def test_a_failed_config_write_leaves_no_ownership_record(tmp_path: Path, monkey
     assert path.read_text(encoding="utf-8") == USER_CONFIG
 
 
+def test_a_failed_record_removal_puts_the_config_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home, guard = homes(tmp_path)
+    path = write_config(home, USER_CONFIG)
+    lean.enable(home, guard)
+    turned_on = path.read_text(encoding="utf-8")
+
+    def refuse(*_args: object, **_kwargs: object) -> None:
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(lean, "_write_record", refuse)
+    with pytest.raises(PermissionError):
+        lean.disable(home, guard)
+
+    assert path.read_text(encoding="utf-8") == turned_on
+    assert lean.status(home, guard)["state"] == "on"
+
+
 def test_an_interrupted_hook_install_stops_the_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import codex_hook_recovery
     from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
