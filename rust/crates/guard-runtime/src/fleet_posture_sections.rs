@@ -27,6 +27,7 @@ use crate::cloud_request_text::py_truthy;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
 use super::selection::{keyed_digest, normalized_timestamp, HARNESS_IDS};
+use super::tools::clip;
 
 const MAX_RUNTIMES: usize = 64;
 const MAX_ADVISORY_IDS: usize = 16;
@@ -260,11 +261,6 @@ fn is_sha256_hex(text: &str) -> bool {
         && text
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-/// `clip`: the first `limit` characters.
-fn clip(text: &str, limit: usize) -> String {
-    text.chars().take(limit).collect()
 }
 
 fn clipped(value: Option<&Value>, limit: usize) -> Value {
