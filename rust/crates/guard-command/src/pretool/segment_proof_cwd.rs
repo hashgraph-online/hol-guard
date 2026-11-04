@@ -453,6 +453,7 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "ls"
                 | "cat"
                 | "base64"
+                | "base32"
                 | "stat"
                 | "test"
                 | "find"

@@ -11,6 +11,11 @@
 //! joins or lays out the columns of what it reads and has no option that
 //! names a file to write.
 //!
+//! `strings`, `hexdump`, `xxd`, `pr`, `shuf` and `iconv` belong here too:
+//! each prints a rendering of what it reads. `xxd` is the second exception
+//! that writes — `xxd INPUT OUTPUT` truncates its second operand — so only a
+//! single operand is proven for it.
+//!
 //! `nl`, `tac`, `rev`, `fold`, `expand`, `unexpand`, `fmt` and `comm` number,
 //! reverse, wrap, retab, reflow or compare the lines of what they read, and
 //! none of them has an option that names a file to write either.
@@ -29,7 +34,7 @@ pub(super) fn safe_arguments(tool: &str, arguments: &[String]) -> bool {
             .all(|argument| short_flags(argument, "cdui")),
         "cut" => safe_cut_arguments(arguments),
         "tr" => safe_tr_arguments(arguments),
-        "base64" => safe_base64_arguments(arguments),
+        "base64" | "base32" => safe_base64_arguments(arguments),
         "paste" => {
             let mut operands: Vec<&str> = Vec::new();
             super::stdin_filter_options::safe_paste_arguments(arguments, &mut operands)
@@ -44,6 +49,25 @@ pub(super) fn safe_arguments(tool: &str, arguments: &[String]) -> bool {
             let mut operands: Vec<&str> = Vec::new();
             layout_arguments(tool, arguments, &mut operands) && operands.is_empty()
         }
+        "strings" | "hexdump" | "xxd" | "pr" | "shuf" | "iconv" => {
+            let mut operands: Vec<&str> = Vec::new();
+            dump_arguments(tool, arguments, &mut operands) && operands.is_empty()
+        }
+        _ => false,
+    }
+}
+
+/// The dump and paging filters, each with its own option line. A tool this
+/// dispatcher does not name proves nothing and keeps the command under
+/// review.
+fn dump_arguments<'a>(tool: &str, arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
+    match tool {
+        "strings" => super::dump_filter_options::safe_strings_arguments(arguments, operands),
+        "hexdump" => super::dump_filter_options::safe_hexdump_arguments(arguments, operands),
+        "xxd" => super::dump_filter_options::safe_xxd_arguments(arguments, operands),
+        "pr" => super::dump_filter_options::safe_pr_arguments(arguments, operands),
+        "shuf" => super::dump_filter_options::safe_shuf_arguments(arguments, operands),
+        "iconv" => super::dump_filter_options::safe_iconv_arguments(arguments, operands),
         _ => false,
     }
 }
@@ -103,13 +127,12 @@ fn safe_tr_arguments(arguments: &[String]) -> bool {
     (1..=2).contains(&sets)
 }
 
-/// `base64` over standard input, writing only to stdout. Any operand or
-/// `-i`/`-o` names a file (BSD spells input and output that way), so neither
-/// is admitted; only decode, garbage and line-wrap options are.
+/// `base64` and `base32` over standard input, writing only to stdout. The two
+/// carry the same option line. Any operand or `-i`/`-o` names a file (BSD
+/// spells input and output that way), so neither is admitted; only decode,
+/// garbage and line-wrap options are.
 fn safe_base64_arguments(arguments: &[String]) -> bool {
-    let wrap = |value: &str| {
-        !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
-    };
+    let wrap = super::base64_reads::safe_wrap_count;
     let mut pending_wrap = false;
     for argument in arguments {
         if pending_wrap {
@@ -241,12 +264,14 @@ pub(super) fn safe_file_arguments(
         "nl" | "tac" | "rev" | "fold" | "expand" | "unexpand" | "fmt" | "comm" => {
             layout_arguments(tool, arguments, &mut operands)
         }
-        _ => false,
+        other => dump_arguments(other, arguments, &mut operands),
     };
     let maximum = match tool {
         "uniq" => 1,
         // `join` pairs exactly two sorted inputs, and `comm` compares two.
         "join" | "comm" => 2,
+        // `xxd INPUT OUTPUT` truncates the second operand.
+        "xxd" => 1,
         _ => MAX_INPUTS,
     };
     // A file operand is opened, so it takes the read proof `cat` takes, and

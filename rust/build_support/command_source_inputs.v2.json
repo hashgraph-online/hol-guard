@@ -339,6 +339,7 @@
       "src/pretool/docker_reads.rs",
       "src/pretool/docker_start.rs",
       "src/pretool/doctl_reads.rs",
+      "src/pretool/dump_filter_options.rs",
       "src/pretool/env_prefix_leading.rs",
       "src/pretool/env_prefix_projection.rs",
       "src/pretool/env_prefix_reviewed.rs",
