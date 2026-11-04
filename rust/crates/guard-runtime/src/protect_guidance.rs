@@ -163,12 +163,12 @@ fn command_text(payload: &Map<String, Value>) -> String {
         Some(Value::String(command)) => terminal_safe(py_strip(command)),
         Some(Value::Array(parts)) => {
             let mut argv: Vec<&str> = parts.iter().filter_map(Value::as_str).collect();
-            let Some(first) = argv.first_mut() else {
+            let Some(&first) = argv.first() else {
                 return String::new();
             };
-            let name = os_basename(*first);
+            let name = os_basename(first);
             if !name.is_empty() {
-                *first = name;
+                argv[0] = name;
             }
             let quoted: Vec<String> = argv.iter().map(|part| shlex_quote(part)).collect();
             terminal_safe(&quoted.join(" "))
