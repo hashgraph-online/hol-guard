@@ -100,6 +100,7 @@ import {
 import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 import { observeDashboardBuild } from "./dashboard-build";
+import { sendWithPulseApproval } from "./pulse-approval";
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -1027,6 +1028,11 @@ function withGuardAuthForToken(
 }
 
 export async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  // Every gated request goes through the Pulse flow when the gate asks for it.
+  return sendWithPulseApproval(fetchWithGuardAuthOnce, input, init);
+}
+
+async function fetchWithGuardAuthOnce(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const requestInput = guardApiInput(input);
   const guardToken = readGuardToken();
   const response = await daemonFetch(requestInput, withGuardAuthForToken(init, guardToken));
@@ -3311,6 +3317,7 @@ export async function bulkAllowReadOnce(input: {
   approval_password?: string;
   approval_totp_code?: string;
   approval_gate_use_cooldown?: boolean;
+  approval_gate_pulse?: boolean;
 }): Promise<BulkAllowReadOnceResult> {
   if (isGuardDemoMode()) {
     return {
@@ -3330,6 +3337,7 @@ export async function bulkAllowReadOnce(input: {
       ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
       ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
       approval_gate_use_cooldown: input.approval_gate_use_cooldown ?? false,
+      ...(input.approval_gate_pulse === true ? { approval_gate_pulse: true } : {}),
     }),
   });
   return {
@@ -4613,3 +4621,79 @@ export {
   packageWorkbenchEcosystems,
   sortPackageWorkbenchFindings,
 } from "./supply-chain-audit-normalize";
+
+export type GuardPulseEnrollment = {
+  status: "pending";
+  request_id: string;
+  match_code: string;
+  yid_hint: string;
+  decide_by: string;
+};
+
+/** Step 1 of Pulse setup: check the approval password (and authenticator code) only. */
+export async function authorizeApprovalGatePulseSetup(payload: {
+  approval_password: string;
+  approval_totp_code?: string;
+}): Promise<{ status: "authorized"; expires_at: string }> {
+  return readJson("/v1/approval-gate/pulse/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, step: "authorize" }),
+  });
+}
+
+/**
+ * Send the enrollment request to the YID app. After step 1, the same session
+ * needs only the agent key for 15 minutes.
+ */
+export async function beginApprovalGatePulseEnrollment(payload: {
+  pulse_agent_key: string;
+}): Promise<GuardSettingsPayload & { pulse_enrollment: GuardPulseEnrollment }> {
+  return readJson("/v1/approval-gate/pulse/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+/** One bounded poll of a Pulse request. */
+export async function pollApprovalGatePulse(requestId: string): Promise<{ status: "pending" | "approved" | "rejected" | "expired" }> {
+  return readJson("/v1/approval-gate/pulse/poll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ request_id: requestId }),
+  });
+}
+
+/** Finish Pulse setup. The response carries the one-time recovery code. */
+export async function confirmApprovalGatePulseEnrollment(payload: {
+  request_id: string;
+  cooldown_seconds: 0 | 900 | 3600;
+}): Promise<GuardSettingsPayload & { pulse_recovery_code: string }> {
+  return readJson("/v1/approval-gate/pulse/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Return to the approval password. The Pulse layer asks the YID app first. */
+export async function disableApprovalGatePulse(): Promise<GuardSettingsPayload> {
+  return readJson("/v1/approval-gate/pulse/disable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+}
+
+/** Lost the YID app: the approval password and the one-time recovery code turn Pulse off. */
+export async function recoverApprovalGatePulse(payload: {
+  approval_password: string;
+  pulse_recovery_code: string;
+}): Promise<GuardSettingsPayload> {
+  return readJson("/v1/approval-gate/pulse/recover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}

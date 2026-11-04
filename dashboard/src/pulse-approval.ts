@@ -1,0 +1,189 @@
+/**
+ * Yanez Pulse in the approval center.
+ *
+ * When the approval gate uses Pulse, the daemon answers a gated request with
+ * `approval_gate_pulse_required`. This layer then retries it once asking the
+ * daemon to create the Pulse request for that exact action (`approval_gate_pulse`).
+ * It shows the match code, checks every 10 seconds until the YID app answers
+ * (a check that cannot reach Pulse is tried again until the window closes), and resubmits the
+ * same request with `approval_pulse_request_id`. The CLI uses the same daemon
+ * and resident path, so both surfaces approve the same action the same way.
+ *
+ * Rejection, expiry and an unreachable Pulse all end the request with an
+ * error; nothing here can grant anything by itself.
+ */
+
+export const PULSE_APPROVAL_EVENT = "hol-guard:pulse-approval";
+export const PULSE_POLL_PATH = "/v1/approval-gate/pulse/poll";
+// The 15-minute decision window plus the 60 s consent grace the resident adds.
+const PULSE_DEADLINE_MS = 960_000;
+const PULSE_POLL_INTERVAL_MS = 10_000;
+
+export type PulseWaitTiming = { deadlineMs?: number; intervalMs?: number };
+
+export type PulseApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "error" | "cancelled";
+
+export type PulseApprovalDetail = {
+  requestId: string;
+  matchCode: string | null;
+  decideBy: string | null;
+  status: PulseApprovalStatus;
+};
+
+type Send = (input: RequestInfo, init?: RequestInit) => Promise<Response>;
+
+function announce(detail: PulseApprovalDetail): void {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
+  window.dispatchEvent(new CustomEvent<PulseApprovalDetail>(PULSE_APPROVAL_EVENT, { detail }));
+}
+
+function jsonObjectBody(init?: RequestInit): Record<string, unknown> | null {
+  if ((init?.method ?? "GET").toUpperCase() !== "POST" || typeof init?.body !== "string") return null;
+  try {
+    const parsed: unknown = JSON.parse(init.body);
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function peekJson(response: Response): Promise<Record<string, unknown> | null> {
+  try {
+    const parsed: unknown = await response.clone().json();
+    return parsed !== null && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function failure(code: string, message: string, status = 403): Response {
+  return new Response(JSON.stringify({ error: code, message }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+const OUTCOME_ERRORS: Record<Exclude<PulseApprovalStatus, "pending" | "approved">, [string, string]> = {
+  rejected: ["approval_gate_pulse_rejected", "The action was rejected in the YID app."],
+  expired: ["approval_gate_pulse_expired", "The Pulse request expired before it was approved."],
+  error: ["approval_gate_pulse_unavailable", "Yanez Pulse is unreachable. The action stays blocked."],
+  cancelled: ["approval_gate_pulse_cancelled", "The Pulse approval was cancelled."],
+};
+
+function pause(ms: number, signal?: AbortSignal | null): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
+}
+
+/** One check of the request: an answer, "retry" when Pulse could not be reached, or a final error. */
+async function checkOnce(
+  send: Send,
+  requestId: string,
+  signal?: AbortSignal | null,
+): Promise<PulseApprovalStatus | "retry"> {
+  try {
+    const response = await send(PULSE_POLL_PATH, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ request_id: requestId }),
+      signal: signal ?? undefined,
+    });
+    const payload = await peekJson(response);
+    if (response.ok) {
+      const reported = payload?.status;
+      return reported === "pending" || reported === "approved" || reported === "rejected" || reported === "expired"
+        ? reported
+        : "error";
+    }
+    if (response.status === 503) return "retry";
+    return payload?.error === "approval_gate_pulse_expired" ? "expired" : "error";
+  } catch {
+    return signal?.aborted ? "cancelled" : "retry";
+  }
+}
+
+/**
+ * Check the request every 10 seconds until the YID app answers or the window
+ * closes. A check that cannot reach Pulse is tried again; if Pulse is still
+ * unreachable when the window closes, the outcome is "error", not "expired".
+ */
+export async function waitForPulseApproval(
+  send: Send,
+  detail: Omit<PulseApprovalDetail, "status">,
+  signal?: AbortSignal | null,
+  timing: PulseWaitTiming = {},
+): Promise<Exclude<PulseApprovalStatus, "pending">> {
+  const { deadlineMs = PULSE_DEADLINE_MS, intervalMs = PULSE_POLL_INTERVAL_MS } = timing;
+  announce({ ...detail, status: "pending" });
+  const deadline = Date.now() + deadlineMs;
+  let unreachable = false;
+  for (let remaining = deadlineMs; remaining > 0; remaining = deadline - Date.now()) {
+    await pause(Math.min(intervalMs, remaining), signal);
+    const status = signal?.aborted ? "cancelled" : await checkOnce(send, detail.requestId, signal);
+    unreachable = status === "retry";
+    if (status !== "pending" && status !== "retry") {
+      announce({ ...detail, status });
+      return status;
+    }
+  }
+  const status = unreachable ? "error" : "expired";
+  announce({ ...detail, status });
+  return status;
+}
+
+/**
+ * Run one request through the Pulse flow when the gate asks for it. Requests
+ * the gate does not hold, and every non-JSON request, pass through untouched.
+ */
+export async function sendWithPulseApproval(
+  send: Send,
+  input: RequestInfo,
+  init?: RequestInit,
+  timing?: PulseWaitTiming,
+): Promise<Response> {
+  let response = await send(input, init);
+  let body = jsonObjectBody(init);
+  if (body === null || typeof input !== "string" || input.startsWith(PULSE_POLL_PATH)) return response;
+  if (response.status === 403 && body.approval_gate_pulse !== true && body.approval_pulse_request_id === undefined) {
+    const refused = await peekJson(response);
+    if (refused?.error !== "approval_gate_pulse_required") return response;
+    body = { ...body, approval_gate_pulse: true };
+    response = await send(input, { ...init, body: JSON.stringify(body) });
+  }
+  if (response.status !== 202) return response;
+  const pending = await peekJson(response);
+  const requestId = pending?.pulse_request_id;
+  if (pending?.error !== "approval_gate_pulse_pending" || typeof requestId !== "string" || requestId === "") {
+    return response;
+  }
+  const outcome = await waitForPulseApproval(
+    send,
+    {
+      requestId,
+      matchCode: typeof pending.pulse_match_code === "string" ? pending.pulse_match_code : null,
+      decideBy: typeof pending.pulse_decide_by === "string" ? pending.pulse_decide_by : null,
+    },
+    init?.signal,
+    timing,
+  );
+  if (outcome !== "approved") {
+    const [code, message] = OUTCOME_ERRORS[outcome];
+    return failure(code, message, outcome === "error" ? 503 : 403);
+  }
+  // The YID approval is the proof now; the resident refuses a password or code beside it.
+  const { approval_gate_pulse: _defer, approval_password: _password, approval_totp_code: _code, ...rest } = body;
+  return send(input, { ...init, body: JSON.stringify({ ...rest, approval_pulse_request_id: requestId }) });
+}

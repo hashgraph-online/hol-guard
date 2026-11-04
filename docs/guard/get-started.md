@@ -452,6 +452,15 @@ hol-guard settings approval-totp status
 
 Guard emits a standard `otpauth://totp/HOL%20Guard:<device>` URI with a Base32 secret, SHA-1, 6 digits, and a 30-second period. The seed is encrypted locally and never appears in public settings, diagnostics export, receipts, URLs, or screenshots. Guard rejects invalid codes, replayed time steps, and stale enrollment state. When TOTP is enabled, protected actions require a current authenticator code instead of the password.
 
+Use Yanez Pulse when you want to approve in the YID app with a face scan instead of typing a password or code:
+
+```bash
+hol-guard settings approval-pulse enroll
+hol-guard settings approval-pulse status
+```
+
+Setup asks for your current factor, then for a YID agent key at a hidden prompt (never as an argument). Choose your cooldown before you scan. Guard asks Pulse which Yanez identity owns that key and sends an enrollment request to the YID app. Yanez rates each face scan low, medium or high. Guard accepts medium and high and refuses low; if yours is refused, run setup again. After you approve it, Guard pins that identity, the Yanez issuer, and the agent key, pauses your authenticator if you set one up (Guard keeps it and accepts no codes while Pulse is on; it works again when you turn Pulse off), and shows a one-time recovery code. Every later approval shows a six-character match code in both the YID app and the dashboard or terminal. Guard never sends a full command, an argument, a path or a secret to Pulse. The YID app shows the kind of approval, the names of the programs being run (for example `rm`), the agent, the request type, Guard's risk level and its risk headline, and the request is bound to a keyed hash of the exact action, scope, subject, session and nonce. A rejected, expired or unverifiable approval, or an unreachable Pulse, leaves the action blocked, with no password or TOTP fallback. You have 15 minutes to approve each request. Pulse cooldown is off by default. If you choose 15 minutes or 1 hour, it covers only the same kind of action and scope from the same session, and changes to Guard itself always ask again. If you lose the YID app, `hol-guard settings approval-pulse recover` turns Pulse off with the approval password and the recovery code. See [Yanez Pulse approval gate](yanez-pulse-approval-gate.md) for the full design.
+
 After the active factor succeeds, Guard issues an internal 30-second grant bound to that exact action, scope, subject, and session nonce. It exists only long enough for the daemon and store to finish the current transaction; it is not exposed to the browser or reusable as a broad session. Guard counts password and authenticator failures separately and locks the active factor after five failed attempts. Password or TOTP rotation revokes outstanding grants and clears any recovery, approval-session, or trusted-device state.
 
 ## What `install` does

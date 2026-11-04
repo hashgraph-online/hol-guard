@@ -8,7 +8,7 @@ import {
 } from "./approval-center-utils";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 import { defaultUseApprovalCooldown, requiresApprovalPasswordPrompt } from "./approval-gate-utils";
-import { bulkApprovalProof } from "./queue-bulk-approval-credentials";
+import { bulkApprovalProof, bulkApproveCooldownOpen } from "./queue-bulk-approval-credentials";
 import {
   buildBulkGateCredentials,
   isBulkApproveGateReady,
@@ -196,6 +196,21 @@ assert(
 const totpCredentials = buildBulkGateCredentials(totpGate, "secret", "123456");
 assert(totpCredentials?.approval_totp_code === "123456", "T-BULK-13: buildBulkGateCredentials includes totp when MFA is enabled");
 assert(!("approval_password" in (totpCredentials ?? {})), "T-BULK-14: buildBulkGateCredentials omits password when MFA is enabled");
+
+const pulseGate = { ...readyGate, pulse_enabled: true, cooldown_active: true };
+assert(
+  validateBulkApproveCredentials(pulseGate, { password: "", totpCode: "" }) === null,
+  "T-BULK-PULSE-1: with Pulse on, bulk approval needs no password or code",
+);
+const pulseCredentials = buildBulkGateCredentials(pulseGate, "secret", "123456");
+assert(
+  pulseCredentials?.approval_gate_pulse === true &&
+    !("approval_password" in pulseCredentials) &&
+    !("approval_totp_code" in pulseCredentials),
+  "T-BULK-PULSE-2: with Pulse on, bulk approval asks the YID app and sends no password or code",
+);
+assert(bulkApprovalProof(pulseCredentials) === "pulse", "T-BULK-PULSE-3: a Pulse submit reaches the approval call");
+assert(!bulkApproveCooldownOpen(pulseGate), "T-BULK-PULSE-4: the password window does not stand in for Pulse");
 
 assert(buildBulkGateCredentials(null, "secret", "") === undefined, "T-BULK-15: buildBulkGateCredentials omits credentials when gate is not ready");
 
