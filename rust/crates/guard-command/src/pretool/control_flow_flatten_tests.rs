@@ -397,52 +397,6 @@ fn a_wait_that_builds_up_across_passes_keeps_its_review() {
     }
 }
 
-/// Arithmetic runs where the shell expands it: bare or in double quotes, not
-/// in single quotes or behind a backslash.
-#[test]
-fn arithmetic_is_read_where_the_shell_runs_it() {
-    for text in [
-        "echo $((PATH=10))",
-        "echo \"$((PATH=10))\"",
-        "echo $[PATH=10]",
-        "echo \"it's\" $((PATH=10))",
-        "echo $'\\'' $((PATH=10))",
-    ] {
-        assert!(super::runs_arithmetic(text), "{text}");
-    }
-    for text in ["echo '$((PATH=10))'", "echo \\$((PATH=10))", "echo $PATH"] {
-        assert!(!super::runs_arithmetic(text), "{text}");
-    }
-}
-
-/// Only an assignment inside the expansion itself reaches a later step. The
-/// body ends at its own close, so an option or a `name=value` in the rest of
-/// the step is the step's own text, not arithmetic.
-#[test]
-fn only_assigning_arithmetic_changes_later_steps() {
-    for text in [
-        "cat package.json $((PATH=10))",
-        "echo $((x+=1))",
-        "echo $((i++))",
-        "echo $[PATH=10]",
-        "echo $((x<<=1))",
-        "echo $((a == b)) $((PATH=10))",
-    ] {
-        assert!(super::arithmetic_assigns(text), "{text}");
-    }
-    for text in [
-        "sleep $(( (1 + 1) * 2 ))",
-        "echo $((a == b))",
-        "echo $((a <= b))",
-        "echo $((a != b))",
-        "echo '$((PATH=10))'",
-        "timeout $((60 * 2)) git fetch --all",
-        "git log -n $((5)) --format=%H",
-    ] {
-        assert!(!super::arithmetic_assigns(text), "{text}");
-    }
-}
-
 /// The shell removes quoting inside a word, so a split-quoted `-v` is still
 /// printf's assigning option, while a `-v` after the format is printed data.
 #[test]

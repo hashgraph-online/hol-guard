@@ -266,7 +266,7 @@ fn verdict(
         // `printf -v` or `%n`, arithmetic like `$((PATH=10))`) can name the
         // configuration Git reads; the proofs below answer only for what a
         // step writes to disk. `cd` is checked above instead.
-        if super::control_flow_flatten::arithmetic_assigns(&segment.text)
+        if super::shell_arithmetic::arithmetic_assigns(&segment.text)
             || super::printf_words::printf_sets_variable(segment)
             || segment
                 .environment_names
