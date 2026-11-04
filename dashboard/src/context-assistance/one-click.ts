@@ -48,10 +48,8 @@ export function planCigarSetup(data: CigarVersionsData, options: { locked: boole
     ? planCigarAdopt(data.jobs.find((job) => job.job_id === options.adopt), state)
     : null;
   if (adopted) return adopted;
-  if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
-  if (data.jobs.some((job) => job.phase === "recovery_required")) {
-    return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
-  }
+  const busy = cigarBusyHold(state, data.jobs);
+  if (busy) return busy;
   if (options.locked || (state.restriction && !state.effective_preferences.enabled)) {
     // A managed computer can still start the selection its administrator already turned on.
     return planCigarStart(state, false) ?? blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
@@ -98,6 +96,15 @@ export function planCigarAdopt(job: CigarVersionJob | undefined, state: ContextA
     commit: { job_id: job.job_id, expected_generation: job.expected_generation, reconnect: job.reconnect_required } };
 }
 
+/** A running or paused task owns the selection, so nothing else may start until it settles. */
+function cigarBusyHold(state: ContextAssistanceStatus, jobs: CigarVersionJob[]): CigarSetupPlan | null {
+  if (state.job || jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
+  if (jobs.some((job) => job.phase === "recovery_required")) {
+    return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
+  }
+  return null;
+}
+
 /** Unsaved settings and an administrator's lock stop every path, including finishing a prepared check. */
 export function cigarSetupHold(state: ContextAssistanceStatus, options: { locked: boolean; dirty: boolean }): CigarSetupPlan | null {
   if (state.effective_enabled) return null;
@@ -113,6 +120,10 @@ export function cigarSetupHold(state: ContextAssistanceStatus, options: { locked
 // computer can still start the selection its administrator already turned on.
 export function planCigarHeldJob(job: CigarVersionJob | undefined, state: ContextAssistanceStatus,
   status: ContextAssistanceStatus | null, options: { locked: boolean; dirty: boolean }): CigarSetupPlan | null {
+  if (state.effective_enabled) return null;
+  if (options.dirty) return cigarSetupHold(state, options);
+  const busy = cigarBusyHold(state, job ? [job] : []);
+  if (busy) return busy;
   const hold = cigarSetupHold(state, options);
   if (!hold) return planCigarAdopt(job, state);
   return planCigarStart(status, options.dirty) ? null : hold;

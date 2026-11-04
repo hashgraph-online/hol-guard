@@ -130,10 +130,16 @@ assert.equal(cigarSetupHold(off, { locked: false, dirty: false }), null);
 assert.equal(cigarSetupHold(ready, { locked: true, dirty: true }), null, "nothing to hold once CIGAR is on");
 const heldAdopt = planCigarSetup(data({ state: off, jobs: [prepared] }), { locked: false, dirty: true, adopt: "dashboard:mine" });
 assert.ok(heldAdopt.kind === "blocked" && heldAdopt.block.title === "Save your changes first");
-// A lock stops adopting the held job but leaves the managed start; unsaved settings stop both.
-assert.equal(planCigarHeldJob(prepared, off, saved, { locked: true, dirty: false }), null, "a managed computer falls through to its saved start");
-assert.ok(planCigarHeldJob(prepared, off, off, { locked: true, dirty: false })?.kind === "blocked", "no saved selection keeps the lock");
+// A lock stops adopting a settled held job but leaves the managed start; unsaved settings stop both.
+const settled = { ...prepared, worker_live: false };
+assert.equal(planCigarHeldJob(settled, off, saved, { locked: true, dirty: false }), null, "a managed computer falls through to its saved start");
+assert.ok(planCigarHeldJob(settled, off, off, { locked: true, dirty: false })?.kind === "blocked", "no saved selection keeps the lock");
 assert.ok(planCigarHeldJob(prepared, off, saved, { locked: false, dirty: true })?.kind === "blocked", "unsaved settings stay a hard hold");
+// A live worker or a paused task still owns the selection, so neither the commit nor the saved start may run.
+const heldBusy = planCigarHeldJob(prepared, off, saved, { locked: true, dirty: false });
+assert.ok(heldBusy?.kind === "blocked" && heldBusy.block.title === "CIGAR is busy");
+const heldPaused = planCigarHeldJob({ ...settled, phase: "recovery_required" }, off, saved, { locked: false, dirty: false });
+assert.ok(heldPaused?.kind === "blocked" && heldPaused.block.title === "An earlier setup did not finish");
 
 // Running: a fake Guard that answers each step the way the daemon does.
 type Script = { calls: string[]; stages: CigarSetupStage[]; jobs: (string | null)[]; saved: GuardContextAssistanceConfig[] };

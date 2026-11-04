@@ -5900,10 +5900,8 @@ function planCigarSetup(data, options) {
   if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
   const adopted = options.adopt && !cigarSetupHold(state, options) ? planCigarAdopt(data.jobs.find((job) => job.job_id === options.adopt), state) : null;
   if (adopted) return adopted;
-  if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
-  if (data.jobs.some((job) => job.phase === "recovery_required")) {
-    return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
-  }
+  const busy = cigarBusyHold(state, data.jobs);
+  if (busy) return busy;
   if (options.locked || state.restriction && !state.effective_preferences.enabled) {
     return planCigarStart(state, false) ?? blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
   }
@@ -5964,6 +5962,13 @@ function planCigarAdopt(job, state) {
     commit: { job_id: job.job_id, expected_generation: job.expected_generation, reconnect: job.reconnect_required }
   };
 }
+function cigarBusyHold(state, jobs) {
+  if (state.job || jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
+  if (jobs.some((job) => job.phase === "recovery_required")) {
+    return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
+  }
+  return null;
+}
 function cigarSetupHold(state, options) {
   if (state.effective_enabled) return null;
   if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
@@ -5973,6 +5978,10 @@ function cigarSetupHold(state, options) {
   return null;
 }
 function planCigarHeldJob(job, state, status, options) {
+  if (state.effective_enabled) return null;
+  if (options.dirty) return cigarSetupHold(state, options);
+  const busy = cigarBusyHold(state, job ? [job] : []);
+  if (busy) return busy;
   const hold = cigarSetupHold(state, options);
   if (!hold) return planCigarAdopt(job, state);
   return planCigarStart(status, options.dirty) ? null : hold;
