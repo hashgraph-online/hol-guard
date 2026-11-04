@@ -224,7 +224,9 @@ fn file_url_spellings_never_weaken_a_read_decision() {
     std::fs::write(config.join("config.toml"), "token = \"canary\"\n").unwrap();
     std::fs::write(project.join(".env"), "SECRET=canary\n").unwrap();
 
-    // Whatever the plain spelling earns, the URL spelling earns no more.
+    // A credential, a dot-file and a hidden directory decide the same under
+    // either spelling: the URL is resolved before any screen runs, so both
+    // spellings reach the read rules as the same path.
     for target in [
         ssh.join("id_ed25519"),
         ssh.clone(),
@@ -234,17 +236,21 @@ fn file_url_spellings_never_weaken_a_read_decision() {
     ] {
         let plain = target.to_string_lossy().into_owned();
         let plain_decision = read_target(&plain, &home, &project);
-        if plain_decision.minimum_action == "allow" {
-            continue;
-        }
         let url = file_url(&target);
         let url_decision = read_target(&url, &home, &project);
-        assert_ne!(
-            url_decision.minimum_action, "allow",
-            "{url}: {}",
-            url_decision.reason_code
+        assert_eq!(
+            (
+                url_decision.minimum_action.as_str(),
+                url_decision.reason_code.as_str(),
+                url_decision.explicitly_benign,
+            ),
+            (
+                plain_decision.minimum_action.as_str(),
+                plain_decision.reason_code.as_str(),
+                plain_decision.explicitly_benign,
+            ),
+            "{url} decided unlike {plain}"
         );
-        assert!(!url_decision.explicitly_benign, "{url}");
     }
 
     let slashed = |path: &std::path::Path| {

@@ -16,14 +16,7 @@ pub(in crate::pretool) fn bounded_directory_read_tool_target(
     cwd: Option<&str>,
 ) -> bool {
     match (harness, tool) {
-        ("omp", Some("read")) => {
-            // OMP's `read` also addresses a directory by `file://` URL, which
-            // is a spelling of the path, not a wider capability: reduce it to
-            // the path it denotes and prove that path the ordinary way. No
-            // other tool here resolves URLs, so none widens by this.
-            let resolved = super::super::omp_file_url::local_file_url_path(value);
-            bounded_omp_directory_read_target(resolved.as_deref().unwrap_or(value), home_dir, cwd)
-        }
+        ("omp", Some("read")) => bounded_omp_directory_read_target(value, home_dir, cwd),
         ("claude-code" | "grok", Some("Read")) => {
             literal_path(value)
                 && bounded_omp_directory_read_target_without_selector(value, home_dir, cwd)

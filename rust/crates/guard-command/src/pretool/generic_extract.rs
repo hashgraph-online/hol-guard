@@ -56,6 +56,21 @@ pub(super) struct GenericSignals {
     pub(super) event_hint: Option<String>,
 }
 
+impl GenericSignals {
+    /// Replace the single read target with the local path a `file://` URL
+    /// denotes, so every later screen reads the path instead of the URL.
+    /// Resolution never relaxes a screen: the decoded path is re-tested for
+    /// credential and secret names and the sensitive flags only ever gain,
+    /// so a URL spelling cannot buy what the plain path cannot.
+    pub(super) fn resolve_read_url_path(&mut self, path: String) {
+        let sensitive = sensitive_text(std::slice::from_ref(&path));
+        self.path_values = vec![path];
+        self.content_sensitive |= sensitive;
+        self.sensitive_target |= sensitive;
+        self.independent_sensitive_target |= sensitive;
+    }
+}
+
 /// File bodies a host sends beside the path they belong to. Generic
 /// extraction reads none of these keys and the decision uses the path, so the
 /// command-size bound does not apply to them.

@@ -189,6 +189,7 @@ pub(crate) use git_routes::{
 mod apply_patch_writes;
 mod data_heredocs;
 mod lockfile_install;
+mod omp_file_url;
 mod omp_hashline_writes;
 pub(crate) mod pipe_attacks;
 mod pure_expression;

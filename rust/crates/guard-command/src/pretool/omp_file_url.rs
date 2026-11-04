@@ -27,7 +27,7 @@ const MAX_FILE_URL_BYTES: usize = 4096;
 
 /// The local filesystem path a `file://` URL denotes, or `None` when the value
 /// is not a `file://` URL or names something other than a plain local path.
-pub(super) fn local_file_url_path(value: &str) -> Option<String> {
+pub(in crate::pretool) fn local_file_url_path(value: &str) -> Option<String> {
     if value.len() > MAX_FILE_URL_BYTES || value.trim() != value || value.contains('\\') {
         return None;
     }
