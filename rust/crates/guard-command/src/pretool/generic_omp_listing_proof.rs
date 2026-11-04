@@ -45,9 +45,9 @@ pub(super) fn listing(
     let (home, cwd) = (context.path.home_dir, context.path.cwd);
     let missing = |target: &str| {
         !signals.sensitive_target
-            && super::super::read_paths::missing_read_target(target, home, cwd, false)
-            && !super::super::sensitive_command(target)
-            && !super::super::sensitive_read_path_argument(target)
+            && crate::pretool::read_paths::missing_read_target(target, home, cwd, false)
+            && !crate::pretool::sensitive_command(target)
+            && !crate::pretool::sensitive_read_path_argument(target)
     };
     // A name inside a linked worktree this repository registers lists nothing
     // when nothing is there, and every existing file in that worktree is
@@ -55,7 +55,7 @@ pub(super) fn listing(
     // listing the agent may already run.
     let registered = |target: &str| {
         missing(target)
-            && super::super::git_routes::missing_path_in_registered_worktree(target, home, cwd)
+            && crate::pretool::git_routes::missing_path_in_registered_worktree(target, home, cwd)
     };
     if targets
         .iter()
@@ -81,10 +81,10 @@ pub(super) fn listing(
                     false,
                 ),
                 "block",
-                super::read_decisions::MISSING_PATH,
+                crate::pretool::generic::read_decisions::MISSING_PATH,
                 "",
             );
-            result.reason = super::read_decisions::missing_path_reason(
+            result.reason = crate::pretool::generic::read_decisions::missing_path_reason(
                 "HOL Guard did not run this listing because its path does not exist. Check the path, for example by listing its parent directory, and try again with the correct one.",
                 "listing",
                 targets.iter().find(|target| !proven(target)).copied(),
@@ -152,7 +152,7 @@ fn listing_target_proven(
     if has_glob_selector
         && !literal_name
         && !single_level
-        && !super::super::search_scope::omp_glob_scope_proven(
+        && !crate::pretool::search_scope::omp_glob_scope_proven(
             target,
             context.path.home_dir,
             context.path.cwd,
@@ -173,7 +173,7 @@ fn listing_target_proven(
     // that one name. A file there carries the bounded file-read proof.
     let literal_glob_file = signals.tool_name.as_deref() == Some("glob")
         && !has_glob_selector
-        && super::super::read_paths::existing_regular_read_target(
+        && crate::pretool::read_paths::existing_regular_read_target(
             target,
             context.path.home_dir,
             context.path.cwd,
@@ -183,7 +183,7 @@ fn listing_target_proven(
         && missing_listing_entry(target, context);
     literal_glob_file
         || missing_glob_entry
-        || super::super::safe_reads::bounded_omp_directory_read_target(
+        || crate::pretool::safe_reads::bounded_omp_directory_read_target(
             target,
             context.path.home_dir,
             context.path.cwd,
@@ -208,7 +208,7 @@ fn home_dot_directory_listing(
 ) -> bool {
     !has_glob_selector
         && !recursive
-        && super::super::read_paths::home_hidden_directory(
+        && crate::pretool::read_paths::home_hidden_directory(
             target,
             context.path.home_dir,
             context.path.cwd,
@@ -244,8 +244,8 @@ fn project_skill_listing(target: &str, context: &OmpContext<'_>) -> bool {
     ) else {
         return false;
     };
-    super::super::read_paths::project_skill_listing_directory(&canonical, &session)
-        && super::super::read_paths::resolved_location_allowed(
+    crate::pretool::read_paths::project_skill_listing_directory(&canonical, &session)
+        && crate::pretool::read_paths::resolved_location_allowed(
             &canonical,
             context.path.home_dir,
             context.path.cwd,
@@ -287,8 +287,8 @@ fn literal_name_selector(selector: &str) -> bool {
         && [name.to_owned(), name.to_ascii_lowercase()]
             .iter()
             .all(|name| {
-                !super::super::sensitive_read_path_argument(name)
-                    && !super::super::sensitive_command(name)
+                !crate::pretool::sensitive_read_path_argument(name)
+                    && !crate::pretool::sensitive_command(name)
             })
 }
 
@@ -299,15 +299,15 @@ fn literal_name_selector(selector: &str) -> bool {
 /// Sensitive and hidden names keep their review.
 fn missing_listing_entry(target: &str, context: &OmpContext<'_>) -> bool {
     let (home, cwd) = (context.path.home_dir, context.path.cwd);
-    if !super::super::read_paths::missing_read_target(target, home, cwd, false)
-        || super::super::sensitive_command(target)
-        || super::super::sensitive_read_path_argument(target)
+    if !crate::pretool::read_paths::missing_read_target(target, home, cwd, false)
+        || crate::pretool::sensitive_command(target)
+        || crate::pretool::sensitive_read_path_argument(target)
         || target.split(['/', '\\']).any(|part| part == "..")
     {
         return false;
     }
     let expand = |path: &str| {
-        super::super::read_paths::expand_home_read_path(path, home)
+        crate::pretool::read_paths::expand_home_read_path(path, home)
             .unwrap_or_else(|| path.to_owned())
     };
     let Some(session) = cwd.and_then(|root| std::fs::canonicalize(expand(root)).ok()) else {
@@ -337,7 +337,7 @@ fn missing_listing_entry(target: &str, context: &OmpContext<'_>) -> bool {
         && canonical.strip_prefix(&session).is_ok_and(visible)
         && visible(missing)
         && folder.to_str().is_some_and(|folder| {
-            super::super::safe_reads::bounded_omp_directory_read_target(folder, home, cwd)
+            crate::pretool::safe_reads::bounded_omp_directory_read_target(folder, home, cwd)
         })
 }
 
