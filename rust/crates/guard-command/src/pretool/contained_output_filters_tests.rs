@@ -187,6 +187,10 @@ fn a_stage_the_runtime_cannot_run_over_the_text_is_not_a_matcher_stage() {
         ("uniq", &["-c"]),
         ("wc", &["-l"]),
         ("tr", &["-d", "\\r"]),
+        // The peel runs a matcher itself over the captured text; it has no
+        // reading of `cat`, which is why a rejoined `cat` keeps the sibling
+        // route's own sink rather than the peel's.
+        ("cat", &["-v"]),
         ("awk", &["{print $1}"]),
         ("head", &["-40"]),
     ] {
@@ -210,6 +214,12 @@ fn a_rejoined_stage_reshapes_what_it_reads_on_standard_input() {
         ("uniq", &["-c"]),
         ("uniq", &["-f", "2", "-w10"]),
         ("wc", &["-l"]),
+        // `cat` copies standard input and its switches only respell the bytes.
+        ("cat", &[]),
+        ("cat", &["-v"]),
+        ("cat", &["-A"]),
+        ("cat", &["-n"]),
+        ("cat", &["-vET"]),
         ("tr", &["-d", "\\r"]),
         ("head", &["-40"]),
         ("tail", &["-n", "15"]),
@@ -238,6 +248,12 @@ fn a_stage_that_names_a_file_or_runs_a_program_is_not_rejoined() {
         ("sort", &["-T", "/tmp"]),
         ("sort", &["-S", "1G"]),
         ("uniq", &["notes.txt"]),
+        // Every `cat` operand is a file it opens, `-` included.
+        ("cat", &["/etc/passwd"]),
+        ("cat", &["-v", "/etc/passwd"]),
+        ("cat", &["-"]),
+        // A flag `cat` does not take leaves the stage to review.
+        ("cat", &["-x"]),
         ("wc", &["-l", "/etc/passwd"]),
         ("grep", &["FAIL", "build.log"]),
         ("sh", &[]),
