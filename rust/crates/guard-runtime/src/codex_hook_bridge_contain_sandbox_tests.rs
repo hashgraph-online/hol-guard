@@ -11,8 +11,10 @@ fn context(turn_id: &str, policy: &str) -> String {
     )
 }
 
-const WORKSPACE_WRITE: &str =
-    r#"{"type":"workspace-write","writable_roots":[],"network_access":false}"#;
+const WORKSPACE_WRITE: &str = r#"{"type":"workspace-write","writable_roots":[],"network_access":false,"exclude_tmpdir_env_var":true,"exclude_slash_tmp":true}"#;
+/// Codex's default workspace-write sandbox, which also writes `/tmp` and
+/// `$TMPDIR`.
+const SHARED_TMP: &str = r#"{"type":"workspace-write","writable_roots":[],"network_access":false,"exclude_tmpdir_env_var":false,"exclude_slash_tmp":false}"#;
 
 /// A transcript holding `lines`, and a payload for `turn_id` that names it.
 fn session(lines: &[String], turn_id: &str, input: &str) -> (tempfile::TempDir, PyVal) {
@@ -61,6 +63,10 @@ fn a_turn_whose_sandbox_reaches_the_network_or_writes_elsewhere_is_wider() {
         r#"{"type":"read-only","network_access":true}"#,
         r#"{"type":"workspace-write","writable_roots":["/Users/u"],"network_access":false}"#,
         r#"{"type":"workspace-write","writable_roots":"/","network_access":false}"#,
+        SHARED_TMP,
+        r#"{"type":"workspace-write","writable_roots":[],"network_access":false}"#,
+        r#"{"type":"workspace-write","exclude_slash_tmp":true,"exclude_tmpdir_env_var":false}"#,
+        r#"{"type":"workspace-write","exclude_slash_tmp":false,"exclude_tmpdir_env_var":true}"#,
     ] {
         let (_directory, payload) = session(&[context("t2", policy)], "t2", COMMAND);
         assert_eq!(turn(&payload), Turn::Wider, "{policy}");
@@ -242,6 +248,11 @@ fn a_contained_call_in_codex_sandbox_runs_as_it_is() {
     assert_eq!(
         answer(r#"{"type":"workspace-write","network_access":true}"#, DENY),
         denied
+    );
+    assert_eq!(
+        answer(SHARED_TMP, DENY),
+        denied,
+        "Codex's default sandbox writes /tmp and $TMPDIR"
     );
     assert_eq!(
         answer(WORKSPACE_WRITE, READ_ONLY_DENY),

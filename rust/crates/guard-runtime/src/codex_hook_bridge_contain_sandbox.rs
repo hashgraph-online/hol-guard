@@ -7,7 +7,10 @@
 //! rewrite would fail every time, so a call that Codex's sandbox confines
 //! at least as tightly as the profile Guard requires runs as it is: a
 //! read-only turn for any profile, a workspace-write turn with no extra
-//! writable roots only for the workspace profile, and never with network.
+//! writable roots that also keeps `/tmp` and `$TMPDIR` read-only only for
+//! the workspace profile, and never with network. Codex lets a
+//! workspace-write call write both temporary directories unless its config
+//! excludes them; Guard's workspace profile does not.
 //!
 //! The hook payload does not say which sandbox the turn uses, so the turn's
 //! `turn_context` record is read from the session transcript Codex names
@@ -37,11 +40,12 @@ pub(super) enum Turn {
     Unknown,
     /// Codex's read-only sandbox, with no network.
     ReadOnly,
-    /// Codex's workspace-write sandbox with no extra writable roots and no
-    /// network.
+    /// Codex's workspace-write sandbox with no extra writable roots, the
+    /// shared temporary directories excluded, and no network.
     WorkspaceWrite,
     /// A Codex sandbox that is wider than the workspace: it reaches the
-    /// network or writes outside the workspace.
+    /// network or writes outside the workspace, `/tmp` and `$TMPDIR`
+    /// included.
     Wider,
 }
 
@@ -138,9 +142,12 @@ fn turn_policy(line: &str, turn_id: &str) -> Option<Turn> {
     let roots = policy.get("writable_roots");
     let extra_roots =
         roots.is_some_and(|roots| roots.as_array().is_none_or(|roots| !roots.is_empty()));
+    let excluded = |key: &str| policy.get(key) == Some(&serde_json::Value::Bool(true));
+    let shared_tmp = !(excluded("exclude_slash_tmp") && excluded("exclude_tmpdir_env_var"));
     match policy.get("type").and_then(serde_json::Value::as_str) {
         Some("read-only" | "workspace-write") if networked || extra_roots => Some(Turn::Wider),
         Some("read-only") => Some(Turn::ReadOnly),
+        Some("workspace-write") if shared_tmp => Some(Turn::Wider),
         Some("workspace-write") => Some(Turn::WorkspaceWrite),
         _ => Some(Turn::Unknown),
     }
