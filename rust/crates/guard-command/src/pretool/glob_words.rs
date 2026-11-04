@@ -369,3 +369,35 @@ mod tests {
         assert!(words("echo \"a*").is_none());
     }
 }
+
+/// Whether a `printf` may assign a shell variable rather than only print:
+/// `-v NAME`, or a `%n` conversion, which stores a count in the variable it
+/// names. The parsed format is read, so quoting split across the option
+/// (`"-"v`) is seen as the shell sees it. Any leading option, or a format the
+/// shell builds from an expansion, counts as one that may.
+pub(super) fn printf_sets_variable(segment: &CommandSegmentV1) -> bool {
+    let printf = segment
+        .executable
+        .as_deref()
+        .is_some_and(|executable| super::executable_basename(executable) == "printf");
+    printf
+        && segment.arguments.first().is_some_and(|format| {
+            format.starts_with('-') || format.contains(['$', '`']) || format_counts(format)
+        })
+}
+
+/// Whether a printf format holds a `%n` conversion, after any flags, width,
+/// precision and length modifier. `%%` prints a percent sign.
+fn format_counts(format: &str) -> bool {
+    let mut characters = format.chars();
+    while characters.any(|character| character == '%') {
+        if characters
+            .by_ref()
+            .find(|character| !"-+ #'0123456789.*hjlLqtz".contains(*character))
+            == Some('n')
+        {
+            return true;
+        }
+    }
+    false
+}

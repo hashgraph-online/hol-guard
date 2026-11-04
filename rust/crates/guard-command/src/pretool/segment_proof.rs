@@ -349,9 +349,10 @@ pub(super) fn exact_safe_segment_with_context(
                 && matches!(segment.arguments.as_slice(), [target] if safe_directory_target(target))
                 && super::directory_targets::drive_targets_quoted(segment)
         }
-        // `printf -v NAME` assigns a shell variable rather than printing.
+        // `printf -v NAME` and `%n` assign a shell variable rather than print.
         "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" => {
-            !super::control_flow_flatten::command_word_changes_shell_state(&segment.text)
+            !super::glob_words::printf_sets_variable(segment)
+                && !super::control_flow_flatten::command_word_changes_shell_state(&segment.text)
                 && super::glob_words::printed_globs_listable(model, segment, context)
         }
         "exit" => super::shell_flow::safe_exit_arguments(&segment.arguments),

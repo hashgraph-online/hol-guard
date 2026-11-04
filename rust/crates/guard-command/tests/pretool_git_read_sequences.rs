@@ -466,6 +466,15 @@ fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
         // one for the read, so neither is a step that only prints.
         "printf -v GIT_CONFIG_GLOBAL '/tmp/evil'; git status --short",
         "GIT_CONFIG_GLOBAL=/tmp/evil cat package.json; git status --short",
+        // The shell joins split quoting back into the option, and `%n`
+        // stores a count in the variable it names.
+        "printf \"-\"v HOME /tmp/evil; git status --short",
+        "printf -''v HOME /tmp/evil; git status --short",
+        "printf 'x%n' PATH; git status --short",
+        "printf '%5n' PATH; git status --short",
+        // The shell joins a split-quoted option, so these still assign.
+        "printf \"-\"v GIT_CONFIG_GLOBAL /tmp/evil; git status --short",
+        "printf -''v GIT_CONFIG_GLOBAL /tmp/evil; git status --short",
         // An arithmetic expansion assigns as it prints.
         "cat package.json $((PATH=10)); git status --short",
         "echo \"$((PATH=10))\"; git status --short",

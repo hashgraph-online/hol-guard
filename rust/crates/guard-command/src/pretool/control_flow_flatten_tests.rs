@@ -414,3 +414,24 @@ fn arithmetic_is_read_where_the_shell_runs_it() {
         assert!(!super::runs_arithmetic(text), "{text}");
     }
 }
+
+/// The shell removes quoting inside a word, so a split-quoted `-v` is still
+/// printf's assigning option, while a `-v` after the format is printed data.
+#[test]
+fn split_quoted_printf_option_still_assigns() {
+    for text in [
+        "printf -v NAME value",
+        "printf \"-\"v NAME value",
+        "printf -''v NAME value",
+        "printf -\"v\" NAME value",
+    ] {
+        assert!(super::command_word_changes_shell_state(text), "{text}");
+    }
+    for text in [
+        "printf '%s\\n' -version",
+        "printf -- -v",
+        "printf '%s' value",
+    ] {
+        assert!(!super::command_word_changes_shell_state(text), "{text}");
+    }
+}

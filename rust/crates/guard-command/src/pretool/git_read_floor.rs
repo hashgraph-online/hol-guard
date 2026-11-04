@@ -262,12 +262,12 @@ fn verdict(
     };
     let settled = |prior: usize, later: &crate::CommandSegmentV1| {
         let segment = segments[prior];
-        // A step that changes shell state carries into the read: an
-        // assignment, `export`, `source`, `printf -v` or an arithmetic
-        // expansion (`$((PATH=10))`) can name the configuration Git reads.
-        // The proofs below answer for what a step writes to disk, not for
-        // what it leaves in the shell. `cd` is checked above instead.
+        // A step that changes shell state (an assignment, `export`, `source`,
+        // `printf -v` or `%n`, arithmetic like `$((PATH=10))`) can name the
+        // configuration Git reads; the proofs below answer only for what a
+        // step writes to disk. `cd` is checked above instead.
         if super::control_flow_flatten::runs_arithmetic(&segment.text)
+            || super::glob_words::printf_sets_variable(segment)
             || segment
                 .environment_names
                 .iter()
