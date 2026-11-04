@@ -23,12 +23,13 @@ fn matched(found: &[String]) -> Option<String> {
     super::matched(found).map(|rendered| rendered.text)
 }
 
-fn span(path: &str, start: u64, end: u64) -> Span {
-    Span {
-        path: path.into(),
-        start,
-        end,
-    }
+fn shown(excerpt: &PickedExcerpt) -> Span {
+    Span::new(
+        &excerpt.path,
+        excerpt.start_line,
+        excerpt.end_line,
+        excerpt.text.trim_end(),
+    )
 }
 
 #[test]
@@ -40,17 +41,11 @@ fn an_excerpt_the_session_already_has_is_named_instead_of_sent_again() {
     let found = words(&["src/header.tsx", "src/header-title.ts", "src/theme.css"]);
     let asked = words(&["header"]);
     let first = super::render(&picked, &found, &asked, &[]).unwrap();
-    assert_eq!(
-        first.shown,
-        vec![
-            span("src/header.tsx", 1, 3),
-            span("src/header-title.ts", 1, 3)
-        ]
-    );
+    assert_eq!(first.shown, vec![shown(&picked[0]), shown(&picked[1])]);
 
-    let earlier = [span("src/header.tsx", 1, 40)];
+    let earlier = [shown(&picked[0])];
     let next = super::render(&picked, &found, &asked, &earlier).unwrap();
-    assert_eq!(next.shown, vec![span("src/header-title.ts", 1, 3)]);
+    assert_eq!(next.shown, vec![shown(&picked[1])]);
     assert!(!next.text.contains("<header />"), "{}", next.text);
     assert!(next.text.starts_with(HEADER), "{}", next.text);
     assert!(
@@ -61,14 +56,27 @@ fn an_excerpt_the_session_already_has_is_named_instead_of_sent_again() {
         next.text
     );
 
-    let all = [
-        span("src/header.tsx", 1, 3),
-        span("src/header-title.ts", 1, 3),
-    ];
-    let repeat = super::render(&picked, &found, &asked, &all).unwrap();
+    let repeat = super::render(&picked, &found, &asked, &first.shown).unwrap();
     assert!(repeat.shown.is_empty());
     assert!(repeat.text.starts_with(REPEATED_HEADER), "{}", repeat.text);
     assert!(!repeat.text.contains("```"), "{}", repeat.text);
+}
+
+#[test]
+fn an_excerpt_edited_since_it_was_shown_is_sent_again() {
+    let picked = [excerpt(
+        "src/header.tsx",
+        "export const Header = () => <header />;",
+    )];
+    let before = [Span::new(
+        "src/header.tsx",
+        1,
+        3,
+        "export const Header = () => <div />;",
+    )];
+    let next = super::render(&picked, &[], &words(&["header"]), &before).unwrap();
+    assert_eq!(next.shown, vec![shown(&picked[0])]);
+    assert!(next.text.contains("<header />"), "{}", next.text);
 }
 
 #[test]
@@ -83,6 +91,11 @@ fn a_file_this_prompt_did_not_rank_must_mention_two_of_its_words() {
     assert!(rendered.contains("src/progress.py (lines"), "{rendered}");
     assert!(rendered.contains("src/older.py (lines"), "{rendered}");
     assert!(!rendered.contains("src/earlier.py"), "{rendered}");
+
+    // A quoted word is also one of the prompt's words, and counts once.
+    let picked = [excerpt("src/dialog.py", "confirm = True")];
+    let asked = words(&["confirm", "button", "confirm"]);
+    assert_eq!(render(&picked, &[], &asked), None);
 }
 
 #[test]

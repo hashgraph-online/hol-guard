@@ -1,28 +1,39 @@
 //! The excerpts CIGAR already added to a session. A later prompt in the same
 //! session names an excerpt it already has instead of sending it again, so
-//! a long session does not carry the same code once per prompt.
+//! a long session does not carry the same code once per prompt. An excerpt
+//! counts as the same only when its file, lines and text all match, so code
+//! edited since it was shown is sent again.
 //!
 //! Only this process remembers, for a bounded number of sessions; a
 //! restart, or a session it no longer holds, gets every excerpt again.
 use std::collections::VecDeque;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 const MAX_SESSIONS: usize = 64;
 const MAX_SPANS: usize = 128;
 
-/// Lines of one project file that a prompt's context showed.
+/// Lines of one project file that a prompt's context showed, with a digest
+/// of the text they held.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Span {
     pub(super) path: String,
     pub(super) start: u64,
     pub(super) end: u64,
+    digest: u64,
 }
 
 impl Span {
-    /// Whether this span already holds every line of `other`.
-    pub(super) fn covers(&self, other: &Span) -> bool {
-        self.path == other.path && self.start <= other.start && other.end <= self.end
+    pub(super) fn new(path: &str, start: u64, end: u64, text: &str) -> Self {
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        Self {
+            path: path.to_owned(),
+            start,
+            end,
+            digest: hasher.finish(),
+        }
     }
 }
 

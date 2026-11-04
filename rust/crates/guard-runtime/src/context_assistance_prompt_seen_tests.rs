@@ -1,11 +1,7 @@
 use super::*;
 
 fn span(path: &str, start: u64, end: u64) -> Span {
-    Span {
-        path: path.into(),
-        start,
-        end,
-    }
+    Span::new(path, start, end, "text")
 }
 
 fn session(id: &str) -> Session {
@@ -17,13 +13,24 @@ fn session(id: &str) -> Session {
 }
 
 #[test]
-fn a_span_covers_only_lines_of_the_same_file_it_holds() {
-    let shown = span("src/a.py", 10, 40);
-    assert!(shown.covers(&span("src/a.py", 10, 40)));
-    assert!(shown.covers(&span("src/a.py", 12, 30)));
-    assert!(!shown.covers(&span("src/a.py", 5, 30)), "starts earlier");
-    assert!(!shown.covers(&span("src/a.py", 30, 50)), "ends later");
-    assert!(!shown.covers(&span("src/b.py", 12, 30)), "another file");
+fn a_span_matches_only_the_same_lines_holding_the_same_text() {
+    let shown = Span::new("src/a.py", 10, 40, "def run(): pass");
+    assert_eq!(shown, Span::new("src/a.py", 10, 40, "def run(): pass"));
+    assert_ne!(
+        shown,
+        Span::new("src/a.py", 10, 40, "def run(): return 1"),
+        "edited since"
+    );
+    assert_ne!(
+        shown,
+        Span::new("src/a.py", 12, 30, "def run(): pass"),
+        "other lines"
+    );
+    assert_ne!(
+        shown,
+        Span::new("src/b.py", 10, 40, "def run(): pass"),
+        "another file"
+    );
 }
 
 #[test]

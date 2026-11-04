@@ -18,6 +18,7 @@ use guard_contracts::GuardHookEnvelopeV2;
 use lookup::{lookup, Miss, Request};
 use seen::{Session, Span};
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -280,16 +281,18 @@ fn relevant<'a>(
     ranked: &[String],
     words: &[String],
 ) -> Vec<&'a PickedExcerpt> {
+    // A quoted word is in `words` twice; each word counts once.
+    let distinct: BTreeSet<&str> = words.iter().map(String::as_str).collect();
     let mut found: Vec<&PickedExcerpt> = picked
         .iter()
         .filter(|excerpt| {
             let text = excerpt.text.to_lowercase();
             let path = excerpt.path.to_lowercase().replace(['-', '_'], "");
-            let mentioned = words
+            let mentioned = distinct
                 .iter()
-                .filter(|word| text.contains(word.as_str()) || path.contains(word.as_str()))
+                .filter(|word| text.contains(**word) || path.contains(**word))
                 .count();
-            let needed = if words.len() > 1 && !ranked.contains(&excerpt.path) {
+            let needed = if distinct.len() > 1 && !ranked.contains(&excerpt.path) {
                 2
             } else {
                 1
@@ -322,16 +325,12 @@ fn render(
     let mut shown: Vec<Span> = Vec::new();
     let mut repeated: Vec<Span> = Vec::new();
     for excerpt in relevant(picked, found, words) {
-        let span = Span {
-            path: excerpt.path.clone(),
-            start: excerpt.start_line,
-            end: excerpt.end_line,
-        };
-        if earlier.iter().any(|before| before.covers(&span)) {
+        let text = excerpt.text.trim_end();
+        let span = Span::new(&excerpt.path, excerpt.start_line, excerpt.end_line, text);
+        if earlier.contains(&span) {
             repeated.push(span);
             continue;
         }
-        let text = excerpt.text.trim_end();
         let fence = fence_for(text);
         let block = format!(
             "\n\n{} (lines {}-{})\n{fence}{}\n{}\n{fence}",
