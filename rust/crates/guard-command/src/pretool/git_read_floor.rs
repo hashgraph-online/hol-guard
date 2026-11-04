@@ -253,11 +253,32 @@ fn verdict(
             .is_none_or(|executable| super::executable_basename(executable) != "git")
             || super::symlink_writes::current_branch_read(segment, read_context)
     });
+    // This floor asks one question of a step before a Git read: could it have
+    // changed the configuration that read runs under? A step that opens the
+    // paths it is given only to read them answers no, wherever those paths
+    // are. The proofs above answer a wider question that also covers what a
+    // read may disclose, so a reader whose operand sits outside the workspace
+    // -- a sibling checkout, a file under `$HOME` -- failed them and was
+    // counted as a step that could have rewritten Git's configuration. It
+    // writes nothing at all. `creates_nothing` is the narrow write proof: it
+    // refuses an output redirect, a wrapper chain and a `PATH` override, and
+    // admits only programs with no option that names a file to write. `cd` is
+    // excluded because moving the directory is exactly what the checks above
+    // this one account for.
+    let writes_nothing = |segment: &crate::CommandSegmentV1| {
+        model.confidence == "exact"
+            && !model.path_overridden
+            && model.wrapper_chain.is_empty()
+            && segment.environment_names.is_empty()
+            && segment.executable.as_deref() != Some("cd")
+            && super::search::grep::creates_nothing(segment)
+    };
     let settled = |prior: usize, later: &crate::CommandSegmentV1| {
         let segment = segments[prior];
         benign.contains(&prior)
             || (prior == 0 && destination.is_some())
             || write_free(segment)
+            || writes_nothing(segment)
             || (link_settles
                 && super::symlink_writes::safe_symlink_arguments(segment, read_context))
             || super::git_remote_ops::verified_refresh(
