@@ -12,18 +12,33 @@ fn fixture_root() -> std::path::PathBuf {
         .join("../../target")
         .join(format!("guard-omp-file-url-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
-    std::fs::canonicalize(root).unwrap()
+    let canonical = std::fs::canonicalize(root).unwrap();
+    // Windows canonicalization returns a `\\?\C:\...` extended path. No host
+    // spells a target that way, and the `?` is not part of the path, so the
+    // fixture uses the plain drive path a `file://` URL can carry.
+    match canonical
+        .to_str()
+        .and_then(|text| text.strip_prefix(r"\\?\"))
+    {
+        Some(plain) => std::path::PathBuf::from(plain),
+        None => canonical,
+    }
 }
 
-/// The `file://` spelling of an absolute path, the way Oh My Pi spells it: a
-/// Windows path keeps its drive behind the URL's root slash.
-fn file_url(path: &std::path::Path) -> String {
+/// A path as a URL carries it: forward slashes, and a Windows drive behind
+/// the URL's root slash.
+fn slashed(path: &std::path::Path) -> String {
     let text = path.to_string_lossy().replace('\\', "/");
     if text.starts_with('/') {
-        format!("file://{text}")
+        text
     } else {
-        format!("file:///{text}")
+        format!("/{text}")
     }
+}
+
+/// The `file://` spelling of an absolute path, the way Oh My Pi spells it.
+fn file_url(path: &std::path::Path) -> String {
+    format!("file://{}", slashed(path))
 }
 
 fn read_target(
@@ -155,6 +170,10 @@ fn file_url_reads_decide_exactly_as_the_plain_path_they_spell() {
     ] {
         let plain = target.to_string_lossy().into_owned();
         let url = file_url(&target);
+        // The path the URL denotes, judged on its own: the URL must earn
+        // exactly this, whatever separators the host platform spells.
+        let denoted = local_file_url_path(&url).expect("the fixture URL names a local path");
+        let denoted_decision = read_target(&denoted, &home, &project);
         let plain_decision = read_target(&plain, &home, &project);
         let url_decision = read_target(&url, &home, &project);
         assert_eq!(
@@ -169,23 +188,22 @@ fn file_url_reads_decide_exactly_as_the_plain_path_they_spell() {
                 url_decision.explicitly_benign,
             ),
             (
-                plain_decision.minimum_action.as_str(),
-                plain_decision.reason_code.as_str(),
-                plain_decision.explicitly_benign,
+                denoted_decision.minimum_action.as_str(),
+                denoted_decision.reason_code.as_str(),
+                denoted_decision.explicitly_benign,
             ),
-            "{url} must decide as {plain}",
+            "{url} must decide as {denoted}",
+        );
+        assert_eq!(
+            url_decision.minimum_action, "allow",
+            "{url}: {} ({})",
+            url_decision.reason_code, url_decision.reason
         );
     }
 
     // The `localhost` authority and a line selector name the same file.
     for target in [
-        format!(
-            "file://localhost{}",
-            sibling
-                .join("NOTES.md")
-                .to_string_lossy()
-                .replace('\\', "/")
-        ),
+        format!("file://localhost{}", slashed(&sibling.join("NOTES.md"))),
         format!("{}:1-5", file_url(&project.join("main.rs"))),
     ] {
         let decision = read_target(&target, &home, &project);
@@ -224,9 +242,10 @@ fn file_url_spellings_never_weaken_a_read_decision() {
     std::fs::write(config.join("config.toml"), "token = \"canary\"\n").unwrap();
     std::fs::write(project.join(".env"), "SECRET=canary\n").unwrap();
 
-    // A credential, a dot-file and a hidden directory decide the same under
-    // either spelling: the URL is resolved before any screen runs, so both
-    // spellings reach the read rules as the same path.
+    // A credential, a dot-file and a hidden directory keep their stricter
+    // answer under the URL spelling: resolution happens before the screens
+    // run, so the sensitive-name rules read the same path either way and no
+    // URL spelling reaches the benign proof.
     for target in [
         ssh.join("id_ed25519"),
         ssh.clone(),
@@ -236,31 +255,21 @@ fn file_url_spellings_never_weaken_a_read_decision() {
     ] {
         let plain = target.to_string_lossy().into_owned();
         let plain_decision = read_target(&plain, &home, &project);
+        assert_ne!(
+            plain_decision.minimum_action, "allow",
+            "{plain}: {}",
+            plain_decision.reason_code
+        );
         let url = file_url(&target);
         let url_decision = read_target(&url, &home, &project);
-        assert_eq!(
-            (
-                url_decision.minimum_action.as_str(),
-                url_decision.reason_code.as_str(),
-                url_decision.explicitly_benign,
-            ),
-            (
-                plain_decision.minimum_action.as_str(),
-                plain_decision.reason_code.as_str(),
-                plain_decision.explicitly_benign,
-            ),
-            "{url} decided unlike {plain}"
+        assert_ne!(
+            url_decision.minimum_action, "allow",
+            "{url}: {}",
+            url_decision.reason_code
         );
+        assert!(!url_decision.explicitly_benign, "{url}");
     }
 
-    let slashed = |path: &std::path::Path| {
-        let text = path.to_string_lossy().replace('\\', "/");
-        if text.starts_with('/') {
-            text
-        } else {
-            format!("/{text}")
-        }
-    };
     for target in [
         // Another host's file: the path after the authority is not this
         // host's path and must not be resolved to it.
