@@ -1,0 +1,119 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.apple-docs-2.0-mcp",
+  "version": "1.0.0",
+  "name": "Apple Docs 2.0 MCP",
+  "description": "Apple's developer documentation for AI agents: developer.apple.com search, whole documentation pages as Markdown with declarations, OS availability and deprecation notes, the Human Interface Guidelines, App Store Connect Help, sample code and WWDC sessions from 2014 to 2026 with transcripts and code. Read-only: it writes no files, runs no commands and needs no credentials. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.mishafyi",
+    "displayName": "MishaFYI",
+    "url": "https://github.com/mishafyi"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#0F172A"
+  },
+  "homepage": "https://github.com/mishafyi/Apple-Docs-2.0-MCP",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "apple-docs-2.0-mcp"
+  },
+  "riskClasses": [
+    "external-network-read"
+  ],
+  "tools": [
+    {
+      "name": "search_apple_docs",
+      "state": "allow"
+    },
+    {
+      "name": "get_apple_doc_content",
+      "state": "allow"
+    },
+    {
+      "name": "list_technologies",
+      "state": "allow"
+    },
+    {
+      "name": "search_framework_symbols",
+      "state": "allow"
+    },
+    {
+      "name": "search_docs_map",
+      "state": "allow"
+    },
+    {
+      "name": "get_related_apis",
+      "state": "allow"
+    },
+    {
+      "name": "resolve_references_batch",
+      "state": "allow"
+    },
+    {
+      "name": "get_platform_compatibility",
+      "state": "allow"
+    },
+    {
+      "name": "find_similar_apis",
+      "state": "allow"
+    },
+    {
+      "name": "get_documentation_updates",
+      "state": "allow"
+    },
+    {
+      "name": "get_technology_overviews",
+      "state": "allow"
+    },
+    {
+      "name": "get_sample_code",
+      "state": "allow"
+    },
+    {
+      "name": "list_wwdc_videos",
+      "state": "allow"
+    },
+    {
+      "name": "search_wwdc_content",
+      "state": "allow"
+    },
+    {
+      "name": "get_wwdc_video",
+      "state": "allow"
+    },
+    {
+      "name": "get_wwdc_code_examples",
+      "state": "allow"
+    },
+    {
+      "name": "browse_wwdc_topics",
+      "state": "allow"
+    },
+    {
+      "name": "find_related_wwdc_videos",
+      "state": "allow"
+    },
+    {
+      "name": "list_wwdc_years",
+      "state": "allow"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/mishafyi/Apple-Docs-2.0-MCP",
+    "https://www.npmjs.com/package/apple-docs-2.0-mcp"
+  ],
+  "saferAlternatives": [
+    "Pin a release, for example npx -y apple-docs-2.0-mcp@2.0.7, to review each update before it runs.",
+    "Set a tool to review instead of allow if you want to approve each request it sends to Apple's servers."
+  ]
+}
