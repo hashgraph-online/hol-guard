@@ -23,6 +23,10 @@ mod release_verification;
 /// interpreter probe's budget. It never runs on the synchronous hook path.
 const STARTUP_RPC_TIMEOUT: Duration = process::PROBE_TIMEOUT;
 
+fn startup_doctor(process: &mut JsonProcess) -> Result<Value, RuntimeError> {
+    process.rpc(json!({"op": "doctor"}), STARTUP_RPC_TIMEOUT)
+}
+
 // Windows reports the host processor from `platform.machine()`, so an x64
 // interpreter emulated on an ARM64 PC would claim arm64; the build tag names
 // the interpreter itself.
@@ -239,7 +243,7 @@ impl VerifiedRuntime {
         }
         let mut process =
             JsonProcess::spawn_cancellable(&selection, expected.bridge()?, Arc::clone(&cancel))?;
-        let doctor = process.rpc(json!({"op": "doctor"}), STARTUP_RPC_TIMEOUT)?;
+        let doctor = startup_doctor(&mut process)?;
         let features = verify_doctor_for(&doctor, &expected)?;
         // Detect package or executable replacement during handshake/import.
         if crate::artifacts::inspect_cancellable(

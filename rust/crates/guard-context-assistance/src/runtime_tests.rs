@@ -124,10 +124,7 @@ fn exercise_transport(selection: &RuntimeSelection) {
     );
     // A slow cold start (emulated interpreter, antivirus scan) still completes the handshake.
     let mut slow = JsonProcess::spawn(selection, "import json,sys,time\ntime.sleep(6)\nfor line in sys.stdin:\n r=json.loads(line)\n print(json.dumps({'schema':'guard-cigar-bridge.v1','id':r['id'],'ok':True,'result':{}}),flush=True)").unwrap();
-    assert_eq!(
-        slow.rpc(json!({"op":"doctor"}), STARTUP_RPC_TIMEOUT),
-        Ok(json!({}))
-    );
+    assert_eq!(startup_doctor(&mut slow), Ok(json!({})));
     let mut hung = JsonProcess::spawn(selection, "import time\ntime.sleep(60)").unwrap();
     let started = Instant::now();
     assert_eq!(
