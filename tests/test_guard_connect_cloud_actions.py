@@ -12,7 +12,7 @@ from rich.console import Console
 
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard.cli import commands as guard_commands
-from codex_plugin_scanner.guard.cli import commands_support_connect, connect_flow
+from codex_plugin_scanner.guard.cli import commands_support_connect, connect_cloud_actions, connect_flow
 from codex_plugin_scanner.guard.cli.connect_cloud_actions import (
     CloudActionsConnectReport,
     check_connect_cloud_actions_declined,
@@ -129,21 +129,40 @@ def test_connect_summary_separates_pairing_from_cloud_actions() -> None:
 
 
 def test_connect_reports_wrong_workspace_and_ignored_decline() -> None:
-    on_report: CloudActionsConnectReport = {"status": "on", "workspace_id": WORKSPACE_ID}
+    on_summary = cloud_actions_connect_summary({"status": "on", "workspace_id": WORKSPACE_ID}, paired=True)
+    off_summary = cloud_actions_connect_summary({"status": "off", "workspace_id": WORKSPACE_ID}, paired=True)
+    unreported = cloud_actions_connect_summary(None, paired=True)
+    unread = {"status": "unknown", "workspace_id": None, "message": connect_cloud_actions._NATIVE_UNAVAILABLE_MESSAGE}
 
     wrong_workspace = check_connect_cloud_workspace(workspace_id=OTHER_WORKSPACE_ID, cloud_workspace_id=WORKSPACE_ID)
     matched = check_connect_cloud_workspace(workspace_id=WORKSPACE_ID.upper(), cloud_workspace_id=WORKSPACE_ID)
     unrequested = check_connect_cloud_workspace(workspace_id=OTHER_WORKSPACE_ID, cloud_workspace_id=None)
-    ignored_decline = check_connect_cloud_actions_declined(report=on_report, cloud_actions_declined=True)
-    honored_decline = check_connect_cloud_actions_declined(
-        report={"status": "off", "workspace_id": WORKSPACE_ID}, cloud_actions_declined=True
-    )
-    not_declined = check_connect_cloud_actions_declined(report=on_report, cloud_actions_declined=False)
+    ignored_decline = check_connect_cloud_actions_declined(summary=on_summary, cloud_actions_declined=True)
 
     assert wrong_workspace is not None and OTHER_WORKSPACE_ID in wrong_workspace
     assert matched is None and unrequested is None
     assert ignored_decline is not None and "--no-cloud-actions" in ignored_decline
-    assert honored_decline is None and not_declined is None
+    for honored in (off_summary, unreported, None):
+        assert check_connect_cloud_actions_declined(summary=honored, cloud_actions_declined=True) is None
+    assert check_connect_cloud_actions_declined(summary=on_summary, cloud_actions_declined=False) is None
+    # Guard could not read Guard Cloud's answer when connect finished, so a decline cannot be confirmed.
+    unread_decline = check_connect_cloud_actions_declined(summary=unread, cloud_actions_declined=True)
+    assert unread_decline is not None and "disconnected this computer" in unread_decline
+
+
+def test_connect_checks_disconnect_the_computer_without_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    on: CloudActionsConnectReport = {"status": "on", "workspace_id": WORKSPACE_ID}
+    on_summary = cloud_actions_connect_summary(on, paired=True)
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_, **__: None)
+
+    assert parse_cloud_actions_connect_report({"guard_cloud_actions": on}) is None
+    assert cloud_actions_connect_summary(on, paired=True)["status"] == "unknown"
+    assert check_connect_cloud_workspace(workspace_id=WORKSPACE_ID, cloud_workspace_id=WORKSPACE_ID)
+    assert check_connect_cloud_actions_declined(summary=on_summary, cloud_actions_declined=True)
+    assert check_connect_cloud_workspace(workspace_id=WORKSPACE_ID, cloud_workspace_id=None) is None
+    assert check_connect_cloud_actions_declined(summary=on_summary, cloud_actions_declined=False) is None
 
 
 def test_connect_answer_is_kept_per_pairing(tmp_path: Path) -> None:
@@ -321,6 +340,33 @@ def test_headless_connect_undoes_the_pairing_when_cloud_actions_came_back_on_des
     assert "--no-cloud-actions" in str(payload["cloud_actions_problem"])
     assert payload["cloud_actions"]["status"] == "off"
     assert "not paired" in payload["cloud_actions"]["message"]
+
+
+def test_headless_connect_undoes_the_pairing_when_the_decline_cannot_be_checked(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    disconnects: list[dict[str, object]] = []
+    connected = _connected_payload(workspace_id=WORKSPACE_ID, cloud_actions_status="on")
+
+    def fail_finalize(**kwargs: object) -> dict[str, object]:
+        raise AssertionError("first sync must not run when the decline cannot be checked")
+
+    monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", lambda **_: connected)
+    monkeypatch.setattr(commands_support_connect, "_finalize_guard_connect_payload", fail_finalize)
+    monkeypatch.setattr(guard_commands, "run_guard_disconnect_command", lambda **kwargs: disconnects.append(kwargs))
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_, **__: None)
+
+    payload, exit_code = guard_commands._build_guard_device_connect_payload(
+        store=GuardStore(tmp_path / "guard-home"),
+        connect_url="https://hol.org/guard/connect",
+        use_browser_oauth=False,
+        cloud_actions_declined=True,
+    )
+
+    assert exit_code == 1
+    assert payload is not None and payload["status"] == "disconnected"
+    assert len(disconnects) == 1 and disconnects[0]["revoke_cloud_grant"] is True
+    assert "disconnected this computer" in str(payload["cloud_actions_problem"])
 
 
 def test_plain_connect_keeps_its_flow_call_and_succeeds(tmp_path: Path, monkeypatch) -> None:

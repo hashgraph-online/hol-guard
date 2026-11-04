@@ -8,13 +8,14 @@ pairing and reports it back in the connect token response as
 answer next to the pairing, and turns it into connect and status output.
 
 The stored answer is a display hint only. Guard Cloud checks the pairing
-itself whenever an AI tool asks for Cloud actions access.
+itself whenever an AI tool asks for Cloud actions access. What the answer
+means is decided by the native runtime's ``cloud_actions_connect`` kind.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict, cast
 
 from ..store import GuardStore
 
@@ -23,6 +24,13 @@ CloudActionsConnectStatus = Literal["on", "off", "unknown"]
 CLOUD_ACTIONS_CONNECT_STATE_PREFIX = "cloud_actions_connect:"
 CLOUD_ACTIONS_CONFIGURE_COMMAND = "hol-guard cloud-actions ai-tools configure <ai-tool>"
 CLOUD_ACTIONS_RECONNECT_COMMAND = "hol-guard connect"
+_FEATURE = "native-cloud-actions-connect-v1"
+_COMMAND = "cloud-actions-connect"
+_NATIVE_UNAVAILABLE_MESSAGE = (
+    "Guard's native runtime is not available, so HOL Guard could not check Cloud actions for this pairing. "
+    "Run hol-guard doctor, then try again."
+)
+_DISCONNECTED_MESSAGE = f"{_NATIVE_UNAVAILABLE_MESSAGE} HOL Guard disconnected this computer before sending anything."
 
 
 class CloudActionsConnectReport(TypedDict):
@@ -37,23 +45,14 @@ class CloudActionsConnectSummary(TypedDict):
 
 
 def parse_cloud_actions_connect_report(payload: Mapping[str, object]) -> CloudActionsConnectReport | None:
-    """Read ``guard_cloud_actions`` from a connect token response.
-
-    Guard Cloud leaves the field out when Cloud actions are not available, for
-    other apps, or when it could not look the pairing up. Anything malformed is
-    treated the same way, so the CLI never claims an answer it did not get.
-    """
+    """Read ``guard_cloud_actions`` from a connect token response, or ``None``."""
     value = payload.get("guard_cloud_actions")
     if not isinstance(value, Mapping):
         return None
-    status = value.get("status")
-    if status not in ("on", "off"):
-        return None
-    workspace_id = value.get("workspace_id")
-    return {
-        "status": status,
-        "workspace_id": workspace_id.strip() if isinstance(workspace_id, str) and workspace_id.strip() else None,
-    }
+    answer = _native(
+        {"op": "report", "value": {"status": value.get("status"), "workspace_id": value.get("workspace_id")}}
+    )
+    return cast("CloudActionsConnectReport | None", answer.get("report") if answer is not None else None)
 
 
 def _state_key(grant_id: str) -> str:
@@ -94,32 +93,10 @@ def cloud_actions_connect_summary(
     *,
     paired: bool,
 ) -> CloudActionsConnectSummary:
-    if not paired:
-        return {
-            "status": "off",
-            "workspace_id": None,
-            "message": f"This computer is not paired. Run {CLOUD_ACTIONS_RECONNECT_COMMAND} first.",
-        }
-    if report is None:
-        return {
-            "status": "unknown",
-            "workspace_id": None,
-            "message": "Guard Cloud did not report Cloud actions for this pairing.",
-        }
-    if report["status"] == "on":
-        return {
-            "status": "on",
-            "workspace_id": report["workspace_id"],
-            "message": f"Ready. Set up an AI tool with {CLOUD_ACTIONS_CONFIGURE_COMMAND}.",
-        }
-    return {
-        "status": "off",
-        "workspace_id": report["workspace_id"],
-        "message": (
-            f"Off. To turn them on, run {CLOUD_ACTIONS_RECONNECT_COMMAND} again and choose "
-            '"Let AI tools on this computer use Cloud actions".'
-        ),
-    }
+    answer = _native({"op": "summary", "report": report, "paired": paired})
+    if answer is None or not isinstance(answer.get("message"), str):
+        return {"status": "unknown", "workspace_id": None, "message": _NATIVE_UNAVAILABLE_MESSAGE}
+    return cast("CloudActionsConnectSummary", answer)
 
 
 def record_connect_cloud_actions(
@@ -154,31 +131,43 @@ def check_connect_cloud_workspace(*, workspace_id: str | None, cloud_workspace_i
     The caller checks this before the first sync and undoes the pairing, so
     nothing from this computer reaches the wrong workspace.
     """
-    if cloud_workspace_id is None or (workspace_id or "").lower() == cloud_workspace_id.lower():
+    if cloud_workspace_id is None:
         return None
-    return (
-        f"Guard Cloud paired this computer to workspace {workspace_id or 'unknown'}, not {cloud_workspace_id}. "
-        "HOL Guard disconnected it before sending anything. "
-        f"Run {CLOUD_ACTIONS_RECONNECT_COMMAND} --cloud-workspace {cloud_workspace_id} again and pick "
-        "that workspace in the browser."
-    )
+    return _problem({"op": "workspace", "workspace_id": workspace_id, "cloud_workspace_id": cloud_workspace_id})
 
 
-def check_connect_cloud_actions_declined(
-    *,
-    report: CloudActionsConnectReport | None,
-    cloud_actions_declined: bool,
-) -> str | None:
+def check_connect_cloud_actions_declined(*, summary: object, cloud_actions_declined: bool) -> str | None:
     """Return a problem message when Cloud actions came back on despite ``--no-cloud-actions``.
 
-    The caller undoes the pairing before the first sync, reports the problem and
-    exits non-zero so scripts notice. Without a report Guard Cloud did not turn
-    Cloud actions on for this pairing, which is what the option asked for.
+    ``summary`` is the connect payload's ``cloud_actions`` summary. The caller
+    undoes the pairing before the first sync, reports the problem and exits
+    non-zero so scripts notice. Without an answer Guard Cloud did not turn Cloud
+    actions on for this pairing, which is what the option asked for. An answer
+    Guard could not read disconnects the computer too.
     """
-    if not cloud_actions_declined or report is None or report["status"] != "on":
+    if not cloud_actions_declined or not isinstance(summary, Mapping):
         return None
-    return (
-        "Cloud actions were turned on in the browser although --no-cloud-actions was set. "
-        "HOL Guard disconnected this computer before sending anything. "
-        f"Run {CLOUD_ACTIONS_RECONNECT_COMMAND} --no-cloud-actions again and leave Cloud actions off in the browser."
+    if summary.get("message") == _NATIVE_UNAVAILABLE_MESSAGE:
+        return _DISCONNECTED_MESSAGE
+    answer = _native(
+        {"op": "report", "value": {"status": summary.get("status"), "workspace_id": summary.get("workspace_id")}}
     )
+    if answer is None:
+        return _DISCONNECTED_MESSAGE
+    return _problem({"op": "declined", "report": answer.get("report"), "declined": True})
+
+
+def _problem(request: dict[str, object]) -> str | None:
+    """A check that cannot run disconnects the computer, like a failed one."""
+    answer = _native(request)
+    problem = answer.get("problem", 0) if answer is not None else 0
+    if problem is None or isinstance(problem, str):
+        return problem
+    return _DISCONNECTED_MESSAGE
+
+
+def _native(request: dict[str, object]) -> Any:  # the one-shot command's answer, or None
+    # One-shot so that `cloud-actions status --offline` never starts a resident.
+    from ..mdm.runtime_request import runtime_answer
+
+    return runtime_answer(_FEATURE, _COMMAND, request, output_limit=4096, timeout_seconds=5.0)

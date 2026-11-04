@@ -17,11 +17,9 @@ from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..browser_opener import open_browser_url
 from .connect_cloud_actions import (
-    CloudActionsConnectReport,
     check_connect_cloud_actions_declined,
     check_connect_cloud_workspace,
     cloud_actions_connect_summary,
-    parse_cloud_actions_connect_report,
 )
 from .connect_sync_result import apply_guard_connect_sync_result
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
@@ -462,7 +460,7 @@ def _build_guard_device_connect_payload(
         cloud_workspace_id=cloud_workspace_id,
     )
     problem = workspace_problem or check_connect_cloud_actions_declined(
-        report=_connect_payload_cloud_actions_report(payload),
+        summary=payload.get("cloud_actions"),
         cloud_actions_declined=cloud_actions_declined,
     )
     if problem is not None:
@@ -485,12 +483,6 @@ def _build_guard_device_connect_payload(
         workspace_dir=workspace_dir,
     )
     return payload, 0
-
-def _connect_payload_cloud_actions_report(payload: dict[str, object]) -> CloudActionsConnectReport | None:
-    summary = payload.get("cloud_actions")
-    if not isinstance(summary, dict):
-        return None
-    return parse_cloud_actions_connect_report({"guard_cloud_actions": summary})
 
 def _undo_unwanted_guard_connect_pairing(store: GuardStore) -> dict[str, object]:
     try:
