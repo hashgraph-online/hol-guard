@@ -130,7 +130,7 @@ def test_real_codex_hook_honors_once_across_transport_changes(
                 store, request_id=request_id, now=str(row["resolved_at"]), fresh_allow_authorized=authorized
             )
             assert completed["completed"] is True, completed
-        subprocess.run(["rm", "-rf", str(scratch)], check=True)
-        assert not scratch.exists()
+        # This is an admission test only. Never execute the reported removal.
+        assert scratch.is_dir()
     finally:
         worker.close()

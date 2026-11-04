@@ -59,8 +59,8 @@ def write_review_config(guard_home: Path, *, file_tool: bool = False, intrinsic_
     """
     guard_home.mkdir(mode=0o700, parents=True, exist_ok=True)
     if intrinsic_review:
-        # Removal already needs review. A blanket subprocess floor would also
-        # hold its successful PostToolUse and make the agent retry after deletion.
+        # The command already needs review. A blanket subprocess floor would
+        # also hold its successful PostToolUse and make the agent retry after execution.
         (guard_home / "config.toml").write_text('mode = "enforce"\nblocked_request_mode = "ask"\n', encoding="utf-8")
         return {"intrinsic_review": True, "blocked_request_mode": "ask"}
     setting = "default_action" if file_tool else "subprocess_action"

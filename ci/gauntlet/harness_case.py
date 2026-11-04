@@ -17,9 +17,9 @@ from .approval_retry import ReviewApprover, write_review_config
 from .approval_retry_bash import BASH_LIFECYCLE_ORACLE
 from .approval_retry_bash import evidence as bash_lifecycle_evidence
 from .approval_retry_bash import stage as stage_bash_lifecycle
-from .approval_retry_removal import CASE as SCRATCH_REMOVAL_CASE
-from .approval_retry_removal import collect as collect_scratch_removal
-from .approval_retry_removal import stage as stage_scratch_removal
+from .approval_retry_marker import CASE as APPROVAL_MARKER_CASE
+from .approval_retry_marker import collect as collect_approval_marker
+from .approval_retry_marker import stage as stage_approval_marker
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import add_credential_redactions, fixture_system_context
@@ -184,7 +184,7 @@ def run_harness_case(
         "cleanup_ok": False,
         "transcript": {"calls": [], "terminal": False},
     }
-    stage_scratch_removal(fixture.workspace, scenario.id, case)
+    stage_approval_marker(fixture.workspace, scenario.id, case)
     daemon = None
     connector = None
     seed: CredentialSeed | None = None
@@ -226,7 +226,7 @@ def run_harness_case(
                 case["review_policy"] = write_review_config(
                     guard_home,
                     file_tool="bash" not in scenario.required_tools,
-                    intrinsic_review=scenario.id == SCRATCH_REMOVAL_CASE,
+                    intrinsic_review=scenario.id == APPROVAL_MARKER_CASE,
                 )
             if CONNECTOR_PROFILE in scenario.profiles:
                 connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
@@ -353,7 +353,7 @@ def run_harness_case(
             case["credential_write_back_error"] = type(exc).__name__
         finally:
             case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
-            collect_scratch_removal(fixture.workspace, scenario.id, case)
+            collect_approval_marker(fixture.workspace, scenario.id, case)
             if connector is not None:
                 case["filesystem"].update(connector_checks(connector, connector_state))
             remove_scratch_checkout(fixture.root)
