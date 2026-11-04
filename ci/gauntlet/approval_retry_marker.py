@@ -1,10 +1,13 @@
 """Physical proof of approval using one harmless file in a disposable workspace."""
 
+from configparser import ConfigParser
+from configparser import Error as ConfigError
 from pathlib import Path
 from typing import Any
 
 CASE = "approved-retry-marker-command"
 MARKER = "approval-marker.txt"
+CONTENT = "[gauntlet]\n\tapproval = approved\n"
 
 
 def stage(workspace: Path, scenario_id: str, case: dict[str, Any]) -> None:
@@ -24,8 +27,12 @@ def collect(workspace: Path, scenario_id: str, case: dict[str, Any]) -> None:
     if not marker.is_symlink():
         try:
             with marker.open("rb") as handle:
-                created = handle.read(9) == b"approved"
-        except OSError:
+                data = handle.read(4097)
+            if len(data) <= 4096:
+                config = ConfigParser()
+                config.read_string(data.decode("utf-8"))
+                created = config.get("gauntlet", "approval", fallback=None) == "approved"
+        except (OSError, UnicodeError, ConfigError):
             pass
     case.setdefault("approval_marker", {})["created"] = created
 
