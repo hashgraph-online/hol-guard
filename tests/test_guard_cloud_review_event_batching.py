@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_event_wake import review_event_wake_signal
 from codex_plugin_scanner.guard.runtime import (
@@ -20,10 +21,14 @@ from codex_plugin_scanner.guard.runtime.cloud_review_batching import (
     CLOUD_REVIEW_MAX_BATCH_BYTES,
     CLOUD_REVIEW_MAX_BATCH_EVENTS,
     CloudReviewBatchLimits,
+    CloudReviewEventTooLargeError,
     next_review_batch_limits,
     select_review_event_batch,
 )
-from codex_plugin_scanner.guard.runtime.cloud_review_event_delivery import encoded_review_events_payload
+from codex_plugin_scanner.guard.runtime.cloud_review_event_delivery import (
+    CloudReviewEventProtocolError,
+    encoded_review_events_payload,
+)
 from tests.guard_exact_cloud_review_support import connected_exact_review_store
 
 
@@ -402,3 +407,45 @@ def test_error_backoff_jitter_is_exponential_and_bounded(monkeypatch: pytest.Mon
     assert cloud_review_sync_worker._bounded_error_wait(2.0, 30.0, 1) == 2.0
     assert cloud_review_sync_worker._bounded_error_wait(2.0, 30.0, 2) == 4.0
     assert cloud_review_sync_worker._bounded_error_wait(2.0, 30.0, 20) == 15.0
+
+
+def test_without_the_native_runtime_no_batch_is_prepared(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+
+    with pytest.raises(CloudReviewEventProtocolError, match="without the HOL Guard native runtime"):
+        select_review_event_batch([_event(1)], CloudReviewBatchLimits())
+    with pytest.raises(CloudReviewEventProtocolError, match="without the HOL Guard native runtime"):
+        next_review_batch_limits(CloudReviewBatchLimits(), {})
+
+
+def test_an_event_without_a_source_sequence_stops_the_batch() -> None:
+    with pytest.raises(CloudReviewEventProtocolError, match="no valid source sequence"):
+        select_review_event_batch([_event(1), {"localStreamSequence": True}], CloudReviewBatchLimits())
+
+
+def test_events_too_large_for_one_native_request_are_offered_in_halves(monkeypatch: pytest.MonkeyPatch) -> None:
+    offered: list[int] = []
+    refused_from = 2
+
+    def bounded(_kind: str, request: dict[str, object]) -> dict[str, object]:
+        events = request["events"]
+        assert isinstance(events, list)
+        offered.append(len(events))
+        if len(events) >= refused_from:
+            raise native_runner_authority.NativeRunnerAuthorityRefusalError("native_runner_authority_request_too_large")
+        return {"count": len(events)}
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", bounded)
+    events = [_event(index) for index in range(1, 6)]
+
+    assert select_review_event_batch(events, CloudReviewBatchLimits(events=4)) == events[:1]
+    assert offered == [4, 2, 1]
+
+    refused_from = 1
+    offered.clear()
+    with pytest.raises(CloudReviewEventTooLargeError):
+        select_review_event_batch(events, CloudReviewBatchLimits(events=4))
+    assert offered == [4, 2, 1]
