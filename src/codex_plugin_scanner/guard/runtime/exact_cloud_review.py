@@ -96,10 +96,13 @@ def _ask(request: dict[str, object], member: str) -> dict[str, object]:
     return cast("dict[str, object]", value)
 
 
-def _signing_key(store: GuardStore, envelope: object, *, create: bool = False) -> dict[str, object]:
-    """The local key, read only for an envelope it could check."""
+_FOR_SIGNING = object()
 
-    if not create and not isinstance(envelope, dict):
+
+def _signing_key(store: GuardStore, envelope: object, *, create: bool = False) -> dict[str, object]:
+    """The local key: always for signing, and for checking only an envelope it could check."""
+
+    if envelope is not _FOR_SIGNING and not create and not isinstance(envelope, dict):
         return {"key": None, "key_id": None}
     from .command_capability import _signing_material_for_resident
 
@@ -108,7 +111,7 @@ def _signing_key(store: GuardStore, envelope: object, *, create: bool = False) -
 
 
 def _sign(store: GuardStore, payload: dict[str, object], *, create_key: bool) -> dict[str, object]:
-    request = {"op": "sign", **_signing_key(store, None, create=create_key), "payload": payload}
+    request = {"op": "sign", **_signing_key(store, _FOR_SIGNING, create=create_key), "payload": payload}
     return _ask(request, "envelope")
 
 
