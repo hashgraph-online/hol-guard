@@ -8,9 +8,10 @@ type Props = {
   onManage?: () => void; onRefresh: () => void; onRestore: () => void;
 };
 const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-function describe(id: string, selected: ContextInstallation | undefined): string {
+function describe(id: string, installations: ContextInstallation[] | null, selected: ContextInstallation | undefined): string {
   if (!id) return "Not set up yet";
-  if (!selected) return "Installed";
+  if (installations === null) return "Looking up version details";
+  if (!selected) return "Picked, but not found on this computer";
   const sdk = selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : "";
   return sdk + "Python " + selected.python_version.join(".") + " · " + platformLabel(selected.platform);
 }
@@ -23,7 +24,7 @@ export function CigarRuntimeSelection(props: Props) {
     <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
       <div className="min-w-0 flex-[1_1_16rem]">
         <p className="guard-settings-body font-medium text-brand-dark">CIGAR version</p>
-        <p className="mt-0.5 text-sm text-brand-dark/80">{describe(id, selected)}</p>
+        <p className="mt-0.5 text-sm text-brand-dark/80">{describe(id, props.installations ?? null, selected)}</p>
         {selected ? <p className="guard-settings-caption mt-0.5 text-slate-500">{sentence(installationLabel(selected.qualification))}</p> : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">

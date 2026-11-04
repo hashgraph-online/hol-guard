@@ -3229,9 +3229,10 @@ function platformLabel(platform2) {
   return chip2 ? name + " · " + chip2 : name;
 }
 const sentence = (text2) => text2.charAt(0).toUpperCase() + text2.slice(1);
-function describe$1(id2, selected) {
+function describe$1(id2, installations, selected) {
   if (!id2) return "Not set up yet";
-  if (!selected) return "Installed";
+  if (installations === null) return "Looking up version details";
+  if (!selected) return "Picked, but not found on this computer";
   const sdk = selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : "";
   return sdk + "Python " + selected.python_version.join(".") + " · " + platformLabel(selected.platform);
 }
@@ -3243,7 +3244,7 @@ function CigarRuntimeSelection(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-x-6 gap-y-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-[1_1_16rem]", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-body font-medium text-brand-dark", children: "CIGAR version" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-brand-dark/80", children: describe$1(id2, selected) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-brand-dark/80", children: describe$1(id2, props.installations ?? null, selected) }),
         selected ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption mt-0.5 text-slate-500", children: sentence(installationLabel(selected.qualification)) }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
@@ -5898,7 +5899,7 @@ function planCigarSetup(data, options) {
   if (state.effective_enabled) return { kind: "ready" };
   if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
   if (options.locked || state.restriction && !state.effective_preferences.enabled) {
-    return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
+    return planCigarStart(state, false) ?? blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
   }
   if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
   if (data.jobs.some((job) => job.phase === "recovery_required")) {

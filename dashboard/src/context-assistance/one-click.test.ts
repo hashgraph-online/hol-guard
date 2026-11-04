@@ -45,6 +45,10 @@ assert.deepEqual(planCigarSetup(data({ state: ready }), open), { kind: "ready" }
 assert.equal(planCigarSetup(data(), { ...open, dirty: true }).kind, "blocked");
 const managed = planCigarSetup(data(), { ...open, locked: true });
 assert.ok(managed.kind === "blocked" && /organization/.test(managed.block.title));
+const stoppedManaged = planCigarSetup(data({ state: { ...ready, effective_enabled: false, runtime: null } }), { ...open, locked: true });
+assert.deepEqual(stoppedManaged.kind === "run" ? stoppedManaged.stages : stoppedManaged, ["start"],
+  "a managed computer still starts the selection its administrator turned on, without changing preferences");
+assert.equal((stoppedManaged as CigarSetupRun).approval, false);
 const upstream = planCigarSetup(data({ catalog: bundled }), open);
 assert.ok(upstream.kind === "run" && upstream.build_id === bundled.builds[0].identity.build_id,
   "the bundled catalog entry installs by one click; installation checks each feature on this computer");

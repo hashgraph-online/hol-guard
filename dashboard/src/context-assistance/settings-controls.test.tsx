@@ -88,3 +88,8 @@ assert.deepEqual(executionSwitch(render({ value: executionSelected })), { disabl
 assert.equal(executionSwitch(render({ status: executionCapable,
   value: { ...ready.preferences, sources: { ...ready.preferences.sources, native_policy_facts: false } } })).disabled, true);
 console.log("Context assistance settings rendering and unavailable/managed/cancellation controls passed.");
+
+// The version row never calls a missing or still-loading installation "Installed".
+assert.match(render(), /Looking up version details/);
+assert.match(render({ installations: [] }), /Picked, but not found on this computer/);
+assert.doesNotMatch(render({ installations: [] }), />Installed</);
