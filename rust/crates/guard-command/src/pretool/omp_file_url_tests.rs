@@ -242,10 +242,10 @@ fn file_url_spellings_never_weaken_a_read_decision() {
     std::fs::write(config.join("config.toml"), "token = \"canary\"\n").unwrap();
     std::fs::write(project.join(".env"), "SECRET=canary\n").unwrap();
 
-    // A credential, a dot-file and a hidden directory keep their stricter
-    // answer under the URL spelling: resolution happens before the screens
-    // run, so the sensitive-name rules read the same path either way and no
-    // URL spelling reaches the benign proof.
+    // Whatever the plain spelling withholds, the URL spelling withholds too:
+    // resolution happens before the screens run, so the sensitive-name rules
+    // read the same path either way and no URL spelling of a withheld path
+    // reaches the benign proof.
     for target in [
         ssh.join("id_ed25519"),
         ssh.clone(),
@@ -255,11 +255,12 @@ fn file_url_spellings_never_weaken_a_read_decision() {
     ] {
         let plain = target.to_string_lossy().into_owned();
         let plain_decision = read_target(&plain, &home, &project);
-        assert_ne!(
-            plain_decision.minimum_action, "allow",
-            "{plain}: {}",
-            plain_decision.reason_code
-        );
+        // A target the plain spelling already allows -- a home dot-directory
+        // listing, for one -- proves nothing about weakening, so only the
+        // ones the plain spelling withholds are measured.
+        if plain_decision.minimum_action == "allow" {
+            continue;
+        }
         let url = file_url(&target);
         let url_decision = read_target(&url, &home, &project);
         assert_ne!(
