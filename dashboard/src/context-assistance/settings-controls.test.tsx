@@ -44,6 +44,8 @@ assert.equal(buttonDisabled(render({ status: requested, dirty: false }), "Start 
 const noRuntime = render({ installations: [] });
 assert.match(noRuntime, /CIGAR is not set up on this computer yet\. Turn on CIGAR at the top of this page/);
 assert.doesNotMatch(noRuntime, /Switch to another CIGAR build/, "with nothing installed there is nothing to switch to");
+assert.doesNotMatch(render({ installations: null }), /Switch to another CIGAR build/, "before the list loads, or after it fails, there is nothing known to switch to");
+assert.doesNotMatch(render(), /every command/, "CIGAR's note promises nothing about how Guard decides commands");
 const blank = { ...ready.preferences, runtime_id: "" };
 const unselected = render({ value: blank, status: { ...ready, preferences: blank }, installations: [] });
 assert.doesNotMatch(unselected, />Check selected runtime</, "nothing to check before a runtime is chosen");

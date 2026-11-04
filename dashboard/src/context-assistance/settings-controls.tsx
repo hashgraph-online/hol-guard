@@ -119,7 +119,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
             <SettingsToggleRow label="Review briefs" description="Prepare cited context to help you understand a request. Guard's approval choices stay available."
               checked={value.features.review_briefs} disabled={editingDisabled}
               onChange={(review_briefs) => props.onChange({ ...value, features: { ...value.features, review_briefs } })} />
-            <SettingsToggleRow label="Context for AI apps" description="Each prompt in Claude Code, Codex, Pi and Oh My Pi gets the project files that match it, and apps you allow can ask CIGAR for more."
+            <SettingsToggleRow label="Context for AI apps" description="CIGAR adds relevant context to prompts in Claude Code, Codex, Pi and Oh My Pi, and apps you allow can ask it for more. Project files are included only when workspace documents are allowed below."
               checked={value.features.agent_context} disabled={editingDisabled}
               onChange={(agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })} />
             <SettingsToggleRow label="Allow selected workspace documents" description="Lets CIGAR read files in the project you are working in. To pick exactly which files, add the project under Projects."
@@ -227,7 +227,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
           <ContextExecutionPanel status={status} />
         </>
       ) : <p className={note}>Update Guard to a native core with context assistance support before choosing these settings.</p>}
-      <p className={caption}>CIGAR only adds context. Guard still checks every command and asks for your approval the same way.</p>
+      <p className={caption}>CIGAR only adds context. Guard's protection and approval settings stay as they are.</p>
     </div>
   );
 }

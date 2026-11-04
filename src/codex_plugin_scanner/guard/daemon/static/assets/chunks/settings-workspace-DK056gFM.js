@@ -3244,7 +3244,7 @@ function CigarRuntimeSelection(props) {
       ] })
     ] }),
     props.installations?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "CIGAR is not set up on this computer yet. Turn on CIGAR at the top of this page and Guard sets it up for you." }) : null,
-    props.installations?.length === 0 ? null : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption text-slate-500", children: "Switch to another CIGAR build in Updates. Your current build and data stay as they are until the new one is ready." }),
+    props.installations?.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption text-slate-500", children: "Switch to another CIGAR build in Updates. Your current build and data stay as they are until the new one is ready." }) : null,
     pending ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A pending runtime choice is in this form. Use the current selection before preparing a different runtime in Updates." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onRestore, children: "Use current selection" })
@@ -3395,7 +3395,7 @@ function ContextSettingsControls(props) {
           SettingsToggleRow,
           {
             label: "Context for AI apps",
-            description: "Each prompt in Claude Code, Codex, Pi and Oh My Pi gets the project files that match it, and apps you allow can ask CIGAR for more.",
+            description: "CIGAR adds relevant context to prompts in Claude Code, Codex, Pi and Oh My Pi, and apps you allow can ask it for more. Project files are included only when workspace documents are allowed below.",
             checked: value.features.agent_context,
             disabled: editingDisabled,
             onChange: (agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })
@@ -3587,7 +3587,7 @@ function ContextSettingsControls(props) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ContextExecutionPanel, { status })
     ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: note, children: "Update Guard to a native core with context assistance support before choosing these settings." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "CIGAR only adds context. Guard still checks every command and asks for your approval the same way." })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$1, children: "CIGAR only adds context. Guard's protection and approval settings stay as they are." })
   ] });
 }
 const empty$1 = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70";
@@ -6626,9 +6626,13 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
           present ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "green", children: "Ready" }) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: platformLabel(build.platform) })
         ] }),
-        meta: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { id: id2 + "-python-id-" + build.build_id, title: build.build_id, children: [
+        meta: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           "Download ",
           versionBytes(build.archive_bytes)
+        ] }),
+        extra: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { id: id2 + "-python-id-" + build.build_id, className: "break-all font-mono text-xs text-brand-dark/50", children: [
+          "Build: ",
+          build.build_id
         ] }),
         reason: reason && build.platform === catalog.host_platform ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: id2 + "-python-reason-" + build.build_id, className: "text-sm text-amber-800", children: reason }) : null,
         action: /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -7390,16 +7394,16 @@ function CigarVersionsPanel(props) {
       [0, 1, 2].map((row2) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-16 rounded-2xl bg-brand-dark/[0.04] motion-safe:animate-pulse" }, row2)),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Loading CIGAR versions…" })
     ] }) : null,
-    versions.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: notice, children: "Starting. Guard keeps going in the background, so you can leave this page." }) : null,
+    versions.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: notice, children: "Starting. Keep this page open until Guard confirms the change has started." }) : null,
     versions.error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "cigar-note", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR updates need attention" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: versions.error }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Refresh the list before trying another change." })
     ] }) : null,
     versions.tracking ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-xs text-brand-dark/60", children: [
-      "Last submitted job: ",
+      "Guard is working on job ",
       versions.tracking,
-      ". Refresh jobs to confirm its outcome."
+      " and keeps going if you leave this page. Refresh the list to see how it went."
     ] }) : null,
     props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: notice, children: "You can prepare builds now. Save your CIGAR preference edits before preparing or committing a selection." }) : null,
     data ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [

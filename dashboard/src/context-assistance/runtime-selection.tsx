@@ -26,7 +26,7 @@ export function CigarRuntimeSelection(props: Props) {
       </div>
     </div>
     {props.installations?.length === 0 ? <p className="text-sm text-slate-600">CIGAR is not set up on this computer yet. Turn on CIGAR at the top of this page and Guard sets it up for you.</p> : null}
-    {props.installations?.length === 0 ? null : <p className="guard-settings-caption text-slate-500">Switch to another CIGAR build in Updates. Your current build and data stay as they are until the new one is ready.</p>}
+    {props.installations?.length ? <p className="guard-settings-caption text-slate-500">Switch to another CIGAR build in Updates. Your current build and data stay as they are until the new one is ready.</p> : null}
     {pending ? <div role="status" className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900"><p>A pending runtime choice is in this form. Use the current selection before preparing a different runtime in Updates.</p>
       <button type="button" className={versionButton} disabled={props.disabled} onClick={props.onRestore}>Use current selection</button></div> : null}
   </div>;

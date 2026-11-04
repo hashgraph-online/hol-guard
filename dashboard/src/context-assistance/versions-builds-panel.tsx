@@ -74,7 +74,8 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
     const reason = cigarPythonBlock(catalog, build), present = data.interpreters.some((p) => p.build_id === build.build_id);
     return <Row key={build.build_id} titleId={id + "-python-" + build.build_id} describedBy={id + "-python-id-" + build.build_id}
       title={"Python " + build.python_version.join(".")} tags={<>{present ? <Tag tone="green">Ready</Tag> : null}<Tag tone="slate">{platformLabel(build.platform)}</Tag></>}
-      meta={<span id={id + "-python-id-" + build.build_id} title={build.build_id}>Download {versionBytes(build.archive_bytes)}</span>}
+      meta={<>Download {versionBytes(build.archive_bytes)}</>}
+      extra={<p id={id + "-python-id-" + build.build_id} className="break-all font-mono text-xs text-brand-dark/50">Build: {build.build_id}</p>}
       reason={reason && build.platform === catalog.host_platform ? <p id={id + "-python-reason-" + build.build_id} className="text-sm text-amber-800">{reason}</p> : null}
       action={<button type="button" className={versionButton} aria-describedby={reason && build.platform === catalog.host_platform ? id + "-python-reason-" + build.build_id : undefined} disabled={disabled || present || reason !== null}
         onClick={() => onAction({ input: { action: "setup_interpreter", job_id: cigarVersionJobId(), build_id: build.build_id },

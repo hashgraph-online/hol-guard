@@ -68,6 +68,8 @@ const builds = renderToStaticMarkup(<CigarVersionBuildsPanel data={data} status=
 assert.match(builds, /No Python set up yet/);
 assert.match(builds, /disabled="">Prepare this build/);
 assert.match(builds, /Build details/);
+const pythonBuild = catalog.interpreter_builds[0].build_id;
+assert.ok(builds.includes(">Build: " + pythonBuild + "<"), "the Python build ID is readable text, not only a hover title");
 const preferences = renderToStaticMarkup(<CigarUpdatePreferencesPanel value={updates} builds={catalog.builds} disabled={false} onAction={noAction} />);
 assert.match(preferences, /notifications and automatic preparation are not available/);
 assert.match(preferences, /aria-disabled="true"[^>]*><span[^>]*>Notify</);

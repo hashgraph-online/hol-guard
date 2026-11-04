@@ -41,9 +41,9 @@ export function CigarVersionsPanel(props: Props) {
     {versions.loading && !data ? <div role="status" className="space-y-3" aria-label="Loading CIGAR versions…">
       {[0, 1, 2].map((row) => <div key={row} className="h-16 rounded-2xl bg-brand-dark/[0.04] motion-safe:animate-pulse" />)}
       <span className="sr-only">Loading CIGAR versions…</span></div> : null}
-    {versions.busy ? <p role="status" className={notice}>Starting. Guard keeps going in the background, so you can leave this page.</p> : null}
+    {versions.busy ? <p role="status" className={notice}>Starting. Keep this page open until Guard confirms the change has started.</p> : null}
     {versions.error ? <div role="alert" className="cigar-note"><strong>CIGAR updates need attention</strong><p>{versions.error}</p><p>Refresh the list before trying another change.</p></div> : null}
-    {versions.tracking ? <p className="break-all text-xs text-brand-dark/60">Last submitted job: {versions.tracking}. Refresh jobs to confirm its outcome.</p> : null}
+    {versions.tracking ? <p className="break-all text-xs text-brand-dark/60">Guard is working on job {versions.tracking} and keeps going if you leave this page. Refresh the list to see how it went.</p> : null}
     {props.dirty ? <p role="status" className={notice}>You can prepare builds now. Save your CIGAR preference edits before preparing or committing a selection.</p> : null}
     {data ? <>
       {activeJobs.length ? <CigarVersionJobsPanel jobs={activeJobs} status={props.status} disabled={disabled} selectionDisabled={selectionDisabled} onAction={choose} /> : null}
