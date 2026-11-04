@@ -161,9 +161,9 @@ fn a_step_whose_ids_this_catalog_does_not_carry_is_dropped() {
         Some("command.retired-extension.rule"),
         None,
     );
-    let coverage = coverage(&hint(vec![git(0), retired], Some(2)), &catalog()).expect("coverage");
-    assert_eq!(indexes(&coverage), vec![0]);
-    assert_eq!(coverage["compound"], true);
+    let covered = coverage(&hint(vec![git(0), retired], Some(2)), &catalog()).expect("coverage");
+    assert_eq!(indexes(&covered), vec![0]);
+    assert_eq!(covered["compound"], true);
     let only_retired = step(0, "command.retired-extension", None, None);
     assert_eq!(coverage(&hint(vec![only_retired], None), &catalog()), None);
 }
@@ -181,10 +181,13 @@ fn a_package_firewall_match_alone_is_not_offered_as_coverage() {
         coverage(&hint(vec![only_firewall], Some(1)), &catalog),
         None
     );
-    let beside_a_rule = vec![git(0), step(1, NODE_PACKAGES, None, Some(firewall.as_str()))];
-    let coverage = coverage(&hint(beside_a_rule, None), &catalog).expect("coverage");
-    assert_eq!(indexes(&coverage), vec![0]);
-    assert_eq!(coverage["compound"], true);
+    let beside_a_rule = vec![
+        git(0),
+        step(1, NODE_PACKAGES, None, Some(firewall.as_str())),
+    ];
+    let covered = coverage(&hint(beside_a_rule, None), &catalog).expect("coverage");
+    assert_eq!(indexes(&covered), vec![0]);
+    assert_eq!(covered["compound"], true);
 }
 
 #[test]
