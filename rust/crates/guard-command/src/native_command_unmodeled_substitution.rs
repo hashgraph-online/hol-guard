@@ -34,7 +34,7 @@ use std::collections::BTreeSet;
 use super::{find_exec_programs, is_assignment, named_words, INTERPRETERS, SHELL_PREFIXES};
 
 /// Stands in for a bounded substitution's output: one ordinary word.
-pub(super) const OUTPUT: &str = "guard_substituted_output";
+const OUTPUT: &str = "guard_substituted_output";
 
 /// Lookups the lookup reader proves on its own. One it left in place names a
 /// word it could not prove is an operand.

@@ -741,17 +741,15 @@ fn reviewable_structure(
         // trailing `&` blocked outright while the same command with a redirect
         // reached review, because the redirect reason wins the parser's scan.
         Some("background_job_not_yet_supported") => {
-            let settled = without_setting_prefixes(normalized);
-            let literal = unquoted_literal(&settled);
+            let literal = unquoted_literal(normalized);
             !background_pipeline(normalized)
-                && (!moves_data(&literal) || literal_redirects_only(&settled))
+                && (!moves_data(&literal) || literal_redirects_only(normalized))
                 && !backgrounded_nested_executor(normalized)
         }
         Some("compound_shell_not_yet_supported") => {
-            let settled = without_setting_prefixes(normalized);
-            let literal = unquoted_literal(&settled);
+            let literal = unquoted_literal(normalized);
             !moves_data(&literal)
-                || literal_redirects_only(&settled)
+                || literal_redirects_only(normalized)
                 || named_xargs_pipeline(normalized)
         }
         // `cat list.txt | xargs -0 rm -f` is a nested executor because `xargs`
@@ -935,105 +933,6 @@ fn moves_data(literal: &str) -> bool {
                     "export" | "declare" | "typeset" | "readonly" | "local" | "unset" | "alias"
                 )
         })
-}
-
-/// The same text with its setting prefixes left out.
-///
-/// A setting prefix hands a literal to the program the text already names,
-/// so the command answers exactly as its unprefixed spelling does, which is
-/// the reading the two arms below it apply. Dropping the word rather than
-/// teaching every reader about it keeps `moves_data` and
-/// `literal_redirects_only` answering for the rest of the text unchanged,
-/// so a heredoc that outlives its command, or a value a substitution filled
-/// in, still answers for what it moves.
-fn without_setting_prefixes(text: &str) -> String {
-    // Every separator the text had stays where it was. `command_words` reads
-    // a newline, a `;` and a `(` as the end of a command, so joining the
-    // words back on spaces would put `LD_PRELOAD=/tmp/x.so ls` on the same
-    // line as the command before it and leave the setting out of every
-    // command position the screens read.
-    let mut out = String::with_capacity(text.len());
-    let mut start = None;
-    for (index, character) in text.char_indices() {
-        if character.is_whitespace() {
-            if let Some(start) = start.take() {
-                out.push_str(kept_beside_a_setting(&text[start..index]));
-            }
-            out.push(character);
-        } else if start.is_none() {
-            start = Some(index);
-        }
-    }
-    if let Some(start) = start {
-        out.push_str(kept_beside_a_setting(&text[start..]));
-    }
-    out
-}
-
-/// The word with its setting prefix left out, which is nothing at all unless
-/// a subshell or brace group opens on the same word: `(PORT=39871 npm start
-/// &)`. That opener is what the text around the setting is made of, so it
-/// stays.
-fn kept_beside_a_setting(word: &str) -> &str {
-    let opened = word.len() - word.trim_start_matches(['(', '{']).len();
-    if setting_prefix(&word[opened..]) {
-        &word[..opened]
-    } else {
-        word
-    }
-}
-
-/// Whether the word sets a value the command beside it reads for itself.
-///
-/// `moves_data` asks whether this text puts data somewhere the floor cannot
-/// read. A setting prefix does not: it hands a literal to the program this
-/// text already names, and that program's owners bound it as they bound the
-/// rest. Reading every assignment as data movement left `(PORT=39871 npm
-/// start > app.log 2>&1 & echo $! > app.pid)` — a server started,
-/// backgrounded and smoke-tested over loopback, the shape of a local
-/// integration test — with a block and no approval row, while the same
-/// command without the setting reached a review card. The names that
-/// redirect what runs, that move a config file, a home or a toolchain, that
-/// inject options into the program (`PATH`, `LD_PRELOAD`, `NODE_OPTIONS`,
-/// `PYTEST_ADDOPTS`), that move a trust anchor or that route a credential
-/// are not settings in this sense and stay unread, as does a value built
-/// from an expansion. An endpoint name such as `PORT` is read here, where
-/// the only question is whether the command may be put on a review card
-/// with that setting in plain view; the screens that decide what runs
-/// unreviewed keep reading it as before.
-fn setting_prefix(word: &str) -> bool {
-    use crate::command_compatibility::environment as settings;
-    let Some((name, value)) = word.split_once('=') else {
-        return false;
-    };
-    // The name has to be a plain identifier and the value plain text: the
-    // shell reads `FOO=1>>out` as a setting with a redirect glued to it, and
-    // `FOO=1;cmd` as a setting and then a command. Taking either for one word
-    // dropped the redirect or the separator along with the setting, and the
-    // screens that answer for a write never saw it.
-    !name.is_empty()
-        && name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '_')
-        && !value.contains(['\\', '\n', '\r'])
-        // Quoting has to close inside the word, or dropping it would leave
-        // the quote it opened hanging over the rest of the text.
-        && value.matches('\'').count() % 2 == 0
-        && value.matches('"').count() % 2 == 0
-        // An operator the shell would act on is read outside quoting only:
-        // `FOO=1>>out` is a setting with a redirect glued to it, while
-        // `LOG_FORMAT='(%level%)'` is a format string and runs nothing.
-        && !unquoted_literal(value).contains([
-            '$', '`', '<', '>', ';', '&', '|', '(', ')',
-        ])
-        && crate::pretool::generic::chain_literals::ordinary_name(name)
-        && !settings::code_or_redirect_environment_name(name)
-        && !settings::trust_anchor_environment_name(name)
-        && !settings::credential_routing_environment_name(name)
-        // A value a substitution filled in is not a literal this text holds:
-        // `x=$(curl -s https://example.invalid)` names the fetch, not a
-        // setting, and keeps its floor.
-        && !value.contains(substitution::OUTPUT)
 }
 
 /// Every word the shell could read as a program name or keyword token, with
