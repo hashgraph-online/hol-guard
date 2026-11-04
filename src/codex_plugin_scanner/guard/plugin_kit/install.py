@@ -931,6 +931,10 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
     def undo_marketplace() -> str:
         return _undo(program, remove_marketplace, context) if added else ""
 
+    def undo_plugin() -> str:
+        """A plugin Guard could not uninstall keeps its marketplace."""
+        return _undo(program, ["claude", "plugin", "uninstall", plugin_id], context) or undo_marketplace()
+
     def run_install(arguments: Sequence[str]) -> runner.Completed:
         """Run Claude Code's install; if it never finishes, take back what
         Guard added before reporting the failure."""
@@ -938,14 +942,11 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
         try:
             return runner.run(program, arguments, capture=True)
         except runner.RunnerError as error:
-            undone = ""
             try:
                 present = (_claude_install(claude_state(context.home, plugin_id)) or (True, None))[0]
             except _StoppedError:
                 present = True
-            if present:
-                undone = _undo(program, ["claude", "plugin", "uninstall", plugin_id], context)
-            undone += undo_marketplace()
+            undone = undo_plugin() if present else undo_marketplace()
             raise runner.RunnerError(
                 f"{error}{undone}" if undone else f"{error} Guard removed what it added."
             ) from None
@@ -998,7 +999,7 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
         try:
             state = claude_state(context.home, plugin_id, marketplace)
         except _StoppedError as stop:
-            undone = _undo(program, ["claude", "plugin", "uninstall", plugin_id], context) + undo_marketplace()
+            undone = undo_plugin()
             raise _StoppedError(
                 "failed",
                 f"{stop} Guard could not check the install command Claude Code ran, so "
@@ -1013,7 +1014,7 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
             else f"installed from the {marketplace} marketplace at commit {_short(head)}, "
             f"not the commit HOL scanned ({_short(expected)})"
         )
-        undone = _undo(program, ["claude", "plugin", "uninstall", plugin_id], context) + undo_marketplace()
+        undone = undo_plugin()
         raise _StoppedError(
             "blocked",
             f"Claude Code {problem}. "
@@ -1024,14 +1025,14 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
     try:
         found = _claude_install(claude_state(context.home, plugin_id))
     except _StoppedError as stop:
-        undone = _undo(program, ["claude", "plugin", "uninstall", plugin_id], context) + undo_marketplace()
+        undone = undo_plugin()
         raise _StoppedError(
             "failed",
             f"{stop} Guard could not check which commit Claude Code installed, so "
             + (f"it tried to remove the plugin.{undone}" if undone else "it removed the plugin again."),
         ) from None
     if found is None:
-        undone = _undo(program, ["claude", "plugin", "uninstall", plugin_id], context) + undo_marketplace()
+        undone = undo_plugin()
         raise _StoppedError(
             "failed",
             f"Claude Code finished, but {_claude_unreadable(context.home)} to check which commit it installed, so "
@@ -1040,7 +1041,7 @@ def _install_claude(step: Mapping[str, Any], program: runner.Program, context: _
     commit = found[1]
     if commit == expected:
         return added
-    undone = _undo(program, ["claude", "plugin", "uninstall", plugin_id], context) + undo_marketplace()
+    undone = undo_plugin()
     raise _StoppedError(
         "blocked",
         f"Claude Code installed commit {_short(commit)}, not the commit HOL scanned ({_short(expected)}). "

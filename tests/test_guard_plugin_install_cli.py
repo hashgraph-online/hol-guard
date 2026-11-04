@@ -461,6 +461,18 @@ def test_claude_code_installing_another_commit_is_rolled_back(
     assert install.recorded_installs(guard_home) == {}
 
 
+def test_a_plugin_claude_code_could_not_uninstall_keeps_its_marketplace(
+    spec_file: Path, runtimes: FakeRuntimes
+) -> None:
+    runtimes.claude_commit = OTHER
+    runtimes.exit_codes[("claude", "plugin", "uninstall")] = 1
+    exit_code, _output, error = _install(spec_file, "--apply", "--yes", "--runtime", "claude-code")
+    assert exit_code == 4
+    assert "Guard could not remove it. Remove it yourself with: claude plugin uninstall toolgate@acme" in error
+    assert runtimes.ran[-1] == ["claude", "plugin", "uninstall", "toolgate@acme"]
+    assert ["claude", "plugin", "marketplace", "remove", "acme"] not in runtimes.ran
+
+
 def test_claude_code_install_is_rolled_back_when_its_commit_cannot_be_read(
     spec_file: Path, runtimes: FakeRuntimes, guard_home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
