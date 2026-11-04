@@ -124,7 +124,7 @@ fn a_binding_to_a_plain_parameter_reaches_review() {
     let controls = controls(github("enabled", None), false);
     for command in [
         "s=$?",
-        "status=\"$?\"",
+        "rc=\"$?\"",
         "count=$#",
         "first=$1",
         "dir=$ROOT",
@@ -150,6 +150,7 @@ fn a_binding_that_evaluates_its_value_is_not_a_plain_binding() {
         "x=${!NAME}",
         "x=${PATH:=/tmp/tools}; ls",
         "x=${X@P}",
+        "x=$GIT_DIR; ls",
     ] {
         let (action, _code) = decision(&controls, command);
         assert_ne!(action, "allow", "{command}");

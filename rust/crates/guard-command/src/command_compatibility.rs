@@ -283,8 +283,9 @@ pub(crate) fn sets_ordinary_variables(segment: &CommandSegmentV1) -> bool {
 /// expand to text and run nothing, so the item still runs no program. It is
 /// not literal, so it is no proof of its own: it reaches the compatibility
 /// pass instead of failing it. Command substitution, arithmetic, subscripts
-/// and the `${...}` operator forms can run code or set other names, so any
-/// of them keeps the evaluation failure.
+/// and the `${...}` operator forms can run code or set other names, and a
+/// read of a steering name such as `$GIT_DIR` carries that setting into an
+/// ordinary one, so any of them keeps the evaluation failure.
 fn binds_plain_parameters(segment: &CommandSegmentV1) -> bool {
     !segment.environment_names.is_empty()
         && segment.tokens.len() == segment.environment_names.len()
@@ -310,25 +311,24 @@ fn plain_parameter_expansions(text: &str) -> bool {
             '\\' => index += 2,
             '$' => {
                 let rest = &characters[index + 1..];
-                let length = match rest.first() {
-                    Some('{') => {
-                        let inner = &rest[1..];
-                        let length = match inner.first() {
-                            Some(character) if special(character) => 1,
-                            _ => inner.iter().take_while(|c| name(c)).count(),
-                        };
-                        if length == 0 || inner.get(length) != Some(&'}') {
+                let braced = rest.first() == Some(&'{');
+                let inner = &rest[usize::from(braced)..];
+                let length = match inner.first() {
+                    Some(character) if special(character) => 1,
+                    Some(character) if name(character) => {
+                        let length = inner.iter().take_while(|c| name(c)).count();
+                        let referenced: String = inner[..length].iter().collect();
+                        if !environment::ordinary_setting_name(&referenced) {
                             return false;
                         }
-                        length + 2
-                    }
-                    Some(character) if special(character) => 1,
-                    Some(character) if name(character) && !character.is_ascii_digit() => {
-                        rest.iter().take_while(|c| name(c)).count()
+                        length
                     }
                     _ => return false,
                 };
-                index += 1 + length;
+                if braced && inner.get(length) != Some(&'}') {
+                    return false;
+                }
+                index += 1 + length + 2 * usize::from(braced);
             }
             _ => index += 1,
         }
