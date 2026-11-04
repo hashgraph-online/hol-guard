@@ -415,6 +415,9 @@ fn statements(text: &str) -> Option<Vec<String>> {
             }
             continue;
         }
+        // A backslash puts the character after it inside the word, a space
+        // included, so `echo a\ #` is one word and the `#` is ordinary text.
+        let escaped_here = escaped && !single;
         if single {
             single = character != '\'';
         } else if escaped {
@@ -436,7 +439,7 @@ fn statements(text: &str) -> Option<Vec<String>> {
                 _ => {}
             }
         }
-        word_start = !single && !double && character.is_whitespace();
+        word_start = !escaped_here && !single && !double && character.is_whitespace();
         if let Some(piece) = pieces.last_mut() {
             piece.push(character);
         }

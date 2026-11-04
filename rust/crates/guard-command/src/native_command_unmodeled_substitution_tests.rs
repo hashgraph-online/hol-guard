@@ -568,3 +568,13 @@ fn a_process_substitution_an_assignment_keeps_names_its_receiver() {
     let bounded = reviewable_substitutions(command).unwrap();
     assert!(bounded.programs.contains("gh"), "{command}");
 }
+
+#[test]
+fn an_escaped_space_does_not_open_a_comment() {
+    // `echo a\ #` is one word the shell prints as `a #`, so the `#` opens no
+    // comment and the statement after it is still a statement. Dropping the
+    // rest of the line there hid the receiver from the owner check.
+    let command = r#"id=$(cat id); echo a\ #; gh pr view "$id""#;
+    let bounded = reviewable_substitutions(command).unwrap();
+    assert!(bounded.programs.contains("gh"), "{command}");
+}
