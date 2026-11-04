@@ -34,7 +34,12 @@ from pathlib import Path
 from typing import Literal
 
 from ..daemon.atomic_replace import replace_file
-from .cloud_actions_host_config import HostConfigPlan, read_settings_bytes, render_entry_undo
+from .cloud_actions_host_config import (
+    HostConfigNativeUnavailableError,
+    HostConfigPlan,
+    read_settings_bytes,
+    render_entry_undo,
+)
 
 _BACKUP_FORMAT = "guard.cloud-actions.settings-backup.v1"
 _KEEP_BACKUPS = 10
@@ -206,6 +211,12 @@ def _undo_entry(backup: HostConfigBackup, *, current: bytes | None, before: byte
         if current is None:
             raise ValueError("missing")
         restored, entry_removed = render_entry_undo(backup.ai_tool, current=current, written=backup.entry, prior=before)
+    except HostConfigNativeUnavailableError:
+        raise HostConfigWriteError(
+            "native_unavailable",
+            f"Guard's native runtime is not available, so the hol-guard-cloud entry in {path} was left as it is. "
+            "Run hol-guard doctor, then try again.",
+        ) from None
     except ValueError:
         raise HostConfigWriteError(
             "changed_since_apply",

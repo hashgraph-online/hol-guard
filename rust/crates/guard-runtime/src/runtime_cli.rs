@@ -213,6 +213,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = network_status_validation::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if cloud_actions_host_config::is_command(command) && flag == "--stdin" => {
+            let response = cloud_actions_host_config::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if local_skill_index::is_command(command) && flag == "--stdin" => {
             let response = local_skill_index::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
