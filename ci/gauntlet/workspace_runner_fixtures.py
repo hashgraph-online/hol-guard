@@ -36,6 +36,10 @@ WORKSPACE_HEAP_PREFIX_CASE = "omp-native-workspace-node-options-heap-prefix"
 # The setting only turns on Node's module VM classes, so the run has to finish
 # the same way the unprefixed launch does.
 WORKSPACE_VM_MODULES_PREFIX_CASE = "omp-native-workspace-node-options-vm-modules-prefix"
+# The same install, launched with the debug namespaces a developer turns on in
+# front of it. The pattern only chooses which of the project's own loggers
+# print, so the run has to finish the same way the unprefixed launch does.
+WORKSPACE_DEBUG_PATTERN_PREFIX_CASE = "omp-native-workspace-debug-pattern-prefix-npx-jest"
 # The same install, launched with npm's own logging key written in front of
 # it. The setting only decides how much npm prints, so the run has to finish
 # the same way the unprefixed launch does.
@@ -125,6 +129,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_NPM_EXEC_CASE,
         WORKSPACE_HEAP_PREFIX_CASE,
         WORKSPACE_VM_MODULES_PREFIX_CASE,
+        WORKSPACE_DEBUG_PATTERN_PREFIX_CASE,
         WORKSPACE_NPM_CONFIG_PREFIX_CASE,
         WORKSPACE_MOCHA_CASE,
         WORKSPACE_AVA_CASE,
