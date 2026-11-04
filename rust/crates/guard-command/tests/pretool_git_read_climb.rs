@@ -91,14 +91,13 @@ const SIBLING_READS: &[&str] = &[
     "cd ../api && git branch --show-current; git status --short",
 ];
 
-/// Climb proofs are Unix-only (`sibling::climbed` refuses every climb on
-/// Windows), so there the read keeps its review.
+/// The climb is proved on every platform. Windows refused every one of them,
+/// because the proof compared the directory with the `\\?\` verbatim form
+/// `canonicalize` answers with there and no reported directory is written
+/// that way, so these reads fell through to the execution-context review on
+/// Windows alone.
 fn assert_climb_proof(result: &guard_contracts::PreToolResultV1, label: &str) {
-    if cfg!(windows) {
-        assert_ne!(result.decision, "allow", "{label}");
-    } else {
-        assert_ne!(result.reason_code, FLOOR, "{label}");
-    }
+    assert_ne!(result.reason_code, FLOOR, "{label}");
 }
 
 #[test]
