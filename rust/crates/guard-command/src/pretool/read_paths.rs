@@ -13,6 +13,8 @@ mod missing;
 use missing::missing_absolute_read_allowed;
 #[path = "hidden_listing.rs"]
 pub(super) mod hidden_listing;
+#[path = "omp_file_url.rs"]
+mod omp_file_url;
 #[path = "omp_json_query.rs"]
 mod omp_json_query;
 #[path = "omp_read_targets.rs"]

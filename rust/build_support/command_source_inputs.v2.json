@@ -488,6 +488,7 @@
       "src/pretool/npm_environment.rs",
       "src/pretool/npm_reads.rs",
       "src/pretool/npmrc_keys.rs",
+      "src/pretool/omp_file_url.rs",
       "src/pretool/omp_hashline_writes.rs",
       "src/pretool/omp_json_query.rs",
       "src/pretool/omp_read_targets.rs",

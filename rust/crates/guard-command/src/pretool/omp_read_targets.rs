@@ -8,11 +8,16 @@ use super::{
 
 /// OMP's `read` tool accepts a bounded source selector after a literal-path
 /// probe. Keep that host-specific syntax out of shared command/file proofs.
+/// A target spelled as a `file://` URL is first reduced to the path it
+/// denotes (see `omp_file_url`), so the URL and the plain path are proved the
+/// same way; a URL that names no plain local path is left for review.
 pub(in crate::pretool) fn bounded_omp_file_read_target(
     value: &str,
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
+    let resolved = super::omp_file_url::local_file_url_path(value);
+    let value = resolved.as_deref().unwrap_or(value);
     if let Some(base) = super::omp_json_query::json_query_base(value) {
         // The host queries the file only when it exists; a missing one falls
         // back to a workspace suffix match, which this proof does not model.
@@ -126,6 +131,11 @@ pub(in crate::pretool) fn bounded_omp_selector_requires_review(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
+    // A resolved `file://` target is judged as the path it denotes, so only a
+    // selector the resolved path itself spells is unsupported. A URL this
+    // resolver cannot reduce to a local path keeps the review it has today.
+    let resolved = super::omp_file_url::local_file_url_path(value);
+    let value = resolved.as_deref().unwrap_or(value);
     matches!(
         bounded_selector_path(value, home_dir, cwd),
         BoundedSelectorPath::Unsupported

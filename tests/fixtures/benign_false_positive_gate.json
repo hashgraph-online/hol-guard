@@ -5993,6 +5993,90 @@
       "expect": "allow"
     },
     {
+      "id": "omp-read-file-url-sibling-checkout",
+      "fix_area": "read",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://${HOME}/other-project"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-read-file-url-sibling-note",
+      "fix_area": "read",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://${HOME}/other-project/notes.md"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-read-file-url-localhost-sibling-source",
+      "fix_area": "read",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://localhost${HOME}/other-project/src/report.ts"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-omp-read-file-url-remote-authority",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://remote.example${HOME}/other-project/notes.md"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-read-file-url-encoded-credential-directory",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://${HOME}/%2essh/id_rsa"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-read-file-url-encoded-climb-to-credential",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://${HOME}/other-project/%2e%2e/.ssh/id_rsa"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
+    },
+    {
       "id": "read-auth-feature-readme",
       "fix_area": "read",
       "harnesses": [
