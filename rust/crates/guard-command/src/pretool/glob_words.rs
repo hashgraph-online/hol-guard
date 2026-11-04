@@ -384,56 +384,101 @@ pub(super) fn printf_sets_variable(segment: &CommandSegmentV1) -> bool {
 /// a `%n` conversion, which stores a count in the variable it names. printf
 /// reads options only before its format and stops at `--`, so a `-v` after
 /// either is printed data. The shell removes quoting anywhere in a word, so
-/// `"-"v` and `-''v` reach printf as `-v`. Any other leading option, or a
-/// format the shell builds from an expansion, counts as one that may; `$`
-/// inside single quotes is printed as written.
+/// `"-"v` and `-''v` reach printf as `-v`, and takes redirections out of the
+/// arguments wherever they stand (`printf 2>/dev/null -v PATH dir`). Any
+/// other leading option, a format the shell builds from an expansion, or a
+/// word that mixes a redirection with other text counts as one that may.
 pub(super) fn printf_assigns(text: &str) -> bool {
     let words = shell_words(text);
     let Some(at) = words
         .iter()
-        .position(|(word, _)| word == "printf" || word.ends_with("/printf"))
+        .position(|word| word.value == "printf" || word.value.ends_with("/printf"))
     else {
         return true;
     };
-    let mut arguments = words[at + 1..].iter();
+    let mut arguments = Vec::new();
+    let mut rest = words[at + 1..].iter();
+    while let Some(word) = rest.next() {
+        if !word.redirect {
+            arguments.push(word);
+            continue;
+        }
+        let operator = word
+            .value
+            .trim_start_matches(|character: char| character.is_ascii_digit());
+        match operator.trim_start_matches(['<', '>', '&', '|']) {
+            // A bare operator (`2>`) takes the next word as its target.
+            "" => {
+                rest.next();
+            }
+            target if target.len() < operator.len() && !target.contains(['<', '>']) => {}
+            _ => return true,
+        }
+    }
+    let mut arguments = arguments.into_iter();
     let mut format = arguments.next();
-    if format.is_some_and(|(word, expands)| word == "--" && !expands) {
+    if format.is_some_and(|word| word.value == "--" && !word.expands) {
         format = arguments.next();
-    } else if format.is_some_and(|(word, _)| word.starts_with('-')) {
+    } else if format.is_some_and(|word| word.value.starts_with('-')) {
         return true;
     }
-    format.is_some_and(|(word, expands)| *expands || format_counts(word))
+    format.is_some_and(|word| word.expands || format_counts(&word.value))
 }
 
-/// The words of `text`, each with its quoting removed and whether any of it
-/// expands: a `$` or backquote outside single quotes.
-fn shell_words(text: &str) -> Vec<(String, bool)> {
+/// A word of shell text with its quoting removed.
+#[derive(Default)]
+struct ShellWord {
+    value: String,
+    /// A `$` or backquote outside single quotes, or an ANSI-C escape that
+    /// names a character by number (`$'\x25'`).
+    expands: bool,
+    /// An unquoted `<` or `>`.
+    redirect: bool,
+}
+
+/// The words of `text`. ANSI-C quoting (`$'...'`) is literal text.
+fn shell_words(text: &str) -> Vec<ShellWord> {
     let mut words = Vec::new();
-    let (mut word, mut expands, mut started) = (String::new(), false, false);
-    let (mut single, mut double) = (false, false);
-    let mut characters = text.chars();
+    let mut word = ShellWord::default();
+    let (mut started, mut single, mut double, mut ansi) = (false, false, false, false);
+    let mut characters = text.chars().peekable();
     while let Some(character) = characters.next() {
         match character {
+            '\'' if ansi => ansi = false,
+            '\\' if ansi => match characters.next() {
+                Some(escaped) if "xuUc01234567".contains(escaped) => word.expands = true,
+                escaped => word.value.extend(escaped),
+            },
+            character if ansi => word.value.push(character),
+            '$' if !single && !double && characters.peek() == Some(&'\'') => {
+                characters.next();
+                ansi = true;
+            }
             '\'' if !double => single = !single,
             '"' if !single => double = !double,
-            '\\' if !single => word.extend(characters.next()),
+            '\\' if !single => word.value.extend(characters.next()),
             '$' | '`' if !single => {
-                expands = true;
-                word.push(character);
+                word.expands = true;
+                word.value.push(character);
+            }
+            '<' | '>' if !single && !double => {
+                word.redirect = true;
+                word.value.push(character);
             }
             character if character.is_whitespace() && !single && !double => {
+                let ended = std::mem::take(&mut word);
                 if started {
-                    words.push((std::mem::take(&mut word), expands));
+                    words.push(ended);
                 }
-                (expands, started) = (false, false);
+                started = false;
                 continue;
             }
-            character => word.push(character),
+            character => word.value.push(character),
         }
         started = true;
     }
     if started {
-        words.push((word, expands));
+        words.push(word);
     }
     words
 }

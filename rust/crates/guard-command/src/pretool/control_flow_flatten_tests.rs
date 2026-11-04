@@ -427,6 +427,10 @@ fn split_quoted_printf_option_still_assigns() {
         "printf '-''v' PATH '%s'",
         "printf 'x%n' PATH",
         "printf \"a $f\" PATH",
+        "printf 2>/dev/null -v PATH /tmp/tools",
+        "printf > out -v PATH /tmp/tools",
+        "printf -v>/dev/null PATH /tmp/tools",
+        "printf $'\\x25n' PATH",
     ] {
         assert!(super::command_word_changes_shell_state(text), "{text}");
     }
@@ -438,6 +442,9 @@ fn split_quoted_printf_option_still_assigns() {
         "printf '$HOME'",
         "printf '%s %s\\n' \"$a\" \"$b\"",
         "printf '%%n'",
+        "printf $'%s\\n' hello",
+        "printf '%s\\n' hello 2>/dev/null",
+        "printf 2>&1 '%s\\n' hello",
     ] {
         assert!(!super::command_word_changes_shell_state(text), "{text}");
     }
