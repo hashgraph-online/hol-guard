@@ -445,4 +445,22 @@ fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
         "allow",
         "{redirected}"
     );
+    // A path-qualified spelling is a local program wearing a builtin's name,
+    // not the builtin, so it stays a step that could have written Git's
+    // configuration.
+    std::fs::write(
+        repository.join("echo"),
+        "#!/bin/sh\ngit config core.pager true\n",
+    )
+    .unwrap();
+    for disguised in [
+        "./echo hello; git status --short",
+        "./echo hello && git status --short --branch",
+    ] {
+        assert_ne!(
+            action(&home, &repository, disguised),
+            "allow",
+            "{disguised}"
+        );
+    }
 }

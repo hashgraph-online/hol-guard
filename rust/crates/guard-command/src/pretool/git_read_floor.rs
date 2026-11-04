@@ -266,11 +266,17 @@ fn verdict(
     // excluded because moving the directory is exactly what the checks above
     // this one account for.
     let writes_nothing = |segment: &crate::CommandSegmentV1| {
-        model.confidence == "exact"
-            && !model.path_overridden
-            && model.wrapper_chain.is_empty()
+        segment.executable.as_deref().is_some_and(|executable| {
+            // Only a bare name reaches this arm. `creates_nothing` admits a
+            // builtin by its basename, so a path-qualified spelling such as
+            // `./echo` would carry a local program of any behaviour -- one
+            // that can write Git's configuration -- in under a builtin's
+            // name. A bare name is the shell's own lookup, which the segment
+            // proof below already screens for an overridden `PATH`.
+            super::executable_basename(executable) == executable && executable != "cd"
+        }) && !segment.path_overridden
+            && segment.wrapper_chain.is_empty()
             && segment.environment_names.is_empty()
-            && segment.executable.as_deref() != Some("cd")
             && super::search::grep::creates_nothing(segment)
     };
     let settled = |prior: usize, later: &crate::CommandSegmentV1| {
