@@ -8,6 +8,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from codex_plugin_scanner.guard.aibom_trust_metadata import separate_untrusted_adapter_trust_metadata
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_runner_authority import (
@@ -24,7 +25,6 @@ from codex_plugin_scanner.guard.runtime.trust_attestation import (
     sign_trust_attestation,
     trust_claim_hash,
 )
-from codex_plugin_scanner.guard.trust_metadata_boundary import separate_untrusted_adapter_trust_metadata
 from tests.trust_attestation_verify_support import (
     GuardTrustAttestationVerificationPolicy,
     build_trust_attestation_verification_key,

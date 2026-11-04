@@ -13,12 +13,24 @@
 //! `inventory_url_redaction` serves, so a value exports the same either way.
 //!
 //! `{"op": "artifact_metadata", "home_dir": str, "workspace_dir": str|null,
-//! "cwd": str, "artifacts": [<JSON text>, ...]}` answers `{"metadata":
-//! [<JSON text>, ...]}`, one answer per artifact. Each artifact is
+//! "cwd": str, "artifacts": [<JSON text>, ...], "window": null}` answers
+//! `{"metadata": [<JSON text>, ...]}`, one answer per artifact. Each artifact is
 //! `{"metadata": object, "artifact_type": str, "config_path": str|null,
 //! "command": str|null, "url": str|null, "transport": str|null}`; it travels
 //! as JSON text so its key order survives, and so a long list inside it is
 //! not refused as a wide request.
+//!
+//! One artifact too large for its answer to fit a response is read in parts:
+//! with `"window": {"start": int, "length": int}` and exactly one artifact, the
+//! answer is `{"metadata": [<part>], "total": int}`, the part being the answer
+//! text's characters from `start`, at most `length` of them, and `total` the
+//! answer text's length in characters.
+//!
+//! `{"op": "separate_trust", "metadata": <JSON text>}` applies only the
+//! trust-claim separation, for metadata the AIBOM enrichment builds itself. It
+//! answers `{"drop": <JSON text>, "evidence": <JSON text>|null}`: the keys to
+//! remove and the `unverifiedAdapterEvidence` value to append, so the caller
+//! keeps its own values and key order for everything else.
 
 use std::path::Path;
 
@@ -33,7 +45,19 @@ use crate::hook_env_stamp::{dumps, set_member as set};
 use crate::pyjson::PyVal;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
-const KEYS: [&str; 5] = ["op", "home_dir", "workspace_dir", "cwd", "artifacts"];
+const KEYS: [&str; 6] = [
+    "op",
+    "home_dir",
+    "workspace_dir",
+    "cwd",
+    "artifacts",
+    "window",
+];
+const WINDOW_KEYS: [&str; 2] = ["start", "length"];
+const SEPARATE_KEYS: [&str; 2] = ["op", "metadata"];
+/// The most characters one window answers. Even a part made only of characters
+/// JSON writes as six-byte escapes stays well inside a response.
+const MAX_WINDOW: u64 = 256 * 1024;
 const ARTIFACT_KEYS: [&str; 6] = [
     "metadata",
     "artifact_type",
@@ -111,6 +135,11 @@ pub(super) fn dispatch(fields: &Map<String, Value>) -> KindResult {
         .and_then(Value::as_array)
         .filter(|artifacts| artifacts.len() <= MAX_ARTIFACTS)
         .ok_or(ERR_INVALID)?;
+    let window = match fields.get("window") {
+        Some(Value::Null) => None,
+        Some(Value::Object(window)) if artifacts.len() == 1 => Some(answer_window(window)?),
+        _ => return Err(ERR_INVALID),
+    };
     let metadata = artifacts
         .iter()
         .map(|artifact| {
@@ -122,10 +151,58 @@ pub(super) fn dispatch(fields: &Map<String, Value>) -> KindResult {
                 mapped,
                 &mut answer,
             );
-            Ok(Value::from(answer))
+            Ok(answer)
         })
-        .collect::<Result<Vec<Value>, &'static str>>()?;
-    Ok(json!({ "metadata": metadata }))
+        .collect::<Result<Vec<String>, &'static str>>()?;
+    let Some((start, length)) = window else {
+        return Ok(json!({ "metadata": metadata }));
+    };
+    let text = &metadata[0];
+    let part: String = text.chars().skip(start).take(length).collect();
+    Ok(json!({ "metadata": [part], "total": text.chars().count() }))
+}
+
+/// `separate_untrusted_adapter_trust_metadata(metadata)`, as the keys it
+/// removes and the evidence it appends.
+pub(super) fn separate_trust(fields: &Map<String, Value>) -> KindResult {
+    exact_keys(fields, &SEPARATE_KEYS)?;
+    let (metadata, mapped) = parse(text(fields, "metadata")?)?;
+    let PyVal::Dict(entries) = metadata else {
+        return Err(ERR_INVALID);
+    };
+    let dropped: Vec<PyVal> = entries
+        .iter()
+        .filter(|(key, _)| {
+            key == EVIDENCE_KEY || is_prior_proof_key(key) || is_untrusted_trust_key(key)
+        })
+        .map(|(key, _)| PyVal::Str(key.clone()))
+        .collect();
+    let mut drop = String::new();
+    dumps(&PyVal::List(dropped), false, mapped, &mut drop);
+    let separated = separate_untrusted_trust(entries);
+    let evidence = get(&separated, EVIDENCE_KEY).map(|value| {
+        let mut answer = String::new();
+        dumps(value, false, mapped, &mut answer);
+        answer
+    });
+    Ok(json!({ "drop": drop, "evidence": evidence }))
+}
+
+/// The window's start and length, in characters.
+fn answer_window(window: &Map<String, Value>) -> Result<(usize, usize), &'static str> {
+    exact_keys(window, &WINDOW_KEYS)?;
+    let start = window
+        .get("start")
+        .and_then(Value::as_u64)
+        .ok_or(ERR_INVALID)?;
+    let length = window
+        .get("length")
+        .and_then(Value::as_u64)
+        .filter(|length| (1..=MAX_WINDOW).contains(length))
+        .ok_or(ERR_INVALID)?;
+    let start = usize::try_from(start).map_err(|_| ERR_INVALID)?;
+    let length = usize::try_from(length).map_err(|_| ERR_INVALID)?;
+    Ok((start, length))
 }
 
 /// `_safe_artifact_metadata(artifact, home_dir=..., workspace_dir=...)`.

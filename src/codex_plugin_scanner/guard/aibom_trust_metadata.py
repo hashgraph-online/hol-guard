@@ -8,8 +8,9 @@ authority.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from ..checks.skill_security import resolve_skill_security_context
 from ..models import ScanOptions, Severity
@@ -19,7 +20,6 @@ from ..trust_models import TrustDomainScore
 from ..trust_plugin_scoring import build_plugin_domain
 from ..trust_skill_scoring import build_skill_domain
 from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
-from .trust_metadata_boundary import separate_untrusted_adapter_trust_metadata
 
 _INVENTORY_TRUST_SCAN_OPTIONS = ScanOptions(cisco_skill_scan="off")
 
@@ -82,6 +82,26 @@ def trust_resolution_from_domain(
     if not isinstance(resolution, dict):
         raise NativeRunnerAuthorityError("native_runner_authority_result_invalid")
     return resolution
+
+
+def separate_untrusted_adapter_trust_metadata(metadata: dict[str, object]) -> dict[str, object]:
+    """Move adapter-authored trust claims under ``unverifiedAdapterEvidence`` and drop proof material.
+
+    The native export redaction names the keys to remove and the evidence to
+    append, so every other member keeps its own value and place.
+    """
+    request = {"op": "separate_trust", "metadata": json.dumps(metadata, default=str)}
+    answer = native_runner_authority("inventory_export_redaction", request)
+    try:
+        dropped, evidence = json.loads(answer["drop"]), answer["evidence"]
+        clean = {key: value for key, value in metadata.items() if key not in cast("list[object]", dropped)}
+        if evidence is not None:
+            clean["unverifiedAdapterEvidence"] = cast("object", json.loads(evidence))
+    except (KeyError, TypeError, ValueError) as error:
+        raise NativeRunnerAuthorityError("native_runner_authority_result_invalid") from error
+    if not isinstance(dropped, list) or not isinstance(clean.get("unverifiedAdapterEvidence", {}), dict):
+        raise NativeRunnerAuthorityError("native_runner_authority_result_invalid")
+    return clean
 
 
 def apply_local_trust_metadata(

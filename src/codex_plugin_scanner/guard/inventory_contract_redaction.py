@@ -19,6 +19,8 @@ from .inventory_contract_constants import (
 _NATIVE_VALUE_BUDGET = 128 * 1024
 # Redaction can lengthen a value several times over; the answer must still fit.
 _METADATA_BUDGET = 256 * 1024
+# An artifact over the budget is answered alone, in windows of this many characters.
+_METADATA_WINDOW = 256 * 1024
 
 
 def redact_local_path(path: str | Path, *, home_dir: Path | None = None) -> str:
@@ -154,7 +156,10 @@ def _safe_artifact_metadata(
     entry, roots = _metadata_entry(artifact), _native_url.roots(home_dir, workspace_dir)
     cache = _native_url.pass_answers()
     text = cache.get(_metadata_key(entry, roots)) if cache is not None else None
-    metadata = json.loads(text if isinstance(text, str) else _native_artifact_metadata([entry], roots)[0])
+    try:
+        metadata = json.loads(text if isinstance(text, str) else _native_artifact_metadata([entry], roots)[0])
+    except ValueError as error:
+        raise _native_url.NativeInventoryUrlRedactionError("native_inventory_url_redaction_unavailable") from error
     if not isinstance(metadata, dict):
         raise _native_url.NativeInventoryUrlRedactionError("native_inventory_url_redaction_unavailable")
     return metadata
@@ -205,10 +210,35 @@ def _wire(value: object) -> object:
 
 
 def _native_artifact_metadata(entries: list[str], roots: dict[str, str | None]) -> list[str]:
-    texts = _native_export_redaction({"op": "artifact_metadata", **roots, "artifacts": entries}).get("metadata")
+    if len(entries) == 1 and len(entries[0]) > _METADATA_BUDGET:
+        return [_windowed_artifact_metadata(entries[0], roots)]
+    request: dict[str, object] = {"op": "artifact_metadata", **roots, "artifacts": entries, "window": None}
+    texts = _native_export_redaction(request).get("metadata")
     if not isinstance(texts, list) or len(texts) != len(entries) or not all(isinstance(text, str) for text in texts):
         raise _native_url.NativeInventoryUrlRedactionError("native_inventory_url_redaction_unavailable")
     return cast("list[str]", texts)
+
+
+def _windowed_artifact_metadata(entry: str, roots: dict[str, str | None]) -> str:
+    """One large artifact's metadata, read in parts so no answer nears the response limit."""
+    parts: list[str] = []
+    start, total = 0, None
+    while total is None or start < total:
+        window = {"start": start, "length": _METADATA_WINDOW}
+        answer = _native_export_redaction({"op": "artifact_metadata", **roots, "artifacts": [entry], "window": window})
+        texts, answered_total = answer.get("metadata"), answer.get("total")
+        part = texts[0] if isinstance(texts, list) and len(texts) == 1 else None
+        if (
+            not isinstance(part, str)
+            or not isinstance(answered_total, int)
+            or answered_total != (total if total is not None else answered_total)
+            or (not part and start < answered_total)
+        ):
+            raise _native_url.NativeInventoryUrlRedactionError("native_inventory_url_redaction_unavailable")
+        total = answered_total
+        parts.append(part)
+        start += len(part)
+    return "".join(parts)
 
 
 def _redact_known_path(value: str, home_dir: Path, workspace_dir: Path | None) -> str:

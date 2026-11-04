@@ -237,8 +237,55 @@ def test_artifact_metadata_is_sent_as_json_text_and_a_bad_answer_fails_closed(mo
         "url": None,
         "transport": None,
     }
-    bad_answers: tuple[dict[str, object], ...] = ({"metadata": []}, {"metadata": ["[]"]}, {"metadata": [1]}, {})
+    assert request["window"] is None
+    bad_answers: tuple[dict[str, object], ...] = (
+        {"metadata": []},
+        {"metadata": ["[]"]},
+        {"metadata": [1]},
+        {"metadata": ["{not json"]},
+        {},
+    )
     for bad in bad_answers:
         answer = bad
         with pytest.raises(NativeInventoryUrlRedactionError):
             redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None)
+
+
+def test_a_large_artifact_is_answered_in_windows(monkeypatch) -> None:
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    import pytest
+
+    from codex_plugin_scanner.guard import inventory_contract_redaction as redaction
+    from codex_plugin_scanner.guard.native_inventory_url_redaction import NativeInventoryUrlRedactionError
+
+    monkeypatch.setattr(redaction, "_METADATA_BUDGET", 16)
+    monkeypatch.setattr(redaction, "_METADATA_WINDOW", 7)
+    whole = json.dumps({"tools": ["\u00e9" * 5, "x" * 20], "artifactType": "mcp_server"}, ensure_ascii=False)
+    windows: list[object] = []
+    answer_total = len(whole)
+
+    def export_redaction(args: dict[str, object]) -> dict[str, object]:
+        window = args["window"]
+        assert isinstance(window, dict)
+        assert len(args["artifacts"]) == 1
+        windows.append(window)
+        start, length = window["start"], window["length"]
+        return {"metadata": [whole[start : start + length]], "total": answer_total}
+
+    monkeypatch.setattr(redaction, "_native_export_redaction", export_redaction)
+    artifact = SimpleNamespace(artifact_type="mcp_server", metadata={"tools": ["a"] * 40})
+    home = Path("/agent/home")
+    assert redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None) == json.loads(whole)
+    assert [window["start"] for window in windows] == list(range(0, len(whole), 7))
+
+    # A total that moves between windows, or a window that makes no progress, fails closed.
+    totals = iter((len(whole), len(whole) + 1))
+    monkeypatch.setattr(redaction, "_native_export_redaction", lambda args: {"metadata": ["x"], "total": next(totals)})
+    with pytest.raises(NativeInventoryUrlRedactionError):
+        redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None)
+    monkeypatch.setattr(redaction, "_native_export_redaction", lambda args: {"metadata": [""], "total": 5})
+    with pytest.raises(NativeInventoryUrlRedactionError):
+        redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None)

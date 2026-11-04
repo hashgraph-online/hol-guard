@@ -15,6 +15,7 @@ fn request(artifacts: Value) -> Value {
         "workspace_dir": "/nonexistent-agent/work",
         "cwd": "/nonexistent-agent/work",
         "artifacts": artifacts,
+        "window": null,
     })
 }
 
@@ -64,9 +65,9 @@ fn every_recorded_artifact_exports_the_metadata_python_exported() {
 
 #[test]
 fn a_batch_answers_each_artifact_in_order() {
-    let request = request(json!([entry(json!({"b": 1})), entry(json!({"a": 2}))]));
+    let batch = request(json!([entry(json!({"b": 1})), entry(json!({"a": 2}))]));
     assert_eq!(
-        answers(&request),
+        answers(&batch),
         vec![
             r#"{"b":1,"artifactType":"mcp_server"}"#.to_owned(),
             r#"{"a":2,"artifactType":"mcp_server"}"#.to_owned(),
@@ -85,6 +86,53 @@ fn a_mapped_surrogate_is_written_back_as_its_escape() {
 }
 
 #[test]
+fn a_window_reads_one_answer_in_parts() {
+    let metadata = json!({"name": "\u{e9}t\u{e9}", "n": 1});
+    let whole = answers(&request(json!([entry(metadata.clone())])));
+    let whole_text = &whole[0];
+    let total = whole_text.chars().count();
+    let mut read = String::new();
+    let mut start = 0;
+    while start < total {
+        let mut windowed = request(json!([entry(metadata.clone())]));
+        windowed["window"] = json!({"start": start, "length": 5});
+        let answer = dispatch(&windowed).expect("answer");
+        assert_eq!(answer["total"], json!(total));
+        let part = answer["metadata"][0].as_str().expect("part");
+        assert!(part.chars().count() <= 5);
+        read.push_str(part);
+        start += 5;
+    }
+    assert_eq!(&read, whole_text);
+    let mut past_end = request(json!([entry(metadata)]));
+    past_end["window"] = json!({"start": total + 3, "length": 5});
+    assert_eq!(
+        dispatch(&past_end).expect("answer"),
+        json!({"metadata": [""], "total": total})
+    );
+}
+
+#[test]
+fn a_malformed_window_is_refused() {
+    let one = json!([entry(json!({}))]);
+    let two = json!([entry(json!({})), entry(json!({}))]);
+    for (artifacts, window) in [
+        (two, json!({"start": 0, "length": 5})),
+        (json!([]), json!({"start": 0, "length": 5})),
+        (one.clone(), json!({"start": 0, "length": 0})),
+        (one.clone(), json!({"start": 0, "length": 262_145})),
+        (one.clone(), json!({"start": -1, "length": 5})),
+        (one.clone(), json!({"start": 0})),
+        (one.clone(), json!({"start": 0, "length": 5, "extra": 1})),
+        (one, json!(5)),
+    ] {
+        let mut bad = request(artifacts);
+        bad["window"] = window;
+        assert_eq!(dispatch(&bad), Err(ERR_INVALID), "{bad}");
+    }
+}
+
+#[test]
 fn a_malformed_request_is_refused() {
     let mut extra = request(json!([]));
     extra["extra"] = json!(1);
@@ -92,11 +140,14 @@ fn a_malformed_request_is_refused() {
     workspace["workspace_dir"] = json!(5);
     let mut home = request(json!([]));
     home["home_dir"] = json!(null);
+    let mut no_window = request(json!([]));
+    no_window.as_object_mut().expect("object").remove("window");
     let wide: Vec<String> = vec![entry(json!({})); 4097];
     for bad in [
         extra,
         workspace,
         home,
+        no_window,
         request(json!({})),
         request(json!(wide)),
     ] {
@@ -140,5 +191,39 @@ fn a_malformed_artifact_is_refused() {
             Err(ERR_INVALID),
             "{artifact}"
         );
+    }
+}
+
+fn separate(metadata: &str) -> Value {
+    dispatch(&json!({"op": "separate_trust", "metadata": metadata})).expect("answer")
+}
+
+#[test]
+fn trust_separation_names_what_it_removes_and_appends() {
+    let answer = separate(
+        r#"{"description":"d","trustResolution":{"status":"s","metadata":{"signature":"p"}},"signature":"p","unverifiedAdapterEvidence":{"source":"adapter_metadata","verificationStatus":"unverified","trustClaims":{"verified":true,"keyId":"k"}},"trust_layers":[{"attestation":{}}]}"#,
+    );
+    assert_eq!(
+        answer["drop"],
+        r#"["trustResolution","signature","unverifiedAdapterEvidence","trust_layers"]"#
+    );
+    assert_eq!(
+        answer["evidence"],
+        r#"{"source":"adapter_metadata","verificationStatus":"unverified","affectsTrustScore":false,"trustClaims":{"verified":true,"keyId":"k","trustResolution":{"status":"s","metadata":{}},"trust_layers":[{}]}}"#
+    );
+    let plain = separate(r#"{"description":"d","\udc80":1}"#);
+    assert_eq!(plain, json!({"drop": "[]", "evidence": null}));
+    let stale = separate(r#"{"unverifiedAdapterEvidence":{"source":"other"},"n":1}"#);
+    assert_eq!(
+        stale,
+        json!({"drop": r#"["unverifiedAdapterEvidence"]"#, "evidence": null})
+    );
+    for bad in [
+        json!({"op": "separate_trust", "metadata": "[]"}),
+        json!({"op": "separate_trust", "metadata": {}}),
+        json!({"op": "separate_trust"}),
+        json!({"op": "separate_trust", "metadata": "{}", "extra": 1}),
+    ] {
+        assert_eq!(dispatch(&bad), Err(ERR_INVALID), "{bad}");
     }
 }
