@@ -321,8 +321,8 @@ fn contained_target_reads_a_bounded_inline_shell_as_its_script() {
         );
     }
     // A shell that reads more than its script, a script of several commands
-    // (run bare, it would lose `-e`), a script that expands, or a command with
-    // no shell in front stays whole.
+    // (run bare, it would lose `-e`), a script that expands, a brace Bash would
+    // expand, or a command with no shell in front stays whole.
     for text in [
         "bash -lc 'pytest -q'",
         "zsh -c 'pytest -q'",
@@ -330,6 +330,7 @@ fn contained_target_reads_a_bounded_inline_shell_as_its_script() {
         "bash -ec 'pytest -q && rm -rf x'",
         "bash -ec 'pytest -q | tee log'",
         "bash -c 'pytest \"$X\"'",
+        "bash -ec 'python3 build.py {fast,full}'",
         "pytest -q",
     ] {
         let input = json!({ "text": text });

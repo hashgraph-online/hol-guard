@@ -21,5 +21,9 @@ pub(crate) fn inline_shell_target(text: &str) -> Option<String> {
     if model.segments.len() != 1 {
         return None;
     }
+    // Brace expansion is a Bash rewrite of the arguments: `bash -ec 'python3
+    // build.py {fast,full}'` passes two words where a POSIX shell passes one,
+    // so a script holding a brace stays whole.
     crate::command_parse_surface::inline_shell_script_text(&request)
+        .filter(|script| !script.contains(['{', '}']))
 }
