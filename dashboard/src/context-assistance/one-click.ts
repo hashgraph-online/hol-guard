@@ -42,10 +42,8 @@ const blocked = (title: string, detail: string, tab?: CigarTab, wait?: boolean):
 export function planCigarSetup(data: CigarVersionsData, options: { locked: boolean; dirty: boolean; adopt?: string | null }): CigarSetupPlan {
   const { state, catalog } = data;
   if (state.effective_enabled) return { kind: "ready" };
-  if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
-  if (options.locked || (state.restriction && !state.effective_preferences.enabled)) {
-    return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
-  }
+  const held = cigarSetupHold(state, options);
+  if (held) return held;
   const adopted = options.adopt ? planCigarAdopt(data.jobs.find((job) => job.job_id === options.adopt), state) : null;
   if (adopted) return adopted;
   if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
@@ -92,6 +90,16 @@ export function planCigarAdopt(job: CigarVersionJob | undefined, state: ContextA
   return { kind: "run", runtime_id: job.target_runtime_id, build_id: null, interpreter_id: null, python_build_id: null,
     stages: ["check", "start"], approval: true,
     commit: { job_id: job.job_id, expected_generation: job.expected_generation, reconnect: job.reconnect_required } };
+}
+
+/** Unsaved settings and an administrator's lock stop every path, including finishing a prepared check. */
+export function cigarSetupHold(state: ContextAssistanceStatus, options: { locked: boolean; dirty: boolean }): CigarSetupPlan | null {
+  if (state.effective_enabled) return null;
+  if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
+  if (options.locked || (state.restriction && !state.effective_preferences.enabled)) {
+    return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
+  }
+  return null;
 }
 
 /** A saved, selected preference can start without version metadata (for example on an older daemon). */

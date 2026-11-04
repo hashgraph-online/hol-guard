@@ -3,7 +3,7 @@ import type { GuardApprovalGatePublicConfig, GuardContextAssistanceConfig } from
 import { controlContextAssistance, fetchContextAssistance } from "./api";
 import { saveCigarPreference } from "./one-click-api";
 import {
-  CigarSetupError, CigarSetupStopped, planCigarAdopt, planCigarSetup, planCigarStart, runCigarSetup,
+  CigarSetupError, CigarSetupStopped, cigarSetupHold, planCigarAdopt, planCigarSetup, planCigarStart, runCigarSetup,
   type CigarSetupPlan, type CigarSetupRun, type CigarSetupStage,
 } from "./one-click";
 import type { ContextAssistanceStatus } from "./types";
@@ -98,7 +98,8 @@ export function useCigarOneClick(options: Options) {
 
   const plan: CigarSetupPlan | null = useMemo(() => data
     ? planCigarSetup({ ...data, state: options.status ?? data.state }, { locked: options.locked, dirty: options.dirty, adopt: turnOnJob() })
-    : (own && planCigarAdopt(own.job, options.status ?? own.state)) ?? planCigarStart(options.status, options.dirty),
+    : (own && (cigarSetupHold(options.status ?? own.state, options) ?? planCigarAdopt(own.job, options.status ?? own.state)))
+      ?? planCigarStart(options.status, options.dirty),
   [data, own, options.status, options.locked, options.dirty]);
 
   // A busy block clears on its own; re-check so the button comes back without a manual refresh.
@@ -150,12 +151,16 @@ export function useCigarOneClick(options: Options) {
       } else {
         const job = await fetchOwnJob(abort.signal);
         if (abort.signal.aborted) throw new CigarSetupStopped();
-        next = job && planCigarAdopt(job.job, job.state);
+        next = job && (cigarSetupHold(job.state, latest.current) ?? planCigarAdopt(job.job, job.state));
         if (job && next) { initial = job.state; latest.current.publish(job.state); }
         next ??= planCigarStart(latest.current.status, latest.current.dirty);
         if (!next) throw failure;
       }
-      if (!next || next.kind !== "run" || !initial) { forgetTurnOn(); setRun({ phase: "idle" }); return; }
+      if (!next || next.kind !== "run" || !initial) {
+        // A block such as unsaved settings keeps a prepared check, so the next click can still finish it.
+        if (next?.kind === "blocked") forgetTurnOnClick(); else forgetTurnOn();
+        setRun({ phase: "idle" }); return;
+      }
       // Asking for approval hands the decision back to the person; an old click must not finish it later.
       if (latest.current.gate?.enabled && next.approval && !proof) { forgetTurnOnClick(); setRun({ phase: "proof", plan: next, error: null }); return; }
       planned = next; stages = next.stages;

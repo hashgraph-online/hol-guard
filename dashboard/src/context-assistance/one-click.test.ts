@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import type { GuardContextAssistanceConfig } from "../guard-types";
 import { ContextAssistanceApiError } from "./api";
 import {
-  CigarSetupError, CigarSetupStopped, planCigarAdopt, planCigarSetup, planCigarStart, runCigarSetup,
+  CigarSetupError, CigarSetupStopped, cigarSetupHold, planCigarAdopt, planCigarSetup, planCigarStart, runCigarSetup,
   type CigarSetupDeps, type CigarSetupRun, type CigarSetupStage,
 } from "./one-click";
 import { parseContextAssistanceStatus } from "./status";
@@ -111,6 +111,13 @@ assert.equal(stalePrepared.kind, "blocked", "a check prepared for an older gener
 assert.deepEqual(planCigarAdopt(prepared, off)?.commit, { job_id: "dashboard:mine", expected_generation: "7", reconnect: false });
 assert.equal(planCigarAdopt(prepared, ready), null, "nothing to finish once CIGAR is on");
 assert.equal(planCigarAdopt(undefined, off), null);
+// The fallback that adopts a prepared check without the version list keeps the same holds.
+assert.ok(cigarSetupHold(off, { locked: false, dirty: true })?.kind === "blocked", "unsaved settings stop a commit");
+assert.ok(cigarSetupHold(off, { locked: true, dirty: false })?.kind === "blocked", "an administrator lock stops a commit");
+assert.equal(cigarSetupHold(off, { locked: false, dirty: false }), null);
+assert.equal(cigarSetupHold(ready, { locked: true, dirty: true }), null, "nothing to hold once CIGAR is on");
+const heldAdopt = planCigarSetup(data({ state: off, jobs: [prepared] }), { locked: false, dirty: true, adopt: "dashboard:mine" });
+assert.ok(heldAdopt.kind === "blocked" && heldAdopt.block.title === "Save your changes first");
 
 // Running: a fake Guard that answers each step the way the daemon does.
 type Script = { calls: string[]; stages: CigarSetupStage[]; jobs: (string | null)[]; saved: GuardContextAssistanceConfig[] };
