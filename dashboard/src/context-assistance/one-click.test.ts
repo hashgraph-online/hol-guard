@@ -103,7 +103,8 @@ const busyManaged = planCigarSetup(data({ state: stopped, jobs: [job({ schema: "
 assert.ok(busyManaged.kind === "blocked" && busyManaged.block.title === "CIGAR is busy", "a managed start waits for a running task too");
 const pausedManaged = planCigarSetup(data({ state: stopped, jobs: [job({ schema: "guard-cigar-catalog-refresh-job.v1", operation: "refresh_catalog",
   phase: "recovery_required", code: "recovery_required", worker_live: false })] }), { ...open, locked: true });
-assert.ok(pausedManaged.kind === "blocked" && /organization/.test(pausedManaged.block.title), "a paused task blocks a managed start");
+assert.ok(pausedManaged.kind === "blocked" && pausedManaged.block.title === "An earlier setup did not finish" && pausedManaged.block.tab === "versions",
+  "a paused task blocks a managed start and says why");
 
 // Running: a fake Guard that answers each step the way the daemon does.
 type Script = { calls: string[]; stages: CigarSetupStage[]; jobs: (string | null)[]; saved: GuardContextAssistanceConfig[] };
