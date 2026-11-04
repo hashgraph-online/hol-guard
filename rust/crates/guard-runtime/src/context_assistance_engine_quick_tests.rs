@@ -273,6 +273,44 @@ fn a_folder_picked_in_the_dashboard_keeps_to_its_picked_files() {
     assert_eq!(paths, ["src/cart-tax.ts"]);
 }
 
+/// Files picked by hand for an app keep a read Guard makes while CIGAR is
+/// busy to those files, as CIGAR keeps to them. Another app's pick leaves
+/// this app's read alone.
+#[test]
+fn a_running_pick_for_this_app_keeps_the_read_to_its_files() {
+    let f = fixture(ON);
+    f.write("src/cart.ts", "export const cartTotal = 0;\n");
+    f.write("src/cart-tax.ts", "export const cartTax = 0;\n");
+    let root = SourceRoot::inspect(&f.root).unwrap().path().to_path_buf();
+    let pick = |app: &str, files: &[&str]| Hand {
+        root: root.clone(),
+        app: app.into(),
+        files: files.iter().map(|file| (*file).to_owned()).collect(),
+    };
+    let paths = || -> Vec<String> {
+        (f.read(&["src/cart.ts", "src/cart-tax.ts"], &["cart"])
+            .into_iter())
+        .map(|part| part.path)
+        .collect()
+    };
+    publish(f.home.path(), vec![pick("codex", &["src/cart.ts"])]);
+    assert_eq!(paths(), ["src/cart.ts", "src/cart-tax.ts"]);
+    publish(
+        f.home.path(),
+        vec![
+            pick("dashboard", &["src/cart.ts"]),
+            pick("claude-code", &["src/cart-tax.ts"]),
+        ],
+    );
+    assert_eq!(paths(), ["src/cart-tax.ts"], "the app's own pick wins");
+    publish(f.home.path(), vec![pick("dashboard", &["src/cart.ts"])]);
+    assert_eq!(paths(), ["src/cart.ts"]);
+    publish(f.home.path(), vec![pick("claude-code", &[])]);
+    assert!(paths().is_empty(), "a pick of no files reads none");
+    publish(f.home.path(), Vec::new());
+    assert_eq!(paths().len(), 2);
+}
+
 #[test]
 fn nothing_is_read_where_project_context_is_off() {
     let f = fixture("[context_assistance]\nenabled=false\nruntime_id='selected'\n");
