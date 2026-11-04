@@ -89,6 +89,8 @@ pub(super) fn reviewable_substitutions(text: &str) -> Option<BoundedSubstitution
 }
 
 fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
+    let folded = fold_printed_heredocs(text);
+    let text = folded.as_str();
     if text.contains("<<") || text.contains('`') {
         return None;
     }
@@ -270,6 +272,120 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
         text: out,
         programs,
     })
+}
+
+/// The text with each `$(cat <<'EOF' … EOF)` read as the `$(cat)` it is.
+///
+/// `git commit -m "$(cat <<'EOF' … EOF)"` is how agents write a multi-line
+/// commit message: `cat` prints the body and the output becomes one argument.
+/// A quoted delimiter keeps the body from expanding, so every line under it
+/// is data on `cat`'s standard input and runs nothing. Dropping the body
+/// leaves the substitution this reader already bounds; without it the `<<`
+/// alone sent the commit to an evaluation failure with no approval to give.
+///
+/// Only that exact shape folds: `cat` alone in the substitution, a quoted
+/// delimiter written plainly, nothing after it on the line, and the
+/// substitution closing right under the delimiter line. The `$(` must be read
+/// by the shell as a substitution, outside single quotes, an escape or a
+/// comment, because a body the shell reads as command lines must never be
+/// dropped. Text with no `<<` comes back unchanged, and any other heredoc
+/// stays in place for the check that refuses it.
+fn fold_printed_heredocs(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("<<") {
+        let (before, operator) = rest.split_at(start);
+        let opened = before
+            .trim_end()
+            .strip_suffix("cat")
+            .map(str::trim_end)
+            .and_then(|head| head.strip_suffix("$("));
+        let Some(head) = opened else {
+            break;
+        };
+        if !reads_as_substitution(&format!("{out}{head}")) {
+            break;
+        }
+        let after = &operator[2..];
+        let (after, strip_tabs) = match after.strip_prefix('-') {
+            Some(after) => (after, true),
+            None => (after, false),
+        };
+        let after = after.trim_start_matches([' ', '\t']);
+        let Some(quote) = after.chars().next().filter(|c| matches!(c, '\'' | '"')) else {
+            break;
+        };
+        let inside = &after[1..];
+        let Some(end) = inside.find(quote) else {
+            break;
+        };
+        let delimiter = &inside[..end];
+        let Some((trailing, mut body)) = inside[end + 1..].split_once('\n') else {
+            break;
+        };
+        if delimiter.is_empty()
+            || !delimiter
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+            || !trailing.trim().is_empty()
+        {
+            break;
+        }
+        let closed = loop {
+            let (line, next) = match body.split_once('\n') {
+                Some((line, next)) => (line, Some(next)),
+                None => (body, None),
+            };
+            let line = if strip_tabs {
+                line.trim_start_matches('\t')
+            } else {
+                line
+            };
+            if line == delimiter {
+                break next;
+            }
+            match next {
+                Some(next) => body = next,
+                None => break None,
+            }
+        };
+        let Some(remaining) = closed.filter(|remaining| remaining.trim_start().starts_with(')'))
+        else {
+            break;
+        };
+        out.push_str(before);
+        rest = remaining.trim_start();
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Whether a `$(` written after this text opens a substitution: no single
+/// quote is open, no backslash escapes it, and no comment has started.
+fn reads_as_substitution(prefix: &str) -> bool {
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    let mut previous = ' ';
+    for character in prefix.chars() {
+        if single {
+            single = character != '\'';
+        } else if escaped {
+            escaped = false;
+        } else {
+            match character {
+                '\\' => escaped = true,
+                '\'' if !double => single = true,
+                '"' => double = !double,
+                '#' if !double
+                    && (previous.is_whitespace() || matches!(previous, ';' | '&' | '|' | '(')) =>
+                {
+                    return false;
+                }
+                _ => {}
+            }
+        }
+        previous = character;
+    }
+    !single && !escaped
 }
 
 /// Whether another word of the same simple command follows the position.

@@ -602,8 +602,8 @@ fn mask_data_heredoc_bodies(
         .filter(|heredoc| {
             let owner = owners
                 .iter()
-                .filter(|(_, _, _, offset)| *offset <= heredoc.operator_start)
-                .last();
+                .rev()
+                .find(|(_, _, _, offset)| *offset <= heredoc.operator_start);
             let Some((_, _, segment_text, offset)) = owner else {
                 return false;
             };
