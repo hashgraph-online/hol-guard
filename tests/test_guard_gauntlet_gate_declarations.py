@@ -20,7 +20,7 @@ from ci.gauntlet.contained_core import request_proofs
 from ci.gauntlet.evidence import assess_case
 from ci.gauntlet.fixtures import create_fixture, filesystem_checks
 from ci.gauntlet.input_evidence import input_digest
-from tests.test_guard_gauntlet_contained_core import _capture_log, _contained, _end, _request, _wrapper
+from tests.gauntlet_contained_helpers import _capture_log, _contained, _end, _request, _wrapper
 from tests.test_guard_gauntlet_workflow_boundaries import _case
 
 CATALOG = {scenario.id: scenario for scenario in load_catalog()}
