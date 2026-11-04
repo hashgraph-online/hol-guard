@@ -725,6 +725,12 @@ fn a_setting_prefix_does_not_hide_a_backgrounded_command_from_review() {
         "(GITHUB_TOKEN=abc ls &)",
         "(LOG_LEVEL=\"$MODE\" ls &)",
         "(TARGET=$(cat id) ls &)",
+        // The subshell opens on the same word the setting starts, so the
+        // name the screens read has to be the one the shell sets, not
+        // `(LD_AUDIT`.
+        "(LD_AUDIT=/tmp/audit.so ls &)",
+        "(CC=/tmp/compiler make &)",
+        "{ LD_PRELOAD=/tmp/x.so ls; }",
         // The shell reads `FOO=1>>out` as a setting and a redirect glued to
         // it. Taking the whole word for a setting dropped the redirect with
         // it, and the write to a path that follows a link reached a review
