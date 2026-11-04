@@ -829,11 +829,12 @@ def add_workspace_node_runtime(home: Path, scenario_id: str | None) -> None:
 def _add_node_package_manager(source_prefix: Path, prefix: Path) -> None:
     """Copy the host release's own ``npm`` into the fixture's Node prefix.
 
-    The ``bin`` entries npm installs are relative links into the prefix, so
-    they are copied as links and keep pointing inside the fixture's own tree.
-    A host without a bundled npm leaves the prefix as it is: the cases that
-    need one fail on their own evidence rather than on a fixture that quietly
-    planted the host's.
+    The ``bin`` entries npm installs are links to a CLI file under the same
+    prefix. Both relative and absolute spellings are rewritten against the
+    fixture's own prefix, so a case never reaches back into the host's npm
+    tree. A host without a bundled npm leaves the prefix as it is: the cases
+    that need one fail on their own evidence rather than on a fixture that
+    quietly planted the host's.
     """
     package_manager = source_prefix / "lib/node_modules/npm"
     if not package_manager.is_dir():
@@ -847,10 +848,17 @@ def _add_node_package_manager(source_prefix: Path, prefix: Path) -> None:
         target = prefix / "bin" / name
         if not entry.exists() or target.exists():
             continue
-        if entry.is_symlink():
-            target.symlink_to(os.readlink(entry))
-        else:
+        if not entry.is_symlink():
             shutil.copy2(entry, target)
+            continue
+        resolved = Path(os.readlink(entry))
+        if not resolved.is_absolute():
+            resolved = (source_prefix / "bin" / resolved).resolve()
+        try:
+            inside = resolved.relative_to(source_prefix.resolve())
+        except ValueError:
+            continue
+        target.symlink_to(os.path.relpath(prefix / inside, target.parent))
 
 
 def home_bun_bin(home: Path) -> Path | None:

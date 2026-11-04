@@ -198,9 +198,10 @@ pub(super) fn managed_node(executable: &Path, home: Option<&Path>) -> bool {
 /// manager, put under one of the caller's homes.
 pub(super) fn managed_bun(executable: &Path, home: Option<&Path>) -> bool {
     let homes = runtime_homes(home);
-    let installed = manager_roots(&homes, &[BUN_INSTALL_ROOT])
-        .iter()
-        .any(|root| executable.parent() == Some(root.as_path()));
+    let installed = executable.file_name() == Some(OsStr::new("bun"))
+        && manager_roots(&homes, &[BUN_INSTALL_ROOT])
+            .iter()
+            .any(|root| executable.parent() == Some(root.as_path()));
     installed || managed_runtime(executable, &manager_roots(&homes, BUN_MANAGER_ROOTS))
 }
 

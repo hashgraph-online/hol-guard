@@ -635,3 +635,27 @@ fn bun_installed_by_a_version_manager_runs_contained() {
         json!("inline_eval_invalid_command")
     );
 }
+
+#[test]
+fn a_runtime_under_any_consulted_home_resolves() {
+    // The request HOME and the account HOME are both consulted. A supervised
+    // session whose HOME is not the account's own was the reported failure:
+    // the only Node on the machine sat under the second home and the
+    // contained run exited 126. The account home comes from the password
+    // database and no test may write into it, so the list `runtime_homes`
+    // builds is exercised here directly.
+    let fixture = fixture("guard-second-home");
+    let request = fixture.0.join("request-home");
+    let account = fixture.0.join("account-home");
+    fs::create_dir_all(&request).unwrap();
+    let node = account.join(".nvm/versions/node/v20.1.2/bin/node");
+    plant_runtime(&node);
+    assert!(!managed_runtime(
+        &node,
+        &manager_roots(&[request.clone()], NODE_MANAGER_ROOTS)
+    ));
+    assert!(managed_runtime(
+        &node,
+        &manager_roots(&[request, account], NODE_MANAGER_ROOTS)
+    ));
+}
