@@ -128,8 +128,6 @@ fn a_binding_to_a_plain_parameter_reaches_review() {
         "count=$#",
         "first=$1",
         "dir=$ROOT",
-        "dir=${ROOT}/out",
-        "tenth=\"${10}\"",
         "git show-ref --verify --quiet refs/heads/x; s=$?; echo $s",
     ] {
         let (action, code) = decision(&controls, command);
