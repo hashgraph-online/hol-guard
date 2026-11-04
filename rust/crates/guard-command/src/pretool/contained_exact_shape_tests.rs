@@ -109,3 +109,38 @@ fn a_group_carrying_an_expansion_or_a_redirect_has_no_reading() {
         );
     }
 }
+
+/// The grouped reading names every command the group runs, so a destructive
+/// command in a loop body, a branch body or a group keeps whatever screen it
+/// has when it is written out flat. The reading blanks brackets and nothing
+/// else.
+#[test]
+fn a_grouped_reading_still_names_every_command_the_group_runs() {
+    for (command, named) in [
+        ("(cd dashboard && rm -rf /) && ls", "rm -rf /"),
+        ("{ cd dashboard && rm -rf /; } && ls", "rm -rf /"),
+        ("(cat ~/.ssh/id_rsa) && ls", "cat ~/.ssh/id_rsa"),
+    ] {
+        let reading = crate::parser_segments::blanked_top_level_group_list(command)
+            .unwrap_or_else(|| panic!("{command}"));
+        assert!(reading.contains(named), "{command} -> {reading}");
+        assert!(
+            !reading.contains('(') && !reading.contains(')'),
+            "{reading}"
+        );
+    }
+}
+
+/// A loop body subshell and a branch body subshell reach the sandbox through
+/// the decision's own rewrite, so the reading of the rewritten list is what
+/// screens them; neither keeps a bracket the screen would have to read.
+#[test]
+fn a_loop_or_branch_body_group_is_read_without_its_brackets() {
+    let ws = tree("group-bodies");
+    for command in [
+        "for d in dashboard src; do (cd \"$d\" && ls); done",
+        "if [ -d dashboard ]; then (cd dashboard && npm run build); fi",
+    ] {
+        assert!(shaped(command, &ws), "{command}");
+    }
+}
