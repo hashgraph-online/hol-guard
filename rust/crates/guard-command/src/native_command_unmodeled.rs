@@ -956,12 +956,13 @@ fn moves_data(literal: &str) -> bool {
 /// of their own.
 fn plain_sequence(text: &str) -> bool {
     let literal = unquoted_literal(text);
-    !command_words(&literal).any(|word| {
+    let construct = command_words(&literal).any(|word| {
         matches!(
             word,
             "for" | "done" | "case" | "esac" | "fi" | "select" | "function" | "coproc"
         )
-    })
+    });
+    !construct
 }
 
 /// Every word the shell could read as a program name or keyword token, with
