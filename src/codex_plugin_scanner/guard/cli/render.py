@@ -855,6 +855,17 @@ def _protection_panel_line(name: str, *, protection_off: bool, in_effect: bool) 
     return f"protection: {name}"
 
 
+def _watch_revert_line(payload: Mapping[str, object]) -> str:
+    """Say when machine-wide Watch ends, or that it will not end on its own."""
+
+    if str(payload.get("protection") or payload.get("protection_posture") or "") != "watch":
+        return ""
+    reverts_at = payload.get("watch_reverts_at")
+    if isinstance(reverts_at, str) and reverts_at:
+        return f"\nwatch ends: {reverts_at} (protection turns back on)"
+    return "\nwatch ends: never on its own; run `hol-guard settings set protection protected`"
+
+
 def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     name, protection_off = _protection_status_copy(payload, "protected")
@@ -862,6 +873,7 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
     in_effect = reported if isinstance(reported, bool) else protection_is_in_effect(harnesses)
     protection_line = _protection_panel_line(name, protection_off=protection_off, in_effect=in_effect)
     protection_off = protection_off or not in_effect
+    protection_line += _watch_revert_line(payload)
     protection_line += harness_posture_line(payload)
     console.print(
         Panel.fit(

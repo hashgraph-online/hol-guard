@@ -206,12 +206,8 @@ def effective_harness_postures(config: GuardConfig) -> dict[str, str]:
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
-def watch_auto_revert_due(config: GuardConfig, *, now: datetime | None = None) -> tuple[bool, tuple[str, ...]]:
-    """Whether the machine-wide Watch posture and which harness overrides are due to revert.
-
-    The runtime dates each revert, so only the clock is read here and the native answer stays
-    memoized for an unchanged configuration. A naive ``now`` is read as UTC, like a naive stamp.
-    """
+def _watch_revert_deadlines(config: GuardConfig) -> tuple[int | None, dict[str, int]]:
+    """When the machine-wide Watch and each harness Watch override revert, in epoch microseconds."""
 
     result = resolve_native_guard_config(
         "watch_auto_revert_deadlines",
@@ -235,10 +231,41 @@ def watch_auto_revert_due(config: GuardConfig, *, now: datetime | None = None) -
         or not (posture_at is None or type(posture_at) is int)
     ):
         raise ConfigFileTrustError("native_guard_config_invalid")
+    return cast("int | None", posture_at), cast("dict[str, int]", deadlines)
+
+
+def watch_auto_revert_due(config: GuardConfig, *, now: datetime | None = None) -> tuple[bool, tuple[str, ...]]:
+    """Whether the machine-wide Watch posture and which harness overrides are due to revert.
+
+    The runtime dates each revert, so only the clock is read here and the native answer stays
+    memoized for an unchanged configuration. A naive ``now`` is read as UTC, like a naive stamp.
+    """
+
+    posture_at, deadlines = _watch_revert_deadlines(config)
     current = now or datetime.now(timezone.utc)
     clock = (current.replace(tzinfo=current.tzinfo or timezone.utc) - _EPOCH) // timedelta(microseconds=1)
-    due = tuple(sorted(key for key, at in cast("dict[str, int]", deadlines).items() if clock >= at))
+    due = tuple(sorted(key for key, at in deadlines.items() if clock >= at))
     return posture_at is not None and clock >= posture_at, due
+
+
+def _iso_from_micros(micros: int) -> str:
+    return (_EPOCH + timedelta(microseconds=micros)).isoformat()
+
+
+def watch_revert_times(config: GuardConfig) -> dict[str, object]:
+    """When Watch began and when it turns back to Protected, for status and doctor output.
+
+    ``watch_reverts_at`` is null while the machine is not in Watch, and also when Watch has
+    no revert date (auto-revert off, or no stamp), so a reader can tell Watch will not end
+    on its own.
+    """
+
+    posture_at, deadlines = _watch_revert_deadlines(config)
+    return {
+        "watch_entered_at": config.watch_entered_at if config.protection_posture == "watch" else None,
+        "watch_reverts_at": _iso_from_micros(posture_at) if posture_at is not None else None,
+        "harness_watch_reverts_at": {harness: _iso_from_micros(at) for harness, at in sorted(deadlines.items())},
+    }
 
 
 def harness_posture_summary(config: GuardConfig) -> dict[str, object]:
@@ -253,6 +280,7 @@ def harness_posture_summary(config: GuardConfig) -> dict[str, object]:
     return {
         "harness_postures": overrides,
         "harnesses_in_watch": [h for h in known_harness_ids() if effective.get(h) == "watch"],
+        **watch_revert_times(config),
     }
 
 
@@ -305,4 +333,5 @@ __all__ = [
     "protection_settings_payload",
     "runtime_harness_key",
     "watch_auto_revert_due",
+    "watch_revert_times",
 ]
