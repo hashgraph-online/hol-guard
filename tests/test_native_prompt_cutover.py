@@ -208,6 +208,6 @@ def test_actual_hook_uses_request_home_instead_of_ambient_default(native_hook_fo
     )
     payload = json.loads(capsys.readouterr().out)
     assert code == 0
-    assert payload["decision"] == "block"
+    assert "decision" not in payload
     assert payload.get("reason_code") != "native_prompt_unavailable"
-    assert "HOL Guard" in payload["reason"]
+    assert "HOL Guard" in payload["systemMessage"]

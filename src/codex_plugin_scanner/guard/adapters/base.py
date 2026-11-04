@@ -479,7 +479,13 @@ class HarnessAdapter:
             harness=self.harness,
             executable=self.executable,
             command_absence_proves_uninstalled=self.command_absence_proves_uninstalled,
-            runtime_probe_timed_out=runtime_probe is not None and runtime_probe.get("timed_out") is True,
+            runtime_probe=None
+            if runtime_probe is None
+            else {
+                "timed_out": runtime_probe.get("timed_out") is True,
+                "failed": runtime_probe.get("ok") is False,
+                "reported_no_artifacts": runtime_probe.get("reported_artifacts") == 0,
+            },
             detection=_detection_request(detection),
         )
         return [*detection.warnings, *added]

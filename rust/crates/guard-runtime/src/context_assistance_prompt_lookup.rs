@@ -12,6 +12,18 @@ use std::time::{Duration, Instant};
 
 /// How long a warm-up waits for a starting worker before giving up.
 const WARM_WAIT: Duration = Duration::from_secs(60);
+/// What a prompt keeps of its wait, at most, to read the matched files
+/// itself when CIGAR is still starting.
+const READ_RESERVE: Duration = Duration::from_millis(300);
+
+/// Why CIGAR gave a prompt no answer.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Miss {
+    /// CIGAR is on and still starting, so no worker holds the project yet.
+    Starting,
+    /// CIGAR is busy with another prompt for this project, or was late.
+    Pending,
+}
 
 pub(super) struct Request {
     pub(super) root: PathBuf,
@@ -46,40 +58,44 @@ fn warming() -> &'static Mutex<BTreeSet<Key>> {
     WARMING.get_or_init(Default::default)
 }
 
-/// CIGAR's rendered answer, `Some(None)` when it had nothing that fits, was
-/// off, or failed, and `None` when CIGAR is on but still starting, busy with
-/// another prompt for this project, or did not answer before `deadline`.
+/// CIGAR's rendered answer, `Ok(None)` when it had nothing that fits, was
+/// off, or failed, and a [`Miss`] when CIGAR is on but did not answer before
+/// `deadline`.
 pub(super) fn lookup(
     service: &Service,
     guard_home: &Path,
     request: Request,
     deadline: Instant,
-) -> Option<Option<String>> {
+) -> Result<Option<String>, Miss> {
     let key = (request.root.clone(), request.app.clone());
     let prompt = hashed(&request.query);
     let flight = {
         let Ok(running) = flights().lock() else {
-            return Some(None);
+            return Ok(None);
         };
         match running.get(&key) {
             Some(flight) if flight.prompt == prompt => Some(Arc::clone(flight)),
-            Some(_) => return None,
+            Some(_) => return Err(Miss::Pending),
             None => None,
         }
     };
     if let Some(flight) = flight {
-        return answer(service, &flight, deadline);
+        return answer(service, &flight, deadline).ok_or(Miss::Pending);
     }
-    let lane = match service.prompt_lane(guard_home, deadline) {
+    // The lane keeps at least half of what is left, so a short or late wait
+    // still finds out whether CIGAR is on.
+    let left = deadline.saturating_duration_since(Instant::now());
+    let lane_until = deadline - READ_RESERVE.min(left / 2);
+    let lane = match service.prompt_lane(guard_home, lane_until) {
         Ok(lane) => lane,
         Err(LaneMiss::Starting) => {
             warm_when_ready(service.lane_watch(), key, request);
-            return None;
+            return Err(Miss::Starting);
         }
-        Err(LaneMiss::Off) => return Some(None),
+        Err(LaneMiss::Off) => return Ok(None),
     };
-    let flight = launch(key, prompt, lane, request)?;
-    answer(service, &flight, deadline)
+    let flight = launch(key, prompt, lane, request).ok_or(Miss::Pending)?;
+    answer(service, &flight, deadline).ok_or(Miss::Pending)
 }
 
 /// Waits on its own thread for a worker that is still starting, then runs

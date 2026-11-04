@@ -30,7 +30,7 @@ const object = (value: unknown): value is Record<string, unknown> => value !== n
 const text = (value: unknown): value is string => typeof value === "string";
 const digest = (value: unknown): value is string => text(value) && /^[a-f0-9]{64}$/.test(value);
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
-function invalid(): never { throw new ContextAssistanceApiError("workspace_payload_invalid", "Guard returned incompatible context data. Refresh its status."); }
+function invalid(): never { throw new ContextAssistanceApiError("workspace_payload_invalid", "CIGAR sent back something this page does not understand. Refresh and try again."); }
 
 export function validContextBrokerRevision(value: unknown): value is ContextBrokerRevision {
   return object(value) && digest(value.epoch) && text(value.version) && /^(0|[1-9][0-9]{0,19})$/.test(value.version)
@@ -74,6 +74,23 @@ export function parseContextBrief(value: unknown): ContextBrief {
   return value as ContextBrief;
 }
 
+/** Plain words for a refused request. A refused pick names its likely cause:
+ *  reading files again cannot help with a secret-looking, blocked or private file. */
+function refusal(code: string, action: string, status: number): string {
+  if (code.endsWith("context_storage_repair_required")) return "CIGAR's saved notes need repair. Delete them in CIGAR → Privacy, then add the project again.";
+  if (code.endsWith("context_storage_outcome_unknown")) return "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again.";
+  if (code.endsWith("context_resource_limit") && action === "authorize_agent") {
+    return "CIGAR is connected to as many apps as it can. Disconnect an app or remove a project you no longer use, then reconnect this app and use its new code.";
+  }
+  if (code.endsWith("context_busy") || code.endsWith("_busy")) return "CIGAR is still finishing something. Try again in a moment.";
+  if (code.endsWith("context_scope_denied") && action === "grant") {
+    return "CIGAR couldn't add these files. It won't read a file that looks like it holds a password or key, a file your settings block, or a folder Guard keeps private. Take that file out, or pick another folder, and try again.";
+  }
+  if (code.endsWith("context_stale") || code.endsWith("context_scope_denied")) return "The project or its files changed. Choose Read files again, or add the project again.";
+  if (status === 403 || status === 401) return "Guard needs your approval password for this.";
+  return "CIGAR could not finish that. Refresh and try again.";
+}
+
 async function ask(route: "workspace" | "workspace-access" | "workspace-grant", input: Record<string, unknown>, proof?: ContextProof, signal?: AbortSignal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context sources require a local Guard installation.");
   const timeout = AbortSignal.timeout(12_000);
@@ -86,25 +103,13 @@ async function ask(route: "workspace" | "workspace-access" | "workspace-grant", 
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const code = object(body) && text(body.code) && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_request_refused";
-    const message = code.endsWith("context_storage_repair_required")
-      ? "Saved evidence needs repair. Use Data & repair to remove saved evidence, then check the runtime and grant sources again."
-      : code.endsWith("context_storage_outcome_unknown")
-        ? "Saved data may have changed before the operation ended. Inspect Data & repair before retrying."
-      : code.endsWith("context_resource_limit") && input.action === "authorize_agent"
-        ? "Context client capacity is full. Revoke an unused connection or workspace, then restart this app's Guard MCP connection and pair its new code."
-      : code.endsWith("context_busy") || code.endsWith("_busy")
-        ? "Context work or cleanup is still running. Refresh status after it finishes."
-      : code.endsWith("context_stale") || code.endsWith("context_scope_denied")
-        ? "Sources or access changed. Refresh sources or grant access again before using this context."
-        : response.status === 403 || response.status === 401
-          ? "Guard needs your approval proof before granting source access."
-        : "Context did not return a verified result. Refresh its status before trying again.";
+    const message = refusal(code, String(input.action), response.status);
     throw new ContextAssistanceApiError(code, message);
   }
   if (!object(body) || body.schema !== "guard-cigar-workspace-result.v1" || body.data_role !== true || !object(body.result)) invalid();
   return body.result;
 }
-export { ask as requestContextWorkspace };
+export { ask as requestContextWorkspace, refusal as contextRefusalMessage };
 
 export async function listContextWorkspaces(signal?: AbortSignal): Promise<ContextWorkspaceScope[]> {
   const result = await ask("workspace", { action: "list" }, undefined, signal);

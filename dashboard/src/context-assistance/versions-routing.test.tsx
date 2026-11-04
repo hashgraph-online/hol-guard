@@ -27,7 +27,7 @@ assert.match(pending, /Use current selection/);
 const locked = renderToStaticMarkup(<CigarRuntimeSelection value={state.preferences} status={state} installations={[]}
   disabled={true} onManage={effect} onRefresh={effect} onRestore={effect} />);
 assert.match(locked, /disabled="">Choose or switch runtime/);
-assert.match(locked, /No registered CIGAR runtime is available/);
+assert.match(locked, /CIGAR is not set up on this computer yet/);
 const previous = { schema: 1 as const, tutorial: "first-brief" as const, step: 5 };
 assert.deepEqual(parseTutorialProgress(previous), previous, "existing lesson IDs and step bounds remain valid");
 const tutorial = cigarTutorial("cigar-updates");

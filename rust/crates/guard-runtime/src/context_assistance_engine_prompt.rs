@@ -3,10 +3,15 @@
 //! When someone has turned on agent context, each prompt an agent hook sees
 //! keeps one memory-only scope per (project, app) up to date with the files
 //! that prompt is about, and asks CIGAR which parts matter. A project picked
-//! by hand always wins: its files stay exactly as chosen. Automatic scopes
+//! by hand always wins, for every app when it was picked in the dashboard:
+//! its files stay exactly as chosen. Automatic scopes
 //! never keep a resting worker awake and are the first to make room.
 use super::*;
 use std::time::{Instant, SystemTime};
+
+#[path = "context_assistance_engine_quick.rs"]
+mod quick;
+pub(crate) use quick::quick_excerpts;
 
 /// The graph holds 128 sources, Guard's own included, and a removed file
 /// still counts until the graph is rebuilt.
@@ -70,19 +75,9 @@ pub(crate) fn admissible_paths(
     limit: usize,
     until: Instant,
 ) -> Vec<String> {
-    if crate::guard_config_harness::canonical_harness_id(app) != Some(app) {
-        return Vec::new();
-    }
-    let Ok(root) = SourceRoot::inspect(workspace) else {
+    let Some(root) = quick::screened(home, workspace, app) else {
         return Vec::new();
     };
-    let permitted = !root.path().starts_with(home)
-        && effective(home, &root).is_ok_and(|policy| {
-            policy.features.agent_context && policy.sources.workspace_documents
-        });
-    if !permitted {
-        return Vec::new();
-    }
     found
         .iter()
         .take_while(|_| Instant::now() < until)
@@ -97,44 +92,26 @@ pub(crate) fn admissible_paths(
 /// meaning can miss, so the file the prompt names comes first with the chunk
 /// that holds the most of `words`, the walk's own words and quoted text from
 /// the whole prompt. A file whose chunks share none of them is not added.
+///
+/// When CIGAR did pick that file but none of its picks overlaps that chunk,
+/// the chunk still leads unless a pick of the file holds more of `words`: a
+/// pick by meaning can land on the file's neighbouring lines and leave out
+/// the ones the prompt quotes.
 fn led_by(
     mut picked: Vec<PickedExcerpt>,
     lead: Option<&AdmittedFile>,
     words: &[String],
 ) -> Vec<PickedExcerpt> {
-    let Some(file) = lead else {
+    let Some((score, part)) = lead.and_then(|file| quick::best_part(file, words)) else {
         return picked;
     };
-    if picked
-        .iter()
-        .any(|excerpt| excerpt.path == file.relative_path)
-    {
+    let of_file = || picked.iter().filter(|excerpt| excerpt.path == part.path);
+    let covered = of_file()
+        .any(|excerpt| excerpt.start_line <= part.end_line && excerpt.end_line >= part.start_line);
+    if covered || of_file().any(|excerpt| quick::said(&excerpt.text, words) > score) {
         return picked;
     }
-    let said = |text: &str| {
-        let text = text.to_lowercase();
-        words.iter().filter(|w| text.contains(w.as_str())).count()
-    };
-    let best = file
-        .documents
-        .iter()
-        .map(|doc| (said(&doc.text), doc))
-        .filter(|(score, _)| *score > 0)
-        .max_by_key(|(score, doc)| (*score, std::cmp::Reverse(doc.start_line)));
-    let Some((_, doc)) = best else {
-        return picked;
-    };
-    let start = u64::from(doc.start_line);
-    let lines = doc.text.lines().count().max(1) as u64;
-    picked.insert(
-        0,
-        PickedExcerpt {
-            path: file.relative_path.clone(),
-            start_line: start,
-            end_line: start + lines - 1,
-            text: doc.text.clone(),
-        },
-    );
+    picked.insert(0, part);
     picked
 }
 
@@ -191,8 +168,12 @@ impl Engine {
         if let Some(id) = self
             .scopes
             .iter()
-            .find(|(id, scope)| !self.auto.contains(id) && !scope.revoked && same(scope))
-            .map(|(id, _)| id.clone())
+            .filter(|(id, scope)| {
+                !self.auto.contains(id) && !scope.revoked && scope.root.path() == root.path()
+            })
+            .filter_map(|(id, scope)| Some((pick_rank(&scope.app, &app, scope.sources.len())?, id)))
+            .min_by_key(|(rank, _)| *rank)
+            .map(|(_, id)| id.clone())
         {
             return self.pick(runtime, &id, &query).map(Some);
         }
@@ -464,6 +445,19 @@ impl Engine {
                 let _ = scope.graph.close(runtime);
             }
         }
+    }
+}
+
+/// How a project picked by hand answers `app`'s prompts: a pick for that app
+/// comes first, then files picked in the dashboard, which serve every app.
+/// A dashboard pick of no files leaves the prompt to the automatic scope.
+fn pick_rank(picked_for: &str, app: &str, files: usize) -> Option<u8> {
+    if picked_for == app {
+        Some(0)
+    } else if picked_for == "dashboard" && files > 0 {
+        Some(1)
+    } else {
+        None
     }
 }
 

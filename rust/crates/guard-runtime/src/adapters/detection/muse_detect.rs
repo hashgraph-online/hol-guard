@@ -11,7 +11,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
-use super::adapter_inventory::{carried, json_document, Inventory, Request, SkillNaming};
+use super::adapter_inventory::{
+    carried, json_document, skill_root_label, Inventory, Request, SkillNaming,
+};
 use super::claude_guard_question::python_lower;
 use super::context_digest::python_strip;
 use super::pyjson::PyVal;
@@ -354,12 +356,11 @@ pub(crate) fn detect(args: &Value) -> KindResult {
         ));
     }
     for (skill_root, identity_root, scope) in skill_roots {
+        let label = skill_root_label(&skill_root, &identity_root);
         inventory.skills(
             scope,
             "Muse",
-            &SkillNaming::Bare {
-                root_label: &skill_root.to_string_lossy(),
-            },
+            &SkillNaming::Bare { root_label: &label },
             &skill_root,
             &identity_root,
             "skills",

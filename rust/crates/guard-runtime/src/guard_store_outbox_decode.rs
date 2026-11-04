@@ -4,6 +4,7 @@
 
 use serde_json::{Map, Value};
 
+use crate::cloud_review_ack::py_repr;
 use crate::guard_store_db::Row;
 use crate::guard_store_json::py_strip;
 use crate::guard_store_outbox_identity::payload_digest;
@@ -114,9 +115,25 @@ const CONTINUATION_STATUSES: [&str; 6] = [
 /// An authenticated event.
 pub(crate) struct StoredEvent {
     pub stream_sequence: i64,
+    pub request_sequence: i64,
     pub event_id: String,
     pub event_type: String,
+    pub native_replay: Option<bool>,
+    pub continuation_result: Option<Map<String, Value>>,
     pub snapshot: Map<String, Value>,
+}
+
+/// Why a stored event cannot be trusted: its quarantine reason and message.
+pub(crate) struct Refusal {
+    pub reason: &'static str,
+    pub message: String,
+}
+
+fn refuse<T>(reason: &'static str, message: impl Into<String>) -> Result<T, Refusal> {
+    Err(Refusal {
+        reason,
+        message: message.into(),
+    })
 }
 
 fn nonblank(value: &Value) -> bool {
@@ -125,48 +142,105 @@ fn nonblank(value: &Value) -> bool {
         .is_some_and(|text| !py_strip(text).is_empty())
 }
 
-fn decode_snapshot(payload: &Map<String, Value>) -> Option<Map<String, Value>> {
-    let mut snapshot = payload.get("requestSnapshot")?.as_object()?.clone();
-    if SNAPSHOT_COLUMNS
+fn decode_snapshot(payload: &Map<String, Value>) -> Result<Map<String, Value>, Refusal> {
+    let raw = match payload.get("requestSnapshot") {
+        None | Some(Value::Null) => {
+            return refuse(
+                "payload_snapshot_missing",
+                "Stored Review event has no immutable request snapshot.",
+            )
+        }
+        Some(raw) => raw,
+    };
+    let Some(snapshot) = raw.as_object() else {
+        return refuse(
+            "payload_snapshot_invalid",
+            "Stored Review event request snapshot is invalid.",
+        );
+    };
+    let mut snapshot = snapshot.clone();
+    let mut missing: Vec<&str> = SNAPSHOT_COLUMNS
         .iter()
-        .any(|name| *name != "continuation_snapshot_json" && !snapshot.contains_key(*name))
-    {
-        return None;
+        .copied()
+        .filter(|name| *name != "continuation_snapshot_json" && !snapshot.contains_key(*name))
+        .collect();
+    if !missing.is_empty() {
+        missing.sort_unstable();
+        return refuse(
+            "payload_snapshot_incomplete",
+            format!(
+                "Stored Review event snapshot is missing canonical fields: {}.",
+                missing.join(", ")
+            ),
+        );
     }
-    if snapshot
+    let mut unexpected: Vec<&str> = snapshot
         .keys()
-        .any(|key| !SNAPSHOT_COLUMNS.contains(&key.as_str()))
-    {
-        return None;
+        .map(String::as_str)
+        .filter(|key| !SNAPSHOT_COLUMNS.contains(key))
+        .collect();
+    if !unexpected.is_empty() {
+        unexpected.sort_unstable();
+        return refuse(
+            "payload_snapshot_unexpected_fields",
+            format!(
+                "Stored Review event snapshot has unexpected fields: {}.",
+                unexpected.join(", ")
+            ),
+        );
     }
     snapshot
         .entry("continuation_snapshot_json")
         .or_insert(Value::Null);
-    if REQUIRED_NONEMPTY
+    let invalid: Vec<&str> = REQUIRED_NONEMPTY
         .iter()
-        .any(|name| !nonblank(&snapshot[*name]))
-    {
-        return None;
+        .copied()
+        .filter(|name| !nonblank(&snapshot[*name]))
+        .collect();
+    if !invalid.is_empty() {
+        return refuse(
+            "payload_snapshot_incomplete",
+            format!(
+                "Stored Review event snapshot has invalid canonical fields: {}.",
+                invalid.join(", ")
+            ),
+        );
     }
     for field in SNAPSHOT_JSON_FIELDS {
         if let Some(Value::String(text)) = snapshot.get(field) {
-            let parsed = serde_json::from_str::<Value>(text).ok()?;
+            let Ok(parsed) = serde_json::from_str::<Value>(text) else {
+                return refuse(
+                    "payload_snapshot_invalid",
+                    format!("Stored Review event snapshot field {field} is invalid JSON."),
+                );
+            };
             snapshot.insert(field.to_owned(), parsed);
         }
     }
-    Some(snapshot)
+    Ok(snapshot)
 }
 
-fn valid_continuation(payload: &Map<String, Value>, event_type: &str) -> bool {
-    let result = payload.get("continuationResult");
+fn decode_continuation(
+    payload: &Map<String, Value>,
+    event_type: &str,
+) -> Result<Option<Map<String, Value>>, Refusal> {
+    let result = payload
+        .get("continuationResult")
+        .filter(|value| !value.is_null());
     let Some(status) = event_type.strip_prefix("review.continuation.") else {
-        return result.is_none() || result == Some(&Value::Null);
+        if result.is_some() {
+            return refuse(
+                "payload_continuation_unexpected",
+                "Stored Review request event contains unexpected continuation evidence.",
+            );
+        }
+        return Ok(None);
     };
-    if !CONTINUATION_STATUSES.contains(&status) {
-        return false;
-    }
     let Some(Value::Object(result)) = result else {
-        return false;
+        return refuse(
+            "payload_continuation_missing",
+            "Stored Review continuation event has no terminal result.",
+        );
     };
     const FIELDS: [&str; 7] = [
         "action",
@@ -177,33 +251,75 @@ fn valid_continuation(payload: &Map<String, Value>, event_type: &str) -> bool {
         "reason",
         "status",
     ];
-    result.len() == FIELDS.len()
-        && FIELDS.iter().all(|field| result.contains_key(*field))
-        && result.get("status").and_then(Value::as_str) == Some(status)
-        && matches!(
-            result.get("action").and_then(Value::as_str),
-            Some("allow_once" | "block")
-        )
-        && [
-            "capability",
-            "completedAt",
-            "correlationId",
-            "evidenceId",
-            "reason",
-        ]
-        .iter()
-        .all(|field| nonblank(&result[*field]))
+    const INVALID: &str = "payload_continuation_invalid";
+    if result.len() != FIELDS.len() || !FIELDS.iter().all(|field| result.contains_key(*field)) {
+        return refuse(
+            INVALID,
+            "Stored Review continuation result fields are invalid.",
+        );
+    }
+    if result.get("status").and_then(Value::as_str) != Some(status) {
+        return refuse(
+            INVALID,
+            "Stored Review continuation status does not match its event.",
+        );
+    }
+    if !matches!(
+        result.get("action").and_then(Value::as_str),
+        Some("allow_once" | "block")
+    ) {
+        return refuse(INVALID, "Stored Review continuation action is invalid.");
+    }
+    if ![
+        "capability",
+        "completedAt",
+        "correlationId",
+        "evidenceId",
+        "reason",
+    ]
+    .iter()
+    .all(|field| nonblank(&result[*field]))
+    {
+        return refuse(INVALID, "Stored Review continuation result is incomplete.");
+    }
+    Ok(Some(result.clone()))
+}
+
+fn known_event_type(event_type: &str) -> bool {
+    REQUEST_EVENT_TYPES.contains(&event_type)
+        || event_type
+            .strip_prefix("review.continuation.")
+            .is_some_and(|status| CONTINUATION_STATUSES.contains(&status))
 }
 
 /// Authenticate one stored event row; `None` when it cannot be trusted.
 pub(crate) fn decode_stored_event(row: &Row) -> Option<StoredEvent> {
-    if row.get("event_schema_version")?.as_i64()? != EVENT_SCHEMA_VERSION {
-        return None;
-    }
-    let payload_json = row.get("payload_json")?.as_str()?;
-    let payload_hash = row.get("payload_hash")?.as_str()?;
+    decode_checked(row).ok()
+}
+
+/// Authenticate one stored event row, or say why it cannot be trusted.
+pub(crate) fn decode_checked(row: &Row) -> Result<StoredEvent, Refusal> {
     let null = Value::Null;
     let field = |name: &str| row.get(name).unwrap_or(&null);
+    let version = field("event_schema_version");
+    if version.as_i64() != Some(EVENT_SCHEMA_VERSION) {
+        return refuse(
+            "unsupported_event_schema",
+            format!(
+                "Unsupported Review event schema version: {}.",
+                py_repr(version)
+            ),
+        );
+    }
+    let (Some(payload_json), Some(payload_hash)) = (
+        field("payload_json").as_str(),
+        field("payload_hash").as_str(),
+    ) else {
+        return refuse(
+            "payload_hash_mismatch",
+            "Stored Review event payload metadata is invalid.",
+        );
+    };
     let actual = payload_digest(
         payload_json,
         [
@@ -215,46 +331,96 @@ pub(crate) fn decode_stored_event(row: &Row) -> Option<StoredEvent> {
         ],
     );
     if !constant_time_equal(actual.as_bytes(), payload_hash.as_bytes()) {
-        return None;
+        return refuse(
+            "payload_hash_mismatch",
+            "Stored Review event payload integrity check failed.",
+        );
     }
-    let Value::Object(payload) = serde_json::from_str::<Value>(payload_json).ok()? else {
-        return None;
+    let payload = match serde_json::from_str::<Value>(payload_json) {
+        Ok(Value::Object(payload)) => payload,
+        Ok(_) => {
+            return refuse(
+                "payload_json_invalid",
+                "Stored Review event payload is not an object.",
+            )
+        }
+        Err(_) => {
+            return refuse(
+                "payload_json_invalid",
+                "Stored Review event payload is invalid JSON.",
+            )
+        }
     };
-    let event_type = row.get("event_type")?.as_str()?;
-    let local_request_id = row.get("local_request_id")?;
-    let wire_known =
-        REQUEST_EVENT_TYPES.contains(&event_type) || event_type.starts_with("review.continuation.");
-    if !wire_known
-        || payload.get("schema").and_then(Value::as_str) != Some(EVENT_SCHEMA_NAME)
+    let event_type = match field("event_type").as_str() {
+        Some(event_type) if known_event_type(event_type) => event_type,
+        _ => {
+            return refuse(
+                "unsupported_event_type",
+                format!(
+                    "Unsupported Review event type: {}.",
+                    py_repr(field("event_type"))
+                ),
+            )
+        }
+    };
+    let local_request_id = field("local_request_id");
+    if payload.get("schema").and_then(Value::as_str) != Some(EVENT_SCHEMA_NAME)
         || payload.get("eventType").and_then(Value::as_str) != Some(event_type)
-        || payload.get("localRequestId") != Some(local_request_id)
+        || payload.get("localRequestId").unwrap_or(&null) != local_request_id
     {
-        return None;
+        return refuse(
+            "payload_metadata_mismatch",
+            "Stored Review event payload does not match its authenticated envelope.",
+        );
     }
-    let oauth_source = field("oauth_source");
-    if payload.get("oauthSource").unwrap_or(&null) != oauth_source {
-        return None;
+    let payload_source = payload.get("oauthSource").unwrap_or(&null);
+    if payload_source != field("oauth_source") {
+        return refuse(
+            "payload_source_binding_mismatch",
+            "Stored Review event OAuth source does not match its delivery binding.",
+        );
     }
-    match payload.get("nativeReplay") {
-        None | Some(Value::Null) => {}
-        Some(Value::Bool(_)) if event_type == "review.request.snapshot_requeued" => {}
-        Some(_) => return None,
-    }
+    let native_replay = match payload.get("nativeReplay") {
+        None | Some(Value::Null) => None,
+        Some(Value::Bool(flag)) if event_type == "review.request.snapshot_requeued" => Some(*flag),
+        Some(_) => {
+            return refuse(
+                "payload_native_replay_invalid",
+                "Stored Review event native replay discriminator is invalid.",
+            )
+        }
+    };
     let snapshot = decode_snapshot(&payload)?;
-    if !valid_continuation(&payload, event_type) {
-        return None;
+    let continuation_result = decode_continuation(&payload, event_type)?;
+    if snapshot.get("request_id") != Some(local_request_id) {
+        return refuse(
+            "payload_snapshot_request_mismatch",
+            "Stored Review event snapshot request does not match its authenticated envelope.",
+        );
     }
-    if snapshot.get("request_id") != Some(local_request_id)
-        || snapshot.get("oauth_source").unwrap_or(&null)
-            != payload.get("oauthSource").unwrap_or(&null)
-    {
-        return None;
+    if snapshot.get("oauth_source").unwrap_or(&null) != payload_source {
+        return refuse(
+            "payload_snapshot_source_mismatch",
+            "Stored Review event snapshot OAuth source does not match its authenticated envelope.",
+        );
     }
-    row.get("request_sequence")?.as_i64()?;
-    Some(StoredEvent {
-        stream_sequence: row.get("stream_sequence")?.as_i64()?,
-        event_id: row.get("event_id")?.as_str()?.to_owned(),
+    let (Some(stream_sequence), Some(request_sequence), Some(event_id)) = (
+        field("stream_sequence").as_i64(),
+        field("request_sequence").as_i64(),
+        field("event_id").as_str(),
+    ) else {
+        return refuse(
+            "payload_metadata_mismatch",
+            "Stored Review event sequence metadata is invalid.",
+        );
+    };
+    Ok(StoredEvent {
+        stream_sequence,
+        request_sequence,
+        event_id: event_id.to_owned(),
         event_type: event_type.to_owned(),
+        native_replay,
+        continuation_result,
         snapshot,
     })
 }

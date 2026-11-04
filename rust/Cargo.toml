@@ -28,6 +28,7 @@ members = [
     "crates/guard-runtime",
     "crates/guard-runtime-pyjson",
     "crates/guard-runtime-windows-process",
+    "crates/guard-yanez-pulse",
 ]
 resolver = "2"
 

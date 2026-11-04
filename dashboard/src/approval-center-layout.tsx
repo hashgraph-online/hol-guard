@@ -144,6 +144,7 @@ function renderInboxContent(props: LayoutProps): ReactNode {
       <QueueConnectionError
         message={props.requests.message}
         approvalUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null}
+        requestId={props.activeRequestId}
         onRetry={props.onRetry}
         onRepair={props.onRepair}
       />

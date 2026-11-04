@@ -33,6 +33,7 @@ mod policy_enforcement_policy;
 #[path = "policy_enforcement_reason.rs"]
 mod policy_enforcement_reason;
 pub(crate) use policy_enforcement_matrix::{validate_pre_tool_result_matrix, ActionFloor};
+pub(crate) use prompt::deferred_prompt_review;
 
 /// Recheck business rules above the authenticated native receipt's intrinsic
 /// floor. This validates review eligibility; it grants no execution authority.
@@ -308,6 +309,7 @@ pub(crate) fn apply_pre_tool_policy(
                 };
             output.explicitly_benign = effective == "allow";
         }
+        prompt::defer_prompt_review(&mut output);
         validate_pre_tool_result_matrix(&output)?;
         return Ok(output);
     }
@@ -345,6 +347,7 @@ pub(crate) fn apply_pre_tool_policy(
         "deny".to_owned()
     };
     output.explicitly_benign = effective == "allow";
+    prompt::defer_prompt_review(&mut output);
     validate_pre_tool_result_matrix(&output)?;
     Ok(output)
 }
@@ -353,6 +356,8 @@ pub(crate) fn apply_pre_tool_policy(
 mod eval_output;
 #[path = "policy_enforcement_post.rs"]
 mod post;
+#[path = "policy_enforcement_prompt.rs"]
+mod prompt;
 #[cfg(test)]
 pub(crate) use post::apply_post_tool_policy;
 pub(crate) use post::apply_post_tool_policy_with_delivery;

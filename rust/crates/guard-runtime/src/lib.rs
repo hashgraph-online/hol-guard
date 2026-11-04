@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![recursion_limit = "512"]
 
+mod access_graph_snapshot;
 mod active_pack_security;
 #[path = "adapters/adapter_inventory.rs"]
 mod adapter_inventory;
@@ -29,6 +30,7 @@ mod antigravity_detect;
 mod approval;
 mod approval_bulk_eligibility_op;
 mod approval_copy;
+mod approval_extension_coverage;
 mod approval_extension_recommendation_op;
 mod approval_gate_consumers;
 mod approval_gate_enrollment;
@@ -90,7 +92,9 @@ mod browser_open;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
 mod business_document_compile;
+mod business_review_page;
 mod business_source_codec;
+mod catalog_provenance;
 mod cisco_containment;
 mod cisco_evidence;
 mod cisco_plan;
@@ -136,6 +140,7 @@ mod claude_session_start;
 mod claude_session_start_contract;
 mod claude_session_start_live;
 mod cli_copilot_resolution;
+mod cli_profiles;
 mod cli_runtime_support_op;
 #[path = "adapters/detection/cline_detect.rs"]
 mod cline_detect;
@@ -148,6 +153,11 @@ mod cline_hook_files;
 #[path = "adapters/cline_hook_files_tests.rs"]
 mod cline_hook_files_tests;
 mod cline_hook_worker;
+#[path = "adapters/cline_install_plan.rs"]
+mod cline_install_plan;
+#[cfg(test)]
+#[path = "adapters/cline_install_plan_tests.rs"]
+mod cline_install_plan_tests;
 #[path = "adapters/cline_paths.rs"]
 mod cline_paths;
 #[path = "adapters/cline_plugin_render.rs"]
@@ -157,6 +167,8 @@ mod cline_plugin_render;
 mod cline_plugin_render_tests;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
+mod cloud_actions_access;
+mod cloud_actions_status;
 mod cloud_exception_lift;
 mod cloud_receipt_payload;
 #[cfg(test)]
@@ -220,8 +232,11 @@ mod compound_git_inspection_op_tests;
 mod compound_git_inspection_vectors_tests;
 mod compound_git_paths;
 mod compound_git_segments;
+mod connector_regroup;
 mod connector_setup;
 mod connector_setup_context_op;
+mod connector_setup_rows;
+mod consumer_approval_context;
 mod consumer_artifact_compose_op;
 mod consumer_artifact_compose_runtime;
 mod consumer_artifact_project_op;
@@ -234,6 +249,7 @@ mod consumer_mode_contract;
 mod consumer_outcome;
 mod consumer_result;
 mod consumer_url;
+mod contained_denial_note;
 #[cfg(unix)]
 mod contained_op;
 mod contained_output_match;
@@ -242,6 +258,7 @@ mod contained_test_request;
 mod contained_workspace_grant_plan;
 #[cfg(unix)]
 mod contained_workspace_sink;
+mod contained_workspace_sink_denial;
 mod contained_wrapper_plan_op;
 mod content_decode;
 mod content_sensitivity_op;
@@ -343,6 +360,7 @@ mod daemon_route_op;
 mod daemon_route_paths;
 mod daemon_route_resolve;
 mod daemon_route_session;
+mod dashboard_reconnect;
 mod data_flow_analyze_op;
 mod decision_authority_op;
 #[cfg(test)]
@@ -352,6 +370,7 @@ mod desktop_core_onedir;
 mod desktop_foreign_installs;
 mod desktop_foreign_remove;
 mod desktop_notification;
+mod desktop_review_link;
 mod developer_inspection_authority_op;
 mod developer_inspection_host;
 mod device_key_helper;
@@ -382,9 +401,11 @@ mod extension_control_mutation_op;
 mod extension_control_op;
 mod extension_control_prepared_op;
 mod extension_control_preview_op;
+mod extension_control_projection_op;
 mod extension_control_proof;
 mod extension_control_terminal_op;
 mod extension_coverage_hint;
+mod extension_hint_shape;
 mod fleet_posture_inventory;
 /// Parser entry points for `rust/fuzz`; see `fuzz_entry.rs`.
 #[cfg(any(test, feature = "fuzzing"))]
@@ -716,6 +737,7 @@ mod hook_process_spawn;
 mod hook_render_op;
 mod insights_share_payload;
 mod installation_continuity;
+mod inventory_export_redaction;
 mod inventory_item_classification_op;
 mod inventory_scan_findings_op;
 mod inventory_scan_targets_op;
@@ -731,6 +753,7 @@ mod kimi_hook_config;
 #[path = "adapters/detection/kimi_hook_config_tests.rs"]
 mod kimi_hook_config_tests;
 mod local_authority_integrity_op;
+mod local_cli_change_request;
 mod local_cli_grant_op;
 mod local_cli_help;
 mod local_cli_hook_contained;
@@ -759,6 +782,8 @@ mod managed_policy_plist;
 mod managed_policy_registry;
 mod managed_resident;
 mod mcp_classification_op;
+mod mcp_output;
+mod mcp_policy_input;
 mod mcp_probe_op;
 mod mcp_proxy_actions;
 mod mcp_proxy_archive;
@@ -783,6 +808,8 @@ mod mcp_proxy_projection_vectors_tests;
 mod mcp_proxy_route;
 mod mcp_proxy_shlex;
 mod mcp_proxy_signals;
+mod mcp_registry_page;
+mod mcp_registry_setup;
 mod mcp_relay;
 mod mcp_relay_args;
 mod mcp_relay_authority;
@@ -810,6 +837,7 @@ mod mcp_stdio_session_op;
 mod mcp_tool_call_identity_build;
 mod mcp_tool_call_identity_op;
 mod mcp_tool_evidence_op;
+mod mcp_tool_inventory;
 mod mcp_tool_policy_composio;
 mod mcp_tool_policy_connector;
 mod mcp_tool_policy_decide_op;
@@ -821,6 +849,8 @@ mod mcp_tool_policy_lookup;
 mod mcp_tool_policy_proxy;
 mod mcp_tool_policy_revalidate;
 mod mdm_integrity_snapshot;
+mod memory_decision_event;
+mod memory_decision_receipt;
 mod memory_pattern;
 #[cfg(target_os = "macos")]
 mod native_bash_client;
@@ -836,7 +866,9 @@ mod native_runtime_admission;
 mod native_runtime_resilience;
 mod network_protection;
 mod network_protection_verify_op;
+mod network_status_build;
 mod network_status_validation;
+mod oauth_package_firewall_entitlement;
 mod oauth_refresh;
 mod oauth_secret_authority;
 mod oci_bundle_evidence;
@@ -845,6 +877,7 @@ mod oci_bundle_op;
 #[cfg(test)]
 mod oci_bundle_vectors_tests;
 mod oci_path;
+mod omp_code_mode;
 mod omp_yield_input_scan;
 mod onefile_extraction_reclaim;
 mod onefile_extraction_removal;
@@ -862,6 +895,12 @@ mod openclaw_detect;
 mod openclaw_detect_tests;
 mod openclaw_mcp;
 mod openclaw_skills;
+mod opencode_command_replace;
+#[path = "adapters/opencode_config_normalize.rs"]
+mod opencode_config_normalize;
+#[cfg(test)]
+#[path = "adapters/opencode_config_normalize_tests.rs"]
+mod opencode_config_normalize_tests;
 #[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
 #[path = "adapters/opencode_install_plan.rs"]
@@ -878,6 +917,8 @@ mod opencode_plugin_render;
 mod opencode_plugin_render_tests;
 #[path = "adapters/opencode_proxy_entry.rs"]
 mod opencode_proxy_entry;
+#[path = "adapters/opencode_server_id.rs"]
+mod opencode_server_id;
 mod orphaned_worker_reap;
 mod ownership_acl_verdict;
 mod package_approval_hash_op;
@@ -948,10 +989,13 @@ mod project_identity;
 mod project_identity_op;
 mod prompt_analyze_op;
 mod protect_advisory_merge_op;
+mod protect_approval_plan;
+mod protect_guidance;
 mod protect_request_op;
 mod protection_health_report_op;
 mod proxy_credentials;
 use guard_runtime_pyjson as pyjson;
+mod receipt_embedded_scripts;
 #[cfg(test)]
 mod registry_vectors_tests;
 mod release_feed_op;
@@ -985,6 +1029,8 @@ mod restricted_linux_launch;
 mod restricted_process_ceiling;
 mod restricted_pytest_op;
 mod retry_lineage_capture_op;
+mod review_event_decode;
+mod review_policy_memory_plan;
 mod reviewed_invocation_bindings_op;
 mod rich_command_model_op;
 mod risk_action;
@@ -1088,15 +1134,18 @@ mod windows_readonly;
 mod windows_trusted_directories;
 mod workspace_assessment_sync;
 mod workspace_audit_sync;
+mod workspace_findings_carry;
 mod workspace_fix;
 mod workspace_fix_diff;
 mod workspace_fix_fs;
 mod workspace_fix_manifest;
+mod workspace_fix_verify;
 mod workspace_inventory_dependencies;
 mod workspace_inventory_files;
 mod workspace_inventory_op;
 mod workspace_mcp_config;
 mod workspace_package_findings;
+mod workspace_rule_findings;
 mod workspace_runtime_findings;
 mod workspace_scan_targets;
 mod workspace_snapshot;

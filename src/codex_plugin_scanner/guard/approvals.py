@@ -216,6 +216,22 @@ def primary_approval_url(
 first_approval_url = primary_approval_url
 
 
+def primary_approval_browser_url(
+    queued: Sequence[object],
+    *,
+    browser_url: str | None,
+    harness: str | None = None,
+    approval_center_url: str | None = None,
+    request_id: str | None = None,
+) -> str | None:
+    """The link the approval surface opens: the review link, carrying the
+    browser session's token when both point at the same approval center."""
+
+    fields = {"harness": _text(harness), "request_id": _text(request_id), "browser_url": _text(browser_url)}
+    link = _approval_link("primary", queued, approval_center_url=_text(approval_center_url), **fields)
+    return _text(link.get("browser_url", browser_url))
+
+
 def preferred_approval_review_url(payload: Mapping[str, object], *, harness: str) -> str | None:
     """Return the review link for a hook payload, else its approval center."""
 
@@ -1429,7 +1445,6 @@ def _build_runtime_cloud_context(
         "cloud_policy_sync_error": cached_policy_bundle_error
         or _optional_string(policy_bundle_last_error.get("reason")),
         "cloud_policy_last_ack_at": cloud_status["cloud_policy_last_ack_at"],
-        "team_policy_active": False,
         "proof_status": cloud_status["proof_status"],
     }
 

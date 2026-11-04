@@ -23,6 +23,7 @@ from tests.test_guard_workspace_assessment_runner import (
     T0,
     queued_run,
 )
+from tests.workspace_rule_support import project_rule_findings, with_rule_coverage
 
 FINDING_ID = "0123456789abcdef0123456789abcdef"
 TASKS_PATH = ".vscode/tasks.json"
@@ -143,8 +144,10 @@ def test_a_configuration_the_scan_could_not_read_leaves_the_run_partial(
 
 
 def test_an_editor_task_scan_at_its_cap_marks_findings_truncated() -> None:
-    coverage = editor_findings.with_editor_task_coverage(
-        EMPTY_COVERAGE, editor_result(native_finding(), status="incomplete", truncation_reasons=["max_findings"])
+    coverage = with_rule_coverage(
+        editor_findings.EDITOR_TASK_DETECTOR,
+        EMPTY_COVERAGE,
+        editor_result(native_finding(), status="incomplete", truncation_reasons=["max_findings"]),
     )
     assert coverage["reasons"] == ["editor_task_incomplete", "finding_cap"]
 
@@ -165,7 +168,7 @@ def test_an_editor_task_scan_at_its_cap_marks_findings_truncated() -> None:
     ],
 )
 def test_an_unreadable_editor_task_result_is_an_error(payload: dict[str, object]) -> None:
-    coverage = editor_findings.with_editor_task_coverage(EMPTY_COVERAGE, payload)
+    coverage = with_rule_coverage(editor_findings.EDITOR_TASK_DETECTOR, EMPTY_COVERAGE, payload)
     assert (coverage["status"], coverage["reasons"]) == ("partial", ["editor_task_incomplete"])
     assert coverage["detectors"]["editor_task_v1"] == "error"
 
@@ -197,8 +200,8 @@ def test_an_unreadable_editor_task_result_is_an_error(payload: dict[str, object]
 )
 def test_a_malformed_finding_is_dropped_and_leaves_the_scan_incomplete(bad: dict[str, object]) -> None:
     result = editor_result(native_finding(**bad))
-    assert editor_findings.project_editor_task_findings(result) == []
-    coverage = editor_findings.with_editor_task_coverage(EMPTY_COVERAGE, result)
+    assert project_rule_findings(editor_findings.EDITOR_TASK_DETECTOR, result) == []
+    coverage = with_rule_coverage(editor_findings.EDITOR_TASK_DETECTOR, EMPTY_COVERAGE, result)
     assert coverage["detectors"]["editor_task_v1"] == "incomplete"
     assert coverage["editor_task"]["truncation_reasons"] == ["invalid_finding"]
 
@@ -218,10 +221,10 @@ def test_every_configuration_the_native_scan_reads_is_accepted() -> None:
             for index, (rule_id, path) in enumerate(located)
         )
     )
-    assert [item["path"] for item in editor_findings.project_editor_task_findings(result)] == [
+    assert [item["path"] for item in project_rule_findings(editor_findings.EDITOR_TASK_DETECTOR, result)] == [
         path for _, path in located
     ]
-    coverage = editor_findings.with_editor_task_coverage(EMPTY_COVERAGE, result)
+    coverage = with_rule_coverage(editor_findings.EDITOR_TASK_DETECTOR, EMPTY_COVERAGE, result)
     assert coverage["detectors"]["editor_task_v1"] == "complete"
 
 

@@ -45,6 +45,9 @@ fn request(response: Value, trusted_keys: Option<Value>) -> NetworkProtectionVer
         schema: NETWORK_PROTECTION_VERIFY_REQUEST_SCHEMA.to_owned(),
         request_id: "network-protection-verify-test".to_owned(),
         response,
+        response_json: None,
+        response_path: None,
+        response_sha256: None,
         workspace_id: workspace_id(),
         trusted_keys,
         cached_bundle_version: None,
@@ -198,5 +201,266 @@ fn still_reads_an_envelope_that_lists_no_entries_as_an_empty_keyring() {
     assert_eq!(
         message,
         "Network protection bundle signing key is not trusted"
+    );
+}
+
+fn as_text(request: NetworkProtectionVerifyRequestV1) -> NetworkProtectionVerifyRequestV1 {
+    NetworkProtectionVerifyRequestV1 {
+        response: Value::Null,
+        response_json: Some(serde_json::to_string(&request.response).expect("response encodes")),
+        ..request
+    }
+}
+
+#[test]
+fn verifies_the_same_bundle_when_the_response_arrives_as_text() {
+    let response = response();
+    let keys = advertised_keys(&response);
+    let as_value = result(&request(response.clone(), Some(keys.clone())));
+    let as_json = result(&as_text(request(response, Some(keys))));
+
+    assert_eq!(as_value.payload["outcome"], "verified");
+    assert_eq!(as_json.payload, as_value.payload);
+}
+
+#[test]
+fn refuses_a_request_that_carries_the_response_twice() {
+    let response = response();
+    let keys = advertised_keys(&response);
+    let both = NetworkProtectionVerifyRequestV1 {
+        response_json: Some(serde_json::to_string(&response).expect("response encodes")),
+        ..request(response, Some(keys))
+    };
+
+    assert_eq!(
+        refusal(&both),
+        "Network protection bundle request carries the response twice"
+    );
+}
+
+#[test]
+fn refuses_response_text_that_is_not_json() {
+    let response = response();
+    let keys = advertised_keys(&response);
+    let broken = NetworkProtectionVerifyRequestV1 {
+        response_json: Some("{".to_owned()),
+        ..as_text(request(response, Some(keys)))
+    };
+
+    assert_eq!(
+        refusal(&broken),
+        "Network protection bundle response is not valid JSON"
+    );
+}
+
+/// A production bundle's threat feeds hold far more than the 4,096 items a
+/// request frame allows in one array. Sent as a value, the frame never reaches
+/// the verifier and the caller sees no reply at all; sent as text, the
+/// verifier reads it and answers.
+#[test]
+fn a_bundle_with_wide_threat_feeds_reaches_the_verifier_as_text() {
+    let mut response = response();
+    let keys = advertised_keys(&response);
+    response["bundle"]["threatUrls"]["malware_distribution"] = Value::Array(
+        (0..5_000)
+            .map(|index| Value::String(format!("{index:032x}")))
+            .collect(),
+    );
+    let frame = |request: NetworkProtectionVerifyRequestV1| {
+        serde_json::to_vec(&json!({
+            "operation": "network_protection_verify",
+            "request": request,
+            "deadline_budget_ms": 15_000,
+        }))
+        .expect("frame encodes")
+    };
+
+    let as_value = request(response.clone(), Some(keys.clone()));
+    assert_eq!(
+        crate::resident_ops::evaluate_resident_bytes(&frame(as_value), None),
+        Err("native_json_array_too_wide".to_owned())
+    );
+
+    let as_json = as_text(request(response, Some(keys)));
+    let reply = crate::resident_ops::evaluate_resident_bytes(&frame(as_json), None)
+        .expect("the frame reaches the operation");
+    let parsed: NetworkProtectionVerifyResultV1 =
+        serde_json::from_slice(&reply).expect("the reply parses");
+    // The extra entries are outside what the producer signed, so the
+    // verifier itself refuses them, which is the point: it read the bundle.
+    assert_eq!(parsed.payload["outcome"], "refused");
+    assert_eq!(
+        parsed.payload["message"],
+        "Network protection bundle payloadHash does not match its payload"
+    );
+}
+
+fn file_digest(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("sha256:{}", hex::encode(Sha256::digest(bytes)))
+}
+
+/// Write the request's response to a file in `dir` and name it instead.
+fn as_file(
+    dir: &tempfile::TempDir,
+    request: NetworkProtectionVerifyRequestV1,
+) -> NetworkProtectionVerifyRequestV1 {
+    let bytes = serde_json::to_vec(&request.response).expect("response encodes");
+    let path = dir.path().join("response.json");
+    std::fs::write(&path, &bytes).expect("response file writes");
+    NetworkProtectionVerifyRequestV1 {
+        response: Value::Null,
+        response_path: Some(path.to_string_lossy().into_owned()),
+        response_sha256: Some(file_digest(&bytes)),
+        ..request
+    }
+}
+
+#[test]
+fn verifies_the_same_bundle_when_the_response_arrives_as_a_file() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let response = response();
+    let keys = advertised_keys(&response);
+    let as_value = result(&request(response.clone(), Some(keys.clone())));
+    let from_file = result(&as_file(&dir, request(response, Some(keys))));
+
+    assert_eq!(as_value.payload["outcome"], "verified");
+    assert_eq!(from_file.payload, as_value.payload);
+}
+
+/// The digest is what binds the file to the request hash the reply carries,
+/// so a file rewritten after the caller hashed it is never verified.
+#[test]
+fn refuses_a_response_file_that_changed_after_it_was_hashed() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let response = response();
+    let keys = advertised_keys(&response);
+    let request = as_file(&dir, request(response, Some(keys)));
+    let path = request.response_path.clone().expect("file route");
+    std::fs::write(&path, b"{}").expect("file rewrites");
+
+    assert_eq!(
+        refusal(&request),
+        "Network protection bundle response file does not match its digest"
+    );
+}
+
+#[test]
+fn refuses_a_response_file_without_a_digest() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let response = response();
+    let keys = advertised_keys(&response);
+    let request = NetworkProtectionVerifyRequestV1 {
+        response_sha256: None,
+        ..as_file(&dir, request(response, Some(keys)))
+    };
+
+    assert_eq!(
+        refusal(&request),
+        "Network protection bundle response file has no digest"
+    );
+}
+
+#[test]
+fn refuses_a_digest_without_a_response_file() {
+    let response = response();
+    let keys = advertised_keys(&response);
+    let request = NetworkProtectionVerifyRequestV1 {
+        response_sha256: Some(file_digest(b"{}")),
+        ..request(response, Some(keys))
+    };
+
+    assert_eq!(
+        refusal(&request),
+        "Network protection bundle request names a digest without a file"
+    );
+}
+
+#[test]
+fn refuses_a_request_that_carries_the_response_as_text_and_a_file() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let response = response();
+    let keys = advertised_keys(&response);
+    let both = NetworkProtectionVerifyRequestV1 {
+        response_json: Some(serde_json::to_string(&response).expect("response encodes")),
+        ..as_file(&dir, request(response, Some(keys)))
+    };
+
+    assert_eq!(
+        refusal(&both),
+        "Network protection bundle request carries the response twice"
+    );
+}
+
+#[test]
+fn refuses_a_missing_response_file() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let response = response();
+    let keys = advertised_keys(&response);
+    let request = as_file(&dir, request(response, Some(keys)));
+    std::fs::remove_file(request.response_path.as_deref().expect("file route"))
+        .expect("file removes");
+
+    assert_eq!(
+        refusal(&request),
+        "Network protection bundle response file is unreadable"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn refuses_a_response_file_reached_through_a_link() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let response = response();
+    let keys = advertised_keys(&response);
+    let request = as_file(&dir, request(response, Some(keys)));
+    let link = dir.path().join("link.json");
+    std::os::unix::fs::symlink(request.response_path.as_deref().expect("file route"), &link)
+        .expect("link creates");
+    let linked = NetworkProtectionVerifyRequestV1 {
+        response_path: Some(link.to_string_lossy().into_owned()),
+        ..request
+    };
+
+    assert_eq!(
+        refusal(&linked),
+        "Network protection bundle response file is unreadable"
+    );
+}
+
+/// A file carries feeds no frame string could: twice the 4 MiB bound the
+/// text route has to fit under, and the verifier still reads it.
+#[test]
+fn a_bundle_larger_than_a_frame_string_reaches_the_verifier_as_a_file() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut response = response();
+    let keys = advertised_keys(&response);
+    response["bundle"]["threatUrls"]["malware_distribution"] = Value::Array(
+        (0..250_000)
+            .map(|index| Value::String(format!("{index:032x}")))
+            .collect(),
+    );
+    let request = as_file(&dir, request(response, Some(keys)));
+    let size = std::fs::metadata(request.response_path.as_deref().expect("file route"))
+        .expect("file stats")
+        .len();
+    assert!(size > 8 * 1024 * 1024, "file is {size} bytes");
+    let frame = serde_json::to_vec(&json!({
+        "operation": "network_protection_verify",
+        "request": &request,
+        "deadline_budget_ms": 15_000,
+    }))
+    .expect("frame encodes");
+
+    let reply = crate::resident_ops::evaluate_resident_bytes(&frame, None)
+        .expect("the frame reaches the operation");
+    let parsed: NetworkProtectionVerifyResultV1 =
+        serde_json::from_slice(&reply).expect("the reply parses");
+    // The extra entries are outside what the producer signed, so the
+    // verifier itself refuses them, which is the point: it read the bundle.
+    assert_eq!(parsed.payload["outcome"], "refused");
+    assert_eq!(
+        parsed.payload["message"],
+        "Network protection bundle payloadHash does not match its payload"
     );
 }

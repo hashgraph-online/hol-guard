@@ -7,7 +7,9 @@ import { ContextWorkspacesPanel } from "./workspaces-panel";
 import { CigarWorkspace } from "./workspace";
 import { CigarVersionsPanel } from "./versions-panel";
 import { CigarSetupProof } from "./one-click-setup";
+import { CodexLeanSessions } from "./codex-lean";
 import { useCigarOneClick } from "./use-one-click";
+import { CigarAllowFilesProof, useCigarAllowFiles } from "./allow-files";
 import { commitDashboardLocation } from "../dashboard-location";
 import { sameCigarPreferences } from "./selection-settings";
 import { cigarWaking } from "./workspace-model";
@@ -121,6 +123,11 @@ export function ContextAssistanceSettings(props: Props) {
     onSaved: (config, previous) => props.onSelectionChanged?.(config, previous),
     onTurnOff: () => void perform("stop"),
   });
+  const allowFiles = useCigarAllowFiles({
+    saved, dirty, disabled: props.disabled || props.locked || busy || setup.busy, gate: props.gate ?? null,
+    onSaved: (config, previous) => props.onSelectionChanged?.(config, previous),
+    onRestart: () => void perform("activate"),
+  });
   useEffect(() => {
     if (!setup.busy) return;
     onBusyChange(true);
@@ -168,7 +175,7 @@ export function ContextAssistanceSettings(props: Props) {
     } catch (cause) {
       if (current !== revision.current) return;
       setStatus(null);
-      setError(cause instanceof Error ? cause.message : "The context assistance operation did not return a verified result. Refresh its status.");
+      setError(cause instanceof Error ? cause.message : "CIGAR could not finish that. Refresh and try again.");
     } finally {
       pending.current = false;
       if (mounted.current && current === revision.current) {
@@ -194,13 +201,15 @@ export function ContextAssistanceSettings(props: Props) {
       executionAllowed={status?.effective_preferences.features.execution_context === true
         && status?.capabilities?.execution_context === true}
       sharingAllowed={status?.effective_preferences.features.shared_agents === true && status?.runtime?.shared_compile_verified === true}
-      gate={props.gate ?? null} />;
+      gate={props.gate ?? null} allowFiles={allowFiles} />;
   return workspace ? <><CigarWorkspace status={status} installations={installations} loading={loading}
-    busy={busy} disabled={props.disabled} dirty={dirty} error={error} setup={setup}
+    busy={busy} disabled={props.disabled} dirty={dirty} error={error} setup={setup} allowFiles={allowFiles}
     stopAvailable={Boolean(value?.enabled || saved?.enabled || status?.job || status?.effective_enabled || error)}
-    controls={controls} access={access} data={props.data}
+    controls={<div className="space-y-8">{controls}<CodexLeanSessions gate={props.gate ?? null} disabled={props.disabled} /></div>}
+    access={access} data={props.data}
     versions={<CigarVersionsPanel status={status} disabled={props.disabled || busy} locked={props.locked}
       dirty={dirty} gate={props.gate ?? null} captureStatus={captureVersionStatus} />}
     onRefresh={() => { void refresh(); void setup.refresh(); }}
-    onStop={() => void perform("stop")} /><CigarSetupProof setup={setup} gate={props.gate ?? null} /></> : <>{controls}{access}</>;
+    onStop={() => void perform("stop")} /><CigarSetupProof setup={setup} gate={props.gate ?? null} />
+    <CigarAllowFilesProof allow={allowFiles} gate={props.gate ?? null} /></> : <>{controls}{access}<CigarAllowFilesProof allow={allowFiles} gate={props.gate ?? null} /></>;
 }

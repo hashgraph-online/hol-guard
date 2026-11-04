@@ -122,6 +122,23 @@ fn status_is_bound_off_and_activation_cannot_bypass_local_consent() {
 }
 
 #[test]
+fn a_session_start_warm_leaves_project_context_off_when_nobody_chose_it() {
+    let fixture = Fixture::new();
+    let warm = fixture.ask("warm");
+    assert_eq!(warm["status"], "ok");
+    assert_eq!(warm["payload"]["kind"], "warm");
+    assert_eq!(warm["payload"]["state"]["effective_enabled"], false);
+    // The fixture's store has no policy binding yet, as a resident the
+    // prewarm just started has none until the daemon pushes one.
+    assert_eq!(warm["payload"]["warm"], "waiting");
+    assert!(!fixture.home.join("context-assistance").exists());
+    assert_eq!(
+        fixture.ask_input("warm", json!({"harness":"codex"}))["code"],
+        "native_context_assistance_control_input_invalid"
+    );
+}
+
+#[test]
 fn foreign_home_and_caller_supplied_runtime_authority_are_refused() {
     let fixture = Fixture::new();
     let request: Request = serde_json::from_value(

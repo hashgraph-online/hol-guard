@@ -26,6 +26,21 @@ pub(crate) use guard_adapter_detection::{
     carried, json_document, json_payload, mcp_fields, SkillNaming, ERR_NAME, ERR_VALUE,
 };
 
+/// A skill root named relative to its identity root (`relative_to(...).as_posix()`,
+/// else the root itself), so discovery-issue ids carry no absolute local path.
+pub(crate) fn skill_root_label(skill_root: &Path, identity_root: &Path) -> String {
+    let label = skill_root
+        .strip_prefix(identity_root)
+        .unwrap_or(skill_root)
+        .to_string_lossy()
+        .into_owned();
+    if cfg!(windows) {
+        label.replace('\\', "/")
+    } else {
+        label
+    }
+}
+
 /// The directories one detection request names.
 pub(crate) struct Request {
     pub(crate) home: PathBuf,

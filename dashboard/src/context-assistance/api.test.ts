@@ -47,7 +47,7 @@ try {
   assert.equal(compiled.scope?.receipt_window?.retained, 1);
   assert.equal(compiled.brief.snapshot_id, observed.snapshot_id);
   payload = { schema: "guard-cigar-workspace-result.v1", data_role: true, result: { brief: observed, current: true, scope: { ...scope, scope_id: "scope:foreign" } } };
-  await assert.rejects(compileWorkspaceContext(scope.scope_id, "native recorded decisions"), /incompatible context data/);
+  await assert.rejects(compileWorkspaceContext(scope.scope_id, "native recorded decisions"), /does not understand/);
   payload = { schema: "guard-cigar-workspace-result.v1", data_role: true,
     result: { agent_sessions: [{ session_id: "agent:public-code", scope_id: null, phase: "pending", expires_in_seconds: 300 }] } };
   assert.equal((await listContextAgentSessions())[0].phase, "pending");
@@ -66,11 +66,11 @@ try {
   const beforePairingRefusal = calls.length;
   await assert.rejects(authorizeContextAgentSession("agent:capacity", "scope:chosen"), (error: unknown) =>
     error instanceof ContextAssistanceApiError && error.code.endsWith("context_resource_limit")
-      && error.message.includes("Revoke an unused connection or workspace")
-      && error.message.includes("pair its new code") && !error.message.includes("private-capacity"));
+      && error.message.includes("Disconnect an app or remove a project")
+      && error.message.includes("use its new code") && !error.message.includes("private-capacity"));
   assert.equal(calls.length, beforePairingRefusal + 1, "a refused pairing must never retry itself");
   await assert.rejects(compileWorkspaceContext(scope.scope_id, "native recorded decisions"), (error: unknown) =>
-    error instanceof ContextAssistanceApiError && !error.message.includes("client capacity")
+    error instanceof ContextAssistanceApiError && !error.message.includes("connected to as many apps")
       && !error.message.includes("private-capacity"), "other resource limits need their own recovery, not a pairing instruction");
   payload = { code: "native_context_assistance_disabled", message: "private-content-must-not-render" };
   status = 503;

@@ -7,6 +7,20 @@ export const QUEUE_SESSION_ERROR_DETAIL =
   "Guard is still running on this device. This browser is not signed in to the local dashboard.";
 export const QUEUE_SESSION_ERROR_INSTRUCTION =
   "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
+export const QUEUE_SESSION_COMMAND_INSTRUCTION =
+  "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
+
+const REQUEST_ID = /^[0-9a-f]{32}$/;
+
+/** `hol-guard-desktop://requests/<id>` for a queue-shaped request id. */
+export function desktopRequestUrl(requestId: string | null): string | null {
+  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard-desktop://requests/${requestId}` : null;
+}
+
+/** The terminal command that opens `requestId` with a signed local session. */
+export function approvalsOpenCommand(requestId: string | null): string | null {
+  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard approvals open ${requestId}` : null;
+}
 
 export function queueErrorIsUnauthorizedSession(message: string): boolean {
   const lower = message.trim().toLowerCase();

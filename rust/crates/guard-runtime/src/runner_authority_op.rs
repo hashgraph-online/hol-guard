@@ -22,6 +22,7 @@ use super::claude_code_detect;
 use super::claude_hook_config;
 use super::cline_detect;
 use super::cline_hook_files;
+use super::cline_install_plan;
 use super::cline_paths;
 use super::cline_plugin_render;
 use super::codex_detect;
@@ -50,6 +51,7 @@ use super::kimi_hook_config;
 use super::muse_detect;
 use super::oci_bundle_op as oci;
 use super::openclaw_detect;
+use super::opencode_config_normalize;
 use super::opencode_detect;
 use super::opencode_install_plan;
 use super::opencode_launch;
@@ -100,6 +102,8 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
     match kind {
         "approval_wait_hint" => crate::blocked_request_mode::wait_hint_projection(args),
         "approval_link" => crate::approval_link::dispatch(args),
+        "protect_approval_plan" => crate::protect_approval_plan::dispatch(args),
+        "protect_guidance" => crate::protect_guidance::dispatch(args),
         "runtime_cloud_status" => crate::runtime_cloud_status::dispatch(args),
         "runtime_headline" => crate::runtime_headline::dispatch(args),
         "developer_inspection_authority" => {
@@ -118,17 +122,40 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         | "decision_legacy"
         | "decision_build" => crate::decision_authority_op::dispatch(kind, args),
         "cli_runtime_support" => crate::cli_runtime_support_op::dispatch(args),
+        "extension_hint_shape" => crate::extension_hint_shape::dispatch(args),
+        "mcp_output" => crate::mcp_output::dispatch(args),
+        "memory_decision_receipt" => crate::memory_decision_receipt::dispatch(args),
+        "cli_profiles" => crate::cli_profiles::dispatch(args),
+        "catalog_provenance" => crate::catalog_provenance::dispatch(args),
+        "connector_regroup" => crate::connector_regroup::dispatch(args),
+        "cloud_actions_access" => crate::cloud_actions_access::dispatch(args),
+        "mcp_policy_input" => crate::mcp_policy_input::dispatch(args),
+        "mcp_tool_inventory" => crate::mcp_tool_inventory::dispatch(args),
         "approval_copy" => crate::approval_copy::dispatch(args),
+        "access_graph_snapshot" => crate::access_graph_snapshot::dispatch(args),
+        "memory_decision_event" => crate::memory_decision_event::dispatch(args),
         "workspace_assessment_build" | "workspace_assessment_fit" => {
             crate::workspace_assessment_sync::dispatch(kind, args)
         }
         "workspace_audit_sync" => crate::workspace_audit_sync::dispatch(args),
+        "workspace_fix_verify" => crate::workspace_fix_verify::dispatch(args),
+        "workspace_rule_findings" => crate::workspace_rule_findings::dispatch(args),
         "workspace_runtime_findings" => crate::workspace_runtime_findings::dispatch(args),
+        "workspace_findings_carry" => crate::workspace_findings_carry::dispatch(args),
         "shell_request_authority" => crate::shell_request_authority_op::dispatch(args),
         "guard_product_copy" => crate::guard_product_copy::dispatch(args),
         "consumer_mode_contract" => crate::consumer_mode_contract::dispatch(args),
         "surface_server_handshake" => crate::surface_server_handshake::dispatch(args),
         "trust_attestation_shape" => crate::trust_attestation_shape::dispatch(args),
+        "local_cli_recognize" => crate::local_cli_identify::recognize_dispatch(args),
+        "network_status_build" => crate::network_status_build::dispatch(args),
+        "business_review_page" => crate::business_review_page::dispatch(args),
+        "mcp_registry_page" => crate::mcp_registry_page::dispatch(args),
+        "mcp_registry_setup" => crate::mcp_registry_setup::dispatch(args),
+        "connector_setup_rows" => crate::connector_setup_rows::dispatch(args),
+        "review_event_decode" => crate::review_event_decode::dispatch(args),
+        "review_policy_memory_plan" => crate::review_policy_memory_plan::dispatch(args),
+        "contained_denial_note" => crate::contained_denial_note::dispatch(args),
         "detector_authority" => detector::detector_authority(args),
         "detector_composition" => detector::detector_composition(args),
         "skill_content_risk" => detector::skill_content_risk(args),
@@ -139,6 +166,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "preclaim_failure" => evaluation::preclaim_failure(args),
         "claim_context_failure" => evaluation::claim_context_failure(args),
         "receipt_evidence_merge" => evaluation::receipt_evidence_merge(args),
+        "receipt_embedded_scripts" => crate::receipt_embedded_scripts::dispatch(args),
         "authority_signature" => signature::authority_signature(args),
         "authority_gate" => signature::authority_gate(args),
         "policy_shadow_mismatch" => signature::policy_shadow_mismatch(args),
@@ -166,6 +194,9 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "temporary_mcp_grant" => crate::temporary_mcp_grant::dispatch(args),
         "local_request_snapshot_items" => snapshot::local_request_snapshot_items(args),
         "package_manager_launch_path" => crate::package_manager_launch_path::dispatch(args),
+        "oauth_package_firewall_entitlement" => {
+            crate::oauth_package_firewall_entitlement::dispatch(args)
+        }
         "oci_bundle_evidence" => oci::oci_bundle_evidence(args),
         "oci_evidence_verdict" => oci::oci_evidence_verdict(args),
         "oci_bundle_digest" => oci::oci_bundle_digest(args),
@@ -177,6 +208,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "aibom_codex_skills" => aibom::codex_skills(args),
         "aibom_mcp_metadata" => aibom::mcp_metadata(args),
         "aibom_primary_content" => crate::aibom_primary_content::dispatch(args),
+        "inventory_export_redaction" => crate::inventory_export_redaction::dispatch(args),
         "package_command_redaction" => crate::package_command_redaction::dispatch(args),
         "zcode_detect" => zcode_detect::detect(args),
         "zcode_hook_settings" => zcode_hook_surface::dispatch(args),
@@ -185,6 +217,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cline_plugin_render" => cline_plugin_render::render(args),
         "cline_hook_files" => cline_hook_files::dispatch(args),
         "cline_paths" => cline_paths::dispatch(args),
+        "cline_install_plan" => cline_install_plan::dispatch(args),
         "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
         "codex_host_inventory" => crate::codex_host_inventory::dispatch(args),
@@ -205,6 +238,9 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "harness_settings_file" => harness_settings_file::dispatch(args),
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
+        "opencode_command_replace" => crate::opencode_command_replace::dispatch(args),
+        "local_cli_change_request" => crate::local_cli_change_request::dispatch(args),
+        "omp_code_mode" => crate::omp_code_mode::dispatch(args),
         "user_command_lookup" => crate::user_command_lookup::dispatch(args),
         "local_cli_script_source" => crate::local_cli_script_source::dispatch(args),
         "local_mcp_probe" => crate::local_mcp_probe::dispatch(args),
@@ -224,10 +260,13 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "fleet_inventory_rows"
         | "fleet_inventory_items"
         | "fleet_posture_build"
-        | "fleet_aibom_rows" => crate::fleet_posture_inventory::dispatch(kind, args),
+        | "fleet_aibom_rows"
+        | "fleet_policy_section"
+        | "fleet_runtime_posture" => crate::fleet_posture_inventory::dispatch(kind, args),
         "cursor_hook_state" => cursor_hook_state::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
+        "opencode_config_normalize" => opencode_config_normalize::dispatch(args),
         "opencode_install_plan" => opencode_install_plan::dispatch(args),
         _ => Err(ERR_KIND),
     }
@@ -248,6 +287,14 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
         }
         // The OpenCode launch overlay is read from that verified home too.
         "opencode_launch" => opencode_launch::dispatch(&request.args, &request.guard_home),
+        // Dashboard reconnect proofs use that home's discovery key and store.
+        "dashboard_reconnect" => {
+            crate::dashboard_reconnect::dispatch(&request.args, &request.guard_home)
+        }
+        // The saved Cloud actions check lives in that home.
+        "cloud_actions_status" => {
+            crate::cloud_actions_status::dispatch(&request.args, &request.guard_home)
+        }
         _ => dispatch(&request.kind, &request.args),
     }
 }

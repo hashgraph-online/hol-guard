@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -141,103 +140,34 @@ def _run_guard_receipts_command(
 def _embedded_scripts_for_receipt(match: dict[str, object]) -> list[dict[str, object]]:
     """Reconstruct heredoc script bodies recorded with a receipt.
 
-    Bodies are sliced out of the retained envelope command text using the
-    spans and hashes recorded in the receipt's ``embedded_script`` evidence.
+    The native runtime slices each body out of the retained command text using
+    the span and hash recorded in the receipt's ``embedded_script`` evidence.
     """
 
     evidence = match.get("scanner_evidence")
-    if not isinstance(evidence, list):
+    if not isinstance(evidence, list) or not any(
+        isinstance(item, dict) and item.get("source") == "embedded_script" and item.get("kind") == "heredoc"
+        for item in evidence
+    ):
         return []
-    markers = [
-        entry
-        for entry in evidence
-        if isinstance(entry, dict) and entry.get("source") == "embedded_script" and entry.get("kind") == "heredoc"
-    ]
-    if not markers:
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    envelope = match.get("action_envelope_json")
+    try:
+        answer = native_runner_authority(
+            "receipt_embedded_scripts",
+            {
+                "scanner_evidence": evidence,
+                "raw_command_text": match.get("raw_command_text"),
+                "envelope_command": envelope.get("command") if isinstance(envelope, dict) else None,
+            },
+        )
+    except NativeRunnerAuthorityError:
+        # Explaining a receipt must not need the resident; the receipt and its
+        # evidence still print without the reconstructed bodies.
         return []
-    command_text = match.get("raw_command_text")
-    if not isinstance(command_text, str) or not command_text:
-        envelope = match.get("action_envelope_json")
-        if isinstance(envelope, dict):
-            candidate = envelope.get("command")
-            command_text = candidate if isinstance(candidate, str) else None
-    if not isinstance(command_text, str) or not command_text:
-        command_text = None
-    scripts: list[dict[str, object]] = []
-    for marker in markers:
-        item: dict[str, object] = {
-            key: marker.get(key)
-            for key in (
-                "index",
-                "delimiter",
-                "quoted",
-                "executable",
-                "executed",
-                "execution_status",
-                "sha256",
-                "bytes",
-                "lines",
-                "span",
-            )
-        }
-        if command_text is not None:
-            body, verified = _recover_embedded_body(command_text, marker)
-            if body is not None:
-                item["sha256_verified"] = verified
-                item["body"] = body
-        scripts.append(item)
-    return scripts
-
-
-def _slice_by_utf8_length(text: str, start: int, byte_len: int) -> str | None:
-    """Return the str slice starting at ``start`` whose UTF-8 encoding is
-    exactly ``byte_len`` bytes, or None if no such slice exists."""
-
-    total = 0
-    for offset, char in enumerate(text[start:]):
-        char_len = len(char.encode("utf-8"))
-        if total + char_len > byte_len:
-            return None
-        total += char_len
-        if total == byte_len:
-            return text[start : start + offset + 1]
-    return None
-
-
-def _recover_embedded_body(command_text: str, marker: dict[str, object]) -> tuple[str | None, bool]:
-    """Recover a heredoc body from retained command text.
-
-    The recorded span was computed against the command text evaluated by the
-    hook, which can differ from the envelope's retained command by surrounding
-    whitespace. ``bytes`` is the authoritative body length; search the
-    neighborhood of the recorded span for the slice that hashes to the
-    recorded digest.
-    """
-
-    expected_sha = marker.get("sha256")
-    byte_len = marker.get("bytes")
-    if not isinstance(expected_sha, str) or not isinstance(byte_len, int) or byte_len < 0:
-        return None, False
-    span = marker.get("span")
-    recorded_start = span.get("start") if isinstance(span, dict) else None
-    if not isinstance(recorded_start, int):
-        return None, False
-    # Spans are Python string (code-point) indices; ``bytes`` is the UTF-8
-    # length of the body. Search the neighborhood of the recorded start in
-    # str space and hash-verify each candidate's UTF-8 encoding.
-    seen: set[int] = set()
-    for start in (recorded_start, recorded_start - 1, recorded_start + 1):
-        if start in seen or start < 0 or start > len(command_text):
-            continue
-        seen.add(start)
-        body = _slice_by_utf8_length(command_text, start, byte_len)
-        if body is not None and hashlib.sha256(body.encode("utf-8")).hexdigest() == expected_sha:
-            return body, True
-    end = span.get("end") if isinstance(span, dict) else None
-    if isinstance(end, int) and 0 <= recorded_start <= end <= len(command_text):
-        body = command_text[recorded_start:end]
-        return body, hashlib.sha256(body.encode("utf-8")).hexdigest() == expected_sha
-    return None, False
+    scripts = answer.get("scripts")
+    return [dict(item) for item in scripts if isinstance(item, dict)] if isinstance(scripts, list) else []
 
 
 def _run_guard_history_command(

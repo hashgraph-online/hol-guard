@@ -129,6 +129,11 @@ pub(super) fn silent(
             auth_token.as_deref(),
             now_micros()?,
         )?;
+        let reason = crate::desktop_review_link::with_desktop_link(
+            reason,
+            Path::new(context.guard_home),
+            &url,
+        );
         silent_block(context.harness, result, &reason)
     });
     let mut blocked = linked.unwrap_or(unlinked);

@@ -23,6 +23,7 @@ from tests.test_guard_workspace_assessment_runner import (
     T0,
     queued_run,
 )
+from tests.workspace_rule_support import project_rule_findings, with_rule_coverage
 
 FINDING_ID = "0123456789abcdef0123456789abcdef"
 AGENTS_PATH = "packages/app/AGENTS.md"
@@ -132,8 +133,10 @@ def test_an_instruction_file_the_scan_could_not_read_leaves_the_run_partial(
 
 
 def test_an_instruction_scan_at_its_cap_marks_findings_truncated() -> None:
-    coverage = instruction_findings.with_instruction_coverage(
-        EMPTY_COVERAGE, instructions_result(native_finding(), status="incomplete", truncation_reasons=["max_findings"])
+    coverage = with_rule_coverage(
+        instruction_findings.INSTRUCTION_DETECTOR,
+        EMPTY_COVERAGE,
+        instructions_result(native_finding(), status="incomplete", truncation_reasons=["max_findings"]),
     )
     assert coverage["reasons"] == ["instruction_file_incomplete", "finding_cap"]
 
@@ -154,7 +157,7 @@ def test_an_instruction_scan_at_its_cap_marks_findings_truncated() -> None:
     ],
 )
 def test_an_unreadable_instruction_result_is_an_error(payload: dict[str, object]) -> None:
-    coverage = instruction_findings.with_instruction_coverage(EMPTY_COVERAGE, payload)
+    coverage = with_rule_coverage(instruction_findings.INSTRUCTION_DETECTOR, EMPTY_COVERAGE, payload)
     assert (coverage["status"], coverage["reasons"]) == ("partial", ["instruction_file_incomplete"])
     assert coverage["detectors"]["instruction_file_v1"] == "error"
 
@@ -190,8 +193,8 @@ def test_an_unreadable_instruction_result_is_an_error(payload: dict[str, object]
 )
 def test_a_malformed_finding_is_dropped_and_leaves_the_scan_incomplete(bad: dict[str, object]) -> None:
     result = instructions_result(native_finding(**bad))
-    assert instruction_findings.project_instruction_findings(result) == []
-    coverage = instruction_findings.with_instruction_coverage(EMPTY_COVERAGE, result)
+    assert project_rule_findings(instruction_findings.INSTRUCTION_DETECTOR, result) == []
+    coverage = with_rule_coverage(instruction_findings.INSTRUCTION_DETECTOR, EMPTY_COVERAGE, result)
     assert coverage["detectors"]["instruction_file_v1"] == "incomplete"
     assert coverage["instruction_file"]["truncation_reasons"] == ["invalid_finding"]
 
@@ -219,8 +222,8 @@ def test_every_file_the_native_scan_reads_is_accepted() -> None:
     result = instructions_result(
         *(native_finding(finding_id=f"{index:032x}", path=path) for index, path in enumerate(paths))
     )
-    assert [item["path"] for item in instruction_findings.project_instruction_findings(result)] == paths
-    coverage = instruction_findings.with_instruction_coverage(EMPTY_COVERAGE, result)
+    assert [item["path"] for item in project_rule_findings(instruction_findings.INSTRUCTION_DETECTOR, result)] == paths
+    coverage = with_rule_coverage(instruction_findings.INSTRUCTION_DETECTOR, EMPTY_COVERAGE, result)
     assert coverage["detectors"]["instruction_file_v1"] == "complete"
 
 

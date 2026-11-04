@@ -120,7 +120,7 @@ export function ContextHistoryPanel({ decisionId, harness }: Props) {
             setDetail(value);
           }
         }); }}>
-        View prepared context {index + 1} · {preparedAt(entry.prepared_at_ms)} · {entry.rendered_tokens} tokens
+        View prepared context {index + 1} · {preparedAt(entry.prepared_at_ms)}
         {entry.association ? <span className="block break-all text-xs">Native decision {entry.association.decision_id}</span> : null}
       </button>
     </li>)}</ul>

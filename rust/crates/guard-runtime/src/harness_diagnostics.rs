@@ -7,9 +7,11 @@
 //! decides from what they found.
 //!
 //! - `{"op": "warnings", "harness", "executable",
-//!   "command_absence_proves_uninstalled", "runtime_probe_timed_out",
-//!   "detection"}` answers `{"warnings": [...]}`, the warnings to append to
-//!   the detection's own, in order.
+//!   "command_absence_proves_uninstalled", "runtime_probe", "detection"}`
+//!   answers `{"warnings": [...]}`, the warnings to append to the detection's
+//!   own, in order. `runtime_probe` is `null` when the adapter ran no probe,
+//!   else `{"timed_out", "failed", "reported_no_artifacts"}`: whether the probe
+//!   timed out, exited unsuccessfully, and listed no MCP servers.
 //! - `{"op": "setup_status", "command_absence_proves_uninstalled",
 //!   "detection", "warnings"}` answers `{"setup_status": "active" | "broken" |
 //!   "partial" | "not_found"}`.
@@ -54,7 +56,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
                     "harness",
                     "executable",
                     "command_absence_proves_uninstalled",
-                    "runtime_probe_timed_out",
+                    "runtime_probe",
                     "detection",
                 ],
             )?;
@@ -67,8 +69,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
                     "command_absence_proves_uninstalled",
                 )?,
             };
-            let timed_out = flag(fields, "runtime_probe_timed_out")?;
-            Ok(json!({ "warnings": added_warnings(&detection, &adapter, timed_out) }))
+            let probe = Probe::parse(fields.get("runtime_probe"))?;
+            Ok(json!({ "warnings": added_warnings(&detection, &adapter, probe) }))
         }
         "setup_status" => {
             expect_keys(
@@ -98,6 +100,30 @@ struct Adapter<'a> {
     harness: &'a str,
     executable: &'a str,
     command_absence_proves_uninstalled: bool,
+}
+
+#[derive(Clone, Copy, Default)]
+struct Probe {
+    timed_out: bool,
+    failed: bool,
+    reported_no_artifacts: bool,
+}
+
+impl Probe {
+    /// `None` when the adapter ran no probe.
+    fn parse(value: Option<&Value>) -> Result<Option<Self>, &'static str> {
+        let value = value.ok_or(ERR_INVALID)?;
+        if value.is_null() {
+            return Ok(None);
+        }
+        let fields = value.as_object().ok_or(ERR_INVALID)?;
+        expect_keys(fields, &["timed_out", "failed", "reported_no_artifacts"])?;
+        Ok(Some(Self {
+            timed_out: flag(fields, "timed_out")?,
+            failed: flag(fields, "failed")?,
+            reported_no_artifacts: flag(fields, "reported_no_artifacts")?,
+        }))
+    }
 }
 
 struct Artifact<'a> {
@@ -205,7 +231,7 @@ impl<'a> Detection<'a> {
 fn added_warnings(
     detection: &Detection<'_>,
     adapter: &Adapter<'_>,
-    timed_out: bool,
+    probe: Option<Probe>,
 ) -> Vec<String> {
     let harness = adapter.harness;
     let executable = adapter.executable;
@@ -238,10 +264,31 @@ fn added_warnings(
             "{harness} config was found, but the {executable} command is not available on PATH."
         ));
     }
-    if timed_out {
+    let probe = probe.unwrap_or_default();
+    if probe.timed_out {
         warnings.push(format!(
             "{executable} diagnostics timed out before Guard could confirm runtime state."
         ));
+    }
+    match harness {
+        "copilot" if probe.failed && !probe.timed_out => warnings.push(
+            "Copilot CLI was found on PATH, but `copilot --help` did not complete successfully."
+                .to_owned(),
+        ),
+        "cursor"
+            if probe.reported_no_artifacts
+                && detection
+                    .artifacts
+                    .iter()
+                    .any(|artifact| artifact.artifact_type == "mcp_server") =>
+        {
+            warnings.push(
+                "Cursor CLI reported no MCP servers, but Guard found local definitions. \
+                 Cursor may be using a different config root than Guard."
+                    .to_owned(),
+            );
+        }
+        _ => {}
     }
     warnings
 }

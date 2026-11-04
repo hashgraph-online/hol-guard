@@ -305,7 +305,7 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(parent / "src" / "one.ts", "export const one = 1;\n")
     # The one committed file long enough for a range-limited read of its history.
     _write(parent / "src" / "report-window.ts", COMMITTED_SOURCE)
-    _write(parent / "src" / "password-reset-email.tsx", "export const Email = () => null;\n")
+    _write(parent / "src" / "password-reset-email.tsx", "export const Email = ({ password }) => <Field password={password} />;\n")
     _write(parent / "app" / "registry" / "[slug]" / "page.tsx", "export default function Page() { return null; }\n")
     # Larger than the 32 KiB command bound, as many READMEs are. Cursor sends
     # the whole file body with each read of it.
@@ -454,6 +454,30 @@ def build_fixture(root: Path) -> BenignFixture:
         _write(repository / ".codex-plugin" / "runtime.node", "\x00binary\n")
         # A tool's own tree, a config file spelled as a directory and a
         # credential store holding a file named as source.
+        # Tooling settings the checkout keeps under its own hidden
+        # directories. Their stems name a credential store as often as they
+        # name an ordinary project document, so the file is read rather than
+        # refused on its name alone.
+        _write(repository / ".circleci" / "config.yml", "version: 2.1\njobs: {}\n")
+        _write(repository / ".changeset" / "config.json", '{"changelog": "@changesets/cli/changelog"}\n')
+        _write(repository / ".storybook" / "settings.json", '{"framework": "react"}\n')
+        # A credential written across several lines, and one quoted word that
+        # a document writes bare when it means "nothing here".
+        _write(
+            repository / ".storybook" / "config.toml",
+            '[registry]\ntoken = """\nhunter2\n"""\n',
+        )
+        _write(repository / ".changeset" / "settings.json", '{"npmAuthToken": "null"}\n')
+        # A mapping that leaves its value for the next line, indented deeper.
+        _write(
+            repository / ".storybook" / "config.yml",
+            "database:\n  password:\n    hunter2\n",
+        )
+        # The same stem over a registry credential, for the negative beside it.
+        _write(
+            repository / ".cargo" / "config.toml",
+            '[registries.internal]\ntoken = "' + "AKIA" + "QYLPT3K7" + "R4FXM2WD" + '"\n',
+        )
         _write(repository / ".cursor" / "mcp.json", '{"mcpServers": {}}\n')
         _write(repository / ".dockerignore" / "notes.md", "# fixture\n")
         _write(repository / ".secrets" / "read.py", "TOKEN = 'fixture'\n")

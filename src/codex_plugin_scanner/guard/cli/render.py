@@ -416,36 +416,6 @@ def _safe_json_output_text(command: str, payload: PayloadDict) -> str:
     return _render_redacted_json_payload(sanitized_payload)
 
 
-def _protect_guidance_lines(payload: PayloadDict) -> list[str]:
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
-    user_copy_map = _coerce_object_dict(user_copy)
-    lines: list[str] = []
-    harness_message = str(user_copy_map.get("harness_message") or "").strip()
-    if harness_message:
-        lines.append(harness_message)
-
-    next_step = str(user_copy_map.get("next_step") or "").strip()
-    if next_step and next_step not in harness_message:
-        lines.append(f"Next step: {next_step}")
-
-    signed_url = payload.get("_ephemeral_signed_approval_url")
-    if isinstance(signed_url, str) and signed_url.strip():
-        dashboard_url = signed_url.strip()
-    elif (
-        "dashboard_url" in user_copy_map
-        and user_copy_map.get("dashboard_url") is None
-        and not payload.get("primary_approval_url")
-    ):
-        dashboard_url = ""
-    else:
-        dashboard_url = str(payload.get("primary_approval_url") or user_copy_map.get("dashboard_url") or "").strip()
-    if dashboard_url and not any(dashboard_url in line for line in lines):
-        lines.append(f"Review: {dashboard_url}")
-
-    return lines
-
-
 def _plain_text_protect(payload: PayloadDict) -> str:
     if str(payload.get("mode") or "") == "status":
         lines = ["HOL Guard install protection is active."]
@@ -481,7 +451,7 @@ def _plain_text_protect(payload: PayloadDict) -> str:
     if reason:
         lines.append(f"Reason: {reason}")
 
-    lines.extend(human_protect_guidance(payload, _protect_guidance_lines(payload))[1])
+    lines.extend(human_protect_guidance(payload)[1])
     return "\n".join(lines)
 
 
@@ -1602,6 +1572,11 @@ def _render_approvals(console: Console, payload: dict[str, object]) -> None:
         body = Table.grid(padding=(0, 1))
         body.add_row("Request", str(payload.get("request_id", "")))
         body.add_row("URL", f"[bold]{approval_url}[/bold]")
+        opened_in = payload.get("opened_in")
+        if opened_in == "desktop":
+            body.add_row("Opened", "In HOL Guard Desktop")
+        elif opened_in == "browser":
+            body.add_row("Opened", "In your browser, signed in")
         console.print(Panel(body, title="Open approval", border_style="cyan"))
         return
     if "title" in payload and "body" in payload:
@@ -1976,6 +1951,12 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
         repair_message = payload.get("repair_message")
         if isinstance(repair_message, str) and repair_message.strip():
             body.add_row("Repair note", repair_message)
+        cloud_actions = payload.get("cloud_actions")
+        if isinstance(cloud_actions, dict):
+            body.add_row("Cloud actions", str(cloud_actions.get("message") or cloud_actions.get("status") or "unknown"))
+        cloud_actions_problem = payload.get("cloud_actions_problem")
+        if isinstance(cloud_actions_problem, str) and cloud_actions_problem.strip():
+            body.add_row("Needs attention", cloud_actions_problem)
         sync_payload = payload.get("sync")
         should_render_sync_counts = False
         if isinstance(sync_payload, dict):
@@ -2502,7 +2483,7 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
             ):
                 body.add_row("Next", "Run hol-guard connect to sign in, then retry this install.")
     console.print(Panel(body, title="Install protection", border_style="cyan"))
-    guidance_title, guidance = human_protect_guidance(payload, _protect_guidance_lines(payload))
+    guidance_title, guidance = human_protect_guidance(payload)
     if guidance:
         guidance_text, signed_approval_url = _protect_harness_message_for_render(payload, "\n".join(guidance))
         console.print(
@@ -3104,10 +3085,6 @@ def _build_cloud_summary_panel(payload: dict[str, object]) -> Panel:
     body.add_row("Cached advisories", str(payload.get("advisory_count") or 0))
     if payload.get("advisory_headline"):
         body.add_row("Latest advisory", str(payload.get("advisory_headline")))
-    if payload.get("team_policy_name"):
-        body.add_row("Team policy", str(payload.get("team_policy_name")))
-    elif payload.get("team_policy_active"):
-        body.add_row("Team policy", "active")
     if payload.get("watchlist_enabled"):
         body.add_row("Watchlist", "enabled")
     if payload.get("team_alerts_enabled"):

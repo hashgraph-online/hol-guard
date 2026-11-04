@@ -267,7 +267,7 @@ fn readonly_config_arguments(args: &[String], manifest: &Path) -> Vec<String> {
 fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
     let argv = normalized_command(&input.command)?;
     if let Some((script, arguments)) = tsx_test_invocation(&argv)? {
-        return prepare_tsx(input, &argv, &script, &arguments);
+        return prepare_tsx(input, &argv, script.as_deref(), &arguments);
     }
     let (tool, args) = contained_runner_invocation(&input.command)?;
     let runtime = node_runtime_args(&input.command)?;
@@ -327,6 +327,37 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
             "mocha/package.json",
             &["mocha/bin/mocha.js", "mocha/bin/mocha"],
         ),
+        // AVA moved its entry twice without renaming the package, so the
+        // manifest is the one spelling every release ships and the entries
+        // are read in the order the releases introduced them.
+        "ava" => (
+            "ava/package.json",
+            &[
+                "ava/entrypoints/cli.js",
+                "ava/entrypoints/cli.mjs",
+                "ava/cli.js",
+            ],
+        ),
+        "jasmine" => ("jasmine/package.json", &["jasmine/bin/jasmine.js"]),
+        "qunit" => ("qunit/package.json", &["qunit/bin/qunit.js"]),
+        "uvu" => ("uvu/package.json", &["uvu/bin.js"]),
+        "tape" => ("tape/package.json", &["tape/bin/tape"]),
+        "tsd" => ("tsd/package.json", &["tsd/dist/cli.js"]),
+        // tap moved its entry once without renaming the package: tap 21 ships
+        // the ESM runner, tap 16 through 20 the CommonJS one. The manifest is
+        // the spelling every release ships and the entries are read in the
+        // order the releases introduced them.
+        "tap" => (
+            "tap/package.json",
+            &["tap/dist/esm/run.mjs", "tap/bin/run.js"],
+        ),
+        "borp" => ("borp/package.json", &["borp/borp.js"]),
+        "poku" => ("poku/package.json", &["poku/lib/bin/index.js"]),
+        "lab" => ("@hapi/lab/package.json", &["@hapi/lab/bin/lab"]),
+        "cucumber-js" => (
+            "@cucumber/cucumber/package.json",
+            &["@cucumber/cucumber/bin/cucumber.js"],
+        ),
         _ => ("vitest/vitest.mjs", &["vitest/vitest.mjs"]),
     };
     let modules = nearest_project_root(cwd, workspace, &format!("node_modules/{installed}"))?
@@ -377,6 +408,17 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
             match tool {
                 "jest" => "Jest is not installed inside this workspace. Guard did not download or execute a replacement.",
                 "mocha" => "Mocha is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "ava" => "AVA is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "jasmine" => "Jasmine is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "qunit" => "QUnit is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "uvu" => "uvu is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "tape" => "tape is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "tsd" => "tsd is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "tap" => "tap is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "borp" => "borp is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "poku" => "poku is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "lab" => "lab is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "cucumber-js" => "cucumber-js is not installed inside this workspace. Guard did not download or execute a replacement.",
                 _ => "Vitest is not installed inside this workspace. Guard did not download or execute a replacement.",
             },
         ));
@@ -406,7 +448,7 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
 fn prepare_tsx(
     input: &Input,
     argv: &[String],
-    script: &str,
+    script: Option<&str>,
     arguments: &[String],
 ) -> Result<Value, RestrictedPytestError> {
     let mut plan = prepare_node(&Input {
@@ -449,16 +491,20 @@ fn prepare_tsx(
         return Err(RestrictedPytestError::new("vitest_restricted_dependency_unavailable", "tsx is not installed inside this workspace. Guard did not download or execute a replacement."));
     };
     let flags = tsx_test_runner_flags(argv)?;
-    // In test-runner mode every word after the flags is another file Node
-    // loads, so each one has to resolve inside the workspace.
-    let mut files = vec![script.to_owned()];
-    if tsx_runner_test_mode(&flags) {
+    let test_mode = tsx_runner_test_mode(&flags);
+    // In test-runner mode every word after the flags is another path Node
+    // loads, so each one has to resolve inside the workspace. A run that names
+    // none leaves the discovery to Node, inside the same workspace.
+    let mut files: Vec<String> = script.map(ToOwned::to_owned).into_iter().collect();
+    if test_mode {
         files.extend_from_slice(arguments);
     }
     if !files.iter().all(|file| {
-        cwd.join(file)
-            .canonicalize()
-            .is_ok_and(|path| path.is_file() && path_is_within(&path, workspace))
+        cwd.join(file).canonicalize().is_ok_and(|path| {
+            // The test runner walks a directory for the files it runs; a
+            // script it is handed outside that mode has to be the file.
+            (path.is_file() || (test_mode && path.is_dir())) && path_is_within(&path, workspace)
+        })
     }) {
         return Err(RestrictedPytestError::new(
             "vitest_restricted_invalid_command",
@@ -473,7 +519,7 @@ fn prepare_tsx(
     // Node reads its test-runner flags before the first file; behind it they
     // are a word the run loads, so they go back in front of it.
     command.extend(flags);
-    command.push(script.to_owned());
+    command.extend(script.map(ToOwned::to_owned));
     command.extend_from_slice(arguments);
     plan["profile_version"] = json!("vitest-readonly-v1");
     plan["command"] = json!(command);

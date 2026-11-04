@@ -39,6 +39,19 @@ pub(crate) fn local_mocha_entry(argument: &str) -> bool {
         || local_bin_entry(argument, "mocha")
 }
 
+/// AVA's installed entry points. AVA 6 declares `entrypoints/cli.js`, AVA 4
+/// and 5 published the same entry as `entrypoints/cli.mjs`, and AVA 3 kept it
+/// at `cli.js`. The sink runs whichever of them this workspace holds, so
+/// reading only the current spelling would send a working
+/// `node node_modules/ava/entrypoints/cli.mjs` to review while the `npx ava`
+/// beside it runs. The installer's link to that entry names the same run.
+pub(crate) fn local_ava_entry(argument: &str) -> bool {
+    local_package_entry(argument, "ava/entrypoints/cli.js")
+        || local_package_entry(argument, "ava/entrypoints/cli.mjs")
+        || local_package_entry(argument, "ava/cli.js")
+        || local_bin_entry(argument, "ava")
+}
+
 /// Jest's installed entry point, and the link its installer writes beside it.
 /// `jest-cli` publishes the executable Jest's own `bin` field points at, and
 /// `node_modules/.bin/jest` is the link to it, so a call that hands either to
@@ -47,11 +60,104 @@ pub(crate) fn local_jest_entry(argument: &str) -> bool {
     local_package_entry(argument, "jest/bin/jest.js") || local_bin_entry(argument, "jest")
 }
 
+/// Jasmine's installed entry point, and the link its installer writes beside
+/// it. `bin/jasmine.js` is the module `jasmine-npm` has declared as its `bin`
+/// since Jasmine 3, so one spelling answers for every release a workspace is
+/// likely to hold.
+pub(crate) fn local_jasmine_entry(argument: &str) -> bool {
+    local_package_entry(argument, "jasmine/bin/jasmine.js") || local_bin_entry(argument, "jasmine")
+}
+
+/// QUnit's installed entry point, and the link its installer writes beside
+/// it. `bin/qunit.js` is the module QUnit declares as its `bin` from QUnit 2
+/// on, so it names the installed runner at every release that ships a CLI.
+pub(crate) fn local_qunit_entry(argument: &str) -> bool {
+    local_package_entry(argument, "qunit/bin/qunit.js") || local_bin_entry(argument, "qunit")
+}
+
+/// uvu's installed entry point, and the link its installer writes beside it.
+/// uvu declares `bin.js` at the package root rather than under a `bin`
+/// directory, and has published it there since 0.3.
+pub(crate) fn local_uvu_entry(argument: &str) -> bool {
+    local_package_entry(argument, "uvu/bin.js") || local_bin_entry(argument, "uvu")
+}
+
+/// tape's installed entry point, and the link its installer writes beside it.
+/// tape declares `bin/tape` as its `bin`, an extensionless file it has
+/// shipped at that path since 4.0.
+pub(crate) fn local_tape_entry(argument: &str) -> bool {
+    local_package_entry(argument, "tape/bin/tape") || local_bin_entry(argument, "tape")
+}
+
+/// tsd's installed entry point, and the link its installer writes beside it.
+/// tsd compiles its TypeScript CLI to `dist/cli.js` and declares that file as
+/// its `bin`.
+pub(crate) fn local_tsd_entry(argument: &str) -> bool {
+    local_package_entry(argument, "tsd/dist/cli.js") || local_bin_entry(argument, "tsd")
+}
+
+/// tap's installed entry points. tap 21 declares `dist/esm/run.mjs`; tap 16
+/// through 20 published the same entry as `bin/run.js`. The sink runs
+/// whichever of them this workspace holds, so reading only the current
+/// spelling would send a working `node node_modules/tap/bin/run.js` to review
+/// while the `npx tap` beside it runs. The installer's link to that entry
+/// names the same run.
+pub(crate) fn local_tap_entry(argument: &str) -> bool {
+    local_package_entry(argument, "tap/dist/esm/run.mjs")
+        || local_package_entry(argument, "tap/bin/run.js")
+        || local_bin_entry(argument, "tap")
+}
+
+/// borp's installed entry point, and the link its installer writes beside it.
+/// borp declares `borp.js` at the package root rather than under a `bin`
+/// directory, and has published it there since 0.1.
+pub(crate) fn local_borp_entry(argument: &str) -> bool {
+    local_package_entry(argument, "borp/borp.js") || local_bin_entry(argument, "borp")
+}
+
+/// poku's installed entry point, and the link its installer writes beside it.
+/// poku declares `lib/bin/index.js`, the compiled CLI its package ships.
+pub(crate) fn local_poku_entry(argument: &str) -> bool {
+    local_package_entry(argument, "poku/lib/bin/index.js") || local_bin_entry(argument, "poku")
+}
+
+/// lab's installed entry point, and the link its installer writes beside it.
+/// lab is published under a scope, so its entry is spelled with the scope
+/// directory the installer writes it into; the extensionless `bin/lab` is the
+/// module `@hapi/lab` has declared since lab 20.
+pub(crate) fn local_lab_entry(argument: &str) -> bool {
+    local_package_entry(argument, "@hapi/lab/bin/lab") || local_bin_entry(argument, "lab")
+}
+
+/// cucumber-js's installed entry point, and the link its installer writes
+/// beside it. The package is scoped, so the entry it declares lands at
+/// `node_modules/@cucumber/cucumber/bin/cucumber.js`, while the link takes
+/// the executable's own name, `cucumber-js`. That file is a shim that
+/// requires the package's `lib/cli/run.js`, and the package has declared it
+/// at that path since cucumber-js 8.
+pub(crate) fn local_cucumber_entry(argument: &str) -> bool {
+    local_package_entry(argument, "@cucumber/cucumber/bin/cucumber.js")
+        || local_bin_entry(argument, "cucumber-js")
+}
+
 /// Whether a word names one of those installed entry points. A runtime handed
-/// this path starts the workspace's own runner, whichever of the three it is.
+/// this path starts the workspace's own runner, whichever of them it is.
 pub(crate) fn local_runner_entry(argument: &str) -> bool {
     let entry = argument.replace('\\', "/");
-    local_vitest_entry(&entry) || local_jest_entry(&entry) || local_mocha_entry(&entry)
+    local_vitest_entry(&entry)
+        || local_jest_entry(&entry)
+        || local_mocha_entry(&entry)
+        || local_ava_entry(&entry)
+        || local_jasmine_entry(&entry)
+        || local_qunit_entry(&entry)
+        || local_uvu_entry(&entry)
+        || local_tape_entry(&entry)
+        || local_tsd_entry(&entry)
+        || local_tap_entry(&entry)
+        || local_borp_entry(&entry)
+        || local_poku_entry(&entry)
+        || local_lab_entry(&entry)
+        || local_cucumber_entry(&entry)
 }
 
 /// Whether a call hands Bun one of those entry points as the file to run.
@@ -134,7 +240,10 @@ fn windows_plain_script(script: &str, node: bool) -> bool {
         && name.is_match(script.rsplit('/').next().unwrap_or(""))
 }
 
-fn workspace_script_path(script: &str) -> bool {
+/// The path hygiene every workspace-relative operand has to pass: a relative
+/// path with no option spelling, no shell metacharacter and no walk out of the
+/// tree it was admitted for.
+pub(crate) fn workspace_script_path(script: &str) -> bool {
     !script.is_empty()
         && !script.starts_with(['-', '/', '~', '$'])
         && !script.contains(['\\', '$', '`'])
@@ -183,9 +292,12 @@ pub fn node_script_index(command: &[String], start: usize) -> Option<usize> {
 struct TsxTestParts<'a> {
     /// The Node test-runner flags ahead of the script.
     flags: &'a [String],
-    /// The script the run names.
-    script: &'a String,
-    /// The arguments the script is passed.
+    /// The first path the run names, when it names one. In test-runner mode
+    /// Node discovers its own files from the working directory, so a run that
+    /// names nothing is still a test run.
+    script: Option<&'a String>,
+    /// The arguments the script is passed, or the further paths the test
+    /// runner loads.
     arguments: &'a [String],
 }
 
@@ -213,24 +325,44 @@ fn tsx_test_parts(command: &[String]) -> Result<Option<TsxTestParts<'_>>, Restri
         return Ok(None);
     }
     let (flags, rest) = args.split_at(tsx_runner_flag_count(args));
-    if tsx_runner_test_mode(flags) && !rest.iter().all(|value| named_test_script(value, true)) {
-        return Ok(None);
+    if tsx_runner_test_mode(flags) {
+        // Here Node is its own test runner and every remaining word is a path
+        // it loads, a directory it resolves, or nothing at all when it
+        // discovers the files itself. The leaf names a project gives its specs are not
+        // the boundary on that shape -- the workspace is, and the sink
+        // resolves each path inside it before the run starts. `node --test`
+        // takes the same paths today through the sibling read-only profile,
+        // and takes them without resolving them at all, so reading them here
+        // admits nothing that was not already contained.
+        if !rest.iter().all(|value| workspace_script_path(value)) {
+            return Ok(None);
+        }
+        return Ok(Some(TsxTestParts {
+            flags,
+            script: rest.first(),
+            arguments: rest.get(1..).unwrap_or_default(),
+        }));
     }
+    // Without those flags the first word is a script Node runs and the rest is
+    // its argv, so the leaf still has to name a test file.
     Ok(rest
         .first()
         .filter(|value| named_test_script(value, true))
         .map(|script| TsxTestParts {
             flags,
-            script,
+            script: Some(script),
             arguments: &rest[1..],
         }))
 }
 
+/// The script a tsx run names, if it names one, and that script's own argv.
+pub type TsxTestInvocation = (Option<String>, Vec<String>);
+
 /// The test script a tsx run names, and the arguments the script is passed.
 pub fn tsx_test_invocation(
     command: &[String],
-) -> Result<Option<(String, Vec<String>)>, RestrictedPytestError> {
-    Ok(tsx_test_parts(command)?.map(|parts| (parts.script.clone(), parts.arguments.to_vec())))
+) -> Result<Option<TsxTestInvocation>, RestrictedPytestError> {
+    Ok(tsx_test_parts(command)?.map(|parts| (parts.script.cloned(), parts.arguments.to_vec())))
 }
 
 /// The Node test-runner flags a tsx run carries, which the sink re-emits in
@@ -343,10 +475,21 @@ fn bun_runner_invocation(
 
 #[path = "contained_argv_runner_calls.rs"]
 mod runner_calls;
+#[path = "contained_argv_single_pass_runners.rs"]
+mod single_pass_runners;
 pub(crate) use runner_calls::{
-    bun_test_runs_once, bun_test_script_once, contained_runner_call, jest_contained_call,
-    jest_runs_once, mocha_contained_call, mocha_runs_once, tsx_runner_flag_count,
-    tsx_runner_test_mode, vitest_runs_once, workspace_test_script,
+    ava_contained_call, ava_runs_once, bun_test_runs_once, bun_test_script_once,
+    contained_runner_call, jest_contained_call, jest_runs_once, mocha_contained_call,
+    mocha_runs_once, tsx_runner_flag_count, tsx_runner_test_mode, vitest_runs_once,
+    workspace_test_script,
+};
+pub(crate) use single_pass_runners::{
+    borp_contained_call, borp_runs_once, cucumber_contained_call, cucumber_prints_its_report,
+    cucumber_runs_once, jasmine_contained_call, jasmine_runs_once, jasmine_sets_no_environment,
+    lab_contained_call, lab_runs_once, poku_contained_call, poku_runs_once,
+    poku_touches_nothing_else, qunit_contained_call, qunit_runs_once, tap_contained_call,
+    tap_runs_tests_once, tap_sets_no_environment, tape_contained_call, tsd_contained_call,
+    uvu_contained_call,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
@@ -383,6 +526,17 @@ fn runner_tail(arguments: &[String]) -> Option<(&'static str, Vec<String>)> {
             match tool.as_str() {
                 "jest" => "jest",
                 "mocha" => "mocha",
+                "ava" => "ava",
+                "jasmine" => "jasmine",
+                "qunit" => "qunit",
+                "uvu" => "uvu",
+                "tape" => "tape",
+                "tsd" => "tsd",
+                "tap" => "tap",
+                "borp" => "borp",
+                "poku" => "poku",
+                "lab" => "lab",
+                "cucumber-js" => "cucumber-js",
                 _ => "vitest",
             },
             rest.to_vec(),
@@ -418,6 +572,112 @@ fn runner_tail_or_error(
             Some("mocha") => Err(RestrictedPytestError::new(
                 VITEST_INVALID,
                 "Protected Mocha reads its configuration and modules from this workspace.",
+            )),
+            Some("ava") if !ava_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected AVA requires a run that does not watch.",
+            )),
+            Some("ava") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected AVA reads its configuration and modules from this workspace.",
+            )),
+            Some("jasmine") if !jasmine_runs_once(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected Jasmine runs specs; it does not scaffold a project.",
+                ))
+            }
+            Some("jasmine") if !jasmine_sets_no_environment(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected Jasmine takes its environment from the run, not from its arguments.",
+                ))
+            }
+            Some("jasmine") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected Jasmine reads its configuration and helpers from this workspace.",
+            )),
+            Some("qunit") if !qunit_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected QUnit requires a run that does not watch.",
+            )),
+            Some("qunit") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected QUnit reads its modules from this workspace.",
+            )),
+            Some("uvu") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected uvu reads its modules from this workspace.",
+            )),
+            Some("tape") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected tape reads its modules from this workspace.",
+            )),
+            Some("tsd") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected tsd reads its types from this workspace.",
+            )),
+            Some("tap") if !tap_runs_tests_once(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected tap runs tests; it does not report, build or open a browser.",
+                ))
+            }
+            Some("tap") if !tap_sets_no_environment(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected tap takes its environment from the run, not from its arguments.",
+                ))
+            }
+            Some("tap") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected tap reads its configuration and modules from this workspace.",
+            )),
+            Some("borp") if !borp_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected borp requires a run that does not watch.",
+            )),
+            Some("borp") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected borp reads its modules from this workspace.",
+            )),
+            Some("poku") if !poku_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected poku requires a run that does not watch.",
+            )),
+            Some("poku") if !poku_touches_nothing_else(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected poku runs tests; it does not end processes or load an environment file.",
+                ))
+            }
+            Some("poku") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected poku reads its modules from this workspace.",
+            )),
+            Some("lab") if !lab_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected lab runs tests; it does not start a debugger.",
+            )),
+            Some("lab") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected lab reads its modules from this workspace.",
+            )),
+            Some("cucumber-js") if !cucumber_prints_its_report(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected cucumber-js prints its report here; it does not write it to a file.",
+                ))
+            }
+            Some("cucumber-js") if !cucumber_runs_once(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected cucumber-js runs its features here; it does not publish the report.",
+                ))
+            }
+            Some("cucumber-js") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected cucumber-js reads its features and support code from this workspace.",
             )),
             _ => invalid_vitest(),
         },
@@ -612,7 +872,23 @@ pub fn contained_runner_invocation(
             args.to_vec()
         } else if let Some(args) = manager_exec_tool(&argv) {
             args.to_vec()
-        } else if matches!(name, "vitest" | "jest" | "mocha") {
+        } else if matches!(
+            name,
+            "vitest"
+                | "jest"
+                | "mocha"
+                | "ava"
+                | "jasmine"
+                | "qunit"
+                | "uvu"
+                | "tape"
+                | "tsd"
+                | "tap"
+                | "borp"
+                | "poku"
+                | "lab"
+                | "cucumber-js"
+        ) {
             let mut call = vec![name.to_owned()];
             call.extend_from_slice(&argv[1..]);
             call
@@ -628,6 +904,28 @@ pub fn contained_runner_invocation(
                 "jest"
             } else if local_mocha_entry(&entry) {
                 "mocha"
+            } else if local_ava_entry(&entry) {
+                "ava"
+            } else if local_jasmine_entry(&entry) {
+                "jasmine"
+            } else if local_qunit_entry(&entry) {
+                "qunit"
+            } else if local_uvu_entry(&entry) {
+                "uvu"
+            } else if local_tape_entry(&entry) {
+                "tape"
+            } else if local_tsd_entry(&entry) {
+                "tsd"
+            } else if local_tap_entry(&entry) {
+                "tap"
+            } else if local_borp_entry(&entry) {
+                "borp"
+            } else if local_poku_entry(&entry) {
+                "poku"
+            } else if local_lab_entry(&entry) {
+                "lab"
+            } else if local_cucumber_entry(&entry) {
+                "cucumber-js"
             } else {
                 return invalid_vitest();
             };
@@ -864,8 +1162,25 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let bun_test = bun_test_invocation(command) || bun_test_script_invocation(command);
     let entries = command.iter().skip(1).take(2);
     let vitest = !command.is_empty()
-        && (matches!(name, "bunx" | "npx" | "vitest" | "jest" | "mocha")
-            || manager_exec_runner(command).is_some()
+        && (matches!(
+            name,
+            "bunx"
+                | "npx"
+                | "vitest"
+                | "jest"
+                | "mocha"
+                | "ava"
+                | "jasmine"
+                | "qunit"
+                | "uvu"
+                | "tape"
+                | "tsd"
+                | "tap"
+                | "borp"
+                | "poku"
+                | "lab"
+                | "cucumber-js"
+        ) || manager_exec_runner(command).is_some()
             || bun.is_some()
             || bun_runner_entry_launch(command)
             || tsx_test_invocation(command)?.is_some()
@@ -875,6 +1190,17 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                     local_vitest_entry(&entry)
                         || local_jest_entry(&entry)
                         || local_mocha_entry(&entry)
+                        || local_ava_entry(&entry)
+                        || local_jasmine_entry(&entry)
+                        || local_qunit_entry(&entry)
+                        || local_uvu_entry(&entry)
+                        || local_tape_entry(&entry)
+                        || local_tsd_entry(&entry)
+                        || local_tap_entry(&entry)
+                        || local_borp_entry(&entry)
+                        || local_poku_entry(&entry)
+                        || local_lab_entry(&entry)
+                        || local_cucumber_entry(&entry)
                 })));
     let node_tool = bun.is_none()
         && !bun_test

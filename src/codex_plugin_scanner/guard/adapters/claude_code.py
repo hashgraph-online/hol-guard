@@ -150,6 +150,21 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         hooks = payload.get("hooks")
         if not isinstance(hooks, dict):
             return
+        # The native SessionStart lane hands off to this refresh whenever its
+        # recorded runtime build differs from the installed one, which is true
+        # after every package upgrade. Rewriting the entry here moves the next
+        # session back onto the native lane instead of paying for Python forever.
+        session_start_handler = _guard_command_handler(
+            self._session_start_command_parts(context),
+            timeout=CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS,
+        )
+        session_start_job = (
+            _hook_config.entry_list(hooks.get("SessionStart")),
+            CLAUDE_GUARD_SESSION_START_MATCHERS,
+            session_start_handler,
+            True,
+        )
+        hooks["SessionStart"] = _hook_config.merge_hook_groups([session_start_job])[0]
         _sync_runtime_hook_groups(hooks, self._daemon_hook_command_parts(context))
         _remove_unsupported_guard_hook_groups(hooks)
         settings_path.parent.mkdir(parents=True, exist_ok=True)

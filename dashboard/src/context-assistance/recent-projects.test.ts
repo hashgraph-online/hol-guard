@@ -46,7 +46,8 @@ const html = renderToStaticMarkup(createElement(RecentProjects, {
   onReuse: () => {}, onForget: () => {},
 }));
 assert.match(html, /Recent projects/);
-assert.match(html, /app<\/span>.*1 file · for Codex/);
-assert.match(html, /site<\/span>.*0 files · for this page/);
+assert.match(html, /app<\/span>.*1 file</, "a recent project counts for every app, so it names no app");
+assert.match(html, /site<\/span>.*Guard&#x27;s safety facts only/);
+assert.doesNotMatch(html, /for Codex|for this page/);
 assert.match(html, /aria-label="Remove app from this list"/);
 console.log("recent projects ok");

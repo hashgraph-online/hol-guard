@@ -215,53 +215,6 @@ def _resolve_headless_short_lived_trust_attestation_signing_config(
 
 
 _SIGNED_PAYLOAD_RULES = {"require_signed_at": True, "require_nonce": True, "require_subject_bindings": True}
-_REQUIRED_PAYLOAD_FIELDS = (
-    ("agent_id", "agentId"),
-    ("item_id", "itemId"),
-    ("item_kind", "itemKind"),
-    ("content_hash", "contentHash"),
-    ("captured_at", "capturedAt"),
-    ("evidence_hash", "evidenceHash"),
-    ("scope", "scope"),
-)
-_OPTIONAL_PAYLOAD_FIELDS = (
-    ("analyzer_id", "analyzerId"),
-    ("analyzer_version", "analyzerVersion"),
-    ("analyzer_spec_version", "analyzerSpecVersion"),
-    ("evidence_schema_version", "evidenceSchemaVersion"),
-    ("policy_version", "policyVersion"),
-    ("workspace_id", "workspaceId"),
-    ("device_id", "deviceId"),
-    ("installation_id", "installationId"),
-    ("upload_id", "uploadId"),
-    ("challenge_id", "challengeId"),
-    ("nonce", "nonce"),
-    ("sequence", "sequence"),
-    ("expires_at", "expiresAt"),
-    ("layer_id", "layerId"),
-    ("layer_type", "layerType"),
-    ("adapter_id", "adapterId"),
-    ("adapter_version", "adapterVersion"),
-    ("config_path_hash", "configPathHash"),
-    ("repository_id", "repositoryId"),
-    ("claim_hash", "claimHash"),
-)
-
-
-def _trust_attestation_payload(fields: Mapping[str, object]) -> dict[str, object]:
-    """Spell builder keyword fields as the unvalidated payload the verifier reads."""
-
-    payload: dict[str, object] = {
-        "payloadVersion": GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3,
-        "domainSeparator": GUARD_TRUST_ATTESTATION_DOMAIN,
-    }
-    for name, key in _REQUIRED_PAYLOAD_FIELDS:
-        payload[key] = fields[name]
-    for name, key in _OPTIONAL_PAYLOAD_FIELDS:
-        value = fields.get(name)
-        if value is not None:
-            payload[key] = value
-    return payload
 
 
 def build_trust_attestation_payload(
@@ -323,7 +276,7 @@ def build_trust_attestation_payload(
         "repository_id": repository_id,
         "claim_hash": claim_hash,
     }
-    return _validate_attestation_payload(_trust_attestation_payload(fields), require_signed_at=False)
+    return _admitted_payload(native_runner_authority("trust_attestation_shape", {"op": "build", "fields": fields}))
 
 
 def apply_trust_attestation_metadata(
@@ -352,72 +305,21 @@ def apply_trust_attestation_metadata(
     signing_config: GuardTrustAttestationSigningConfig | None = None,
 ) -> dict[str, object]:
     enriched = dict(metadata)
-    admitted = _admitted_trust_claims(enriched.get("trustResolution"), enriched.get("trustLayers"))
-    admitted_resolution = admitted.get("resolution")
-    trust_resolution: dict[str, object] | None = None
-    resolution_claim_hash = ""
-    if isinstance(admitted_resolution, dict):
-        trust_resolution = admitted_resolution["claim"]
-        resolution_claim_hash = admitted_resolution["claim_hash"]
-    if trust_resolution is None:
-        enriched.pop("trustResolution", None)
-    else:
-        enriched["trustResolution"] = trust_resolution
-
-    admitted_layers = [layer for layer in admitted.get("layers", []) if isinstance(layer, dict)]
-    trust_layers: list[dict[str, object]] = [layer["claim"] for layer in admitted_layers]
-    layer_claim_hashes: list[str] = [layer["claim_hash"] for layer in admitted_layers]
-    if trust_layers:
-        enriched["trustLayers"] = trust_layers
-    else:
-        enriched.pop("trustLayers", None)
-
-    config = signing_config or resolve_trust_attestation_signing_config()
-    if config is None:
-        return enriched
-
-    include_v2_bindings = workspace_id is not None or device_id is not None
-    effective_nonce = nonce or secrets.token_urlsafe(24)
-    effective_policy_version = policy_version or "guard-local-policy:default"
-    common_attestation_bindings = {
-        key: value
-        for key, value in {
-            "domainSeparator": GUARD_TRUST_ATTESTATION_DOMAIN,
-            "challengeId": challenge_id,
-            "deviceId": device_id,
-            "analyzerId": analyzer_id if include_v2_bindings else None,
-            "analyzerSpecVersion": analyzer_spec_version if include_v2_bindings else None,
-            "analyzerVersion": analyzer_version if include_v2_bindings else None,
-            "expiresAt": expires_at,
-            "installationId": installation_id,
-            "nonce": effective_nonce,
-            "policyVersion": effective_policy_version,
-            "sequence": sequence,
-            "uploadId": upload_id,
-            "workspaceId": workspace_id,
-            "adapterId": adapter_id,
-            "adapterVersion": adapter_version,
-            "configPathHash": config_path_hash,
-            "repositoryId": repository_id,
-        }.items()
-        if value is not None
-    }
-
-    payload_fields: dict[str, object] = {
+    fields: dict[str, object] = {
         "agent_id": agent_id,
-        "analyzer_id": analyzer_id if include_v2_bindings else None,
-        "analyzer_spec_version": analyzer_spec_version if include_v2_bindings else None,
-        "analyzer_version": analyzer_version if include_v2_bindings else None,
+        "analyzer_id": analyzer_id,
+        "analyzer_spec_version": analyzer_spec_version,
+        "analyzer_version": analyzer_version,
         "item_id": item_id,
         "item_kind": item_kind,
         "content_hash": content_hash,
         "challenge_id": challenge_id,
         "expires_at": expires_at,
         "installation_id": installation_id,
-        "nonce": effective_nonce,
-        "policy_version": effective_policy_version,
+        "nonce": nonce or secrets.token_urlsafe(24),
         "sequence": sequence,
         "upload_id": upload_id,
+        "policy_version": policy_version,
         "workspace_id": workspace_id,
         "device_id": device_id,
         "adapter_id": adapter_id,
@@ -425,100 +327,105 @@ def apply_trust_attestation_metadata(
         "config_path_hash": config_path_hash,
         "repository_id": repository_id,
     }
-    claims: list[tuple[dict[str, object], str, str]] = []
-    if trust_resolution is not None:
-        claims.append((trust_resolution, resolution_claim_hash, "trust_resolution"))
-    claims.extend(
-        (layer, claim_hash, "trust_layer") for layer, claim_hash in zip(trust_layers, layer_claim_hashes, strict=True)
+    trust_resolution, trust_layers, signing = _attestation_plan(
+        enriched.get("trustResolution"), enriched.get("trustLayers"), fields
     )
+    if trust_resolution is None:
+        enriched.pop("trustResolution", None)
+    else:
+        enriched["trustResolution"] = trust_resolution
+    if trust_layers:
+        enriched["trustLayers"] = trust_layers
+    else:
+        enriched.pop("trustLayers", None)
 
-    pending: list[tuple[dict[str, object], dict[str, object], str, str, str]] = []
-    payloads: list[dict[str, object]] = []
-    for claim, claim_hash, scope in claims:
-        raw_claim_metadata = claim.get("metadata")
-        claim_metadata = dict(raw_claim_metadata) if isinstance(raw_claim_metadata, dict) else {}
-        evidence_hash = claim_metadata.get("evidenceHash")
-        evidence_schema_version = claim_metadata.get("evidenceSchemaVersion")
-        captured_at = claim.get("capturedAt")
-        layer_fields: dict[str, object] = {}
-        if scope == "trust_layer":
-            layer_fields = {"layer_id": claim.get("layerId"), "layer_type": claim.get("layerType")}
-        if not all(
-            isinstance(value, str) and value
-            for value in (evidence_hash, evidence_schema_version, captured_at, *layer_fields.values())
-        ):
-            continue
-        signed_at, schema_version = str(captured_at), str(evidence_schema_version)
-        payload = _trust_attestation_payload(
-            {
-                **payload_fields,
-                **layer_fields,
-                "captured_at": captured_at,
-                "evidence_hash": evidence_hash,
-                "evidence_schema_version": evidence_schema_version,
-                "scope": scope,
-                "claim_hash": claim_hash,
-            }
-        )
-        payloads.append(_payload_with_signed_at(payload, signed_at))
-        pending.append((claim, claim_metadata, signed_at, schema_version, claim_hash))
-    if not pending:
+    config = signing_config or resolve_trust_attestation_signing_config()
+    if config is None or not signing:
         return enriched
 
-    # Every signed payload of the item is checked in one native call; the
-    # first refusal fails the item exactly as signing it alone would.
+    # Every payload of the item is checked before any is signed; the first
+    # refusal fails the item exactly as signing it alone would.
     private_key = _load_private_key(config.private_key_pem)
-    validated_payloads = _validate_attestation_payloads(payloads, **_SIGNED_PAYLOAD_RULES)
-    for (claim, claim_metadata, signed_at, evidence_schema_version, claim_hash), validated in zip(
-        pending, validated_payloads, strict=True
-    ):
+    validated_payloads = [_admitted_payload(entry) for _, entry in signing]
+    for (claim, entry), validated in zip(signing, validated_payloads, strict=True):
+        raw_claim_metadata = claim.get("metadata")
+        claim_metadata = dict(raw_claim_metadata) if isinstance(raw_claim_metadata, dict) else {}
         claim_metadata["attestation"] = _sign_validated_payload(
-            validated, private_key=private_key, config=config, signed_at=signed_at
+            validated, private_key=private_key, config=config, signed_at=str(entry["signed_at"])
         )
         claim_metadata["attestationStatus"] = "signed"
-        claim_metadata["attestationBindings"] = {
-            **common_attestation_bindings,
-            "evidenceSchemaVersion": evidence_schema_version,
-            "claimHash": claim_hash,
-        }
+        claim_metadata["attestationBindings"] = entry["bindings"]
         claim["metadata"] = claim_metadata
     return enriched
 
 
-def _admitted_trust_claims(raw_resolution: object, raw_layers: object) -> dict[str, Any]:
-    """Return the locally derived claims the native gate admits, with their names.
+_SigningPlan = tuple[dict[str, Any] | None, list[dict[str, Any]], list[tuple[dict[str, Any], dict[str, Any]]]]
 
-    Each admitted claim comes back as ``{"claim", "claim_hash"}`` with its prior
-    proof stripped and its metadata marked unsigned.
+
+def _attestation_plan(raw_resolution: object, raw_layers: object, fields: dict[str, object]) -> _SigningPlan:
+    """Return the locally derived claims the native gate admits and how to sign each.
+
+    Each admitted claim comes back with its prior proof stripped and its
+    metadata marked unsigned. Each signing entry pairs a claim with the native
+    verdict on its payload, its signing time and its attestation bindings.
     """
 
     if not isinstance(raw_resolution, dict) and not (isinstance(raw_layers, list) and raw_layers):
-        return {"resolution": None, "layers": []}
+        return None, [], []
     try:
-        return native_runner_authority(
-            "trust_attestation_shape",
-            {"op": "claims", "resolution": raw_resolution, "layers": raw_layers},
-        )
+        return _plan({"resolution": raw_resolution, "layers": raw_layers}, fields)
     except NativeRunnerAuthorityRefusalError:
-        pass
+        # Shared fields the encoder refuses would refuse every claim alike, so
+        # that refusal fails the item instead of erasing its claims.
+        _plan({"resolution": None, "layers": []}, fields)
     # A claim the bounded encoder refuses (unencodable or oversized) drops
     # alone; the item keeps every other claim instead of losing all of them.
-    resolution = (
-        _admitted_alone({"resolution": raw_resolution}).get("resolution") if isinstance(raw_resolution, dict) else None
+    resolution, _, signing = (
+        _plan_alone({"resolution": raw_resolution}, fields) if isinstance(raw_resolution, dict) else (None, [], [])
     )
-    layers: list[object] = []
+    layers: list[dict[str, Any]] = []
     if isinstance(raw_layers, list):
         for raw_layer in raw_layers:
             if isinstance(raw_layer, dict):
-                layers.extend(_admitted_alone({"layers": [raw_layer]}).get("layers", []))
-    return {"resolution": resolution, "layers": layers}
+                _, admitted, layer_signing = _plan_alone({"resolution": None, "layers": [raw_layer]}, fields)
+                layers.extend(admitted)
+                signing.extend(layer_signing)
+    return resolution, layers, signing
 
 
-def _admitted_alone(request: dict[str, object]) -> dict[str, Any]:
+def _plan_alone(request: dict[str, object], fields: dict[str, object]) -> _SigningPlan:
     try:
-        return native_runner_authority("trust_attestation_shape", {"op": "claims", **request})
+        return _plan(request, fields)
     except NativeRunnerAuthorityRefusalError:
-        return {}
+        return None, [], []
+
+
+def _plan(request: dict[str, object], fields: dict[str, object]) -> _SigningPlan:
+    answer = native_runner_authority("trust_attestation_shape", {"op": "sign_plan", **request, "fields": fields})
+    resolution = answer.get("resolution")
+    layers = answer.get("layers")
+    signing = answer.get("signing")
+    if (
+        not (resolution is None or isinstance(resolution, dict))
+        or not isinstance(layers, list)
+        or not isinstance(signing, list)
+        or not all(isinstance(layer, dict) for layer in layers)
+    ):
+        raise NativeRunnerAuthorityError("native_runner_authority_invalid")
+    admitted_layers: list[dict[str, Any]] = [layer for layer in layers if isinstance(layer, dict)]
+    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for entry in signing:
+        if not isinstance(entry, dict) or not isinstance(entry.get("bindings"), dict):
+            raise NativeRunnerAuthorityError("native_runner_authority_invalid")
+        index = entry.get("layer")
+        if index is None and isinstance(resolution, dict):
+            claim = resolution
+        elif type(index) is int and 0 <= index < len(admitted_layers):
+            claim = admitted_layers[index]
+        else:
+            raise NativeRunnerAuthorityError("native_runner_authority_invalid")
+        pairs.append((claim, entry))
+    return resolution, admitted_layers, pairs
 
 
 def trust_claim_hash(claim: Mapping[str, object], *, require_layer_identity: bool) -> str:
@@ -552,29 +459,6 @@ def _validate_attestation_payload(
         },
     )
     return _admitted_payload(answer)
-
-
-def _validate_attestation_payloads(
-    payloads: list[dict[str, object]],
-    *,
-    require_signed_at: bool,
-    require_nonce: bool,
-    require_subject_bindings: bool,
-) -> list[dict[str, object]]:
-    answer = native_runner_authority(
-        "trust_attestation_shape",
-        {
-            "op": "payloads",
-            "payloads": [{str(key): value for key, value in payload.items()} for payload in payloads],
-            "require_signed_at": require_signed_at,
-            "require_nonce": require_nonce,
-            "require_subject_bindings": require_subject_bindings,
-        },
-    )
-    results = answer.get("results")
-    if not isinstance(results, list) or len(results) != len(payloads):
-        raise NativeRunnerAuthorityError("native_runner_authority_invalid")
-    return [_admitted_payload(result) for result in results]
 
 
 def _admitted_payload(answer: object) -> dict[str, object]:

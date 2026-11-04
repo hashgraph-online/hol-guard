@@ -254,6 +254,32 @@ def test_access_graph_queue_failure_does_not_block_local_approval_decision(tmp_p
     assert "sk-live-secret-token" not in json.dumps(failure_events[0]["payload"])
 
 
+def test_access_graph_snapshot_is_skipped_when_the_resident_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.access_graph_events import queue_access_graph_snapshot
+
+    def refuse(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", refuse)
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+
+    queue_access_graph_snapshot(
+        store=store,
+        detection=_detection(_artifact(tmp_path)),
+        artifacts=[{"artifact_id": "codex:mcp:x", "artifact_type": "mcp_server"}],
+        now="2026-07-07T00:00:00Z",
+    )
+
+    pending = store.list_guard_events_v1(uploaded=False, limit=10)
+    failure_events = store.list_events(limit=5, event_name="access_graph_snapshot_queue_failed")
+    assert not [item for item in pending if item["event_type"] == "access_graph.snapshot"]
+    assert failure_events[0]["payload"]["error_type"] == "NativeRunnerAuthorityError"
+
+
 def test_guard_cloud_event_queue_backpressures_without_dropping_pending_events(
     tmp_path: Path,
 ) -> None:

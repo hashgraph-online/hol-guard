@@ -47,6 +47,7 @@ pub use status::{
     package_shim_cloud_coverage, package_shim_dashboard_status, package_shim_protection,
     package_shim_protection_from_status, package_shim_status,
 };
+pub(crate) use values::py_json_dumps;
 
 /// Sentinel assignment the generated shims carry (`<name> = True`).
 pub const FROZEN_PACKAGE_SHIM_SENTINEL: &str = "HOL_GUARD_PACKAGE_SHIM_SENTINEL";
