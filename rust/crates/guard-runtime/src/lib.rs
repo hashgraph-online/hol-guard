@@ -983,6 +983,7 @@ mod project_identity;
 mod project_identity_op;
 mod prompt_analyze_op;
 mod protect_advisory_merge_op;
+mod protect_approval_plan;
 mod protect_request_op;
 mod protection_health_report_op;
 mod proxy_credentials;
