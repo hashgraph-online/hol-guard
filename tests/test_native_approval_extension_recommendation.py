@@ -403,3 +403,80 @@ def test_an_unbound_caution_reply_is_an_error_never_no_caution(
 
     with pytest.raises(client.NativeApprovalExtensionRecommendationError):
         client.native_caution_risk_classes(["destructive"])
+
+
+COVERAGE_HINT: dict[str, object] = {
+    "schema": "guard.extension-coverage-hint.v1",
+    "catalog_digest": DIGEST,
+    "segments": [
+        {
+            "index": 0,
+            "executable": "git",
+            "extension_ids": ["command.git"],
+            "rule_ids": ["command.git.hard-reset"],
+            "permission_ids": [],
+        }
+    ],
+}
+COVERAGE: dict[str, object] = {
+    "schema": client.COVERAGE_SCHEMA,
+    "catalog_digest": DIGEST,
+    "compound": False,
+    "segments": [{"index": 0, "executable": "git", "extensions": [], "rules": [], "permissions": []}],
+}
+
+
+def _covers(coverage: object) -> Callable[[dict[str, Any]], object]:
+    return lambda request: bound_reply(request, {"kind": "coverage", "coverage": coverage}, schema=RESULT_SCHEMA)
+
+
+def test_coverage_sends_the_stored_hint_and_returns_the_labelled_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+    resident = _resident(monkeypatch, _covers(dict(COVERAGE)))
+
+    assert client.build_approval_extension_coverage(_approval(COVERAGE_HINT)) == COVERAGE
+    [request] = resident.requests
+    assert request["query"] == {"kind": "coverage", "hint": COVERAGE_HINT}
+    assert client.with_approval_extension_coverage({}, _approval(COVERAGE_HINT), include=True) == {
+        "extension_coverage": COVERAGE
+    }
+
+
+def test_coverage_is_not_asked_for_a_resolved_unhinted_or_excluded_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    resident = _resident(monkeypatch, _covers(dict(COVERAGE)))
+
+    assert client.build_approval_extension_coverage(_approval(COVERAGE_HINT, status="approved")) is None
+    assert client.build_approval_extension_coverage(_approval(None)) is None
+    assert client.build_approval_extension_coverage(_approval("hint")) is None
+    assert client.with_approval_extension_coverage({}, _approval(COVERAGE_HINT), include=False) == {}
+    assert resident.requests == []
+
+
+@pytest.mark.parametrize(
+    "coverage",
+    [
+        {**COVERAGE, "schema": "guard.approval-extension-coverage.v2"},
+        {**COVERAGE, "segments": []},
+        {**COVERAGE, "compound": 1},
+        {**COVERAGE, "extra": True},
+        {key: value for key, value in COVERAGE.items() if key != "catalog_digest"},
+        "coverage",
+    ],
+)
+def test_a_malformed_coverage_answer_is_refused(monkeypatch: pytest.MonkeyPatch, coverage: object) -> None:
+    _resident(monkeypatch, _covers(coverage))
+
+    with pytest.raises(client.NativeApprovalExtensionRecommendationError):
+        client.build_approval_extension_coverage(_approval(COVERAGE_HINT))
+    assert client.with_approval_extension_coverage({}, _approval(COVERAGE_HINT), include=True) == {}
+
+
+def test_no_coverage_and_an_unavailable_resident_both_leave_the_approval_as_it_was(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resident = _resident(monkeypatch, _covers(None))
+    assert client.build_approval_extension_coverage(_approval(COVERAGE_HINT)) is None
+    assert client.with_approval_extension_coverage({"id": 1}, _approval(COVERAGE_HINT), include=True) == {"id": 1}
+
+    monkeypatch.setattr(shared, "ensure_resident_prerequisite", lambda _home: False)
+    assert client.with_approval_extension_coverage({"id": 1}, _approval(COVERAGE_HINT), include=True) == {"id": 1}
+    assert len(resident.requests) == 2
