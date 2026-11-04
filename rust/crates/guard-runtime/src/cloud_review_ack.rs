@@ -180,7 +180,7 @@ fn normalize(
 
 /// A JSON integer, as Python's `type(value) is int` sees it: digits only, no
 /// fraction or exponent, and never a boolean. Integers past `i128` saturate.
-fn strict_int(value: &Value) -> Option<i128> {
+pub(crate) fn strict_int(value: &Value) -> Option<i128> {
     let Value::Number(number) = value else {
         return None;
     };
@@ -203,13 +203,13 @@ fn retry_after(value: &Value) -> Option<i128> {
         .map(|value| value.min(MAX_RETRY_AFTER_MS))
 }
 
-fn int_value(value: i128) -> Value {
+pub(crate) fn int_value(value: i128) -> Value {
     Value::Number(Number::from(value as i64))
 }
 
 /// Python's `value == expected` for an int `expected`: booleans count as 0
 /// and 1, and a float compares by value.
-fn py_equals_int(value: &Value, expected: i128) -> bool {
+pub(crate) fn py_equals_int(value: &Value, expected: i128) -> bool {
     match value {
         Value::Bool(flag) => i128::from(*flag) == expected,
         Value::Number(number) => match strict_int(value) {

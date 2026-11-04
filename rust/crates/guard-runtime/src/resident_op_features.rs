@@ -265,6 +265,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-windows-private-directory-v1",
     "native-device-key-metadata-v1",
     "native-cloud-actions-connect-v1",
+    "native-registry-trust-v1",
     "native-cloud-actions-health-v1",
     "native-windows-process-lifecycle-v1",
     "native-local-skill-index-v1",
@@ -319,5 +320,6 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-agent-safety-guidance-v1",
     "native-guard-shim-profile-v1",
     "native-durable-runtime-collapse-v1",
+    "native-exact-cloud-review-v1",
     "native-verified-github-read-v1",
 ];
