@@ -18,6 +18,7 @@ from .decision_coverage import case_coverage as decision_case_coverage
 from .decision_coverage import unexercised_reason
 from .event_exports import public_events as public_events
 from .extension_adapters import extension_adapter
+from .input_evidence import Redaction, redact_value
 from .interruptions import case_interruptions, describe
 from .mixed_reads import assess_mixed_reads
 from .native_routes import native_route_proof_error
@@ -60,17 +61,25 @@ EXECUTION_ERROR_CHAIN_LINKS = 4
 EXECUTION_ERROR_CHAIN_WIDTH = 240
 
 
-def execution_error_chain(error: BaseException) -> list[str]:
-    """Describe a case's execution failure and the causes behind it.
+def execution_error_chain(error: BaseException, replacements: dict[Redaction, str]) -> list[str]:
+    """Describe a case's execution failure and the causes behind it, redacted.
 
     `execution_error` records only the class name, which turns a refusal with a
     status and a reason code into a bare `ExtensionControlApiError`. The chain
     keeps what that name drops, bounded so a noisy cause cannot flood evidence.
+
+    Each link is redacted before it is bounded, and the redactions are required
+    rather than left to the caller. Bounding first cuts a path or a credential
+    in half, and the remaining fragment no longer matches the literal or the
+    compiled matcher that would have hidden it, so it survives into a bundle
+    published with the release. Nothing downstream can reassemble the value to
+    recognize it, so the only place to hide it is before the cut.
     """
     chain: list[str] = []
     link: BaseException | None = error
     while link is not None and len(chain) < EXECUTION_ERROR_CHAIN_LINKS:
-        chain.append(f"{type(link).__name__}: {link}"[:EXECUTION_ERROR_CHAIN_WIDTH])
+        public = redact_value(f"{type(link).__name__}: {link}", replacements)
+        chain.append(public[:EXECUTION_ERROR_CHAIN_WIDTH])
         link = link.__cause__ or link.__context__
     return chain
 

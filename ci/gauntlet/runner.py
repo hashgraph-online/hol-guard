@@ -56,7 +56,6 @@ from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import (
     public_native_extension_evidence,
     public_native_receipt,
-    redact_value,
 )
 from .interruptions import KNOWN_GAPS, load_known_gaps, report_sections, stale_gaps
 from .latency import summarize_hook_latency
@@ -427,7 +426,7 @@ def run_case(
                 raise RuntimeError("installed Guard or its generated extension changed during the session")
     except Exception as exc:
         case["execution_error"] = type(exc).__name__
-        chain = redact_value(execution_error_chain(exc), replacements)
+        chain = execution_error_chain(exc, replacements)
         case["execution_error_chain"] = chain
         (private / "execution-error.txt").write_text("\n".join(chain) + "\n", encoding="utf-8")
     finally:

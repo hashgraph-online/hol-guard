@@ -40,6 +40,7 @@ from .full_tasks import (
     load_full_tasks,
 )
 from .host_process import clean_environment, realistic_environment, run_process
+from .input_evidence import Redaction, operator_home_replacements
 from .observed_extension import generate_observed_extension
 from .parallel import validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
@@ -111,6 +112,9 @@ def run_full_task(
     }
     daemon = None
     started = time.monotonic()
+    # Setup runs inside the try, so a failure can precede the fixture. Start from
+    # the replacements that need no fixture, so even that failure is redacted.
+    replacements: dict[Redaction, str] = operator_home_replacements()
     try:
         # Setup is inside the try: one task that cannot be built is a harness-error row, not a lost run.
         owner = world.owner if world else OWNER
@@ -212,7 +216,7 @@ def run_full_task(
                 raise RuntimeError("installed Guard or its generated extension changed during the session")
     except Exception as exc:
         case["execution_error"] = type(exc).__name__
-        case["execution_error_chain"] = execution_error_chain(exc)
+        case["execution_error_chain"] = execution_error_chain(exc, replacements)
         if private is not None and private.is_dir():
             (private / "execution-error.txt").write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
     finally:

@@ -298,7 +298,7 @@ def test_execution_error_chain_keeps_the_refusal_behind_the_class_name():
         except ValueError as cause:
             raise RuntimeError("(503, 'pack_preparation_unavailable')") from cause
     except RuntimeError as error:
-        chain = execution_error_chain(error)
+        chain = execution_error_chain(error, {})
     assert chain[0] == "RuntimeError: (503, 'pack_preparation_unavailable')"
     assert chain[1] == "ValueError: extension release is unavailable"
 
@@ -316,6 +316,51 @@ def test_execution_error_chain_is_bounded():
         wrapper = RuntimeError("y" * 4000)
         wrapper.__cause__ = error
         error = wrapper
-    chain = execution_error_chain(error)
+    chain = execution_error_chain(error, {})
     assert len(chain) == EXECUTION_ERROR_CHAIN_LINKS
     assert all(len(link) <= EXECUTION_ERROR_CHAIN_WIDTH for link in chain)
+
+
+def test_execution_error_chain_redacts_before_it_bounds():
+    """A link cut to its width must not keep the head of a redacted value."""
+    import re
+
+    from ci.gauntlet.evidence import EXECUTION_ERROR_CHAIN_WIDTH, execution_error_chain
+
+    fixture = "/tmp/gauntlet-fixture-aaaa/workspace"
+    # A placeholder standing in for a credential the compiled matchers hide.
+    planted = "aaaa-bbbb-cccc-dddd"
+    replacements = {
+        fixture: "{{workspace}}",
+        re.compile(re.escape(planted)): "<provider-key-redacted>",
+    }
+
+    # Each value starts six characters before the bound, so truncating first
+    # leaves a head that no longer matches the replacement that would hide it.
+    def straddling(prefix: str, value: str) -> str:
+        return "x" * (EXECUTION_ERROR_CHAIN_WIDTH - len(prefix) - 6) + value
+
+    cause = ValueError(straddling("ValueError: ", planted))
+    error = RuntimeError(straddling("RuntimeError: ", fixture))
+    error.__cause__ = cause
+    chain = execution_error_chain(error, replacements)
+    assert all(len(link) <= EXECUTION_ERROR_CHAIN_WIDTH for link in chain)
+    assert "/tmp/" not in chain[0]
+    assert "aaaa-" not in chain[1]
+
+
+def test_operator_home_is_redacted_from_evidence(monkeypatch, tmp_path):
+    """A failure outside the fixture tree names the operator's own home."""
+    from ci.gauntlet.evidence import execution_error_chain
+    from ci.gauntlet.input_evidence import operator_home_replacements
+
+    home = tmp_path / "operator-account"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    replacements = operator_home_replacements()
+    assert replacements
+    error = PermissionError(f"cannot read {home}/.config/provider/login.json")
+    chain = execution_error_chain(error, replacements)
+    assert str(home) not in chain[0]
+    assert "{{operator_home}}" in chain[0]

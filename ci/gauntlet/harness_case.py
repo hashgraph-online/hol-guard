@@ -344,7 +344,7 @@ def run_harness_case(
                 raise RuntimeError("installed Guard changed during the session")
     except Exception as exc:
         case["execution_error"] = type(exc).__name__
-        chain = redact_value(execution_error_chain(exc), replacements)
+        chain = execution_error_chain(exc, replacements)
         case["execution_error_chain"] = chain
         (private / "execution-error.txt").write_text("\n".join(chain) + "\n", encoding="utf-8")
     finally:

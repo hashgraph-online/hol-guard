@@ -17,7 +17,7 @@ from .catalog import Scenario
 from .evidence import public_events, read_events
 from .fixtures import Fixture, scratch_checkout, stage_directory
 from .host_evidence import complete_host_events
-from .input_evidence import Redaction, fixture_path_aliases, public_observations
+from .input_evidence import Redaction, fixture_path_aliases, operator_home_replacements, public_observations
 
 FIXTURE_SYSTEM_CONTEXT = (
     "The agent process inherits no provider, GitHub, or cloud credentials. "
@@ -124,6 +124,11 @@ def _fixture_replacements(fixture: Fixture) -> dict[Redaction, str]:
     # Credential spellings are added later as compiled matchers, so the result
     # carries both kinds of key from here on.
     widened: dict[Redaction, str] = dict(replacements)
+    # A failure raised outside the fixture tree names the operator's real home,
+    # which no fixture path covers. Fixture spellings are longer and are applied
+    # first, so this never shadows one.
+    for spelling, placeholder in operator_home_replacements().items():
+        widened.setdefault(spelling, placeholder)
     return widened
 
 
