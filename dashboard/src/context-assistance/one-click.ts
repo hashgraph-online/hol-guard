@@ -185,6 +185,7 @@ async function follow(
   deps.onJob(input.job_id);
   // After an unknown submit outcome Guard may register the job late, so a missing job is not yet an answer.
   let uncertain = false;
+  let limit = JOB_LIMIT_MS;
   try {
     deps.onState((await deps.versions(input, proof)).state);
   } catch (cause) {
@@ -210,6 +211,8 @@ async function follow(
     if (reply) {
       deps.onState(reply.state);
       const job = parseCigarVersionJob(reply.result);
+      // Some steps, such as setting up Python, get a longer window than others; wait as long as Guard does.
+      limit = Math.max(limit, job.deadline_at_ms - job.created_at_ms + 60_000);
       if (done(job, reply.state)) { deps.onJob(null); return { job, state: reply.state }; }
       if (failedPhases.has(job.phase)) {
         throw new CigarSetupError(stage, job.phase === "recovery_required"
@@ -217,7 +220,7 @@ async function follow(
           : "This step did not finish (" + job.code.replace(/_/g, " ") + "). Nothing was turned on.");
       }
     }
-    if (deps.now() - started > JOB_LIMIT_MS) throw new CigarSetupError(stage, "This is taking longer than expected. Guard is still working; check Updates in a minute.");
+    if (deps.now() - started > limit) throw new CigarSetupError(stage, "This is taking longer than expected. Guard is still working; check Updates in a minute.");
     await deps.sleep(POLL_MS);
   }
 }

@@ -339,3 +339,21 @@ console.log("CIGAR one-click planning, approval, stop, retry and live-readiness 
   assert.equal(chosen.sources.workspace_documents, false);
   assert.equal(chosen.features.agent_context, false);
 }
+{
+  // Setting up Python may get a longer window than other steps; the wait follows the job's own window.
+  const slowPython = (window: number) => {
+    const { deps } = fakeGuard();
+    const answer = deps.versions;
+    let python = "";
+    deps.versions = async (input, proof) => {
+      if (input.action === "setup_interpreter") python = input.job_id;
+      const reply = await answer(input, proof);
+      if (input.action !== "job" || input.job_id !== python || deps.now() >= 250_000) return reply;
+      return { ...reply, result: { ...reply.result, phase: "extracting", code: "extracting", created_at_ms: 0, deadline_at_ms: window } };
+    };
+    return deps;
+  };
+  assert.equal((await runCigarSetup(plan, off, slowPython(300_000))).effective_enabled, true,
+    "a Python setup that needs four minutes inside its five-minute window finishes");
+  await assert.rejects(runCigarSetup(plan, off, slowPython(120_000)), /taking longer/);
+}
