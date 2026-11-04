@@ -145,10 +145,11 @@ fn contain(
         return Contained::Unchanged;
     }
     if routable(response, &payload.value).is_some() {
+        let profile = text(response, "required_execution_profile");
         match sandbox::launching_turn(&payload.value) {
-            sandbox::Turn::Confined => return Contained::CodexSandbox,
-            sandbox::Turn::Networked => return Contained::Unchanged,
             sandbox::Turn::Unknown => {}
+            turn if turn.confines(profile) => return Contained::CodexSandbox,
+            _ => return Contained::Unchanged,
         }
     }
     let target = Target {

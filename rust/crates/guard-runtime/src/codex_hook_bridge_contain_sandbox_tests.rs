@@ -47,18 +47,46 @@ fn payload_text(transcript: &str, turn_id: &str, input: &str) -> String {
 const COMMAND: &str = r#"{"command":"head -3 README.md"}"#;
 
 #[test]
-fn a_turn_in_codex_workspace_write_or_read_only_sandbox_is_confined() {
-    for policy in [WORKSPACE_WRITE, r#"{"type":"read-only"}"#] {
+fn a_turn_in_codex_workspace_write_or_read_only_sandbox_is_read() {
+    let (_directory, payload) = session(&[context("t2", WORKSPACE_WRITE)], "t2", COMMAND);
+    assert_eq!(turn(&payload), Turn::WorkspaceWrite);
+    let (_directory, payload) = session(&[context("t2", r#"{"type":"read-only"}"#)], "t2", COMMAND);
+    assert_eq!(turn(&payload), Turn::ReadOnly);
+}
+
+#[test]
+fn a_turn_whose_sandbox_reaches_the_network_or_writes_elsewhere_is_wider() {
+    for policy in [
+        r#"{"type":"workspace-write","network_access":true}"#,
+        r#"{"type":"read-only","network_access":true}"#,
+        r#"{"type":"workspace-write","writable_roots":["/Users/u"],"network_access":false}"#,
+        r#"{"type":"workspace-write","writable_roots":"/","network_access":false}"#,
+    ] {
         let (_directory, payload) = session(&[context("t2", policy)], "t2", COMMAND);
-        assert_eq!(turn(&payload), Turn::Confined, "{policy}");
+        assert_eq!(turn(&payload), Turn::Wider, "{policy}");
     }
 }
 
 #[test]
-fn a_turn_whose_sandbox_reaches_the_network_is_not_confined() {
-    let policy = r#"{"type":"workspace-write","network_access":true}"#;
-    let (_directory, payload) = session(&[context("t2", policy)], "t2", COMMAND);
-    assert_eq!(turn(&payload), Turn::Networked);
+fn a_workspace_write_turn_confines_only_the_workspace_profile() {
+    for profile in [
+        "workspace-contained-v1",
+        "pytest-readonly-v2",
+        "node-build-output-v1",
+    ] {
+        assert!(Turn::ReadOnly.confines(Some(profile)), "{profile}");
+        assert!(!Turn::Wider.confines(Some(profile)), "{profile}");
+        assert!(!Turn::Unknown.confines(Some(profile)), "{profile}");
+    }
+    assert!(Turn::WorkspaceWrite.confines(Some("workspace-contained-v1")));
+    for profile in [
+        Some("pytest-readonly-v2"),
+        Some("python-eval-readonly-v1"),
+        Some("node-build-output-v1"),
+        None,
+    ] {
+        assert!(!Turn::WorkspaceWrite.confines(profile), "{profile:?}");
+    }
 }
 
 #[test]
@@ -84,7 +112,7 @@ fn only_the_hook_calls_own_turn_counts() {
     let (_directory, payload) = session(&lines, "t2", COMMAND);
     assert_eq!(turn(&payload), Turn::Unknown);
     let (_directory, payload) = session(&lines, "t1", COMMAND);
-    assert_eq!(turn(&payload), Turn::Confined);
+    assert_eq!(turn(&payload), Turn::WorkspaceWrite);
     let (_directory, payload) = session(&lines, "t3", COMMAND);
     assert_eq!(turn(&payload), Turn::Unknown);
     let (_directory, payload) = session(&lines, "", COMMAND);
@@ -98,7 +126,7 @@ fn the_latest_context_for_the_turn_wins() {
         context("t2", WORKSPACE_WRITE),
     ];
     let (_directory, payload) = session(&lines, "t2", COMMAND);
-    assert_eq!(turn(&payload), Turn::Confined);
+    assert_eq!(turn(&payload), Turn::WorkspaceWrite);
 }
 
 #[test]
@@ -112,7 +140,18 @@ fn a_call_that_asks_to_leave_the_sandbox_is_unknown() {
     }
     let input = r#"{"command":"ls","sandbox_permissions":"use_default"}"#;
     let (_directory, payload) = session(&[context("t2", WORKSPACE_WRITE)], "t2", input);
-    assert_eq!(turn(&payload), Turn::Confined);
+    assert_eq!(turn(&payload), Turn::WorkspaceWrite);
+    let camel = serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "toolInput": {"command": "ls", "sandbox_permissions": "require_escalated"},
+        "transcript_path": "/unused/rollout.jsonl",
+        "turn_id": "t2",
+    });
+    let payload = parse_mapping_lone_surrogates(&camel.to_string())
+        .unwrap()
+        .value;
+    assert!(escalated(&payload), "the camel-case input is read too");
 }
 
 #[test]
@@ -155,7 +194,7 @@ fn a_turn_context_beyond_the_read_tail_is_unknown() {
     assert_eq!(turn(&payload), Turn::Unknown);
     lines.drain(1..3);
     let (_directory, payload) = session(&lines, "t2", COMMAND);
-    assert_eq!(turn(&payload), Turn::Confined);
+    assert_eq!(turn(&payload), Turn::WorkspaceWrite);
 }
 
 #[cfg(target_os = "macos")]
@@ -173,7 +212,8 @@ fn a_contained_call_in_codex_sandbox_runs_as_it_is() {
         start_command: Vec::new(),
         fallback_command: vec!["/opt/hol-guard".to_owned(), "hook".to_owned()],
     };
-    let answer = |policy: &str| {
+    const READ_ONLY_DENY: &str = r#"{"policy_action":"sandbox-required","decision":"deny","reason_code":"native_pytest_readonly_containment_required","required_execution_profile":"pytest-readonly-v2","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Run this inside the contained runner."}}"#;
+    let answer = |policy: &str, deny: &str| {
         let (directory, _) = session(&[context("t2", policy)], "t2", COMMAND);
         let transcript = directory.path().join("rollout.jsonl");
         let prepared = Prepared {
@@ -183,23 +223,29 @@ fn a_contained_call_in_codex_sandbox_runs_as_it_is() {
         };
         FIXED_CODEX_APPLIES.with(|applies| applies.set(Some(true)));
         let deadline = Instant::now() + Duration::from_secs(5);
-        let parsed = parse_mapping_lone_surrogates(DENY).unwrap().value;
+        let parsed = parse_mapping_lone_surrogates(deny).unwrap().value;
         let route = settle(&config, &prepared, parsed, false, deadline);
         FIXED_CODEX_APPLIES.with(|applies| applies.set(None));
         route
     };
     assert_eq!(
-        answer(WORKSPACE_WRITE),
+        answer(WORKSPACE_WRITE, DENY),
         Route::Respond(
             r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}"#
                 .to_owned()
         )
     );
+    let denied = Route::Respond(
+        r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Run this inside the contained runner."}}"#
+            .to_owned(),
+    );
     assert_eq!(
-        answer(r#"{"type":"workspace-write","network_access":true}"#),
-        Route::Respond(
-            r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Run this inside the contained runner."}}"#
-                .to_owned()
-        )
+        answer(r#"{"type":"workspace-write","network_access":true}"#, DENY),
+        denied
+    );
+    assert_eq!(
+        answer(WORKSPACE_WRITE, READ_ONLY_DENY),
+        denied,
+        "workspace-write would let a read-only profile write"
     );
 }

@@ -4,8 +4,10 @@
 //! under a macOS Seatbelt profile. Guard's contained sink cannot start in
 //! there: the profile refuses its connection to the resident socket, and
 //! macOS refuses to apply a second Seatbelt profile inside the first. The
-//! rewrite would fail every time, so a call that Codex's sandbox already
-//! confines (writes limited to the workspace, no network) runs as it is.
+//! rewrite would fail every time, so a call that Codex's sandbox confines
+//! at least as tightly as the profile Guard requires runs as it is: a
+//! read-only turn for any profile, a workspace-write turn with no extra
+//! writable roots only for the workspace profile, and never with network.
 //!
 //! The hook payload does not say which sandbox the turn uses, so the turn's
 //! `turn_context` record is read from the session transcript Codex names
@@ -25,17 +27,34 @@ const REASON: &str = "native_contained_by_codex_sandbox";
 /// writes `turn_context` at the start of each turn, so a turn longer than
 /// this is treated as unknown and keeps Guard's own answer.
 const TAIL_BYTES: u64 = 8 * 1024 * 1024;
-const CONFINED: [&str; 2] = ["workspace-write", "read-only"];
+/// The one contained profile that lets a call write anywhere in the workspace.
+const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
 
 /// The sandbox a Codex turn runs its shell calls in.
 #[derive(Debug, PartialEq)]
 pub(super) enum Turn {
     /// No sandbox, or none Guard can confirm.
     Unknown,
-    /// Codex's sandbox confines writes to the workspace and blocks network.
-    Confined,
-    /// Codex's sandbox confines writes but lets the call reach the network.
-    Networked,
+    /// Codex's read-only sandbox, with no network.
+    ReadOnly,
+    /// Codex's workspace-write sandbox with no extra writable roots and no
+    /// network.
+    WorkspaceWrite,
+    /// A Codex sandbox that is wider than the workspace: it reaches the
+    /// network or writes outside the workspace.
+    Wider,
+}
+
+impl Turn {
+    /// Whether this sandbox limits a call at least as tightly as the
+    /// contained `profile` Guard requires.
+    pub(super) fn confines(&self, profile: Option<&str>) -> bool {
+        match self {
+            Self::ReadOnly => true,
+            Self::WorkspaceWrite => profile == Some(WORKSPACE_PROFILE),
+            Self::Unknown | Self::Wider => false,
+        }
+    }
 }
 
 /// The sandbox of the turn this hook call belongs to. Only macOS is known
@@ -70,7 +89,7 @@ pub(super) fn turn(payload: &PyVal) -> Turn {
 
 /// A call that asks Codex to run it outside the sandbox.
 fn escalated(payload: &PyVal) -> bool {
-    let Some(input) = payload.get("tool_input") else {
+    let Some(input) = super::first(payload, &["tool_input", "toolInput"]) else {
         return false;
     };
     let permissions = text(input, "sandbox_permissions");
@@ -114,15 +133,17 @@ fn turn_policy(line: &str, turn_id: &str) -> Option<Turn> {
     let Some(policy) = context.get("sandbox_policy") else {
         return Some(Turn::Unknown);
     };
-    let kind = policy.get("type").and_then(serde_json::Value::as_str);
-    if !kind.is_some_and(|kind| CONFINED.contains(&kind)) {
-        return Some(Turn::Unknown);
-    }
     let network = policy.get("network_access");
-    if network.is_some_and(|value| value != &serde_json::Value::Bool(false)) {
-        return Some(Turn::Networked);
+    let networked = network.is_some_and(|value| value != &serde_json::Value::Bool(false));
+    let roots = policy.get("writable_roots");
+    let extra_roots =
+        roots.is_some_and(|roots| roots.as_array().is_none_or(|roots| !roots.is_empty()));
+    match policy.get("type").and_then(serde_json::Value::as_str) {
+        Some("read-only" | "workspace-write") if networked || extra_roots => Some(Turn::Wider),
+        Some("read-only") => Some(Turn::ReadOnly),
+        Some("workspace-write") => Some(Turn::WorkspaceWrite),
+        _ => Some(Turn::Unknown),
     }
-    Some(Turn::Confined)
 }
 
 /// The allow that leaves the call to Codex's sandbox.
