@@ -95,6 +95,12 @@ WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
 # A filter is not a Vitest command, so the run is the same single pass the bare
 # `run` verb names.
 WORKSPACE_VITEST_FILTER_CASE = "omp-native-workspace-vitest-filter"
+# The same installed Vitest launched by a file its install wrote: Node given the
+# link npm puts in `node_modules/.bin`, and Bun given the package's own launcher.
+# Both name the workspace's runner, so the run means something only when that
+# runner is installed.
+WORKSPACE_VITEST_BIN_LINK_CASE = "omp-native-workspace-node-bin-link-runner"
+WORKSPACE_VITEST_BUN_ENTRY_CASE = "omp-native-workspace-bun-runner-entry"
 # The commit hook a project runs over its staged files. It is declared,
 # installed and pinned exactly as the linter it drives is, and it is launched
 # through npx the same way, so the verdict has the same evidence to read.
@@ -139,6 +145,8 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_LINT_STAGED_CASE,
         WORKSPACE_TSX_NODE_TEST_CASE,
         WORKSPACE_VITEST_FILTER_CASE,
+        WORKSPACE_VITEST_BIN_LINK_CASE,
+        WORKSPACE_VITEST_BUN_ENTRY_CASE,
         WORKSPACE_RUN_ALL_CASE,
         WORKSPACE_SKIP_DOWNLOAD_PREFIX_CASE,
     }
@@ -575,6 +583,18 @@ _VITEST_FILES = {
     ),
 }
 
+# The one line the workspace's own Vitest prints for a bare `run`.
+VITEST_RUN_MARKER = f"vitest {_VITEST_VERSION} ran one pass"
+_VITEST_RUN_FILES = {
+    **_VITEST_FILES,
+    "node_modules/vitest/vitest.mjs": (
+        "#!/usr/bin/env node\n"
+        "const argv = process.argv.slice(2);\n"
+        f"console.log(argv[0] === 'run' ? '{VITEST_RUN_MARKER}'"
+        " : 'vitest: the one-pass run was not forwarded');\n"
+    ),
+}
+
 
 _LINT_STAGED_VERSION = "16.1.2"
 # The one line the workspace's own commit hook prints.
@@ -754,6 +774,18 @@ _INSTALLS = {
         "vitest",
         _VITEST_FILES,
         VITEST_MARKER,
+        entry="vitest.mjs",
+    ),
+    WORKSPACE_VITEST_BIN_LINK_CASE: _Install(
+        "vitest",
+        _VITEST_RUN_FILES,
+        VITEST_RUN_MARKER,
+        entry="vitest.mjs",
+    ),
+    WORKSPACE_VITEST_BUN_ENTRY_CASE: _Install(
+        "vitest",
+        _VITEST_RUN_FILES,
+        VITEST_RUN_MARKER,
         entry="vitest.mjs",
     ),
 }
