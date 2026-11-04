@@ -736,8 +736,9 @@ mod tests {
         );
         // The venv itself, for the packages the run imports, and the install
         // its launcher links out to, for the interpreter and its library.
-        assert!(roots.contains(&venv), "{roots:?}");
-        assert!(roots.contains(&interpreter), "{roots:?}");
+        let granted = super::venv::external_venv_roots(&bin, &workspace);
+        assert!(roots.contains(&venv), "{roots:?} from {granted:?}");
+        assert!(roots.contains(&interpreter), "{roots:?} from {granted:?}");
         // Kept in place on the sandbox PATH, so a bare `python3` resolves
         // inside the sandbox to the launcher the session resolved outside it.
         assert!(

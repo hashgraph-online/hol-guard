@@ -267,19 +267,34 @@ fn standard_libraries(prefix: &Path) -> Vec<PathBuf> {
 /// the runtime and have its whole prefix granted; with it, the directory has
 /// to be one an install actually starts Python from.
 fn interpreter_home(home: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
     if home.file_name() != Some(OsStr::new("bin")) {
         return false;
+    }
+    // A system `bin` holds thousands of entries and the filesystem answers
+    // them in its own order, so a bounded scan alone can miss the
+    // interpreter and decide the same venv differently from one host to the
+    // next. The names a venv's `home` is written with are read outright
+    // first; the scan is what finds a version-suffixed one.
+    if ["python3", "python"]
+        .iter()
+        .any(|name| runnable(&home.join(name)))
+    {
+        return true;
     }
     let Ok(entries) = fs::read_dir(home) else {
         return false;
     };
-    entries.flatten().take(256).any(|entry| {
-        python_named(&entry.path())
-            && entry.path().metadata().is_ok_and(|metadata| {
-                metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
-            })
-    })
+    entries
+        .flatten()
+        .take(256)
+        .any(|entry| python_named(&entry.path()) && runnable(&entry.path()))
+}
+
+/// A file this account can start, following a launcher's link to it.
+fn runnable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    path.metadata()
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
 }
 
 fn managed_prefix(prefix: &Path) -> bool {
