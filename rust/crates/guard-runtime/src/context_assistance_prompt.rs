@@ -287,7 +287,7 @@ fn relevant<'a>(
 ) -> Vec<&'a PickedExcerpt> {
     // A quoted word is in `words` twice; each word counts once.
     let distinct: BTreeSet<&str> = words.iter().map(String::as_str).collect();
-    let mentions: Vec<(&PickedExcerpt, usize)> = picked
+    let mut mentions: Vec<(&PickedExcerpt, usize)> = picked
         .iter()
         .map(|excerpt| {
             let text = excerpt.text.to_lowercase();
@@ -298,24 +298,31 @@ fn relevant<'a>(
                 .count();
             (excerpt, mentioned)
         })
-        .collect();
-    let best = mentions.iter().map(|(_, mentioned)| *mentioned).max();
-    let close = best.unwrap_or_default().div_ceil(2);
-    let mut found: Vec<&PickedExcerpt> = mentions
-        .into_iter()
         .filter(|(excerpt, mentioned)| {
             let needed = if distinct.len() > 1 && !ranked.contains(&excerpt.path) {
                 2
             } else {
                 1
             };
-            *mentioned >= needed.max(close)
+            *mentioned >= needed
         })
+        .collect();
+    // Tests give way before the best match is measured, so a test that
+    // repeats the prompt's words cannot push the source it covers out.
+    if !asks_for_tests(words)
+        && mentions
+            .iter()
+            .any(|(excerpt, _)| !test_file(&excerpt.path))
+    {
+        mentions.retain(|(excerpt, _)| !test_file(&excerpt.path));
+    }
+    let best = mentions.iter().map(|(_, mentioned)| *mentioned).max();
+    let close = best.unwrap_or_default().div_ceil(2);
+    let mut found: Vec<&PickedExcerpt> = mentions
+        .into_iter()
+        .filter(|(_, mentioned)| *mentioned >= close)
         .map(|(excerpt, _)| excerpt)
         .collect();
-    if !asks_for_tests(words) && found.iter().any(|excerpt| !test_file(&excerpt.path)) {
-        found.retain(|excerpt| !test_file(&excerpt.path));
-    }
     found.sort_by_key(|excerpt| {
         ranked
             .iter()

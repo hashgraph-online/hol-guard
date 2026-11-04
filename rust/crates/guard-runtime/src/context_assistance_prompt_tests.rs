@@ -119,6 +119,25 @@ fn a_passing_match_gives_way_to_code_about_the_request() {
 }
 
 #[test]
+fn a_test_that_repeats_the_request_does_not_push_out_its_source() {
+    let picked = [
+        excerpt("src/types.py", "class Choice:\n    def convert(self, raw):"),
+        excerpt(
+            "tests/test_types.py",
+            "def test_invalid_choice_suggests():\n    convert(choice, value)",
+        ),
+    ];
+    let found = words(&["tests/test_types.py", "src/types.py"]);
+    let asked = words(&["choice", "invalid", "value", "convert", "suggest"]);
+    let rendered = render(&picked, &found, &asked).unwrap();
+    assert!(rendered.contains("src/types.py (lines"), "{rendered}");
+    assert!(
+        !rendered.contains("tests/test_types.py (lines"),
+        "{rendered}"
+    );
+}
+
+#[test]
 fn matching_code_is_rendered_as_file_contents_with_other_matches_listed() {
     let picked = [
         excerpt(
