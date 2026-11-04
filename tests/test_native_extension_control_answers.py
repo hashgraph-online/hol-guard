@@ -227,52 +227,30 @@ def _projection_registry() -> Any:
     return registry
 
 
-def _projected_extension(extension_id: str, **overrides: object) -> dict[str, object]:
-    entry: dict[str, object] = {
-        "extension_id": extension_id,
+def _row(**overrides: object) -> dict[str, object]:
+    row: dict[str, object] = {
         "effective_state": "allowed",
         "local_state": "inherited",
         "managed_state": "inherited",
-        "required": False,
         "reason_codes": [],
     }
-    entry.update(overrides)
-    return entry
+    row.update(overrides)
+    return row
 
 
-def _projected_permission(**overrides: object) -> dict[str, object]:
-    entry: dict[str, object] = {
-        "permission_id": PERMISSION,
-        "extension_id": EXTENSION,
-        "effective_state": "blocked",
-        "local_state": "disabled",
-        "managed_state": "inherited",
-        "configurable": False,
-        "fixed_reason": "Always reviewed.",
-        "reason_codes": ["control.disabled-permission"],
-    }
-    entry.update(overrides)
-    return entry
+_DISABLED = _row(effective_state="blocked", local_state="disabled", reason_codes=["control.disabled-permission"])
 
 
-def _projection_payload(
-    extensions: list[dict[str, object]] | None = None, permissions: list[dict[str, object]] | None = None
-) -> dict[str, object]:
-    return {
-        "kind": "project",
-        "extensions": extensions
-        if extensions is not None
-        else [_projected_extension(EXTENSION), _projected_extension("command.shell", required=True)],
-        "permissions": permissions if permissions is not None else [_projected_permission()],
-    }
+def _rows_payload(rows: list[dict[str, object]]) -> dict[str, object]:
+    return {"kind": "project", "rows": rows}
 
 
-def test_a_projection_is_asked_with_the_permission_facts_and_presented(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_projection_is_answered_by_state_and_joined_with_the_registry(monkeypatch: pytest.MonkeyPatch) -> None:
     asked: list[dict[str, object]] = []
 
     def answer(request: dict[str, object]) -> dict[str, object]:
         asked.append(request)
-        return bound_reply(request, _projection_payload())
+        return bound_reply(request, _rows_payload([_row(), _row(reason_codes=["b", "a"]), _DISABLED]))
 
     resident_answers(monkeypatch, answer)
 
@@ -281,22 +259,60 @@ def test_a_projection_is_asked_with_the_permission_facts_and_presented(monkeypat
     query = asked[0]["query"]
     assert isinstance(query, dict)
     assert query["kind"] == "project"
-    assert query["permission_facts"] == [{"configurable": False, "fixed_reason": "Always reviewed."}]
+    assert query["start"] == 0
     assert query["authority_failure"] is None
-    assert [item["extension_id"] for item in extensions] == [EXTENSION, "command.shell"]
-    assert permissions == [_projected_permission()]
+    assert "permission_facts" not in query
+    assert extensions == [
+        {"extension_id": EXTENSION, **_row(), "required": False},
+        {"extension_id": "command.shell", **_row(reason_codes=["b", "a"]), "required": True},
+    ]
+    # Ids, the owner and the catalog facts are the registry's own.
+    assert permissions == [
+        {
+            "permission_id": PERMISSION,
+            "extension_id": EXTENSION,
+            **_DISABLED,
+            "configurable": False,
+            "fixed_reason": "Always reviewed.",
+        }
+    ]
+
+
+def test_a_large_projection_is_asked_a_page_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = _projection_registry()
+    permission = registry.permissions[0]
+    registry.permissions = tuple(
+        type(permission)(**{**vars(permission), "permission_id": f"{PERMISSION}-{index}"}) for index in range(2047)
+    )
+    starts: list[object] = []
+
+    def answer(request: dict[str, object]) -> dict[str, object]:
+        query = request["query"]
+        assert isinstance(query, dict)
+        start = query["start"]
+        assert isinstance(start, int)
+        starts.append(start)
+        return bound_reply(request, _rows_payload([_DISABLED] * min(2048, 2049 - start)))
+
+    resident_answers(monkeypatch, answer)
+
+    extensions, permissions = bridge.project_extension_controls(registry, (make_layer(),), None)
+
+    assert starts == [0, 2048]
+    assert len(extensions) == 2
+    assert [entry["permission_id"] for entry in permissions] == [f"{PERMISSION}-{index}" for index in range(2047)]
 
 
 @pytest.mark.parametrize(
     "payload",
     [
-        _projection_payload(extensions=[_projected_extension(EXTENSION)]),
-        _projection_payload(extensions=[_projected_extension("command.shell"), _projected_extension(EXTENSION)]),
-        _projection_payload(permissions=[_projected_permission(effective_state="maybe")]),
-        _projection_payload(permissions=[_projected_permission(local_state="on")]),
-        _projection_payload(permissions=[_projected_permission(reason_codes=[1])]),
-        _projection_payload(permissions=[{**_projected_permission(), "evidence": "x"}]),
-        {"kind": "project", "extensions": []},
+        _rows_payload([_row(), _row()]),
+        _rows_payload([_row(), _row(), _row(), _row()]),
+        _rows_payload([_row(), _row(), _row(effective_state="maybe")]),
+        _rows_payload([_row(), _row(), _row(local_state="on")]),
+        _rows_payload([_row(), _row(), _row(reason_codes=[1])]),
+        _rows_payload([_row(), _row(), {**_row(), "permission_id": PERMISSION}]),
+        {"kind": "project"},
     ],
 )
 def test_a_malformed_projection_raises(monkeypatch: pytest.MonkeyPatch, payload: dict[str, object]) -> None:

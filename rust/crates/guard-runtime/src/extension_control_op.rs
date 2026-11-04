@@ -121,14 +121,14 @@ fn decide(request: &ExtensionControlRequestV1) -> Result<ExtensionControlPayload
         }
         ExtensionControlQueryV1::Project {
             registry,
-            permission_facts,
             layers,
             authority_failure,
+            start,
         } => crate::extension_control_projection_op::project(
             registry,
-            permission_facts,
             layers,
             authority_failure.as_deref(),
+            *start,
         ),
         ExtensionControlQueryV1::SnapshotDigest {
             catalog_digest,

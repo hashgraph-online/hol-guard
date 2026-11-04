@@ -10,49 +10,75 @@
 use std::collections::BTreeSet;
 
 use guard_command::extension_control::{
-    ControlLayerKind, ControlTargetKind, ExtensionControlLayer,
+    expand_legacy_dns_layers, ControlLayerKind, ControlTargetKind, ExtensionControlLayer,
 };
 use guard_contracts::{
     ExtensionControlItemResultV1, ExtensionControlItemV1, ExtensionControlPayloadV1,
-    ExtensionControlPermissionFactsV1, ExtensionControlProjectedExtensionV1,
-    ExtensionControlProjectedPermissionV1, ExtensionControlRegistryV1, ExtensionControlScenarioV1,
+    ExtensionControlProjectedRowV1, ExtensionControlRegistryV1, ExtensionControlScenarioV1,
     NativeExtensionControlLayerV1,
 };
 
 use crate::extension_control_op::{resolve_scenario, typed_layers, RequestRegistry};
 
-/// The most extensions and permissions one projection lists; the rest of a
+/// The most extensions and permissions the projection lists; the rest of a
 /// larger registry is left out, in registry order.
 const MAX_EXTENSIONS: usize = 512;
 const MAX_PERMISSIONS: usize = 4_096;
+/// The most rows one answer holds, so a page stays within the resolve
+/// query's per-request work and the transport's reply cap.
+const PAGE_ROWS: usize = 2_048;
 const SURFACE: &str = "command-evaluation";
 
+/// The rows from `start` on, at most `PAGE_ROWS`: the registry's leading
+/// extensions, then its leading permissions. Every row resolves against the
+/// same layers; a page past the last row is refused.
 pub(crate) fn project(
     registry: &ExtensionControlRegistryV1,
-    permission_facts: &[ExtensionControlPermissionFactsV1],
     layers: &[NativeExtensionControlLayerV1],
     authority_failure: Option<&str>,
+    start: u32,
 ) -> Result<ExtensionControlPayloadV1, String> {
-    if permission_facts.len() != registry.permissions.len() {
-        return Err("native_extension_control_registry_invalid".to_owned());
-    }
     let index = RequestRegistry::new(registry)?;
     let extensions = &registry.extensions[..registry.extensions.len().min(MAX_EXTENSIONS)];
     let permissions = &registry.permissions[..registry.permissions.len().min(MAX_PERMISSIONS)];
-    // Each item also asks whether its extension (for a permission, its owner)
-    // is active; an owner the registry does not know never is.
-    let items = extensions
+    let total = extensions.len() + permissions.len();
+    let start = usize::try_from(start).unwrap_or(usize::MAX);
+    if start > total || (start == total && total != 0) {
+        return Err("native_extension_control_registry_invalid".to_owned());
+    }
+    // Each row names its target and asks whether its extension (for a
+    // permission, its owner) is active; an owner the registry does not know
+    // never is.
+    let targets: Vec<(ControlTargetKind, &str, &str)> = extensions
         .iter()
-        .map(|extension| ExtensionControlItemV1 {
-            extension_ids: vec![extension.extension_id.clone()],
-            permission_ids: Vec::new(),
-            active_extension_id: Some(extension.extension_id.clone()),
+        .map(|extension| {
+            let id = extension.extension_id.as_str();
+            (ControlTargetKind::Extension, id, id)
         })
-        .chain(permissions.iter().map(|permission| ExtensionControlItemV1 {
-            extension_ids: Vec::new(),
-            permission_ids: vec![permission.permission_id.clone()],
-            active_extension_id: Some(permission.extension_id.clone()),
+        .chain(permissions.iter().map(|permission| {
+            (
+                ControlTargetKind::Permission,
+                permission.permission_id.as_str(),
+                permission.extension_id.as_str(),
+            )
         }))
+        .skip(start)
+        .take(PAGE_ROWS)
+        .collect();
+    let items = targets
+        .iter()
+        .map(|(kind, id, owner)| {
+            let ids = vec![(*id).to_owned()];
+            let (extension_ids, permission_ids) = match kind {
+                ControlTargetKind::Extension => (ids, Vec::new()),
+                ControlTargetKind::Permission => (Vec::new(), ids),
+            };
+            ExtensionControlItemV1 {
+                extension_ids,
+                permission_ids,
+                active_extension_id: Some((*owner).to_owned()),
+            }
+        })
         .collect();
     let scenario = ExtensionControlScenarioV1 {
         layers: layers.to_vec(),
@@ -61,53 +87,23 @@ pub(crate) fn project(
         items,
     };
     let resolved = resolve_scenario(&index, &scenario)?;
-    let typed = typed_layers(layers)?;
-    let (extension_results, permission_results) = resolved.results.split_at(extensions.len());
-    let extensions = extensions
+    // The resolver reads a retired aggregate DNS control as one on each
+    // provider; the shown layer states read it the same way.
+    let typed = expand_legacy_dns_layers(&typed_layers(layers)?);
+    let rows = targets
         .iter()
-        .zip(extension_results)
-        .map(|(extension, result)| {
-            let (local_state, managed_state) = explicit_states(
-                &typed,
-                ControlTargetKind::Extension,
-                &extension.extension_id,
-            );
-            ExtensionControlProjectedExtensionV1 {
-                extension_id: extension.extension_id.clone(),
+        .zip(&resolved.results)
+        .map(|((kind, id, _), result)| {
+            let (local_state, managed_state) = explicit_states(&typed, *kind, id);
+            ExtensionControlProjectedRowV1 {
                 effective_state: effective_state(result).to_owned(),
                 local_state,
                 managed_state,
-                required: extension.required,
                 reason_codes: reason_codes(result),
             }
         })
         .collect();
-    let permissions = permissions
-        .iter()
-        .zip(permission_facts)
-        .zip(permission_results)
-        .map(|((permission, facts), result)| {
-            let (local_state, managed_state) = explicit_states(
-                &typed,
-                ControlTargetKind::Permission,
-                &permission.permission_id,
-            );
-            ExtensionControlProjectedPermissionV1 {
-                permission_id: permission.permission_id.clone(),
-                extension_id: permission.extension_id.clone(),
-                effective_state: effective_state(result).to_owned(),
-                local_state,
-                managed_state,
-                configurable: facts.configurable,
-                fixed_reason: facts.fixed_reason.clone(),
-                reason_codes: reason_codes(result),
-            }
-        })
-        .collect();
-    Ok(ExtensionControlPayloadV1::Project {
-        extensions,
-        permissions,
-    })
+    Ok(ExtensionControlPayloadV1::Project { rows })
 }
 
 fn effective_state(result: &ExtensionControlItemResultV1) -> &'static str {

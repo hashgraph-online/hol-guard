@@ -50,19 +50,6 @@ fn registry() -> ExtensionControlRegistryV1 {
     }
 }
 
-fn facts() -> Vec<ExtensionControlPermissionFactsV1> {
-    vec![
-        ExtensionControlPermissionFactsV1 {
-            configurable: true,
-            fixed_reason: None,
-        },
-        ExtensionControlPermissionFactsV1 {
-            configurable: false,
-            fixed_reason: Some("Always reviewed.".to_owned()),
-        },
-    ]
-}
-
 fn control(kind: &str, target_id: &str, state: &str) -> NativeExtensionControlV1 {
     NativeExtensionControlV1 {
         target_kind: kind.to_owned(),
@@ -85,51 +72,47 @@ fn layer(
     }
 }
 
-fn projected(layers: &[NativeExtensionControlLayerV1], failure: Option<&str>) -> Value {
-    let payload = project(&registry(), &facts(), layers, failure).expect("projection");
-    serde_json::to_value(payload).expect("wire")
+fn rows(
+    registry: &ExtensionControlRegistryV1,
+    layers: &[NativeExtensionControlLayerV1],
+    failure: Option<&str>,
+    start: u32,
+) -> Vec<Value> {
+    let payload = project(registry, layers, failure, start).expect("projection");
+    let ExtensionControlPayloadV1::Project { rows } = payload else {
+        panic!("unexpected payload");
+    };
+    rows.iter()
+        .map(|row| serde_json::to_value(row).expect("row"))
+        .collect()
+}
+
+fn projected(layers: &[NativeExtensionControlLayerV1], failure: Option<&str>) -> Vec<Value> {
+    rows(&registry(), layers, failure, 0)
+}
+
+fn row(effective: &str, local: &str, managed: &str, codes: &[&str]) -> Value {
+    json!({
+        "effective_state": effective,
+        "local_state": local,
+        "managed_state": managed,
+        "reason_codes": codes,
+    })
 }
 
 #[test]
-fn every_item_is_listed_in_registry_order_with_its_own_facts() {
-    let answer = projected(&[], None);
+fn every_extension_then_every_permission_is_a_row_in_registry_order() {
+    let inherited = |effective: &str| row(effective, "inherited", "inherited", &[]);
     assert_eq!(
-        answer,
-        json!({
-            "kind": "project",
-            "extensions": [
-                {
-                    "extension_id": ALPHA, "effective_state": "allowed",
-                    "local_state": "inherited", "managed_state": "inherited",
-                    "required": false, "reason_codes": [],
-                },
-                // An external extension is inert until it is enabled.
-                {
-                    "extension_id": BETA, "effective_state": "blocked",
-                    "local_state": "inherited", "managed_state": "inherited",
-                    "required": false, "reason_codes": [],
-                },
-                {
-                    "extension_id": GAMMA, "effective_state": "allowed",
-                    "local_state": "inherited", "managed_state": "inherited",
-                    "required": true, "reason_codes": [],
-                },
-            ],
-            "permissions": [
-                {
-                    "permission_id": ALPHA_READ, "extension_id": ALPHA,
-                    "effective_state": "allowed", "local_state": "inherited",
-                    "managed_state": "inherited", "configurable": true,
-                    "fixed_reason": null, "reason_codes": [],
-                },
-                {
-                    "permission_id": BETA_RUN, "extension_id": BETA,
-                    "effective_state": "blocked", "local_state": "inherited",
-                    "managed_state": "inherited", "configurable": false,
-                    "fixed_reason": "Always reviewed.", "reason_codes": [],
-                },
-            ],
-        })
+        projected(&[], None),
+        vec![
+            inherited("allowed"),
+            // An external extension is inert until it is enabled.
+            inherited("blocked"),
+            inherited("allowed"),
+            inherited("allowed"),
+            inherited("blocked"),
+        ]
     );
 }
 
@@ -151,17 +134,44 @@ fn local_and_managed_controls_are_shown_beside_the_effective_state() {
         ),
     ];
     let answer = projected(&layers, None);
-    let read = &answer["permissions"][0];
-    assert_eq!(read["local_state"], "enabled");
-    assert_eq!(read["managed_state"], "disabled");
-    assert_eq!(read["effective_state"], "blocked");
-    assert_eq!(read["reason_codes"], json!(["control.disabled-permission"]));
+    assert_eq!(
+        answer[3],
+        row(
+            "blocked",
+            "enabled",
+            "disabled",
+            &["control.disabled-permission"]
+        )
+    );
     // Enabling the external extension locally makes it and its permission active.
-    assert_eq!(answer["extensions"][1]["local_state"], "enabled");
-    assert_eq!(answer["extensions"][1]["effective_state"], "allowed");
-    assert_eq!(answer["permissions"][1]["effective_state"], "allowed");
+    assert_eq!(answer[1]["local_state"], "enabled");
+    assert_eq!(answer[1]["effective_state"], "allowed");
+    assert_eq!(answer[4]["effective_state"], "allowed");
     // A control on an extension says nothing about its permissions' own state.
-    assert_eq!(answer["permissions"][1]["local_state"], "inherited");
+    assert_eq!(answer[4]["local_state"], "inherited");
+}
+
+#[test]
+fn a_retired_dns_control_is_shown_on_each_provider() {
+    let providers = ["command.dns.aws", "command.dns.gcp", "command.dns.azure"];
+    let registry = ExtensionControlRegistryV1 {
+        catalog_digest: digest(),
+        extensions: providers
+            .iter()
+            .map(|id| extension(id, false, "first-party"))
+            .collect(),
+        permissions: Vec::new(),
+    };
+    let layers = [layer(
+        "local-admin",
+        false,
+        vec![control("extension", "command.dns", "disabled")],
+    )];
+    for answer in rows(&registry, &layers, None, 0) {
+        assert_eq!(answer["effective_state"], "blocked", "{answer}");
+        assert_eq!(answer["local_state"], "disabled", "{answer}");
+        assert_eq!(answer["managed_state"], "inherited", "{answer}");
+    }
 }
 
 #[test]
@@ -172,12 +182,7 @@ fn an_unreadable_authority_or_a_lockdown_blocks_everything() {
         (&unavailable, "resolver.authority-unavailable"),
         (&lockdown, "control.global-lockdown"),
     ] {
-        let items = answer["extensions"]
-            .as_array()
-            .into_iter()
-            .chain(answer["permissions"].as_array())
-            .flatten();
-        for item in items {
+        for item in answer {
             assert_eq!(item["effective_state"], "blocked", "{item}");
             let codes = item["reason_codes"].as_array().expect("codes");
             assert!(codes.contains(&json!(reason)), "{item}");
@@ -190,36 +195,50 @@ fn an_unreadable_authority_or_a_lockdown_blocks_everything() {
 }
 
 #[test]
-fn facts_that_do_not_match_the_permissions_are_refused() {
-    let short = &facts()[..1];
+fn an_unknown_failure_or_a_page_past_the_last_row_is_refused() {
     assert_eq!(
-        project(&registry(), short, &[], None),
-        Err("native_extension_control_registry_invalid".to_owned())
-    );
-    assert_eq!(
-        project(&registry(), &facts(), &[], Some("not-a-failure")),
+        project(&registry(), &[], Some("not-a-failure"), 0),
         Err("native_extension_control_authority_failure_invalid".to_owned())
     );
+    for start in [5, 6, u32::MAX] {
+        assert_eq!(
+            project(&registry(), &[], None, start),
+            Err("native_extension_control_registry_invalid".to_owned()),
+            "{start}"
+        );
+    }
+    let empty = ExtensionControlRegistryV1 {
+        catalog_digest: digest(),
+        extensions: Vec::new(),
+        permissions: Vec::new(),
+    };
+    assert!(rows(&empty, &[], None, 0).is_empty());
 }
 
 #[test]
-fn a_large_registry_is_cut_to_the_listed_bound() {
+fn a_large_registry_is_cut_to_the_listed_bound_and_answered_in_pages() {
     let mut registry = registry();
     registry.extensions = (0..MAX_EXTENSIONS + 3)
         .map(|index| extension(&format!("command.ext{index}"), false, "first-party"))
         .collect();
-    registry.permissions.clear();
-    let payload = project(&registry, &[], &[], None).expect("projection");
-    let ExtensionControlPayloadV1::Project {
-        extensions,
-        permissions,
-    } = payload
-    else {
-        panic!("unexpected payload");
-    };
-    assert_eq!(extensions.len(), MAX_EXTENSIONS);
-    assert_eq!(extensions[0].extension_id, "command.ext0");
-    assert!(permissions.is_empty());
+    // The last listed extension owns every permission, and the first one
+    // past the bound owns none that is listed.
+    let owner = format!("command.ext{}", MAX_EXTENSIONS - 1);
+    registry.permissions = (0..2_000)
+        .map(|index| permission(&format!("{owner}.permission.p{index}"), &owner))
+        .collect();
+    let first = rows(&registry, &[], None, 0);
+    let second = rows(&registry, &[], None, PAGE_ROWS as u32);
+    assert_eq!(first.len(), PAGE_ROWS);
+    assert_eq!(second.len(), MAX_EXTENSIONS + 2_000 - PAGE_ROWS);
+    assert!(first
+        .iter()
+        .chain(&second)
+        .all(|answer| answer["effective_state"] == "allowed"));
+    assert_eq!(
+        project(&registry, &[], None, (MAX_EXTENSIONS + 2_000) as u32),
+        Err("native_extension_control_registry_invalid".to_owned())
+    );
 }
 
 #[test]
@@ -229,19 +248,20 @@ fn the_op_answers_a_project_query() {
         request_id: "projection-test".to_owned(),
         query: ExtensionControlQueryV1::Project {
             registry: registry(),
-            permission_facts: facts(),
             layers: Vec::new(),
             authority_failure: None,
+            start: 1,
         },
     };
     let wire = serde_json::to_value(&request).expect("wire");
     assert_eq!(wire["query"]["kind"], "project");
+    assert_eq!(wire["query"]["start"], 1);
     let bytes =
         crate::extension_control_op::evaluate_extension_control_request(&request).expect("answer");
     let result: ExtensionControlResultV1 = serde_json::from_slice(&bytes).expect("result");
     assert_eq!(result.status, "ok", "{}", result.code);
     assert_eq!(
         serde_json::to_value(result.payload).expect("payload"),
-        projected(&[], None)
+        json!({"kind": "project", "rows": projected(&[], None)[1..].to_vec()})
     );
 }
