@@ -27,6 +27,8 @@ export type ContextSettingsControlsProps = {
   onControl: (action: ContextControlAction) => void;
   /** Settings that sit right under the status card, ahead of the form. */
   lean?: ReactNode;
+  /** The page header already offers Turn on and Turn off, so this card leaves them out. */
+  headerControls?: boolean;
 };
 
 const note = "rounded-xl border border-brand-dark/10 bg-surface-1 px-4 py-3 text-sm leading-6 text-brand-dark/75";
@@ -87,12 +89,12 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {status?.requested_enabled && !status.effective_enabled ? (
+            {!props.headerControls && status?.requested_enabled && !status.effective_enabled ? (
               <button type="button" className={versionPrimary} disabled={checkDisabled || !status.effective_preferences.enabled}
                 onClick={() => props.onControl("activate")}>Start CIGAR</button>
             ) : null}
             {value?.runtime_id ? <button type="button" className={versionButton} disabled={checkDisabled} onClick={() => props.onControl("recheck")}>Check CIGAR</button> : null}
-            {!stopped ? <button type="button" className={versionButton} disabled={disabled} onClick={() => props.onControl("stop")}>Turn off now</button> : null}
+            {!props.headerControls && !stopped ? <button type="button" className={versionButton} disabled={disabled} onClick={() => props.onControl("stop")}>Turn off now</button> : null}
             <button type="button" aria-label="Refresh runtime status" title="Refresh runtime status" disabled={disabled || props.loading} onClick={props.onRefresh}
               className="inline-flex size-11 items-center justify-center rounded-lg text-brand-dark/70 hover:bg-brand-dark/[0.05] hover:text-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-50">
               <HiMiniArrowPath aria-hidden="true" className="size-4" /></button>

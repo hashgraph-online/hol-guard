@@ -189,6 +189,7 @@ export function ContextAssistanceSettings(props: Props) {
   const controls = <ContextSettingsControls value={value} status={status} installations={installations}
     loading={loading} busy={busy} disabled={props.disabled} locked={props.locked}
     dirty={dirty} error={workspace ? null : error}
+    headerControls={workspace}
     lean={workspace ? <CodexLeanSessions gate={props.gate ?? null} disabled={props.disabled} /> : undefined}
     onChange={props.onChange} onRefresh={() => void refresh()}
     onChooseRuntime={() => void perform("installations")} onControl={(action) => void perform(action)}

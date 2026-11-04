@@ -49,7 +49,7 @@ test("execution opt-in and browser approvals reach the installed native executor
     await page.keyboard.press("Space");
     await save(page, state);
     expect((await status()).effective_enabled).toBe(false);
-    await page.getByRole("button", { name: "Start CIGAR", exact: true }).click();
+    await page.getByRole("button", { name: "Turn on CIGAR", exact: true }).click();
     await expect.poll(async () => (await status()).execution_ready, { timeout: 90_000 }).toBe(true);
     const ready = await status();
     expect(ready.runtime?.interpreter.version.slice(0, 2)).toEqual([3, 14]);

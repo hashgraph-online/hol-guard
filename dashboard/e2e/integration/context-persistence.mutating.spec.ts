@@ -43,7 +43,7 @@ test("private saved evidence survives runtime restart with fresh grants and can 
     const files = page.getByRole("switch", { name: "Allow selected workspace documents", exact: true });
     if (await files.getAttribute("aria-checked") !== "true") await files.click();
     await save(page, state);
-    await page.getByRole("button", { name: "Start CIGAR", exact: true }).click();
+    await page.getByRole("button", { name: "Turn on CIGAR", exact: true }).click();
     await expect.poll(async () => (await status()).runtime?.persistence_compile_verified, { timeout: 60_000 }).toBe(true);
     const ready = await status();
     expect(ready.effective_preferences.storage).toEqual({ mode: "sqlite", retention_hours: 1 });
@@ -69,7 +69,7 @@ test("private saved evidence survives runtime restart with fresh grants and can 
     await page.getByRole("button", { name: "Refresh versions", exact: true }).click();
     await enabled.click();
     await save(page, state);
-    await page.getByRole("button", { name: "Start CIGAR", exact: true }).click();
+    await page.getByRole("button", { name: "Turn on CIGAR", exact: true }).click();
     await expect.poll(async () => (await status()).runtime?.persistence_compile_verified, { timeout: 60_000 }).toBe(true);
     expect((await scopes()).result.scopes).toEqual([]);
     const old = await page.request.post(`${state.origin}/v1/context-assistance/workspace`, {

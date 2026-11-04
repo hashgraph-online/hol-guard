@@ -196,7 +196,7 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     await expect(toggle).toBeEnabled();
     await toggle.click();
     await saveWithProof(page, state);
-    await page.getByRole("button", { name: "Start CIGAR" }).click();
+    await page.getByRole("button", { name: "Turn on CIGAR" }).click();
     await expect.poll(async () => (await status()).effective_enabled, { timeout: 30_000 }).toBe(true);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();

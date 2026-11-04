@@ -46,6 +46,9 @@ assert.ok(leanFirst.indexOf("Lean sessions slot") < leanFirst.indexOf(">This com
   "the long-session switch sits right under the status card, ahead of the form");
 const raw = ready.preferences.runtime_id;
 assert.ok(raw && everyday.indexOf(raw) > everyday.indexOf(">More settings<"), "the raw runtime ID is a detail, kept under More settings");
+const underHeader = render({ status: { ...ready, effective_enabled: false, availability: "unavailable" as const, runtime: null, diagnostic: "runtime_not_verified" }, headerControls: true });
+assert.doesNotMatch(underHeader, />Start CIGAR<|>Turn off now</, "the page header owns Turn on and Turn off, so the card does not repeat them");
+assert.match(underHeader, />Check CIGAR</);
 const noRuntime = render({ installations: [] });
 assert.match(noRuntime, /CIGAR is not set up on this computer yet\. Turn on CIGAR at the top of this page/);
 assert.doesNotMatch(render(), /every command/, "CIGAR's note promises nothing about how Guard decides commands");

@@ -3313,7 +3313,7 @@ function ContextSettingsControls(props) {
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: [
-        status?.requested_enabled && !status.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        !props.headerControls && status?.requested_enabled && !status.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
             type: "button",
@@ -3324,7 +3324,7 @@ function ContextSettingsControls(props) {
           }
         ) : null,
         value?.runtime_id ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: checkDisabled, onClick: () => props.onControl("recheck"), children: "Check CIGAR" }) : null,
-        !stopped ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled, onClick: () => props.onControl("stop"), children: "Turn off now" }) : null,
+        !props.headerControls && !stopped ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled, onClick: () => props.onControl("stop"), children: "Turn off now" }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
@@ -8018,6 +8018,7 @@ function ContextAssistanceSettings(props) {
       locked: props.locked,
       dirty,
       error: workspace ? null : error,
+      headerControls: workspace,
       lean: workspace ? /* @__PURE__ */ jsxRuntimeExports.jsx(CodexLeanSessions, { gate: props.gate ?? null, disabled: props.disabled }) : void 0,
       onChange: props.onChange,
       onRefresh: () => void refresh(),
