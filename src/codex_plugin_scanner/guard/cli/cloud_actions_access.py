@@ -169,11 +169,12 @@ def exchange_cloud_actions_access(store: GuardStore, *, ai_tool: str) -> CloudAc
     if not isinstance(dpop_key_material, GuardDpopKeyMaterial):
         raise CloudActionsAccessError("pairing_expired", _NOT_PAIRED_MESSAGE)
     token_endpoint = resolve_guard_oauth_client_config(pairing.origin).token_endpoint
+    subject_token = str(auth_context["access_token"])
     body = urllib.parse.urlencode(
         {
             "grant_type": TOKEN_EXCHANGE_GRANT_TYPE,
             "client_id": client_id,
-            "subject_token": str(auth_context["access_token"]),
+            "subject_token": subject_token,
             "subject_token_type": ACCESS_TOKEN_TYPE,
             "resource": pairing.gateway_resource,
             "requested_application_id": ai_tool,
@@ -181,11 +182,13 @@ def exchange_cloud_actions_access(store: GuardStore, *, ai_tool: str) -> CloudAc
     ).encode("utf-8")
     nonce: str | None = None
     for _ in range(_MAX_NONCE_RETRIES + 1):
+        # Guard Cloud requires the proof to carry the subject token's hash (ath).
         proof = runner._sign_guard_dpop_proof(  # pyright: ignore[reportPrivateUsage]
             request_url=token_endpoint,
             method="POST",
             dpop_key_material=dpop_key_material,
             nonce=nonce,
+            access_token=subject_token,
         )
         request = urllib.request.Request(
             token_endpoint,
