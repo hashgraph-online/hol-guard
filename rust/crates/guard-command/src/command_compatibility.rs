@@ -314,6 +314,11 @@ fn plain_parameter_expansions(text: &str) -> bool {
                 let braced = rest.first() == Some(&'{');
                 let inner = &rest[usize::from(braced)..];
                 let length = match inner.first() {
+                    // `${10}` names the tenth positional parameter; unbraced,
+                    // `$10` is `$1` followed by a literal `0`.
+                    Some(character) if braced && character.is_ascii_digit() => {
+                        inner.iter().take_while(|c| c.is_ascii_digit()).count()
+                    }
                     Some(character) if special(character) => 1,
                     Some(character) if name(character) => {
                         let length = inner.iter().take_while(|c| name(c)).count();

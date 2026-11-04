@@ -129,11 +129,12 @@ fn a_binding_to_a_plain_parameter_reaches_review() {
         "first=$1",
         "dir=$ROOT",
         "dir=${ROOT}/out",
+        "tenth=\"${10}\"",
         "git show-ref --verify --quiet refs/heads/x; s=$?; echo $s",
     ] {
         let (action, code) = decision(&controls, command);
         assert_ne!(code, FAILED, "{command}");
-        assert_ne!(action, "block", "{command}: {code}");
+        assert_eq!(action, "review", "{command}: {code}");
     }
 }
 
