@@ -948,7 +948,18 @@ fn moves_data(literal: &str) -> bool {
 /// in, still answers for what it moves.
 fn without_setting_prefixes(text: &str) -> String {
     text.split_whitespace()
-        .filter(|word| !setting_prefix(word))
+        .map(|word| {
+            // A subshell or brace group opens on the same word the setting
+            // starts: `(PORT=39871 npm start &)`. The opener is what the text
+            // around the setting is made of, so it stays.
+            let opened = word.len() - word.trim_start_matches(['(', '{']).len();
+            if setting_prefix(&word[opened..]) {
+                &word[..opened]
+            } else {
+                word
+            }
+        })
+        .filter(|word| !word.is_empty())
         .collect::<Vec<&str>>()
         .join(" ")
 }
@@ -976,12 +987,22 @@ fn setting_prefix(word: &str) -> bool {
     let Some((name, value)) = word.split_once('=') else {
         return false;
     };
+    // The name has to be a plain identifier and the value plain text: the
+    // shell reads `FOO=1>>out` as a setting with a redirect glued to it, and
+    // `FOO=1;cmd` as a setting and then a command. Taking either for one word
+    // dropped the redirect or the separator along with the setting, and the
+    // screens that answer for a write never saw it.
     !name.is_empty()
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+        && !value.contains([
+            '$', '`', '\\', '\n', '\r', '<', '>', ';', '&', '|', '(', ')',
+        ])
         && crate::pretool::generic::chain_literals::ordinary_name(name)
         && !settings::code_or_redirect_environment_name(name)
         && !settings::trust_anchor_environment_name(name)
         && !settings::credential_routing_environment_name(name)
-        && !value.contains(['$', '`', '\\', '\n', '\r'])
         // A value a substitution filled in is not a literal this text holds:
         // `x=$(curl -s https://example.invalid)` names the fetch, not a
         // setting, and keeps its floor.

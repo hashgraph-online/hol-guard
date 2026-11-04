@@ -725,6 +725,11 @@ fn a_setting_prefix_does_not_hide_a_backgrounded_command_from_review() {
         "(GITHUB_TOKEN=abc ls &)",
         "(LOG_LEVEL=\"$MODE\" ls &)",
         "(TARGET=$(cat id) ls &)",
+        // The shell reads `FOO=1>>out` as a setting and a redirect glued to
+        // it. Taking the whole word for a setting dropped the redirect with
+        // it, and the write to a path that follows a link reached a review
+        // card without the screen that answers for it.
+        "(ln -s /tmp/guard-link-target out; FOO=1>>out echo x)",
     ] {
         let result = evaluate(&binding, command);
         assert_eq!(
