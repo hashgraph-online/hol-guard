@@ -960,10 +960,10 @@ fn invalid_vitest<T>() -> Result<T, RestrictedPytestError> {
 /// both. A sink that plans the call again has to plan the text the pre-tool
 /// pass answered for, or it refuses the work that answer already admitted.
 ///
-/// A bounded inline shell such as `bash -ec 'pytest -q'` is read as the
-/// script it holds, because that script is what the review read. The caller
-/// re-authorizes the projected text on its own, so a script the review would
-/// not contain still gets refused there.
+/// A bounded inline shell whose script is one command, such as
+/// `bash -ec 'pytest -q'`, is read as that command, because it is what the
+/// review read. The caller re-authorizes the projected text on its own, so a
+/// command the review would not contain still gets refused there.
 fn contained_target(input: &Value) -> Value {
     let text = input
         .get("text")
@@ -975,18 +975,8 @@ fn contained_target(input: &Value) -> Value {
         ..Default::default()
     };
     crate::pretool::generic::contained_target(text, context)
-        .or_else(|| inline_shell_target(text))
+        .or_else(|| crate::contained_inline_target::inline_shell_target(text))
         .map_or(Value::Null, Value::String)
-}
-
-/// The script a bounded inline shell runs, read the way the review reads it.
-fn inline_shell_target(text: &str) -> Option<String> {
-    crate::command_parse_surface::inline_shell_script_text(&crate::CommandModelRequestV1 {
-        command: text.to_owned(),
-        dialect: "posix".into(),
-        transport: "shell_string".into(),
-        extraction_provenance: "contained-target".into(),
-    })
 }
 
 /// The words a manifest script spells, read with the lexer that reads it in

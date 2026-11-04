@@ -485,6 +485,7 @@ pub mod aibom_trust_metadata;
 pub mod archive_inspection;
 pub mod composition_rules;
 pub mod contained_argv;
+mod contained_inline_target;
 #[cfg(unix)]
 pub mod contained_execution;
 mod contained_git;

@@ -312,9 +312,6 @@ fn contained_target_reads_a_bounded_inline_shell_as_its_script() {
         ("bash -ec 'pytest -q'", "pytest -q"),
         ("sh -c 'pytest -q'", "pytest -q"),
         ("bash -e -c 'pytest -q'", "pytest -q"),
-        // The sink re-authorizes the script on its own, so a chained script
-        // is projected here and refused there.
-        ("bash -ec 'pytest -q && rm -rf x'", "pytest -q && rm -rf x"),
     ] {
         let input = json!({ "text": text });
         assert_eq!(
@@ -323,11 +320,15 @@ fn contained_target_reads_a_bounded_inline_shell_as_its_script() {
             "{text}"
         );
     }
-    // A shell that reads more than its script, a script that expands, or a
-    // command with no shell in front stays whole.
+    // A shell that reads more than its script, a script of several commands
+    // (run bare, it would lose `-e`), a script that expands, or a command with
+    // no shell in front stays whole.
     for text in [
         "bash -lc 'pytest -q'",
         "zsh -c 'pytest -q'",
+        "bash -ec 'pytest -q; echo done'",
+        "bash -ec 'pytest -q && rm -rf x'",
+        "bash -ec 'pytest -q | tee log'",
         "bash -c 'pytest \"$X\"'",
         "pytest -q",
     ] {
