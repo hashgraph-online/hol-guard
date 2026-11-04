@@ -466,3 +466,16 @@ def test_a_bundle_that_would_hold_the_access_is_not_written(tmp_path: Path) -> N
 
     assert reason is not None
     assert not bundle.exists()
+
+
+def test_a_reply_the_native_runtime_cannot_read_is_not_reported_as_an_answer(
+    cloud: StandIn, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", lambda *_a, **_k: None)
+
+    service = cloud_actions_health.check_service(CloudActionsPairing(cloud.origin, WS))
+    connection = cloud_actions_health.check_connection(CloudActionsPairing(cloud.origin, WS), ACCESS, WS)
+
+    assert (service.state, service.ok, service.http_status) == ("native_unavailable", False, 200)
+    assert (connection.state, connection.ok, connection.http_status) == ("native_unavailable", False, 501)
+    assert "hol-guard doctor" in connection.message
