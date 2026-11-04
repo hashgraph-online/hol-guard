@@ -38,7 +38,7 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `llm-search-eval comment FILE...`, which joins the given Markdown files and creates or updates a comment on a GitHub pull request through the GitHub REST API, using the token in $GITHUB_TOKEN (or the variable named by --token-env) and the repository and pull request from --repo/--pr or the GitHub Actions environment. A later run with the same --id edits the earlier comment in place. `--dry-run` prints the comment instead of posting it and is treated as a safe variant. Covers the installed llm-search-eval script and `uv run llm-search-eval`, `uvx llm-search-eval` and `uv tool run llm-search-eval` launches.",
+              "description": "Identifies `llm-search-eval comment FILE...`, which joins the given Markdown files and creates or updates a comment on a GitHub pull request through the GitHub REST API, using the token in $GITHUB_TOKEN (or the variable named by --token-env) and the repository and pull request from --repo/--pr or the GitHub Actions environment. A later run with the same --id edits the earlier comment in place. `--dry-run` prints the comment instead of posting it and is treated as a safe variant. Covers the installed llm-search-eval script and `uv run llm-search-eval`, `uvx llm-search-eval` and `uv tool run llm-search-eval` launches, including uv launcher options such as --env-file and abbreviated option spellings that argparse accepts. Known limit: a `uvx llm-search-eval==VERSION` pin is not matched, because the native package matcher accepts only the `llm-search-eval@VERSION` form.",
               "example_command": "llm-search-eval comment gate.md report.md --repo octo/shop --pr 42",
               "family": null,
               "fixed_reason": null,
@@ -65,7 +65,7 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `llm-search-eval run` with --judge or --pairwise-judge. Results that have no gold label are sent, with the query text and product fields, to the configured judge; an `openai=MODEL` judge calls an OpenAI-compatible API (default $OPENAI_BASE_URL) with an API key from the environment, which can bill the account. `llm-search-eval estimate` takes the same options and makes no judge call, so it is not matched. Known limit: the offline `mock` judge and judges loaded from a local `module:Class` are matched too, because the judge kind is part of the option value. Covers the installed llm-search-eval script and `uv run llm-search-eval`, `uvx llm-search-eval` and `uv tool run llm-search-eval` launches.",
+              "description": "Identifies `llm-search-eval run` with --judge or --pairwise-judge. Results that have no gold label are sent, with the query text and product fields, to the configured judge; an `openai=MODEL` judge calls an OpenAI-compatible API (default $OPENAI_BASE_URL) with an API key from the environment, which can bill the account. `llm-search-eval estimate` takes the same options and makes no judge call, so it is not matched. Known limit: the offline `mock` judge and judges loaded from a local `module:Class` are matched too, because the judge kind is part of the option value. Covers the installed llm-search-eval script and `uv run llm-search-eval`, `uvx llm-search-eval` and `uv tool run llm-search-eval` launches, including uv launcher options such as --env-file and abbreviated option spellings that argparse accepts. Known limit: a `uvx llm-search-eval==VERSION` pin is not matched, because the native package matcher accepts only the `llm-search-eval@VERSION` form.",
               "example_command": "llm-search-eval run -q queries.jsonl -p products.jsonl -s bm25=runs/bm25.jsonl --judge openai=gpt-4o-mini",
               "family": null,
               "fixed_reason": null,
@@ -103,7 +103,7 @@
                 "llm-search-eval pull request comment publish command"
               ],
               "default_mode": "review",
-              "description": "Identifies `llm-search-eval comment FILE...`, which joins the given Markdown files and creates or updates a comment on a GitHub pull request through the GitHub REST API, using the token in $GITHUB_TOKEN (or the variable named by --token-env) and the repository and pull request from --repo/--pr or the GitHub Actions environment. A later run with the same --id edits the earlier comment in place. `--dry-run` prints the comment instead of posting it and is treated as a safe variant. Covers the installed llm-search-eval script and `uv run llm-search-eval`, `uvx llm-search-eval` and `uv tool run llm-search-eval` launches.",
+              "description": "Identifies `llm-search-eval comment FILE...`, which joins the given Markdown files and creates or updates a comment on a GitHub pull request through the GitHub REST API, using the token in $GITHUB_TOKEN (or the variable named by --token-env) and the repository and pull request from --repo/--pr or the GitHub Actions environment. A later run with the same --id edits the earlier comment in place. `--dry-run` prints the comment instead of posting it and is treated as a safe variant. Covers the installed llm-search-eval script and `uv run llm-search-eval`, `uvx llm-search-eval` and `uv tool run llm-search-eval` launches, including uv launcher options such as --env-file and abbreviated option spellings that argparse accepts. Known limit: a `uvx llm-search-eval==VERSION` pin is not matched, because the native package matcher accepts only the `llm-search-eval@VERSION` form.",
               "family": null,
               "matcher": {
                 "op": "any.v1",
@@ -164,7 +164,8 @@
                         "--with",
                         "--with-editable",
                         "--with-requirements",
-                        "--package"
+                        "--package",
+                        "--env-file"
                       ],
                       "inverse_flag_pairs": [],
                       "leading_options_with_values": [
@@ -172,7 +173,8 @@
                         "--project",
                         "--cache-dir",
                         "--config-file",
-                        "--color"
+                        "--color",
+                        "--env-file"
                       ],
                       "options_with_values": [
                         "--repo",
@@ -207,7 +209,12 @@
                         "-q",
                         "--quiet",
                         "-v",
-                        "--verbose"
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
                       ],
                       "interspersed_options_with_values": [
                         "--from",
@@ -217,7 +224,27 @@
                         "--python",
                         "-p",
                         "--index",
-                        "--default-index"
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
                       ],
                       "leading_subcommands": [],
                       "package": "llm-search-eval",
@@ -243,7 +270,12 @@
                         "-q",
                         "--quiet",
                         "-v",
-                        "--verbose"
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
                       ],
                       "interspersed_options_with_values": [
                         "--from",
@@ -253,7 +285,27 @@
                         "--python",
                         "-p",
                         "--index",
-                        "--default-index"
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
                       ],
                       "leading_subcommands": [
                         "tool",
@@ -308,6 +360,191 @@
                           ],
                           "required_flags_in_all_arguments": false,
                           "required_option_values": [],
+                          "subcommands": [
+                            "comment"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package",
+                            "--env-file"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--env-file"
+                          ],
+                          "options_with_values": [
+                            "--repo",
+                            "--pr",
+                            "--id",
+                            "--token-env",
+                            "--api-url"
+                          ],
+                          "required_flags": [
+                            "--dry-run"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "run",
+                            "llm-search-eval",
+                            "comment"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "versioned-package-subcommand.v1",
+                        "config": {
+                          "executables": [
+                            "uvx",
+                            "uvx.exe"
+                          ],
+                          "interspersed_flags": [
+                            "--isolated",
+                            "--no-cache",
+                            "--offline",
+                            "--refresh",
+                            "--no-config",
+                            "-q",
+                            "--quiet",
+                            "-v",
+                            "--verbose",
+                            "--upgrade",
+                            "--reinstall",
+                            "--no-progress",
+                            "--native-tls",
+                            "--no-env-file"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--from",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--python",
+                            "-p",
+                            "--index",
+                            "--default-index",
+                            "--env-file",
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--index-url",
+                            "--extra-index-url",
+                            "--find-links",
+                            "--constraints",
+                            "--overrides",
+                            "--exclude-newer",
+                            "--python-preference",
+                            "--resolution",
+                            "--prerelease",
+                            "--index-strategy",
+                            "--keyring-provider",
+                            "--allow-insecure-host",
+                            "--upgrade-package",
+                            "--reinstall-package"
+                          ],
+                          "leading_subcommands": [],
+                          "package": "llm-search-eval",
+                          "required_flags": [
+                            "--dry-run"
+                          ],
+                          "subcommands": [
+                            "comment"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "versioned-package-subcommand.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "interspersed_flags": [
+                            "--isolated",
+                            "--no-cache",
+                            "--offline",
+                            "--refresh",
+                            "--no-config",
+                            "-q",
+                            "--quiet",
+                            "-v",
+                            "--verbose",
+                            "--upgrade",
+                            "--reinstall",
+                            "--no-progress",
+                            "--native-tls",
+                            "--no-env-file"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--from",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--python",
+                            "-p",
+                            "--index",
+                            "--default-index",
+                            "--env-file",
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--index-url",
+                            "--extra-index-url",
+                            "--find-links",
+                            "--constraints",
+                            "--overrides",
+                            "--exclude-newer",
+                            "--python-preference",
+                            "--resolution",
+                            "--prerelease",
+                            "--index-strategy",
+                            "--keyring-provider",
+                            "--allow-insecure-host",
+                            "--upgrade-package",
+                            "--reinstall-package"
+                          ],
+                          "leading_subcommands": [
+                            "tool",
+                            "run"
+                          ],
+                          "package": "llm-search-eval",
+                          "required_flags": [
+                            "--dry-run"
+                          ],
                           "subcommands": [
                             "comment"
                           ]
@@ -374,6 +611,376 @@
                             "comment"
                           ]
                         }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package",
+                            "--env-file"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--env-file"
+                          ],
+                          "options_with_values": [
+                            "--repo",
+                            "--pr",
+                            "--id",
+                            "--token-env",
+                            "--api-url"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "run",
+                            "llm-search-eval",
+                            "comment"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "versioned-package-subcommand.v1",
+                        "config": {
+                          "executables": [
+                            "uvx",
+                            "uvx.exe"
+                          ],
+                          "interspersed_flags": [
+                            "--isolated",
+                            "--no-cache",
+                            "--offline",
+                            "--refresh",
+                            "--no-config",
+                            "-q",
+                            "--quiet",
+                            "-v",
+                            "--verbose",
+                            "--upgrade",
+                            "--reinstall",
+                            "--no-progress",
+                            "--native-tls",
+                            "--no-env-file"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--from",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--python",
+                            "-p",
+                            "--index",
+                            "--default-index",
+                            "--env-file",
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--index-url",
+                            "--extra-index-url",
+                            "--find-links",
+                            "--constraints",
+                            "--overrides",
+                            "--exclude-newer",
+                            "--python-preference",
+                            "--resolution",
+                            "--prerelease",
+                            "--index-strategy",
+                            "--keyring-provider",
+                            "--allow-insecure-host",
+                            "--upgrade-package",
+                            "--reinstall-package"
+                          ],
+                          "leading_subcommands": [],
+                          "package": "llm-search-eval",
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "subcommands": [
+                            "comment"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "versioned-package-subcommand.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "interspersed_flags": [
+                            "--isolated",
+                            "--no-cache",
+                            "--offline",
+                            "--refresh",
+                            "--no-config",
+                            "-q",
+                            "--quiet",
+                            "-v",
+                            "--verbose",
+                            "--upgrade",
+                            "--reinstall",
+                            "--no-progress",
+                            "--native-tls",
+                            "--no-env-file"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--from",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--python",
+                            "-p",
+                            "--index",
+                            "--default-index",
+                            "--env-file",
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--index-url",
+                            "--extra-index-url",
+                            "--find-links",
+                            "--constraints",
+                            "--overrides",
+                            "--exclude-newer",
+                            "--python-preference",
+                            "--resolution",
+                            "--prerelease",
+                            "--index-strategy",
+                            "--keyring-provider",
+                            "--allow-insecure-host",
+                            "--upgrade-package",
+                            "--reinstall-package"
+                          ],
+                          "leading_subcommands": [
+                            "tool",
+                            "run"
+                          ],
+                          "package": "llm-search-eval",
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "subcommands": [
+                            "comment"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package",
+                            "--env-file"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--env-file"
+                          ],
+                          "options_with_values": [
+                            "--repo",
+                            "--pr",
+                            "--id",
+                            "--token-env",
+                            "--api-url"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "run",
+                            "llm-search-eval",
+                            "comment"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "versioned-package-subcommand.v1",
+                        "config": {
+                          "executables": [
+                            "uvx",
+                            "uvx.exe"
+                          ],
+                          "interspersed_flags": [
+                            "--isolated",
+                            "--no-cache",
+                            "--offline",
+                            "--refresh",
+                            "--no-config",
+                            "-q",
+                            "--quiet",
+                            "-v",
+                            "--verbose",
+                            "--upgrade",
+                            "--reinstall",
+                            "--no-progress",
+                            "--native-tls",
+                            "--no-env-file"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--from",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--python",
+                            "-p",
+                            "--index",
+                            "--default-index",
+                            "--env-file",
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--index-url",
+                            "--extra-index-url",
+                            "--find-links",
+                            "--constraints",
+                            "--overrides",
+                            "--exclude-newer",
+                            "--python-preference",
+                            "--resolution",
+                            "--prerelease",
+                            "--index-strategy",
+                            "--keyring-provider",
+                            "--allow-insecure-host",
+                            "--upgrade-package",
+                            "--reinstall-package"
+                          ],
+                          "leading_subcommands": [],
+                          "package": "llm-search-eval",
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "subcommands": [
+                            "comment"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "versioned-package-subcommand.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "interspersed_flags": [
+                            "--isolated",
+                            "--no-cache",
+                            "--offline",
+                            "--refresh",
+                            "--no-config",
+                            "-q",
+                            "--quiet",
+                            "-v",
+                            "--verbose",
+                            "--upgrade",
+                            "--reinstall",
+                            "--no-progress",
+                            "--native-tls",
+                            "--no-env-file"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--from",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--python",
+                            "-p",
+                            "--index",
+                            "--default-index",
+                            "--env-file",
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--index-url",
+                            "--extra-index-url",
+                            "--find-links",
+                            "--constraints",
+                            "--overrides",
+                            "--exclude-newer",
+                            "--python-preference",
+                            "--resolution",
+                            "--prerelease",
+                            "--index-strategy",
+                            "--keyring-provider",
+                            "--allow-insecure-host",
+                            "--upgrade-package",
+                            "--reinstall-package"
+                          ],
+                          "leading_subcommands": [
+                            "tool",
+                            "run"
+                          ],
+                          "package": "llm-search-eval",
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "subcommands": [
+                            "comment"
+                          ]
+                        }
                       }
                     ]
                   },
@@ -392,7 +999,7 @@
                 "llm-search-eval remote judge evaluation command"
               ],
               "default_mode": "review",
-              "description": "Identifies `llm-search-eval run` with --judge or --pairwise-judge. Results that have no gold label are sent, with the query text and product fields, to the configured judge; an `openai=MODEL` judge calls an OpenAI-compatible API (default $OPENAI_BASE_URL) with an API key from the environment, which can bill the account. `llm-search-eval estimate` takes the same options and makes no judge call, so it is not matched. Known limit: the offline `mock` judge and judges loaded from a local `module:Class` are matched too, because the judge kind is part of the option value. Covers the installed llm-search-eval script and `uv run llm-search-eval`, `uvx llm-search-eval` and `uv tool run llm-search-eval` launches.",
+              "description": "Identifies `llm-search-eval run` with --judge or --pairwise-judge. Results that have no gold label are sent, with the query text and product fields, to the configured judge; an `openai=MODEL` judge calls an OpenAI-compatible API (default $OPENAI_BASE_URL) with an API key from the environment, which can bill the account. `llm-search-eval estimate` takes the same options and makes no judge call, so it is not matched. Known limit: the offline `mock` judge and judges loaded from a local `module:Class` are matched too, because the judge kind is part of the option value. Covers the installed llm-search-eval script and `uv run llm-search-eval`, `uvx llm-search-eval` and `uv tool run llm-search-eval` launches, including uv launcher options such as --env-file and abbreviated option spellings that argparse accepts. Known limit: a `uvx llm-search-eval==VERSION` pin is not matched, because the native package matcher accepts only the `llm-search-eval@VERSION` form.",
               "family": null,
               "matcher": {
                 "op": "any.v1",
@@ -456,10 +1063,330 @@
                         "--output-dir",
                         "-o",
                         "--format",
-                        "--title"
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
                       ],
                       "required_flags": [
                         "--judge"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "llm-search-eval",
+                        "llm-search-eval.cmd",
+                        "llm-search-eval.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--j"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "llm-search-eval",
+                        "llm-search-eval.cmd",
+                        "llm-search-eval.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--ju"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "llm-search-eval",
+                        "llm-search-eval.cmd",
+                        "llm-search-eval.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--jud"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "llm-search-eval",
+                        "llm-search-eval.cmd",
+                        "llm-search-eval.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--judg"
                       ],
                       "required_flags_in_all_arguments": false,
                       "required_option_values": [],
@@ -493,7 +1420,8 @@
                         "--with",
                         "--with-editable",
                         "--with-requirements",
-                        "--package"
+                        "--package",
+                        "--env-file"
                       ],
                       "inverse_flag_pairs": [],
                       "leading_options_with_values": [
@@ -501,7 +1429,8 @@
                         "--project",
                         "--cache-dir",
                         "--config-file",
-                        "--color"
+                        "--color",
+                        "--env-file"
                       ],
                       "options_with_values": [
                         "--queries",
@@ -546,10 +1475,426 @@
                         "--output-dir",
                         "-o",
                         "--format",
-                        "--title"
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
                       ],
                       "required_flags": [
                         "--judge"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run",
+                        "llm-search-eval",
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package",
+                        "--env-file"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--env-file"
+                      ],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--j"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run",
+                        "llm-search-eval",
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package",
+                        "--env-file"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--env-file"
+                      ],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--ju"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run",
+                        "llm-search-eval",
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package",
+                        "--env-file"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--env-file"
+                      ],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--jud"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run",
+                        "llm-search-eval",
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package",
+                        "--env-file"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--env-file"
+                      ],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--judg"
                       ],
                       "required_flags_in_all_arguments": false,
                       "required_option_values": [],
@@ -576,7 +1921,12 @@
                         "-q",
                         "--quiet",
                         "-v",
-                        "--verbose"
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
                       ],
                       "interspersed_options_with_values": [
                         "--from",
@@ -586,9 +1936,347 @@
                         "--python",
                         "-p",
                         "--index",
-                        "--default-index"
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
                       ],
                       "leading_subcommands": [],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--judge"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--j"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--ju"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--jud"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--judg"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
                       "package": "llm-search-eval",
                       "required_flags": [
                         "--judge"
@@ -614,7 +2302,12 @@
                         "-q",
                         "--quiet",
                         "-v",
-                        "--verbose"
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
                       ],
                       "interspersed_options_with_values": [
                         "--from",
@@ -624,7 +2317,27 @@
                         "--python",
                         "-p",
                         "--index",
-                        "--default-index"
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
                       ],
                       "leading_subcommands": [
                         "tool",
@@ -632,7 +2345,205 @@
                       ],
                       "package": "llm-search-eval",
                       "required_flags": [
-                        "--judge"
+                        "--j"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--ju"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--jud"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--judg"
                       ],
                       "subcommands": [
                         "run"
@@ -697,10 +2608,330 @@
                         "--output-dir",
                         "-o",
                         "--format",
-                        "--title"
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
                       ],
                       "required_flags": [
                         "--pairwise-judge"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "llm-search-eval",
+                        "llm-search-eval.cmd",
+                        "llm-search-eval.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--pairwise-j"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "llm-search-eval",
+                        "llm-search-eval.cmd",
+                        "llm-search-eval.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--pairwise-ju"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "llm-search-eval",
+                        "llm-search-eval.cmd",
+                        "llm-search-eval.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--pairwise-jud"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "llm-search-eval",
+                        "llm-search-eval.cmd",
+                        "llm-search-eval.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--pairwise-judg"
                       ],
                       "required_flags_in_all_arguments": false,
                       "required_option_values": [],
@@ -734,7 +2965,8 @@
                         "--with",
                         "--with-editable",
                         "--with-requirements",
-                        "--package"
+                        "--package",
+                        "--env-file"
                       ],
                       "inverse_flag_pairs": [],
                       "leading_options_with_values": [
@@ -742,7 +2974,8 @@
                         "--project",
                         "--cache-dir",
                         "--config-file",
-                        "--color"
+                        "--color",
+                        "--env-file"
                       ],
                       "options_with_values": [
                         "--queries",
@@ -787,10 +3020,426 @@
                         "--output-dir",
                         "-o",
                         "--format",
-                        "--title"
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
                       ],
                       "required_flags": [
                         "--pairwise-judge"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run",
+                        "llm-search-eval",
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package",
+                        "--env-file"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--env-file"
+                      ],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--pairwise-j"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run",
+                        "llm-search-eval",
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package",
+                        "--env-file"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--env-file"
+                      ],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--pairwise-ju"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run",
+                        "llm-search-eval",
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package",
+                        "--env-file"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--env-file"
+                      ],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--pairwise-jud"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run",
+                        "llm-search-eval",
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package",
+                        "--env-file"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--env-file"
+                      ],
+                      "options_with_values": [
+                        "--queries",
+                        "-q",
+                        "--products",
+                        "-p",
+                        "--qrels",
+                        "--system",
+                        "-s",
+                        "--judge",
+                        "--aggregate",
+                        "--min-votes",
+                        "--model",
+                        "--base-url",
+                        "--api-key-env",
+                        "--timeout",
+                        "--cache",
+                        "--concurrency",
+                        "--calibration-sample",
+                        "--pairwise-judge",
+                        "--pairwise",
+                        "--pairwise-k",
+                        "--pairwise-cache",
+                        "--price",
+                        "--price-file",
+                        "--max-cost",
+                        "--max-tokens",
+                        "--max-judgments",
+                        "--metrics",
+                        "--primary",
+                        "--depth",
+                        "--threshold",
+                        "--gain",
+                        "--baseline",
+                        "--permutations",
+                        "--seed",
+                        "--bootstrap",
+                        "--confidence",
+                        "--sample",
+                        "--stratify",
+                        "--min-per-stratum",
+                        "--output-dir",
+                        "-o",
+                        "--format",
+                        "--title",
+                        "--j",
+                        "--ju",
+                        "--jud",
+                        "--judg",
+                        "--pairwise-j",
+                        "--pairwise-ju",
+                        "--pairwise-jud",
+                        "--pairwise-judg"
+                      ],
+                      "required_flags": [
+                        "--pairwise-judg"
                       ],
                       "required_flags_in_all_arguments": false,
                       "required_option_values": [],
@@ -817,7 +3466,12 @@
                         "-q",
                         "--quiet",
                         "-v",
-                        "--verbose"
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
                       ],
                       "interspersed_options_with_values": [
                         "--from",
@@ -827,9 +3481,347 @@
                         "--python",
                         "-p",
                         "--index",
-                        "--default-index"
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
                       ],
                       "leading_subcommands": [],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--pairwise-judge"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--pairwise-j"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--pairwise-ju"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--pairwise-jud"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--pairwise-judg"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
                       "package": "llm-search-eval",
                       "required_flags": [
                         "--pairwise-judge"
@@ -855,7 +3847,12 @@
                         "-q",
                         "--quiet",
                         "-v",
-                        "--verbose"
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
                       ],
                       "interspersed_options_with_values": [
                         "--from",
@@ -865,7 +3862,27 @@
                         "--python",
                         "-p",
                         "--index",
-                        "--default-index"
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
                       ],
                       "leading_subcommands": [
                         "tool",
@@ -873,7 +3890,205 @@
                       ],
                       "package": "llm-search-eval",
                       "required_flags": [
-                        "--pairwise-judge"
+                        "--pairwise-j"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--pairwise-ju"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--pairwise-jud"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--no-cache",
+                        "--offline",
+                        "--refresh",
+                        "--no-config",
+                        "-q",
+                        "--quiet",
+                        "-v",
+                        "--verbose",
+                        "--upgrade",
+                        "--reinstall",
+                        "--no-progress",
+                        "--native-tls",
+                        "--no-env-file"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index",
+                        "--default-index",
+                        "--env-file",
+                        "--directory",
+                        "--project",
+                        "--cache-dir",
+                        "--config-file",
+                        "--color",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--find-links",
+                        "--constraints",
+                        "--overrides",
+                        "--exclude-newer",
+                        "--python-preference",
+                        "--resolution",
+                        "--prerelease",
+                        "--index-strategy",
+                        "--keyring-provider",
+                        "--allow-insecure-host",
+                        "--upgrade-package",
+                        "--reinstall-package"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "llm-search-eval",
+                      "required_flags": [
+                        "--pairwise-judg"
                       ],
                       "subcommands": [
                         "run"
@@ -942,6 +4157,468 @@
                           ],
                           "required_flags_in_all_arguments": true,
                           "required_option_values": [],
+                          "subcommands": [
+                            "run"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package",
+                            "--env-file"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--env-file"
+                          ],
+                          "options_with_values": [
+                            "--queries",
+                            "-q",
+                            "--products",
+                            "-p",
+                            "--qrels",
+                            "--system",
+                            "-s",
+                            "--judge",
+                            "--aggregate",
+                            "--min-votes",
+                            "--model",
+                            "--base-url",
+                            "--api-key-env",
+                            "--timeout",
+                            "--cache",
+                            "--concurrency",
+                            "--calibration-sample",
+                            "--pairwise-judge",
+                            "--pairwise",
+                            "--pairwise-k",
+                            "--pairwise-cache",
+                            "--price",
+                            "--price-file",
+                            "--max-cost",
+                            "--max-tokens",
+                            "--max-judgments",
+                            "--metrics",
+                            "--primary",
+                            "--depth",
+                            "--threshold",
+                            "--gain",
+                            "--baseline",
+                            "--permutations",
+                            "--seed",
+                            "--bootstrap",
+                            "--confidence",
+                            "--sample",
+                            "--stratify",
+                            "--min-per-stratum",
+                            "--output-dir",
+                            "-o",
+                            "--format",
+                            "--title",
+                            "--j",
+                            "--ju",
+                            "--jud",
+                            "--judg",
+                            "--pairwise-j",
+                            "--pairwise-ju",
+                            "--pairwise-jud",
+                            "--pairwise-judg"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "run",
+                            "llm-search-eval",
+                            "run"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "versioned-package-subcommand.v1",
+                        "config": {
+                          "executables": [
+                            "uvx",
+                            "uvx.exe"
+                          ],
+                          "interspersed_flags": [
+                            "--isolated",
+                            "--no-cache",
+                            "--offline",
+                            "--refresh",
+                            "--no-config",
+                            "-q",
+                            "--quiet",
+                            "-v",
+                            "--verbose",
+                            "--upgrade",
+                            "--reinstall",
+                            "--no-progress",
+                            "--native-tls",
+                            "--no-env-file"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--from",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--python",
+                            "-p",
+                            "--index",
+                            "--default-index",
+                            "--env-file",
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--index-url",
+                            "--extra-index-url",
+                            "--find-links",
+                            "--constraints",
+                            "--overrides",
+                            "--exclude-newer",
+                            "--python-preference",
+                            "--resolution",
+                            "--prerelease",
+                            "--index-strategy",
+                            "--keyring-provider",
+                            "--allow-insecure-host",
+                            "--upgrade-package",
+                            "--reinstall-package"
+                          ],
+                          "leading_subcommands": [],
+                          "package": "llm-search-eval",
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "subcommands": [
+                            "run"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "versioned-package-subcommand.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "interspersed_flags": [
+                            "--isolated",
+                            "--no-cache",
+                            "--offline",
+                            "--refresh",
+                            "--no-config",
+                            "-q",
+                            "--quiet",
+                            "-v",
+                            "--verbose",
+                            "--upgrade",
+                            "--reinstall",
+                            "--no-progress",
+                            "--native-tls",
+                            "--no-env-file"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--from",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--python",
+                            "-p",
+                            "--index",
+                            "--default-index",
+                            "--env-file",
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--index-url",
+                            "--extra-index-url",
+                            "--find-links",
+                            "--constraints",
+                            "--overrides",
+                            "--exclude-newer",
+                            "--python-preference",
+                            "--resolution",
+                            "--prerelease",
+                            "--index-strategy",
+                            "--keyring-provider",
+                            "--allow-insecure-host",
+                            "--upgrade-package",
+                            "--reinstall-package"
+                          ],
+                          "leading_subcommands": [
+                            "tool",
+                            "run"
+                          ],
+                          "package": "llm-search-eval",
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "subcommands": [
+                            "run"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package",
+                            "--env-file"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--env-file"
+                          ],
+                          "options_with_values": [
+                            "--queries",
+                            "-q",
+                            "--products",
+                            "-p",
+                            "--qrels",
+                            "--system",
+                            "-s",
+                            "--judge",
+                            "--aggregate",
+                            "--min-votes",
+                            "--model",
+                            "--base-url",
+                            "--api-key-env",
+                            "--timeout",
+                            "--cache",
+                            "--concurrency",
+                            "--calibration-sample",
+                            "--pairwise-judge",
+                            "--pairwise",
+                            "--pairwise-k",
+                            "--pairwise-cache",
+                            "--price",
+                            "--price-file",
+                            "--max-cost",
+                            "--max-tokens",
+                            "--max-judgments",
+                            "--metrics",
+                            "--primary",
+                            "--depth",
+                            "--threshold",
+                            "--gain",
+                            "--baseline",
+                            "--permutations",
+                            "--seed",
+                            "--bootstrap",
+                            "--confidence",
+                            "--sample",
+                            "--stratify",
+                            "--min-per-stratum",
+                            "--output-dir",
+                            "-o",
+                            "--format",
+                            "--title",
+                            "--j",
+                            "--ju",
+                            "--jud",
+                            "--judg",
+                            "--pairwise-j",
+                            "--pairwise-ju",
+                            "--pairwise-jud",
+                            "--pairwise-judg"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "run",
+                            "llm-search-eval",
+                            "run"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "versioned-package-subcommand.v1",
+                        "config": {
+                          "executables": [
+                            "uvx",
+                            "uvx.exe"
+                          ],
+                          "interspersed_flags": [
+                            "--isolated",
+                            "--no-cache",
+                            "--offline",
+                            "--refresh",
+                            "--no-config",
+                            "-q",
+                            "--quiet",
+                            "-v",
+                            "--verbose",
+                            "--upgrade",
+                            "--reinstall",
+                            "--no-progress",
+                            "--native-tls",
+                            "--no-env-file"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--from",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--python",
+                            "-p",
+                            "--index",
+                            "--default-index",
+                            "--env-file",
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--index-url",
+                            "--extra-index-url",
+                            "--find-links",
+                            "--constraints",
+                            "--overrides",
+                            "--exclude-newer",
+                            "--python-preference",
+                            "--resolution",
+                            "--prerelease",
+                            "--index-strategy",
+                            "--keyring-provider",
+                            "--allow-insecure-host",
+                            "--upgrade-package",
+                            "--reinstall-package"
+                          ],
+                          "leading_subcommands": [],
+                          "package": "llm-search-eval",
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "subcommands": [
+                            "run"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "versioned-package-subcommand.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "interspersed_flags": [
+                            "--isolated",
+                            "--no-cache",
+                            "--offline",
+                            "--refresh",
+                            "--no-config",
+                            "-q",
+                            "--quiet",
+                            "-v",
+                            "--verbose",
+                            "--upgrade",
+                            "--reinstall",
+                            "--no-progress",
+                            "--native-tls",
+                            "--no-env-file"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--from",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--python",
+                            "-p",
+                            "--index",
+                            "--default-index",
+                            "--env-file",
+                            "--directory",
+                            "--project",
+                            "--cache-dir",
+                            "--config-file",
+                            "--color",
+                            "--index-url",
+                            "--extra-index-url",
+                            "--find-links",
+                            "--constraints",
+                            "--overrides",
+                            "--exclude-newer",
+                            "--python-preference",
+                            "--resolution",
+                            "--prerelease",
+                            "--index-strategy",
+                            "--keyring-provider",
+                            "--allow-insecure-host",
+                            "--upgrade-package",
+                            "--reinstall-package"
+                          ],
+                          "leading_subcommands": [
+                            "tool",
+                            "run"
+                          ],
+                          "package": "llm-search-eval",
+                          "required_flags": [
+                            "-h"
+                          ],
                           "subcommands": [
                             "run"
                           ]
@@ -1943,6 +5620,239 @@
         0
       ],
       "id": "judge-permission-disabled",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uvx --env-file .env llm-search-eval comment gate.md --pr 42",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-uvx-env-file",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uvx --directory eval llm-search-eval comment gate.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-uvx-directory",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uv tool run --env-file .env llm-search-eval comment gate.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-uv-tool-run-env-file",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uv run --env-file .env llm-search-eval comment gate.md --pr 42",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "comment-uv-run-env-file",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uvx llm-search-eval comment --dry-run gate.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "comment-uvx-dry-run",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uv run llm-search-eval comment gate.md --pr 42 --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "comment-uv-run-dry-run",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uv tool run llm-search-eval@0.4.0 comment --dry-run gate.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "comment-uv-tool-run-dry-run",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uvx llm-search-eval comment --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "comment-uvx-help",
+      "rule_id": "command.llm-search-eval.comment"
+    },
+    {
+      "command": "uvx --env-file .env llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --judge openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-uvx-env-file",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uv tool run --directory eval llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl -s b=b.jsonl --pairwise-judge openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-uv-tool-run-directory-pairwise",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --jud openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-abbreviated",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --judg=openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-abbreviated-equals",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl -s b=b.jsonl --pairwise-jud openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-pairwise-abbreviated",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uv run llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --ju openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-uv-run-abbreviated",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uvx llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --jud openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-uvx-abbreviated",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uv tool run llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl -s b=b.jsonl --pairwise-j openai=gpt-4o-mini",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "judge-uv-tool-run-pairwise-abbreviated",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uvx llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --judge openai=gpt-4o-mini --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "run-uvx-help",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "uv run llm-search-eval run -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "run-uv-run-help-short",
+      "rule_id": "command.llm-search-eval.judge"
+    },
+    {
+      "command": "llm-search-eval run -q q.jsonl -p p.jsonl -s a=a.jsonl --qrels qrels.tsv --pairwise-k 3",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llm-search-eval"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "run-pairwise-without-judge-not-matched",
       "rule_id": "command.llm-search-eval.judge"
     }
   ]
