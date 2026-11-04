@@ -438,6 +438,21 @@ fn evaluate_envelope(
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
+    // Oh My Pi's `read` addresses a file by `file://` URL as well as by path.
+    // The URL is a spelling of a local path, not a wider capability, so it is
+    // reduced to the path it denotes before any screen runs: the sensitive
+    // name, workspace and read rules then all read the same path the plain
+    // spelling would give them. A URL that names no local path -- another
+    // host's authority, a form this resolver cannot reduce -- is left alone
+    // and keeps the review it has today.
+    let resolved_read_url = (harness == "omp"
+        && signals.tool_name.as_deref() == Some("read")
+        && signals.path_values.len() == 1)
+        .then(|| super::omp_file_url::local_file_url_path(&signals.path_values[0]))
+        .flatten();
+    if let Some(resolved) = resolved_read_url {
+        signals.resolve_read_url_path(resolved);
+    }
     signals.mirrored_input_unproven = harness == "grok"
         && !payload
             .as_object()
