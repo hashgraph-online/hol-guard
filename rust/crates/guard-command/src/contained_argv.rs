@@ -981,7 +981,7 @@ fn contained_target(input: &Value) -> Value {
 
 /// The script a bounded inline shell runs, read the way the review reads it.
 fn inline_shell_target(text: &str) -> Option<String> {
-    crate::inline_shell_script_text(&crate::CommandModelRequestV1 {
+    crate::command_parse_surface::inline_shell_script_text(&crate::CommandModelRequestV1 {
         command: text.to_owned(),
         dialect: "posix".into(),
         transport: "shell_string".into(),
