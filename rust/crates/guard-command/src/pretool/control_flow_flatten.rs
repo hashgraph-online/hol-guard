@@ -432,13 +432,49 @@ pub(super) fn command_word_changes_shell_state(stage: &str) -> bool {
     let head = command_head(stage);
     STATE_CHANGING.contains(&head)
         || head.contains(['\'', '"', '\\', '$'])
-        || (head == "printf" && stage.split_whitespace().any(|word| word.starts_with("-v")))
+        || (head == "printf" && printf_assigns(stage))
         || head.split_once('=').is_some_and(|(name, _)| {
             !name.is_empty()
                 && name
                     .bytes()
                     .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
         })
+}
+
+/// `printf -v NAME`: printf reads options only before its format, so a
+/// `-v` later on is printed data (`printf '%s\n' -version`). Quotes around
+/// the option still pass it to printf as an option.
+fn printf_assigns(stage: &str) -> bool {
+    let mut words = stage.split_whitespace().skip_while(|word| *word == "!");
+    words.next();
+    words
+        .next()
+        .is_some_and(|word| word.trim_start_matches(['\'', '"']).starts_with("-v"))
+}
+
+/// Whether the text runs an arithmetic expansion (`$((...))` or `$[...]`),
+/// which can assign a variable. Text inside single quotes or behind a
+/// backslash is printed as written and runs nothing; double quotes still
+/// expand. ANSI-C quoting (`$'...'`) escapes its own quotes, so text with
+/// it is read whole.
+pub(super) fn runs_arithmetic(text: &str) -> bool {
+    let forms = |rest: &str| rest.starts_with("$((") || rest.starts_with("$[");
+    if text.contains("$'") {
+        return (0..text.len()).any(|index| text.is_char_boundary(index) && forms(&text[index..]));
+    }
+    let bytes = text.as_bytes();
+    let (mut single, mut double, mut index) = (false, false, 0);
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\'' if !double => single = !single,
+            b'"' if !single => double = !double,
+            b'\\' if !single => index += 1,
+            b'$' if !single && forms(&text[index..]) => return true,
+            _ => {}
+        }
+        index += 1;
+    }
+    false
 }
 
 /// Consume `keyword` followed by whitespace.

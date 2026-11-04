@@ -267,7 +267,7 @@ fn verdict(
         // expansion (`$((PATH=10))`) can name the configuration Git reads.
         // The proofs below answer for what a step writes to disk, not for
         // what it leaves in the shell. `cd` is checked above instead.
-        if ["$((", "$["].iter().any(|form| segment.text.contains(form))
+        if super::control_flow_flatten::runs_arithmetic(&segment.text)
             || segment
                 .environment_names
                 .iter()

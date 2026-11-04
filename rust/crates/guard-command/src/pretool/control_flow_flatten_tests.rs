@@ -396,3 +396,21 @@ fn a_wait_that_builds_up_across_passes_keeps_its_review() {
         assert_eq!(flatten(command), None, "{command}");
     }
 }
+
+/// Arithmetic runs where the shell expands it: bare or in double quotes, not
+/// in single quotes or behind a backslash.
+#[test]
+fn arithmetic_is_read_where_the_shell_runs_it() {
+    for text in [
+        "echo $((PATH=10))",
+        "echo \"$((PATH=10))\"",
+        "echo $[PATH=10]",
+        "echo \"it's\" $((PATH=10))",
+        "echo $'\\'' $((PATH=10))",
+    ] {
+        assert!(super::runs_arithmetic(text), "{text}");
+    }
+    for text in ["echo '$((PATH=10))'", "echo \\$((PATH=10))", "echo $PATH"] {
+        assert!(!super::runs_arithmetic(text), "{text}");
+    }
+}

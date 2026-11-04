@@ -434,6 +434,8 @@ fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
          printf '%s\\n' '--- repo state ---'; git status --short",
         "head -20 \"$HOME/.zshrc\"; git log --oneline -5",
         "wc -l \"$HOME/.zshrc\" && git status --short --branch",
+        // A `-v` after the format is printed data, not printf's option.
+        "printf '%s\\n' -version; git status --short",
     ] {
         assert_ne!(reason(&home, &repository, command), FLOOR, "{command}");
     }
@@ -466,6 +468,8 @@ fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
         "GIT_CONFIG_GLOBAL=/tmp/evil cat package.json; git status --short",
         // An arithmetic expansion assigns as it prints.
         "cat package.json $((PATH=10)); git status --short",
+        "echo \"$((PATH=10))\"; git status --short",
+        "echo \"it's\" $((PATH=10)); git status --short",
     ] {
         assert_ne!(
             action(&home, &repository, disguised),
