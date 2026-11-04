@@ -95,22 +95,14 @@ pub(super) fn run(
     let preload = path_text(&write_preload(&private.path)?)?;
     plan.command
         .splice(1..1, ["--require".to_owned(), preload.clone()]);
-    // Vitest supplies its own worker execArgv. Only Guard-owned options,
-    // not the caller's NODE_OPTIONS or NODE_PATH, may reach those runtimes,
-    // plus a NODE_OPTIONS the command itself wrote in front of the runner
-    // when the value holds only the inert flags the review read it as.
+    // Vitest supplies its own worker execArgv, so Guard's preload has to
+    // travel in NODE_OPTIONS to reach them. It joins what the Node sink
+    // already settled: Guard's own options and, behind them, the inert
+    // NODE_OPTIONS the command wrote in front of the runner.
     let quoted = serde_json::to_string(&preload).map_err(|_| unavailable("invalid_reply"))?;
-    let guard_options = environment.remove("NODE_OPTIONS").unwrap_or_default();
-    let written = plan
-        .settings
-        .iter()
-        .rev()
-        .find(|(name, _)| name == "NODE_OPTIONS")
-        .map(|(_, value)| value.as_str())
-        .filter(|value| guard_contracts::node_options_inert(value))
-        .unwrap_or_default();
+    let settled = environment.remove("NODE_OPTIONS").unwrap_or_default();
     let preload_option = format!("--require {quoted}");
-    let options = [guard_options.trim(), written, &preload_option]
+    let options = [settled.trim(), preload_option.as_str()]
         .into_iter()
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()

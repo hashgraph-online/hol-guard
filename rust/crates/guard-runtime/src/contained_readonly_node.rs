@@ -1,7 +1,11 @@
 //! The environment a read-only Node run starts with.
 //!
 //! The caller's Node preloads and search paths are not repository input, so
-//! they never reach the run. On Linux, Guard's own sink also asks the
+//! they never reach the run. The one exception is a `NODE_OPTIONS` the
+//! command itself wrote in front of the runner: the review already read
+//! that value as inert and projected it away, so the run has to carry it
+//! or it does work the caller did not ask for. Guard's own options stay in
+//! front of it. On Linux, Guard's own sink also asks the
 //! planned runtime, under the same read-only sandbox, whether it takes
 //! `--disable-wasm-trap-handler`, and sets that one option when it does:
 //! WebAssembly's trap handler reserves a virtual cage larger than the run's
@@ -32,6 +36,7 @@ pub(in super::super) fn settle(
     environment.remove("NODE_OPTIONS");
     environment.remove("NODE_PATH");
     if plan.backend != backend::BUBBLEWRAP {
+        carry_written_options(plan, environment);
         return Ok(());
     }
     let help = vec![plan.executable.clone(), "--help".to_owned()];
@@ -89,7 +94,39 @@ pub(in super::super) fn settle(
             String::from_utf8_lossy(WASM_TRAP_OPTION).into_owned(),
         );
     }
+    carry_written_options(plan, environment);
     Ok(())
+}
+
+/// Put back the `NODE_OPTIONS` the command wrote in front of the runner,
+/// behind whatever Guard itself settled.
+///
+/// The review reads such a prefix as inert and projects it away before it
+/// classifies the command, so the sink receives a run that was authorized
+/// with the value in place. Dropping it here would run a different job than
+/// the one that was reviewed: a suite that needs `--experimental-vm-modules`
+/// fails, and one sized with `--max-old-space-size` runs on the default
+/// heap. The value is re-screened rather than trusted, by the same closed
+/// screen the review used, and only an exact `NODE_OPTIONS` counts, because
+/// only that spelling is the variable Node reads.
+fn carry_written_options(plan: &ReadonlyPlan, environment: &mut BTreeMap<String, String>) {
+    let Some(written) = plan
+        .settings
+        .iter()
+        .rev()
+        .find(|(name, _)| name == "NODE_OPTIONS")
+        .map(|(_, value)| value.as_str())
+        .filter(|value| guard_contracts::node_options_inert(value))
+    else {
+        return;
+    };
+    let settled = environment.remove("NODE_OPTIONS").unwrap_or_default();
+    let options = [settled.trim(), written]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    environment.insert("NODE_OPTIONS".to_owned(), options);
 }
 
 /// What the help probe `argv` printed, when it exits cleanly in time. The
