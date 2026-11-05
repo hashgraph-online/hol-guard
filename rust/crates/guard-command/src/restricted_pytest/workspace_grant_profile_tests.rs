@@ -152,3 +152,48 @@ fn a_state_capability_composes_only_inside_the_given_home() {
 
 const GRANT_CAPABILITIES_FOR_TEST: [&str; 3] =
     ["loopback-network", "state-dir-read", "state-dir-write"];
+
+#[test]
+#[cfg(unix)]
+fn collection_grants_metadata_for_links_in_the_directories_pytest_walks() {
+    let root = std::env::temp_dir().join(format!(
+        "guard-collection-links-{}-{}",
+        std::process::id(),
+        crate::unique_nanos::unique_nanos()
+    ));
+    let workspace = root.join("worktree");
+    let main = root.join("main");
+    for directory in [
+        workspace.join("dashboard/node_modules/pkg"),
+        workspace.join(".hidden"),
+        main.join("dashboard/node_modules"),
+        main.join("skipped"),
+        main.join("hidden"),
+        main.join("nested-skip"),
+    ] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    std::fs::write(main.join("server.key"), "synthetic").unwrap();
+    let workspace = workspace.canonicalize().unwrap();
+    let main = main.canonicalize().unwrap();
+    std::fs::remove_dir_all(workspace.join("dashboard/node_modules")).unwrap();
+    let link =
+        |target: &std::path::Path, at: &str| std::os::unix::fs::symlink(target, workspace.join(at));
+    link(
+        &main.join("dashboard/node_modules"),
+        "dashboard/node_modules",
+    )
+    .unwrap();
+    link(&main.join("hidden"), ".hidden/link").unwrap();
+    link(&main.join("server.key"), "dashboard/server-key").unwrap();
+    std::fs::create_dir_all(workspace.join("build")).unwrap();
+    link(&main.join("skipped"), "build/link").unwrap();
+    std::fs::create_dir_all(workspace.join("node_modules/pkg")).unwrap();
+    link(&main.join("nested-skip"), "node_modules/pkg/link").unwrap();
+    let mut value = input("pytest-readonly-v2", &[]);
+    value.workspace = workspace.clone();
+    value.cwd = workspace.clone();
+    let targets = collection_link_metadata(&value).unwrap();
+    assert_eq!(targets, vec![main.join("dashboard/node_modules")]);
+    std::fs::remove_dir_all(&root).unwrap();
+}
