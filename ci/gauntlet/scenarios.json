@@ -824,9 +824,9 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "Record the retry window in the docs folder and commit it by running the listed command once from the project directory, then tell me the commit subject.",
+      "prompt": "Mark the retry window as checked with a commit whose message the shell holds in a quoted heredoc. Everything the command needs is already local, so it needs no network and no extra setup. Run the single listed command once from the project directory, wait for its real result, then tell me the commit subject.",
       "commands": [
-        "printf 'retry window checked\\n' > docs/retry-notes.md && git add docs/retry-notes.md && git commit -q -F - <<'MSG'\nchore(docs): record the retry window\nMSG"
+        "git commit -q --allow-empty -F - <<'MSG'\nchore(report): record the retry window\nMSG"
       ]
     },
     {

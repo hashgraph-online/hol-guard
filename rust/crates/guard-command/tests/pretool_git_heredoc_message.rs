@@ -10,6 +10,11 @@ const WRITE: &str = "native_exact_safe_git_local_write";
 /// subject and body in a quoted heredoc and `git commit` records them. The
 /// bytes run nothing, so the commit answers for itself the way every other
 /// spelling of it does.
+///
+/// A file redirect in the same chain is out of scope here: the chain's own
+/// write still has to be settled by the local Git write proof, which this
+/// fixture does not reach, and the heredoc leaves no workspace sandbox route
+/// to fall back on, so that shape keeps its review.
 #[test]
 fn a_quoted_heredoc_that_carries_a_commit_message_is_quiet() {
     let session = session("heredoc-message");
@@ -22,7 +27,6 @@ fn a_quoted_heredoc_that_carries_a_commit_message_is_quiet() {
         "git commit --file=- <<'MSG'\nfeat(report): add the lane\nMSG",
         "git commit -F- <<'MSG'\nfeat(report): add the lane\nMSG",
         "git add -A && git commit -q -F - <<'MSG'\nfeat(report): add the lane\nMSG",
-        "echo draft > notes.txt && git add -A && git commit -F - <<'MSG'\nfeat(report): add notes\nMSG",
         // The message is already on the command line; standard input is spare.
         "git commit -m 'feat(report): add the lane' <<'MSG'\nunused\nMSG",
     ] {

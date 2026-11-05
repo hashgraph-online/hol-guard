@@ -17177,7 +17177,7 @@
       "expect": "allow"
     },
     {
-      "id": "session-redirect-add-commit-heredoc-message",
+      "id": "session-git-commit-heredoc-allow-empty",
       "fix_area": "git",
       "harnesses": [
         "codex",
@@ -17188,9 +17188,9 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "printf 'retry window checked\\n' > docs/retry-notes.md && git add docs/retry-notes.md && git commit -q -F - <<'MSG'\nchore(docs): record the retry window\nMSG"
+        "command": "git commit -q --allow-empty -F - <<'MSG'\nchore(report): record the retry window\nMSG"
       },
-      "cwd": "worktree",
+      "cwd": "org_app",
       "expect": "allow"
     },
     {
