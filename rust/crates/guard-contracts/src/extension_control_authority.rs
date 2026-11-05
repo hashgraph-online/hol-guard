@@ -41,6 +41,10 @@ pub const EXTENSION_CONTROL_AUTHORITY_RESULT_SCHEMA: &str =
     "guard-extension-control-authority-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const EXTENSION_CONTROL_AUTHORITY_FEATURE: &str = "extension-control-authority-v1";
+/// Capability advertised when the `restore` and `roll_back` writer ops are
+/// available.
+pub const EXTENSION_CONTROL_AUTHORITY_WRITES_FEATURE: &str =
+    "extension-control-authority-writes-v1";
 /// Largest canonical request the resident accepts. A request carries at most
 /// two catalog manifests, one fingerprint per catalog target.
 ///

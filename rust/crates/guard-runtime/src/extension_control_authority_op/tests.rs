@@ -64,7 +64,7 @@ impl Home {
                 catalog_digest text primary key, manifest_json text not null, record_json text not null,
                 record_digest text not null, record_mac text not null, recorded_at text not null);
              create table sync_state (state_key text primary key, payload_json text not null);
-             create table guard_events (event_name text not null, payload_json text not null);
+             create table guard_events (event_name text not null, payload_json text not null, occurred_at text);
              create table extension_control_authority_proof (
                 proof_id_hash text primary key, mutation_digest text not null,
                 transition_revision integer not null, reserved_at text not null, consumed_at text);",

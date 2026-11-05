@@ -159,7 +159,7 @@ def test_unsettled_replies_always_go_back_to_the_resident(tmp_path: Path, payloa
     assert memo.lookup(_wire(store))[1] is None
 
 
-@pytest.mark.parametrize("op", ["commit_plan", "resume_plan", "rollback_plan", "unknown"])
+@pytest.mark.parametrize("op", ["commit_plan", "resume_plan", "rollback_plan", "restore", "roll_back", "unknown"])
 def test_a_writer_plan_is_never_kept(tmp_path: Path, op: str) -> None:
     store = _store(tmp_path)
     _keep(_wire(store, op=op), {"plan": {"outcome": "prepare"}})
