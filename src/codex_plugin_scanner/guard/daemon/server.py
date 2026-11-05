@@ -82,6 +82,7 @@ from ..native_directory_trust import (
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_evidence_writer import NativeHookEvidenceWriter, unreachable_writer_stats
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
+from ..native_resident_client import record_native_resident_client_failure_code
 from ..native_resident_revival import native_route_unavailable_body
 from ..native_resident_watchdog import start_native_resident_watchdog
 from ..native_runtime_request_scope import scoped_hook_post
@@ -1405,6 +1406,7 @@ class _GuardDaemonHandler(
     BaseHTTPRequestHandler,
 ):
     _MAX_BODY_BYTES = 1_000_000
+    _native_gate_unavailable = False
     server: _GuardDaemonHttpServer  # pyright: ignore[reportIncompatibleVariableOverride]
 
     def end_headers(self) -> None:
@@ -1416,6 +1418,10 @@ class _GuardDaemonHandler(
         super().end_headers()
 
     def parse_request(self) -> bool:
+        # A kept-alive connection reuses this thread, so each request starts
+        # without the previous request's gate or resident failure.
+        self._native_gate_unavailable = False
+        record_native_resident_client_failure_code(None)
         parsed = super().parse_request()
         self._daemon_server().classify_connection(self.request)
         if not parsed:
@@ -2627,6 +2633,7 @@ class _GuardDaemonHandler(
         try:
             return native_route_facts(self.command, path, guard_home=self._route_home()).session_path
         except NativeDaemonRouteError:
+            self._native_gate_unavailable = True
             return False
 
     def _header_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
@@ -2646,6 +2653,7 @@ class _GuardDaemonHandler(
         try:
             return native_origin_decision(normalized_origin, path, guard_home=self._route_home()).allowed
         except NativeDaemonRouteError:
+            self._native_gate_unavailable = True
             return False
 
     def _is_hosted_dashboard_origin(self) -> bool:
@@ -2665,6 +2673,7 @@ class _GuardDaemonHandler(
                 value.strip(), self._normalize_origin(value), guard_home=self._route_home()
             )
         except NativeDaemonRouteError:
+            self._native_gate_unavailable = True
             return None
 
     def _dashboard_session_claims_authorize_request(
@@ -2684,6 +2693,7 @@ class _GuardDaemonHandler(
                 guard_home=self._route_home(),
             )
         except NativeDaemonRouteError:
+            self._native_gate_unavailable = True
             return False
         if verdict.consume_nonce is not None and not self._consume_dashboard_session_nonce(verdict.consume_nonce):
             return False
@@ -3014,8 +3024,14 @@ class _GuardDaemonHandler(
     ) -> dict[str, str] | None:
         parsed = urlparse(self.path)
         origin = self._normalize_origin(self.headers.get("Origin"))
-        if origin is None or not self._origin_is_allowed_for_request(parsed.path):
-            return None
+        # Choosing response headers is not the gate that refused the request,
+        # so a busy resident here must not turn a real denial into a retry.
+        gate_unavailable = self._native_gate_unavailable
+        try:
+            if origin is None or not self._origin_is_allowed_for_request(parsed.path):
+                return None
+        finally:
+            self._native_gate_unavailable = gate_unavailable
         return self._cors_headers(origin, allow_methods=allow_methods, allow_headers=allow_headers)
 
     def _native_handler_decision(self, ask: Callable[[], HandlerDecision]) -> HandlerDecision | None:
@@ -3129,6 +3145,12 @@ class _GuardDaemonHandler(
         status: int = 200,
         extra_headers: dict[str, str] | None = None,
     ) -> None:
+        # A denial written after an origin or session check could not reach the
+        # resident is not a verdict on the caller: the request stays refused, but
+        # as the retryable 503 a busy resident gets everywhere else, so the
+        # dashboard retries instead of dropping its session.
+        if status in (401, 403) and self._native_gate_unavailable:
+            payload, status = native_route_unavailable_body(), 503
         body = escape_json_for_html(json.dumps(payload).encode("utf-8"))
         self._write_json_bytes(body, status=status, extra_headers=extra_headers)
 

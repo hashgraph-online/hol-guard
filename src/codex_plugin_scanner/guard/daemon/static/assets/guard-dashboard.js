@@ -16799,6 +16799,7 @@ const GUARD_DAEMON_PORT_RANGE = 1e3;
 const GUARD_DAEMON_DISCOVERY_PROBE_COUNT = 25;
 const GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE = 5;
 const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
+const GUARD_DAEMON_CANDIDATE_TIMEOUT_MS = 1e4;
 const GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION = 1;
 const GUARD_DAEMON_RECONNECT_NONCE_BYTES = 32;
 const RUNTIME_HEARTBEAT_MAX_AGE_MS = 3e4;
@@ -16993,9 +16994,11 @@ async function probeGuardDaemonHealth(origin) {
     return false;
   }
   try {
-    const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/healthz`, {
-      redirect: "error"
-    });
+    const { response, payload } = await fetchGuardDaemonCandidateJson(
+      `${candidateOrigin}/healthz`,
+      { redirect: "error" },
+      GUARD_DAEMON_PROBE_TIMEOUT_MS
+    );
     if (!response.ok) {
       return false;
     }
@@ -17007,9 +17010,9 @@ async function probeGuardDaemonHealth(origin) {
     return false;
   }
 }
-async function fetchGuardDaemonCandidateJson(input, init) {
+async function fetchGuardDaemonCandidateJson(input, init, timeoutMs = GUARD_DAEMON_CANDIDATE_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await daemonFetch(input, { ...init, signal: controller.signal });
     const payload = await response.json();
@@ -17443,9 +17446,47 @@ function guardApiInput(input) {
 function withGuardAuth(init) {
   return withGuardAuthForToken(init, readGuardToken());
 }
+const BUSY_RETRY_DELAYS_MS = [300, 900, 2e3];
+async function isBusyRefusal(response) {
+  if (response.status !== 503) {
+    return false;
+  }
+  try {
+    const payload = await response.clone().json();
+    return isRecord$4(payload) && payload["error"] === "native_route_policy_unavailable" && payload["reason_code"] === void 0;
+  } catch {
+    return false;
+  }
+}
+function waitForRetry(delayMs, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    function onAbort() {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 async function daemonFetch(input, init) {
-  const response = await fetch(input, init);
+  let response = await fetch(input, init);
   observeDashboardBuild(response);
+  const resendable = !(input instanceof Request) && (init?.body == null || typeof init.body === "string");
+  for (const delayMs of resendable ? BUSY_RETRY_DELAYS_MS : []) {
+    if (!await isBusyRefusal(response)) {
+      break;
+    }
+    await waitForRetry(delayMs, init?.signal);
+    response = await fetch(input, init);
+    observeDashboardBuild(response);
+  }
   return response;
 }
 function withGuardAuthForToken(init, guardToken) {

@@ -18,6 +18,7 @@ from ..cli.connect_flow import (
 from ..cli.connect_sync_result import (
     failed_browser_connect_flow_state,
 )
+from ..native_resident_revival import native_route_unavailable_body
 from ..package_firewall_entitlement import (
     PACKAGE_FIREWALL_RUNTIME_UNAVAILABLE_REASON,
     package_firewall_entitlement_or_denied,
@@ -456,6 +457,11 @@ class _CloudConnectRoutes:
         )
 
     def _write_dashboard_reconnect_candidate_failure(self, reason_code: str) -> None:
+        # The origin check could not reach the resident: say "busy, try again"
+        # rather than "no such daemon", so the dashboard retries the reconnect.
+        if getattr(self, "_native_gate_unavailable", False):
+            self._write_json(native_route_unavailable_body(), status=503, extra_headers={"Cache-Control": "no-store"})
+            return
         self._write_json(
             {"error": "daemon_candidate_unavailable", "reason_code": reason_code},
             status=404,
