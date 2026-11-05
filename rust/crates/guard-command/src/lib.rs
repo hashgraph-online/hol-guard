@@ -534,6 +534,9 @@ pub mod hook_adapter_paths;
 #[cfg(test)]
 #[path = "adapters/hook/hook_adapter_target_file_tests.rs"]
 mod hook_adapter_target_file_tests;
+#[cfg(test)]
+#[path = "adapters/hook/hook_adapter_agent_intent_tests.rs"]
+mod hook_adapter_agent_intent_tests;
 use guard_hook_payload::{hook_adapter_cline_tables, hook_adapter_pyjson, hook_adapter_pytext};
 pub use guard_hook_payload::{
     hook_adapter_prepare, hook_adapter_prepare_cline, hook_adapter_value,
