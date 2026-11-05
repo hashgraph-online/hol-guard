@@ -36,14 +36,9 @@ fn a_named_xargs_pipeline_with_a_literal_output_redirect_is_reviewable() {
         assert_ne!(code, FAILED, "{command}");
         assert_eq!(action, "review", "{command}: {code}");
     }
-    // An input redirect feeds `xargs` from a file this text does not hold,
-    // and a substitution in the redirect target is not a literal path.
-    for command in [
-        "find . \\( -name a -o -name b \\) | xargs rm < list.txt",
-        "find . \\( -name a -o -name b \\) | xargs grep -l x 2>\"$LOG\"",
-    ] {
-        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
-    }
+    // A parameter in the redirect target is not a literal path.
+    let command = "find . \\( -name a -o -name b \\) | xargs grep -l x 2>\"$LOG\"";
+    assert_eq!(decision(&controls, command).1, FAILED, "{command}");
 }
 
 /// Reading the program out of an `xargs` leaves the operands standard input

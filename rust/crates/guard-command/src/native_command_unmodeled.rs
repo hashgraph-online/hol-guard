@@ -589,13 +589,8 @@ fn executor_name(word: &str) -> String {
 
 /// A pipeline whose only data movement is a pipe into an `xargs` that names
 /// the program it runs. A pipe into a shell, `curl url | sh`, is not one.
-///
-/// An output redirect to a literal path, such as the `2>/dev/null` that
-/// silences a search, moves no data the review cannot see. Refusing it sent
-/// `find . \( -name '*.ts' -o -name '*.json' \) | xargs grep -l x 2>/dev/null`
-/// to an evaluation failure with no approval left to give it, while the same
-/// pipeline without the redirect reached review. An input redirect still
-/// refuses: it feeds `xargs` operands from a file this text does not hold.
+/// An output redirect to a literal path, such as a search's `2>/dev/null`,
+/// moves no data the review cannot see, so it keeps the review.
 fn named_xargs_pipeline(text: &str) -> bool {
     let literal = unquoted_literal(text);
     text.contains("xargs")
