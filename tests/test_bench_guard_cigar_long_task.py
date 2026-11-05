@@ -8,6 +8,7 @@ from tests.delivery_scripts import script
 
 # Imported through the helper so scripts/ (which has its own `ci` directory) never stays on sys.path.
 bench = script("bench_guard_cigar_long_task")
+usage = script("bench_guard_cigar_usage")
 
 
 def _usage(thread: str, input_tokens: int, cached: int) -> str:
@@ -30,7 +31,7 @@ def _rollout(tmp_path: Path, thread: str, lines: list[str]) -> Path:
     return path
 
 
-def test_rollout_sum_counts_every_request_and_compaction(tmp_path: Path) -> None:
+def test_codex_rollout_counts_every_request_and_compaction(tmp_path: Path) -> None:
     thread = "0123-thread"
     path = _rollout(
         tmp_path,
@@ -44,14 +45,23 @@ def test_rollout_sum_counts_every_request_and_compaction(tmp_path: Path) -> None
         ],
     )
     assert bench.rollout_path(tmp_path / "codex", thread) == path
-    assert bench.rollout_sum(path) == {
+    assert usage.codex_rollout(path) == {
         "input_tokens": 35000,
         "cached_input_tokens": 11000,
+        "cache_write_tokens": 0,
         "uncached_input_tokens": 24000,
         "output_tokens": 14,
         "requests": 2,
         "compactions": 1,
     }
+
+
+def test_claude_transcripts_follow_claude_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    assert bench.claude_projects() == tmp_path / "home" / ".claude" / "projects"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    assert bench.claude_projects() == tmp_path / "claude-config" / "projects"
 
 
 def test_rollout_path_is_none_without_sessions(tmp_path: Path) -> None:
@@ -145,19 +155,23 @@ def test_passed_requires_every_check_green() -> None:
 
 
 def _row(arm: str, rep: int, input_tokens: int, passed: bool = True) -> dict:
+    tokens = {
+        "input_tokens": input_tokens,
+        "cached_input_tokens": input_tokens - 100_000,
+        "cache_write_tokens": 0,
+        "uncached_input_tokens": 100_000,
+        "output_tokens": 1,
+        "requests": 80,
+        "compactions": 2,
+    }
     return {
         "arm": arm,
         "rep": rep,
         "passed": passed,
         "secs": 600,
-        "tokens": {
-            "input_tokens": input_tokens,
-            "cached_input_tokens": input_tokens - 100_000,
-            "uncached_input_tokens": 100_000,
-            "output_tokens": 1,
-            "requests": 80,
-            "compactions": 2,
-        },
+        "model": bench.MODEL,
+        "tokens": tokens,
+        "cost": usage.cost(tokens, bench.MODEL),
         "tool_output": {"chars": {"read": 300_000}, "calls": {"read": 20}},
     }
 
@@ -174,9 +188,17 @@ def test_report_changes_against_the_base_mean() -> None:
     assert summary["arms"]["cigar"]["change_vs_base"] == -0.6
     assert summary["arms"]["base"]["all_passed"] is True
     assert summary["arms"]["cigar"]["all_passed"] is False
+    # Raw input fell 60%, but the base's extra input was cache reads at a tenth of the price.
+    assert summary["arms"]["cigar"]["paid_change_vs_base"] == -0.493
     table = bench.markdown(summary)
-    assert "| cigar | 2 | 0 | NO | 1,660,000 |" in table
-    assert "-60.0%" in table
+    assert "| cigar | 2 | 0 | NO | 0.0256 | -49.3% |" in table
+    assert "| 1,660,000 | -60.0% |" in table
+
+
+def test_report_rejects_runs_recorded_without_cost() -> None:
+    old = {key: value for key, value in _row("cigar", 1, 1).items() if key not in {"model", "cost"}}
+    with pytest.raises(ValueError, match="cigar have runs without model and cost"):
+        bench.report([_row("base", 1, 1), old], "base", ["cigar"])
 
 
 def test_report_leaves_errored_reps_out_of_the_statistics() -> None:
@@ -187,7 +209,7 @@ def test_report_leaves_errored_reps_out_of_the_statistics() -> None:
     assert stats["errored"] == 1
     assert stats["mean_input"] == stats["min_input"] == 2_000_000
     assert stats["all_passed"] is False
-    assert "| cigar | 2 | 1 | NO | 2,000,000 |" in bench.markdown(bench.report(rows, "base", ["cigar"]))
+    assert "| cigar | 2 | 1 | NO |" in bench.markdown(bench.report(rows, "base", ["cigar"]))
 
 
 def test_report_drops_an_errored_rep_once_it_reran_clean() -> None:
@@ -352,6 +374,14 @@ def test_report_command_fails_when_a_rep_failed(tmp_path: Path, capsys) -> None:
     rows[1]["passed"] = True
     (runs / "results.jsonl").write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
     assert bench.main(["--work", str(tmp_path), "report", "--base", "base", "cigar"]) == 0
+
+
+def test_report_command_names_an_arm_with_no_runs(tmp_path: Path, capsys) -> None:
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    (runs / "results.jsonl").write_text(json.dumps(_row("base", 1, 4_000_000)) + "\n", encoding="utf-8")
+    assert bench.main(["--work", str(tmp_path), "report", "--base", "base", "cigar"]) == 2
+    assert "no recorded runs for arm(s) cigar" in capsys.readouterr().err
 
 
 @pytest.mark.skipif(not Path("/bin/zsh").exists(), reason="the agent shell under test is zsh")

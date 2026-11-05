@@ -31,8 +31,11 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
+import bench_guard_cigar_long_task_claude as claude
+import bench_guard_cigar_usage as usage
 from bench_guard_cigar_long_task_report import EFFORT, FIXTURE_SHA, MODEL, markdown, report
 
 HERE = Path(__file__).resolve().parent
@@ -109,31 +112,7 @@ def rollout_path(codex_home: Path, thread_id: str) -> Path | None:
     return found[-1] if found else None
 
 
-def rollout_sum(path: Path) -> dict:
-    """Input tokens the thread spent, summed over every model request."""
-    totals = collections.Counter()
-    requests = compactions = 0
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.startswith("{"):
-            continue
-        record = json.loads(line)
-        if record.get("type") == "compacted":
-            compactions += 1
-            continue
-        if record.get("type") != "token_usage_record":
-            continue
-        usage = record.get("payload", {}).get("usage", {})
-        requests += 1
-        for key in ("input_tokens", "cached_input_tokens", "output_tokens"):
-            totals[key] += int(usage.get(key) or 0)
-    return {
-        "input_tokens": totals["input_tokens"],
-        "cached_input_tokens": totals["cached_input_tokens"],
-        "uncached_input_tokens": totals["input_tokens"] - totals["cached_input_tokens"],
-        "output_tokens": totals["output_tokens"],
-        "requests": requests,
-        "compactions": compactions,
-    }
+# Kept under its old name: the Codex ledger reader now lives with the other harnesses' readers.
 
 
 def output_breakdown(events: list[dict]) -> dict:
@@ -195,6 +174,11 @@ def fixture(work: Path) -> Path:
 
 def arm_dir(work: Path, arm: str) -> Path:
     return work / "arms" / arm
+
+
+def harness_of(arm: Path) -> str:
+    marker = arm / "harness"
+    return marker.read_text(encoding="utf-8").strip() if marker.exists() else "codex"
 
 
 def arm_init_base(work: Path) -> Path:
@@ -284,6 +268,12 @@ def passed(results: dict) -> bool:
     )
 
 
+def claude_projects() -> Path:
+    """Where Claude Code writes its transcripts under the environment claude_exec gives it."""
+    config = os.environ.get("CLAUDE_CONFIG_DIR")
+    return (Path(config).expanduser() if config else Path.home() / ".claude") / "projects"
+
+
 def agent_env(project: Path, codex_home: Path, home: Path | None, python: Path) -> dict:
     """The environment Codex and its shell commands get, the same for every arm.
 
@@ -296,7 +286,9 @@ def agent_env(project: Path, codex_home: Path, home: Path | None, python: Path) 
     zdot = python.parent.parent.parent / "zdot"
     zdot.mkdir(exist_ok=True)
     (zdot / ".zshenv").write_text("", encoding="utf-8")
-    (zdot / ".zprofile").write_text(f'export PATH="{python.parent}:$PATH"\n', encoding="utf-8")
+    # .zprofile serves Codex's login shell; .zshrc serves the snapshot Claude Code's shell sources.
+    for name in (".zprofile", ".zshrc"):
+        (zdot / name).write_text(f'export PATH="{python.parent}:$PATH"\n', encoding="utf-8")
     path = os.pathsep.join([str(python.parent), os.environ.get("PATH", "")])
     env = dict(os.environ, CODEX_HOME=str(codex_home), PYTHONPATH=str(project / "src"), PATH=path, ZDOTDIR=str(zdot))
     if home:
@@ -340,6 +332,24 @@ def codex_exec(
         raise StepError(f"codex exec exited {done.returncode}; see {out.with_suffix('.err')}")
 
 
+def claude_exec(project: Path, arm: Path, python: Path, prompt: str, session: str, resume: bool, out: Path) -> dict:
+    env = dict(agent_env(project, arm / "codex_unused", None, python), **claude.ISOLATION_ENV)
+    with out.open("w", encoding="utf-8") as stdout, out.with_suffix(".err").open("a", encoding="utf-8") as stderr:
+        try:
+            streams = {"stdin": subprocess.DEVNULL, "stdout": stdout, "stderr": stderr}
+            done = subprocess.run(
+                claude.command(arm, prompt, session, resume), cwd=project, env=env, timeout=STEP_TIMEOUT, **streams
+            )
+        except subprocess.TimeoutExpired as error:
+            raise StepError(f"claude -p timed out after {STEP_TIMEOUT}s") from error
+    if done.returncode != 0:
+        raise StepError(f"claude -p exited {done.returncode}; see {out.with_suffix('.err')}")
+    try:
+        return claude.step_result(out)
+    except RuntimeError as failure:
+        raise StepError(str(failure)) from failure
+
+
 def thread_of(events: list[dict]) -> str | None:
     for event in events:
         if event.get("type") == "thread.started":
@@ -349,11 +359,15 @@ def thread_of(events: list[dict]) -> str | None:
 
 def run_session(work: Path, arm: str, rep: int) -> dict:
     """One rep of one arm: six resumed prompts, checked after each step."""
-    codex_home = arm_dir(work, arm) / "codex_home"
-    home = arm_dir(work, arm) / "home"
-    if not (codex_home / "config.toml").exists():
-        raise SystemExit(f"arm {arm!r} has no codex_home/config.toml under {arm_dir(work, arm)}")
-    # A rep that errored (codex exec crashed or timed out) may be run again; the report leaves it out.
+    where = arm_dir(work, arm)
+    harness = harness_of(where)
+    codex_home = where / "codex_home"
+    home = where / "home"
+    if harness == "codex" and not (codex_home / "config.toml").exists():
+        raise SystemExit(f"arm {arm!r} has no codex_home/config.toml under {where}")
+    if harness == claude.HARNESS and not claude.settings_path(where).exists():
+        raise SystemExit(f"arm {arm!r} has no {claude.settings_path(where).name} under {where}")
+    # A rep that errored (the harness crashed or timed out) may be run again; the report leaves it out.
     if any(row["arm"] == arm and row["rep"] == rep and not row.get("error") for row in load_results(work)):
         raise SystemExit(f"{arm} r{rep} is already recorded under {work / 'runs'}; pick another --first-rep")
     python = work / "venv" / "bin" / "python"
@@ -361,7 +375,7 @@ def run_session(work: Path, arm: str, rep: int) -> dict:
     preflight(project, codex_home, home if home.is_dir() else None, python)
     runs = work / "runs"
     runs.mkdir(exist_ok=True)
-    thread = None
+    thread = str(uuid.uuid4()) if harness == claude.HARNESS else None
     steps = []
     all_events: list[dict] = []
     started = time.time()
@@ -377,36 +391,51 @@ def run_session(work: Path, arm: str, rep: int) -> dict:
         out = runs / f"{arm}-r{rep}-s{step}.jsonl"
         at = time.time()
         try:
-            codex_exec(project, codex_home, home if home.is_dir() else None, python, prompt, thread, out)
+            if harness == claude.HARNESS:
+                claude_exec(project, where, python, prompt, thread, step > 1, out)
+            else:
+                codex_exec(project, codex_home, home if home.is_dir() else None, python, prompt, thread, out)
         except StepError as failure:
             error = f"step {step}: {failure}"
             print(f"{arm} r{rep} s{step} FAIL {error}", flush=True)
             break
-        events = events_of(out)
-        all_events.extend(events)
-        thread = thread or thread_of(events)
-        if not thread:
-            raise RuntimeError(f"step {step}: no thread.started in {out}")
+        if harness == "codex":
+            events = events_of(out)
+            all_events.extend(events)
+            thread = thread or thread_of(events)
+            if not thread:
+                raise RuntimeError(f"step {step}: no thread.started in {out}")
         checks = check_step(python, project)
         steps.append({"step": step, "secs": round(time.time() - at), "checks": checks, "passed": passed(checks)})
         print(
             f"{arm} r{rep} s{step} {thread} {'pass' if steps[-1]['passed'] else 'FAIL'} {checks['suite']}", flush=True
         )
-    rollout = rollout_path(codex_home, thread) if thread else None
-    tokens = rollout_sum(rollout) if rollout else empty_tokens()
-    if error is None and (rollout is None or not tokens["requests"]):
-        raise RuntimeError(f"no rollout with usage records for thread {thread} under {codex_home}")
+    if harness == claude.HARNESS:
+        model = claude.MODEL
+        ledger = usage.claude_transcripts(claude_projects(), thread)
+        tokens = usage.claude_transcript(ledger) if ledger else usage.empty()
+        tool_output = claude.tool_output(ledger, kind)
+    else:
+        model = MODEL
+        rollout = rollout_path(codex_home, thread) if thread else None
+        ledger = [rollout] if rollout else []
+        tokens = usage.codex_rollout(rollout) if rollout else usage.empty()
+        tool_output = output_breakdown(all_events)
+    if error is None and not tokens["requests"]:
+        raise RuntimeError(f"no usage ledger with requests for session {thread} of arm {arm}")
     result = {
         "arm": arm,
+        "harness": harness,
         "rep": rep,
         "thread": thread,
         "secs": round(time.time() - started),
         "fixture": FIXTURE_SHA,
-        "model": MODEL,
-        "effort": EFFORT,
-        "rollout": str(rollout) if rollout else None,
+        "model": model,
+        "effort": EFFORT if harness == "codex" else None,
+        "ledger": [str(path) for path in ledger],
         "tokens": tokens,
-        "tool_output": output_breakdown(all_events),
+        "cost": usage.cost(tokens, model),
+        "tool_output": tool_output,
         "steps": steps,
         "error": error,
         "passed": error is None and len(steps) == STEPS and steps[-1]["passed"],
@@ -414,12 +443,6 @@ def run_session(work: Path, arm: str, rep: int) -> dict:
     with (runs / "results.jsonl").open("a", encoding="utf-8") as sink:
         sink.write(json.dumps(result) + "\n")
     return result
-
-
-def empty_tokens() -> dict:
-    return dict.fromkeys(
-        ("input_tokens", "cached_input_tokens", "uncached_input_tokens", "output_tokens", "requests", "compactions"), 0
-    )
 
 
 def load_results(work: Path) -> list[dict]:
@@ -434,8 +457,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--work", type=Path, required=True, help="scratch directory for fixture, arms and runs")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("fixture", help="fetch the fixture and create its venv")
-    init = commands.add_parser("arm-init", help="write the control arm's Codex home")
-    init.add_argument("arm", choices=["base"])
+    init = commands.add_parser("arm-init", help="write a control arm: Codex home or Claude Code settings")
+    init.add_argument("arm", choices=["base", "claude-base"])
     run = commands.add_parser("run", help="run reps of one arm")
     run.add_argument("--arm", required=True)
     run.add_argument("--reps", type=int, default=1)
@@ -449,14 +472,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "fixture":
         print(fixture(work))
     elif args.command == "arm-init":
-        print(arm_init_base(work))
+        print(claude.arm_init_base(arm_dir(work, args.arm)) if args.arm == "claude-base" else arm_init_base(work))
     elif args.command == "run":
         fixture(work)
         for index in range(args.first_rep, args.first_rep + args.reps):
             result = run_session(work, args.arm, index)
             print(json.dumps({"arm": args.arm, "rep": index, "passed": result["passed"], **result["tokens"]}))
     else:
-        summary = report(load_results(work), args.base, args.arms)
+        try:
+            summary = report(load_results(work), args.base, args.arms)
+        except ValueError as error:
+            print(error, file=sys.stderr)
+            return 2
         print(json.dumps(summary, indent=2) if args.json else markdown(summary))
         if not all(stats["all_passed"] for stats in summary["arms"].values()):
             print("some reps failed a check; the table is not comparable", file=sys.stderr)
