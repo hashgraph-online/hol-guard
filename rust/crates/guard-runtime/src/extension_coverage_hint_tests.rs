@@ -108,3 +108,85 @@ fn coverage_rides_on_an_allow_hint_or_stands_alone() {
         coverage
     );
 }
+
+fn observation(rule_id: &str, match_class: &str, index: u64) -> Value {
+    json!({
+        "extension_id": "command.git",
+        "rule_id": rule_id,
+        "match_class": match_class,
+        "effective_segment_indexes": [index],
+        "matcher_evidence": [{"segment_index": index, "executable": "git"}],
+    })
+}
+
+fn observed(observations: Vec<Value>) -> Value {
+    json!({"binding": {"catalog_digest": DIGEST}, "observations": observations})
+}
+
+#[test]
+fn a_rule_matched_only_as_uncertainty_is_named_as_uncertain() {
+    let hint = compute(&result(
+        observed(vec![
+            observation("command.git.push", "uncertainty", 0),
+            observation("command.git.hard-reset", "unsafe", 0),
+        ]),
+        Value::Null,
+    ))
+    .unwrap();
+    let step = &hint["segments"][0];
+    assert_eq!(
+        step["rule_ids"],
+        json!(["command.git.push", "command.git.hard-reset"])
+    );
+    assert_eq!(step["uncertain_rule_ids"], json!(["command.git.push"]));
+}
+
+#[test]
+fn a_rule_that_also_matched_plainly_is_not_uncertain() {
+    let hint = compute(&result(
+        observed(vec![
+            observation("command.git.push", "uncertainty", 0),
+            observation("command.git.push", "unsafe", 0),
+            observation("command.git.push", "uncertainty", 1),
+        ]),
+        Value::Null,
+    ))
+    .unwrap();
+    assert!(hint["segments"][0].get("uncertain_rule_ids").is_none());
+    assert_eq!(
+        hint["segments"][1]["uncertain_rule_ids"],
+        json!(["command.git.push"])
+    );
+}
+
+#[test]
+fn validation_keeps_uncertain_ids_only_when_they_name_matched_rules() {
+    let stored = |uncertain: Value| {
+        json!({
+            "schema": EXTENSION_COVERAGE_HINT_SCHEMA,
+            "catalog_digest": DIGEST,
+            "segments": [{
+                "index": 0,
+                "executable": "git",
+                "extension_ids": ["command.git"],
+                "rule_ids": ["command.git.push"],
+                "permission_ids": [],
+                "uncertain_rule_ids": uncertain,
+            }],
+        })
+    };
+    let kept = validated(&stored(json!(["command.git.push"]))).unwrap();
+    assert_eq!(
+        kept["segments"][0]["uncertain_rule_ids"],
+        json!(["command.git.push"])
+    );
+    // A hint stored before the key existed, or with nothing uncertain.
+    for absent in [Value::Null, json!([])] {
+        let checked = validated(&stored(absent)).unwrap();
+        assert!(checked["segments"][0].get("uncertain_rule_ids").is_none());
+    }
+    // An id the step never matched, or not a catalog id, is not this hint.
+    assert_eq!(validated(&stored(json!(["command.git.hard-reset"]))), None);
+    assert_eq!(validated(&stored(json!(["push"]))), None);
+    assert_eq!(validated(&stored(json!("command.git.push"))), None);
+}

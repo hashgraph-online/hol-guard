@@ -20,12 +20,18 @@ const MAX_SEGMENT_IDS: usize = 12;
 const MAX_SEGMENT_TOTAL: usize = 256;
 const MAX_SEGMENT_INDEX: u64 = 255;
 const ID_KEYS: [&str; 3] = ["extension_ids", "rule_ids", "permission_ids"];
+/// The rules a step matched only as uncertainty: the matcher could not read
+/// that part well enough to rule the rule in or out. Optional, and a subset of
+/// `rule_ids`, so a hint stored before it existed still validates.
+const UNCERTAIN_KEY: &str = "uncertain_rule_ids";
 
 /// One covered step, keyed by its segment index.
 #[derive(Default)]
 struct Segment {
     executable: Option<String>,
     ids: [Vec<String>; 3],
+    uncertain: Vec<String>,
+    certain: Vec<String>,
 }
 
 impl Segment {
@@ -38,6 +44,28 @@ impl Segment {
                 self.ids[key].push(value.to_owned());
             }
         }
+    }
+
+    fn mark(&mut self, rule_id: Option<&str>, uncertain: bool) {
+        let Some(rule_id) = rule_id else {
+            return;
+        };
+        let list = if uncertain {
+            &mut self.uncertain
+        } else {
+            &mut self.certain
+        };
+        if !list.iter().any(|id| id == rule_id) {
+            list.push(rule_id.to_owned());
+        }
+    }
+
+    /// Rules this step matched as uncertainty and never as a plain match.
+    fn uncertain_only(&self) -> Vec<&String> {
+        self.uncertain
+            .iter()
+            .filter(|id| !self.certain.contains(id))
+            .collect()
     }
 }
 
@@ -151,10 +179,15 @@ pub(crate) fn compute(result: &Map<String, Value>) -> Option<Value> {
                 continue;
             };
             let owned = catalog_id(observation.get(owned_key));
+            let uncertain =
+                observation.get("match_class").and_then(Value::as_str) == Some("uncertainty");
             for (index, named) in evidence_segments(observation) {
                 let segment = segments.entry(index).or_default();
                 segment.record(named, 0, Some(extension_id));
                 segment.record(named, id_key, owned);
+                if id_key == 1 {
+                    segment.mark(owned, uncertain);
+                }
             }
         }
     }
@@ -175,7 +208,11 @@ pub(crate) fn compute(result: &Map<String, Value>) -> Option<Value> {
                 let mut fields = Map::new();
                 fields.insert("index".to_owned(), json!(index));
                 fields.insert("executable".to_owned(), json!(segment.executable));
-                for (key, ids) in ID_KEYS.iter().zip(segment.ids) {
+                let uncertain = segment.uncertain_only();
+                if !uncertain.is_empty() {
+                    fields.insert(UNCERTAIN_KEY.to_owned(), json!(uncertain));
+                }
+                for (key, ids) in ID_KEYS.iter().zip(&segment.ids) {
                     fields.insert((*key).to_owned(), json!(ids));
                 }
                 Value::Object(fields)
@@ -227,6 +264,20 @@ fn validated_segment(value: &Value) -> Option<(u64, Value)> {
             .map(|item| catalog_id(Some(item)))
             .collect::<Option<Vec<_>>>()?;
         checked.insert(key.to_owned(), json!(ids));
+    }
+    match segment.get(UNCERTAIN_KEY) {
+        None | Some(Value::Null) => {}
+        Some(raw) => {
+            let rule_ids = checked.get("rule_ids").and_then(Value::as_array)?;
+            let uncertain = raw
+                .as_array()?
+                .iter()
+                .map(|item| catalog_id(Some(item)).filter(|_| rule_ids.contains(item)))
+                .collect::<Option<Vec<_>>>()?;
+            if !uncertain.is_empty() {
+                checked.insert(UNCERTAIN_KEY.to_owned(), json!(uncertain));
+            }
+        }
     }
     let has_extension = checked
         .get("extension_ids")

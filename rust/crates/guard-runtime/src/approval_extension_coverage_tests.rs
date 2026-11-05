@@ -97,7 +97,19 @@ fn every_step_is_labelled_from_the_catalog() {
                         "name": catalog.get("command.git").expect("git").name,
                         "focus_rule_id": RESET_RULE,
                     }],
-                    "rules": [{"rule_id": RESET_RULE, "title": rule.title, "severity": rule.severity}],
+                    "rules": [{
+                        "rule_id": RESET_RULE,
+                        "title": rule.title,
+                        "severity": rule.severity,
+                        "description": bounded(&rule.description, MAX_TEXT_CHARS),
+                        "safer_alternatives": rule
+                            .safer_alternatives
+                            .iter()
+                            .filter_map(|text| bounded(text, MAX_TEXT_CHARS))
+                            .take(MAX_SAFER_ALTERNATIVES)
+                            .collect::<Vec<_>>(),
+                        "uncertain": false,
+                    }],
                     "permissions": [],
                 },
                 {
@@ -237,4 +249,35 @@ fn the_resident_op_answers_a_coverage_query_from_its_catalog() {
     assert_eq!(answer(Value::Null), None);
     let wire = serde_json::to_value(request(json!({}))).expect("wire");
     assert_eq!(wire["query"], json!({"kind": "coverage", "hint": {}}));
+}
+
+#[test]
+fn a_matched_rule_carries_its_catalog_text() {
+    let catalog = catalog();
+    let coverage = coverage(&hint(vec![git(0)], Some(1)), &catalog).expect("coverage");
+    let (_, rule) = catalog.get_rule(RESET_RULE).expect("reset rule");
+    let entry = &coverage["segments"][0]["rules"][0];
+    assert!(entry["description"].is_string(), "{entry}");
+    assert_eq!(
+        entry["description"],
+        json!(bounded(&rule.description, MAX_TEXT_CHARS))
+    );
+    let safer = entry["safer_alternatives"].as_array().expect("safer");
+    assert!(safer.len() <= MAX_SAFER_ALTERNATIVES, "{entry}");
+    assert!(safer.iter().all(|text| text
+        .as_str()
+        .is_some_and(|text| text.chars().count() <= MAX_TEXT_CHARS)));
+    assert_eq!(entry["uncertain"], json!(false));
+}
+
+#[test]
+fn an_uncertain_rule_is_marked_for_the_card() {
+    let catalog = catalog();
+    let mut step = git(0);
+    step["uncertain_rule_ids"] = json!([RESET_RULE]);
+    let coverage = coverage(&hint(vec![step], Some(1)), &catalog).expect("coverage");
+    assert_eq!(
+        coverage["segments"][0]["rules"][0]["uncertain"],
+        json!(true)
+    );
 }

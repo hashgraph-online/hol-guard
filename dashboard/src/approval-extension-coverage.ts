@@ -40,13 +40,34 @@ function normalizeExtension(raw: unknown): GuardCoveredExtension | null {
   return { extension_id: extensionId, name, focus_rule_id: focus };
 }
 
+const MAX_RULE_TEXT = 240;
+const MAX_SAFER_ALTERNATIVES = 2;
+
 function normalizeRule(raw: unknown): GuardCoveredRule | null {
   if (!isRecord(raw)) return null;
   const ruleId = catalogId(raw.rule_id);
-  const title = boundedText(raw.title, 120);
+  const title = raw.title === null || raw.title === undefined ? null : boundedText(raw.title, 120);
   const severity = boundedText(raw.severity, 32);
-  if (ruleId === null || title === null || severity === null) return null;
-  return { rule_id: ruleId, title, severity };
+  if (ruleId === null || severity === null) return null;
+  if (raw.title !== null && raw.title !== undefined && title === null) return null;
+  const rule: { -readonly [K in keyof GuardCoveredRule]: GuardCoveredRule[K] } = { rule_id: ruleId, title, severity };
+  // Fields a newer daemon adds. Absent is an older daemon; present with the
+  // wrong type is not the payload the daemon builds.
+  if (raw.description !== undefined) {
+    if (raw.description !== null && typeof raw.description !== "string") return null;
+    rule.description = boundedText(raw.description, MAX_RULE_TEXT);
+  }
+  if (raw.safer_alternatives !== undefined) {
+    if (!Array.isArray(raw.safer_alternatives)) return null;
+    const safer = raw.safer_alternatives.map((item) => boundedText(item, MAX_RULE_TEXT));
+    if (safer.some((item) => item === null)) return null;
+    rule.safer_alternatives = (safer as string[]).slice(0, MAX_SAFER_ALTERNATIVES);
+  }
+  if (raw.uncertain !== undefined) {
+    if (typeof raw.uncertain !== "boolean") return null;
+    rule.uncertain = raw.uncertain;
+  }
+  return rule;
 }
 
 function normalizePermission(raw: unknown): GuardCoveredPermission | null {
@@ -114,7 +135,7 @@ export function coverageStepLabel(segment: GuardCoveredSegment): string {
 
 /** What a step is covered by, named once. */
 export function segmentDetail(segment: GuardCoveredSegment): string | null {
-  const titles = segment.rules.map((rule) => rule.title);
+  const titles = segment.rules.flatMap((rule) => (rule.title === null ? [] : [rule.title]));
   const labels = segment.permissions.filter((permission) => permission.configurable).map((item) => item.label);
   // A permission is often named after its extension, and the link beside it
   // already shows that name.

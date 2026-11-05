@@ -17,9 +17,12 @@ use std::collections::HashSet;
 use guard_command::native_command_catalog::CommandCatalog;
 use serde_json::{json, Value};
 
+use crate::approval_extension_recommendation_op::{bounded, MAX_TEXT_CHARS};
 use crate::extension_coverage_hint;
 
 const COVERAGE_SCHEMA: &str = "guard.approval-extension-coverage.v1";
+/// Safer alternatives shown per matched rule on the review card.
+const MAX_SAFER_ALTERNATIVES: usize = 2;
 /// The dashboard renders this many steps; delivering more would store and
 /// send a payload whose tail nothing shows.
 const MAX_DELIVERED_SEGMENTS: usize = 12;
@@ -89,11 +92,28 @@ fn covered_segment(segment: &Value, catalog: &CommandCatalog) -> Option<Value> {
         .into_iter()
         .filter(|permission_id| !handed_off.contains(permission_id))
         .collect();
+    let uncertain: HashSet<&str> = ids(segment, "uncertain_rule_ids").into_iter().collect();
+    // The rule's own catalog text, so the card can say what matched in the
+    // catalog's words. `uncertain` marks a rule the matcher could not rule in
+    // or out for this step: the card must not describe it as what the step does.
     let rules: Vec<Value> = rule_ids
         .iter()
         .filter_map(|rule_id| {
             catalog.get_rule(rule_id).map(|(_, rule)| {
-                json!({"rule_id": rule_id, "title": rule.title, "severity": rule.severity})
+                let safer: Vec<String> = rule
+                    .safer_alternatives
+                    .iter()
+                    .filter_map(|text| bounded(text, MAX_TEXT_CHARS))
+                    .take(MAX_SAFER_ALTERNATIVES)
+                    .collect();
+                json!({
+                    "rule_id": rule_id,
+                    "title": rule.title,
+                    "severity": rule.severity,
+                    "description": bounded(&rule.description, MAX_TEXT_CHARS),
+                    "safer_alternatives": safer,
+                    "uncertain": uncertain.contains(rule_id),
+                })
             })
         })
         .collect();
