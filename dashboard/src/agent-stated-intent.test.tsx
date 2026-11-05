@@ -101,6 +101,19 @@ function requestWith(
   assert(intent?.text === "Clean the build output", "falls back to justification");
   assert(intent?.field === "justification", "reports the justification field");
 }
+for (const toolName of ["exec_command", "functions.exec_command"]) {
+  const intent = resolveAgentStatedIntent(
+    requestWith(
+      { harness: "codex", tool_name: toolName },
+      { cmd: "rm -rf build", justification: "Clean the build output" },
+    ),
+  );
+  assert(intent?.text === "Clean the build output", `reads justification under ${toolName}`);
+}
+assert(
+  resolveAgentStatedIntent(requestWith({ tool_name: "functions.search" }, { query: "x", description: "Notes" })) === null,
+  "the functions namespace does not admit other tools",
+);
 
 // Package scripts run through the shell tool keep the line too.
 assert(
@@ -146,15 +159,23 @@ assert(
   assert(resolveAgentStatedIntent(request)?.text === "Run the unit tests", "reads toolInput under run_shell_command");
 }
 
-// A JSON-string input is chosen the way Core chooses it.
+// A JSON-string input is never shown: Core redacts it as encoded text, so an
+// escaped secret would appear once decoded. Inputs are still chosen the way
+// Core chooses them.
 {
   const withRaw = (raw: Record<string, unknown>) =>
     requestWith({ raw_payload_redacted: { tool_name: "Bash", ...raw } });
   const objectInput = { command: "npm test", description: "Second input's line" };
   assert(
-    resolveAgentStatedIntent(withRaw({ tool_input: JSON.stringify({ command: "ls", description: "First input's line" }) }))
-      ?.text === "First input's line",
-    "a JSON-string tool_input is parsed",
+    resolveAgentStatedIntent(withRaw({ tool_input: JSON.stringify({ command: "ls", description: "First input's line" }) })) ===
+      null,
+    "a JSON-string tool_input is not shown",
+  );
+  assert(
+    resolveAgentStatedIntent(
+      withRaw({ tool_input: '{"command":"git push --force origin main","description":"sk-\\u0061bcdefgh"}' }),
+    ) === null,
+    "an escaped token in a JSON-string input is not decoded onto the card",
   );
   assert(
     resolveAgentStatedIntent(withRaw({ tool_input: JSON.stringify({ command: "ls" }), toolInput: objectInput })) === null,
@@ -184,7 +205,7 @@ assert(resolveAgentStatedIntent(requestWith({}, { command: "ls", description: " 
 // Control characters and bidi overrides cannot hide or reorder the quote.
 {
   const intent = resolveAgentStatedIntent(
-    requestWith({}, { command: "ls", description: "List\nfiles‮  gnihton\u0007 here" }),
+    requestWith({}, { command: "ls", description: "List\nfiles‮  gnihton\u0007 here\u061c" }),
   );
   assert(intent?.text === "List files gnihton here", `unsafe characters are removed: ${JSON.stringify(intent?.text)}`);
 }

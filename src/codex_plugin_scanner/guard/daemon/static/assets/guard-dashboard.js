@@ -31948,11 +31948,13 @@ const SHELL_TOOL_NAMES = /* @__PURE__ */ new Set([
   "terminal",
   "run_command",
   "run_terminal_command",
-  "run_shell_command"
+  "run_shell_command",
+  "exec_command"
 ]);
+const CODEX_TOOL_NAMESPACE = "functions.";
 const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"];
 const UNSAFE_CHARACTERS = new RegExp(
-  "[\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
+  "[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
   "g"
 );
 function resolveAgentStatedIntent(item) {
@@ -31968,7 +31970,7 @@ function resolveAgentStatedIntent(item) {
   }
   const raw = recordValue(envelope.raw_payload_redacted);
   const toolName = envelope.tool_name ?? (typeof raw?.tool_name === "string" ? raw.tool_name : null);
-  if (toolName === null || !SHELL_TOOL_NAMES.has(toolName.trim().toLowerCase())) {
+  if (toolName === null || !SHELL_TOOL_NAMES.has(shellToolName(toolName))) {
     return null;
   }
   const toolInput = firstToolInput(raw);
@@ -32010,12 +32012,15 @@ function firstToolInput(raw) {
     } catch {
       return null;
     }
-    const parsedInput = recordValue(parsed);
-    if (parsedInput !== null) {
-      return parsedInput;
+    if (recordValue(parsed) !== null) {
+      return null;
     }
   }
   return null;
+}
+function shellToolName(toolName) {
+  const name = toolName.trim().toLowerCase();
+  return name.startsWith(CODEX_TOOL_NAMESPACE) ? name.slice(CODEX_TOOL_NAMESPACE.length) : name;
 }
 function recordValue(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
