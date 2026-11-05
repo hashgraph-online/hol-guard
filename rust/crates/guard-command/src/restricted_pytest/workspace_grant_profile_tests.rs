@@ -230,3 +230,45 @@ fn collection_lists_both_roots_before_the_budget_limits_descent() {
     assert_eq!(targets, vec![outside.join("root")]);
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+#[cfg(unix)]
+fn collection_walks_a_skipped_directory_the_command_names() {
+    let root = std::env::temp_dir().join(format!(
+        "guard-collection-selected-{}-{}",
+        std::process::id(),
+        crate::unique_nanos::unique_nanos()
+    ));
+    let workspace = root.join("worktree");
+    let outside = root.join("outside");
+    for directory in [
+        workspace.join("build/tests"),
+        outside.join("named"),
+        outside.join("unnamed"),
+        outside.join("beyond"),
+    ] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let workspace = workspace.canonicalize().unwrap();
+    let outside = outside.canonicalize().unwrap();
+    std::fs::create_dir_all(workspace.join("dist")).unwrap();
+    std::os::unix::fs::symlink(outside.join("named"), workspace.join("build/tests/link")).unwrap();
+    std::os::unix::fs::symlink(outside.join("unnamed"), workspace.join("dist/link")).unwrap();
+    std::os::unix::fs::symlink(outside.join("beyond"), outside.join("named/link")).unwrap();
+    let mut value = input("pytest-readonly-v2", &[]);
+    value.workspace = workspace.clone();
+    value.cwd = workspace.clone();
+    value.command = [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "build/tests::test_x",
+        "../outside",
+    ]
+    .map(String::from)
+    .to_vec();
+    let targets = collection_link_metadata(&value).unwrap();
+    assert_eq!(targets, vec![outside.join("named")]);
+    std::fs::remove_dir_all(&root).unwrap();
+}

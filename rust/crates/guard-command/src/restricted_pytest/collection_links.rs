@@ -34,6 +34,26 @@ pub(super) fn collection_link_metadata(
     walk(input, COLLECTION_ENTRY_BUDGET)
 }
 
+/// A directory named on the command line is collected even when its name is
+/// one pytest skips by default (`pytest build/tests`), so each argument that
+/// resolves to a directory inside the workspace is walked as a root too.
+fn selected_directories(input: &Input) -> Vec<PathBuf> {
+    let Ok(workspace) = input.workspace.canonicalize() else {
+        return vec![];
+    };
+    input
+        .command
+        .iter()
+        .skip(1)
+        .filter(|argument| !argument.starts_with('-'))
+        .filter_map(|argument| {
+            let path = argument.split("::").next().unwrap_or(argument);
+            input.cwd.join(path).canonicalize().ok()
+        })
+        .filter(|path| path.is_dir() && path.starts_with(&workspace))
+        .collect()
+}
+
 /// The walk is breadth-first and always lists the workspace and cwd in full,
 /// so the budget only limits how far it descends. Links at either root keep
 /// their grants however large the tree below them is.
@@ -49,11 +69,12 @@ pub(super) fn walk(
     };
     let patterns: Vec<Regex> = patterns().iter().map(|p| Regex::new(p).unwrap()).collect();
     let mut targets = BTreeSet::new();
-    let mut pending: VecDeque<(PathBuf, usize, bool)> =
-        BTreeSet::from([input.workspace.clone(), input.cwd.clone()])
-            .into_iter()
-            .map(|directory| (directory, 0, true))
-            .collect();
+    let mut roots = BTreeSet::from([input.workspace.clone(), input.cwd.clone()]);
+    roots.extend(selected_directories(input));
+    let mut pending: VecDeque<(PathBuf, usize, bool)> = roots
+        .into_iter()
+        .map(|directory| (directory, 0, true))
+        .collect();
     let mut visited = BTreeSet::new();
     while let Some((directory, depth, required)) = pending.pop_front() {
         if !visited.insert(directory.clone()) {
