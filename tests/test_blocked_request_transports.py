@@ -7,7 +7,9 @@ from typing import Any
 
 import pytest
 
+from codex_plugin_scanner.guard.cli import render
 from codex_plugin_scanner.guard.cli.protect_approvals import _queue_local_protect_approvals
+from codex_plugin_scanner.guard.cli.protect_output import _protect_payload_for_human_output
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy, OpenCodeMcpGuardProxy, runtime_mcp
@@ -56,6 +58,38 @@ def test_local_package_denial_preserves_receipt_and_exposes_decision_wait(tmp_pa
     assert payload["approval_resume"]["request_id"] == request_id
     assert payload["approval_requests"] == []
     assert_silent_review_recorded(store)
+
+
+def test_local_package_denial_prints_signed_link_to_the_queued_request(tmp_path, capsys):
+    context = _context(tmp_path)
+    context.guard_home.chmod(0o700)
+    token_path = context.guard_home / "daemon-auth-token"
+    token_path.write_text("synthetic-daemon-token", encoding="utf-8")
+    token_path.chmod(0o600)
+    payload = _pending_package_payload()
+    store = GuardStore(context.guard_home)
+    _queue_local_protect_approvals(
+        payload,
+        store=store,
+        guard_home=context.guard_home,
+        workspace=context.workspace_dir,
+        ensure_approval_daemon=_unexpected_prompt,
+        approval_delivery_payload=_unexpected_prompt,
+        localize_pending_approval_copy=_unexpected_prompt,
+    )
+    request = store.list_approval_requests(status="pending")[0]
+    assert payload["supply_chain_evaluation"]["user_copy"]["dashboard_url"] == request["approval_url"]
+
+    render.emit_guard_payload(
+        "protect",
+        _protect_payload_for_human_output(payload, guard_home=context.guard_home),
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert f"{request['approval_url']}#guard-token=gld1." in output
+    assert request["request_id"] in output
+    assert "synthetic-daemon-token" not in output
 
 
 def test_local_package_malformed_config_stays_blocked(tmp_path):

@@ -11,6 +11,7 @@ from typing import Any
 
 from ..action_lattice import is_guard_action
 from ..adapters.base import HarnessContext
+from ..approval_hook_copy import authenticated_approval_review_url
 from ..approvals import approval_center_hint, attach_primary_approval_link, queue_blocked_approvals
 from ..config import load_guard_config
 from ..models import GuardAction, GuardArtifact, HarnessDetection
@@ -81,8 +82,15 @@ def _queue_local_protect_approvals(
         verdict = response_payload.get("verdict")
         reason = verdict.get("reason") if isinstance(verdict, dict) else None
         guidance = safe_alternative_reason(str(reason or "HOL Guard blocked this package request."))
+        review_url: str | None = None
         if queued:
             request_id = str(queued[0]["request_id"])
+            # The queued request's own page, so the agent can hand the user a
+            # link that opens it. Human output signs the loopback link; without
+            # a daemon token it cannot, and the copy keeps the wait guidance alone.
+            queued_url = _optional_string(queued[0].get("approval_url"))
+            if queued_url and authenticated_approval_review_url(queued_url, guard_home=guard_home):
+                review_url = queued_url
             guidance = safe_alternative_reason(
                 str(reason or "HOL Guard blocked this package request."),
                 reason_code=str(plan["review_reason_code"]),
@@ -102,7 +110,7 @@ def _queue_local_protect_approvals(
                 **(user_copy if isinstance(user_copy, dict) else {}),
                 "harness_message": guidance,
                 "next_step": guidance,
-                "dashboard_url": None,
+                "dashboard_url": review_url,
             }
         return
     artifact = _protect_request_artifact(response_payload, workspace=workspace, plan=plan)
