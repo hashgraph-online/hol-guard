@@ -405,13 +405,22 @@ fn base<'a>(
 /// Guard enforces a bundle without Extension semantics again: a bundle that
 /// failed validation and now passes, for example from last-good. Guard keeps
 /// climbing it toward applied instead of reporting the failure forever.
-fn recovering(effective: &Obj, stored: &Obj) -> bool {
+///
+/// Only an acknowledgement of this same bundle on this device climbs: a
+/// stored failure of another bundle (cached bundle B fails while Guard falls
+/// back to last-good A) is kept as reported, never restarted for A.
+fn recovering(effective: &Obj, stored: &Obj, device_id: &str) -> bool {
     !stored.contains_key("deliveryId")
         && stored.get("contractVersion").and_then(Value::as_str) == Some(CONTRACT)
         && matches!(
             stored.get("status").and_then(Value::as_str),
             Some("failed" | "offline" | "received" | "validated")
         )
+        && stored.get("deviceId").and_then(Value::as_str) == Some(device_id)
+        && GENERIC_IDENTITY_KEYS
+            .iter()
+            .filter(|field| **field != "deviceId")
+            .all(|field| py_eq_opt(stored.get(*field), effective.get(*field)))
         && !has_extension_semantics(effective)
 }
 
@@ -433,7 +442,7 @@ pub(crate) fn effective_ack(request: &EffectiveRequest) -> Result<Obj, String> {
     if !activating {
         if let Some(stored) = request
             .stored
-            .filter(|stored| recovering(request.effective, stored))
+            .filter(|stored| recovering(request.effective, stored, request.device_id))
         {
             return ack_payload(&base(request, request.device_id, Some(stored), None));
         }

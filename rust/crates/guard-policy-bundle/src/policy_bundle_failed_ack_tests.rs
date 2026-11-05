@@ -297,6 +297,17 @@ fn retained_bundle_climbs_past_a_stored_failure() {
 }
 
 #[test]
+fn retained_bundle_keeps_the_stored_failure_of_another_bundle() {
+    let mut other = generic_ack(2, "failed", json!("wrong_workspace"));
+    other["bundleVersion"] = json!(9);
+    other["bundleHash"] = json!(format!("sha256:{}", "2".repeat(64)));
+    assert_eq!(retained(other.clone()), other);
+    let mut foreign_device = generic_ack(2, "failed", json!("wrong_workspace"));
+    foreign_device["deviceId"] = json!("dev-2");
+    assert_eq!(retained(foreign_device.clone()), foreign_device);
+}
+
+#[test]
 fn retained_bundle_keeps_a_stored_applied_acknowledgement() {
     let applied = generic_ack(4, "applied", Value::Null);
     assert_eq!(retained(applied.clone()), applied);
