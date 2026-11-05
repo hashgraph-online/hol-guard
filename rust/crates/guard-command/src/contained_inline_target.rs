@@ -23,7 +23,15 @@ pub(crate) fn inline_shell_target(text: &str) -> Option<String> {
     }
     // Brace expansion is a Bash rewrite of the arguments: `bash -ec 'python3
     // build.py {fast,full}'` passes two words where a POSIX shell passes one,
-    // so a script holding a brace stays whole.
+    // so a script holding a brace stays whole. `~+`, `~-` and `~N` are Bash
+    // directory-stack words a POSIX shell leaves as text, so they stay whole
+    // too.
     crate::command_parse_surface::inline_shell_script_text(&request)
-        .filter(|script| !script.contains(['{', '}']))
+        .filter(|script| !script.contains(['{', '}']) && !has_bash_only_tilde(script))
+}
+
+fn has_bash_only_tilde(script: &str) -> bool {
+    script.split('~').skip(1).any(|after| {
+        after.starts_with(['+', '-']) || after.starts_with(|c: char| c.is_ascii_digit())
+    })
 }

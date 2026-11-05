@@ -331,6 +331,9 @@ fn contained_target_reads_a_bounded_inline_shell_as_its_script() {
         "bash -ec 'pytest -q | tee log'",
         "bash -c 'pytest \"$X\"'",
         "bash -ec 'python3 build.py {fast,full}'",
+        "bash -ec 'python3 build.py ~+'",
+        "bash -ec 'python3 build.py ~-/out'",
+        "bash -ec 'python3 build.py ~1'",
         "pytest -q",
     ] {
         let input = json!({ "text": text });
