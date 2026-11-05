@@ -3229,7 +3229,7 @@ function platformLabel(platform2) {
   return chip2 ? name + " · " + chip2 : name;
 }
 const sentence = (text2) => text2.charAt(0).toUpperCase() + text2.slice(1);
-function describe$1(id2, installations, selected) {
+function describe(id2, installations, selected) {
   if (!id2) return "Not set up yet";
   if (installations === null) return "Looking up version details";
   if (!selected) return "Picked, but not found on this computer";
@@ -3244,7 +3244,7 @@ function CigarRuntimeSelection(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-x-6 gap-y-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-[1_1_16rem]", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-body font-medium text-brand-dark", children: "CIGAR version" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-brand-dark/80", children: describe$1(id2, props.installations ?? null, selected) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-brand-dark/80", children: describe(id2, props.installations ?? null, selected) }),
         selected ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption mt-0.5 text-slate-500", children: sentence(installationLabel(selected.qualification)) }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
@@ -4198,7 +4198,7 @@ const list = (value, max, item) => {
   return value;
 };
 const place = (row2) => object$6(row2) && text(row2.label) && text(row2.path);
-const size = (value) => Number.isSafeInteger(value) && value >= 0;
+const size$1 = (value) => Number.isSafeInteger(value) && value >= 0;
 function invalid$4() {
   throw new ContextAssistanceApiError("folder_payload_invalid", "Guard returned an unexpected folder list. Try again.");
 }
@@ -4245,15 +4245,15 @@ async function listFolders(path, hidden, signal) {
 }
 async function listProjectFiles(workspace, path, signal) {
   const body = await browse({ mode: "files", workspace, path }, signal);
-  if (!text(body.workspace) || !text(body.path) || !size(body.max_file_bytes) || typeof body.truncated !== "boolean") invalid$4();
+  if (!text(body.workspace) || !text(body.path) || !size$1(body.max_file_bytes) || typeof body.truncated !== "boolean") invalid$4();
   return {
     workspace: body.workspace,
     path: body.path,
     maxFileBytes: body.max_file_bytes,
     truncated: body.truncated,
     entries: list(body.entries, 400, (row2) => object$6(row2) && text(row2.name) && text(row2.relative)),
-    files: list(body.files, 400, (row2) => object$6(row2) && text(row2.name) && text(row2.relative) && size(row2.size) && typeof row2.available === "boolean" && (row2.reason === null || ["too_large", "not_text", "empty"].includes(String(row2.reason)))),
-    suggested: list(body.suggested, 8, (row2) => object$6(row2) && text(row2.relative) && size(row2.size))
+    files: list(body.files, 400, (row2) => object$6(row2) && text(row2.name) && text(row2.relative) && size$1(row2.size) && typeof row2.available === "boolean" && (row2.reason === null || ["too_large", "not_text", "empty"].includes(String(row2.reason)))),
+    suggested: list(body.suggested, 8, (row2) => object$6(row2) && text(row2.relative) && size$1(row2.size))
   };
 }
 function folderCrumbs(path, separator) {
@@ -7619,54 +7619,40 @@ async function call(init, signal) {
 function readCodexLean(signal) {
   return call({ method: "GET" }, signal);
 }
-function saveCodexLean(enabled, proof, signal) {
+function removeCodexLean(proof, signal) {
   return call({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-    enabled,
+    enabled: false,
     ...proof?.currentPassword ? { approval_password: proof.currentPassword } : {},
     ...proof?.totpCode ? { approval_totp_code: proof.totpCode } : {}
   }) }, signal);
 }
-const LIMIT = 3e4;
 function message(cause) {
   return cause instanceof ContextAssistanceApiError ? cause.message : "Guard could not reach your Codex config. Refresh and try again.";
 }
-function describe(state, loading) {
-  if (loading && !state) return "Checking your Codex config…";
-  if (state?.state === "yours") {
-    const limit = typeof state.limit === "number" ? state.limit.toLocaleString() : "its own value";
-    return `Your Codex config already sets its own limit (${limit} tokens). Guard leaves it as it is.`;
-  }
-  return `Codex sums up older turns once a session passes ${LIMIT.toLocaleString()} tokens, instead of carrying the whole conversation. Works with or without CIGAR and saves right away.`;
+function size(state) {
+  return typeof state.limit === "number" ? `${state.limit.toLocaleString()} tokens` : "a set size";
 }
 function CodexLeanSessions({ gate, disabled }) {
   const [state, setState] = reactExports.useState(null);
-  const [loading, setLoading] = reactExports.useState(true);
   const [saving, setSaving] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
   const [proof, setProof] = reactExports.useState(null);
-  const [attempt, setAttempt] = reactExports.useState(0);
   const demo = isGuardDemoMode();
   reactExports.useEffect(() => {
     if (demo) return;
     const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    readCodexLean(controller.signal).then(setState, (cause) => {
-      if (!controller.signal.aborted) setError(message(cause));
-    }).finally(() => {
-      if (!controller.signal.aborted) setLoading(false);
-    });
+    readCodexLean(controller.signal).then(setState, () => void 0);
     return () => controller.abort();
-  }, [demo, attempt]);
-  async function save(enabled, credentials) {
+  }, [demo]);
+  async function remove(credentials) {
     setSaving(true);
     setError(null);
     try {
-      setState(await saveCodexLean(enabled, credentials));
+      setState(await removeCodexLean(credentials));
       setProof(null);
     } catch (cause) {
       if (cause instanceof ContextAssistanceApiError && cause.code.startsWith("approval")) {
-        setProof({ enabled, error: credentials ? "That approval did not work. Try again." : null });
+        setProof({ error: credentials ? "That approval did not work. Try again." : null });
       } else {
         setProof(null);
         setError(message(cause));
@@ -7675,28 +7661,29 @@ function CodexLeanSessions({ gate, disabled }) {
       setSaving(false);
     }
   }
-  function change(enabled) {
-    if (gate?.enabled) setProof({ enabled, error: null });
-    else void save(enabled);
-  }
-  if (demo) return null;
-  const yours = state?.state === "yours";
+  if (demo || state?.state !== "on") return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(SettingsFormSection, { title: "Long Codex sessions", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        SettingsToggleRow,
-        {
-          label: "Keep long Codex sessions lean",
-          checked: state?.state === "on",
-          description: describe(state, loading),
-          disabled: disabled || saving || loading || yours || state === null,
-          onChange: change
-        }
-      ),
-      error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3 py-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "guard-settings-caption text-amber-800", children: error }),
-        state === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: () => setAttempt((n) => n + 1), children: "Try again" }) : null
-      ] }) : null
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(SettingsFormSection, { title: "Codex summary size", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 py-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "guard-settings-caption max-w-prose", children: [
+          "An earlier version of Guard set Codex to sum up long sessions once they pass ",
+          size(state),
+          ". That keeps the chat short but can raise your bill, because Codex then reads files again."
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActionButton,
+          {
+            variant: "outline",
+            disabled: disabled || saving,
+            onClick: () => {
+              if (gate?.enabled) setProof({ error: null });
+              else void remove();
+            },
+            children: saving ? "Removing…" : "Remove"
+          }
+        )
+      ] }),
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "guard-settings-caption pb-3 text-amber-800", children: error }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       SettingsSaveProofModal,
@@ -7704,14 +7691,14 @@ function CodexLeanSessions({ gate, disabled }) {
         open: proof !== null,
         mode: "verify-save",
         gate,
-        title: proof?.enabled === false ? "Approve turning off lean Codex sessions" : "Approve lean Codex sessions",
-        detail: proof?.enabled === false ? "Guard removes the limit it added to your Codex config. A limit you set yourself stays." : `Guard adds model_auto_compact_token_limit = ${LIMIT} to your Codex config. Turn the switch off to remove it again.`,
-        confirmLabel: proof?.enabled === false ? "Turn off" : "Turn on",
+        title: "Approve removing the Codex summary size",
+        detail: "Guard removes the size it added to your Codex config. A size you set yourself stays.",
+        confirmLabel: "Remove",
         error: proof?.error ?? null,
         pending: saving,
         onCancel: () => setProof(null),
         onConfirm: (credentials) => {
-          if (proof) void save(proof.enabled, { currentPassword: credentials.currentPassword, totpCode: credentials.totpCode });
+          void remove({ currentPassword: credentials.currentPassword, totpCode: credentials.totpCode });
         }
       }
     )
