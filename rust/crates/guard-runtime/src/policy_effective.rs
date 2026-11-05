@@ -436,8 +436,7 @@ fn run(request: Request) -> Result<Map<String, Value>, Fail> {
             let policy = compose(&request.configs, request.guard_config, request.observed)?;
             body.insert("policy".into(), policy);
         }
-        // A publication: the composed policy plus the direct-lane views its
-        // binding carries, both from the same loaded configs.
+        // The composed policy plus the direct-lane views its binding carries.
         "publish" => {
             if !request.guard_config || request.configs.is_empty() {
                 return Err(POLICY_INVALID);
@@ -493,7 +492,6 @@ fn evaluate(bytes: &[u8]) -> Result<Vec<u8>, String> {
 
 #[path = "policy_effective_observed.rs"]
 mod observed;
-
 #[path = "policy_effective_views.rs"]
 mod views;
 

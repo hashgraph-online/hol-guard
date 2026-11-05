@@ -36,10 +36,15 @@ def _install(monkeypatch: pytest.MonkeyPatch, reply: object, *, status: object |
     seen: list[dict[str, Any]] = []
     monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_: status or _status())
 
-    def run(path: Path, args: tuple[str, ...], *, input_text: str, timeout_seconds: float) -> str | None:
+    def run(
+        path: Path, args: tuple[str, ...], *, input_text: str, timeout_seconds: float, output_limit: int
+    ) -> str | None:
         assert args == (client.POLICY_EFFECTIVE_COMMAND, "--stdin")
         assert 0 < timeout_seconds <= client.POLICY_EFFECTIVE_TIMEOUT_SECONDS
-        seen.append(json.loads(input_text))
+        request = json.loads(input_text)
+        views = client._PUBLISH_VIEW_BYTES if request["op"] == "publish" else 0
+        assert output_limit == native_runtime._MAX_RESPONSE_BYTES + views
+        seen.append(request)
         return reply if isinstance(reply, str) or reply is None else json.dumps(reply)
 
     monkeypatch.setattr(native_runtime, "_run_native_process", run)
@@ -171,7 +176,7 @@ def test_same_path_with_a_new_digest_recomputes(monkeypatch: pytest.MonkeyPatch)
             capabilities=SimpleNamespace(features=(client.POLICY_EFFECTIVE_FEATURE,)),
         )
 
-    def run(_path: Path, _args: tuple[str, ...], *, input_text: str, timeout_seconds: float) -> str:
+    def run(_path: Path, _args: tuple[str, ...], *, input_text: str, timeout_seconds: float, output_limit: int) -> str:
         assert input_text
         assert timeout_seconds > 0
         return json.dumps(next(policies))

@@ -31,6 +31,9 @@ POLICY_EFFECTIVE_SCHEMA = "guard-effective-policy.v1"
 POLICY_EFFECTIVE_TIMEOUT_SECONDS = 10.0
 _UNAVAILABLE = "native_policy_effective_unavailable"
 _INVALID = "native_policy_effective_invalid"
+# A publication adds up to six bound harness views of at most 256 KiB each to
+# a composed policy that alone may fill the default reply cap.
+_PUBLISH_VIEW_BYTES = 2 * 1024 * 1024
 # The composer is a pure function of one binary and its request. An unchanged
 # request against that same digest must not respawn the runtime.
 _MEMO_LIMIT = 32
@@ -96,7 +99,7 @@ def _call(
     observed: Mapping[str, object] | None = None,
     deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
-    from .native_runtime import _run_native_process
+    from .native_runtime import _MAX_RESPONSE_BYTES, _run_native_process
 
     request: dict[str, object] = {
         "schema": POLICY_EFFECTIVE_SCHEMA,
@@ -130,7 +133,11 @@ def _call(
     if remaining <= 0:
         raise NativePolicySnapshotError(_UNAVAILABLE)
     output = _run_native_process(
-        path, (POLICY_EFFECTIVE_COMMAND, "--stdin"), input_text=text, timeout_seconds=remaining
+        path,
+        (POLICY_EFFECTIVE_COMMAND, "--stdin"),
+        input_text=text,
+        timeout_seconds=remaining,
+        output_limit=_MAX_RESPONSE_BYTES + (_PUBLISH_VIEW_BYTES if op == "publish" else 0),
     )
     if output is None:
         raise NativePolicySnapshotError(_UNAVAILABLE)
