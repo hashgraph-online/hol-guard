@@ -175,6 +175,14 @@ fn prove(
     {
         return false;
     }
+    // A step that only prints rides along a chain whose Git reads carry the
+    // proof. On its own it reads nothing of the new checkout, so entering
+    // the checkout and then only listing it keeps the review it had.
+    let reads_git = segments[first..].iter().any(|segment| {
+        let name = segment.executable.as_deref().map(super::super::executable_basename);
+        segment.pipeline_index == 0 && matches!(name, Some("git" | "gh"))
+    });
+    let inert_allowed = reads_git && search_path_is_absolute(execution_environment);
     let mut links = Vec::new();
     (first..segments.len()).all(|index| {
         let joined = super::separator_between(model, index - 1, index);
@@ -193,13 +201,16 @@ fn prove(
             return super::chain_route::stdin_stage(segment, repository, execution_environment);
         }
         if entered {
-            return super::chain_route::unrouted_read(
+            if super::chain_route::unrouted_read(
                 model,
                 index,
                 repository,
                 deadline,
                 execution_environment,
-            );
+            ) {
+                return true;
+            }
+            return inert_allowed && inert_step(segment) && resolved_outside(segment, &destination);
         }
         if segment.executable.as_deref() == Some("mkdir") {
             return proven_mkdir(segment, &destination, context);
@@ -229,6 +240,55 @@ fn prove(
             execution_environment,
         )
     })
+}
+
+/// Whether every entry of the search path the command runs with is
+/// absolute. Once the `cd` has entered the new checkout a relative entry
+/// names one of its folders, whose contents come from the ref it checks
+/// out, so a bare program name after the `cd` could run what that ref
+/// supplies.
+fn search_path_is_absolute(
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    let Some(search_path) = execution_environment
+        .map(|environment| std::ffi::OsString::from(&environment.path))
+        .or_else(|| std::env::var_os("PATH"))
+    else {
+        return false;
+    };
+    std::env::split_paths(&search_path).all(|directory| directory.is_absolute())
+}
+
+/// A relative path after the `cd` names a file of the new checkout, which
+/// the ref supplies. A bare name uses the search path, which
+/// [`search_path_is_absolute`] screens. The add refuses an existing
+/// destination, so an absolute path that resolves now names a program
+/// outside it; one that does not resolve could only come from the checkout.
+fn resolved_outside(later: &CommandSegmentV1, destination: &Path) -> bool {
+    later.executable.as_deref().is_some_and(|value| {
+        !value.contains(['/', '\\'])
+            || (Path::new(value).is_absolute()
+                && std::fs::canonicalize(value)
+                    .is_ok_and(|resolved| !resolved.starts_with(destination)))
+    })
+}
+
+/// A step that only reads and prints writes no configuration, ref or hook a
+/// later Git read in the checkout could pick up, so it leaves the
+/// destination proof standing. `cd`, `pushd` and `popd` would move those
+/// reads out of the checkout the proof answers for, and `rg` runs a
+/// caller-chosen program through `--pre`. A bare name resolves on the
+/// search path, which [`search_path_is_absolute`] screens, never inside the
+/// new checkout.
+fn inert_step(later: &CommandSegmentV1) -> bool {
+    later.executable.as_deref().is_some_and(|value| {
+        super::super::executable_basename(value) == value
+            && !matches!(value, "cd" | "pushd" | "popd" | "rg")
+    }) && later.environment_names.is_empty()
+        && later.wrapper_chain.is_empty()
+        && !later.path_overridden
+        && !super::super::control_flow_flatten::command_word_changes_shell_state(&later.text)
+        && super::super::search::grep::creates_nothing(later)
 }
 
 /// A `mkdir` the write screens admit that creates nothing in or below the
@@ -423,10 +483,7 @@ fn entered_checkout(
     // After the `cd` the shell looks up `git` and `gh` again, and a relative
     // search path entry then names a folder of the new checkout, whose
     // contents come from the ref it checks out.
-    let search_path = execution_environment
-        .map(|environment| std::ffi::OsString::from(&environment.path))
-        .or_else(|| std::env::var_os("PATH"))?;
-    if !std::env::split_paths(&search_path).all(|directory| directory.is_absolute()) {
+    if !search_path_is_absolute(execution_environment) {
         return None;
     }
     let is = |segment: &CommandSegmentV1, names: &[&str]| {
@@ -456,41 +513,10 @@ fn entered_checkout(
             .as_deref()
             .map(str::trim)
             .is_some_and(|separator| matches!(separator, "&&" | ";"));
-        // A relative path after the `cd` names a file of the new checkout,
-        // which the ref supplies. A bare name uses the search path checked
-        // above. The add refuses an existing destination, so an absolute
-        // path that resolves now names a program outside it; one that does
-        // not resolve could only come from the checkout.
-        let resolved_outside = |later: &CommandSegmentV1| {
-            later.executable.as_deref().is_some_and(|value| {
-                !value.contains(['/', '\\'])
-                    || (Path::new(value).is_absolute()
-                        && std::fs::canonicalize(value)
-                            .is_ok_and(|resolved| !resolved.starts_with(&destination)))
-            })
-        };
-        // A step that only reads and prints writes no configuration, ref or
-        // hook a later Git read in the checkout could pick up, so it leaves
-        // the destination proof standing. `cd`, `pushd` and `popd` would move
-        // those reads out of the checkout the proof answers for, and `rg`
-        // runs a caller-chosen program through `--pre`. A bare name resolves
-        // on the search path checked above, never inside the new checkout.
-        let inert_step = |later: &CommandSegmentV1| {
-            later.executable.as_deref().is_some_and(|value| {
-                super::super::executable_basename(value) == value
-                    && !matches!(value, "cd" | "pushd" | "popd" | "rg")
-            }) && later.environment_names.is_empty()
-                && later.wrapper_chain.is_empty()
-                && !later.path_overridden
-                && !super::super::control_flow_flatten::command_word_changes_shell_state(
-                    &later.text,
-                )
-                && super::super::search::grep::creates_nothing(later)
-        };
         // A later pipeline stage reads only what the step before it prints:
         // a bounded `head`, `tail` or `wc` with no path of its own.
         let rest_is_git = model.segments[after + 1..].iter().all(|later| {
-            resolved_outside(later)
+            resolved_outside(later, &destination)
                 && (is(later, &["git", "gh"])
                     || inert_step(later)
                     || (later.pipeline_index > 0
