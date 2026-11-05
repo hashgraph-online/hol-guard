@@ -51923,6 +51923,19 @@
       "cwd": "worktree",
       "expect": "allow",
       "requires_sandbox": true
+    },
+    {
+      "id": "claude-code-heredoc-commit-message",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add docs/notes.md && git commit -m \"$(cat <<'EOF'\nAdd notes\n\nExplain the retry window.\nEOF\n)\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
     }
   ],
   "mcp_cases": [
