@@ -247,10 +247,7 @@ class _DashboardRecordsReadRoutes:
         if parsed.path == "/v1/read-state":
             self._write_json({"ids": store.get_read_state()})
             return True
-        if parsed.path in m._ROOT_STATIC_FILES:
-            self._write_static_asset(parsed.path.removeprefix("/"))
-            return True
-        if parsed.path.startswith("/assets/") or parsed.path.startswith("/brand/"):
+        if m._is_public_static_path(parsed.path):
             self._write_static_asset(parsed.path.removeprefix("/"))
             return True
         if self._is_dashboard_route(parsed.path):
