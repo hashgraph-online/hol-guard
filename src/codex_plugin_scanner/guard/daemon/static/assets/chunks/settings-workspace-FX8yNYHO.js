@@ -3,7 +3,7 @@ import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRe
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
 import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-CFbrhi6J.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-BJqRCi0R.js";
-import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-COVyR5Cd.js";
+import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-hR3eI7UO.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
   if (typeof count2 === "number" && count2 > 0) {
@@ -2742,7 +2742,7 @@ const CLOUD_BASE_PATH_PATTERN = /^(?:\/[a-z0-9-]{1,32})?$/;
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function text$1(value, pattern) {
+function text$2(value, pattern) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -2750,17 +2750,17 @@ function text$1(value, pattern) {
   return trimmed;
 }
 function moment(value) {
-  const raw = text$1(value);
+  const raw = text$2(value);
   return raw !== null && Number.isFinite(Date.parse(raw)) ? raw : null;
 }
 const NOT_CHECKED = { state: "not_checked", checkedAt: null, stale: false, message: null };
 function normalizeCheck(value) {
   if (!isRecord(value) || value["state"] === "not_checked" || !isRecord(value["service"])) return NOT_CHECKED;
   const service = value["service"];
-  const state = text$1(service["state"], /^[a-z_]{1,40}$/);
+  const state = text$2(service["state"], /^[a-z_]{1,40}$/);
   if (state === null) return NOT_CHECKED;
   const checkedAt = moment(value["checked_at"]);
-  const message2 = text$1(service["message"]);
+  const message2 = text$2(service["message"]);
   return {
     state,
     checkedAt,
@@ -2769,18 +2769,18 @@ function normalizeCheck(value) {
   };
 }
 function cloudBase(value, cloudUrl) {
-  const base = text$1(value);
+  const base = text$2(value);
   if (base === null || cloudUrl === null || !base.startsWith(cloudUrl)) return null;
   return CLOUD_BASE_PATH_PATTERN.test(base.slice(cloudUrl.length)) ? base : null;
 }
 function normalizeConnection(value) {
-  const site = text$1(value["site"], SITE_PATTERN);
-  const reported = text$1(value["cloud_url"], CLOUD_URL_PATTERN);
+  const site = text$2(value["site"], SITE_PATTERN);
+  const reported = text$2(value["cloud_url"], CLOUD_URL_PATTERN);
   const cloudUrl = reported !== null && site !== null && reported.replace(/^https?:\/\//, "") === site ? reported : null;
   const setting = value["state"];
   return {
     setting: setting === "on" || setting === "off" ? setting : "unknown",
-    workspace: text$1(value["workspace"], WORKSPACE_PATTERN),
+    workspace: text$2(value["workspace"], WORKSPACE_PATTERN),
     site,
     cloudBaseUrl: cloudBase(value["cloud_base_url"], cloudUrl),
     check: normalizeCheck(value["check"])
@@ -2884,8 +2884,8 @@ function elapsedCopy(seconds) {
 function cloudActionsCheckedCopy(check, now, staleAfterSeconds) {
   if (check.checkedAt === null) return "Not checked yet";
   const seconds = Math.max(0, (now.getTime() - Date.parse(check.checkedAt)) / 1e3);
-  const when = `Checked ${elapsedCopy(seconds)}`;
-  return check.stale || seconds > staleAfterSeconds ? `${when}. This answer may be out of date.` : when;
+  const when2 = `Checked ${elapsedCopy(seconds)}`;
+  return check.stale || seconds > staleAfterSeconds ? `${when2}. This answer may be out of date.` : when2;
 }
 function cloudActionsRetryAfterSeconds(nextCheckAllowedAt, now) {
   if (nextCheckAllowedAt === null) return 0;
@@ -3869,7 +3869,7 @@ function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate, s
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const id$4 = (value) => typeof value === "string" && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 const digest$1 = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
-const count$2 = (value, max) => Number.isSafeInteger(value) && value >= 0 && value <= max;
+const count$3 = (value, max) => Number.isSafeInteger(value) && value >= 0 && value <= max;
 const documents = (value) => Array.isArray(value) && value.length <= 32 && value.every((item) => record(item) && id$4(item.id) && item.id.startsWith("note:") && item.start_line === 1 && typeof item.text === "string" && item.text.length <= 16384) && value.reduce((total, item) => total + item.text.length, 0) <= 16384;
 function invalid$5() {
   throw new ContextAssistanceApiError("proposal_payload_invalid", "Guard returned incompatible shared-note data. Refresh the proposal list.");
@@ -3881,7 +3881,7 @@ async function listContextProposals(scopeId, signal) {
   const result = await ask("workspace", { action: "proposals", scope_id: scopeId }, void 0, signal);
   const scope = parseContextScope(result.scope);
   const permitted = ["guard:policy", "guard:receipts", ...scope.sources.map((source) => source.source_id)];
-  if (scope.scope_id !== scopeId || scope.sharing?.notes.read !== true || !Array.isArray(result.proposals) || result.proposals.length > 32 || !result.proposals.every((item) => common(item) && count$2(item.documents, 32) && count$2(item.bytes, 16384) && Object.keys(item.basis).every((source) => permitted.includes(source)))) invalid$5();
+  if (scope.scope_id !== scopeId || scope.sharing?.notes.read !== true || !Array.isArray(result.proposals) || result.proposals.length > 32 || !result.proposals.every((item) => common(item) && count$3(item.documents, 32) && count$3(item.bytes, 16384) && Object.keys(item.basis).every((source) => permitted.includes(source)))) invalid$5();
   return result.proposals;
 }
 async function loadContextProposal(scopeId, proposalId, signal) {
@@ -4085,7 +4085,7 @@ function ContextNotesPanel({ scope, disabled, gate, onChanged }) {
     )
   ] });
 }
-const object$7 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const object$8 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 async function saveCigarPreference(config, proof, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Turning on CIGAR requires a local Guard installation.");
   const timeout = AbortSignal.timeout(12e3);
@@ -4102,11 +4102,11 @@ async function saveCigarPreference(config, proof, signal) {
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const code = object$7(body) && typeof body.error === "string" && /^[a-z0-9_]{1,160}$/.test(body.error) ? body.error : "settings_unavailable";
-    throw new ContextAssistanceApiError(code, response.status === 400 && object$7(body) && typeof body.message === "string" ? "Guard could not save this setting: " + body.message.slice(0, 200) : response.status === 403 ? "Guard needs your approval before this change." : "Guard did not confirm the saved setting. Refresh status before trying again.");
+    const code = object$8(body) && typeof body.error === "string" && /^[a-z0-9_]{1,160}$/.test(body.error) ? body.error : "settings_unavailable";
+    throw new ContextAssistanceApiError(code, response.status === 400 && object$8(body) && typeof body.message === "string" ? "Guard could not save this setting: " + body.message.slice(0, 200) : response.status === 403 ? "Guard needs your approval before this change." : "Guard did not confirm the saved setting. Refresh status before trying again.");
   }
-  const saved = object$7(body) && object$7(body.settings) ? body.settings.context_assistance : null;
-  if (!object$7(saved) || saved.schema_version !== 1 || typeof saved.enabled !== "boolean" || typeof saved.runtime_id !== "string") {
+  const saved = object$8(body) && object$8(body.settings) ? body.settings.context_assistance : null;
+  if (!object$8(saved) || saved.schema_version !== 1 || typeof saved.enabled !== "boolean" || typeof saved.runtime_id !== "string") {
     throw new ContextAssistanceApiError("settings_payload_invalid", "Guard returned settings this page does not understand. Refresh status.");
   }
   return saved;
@@ -4191,13 +4191,13 @@ function CigarAllowFilesButton({ allow, className, caption: caption2 }) {
     allow.error && !allow.proofOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "cigar-allow-error", children: allow.error }) : caption2 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: caption2 }) : null
   ] });
 }
-const object$6 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-const text = (value) => typeof value === "string";
+const object$7 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const text$1 = (value) => typeof value === "string";
 const list = (value, max, item) => {
   if (!Array.isArray(value) || value.length > max || !value.every(item)) invalid$4();
   return value;
 };
-const place = (row2) => object$6(row2) && text(row2.label) && text(row2.path);
+const place = (row2) => object$7(row2) && text$1(row2.label) && text$1(row2.path);
 const size = (value) => Number.isSafeInteger(value) && value >= 0;
 function invalid$4() {
   throw new ContextAssistanceApiError("folder_payload_invalid", "Guard returned an unexpected folder list. Try again.");
@@ -4221,15 +4221,15 @@ async function browse(input, signal) {
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const code = object$6(body) && text(body.code) && /^[a-z0-9_]{1,80}$/.test(body.code) ? body.code : "folder_unavailable";
+    const code = object$7(body) && text$1(body.code) && /^[a-z0-9_]{1,80}$/.test(body.code) ? body.code : "folder_unavailable";
     throw new ContextAssistanceApiError(code, MESSAGES[code] ?? (response.status === 404 ? "This Guard version cannot browse folders yet. Update Guard, then try again." : "Guard could not open that folder."));
   }
-  if (!object$6(body) || body.schema !== "guard-context-folders.v1") invalid$4();
+  if (!object$7(body) || body.schema !== "guard-context-folders.v1") invalid$4();
   return body;
 }
 async function listFolders(path, hidden, signal) {
   const body = await browse({ mode: "folders", ...path ? { path } : {}, hidden }, signal);
-  if (!text(body.path) || !text(body.name) || !(body.parent === null || text(body.parent)) || typeof body.project !== "boolean" || !text(body.home) || !text(body.separator) || typeof body.truncated !== "boolean") invalid$4();
+  if (!text$1(body.path) || !text$1(body.name) || !(body.parent === null || text$1(body.parent)) || typeof body.project !== "boolean" || !text$1(body.home) || !text$1(body.separator) || typeof body.truncated !== "boolean") invalid$4();
   return {
     path: body.path,
     name: body.name,
@@ -4240,20 +4240,20 @@ async function listFolders(path, hidden, signal) {
     truncated: body.truncated,
     places: list(body.places, 32, place),
     roots: list(body.roots, 26, place),
-    entries: list(body.entries, 400, (row2) => object$6(row2) && text(row2.name) && text(row2.path) && typeof row2.project === "boolean")
+    entries: list(body.entries, 400, (row2) => object$7(row2) && text$1(row2.name) && text$1(row2.path) && typeof row2.project === "boolean")
   };
 }
 async function listProjectFiles(workspace, path, signal) {
   const body = await browse({ mode: "files", workspace, path }, signal);
-  if (!text(body.workspace) || !text(body.path) || !size(body.max_file_bytes) || typeof body.truncated !== "boolean") invalid$4();
+  if (!text$1(body.workspace) || !text$1(body.path) || !size(body.max_file_bytes) || typeof body.truncated !== "boolean") invalid$4();
   return {
     workspace: body.workspace,
     path: body.path,
     maxFileBytes: body.max_file_bytes,
     truncated: body.truncated,
-    entries: list(body.entries, 400, (row2) => object$6(row2) && text(row2.name) && text(row2.relative)),
-    files: list(body.files, 400, (row2) => object$6(row2) && text(row2.name) && text(row2.relative) && size(row2.size) && typeof row2.available === "boolean" && (row2.reason === null || ["too_large", "not_text", "empty"].includes(String(row2.reason)))),
-    suggested: list(body.suggested, 8, (row2) => object$6(row2) && text(row2.relative) && size(row2.size))
+    entries: list(body.entries, 400, (row2) => object$7(row2) && text$1(row2.name) && text$1(row2.relative)),
+    files: list(body.files, 400, (row2) => object$7(row2) && text$1(row2.name) && text$1(row2.relative) && size(row2.size) && typeof row2.available === "boolean" && (row2.reason === null || ["too_large", "not_text", "empty"].includes(String(row2.reason)))),
+    suggested: list(body.suggested, 8, (row2) => object$7(row2) && text$1(row2.relative) && size(row2.size))
   };
 }
 function folderCrumbs(path, separator) {
@@ -5585,6 +5585,169 @@ function ExploreRow({ icon, title, text: text2, onClick }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true", className: "cigar-explore-arrow" })
   ] }) });
 }
+const PATH$1 = "/v1/context-assistance/usage";
+const USAGE_FIELDS = ["uncached_input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "requests", "compactions"];
+const object$6 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const count$2 = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
+const text = (v) => v === null || typeof v === "string";
+function totals(v) {
+  return object$6(v) && USAGE_FIELDS.every((field) => count$2(v[field]));
+}
+function tool(v) {
+  return object$6(v) && typeof v.harness === "string" && count$2(v.sessions) && totals(v.totals) && Array.isArray(v.recent) && v.recent.every((s) => object$6(s) && typeof s.last_active === "string" && text(s.model) && text(s.folder) && totals(s.totals));
+}
+function parseUsageMeter(body) {
+  if (!object$6(body) || body.state !== "ready" && body.state !== "counting" && body.state !== "unavailable" || !count$2(body.window_days) || !Array.isArray(body.today) || !body.today.every(tool) || !Array.isArray(body.week) || !body.week.every(tool) || !Array.isArray(body.unread) || !body.unread.every((name) => typeof name === "string")) {
+    throw new ContextAssistanceApiError("usage_payload_invalid", "Guard returned usage numbers this page does not understand.");
+  }
+  return body;
+}
+async function readUsageMeter(signal) {
+  const timeout = AbortSignal.timeout(12e3);
+  const response = await fetchWithGuardAuth(PATH$1, { method: "GET", cache: "no-store", signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ContextAssistanceApiError("usage_unavailable", "Guard could not read usage right now. Try again in a moment.");
+  return parseUsageMeter(body);
+}
+const NAMES = {
+  codex: "Codex",
+  "claude-code": "Claude Code",
+  copilot: "Copilot",
+  cursor: "Cursor",
+  gemini: "Gemini",
+  opencode: "OpenCode",
+  pi: "Pi"
+};
+const ROWS = [
+  ["uncached_input_tokens", "Input at full price"],
+  ["cached_input_tokens", "Input read from cache"],
+  ["cache_write_tokens", "Input written to cache"],
+  ["output_tokens", "Output"],
+  ["requests", "Model requests"],
+  ["compactions", "Chat summaries"]
+];
+const POLL_MS$1 = 3e3;
+const exact = new Intl.NumberFormat();
+const compact = new Intl.NumberFormat(void 0, { notation: "compact", maximumFractionDigits: 1 });
+function usageNumber(value) {
+  return value >= 1e6 ? compact.format(value) : exact.format(value);
+}
+function listNames(names) {
+  const shown = names.map((name) => NAMES[name] ?? name);
+  return shown.length > 1 ? shown.slice(0, -1).join(", ") + " or " + shown[shown.length - 1] : shown.join("");
+}
+function when(stamp) {
+  const moment2 = new Date(stamp);
+  return Number.isNaN(moment2.getTime()) ? stamp : moment2.toLocaleString(void 0, { weekday: "short", hour: "numeric", minute: "2-digit" });
+}
+function Cell({ value }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("td", { title: exact.format(value), children: usageNumber(value) });
+}
+function ToolCard({ week, today, days }) {
+  const name = NAMES[week.harness] ?? week.harness;
+  if (!week.sessions) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "cigar-card cigar-usage-card", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: name }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+        "No sessions in the last ",
+        days,
+        " days."
+      ] })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "cigar-card cigar-usage-card", "aria-label": name + " usage", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { children: [
+      name,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        exact.format(week.sessions),
+        " ",
+        week.sessions === 1 ? "session" : "sessions"
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "cigar-usage-table", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Kind" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", children: "Today" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("th", { scope: "col", children: [
+          "Last ",
+          days,
+          " days"
+        ] })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: ROWS.map(([field, label2]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "row", children: label2 }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Cell, { value: today?.totals[field] ?? 0 }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Cell, { value: week.totals[field] })
+      ] }, field)) })
+    ] }),
+    week.recent.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "cigar-usage-recent", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Latest sessions" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { children: week.recent.map((session, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: session.folder ?? "Unknown folder" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: [session.model, when(session.last_active)].filter(Boolean).join(" · ") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          exact.format(session.totals.requests),
+          " requests · ",
+          usageNumber(session.totals.uncached_input_tokens),
+          " input at full price · ",
+          usageNumber(session.totals.output_tokens),
+          " output"
+        ] })
+      ] }, index)) })
+    ] }) : null
+  ] });
+}
+function CigarUsagePanel() {
+  const [meter, setMeter] = reactExports.useState(null);
+  const [error, setError] = reactExports.useState(null);
+  const [attempt, setAttempt] = reactExports.useState(0);
+  const demo = isGuardDemoMode();
+  reactExports.useEffect(() => {
+    if (demo) return;
+    const controller = new AbortController();
+    let timer;
+    setError(null);
+    const load = () => readUsageMeter(controller.signal).then((next) => {
+      setMeter(next);
+      if (next.state === "counting") timer = setTimeout(load, POLL_MS$1);
+    }, (cause) => {
+      if (controller.signal.aborted) return;
+      setError(cause instanceof ContextAssistanceApiError ? cause.message : "Guard could not read usage right now. Try again in a moment.");
+    });
+    void load();
+    return () => {
+      controller.abort();
+      if (timer) clearTimeout(timer);
+    };
+  }, [demo, attempt]);
+  if (demo) return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Usage is not shown in the demo" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "On your computer this tab lists what each AI app used." })
+  ] });
+  if (error || meter?.state === "unavailable") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", role: "alert", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Usage could not be read" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error ?? "Guard could not read the usage records on this computer." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: () => setAttempt((n) => n + 1), children: "Try again" })
+    ] });
+  }
+  if (!meter || meter.state === "counting") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", role: "status", "aria-live": "polite", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Counting your usage…" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "The first count reads every session from the last week, so a long history can take a minute." })
+    ] });
+  }
+  const today = new Map(meter.today.map((tool2) => [tool2.harness, tool2]));
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-usage", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-usage-grid", children: meter.week.map((tool2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ToolCard, { week: tool2, today: today.get(tool2.harness), days: meter.window_days }, tool2.harness)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-usage-foot", children: "Input read from cache is billed at a fraction of the full input price. A chat summary is when the app shortens the conversation so it can keep going." }),
+    meter.unread.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-usage-foot", children: [
+      "Guard does not read usage records from ",
+      listNames(meter.unread),
+      ", so they are not shown here."
+    ] }) : null
+  ] });
+}
 function CigarTutorials(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-walkthroughs", "aria-labelledby": "cigar-tutorials-heading", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-intro", children: [
@@ -5753,6 +5916,10 @@ function CigarSections(props) {
           props.controls
         ] }),
         tab === "versions" ? props.versions : null,
+        tab === "usage" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Usage", children: "What each AI app on this computer used, read from the app's own records. Guard does not estimate these numbers, and they count with CIGAR on or off." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CigarUsagePanel, {})
+        ] }) : null,
         tab === "access" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Projects", children: "CIGAR already finds the project each AI app is open in. Add a project here only to choose exactly which files it reads. Your choice counts for every app." }),
           !status?.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-note", children: cigarWaking(status) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [

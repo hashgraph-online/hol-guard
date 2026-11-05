@@ -128,7 +128,7 @@ for (const width of [1440, 790, 390, 320]) {
     await expect(page.getByRole("heading", { name: "Give your AI the right pages, not the whole book.", exact: true })).toBeVisible();
     await expect(page.locator(".cigar-home-detail strong")).toHaveText("CIGAR is off.");
     await expect(page.getByRole("button", { name: "Turn on CIGAR", exact: true })).toBeEnabled();
-    await expect(workspace.getByRole("tab")).toHaveCount(6);
+    await expect(workspace.getByRole("tab")).toHaveCount(7);
     await expect(page.getByRole("tab", { name: "Home", exact: true })).toHaveAttribute("aria-selected", "true");
     for (const name of ["How it works", "Works in your apps", "You stay in charge", "Go further"])
       await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
@@ -405,4 +405,60 @@ test("the guide explains CIGAR in plain words and links to the deeper sections",
   await page.getByRole("button", { name: "Choose a version in Updates", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Updates", exact: true })).toHaveAttribute("aria-selected", "true");
   expect(writes(calls)).toEqual([]);
+});
+
+const usageTotals = (scale: number) => ({ uncached_input_tokens: 1200 * scale, cached_input_tokens: 2_500_000 * scale, cache_write_tokens: 0,
+  output_tokens: 300 * scale, requests: 4 * scale, compactions: scale > 1 ? 1 : 0 });
+const usageWeek = { harness: "codex", sessions: 2, totals: usageTotals(5), recent: [
+  { last_active: "2026-11-05T10:15:00-05:00", model: "gpt-test", folder: "my-app", totals: usageTotals(3) },
+  { last_active: "2026-11-04T09:00:00-05:00", model: null, folder: null, totals: usageTotals(2) }] };
+const emptyTool = (harness: string) => ({ harness, sessions: 0, totals: usageTotals(0), recent: [] });
+const usageReady = { schema: "guard-context-usage-meter.v1", state: "ready", window_days: 7,
+  today: [{ ...usageWeek, sessions: 1, totals: usageTotals(1), recent: [] }, emptyTool("claude-code")],
+  week: [usageWeek, emptyTool("claude-code")], unread: ["copilot", "cursor", "gemini", "opencode", "pi"] };
+
+for (const width of [1440, 390]) {
+  test("Usage shows each app's own numbers after counting, with no guesses, at " + width + "px", async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const calls = await fixture(page);
+    let reads = 0;
+    await page.route("**/v1/context-assistance/usage", async (route) => {
+      reads += 1;
+      const body = reads === 1 ? { ...usageReady, state: "counting", today: [], week: [] } : usageReady;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    });
+    await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=usage");
+    await expect(page.getByRole("tab", { name: "Usage", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("Counting your usage…", { exact: true })).toBeVisible();
+    const codex = page.getByRole("article", { name: "Codex usage" });
+    await expect(codex).toBeVisible({ timeout: 10_000 });
+    await expect(codex.getByRole("row", { name: /Input at full price/ })).toContainText("1,200");
+    await expect(codex.getByRole("row", { name: /Input at full price/ })).toContainText("6,000");
+    await expect(codex.getByRole("row", { name: /Input read from cache/ })).toContainText("12.5M");
+    await expect(codex.getByRole("row", { name: /Chat summaries/ })).toContainText("1");
+    await codex.getByText("Latest sessions", { exact: true }).click();
+    await expect(codex.getByText("my-app", { exact: true })).toBeVisible();
+    await expect(codex.getByText("Unknown folder", { exact: true })).toBeVisible();
+    await expect(page.getByText("No sessions in the last 7 days.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Guard does not read usage records from Copilot, Cursor, Gemini, OpenCode or Pi, so they are not shown here.", { exact: true })).toBeVisible();
+    await expect(page.locator(".cigar-usage")).not.toContainText("%");
+    expect(await noHorizontalScroll(page)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("cigar-usage-" + width + ".png"), fullPage: true });
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(writes(calls)).toEqual([]);
+  });
+}
+
+test("Usage says plainly when Guard cannot count, and tries again on request", async ({ page }) => {
+  await fixture(page);
+  let reads = 0;
+  await page.route("**/v1/context-assistance/usage", async (route) => {
+    reads += 1;
+    const body = reads === 1 ? { ...usageReady, state: "unavailable", today: [], week: [] } : usageReady;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=usage");
+  await expect(page.getByRole("alert")).toBeVisible();
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByRole("article", { name: "Codex usage" })).toBeVisible();
 });

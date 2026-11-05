@@ -3,6 +3,7 @@ const CIGAR_TABS = [
   { value: "access", label: "Projects" },
   { value: "runtime", label: "Settings" },
   { value: "versions", label: "Updates" },
+  { value: "usage", label: "Usage" },
   { value: "data", label: "Privacy" },
   { value: "guide", label: "Guide" }
 ];
