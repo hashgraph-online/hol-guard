@@ -1,4 +1,5 @@
 use super::*;
+use crate::context_assistance_prompt_words::MAX_TERMS;
 
 fn app(root: &Path) -> PathBuf {
     let project = root.join("todo-app");
@@ -438,4 +439,33 @@ fn a_bare_file_name_matches_that_file_in_any_folder_shortest_path_first() {
         found,
         ["tests/test_options.py", "a/b/tests/test_options.py"]
     );
+}
+
+#[test]
+fn pasted_code_still_counts_but_command_lines_do_not() {
+    let traceback =
+        "It fails:\n```\nTraceback (most recent call last):\n  File \"src/app/cli.py\", \
+                     line 3, in main\n```\nfix it";
+    assert_eq!(named(traceback), ["src/app/cli.py"]);
+    let found = terms("Fix `case_sensitive = False` in the prompt");
+    assert_eq!(found[0], "casesensitive", "{found:?}");
+    assert!(named("run `pytest -x tests/test_basic.py` after").is_empty());
+}
+
+#[test]
+fn a_named_path_is_not_taken_by_a_bare_name_for_the_same_file() {
+    let (_dir, root) = canonical();
+    let project = root.join("paths");
+    for dir in ["a", "b", "packages/z"] {
+        fs::create_dir_all(project.join(dir)).unwrap();
+        fs::write(project.join(dir).join("cli.py"), "def main():\n    pass\n").unwrap();
+    }
+    let found = candidates(
+        &project,
+        &[],
+        &[],
+        &named("Compare `cli.py` with `packages/z/cli.py`"),
+        WALK_BUDGET,
+    );
+    assert_eq!(found, ["a/cli.py", "b/cli.py", "packages/z/cli.py"]);
 }

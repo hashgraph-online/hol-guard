@@ -6,6 +6,8 @@
 //! proposes paths: each one is read again through the CIGAR source screen,
 //! which refuses secrets, keys and credential files on its own.
 use crate::context_assistance_prompt_ignore::{extend, ignored, root_chain};
+use crate::context_assistance_prompt_words::MAX_NAMED;
+pub(crate) use crate::context_assistance_prompt_words::{asks_for_tests, named, phrases, terms};
 use guard_secure_fs::{credential_directory_path, credential_named_path};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -19,15 +21,8 @@ const MAX_SCANNED_BYTES: u64 = 12 * 1024 * 1024;
 /// the scanned-bytes cap still bounds the walk.
 const MAX_FILE_BYTES: u64 = 262_144;
 const MAX_DEPTH: usize = 10;
-const MAX_TERMS: usize = 12;
-const MAX_PHRASES: usize = 4;
-/// Files the prompt names, such as `CHANGES.rst`, each standing for at most
-/// `MAX_NAMED_MATCHES` files with that name.
-const MAX_NAMED: usize = 4;
+/// Files kept per name the prompt gives.
 const MAX_NAMED_MATCHES: usize = 2;
-/// How far past an opening quote to look for its closing one, so a prompt
-/// full of unmatched quotes is still scanned in one pass.
-const MAX_PHRASE_SPAN: usize = 120;
 const WALK_BUDGET: Duration = Duration::from_millis(350);
 
 const SKIPPED_DIRS: &[&str] = &[
@@ -47,7 +42,6 @@ const SKIPPED_DIRS: &[&str] = &[
     "DerivedData",
 ];
 const TEST_DIRS: &[&str] = &["test", "tests", "__tests__", "spec", "e2e"];
-const TEST_WORDS: &[&str] = &["test", "tests", "spec", "e2e", "testing"];
 const TEXT_EXTENSIONS: &[&str] = &[
     "adoc", "astro", "c", "cc", "cjs", "clj", "cpp", "cs", "css", "dart", "erl", "ex", "exs", "go",
     "gradle", "graphql", "h", "hpp", "html", "java", "js", "json", "jsx", "kt", "kts", "less",
@@ -65,13 +59,6 @@ const SKIPPED_FILES: &[&str] = &[
     "composer.lock",
     "go.sum",
     "uv.lock",
-];
-const STOP_WORDS: &[&str] = &[
-    "about", "add", "also", "and", "any", "are", "build", "but", "can", "change", "could",
-    "create", "does", "fix", "for", "from", "get", "have", "help", "how", "into", "its", "just",
-    "let", "like", "make", "need", "new", "not", "now", "our", "please", "put", "should", "some",
-    "that", "the", "them", "then", "there", "this", "update", "use", "want", "what", "when",
-    "where", "which", "why", "will", "with", "would", "you", "your",
 ];
 
 /// The folder a hook's working directory belongs to: the nearest enclosing
@@ -101,195 +88,6 @@ pub(crate) fn project_root(cwd: &Path, home: &Path, guard_home: &Path) -> Option
         || root.components().count() < 3
         || credential_directory_path(&root);
     (!refused).then_some(root)
-}
-
-/// Lowercase words from the prompt worth looking for in paths and code.
-/// Words written like code come first, so a long prompt keeps the names it
-/// is about (`case_sensitive`, `IntRange`) over the plain words around them.
-pub(crate) fn terms(prompt: &str) -> Vec<String> {
-    let mut code: Vec<String> = Vec::new();
-    let mut plain: Vec<String> = Vec::new();
-    for (word, shaped) in words(prompt) {
-        let joined = word.replace(['-', '_'], "").to_lowercase();
-        for part in std::iter::once(joined).chain(
-            word.split(['-', '_'])
-                .filter(|_| word.contains(['-', '_']))
-                .map(str::to_lowercase),
-        ) {
-            let term = singular(&part);
-            if term.chars().count() >= 3
-                && !STOP_WORDS.contains(&term.as_str())
-                && !term.chars().all(|c| c.is_ascii_digit())
-            {
-                if shaped {
-                    code.push(term);
-                } else {
-                    plain.push(term);
-                }
-            }
-        }
-    }
-    let mut found: Vec<String> = Vec::new();
-    for term in code.into_iter().chain(plain) {
-        if found.len() >= MAX_TERMS {
-            break;
-        }
-        if !found.contains(&term) {
-            found.push(term);
-        }
-    }
-    // A request for tests counts even when it comes late in a long prompt.
-    if !asks_for_tests(&found) && prompt_mentions_tests(prompt) {
-        found.truncate(MAX_TERMS - 1);
-        found.push("test".into());
-    }
-    found
-}
-
-/// The prompt's words, each marked when it is written like code: inside
-/// backticks, dotted (`click.Choice`), snake_case or camelCase. A file name
-/// gives its name without the extension.
-fn words(prompt: &str) -> Vec<(String, bool)> {
-    let mut found = Vec::new();
-    for (span, ticked) in spans(prompt) {
-        for token in tokens(span) {
-            let token = token.trim_matches(['.', '-', '/']);
-            let token = file_name(token).map_or(token, |(stem, _)| stem);
-            let shaped = ticked || token.contains(['.', '_']) || camel(token);
-            for piece in token.split(['.', '/']).filter(|piece| !piece.is_empty()) {
-                found.push((piece.to_owned(), shaped));
-            }
-        }
-    }
-    found
-}
-
-/// The prompt's text between backticks and outside them, each marked when it
-/// was backticked. A backticked command line (`pytest -x tests`) says how to
-/// run something, not what the request is about, so it is left out.
-fn spans(prompt: &str) -> impl Iterator<Item = (&str, bool)> {
-    let parts: Vec<&str> = prompt.split('`').collect();
-    let last = parts.len() - 1;
-    parts
-        .into_iter()
-        .enumerate()
-        .map(move |(index, span)| (span, index % 2 == 1 && index < last))
-        .filter(|(span, ticked)| !(*ticked && span.trim().contains(char::is_whitespace)))
-}
-
-fn tokens(span: &str) -> impl Iterator<Item = &str> {
-    span.split(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '/')))
-}
-
-fn camel(word: &str) -> bool {
-    word.chars()
-        .zip(word.chars().skip(1))
-        .any(|(a, b)| a.is_lowercase() && b.is_uppercase())
-}
-
-/// `(stem, extension)` when `token` is a file name this search reads.
-fn file_name(token: &str) -> Option<(&str, &str)> {
-    let (stem, extension) = token.rsplit_once('.')?;
-    let base = stem.rsplit('/').next().unwrap_or(stem);
-    (!base.is_empty() && wanted_file(token.rsplit('/').next().unwrap_or(token)))
-        .then_some((stem, extension))
-}
-
-/// Files the prompt names, as typed (`CHANGES.rst`, `src/app/cli.py`).
-pub(crate) fn named(prompt: &str) -> Vec<String> {
-    let mut found: Vec<String> = Vec::new();
-    for token in spans(prompt).flat_map(|(span, _)| tokens(span)) {
-        if found.len() >= MAX_NAMED {
-            break;
-        }
-        let name = token.trim_matches(['.', '/']);
-        if !token.contains("..") && file_name(name).is_some() && !found.iter().any(|n| n == name) {
-            found.push(name.to_owned());
-        }
-    }
-    found
-}
-
-/// Which of the prompt's `named` files `relative` is, if any: the same path,
-/// or the same file name when the prompt gave no folder.
-fn named_as(relative: &str, named: &[String]) -> Option<usize> {
-    let name = relative.rsplit('/').next().unwrap_or(relative);
-    named.iter().take(MAX_NAMED).position(|wanted| {
-        if wanted.contains('/') {
-            relative.eq_ignore_ascii_case(wanted)
-                || relative
-                    .to_lowercase()
-                    .ends_with(&format!("/{}", wanted.to_lowercase()))
-        } else {
-            name.eq_ignore_ascii_case(wanted)
-        }
-    })
-}
-
-/// True when the search terms ask about tests.
-pub(crate) fn asks_for_tests(terms: &[String]) -> bool {
-    terms.iter().any(|term| TEST_WORDS.contains(&term.as_str()))
-}
-
-fn prompt_mentions_tests(prompt: &str) -> bool {
-    prompt
-        .split(|c: char| !c.is_alphanumeric())
-        .any(|word| TEST_WORDS.contains(&singular(&word.to_lowercase()).as_str()))
-}
-
-/// Text the prompt quotes, such as a label to change, lowercased. A quote
-/// opens only at the start of a word, so an apostrophe inside one ("dialog's")
-/// never pairs with a later quote.
-pub(crate) fn phrases(prompt: &str) -> Vec<String> {
-    let chars: Vec<char> = prompt.chars().collect();
-    let mut found: Vec<String> = Vec::new();
-    let mut at = 0;
-    while at < chars.len() && found.len() < MAX_PHRASES {
-        if at > 0 && chars[at - 1].is_alphanumeric() {
-            at += 1;
-            continue;
-        }
-        let close = match chars[at] {
-            '"' => '"',
-            '\u{201c}' => '\u{201d}',
-            '`' => '`',
-            '\'' => '\'',
-            _ => {
-                at += 1;
-                continue;
-            }
-        };
-        let end = chars[at + 1..]
-            .iter()
-            .take(MAX_PHRASE_SPAN)
-            .enumerate()
-            .position(|(offset, &c)| {
-                let next = chars.get(at + offset + 2);
-                (c == close || (close == '\u{201d}' && c == '"'))
-                    && (close != '\'' || next.is_none_or(|n| !n.is_alphanumeric()))
-            });
-        let Some(end) = end else {
-            at += 1;
-            continue;
-        };
-        let phrase: String = chars[at + 1..at + 1 + end].iter().collect();
-        let phrase = phrase.trim().to_lowercase();
-        if (3..=80).contains(&phrase.chars().count()) && !found.contains(&phrase) {
-            found.push(phrase);
-        }
-        at += end + 2;
-    }
-    found
-}
-
-fn singular(word: &str) -> String {
-    if word.len() > 4 && word.ends_with("ies") {
-        return format!("{}y", &word[..word.len() - 3]);
-    }
-    if word.len() > 4 && word.ends_with('s') && !word.ends_with("ss") {
-        return word[..word.len() - 1].into();
-    }
-    word.into()
 }
 
 /// What one file matched, kept until the walk ends because a word's weight
@@ -469,6 +267,27 @@ fn scores(seen: Vec<Seen>, files: usize, terms: usize, phrases: usize) -> Vec<Sc
         .collect()
 }
 
+/// Which of the prompt's `named` files `relative` is, if any. A name with a
+/// folder claims its own path first, so `cli.py` cannot take the place of
+/// `packages/z/cli.py`; a bare name matches that file name in any folder.
+fn named_as(relative: &str, named: &[String]) -> Option<usize> {
+    let name = relative.rsplit('/').next().unwrap_or(relative);
+    let lower = relative.to_lowercase();
+    let named = &named[..named.len().min(MAX_NAMED)];
+    named
+        .iter()
+        .position(|wanted| {
+            wanted.contains('/')
+                && (relative.eq_ignore_ascii_case(wanted)
+                    || lower.ends_with(&format!("/{}", wanted.to_lowercase())))
+        })
+        .or_else(|| {
+            named
+                .iter()
+                .position(|wanted| !wanted.contains('/') && name.eq_ignore_ascii_case(wanted))
+        })
+}
+
 /// Files the prompt names first, in its order and the shortest path first
 /// when a name matches several; then the rest, best first. Test files stay
 /// out when a source file matched and the prompt did not ask about tests,
@@ -527,7 +346,7 @@ pub(crate) fn test_file(relative: &str) -> bool {
         || stem == "tests"
 }
 
-fn wanted_file(name: &str) -> bool {
+pub(crate) fn wanted_file(name: &str) -> bool {
     if SKIPPED_FILES.contains(&name) || name.ends_with(".min.js") || name.ends_with(".min.css") {
         return false;
     }
