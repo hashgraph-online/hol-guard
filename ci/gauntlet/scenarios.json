@@ -818,6 +818,18 @@
       ]
     },
     {
+      "id": "omp-native-git-commit-heredoc-message",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Mark the retry window as checked with a commit whose message the shell holds in a quoted heredoc. Everything the command needs is already local, so it needs no network and no extra setup. Run the single listed command once from the project directory, wait for its real result, then tell me the commit subject.",
+      "commands": [
+        "git commit -q --allow-empty -F - <<'MSG'\nchore(report): record the retry window\nMSG"
+      ]
+    },
+    {
       "id": "omp-native-git-staged-file-listing",
       "expectation": "allow",
       "oracle": "native-tools",
