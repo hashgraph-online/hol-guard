@@ -15,7 +15,6 @@
 //! a proven `mkdir` may run between them, in the shell's own directory.
 
 use crate::{CanonicalCommandV1, CommandSegmentV1};
-use std::path::Path;
 use std::time::Instant;
 
 /// Whether the whole command is proven `origin` fetches, one proven
@@ -439,4 +438,91 @@ fn entered_checkout(
         .then_some((add, after));
     }
     None
+}
+
+/// The declarative review rules a proven chain's own steps may raise. The
+/// chain proof above constrains every segment, so a rule here can only have
+/// matched a step it proved: `command.git.worktree` the bounded add,
+/// `command.git.fetch` an `origin` fetch before it, and
+/// `command.git.checkout` or `command.git.switch` the one shape
+/// [`chain_route::new_branch_step`] admits, `-b`/`-c` with a single new
+/// branch name and nothing else.
+const RULES: &[&str] = &[
+    "command.git.worktree",
+    "command.git.fetch",
+    "command.git.checkout",
+    "command.git.switch",
+];
+
+/// Turn the catalog's generic review of a proven chain into an allow.
+///
+/// [`super::exact_safe_command`] already allows this command inside
+/// `pretool::decide`, but a packaged rule whose own mode reviews — the
+/// catalog ships `command.git.checkout` and `command.git.switch` that way —
+/// raises a floor over that allow afterwards, so a chain that creates its
+/// branch in the checkout it just made still stopped at review. Only the
+/// chain's own rules are lifted: another rule that asks for more than allow,
+/// a permission the user keeps under review, a disabled extension and any
+/// uncertain match keep their verdict.
+pub(in crate::pretool) fn settle(
+    result: &mut guard_contracts::PreToolResultV1,
+    model: Option<&CanonicalCommandV1>,
+    controls: Option<&crate::native_command_controls::CompiledNativeCommandControls>,
+    context: super::super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) {
+    if result.minimum_action != "review"
+        || !matches!(
+            result.reason_code.as_str(),
+            "native_command_review_required" | "native_command_extension_review"
+        )
+        || result.action.action_type != guard_contracts::PreToolActionTypeV1::Command
+        || result.action.sensitive_target
+    {
+        return;
+    }
+    let Some(model) = model else {
+        return;
+    };
+    let Some(extensions) = result.command_extensions.as_ref() else {
+        return;
+    };
+    if extensions.binding.uncertainty_count != 0
+        || extensions.evaluation_error.is_some()
+        || !extensions
+            .permission_observations
+            .iter()
+            .all(|observation| {
+                observation.uncertainty_reasons.is_empty()
+                    && controls.is_some_and(|controls| {
+                        controls.permission_settles_at_allow(
+                            &observation.extension_id,
+                            &observation.permission_id,
+                        )
+                    })
+            })
+        || !extensions.observations.iter().all(|observation| {
+            observation.uncertainty_reasons.is_empty()
+                && (RULES.contains(&observation.rule_id.as_str())
+                    || controls.is_some_and(|controls| {
+                        controls.rule_settles_at_allow(&observation.rule_id)
+                    }))
+        })
+    {
+        return;
+    }
+    if !proven(model, context, deadline, execution_environment) {
+        return;
+    }
+    result.minimum_action = "allow".into();
+    result.policy_action = "allow".into();
+    result.decision = "allow".into();
+    result.explicitly_benign = true;
+    result.reason_code = "native_exact_safe_worktree_add".into();
+    result.reason = concat!(
+        "The Rust command authority proved this bounded worktree creation has a fresh ",
+        "contained destination, a local ref, and no executable Git routes.",
+    )
+    .into();
 }
