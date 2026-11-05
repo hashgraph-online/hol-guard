@@ -21,7 +21,7 @@
   "launch": {
     "kind": "package-launcher",
     "command": "uvx",
-    "package": "dev-mcp"
+    "package": "git+https://github.com/pranjal2410719/dev-mcp.git@0e842cfc6c60d62cbe517b198db0df9a9024e8cb"
   },
   "riskClasses": [
     "external-desktop-control",
@@ -56,7 +56,7 @@
     { "name": "write_file", "state": "review" },
     { "name": "edit_file", "state": "review" },
     { "name": "batch_replace", "state": "review" },
-    { "name": "create_directory", "state": "inherit" },
+    { "name": "create_directory", "state": "review" },
     { "name": "read_file", "state": "inherit" },
     { "name": "file_info", "state": "inherit" },
     { "name": "list_directory", "state": "inherit" },
@@ -83,8 +83,8 @@
     { "name": "assess_project_readiness", "state": "inherit" },
     { "name": "project_readiness_report", "state": "inherit" },
     { "name": "doctor", "state": "inherit" },
-    { "name": "add_key_file", "state": "inherit" },
-    { "name": "add_decision", "state": "inherit" },
+    { "name": "add_key_file", "state": "review" },
+    { "name": "add_decision", "state": "review" },
     { "name": "export_context_markdown", "state": "inherit" },
     { "name": "project_info", "state": "inherit" },
     { "name": "get_context", "state": "inherit" },
@@ -96,6 +96,7 @@
   "saferAlternatives": [
     "Keep terminal execution (run_command) and desktop automation (desktop_click, desktop_type, desktop_action) on review to prevent unprompted local system manipulation.",
     "Keep destructive operations (delete_path, delete_recursive, reset_project_brain, reset_context) on review to protect repository files and project history.",
-    "Configure DEV_MCP_ALLOWED_DIRS to restrict file modifications to specific approved project workspaces."
+    "Keep file creation and directory operations (write_file, edit_file, batch_replace, create_directory) on review to avoid unprompted filesystem modifications.",
+    "Configure dev-mcp safety_mode to safe or trusted so file operations are constrained to the active project root."
   ]
 }

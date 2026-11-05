@@ -79,7 +79,11 @@ def test_dev_mcp_contribution_is_external_opt_in() -> None:
     assert payload["id"] == "mcp.dev-mcp"
     assert payload["trustClass"] == "external"
     assert payload["activation"] == "opt-in"
-    assert payload["launch"] == {"kind": "package-launcher", "command": "uvx", "package": "dev-mcp"}
+    assert payload["launch"] == {
+        "kind": "package-launcher",
+        "command": "uvx",
+        "package": "git+https://github.com/pranjal2410719/dev-mcp.git@0e842cfc6c60d62cbe517b198db0df9a9024e8cb",
+    }
 
 
 def test_dev_mcp_protects_destructive_and_execution_tools() -> None:
@@ -102,6 +106,9 @@ def test_dev_mcp_protects_destructive_and_execution_tools() -> None:
         "write_file",
         "edit_file",
         "batch_replace",
+        "create_directory",
+        "add_key_file",
+        "add_decision",
         "git_add",
         "git_commit",
         "git_create_branch",
