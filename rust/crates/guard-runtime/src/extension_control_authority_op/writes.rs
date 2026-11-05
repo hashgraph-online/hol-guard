@@ -15,28 +15,39 @@ use serde_json::{json, Value};
 
 use super::records::{canonical, degraded, store_fault, tampered, Phase, Res};
 use super::{fault_value, Ctx, INVALID, STORE_UNAVAILABLE};
-use crate::guard_store_write_cache::open_read_write_cached;
+use crate::guard_store_write_cache::{open_read_write_cached, CachedConnection};
 use crate::local_store_read::{require_store_path, table_exists};
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 const RESTORED_EVENT: &str = "extension_control_authority_restored";
 
+/// The store a writer op writes, or `None` when it cannot be opened.
+pub(super) fn open_writer(
+    request: &ExtensionControlAuthorityRequestV1,
+) -> Result<Option<CachedConnection>, String> {
+    let store_path = require_store_path(&request.store_path, &request.guard_home)
+        .map_err(|_| INVALID.to_owned())?;
+    if !store_path.exists() {
+        return Ok(None);
+    }
+    let Ok(connection) = open_read_write_cached(&store_path) else {
+        return Ok(None);
+    };
+    if connection.busy_timeout(BUSY_TIMEOUT).is_err() {
+        return Ok(None);
+    }
+    Ok(Some(connection))
+}
+
 pub(super) fn with_writable_store(
     request: &ExtensionControlAuthorityRequestV1,
     key: Option<&[u8]>,
 ) -> Result<Value, String> {
-    let store_path = require_store_path(&request.store_path, &request.guard_home)
-        .map_err(|_| INVALID.to_owned())?;
     let unavailable = || Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
-    if !store_path.exists() {
-        return unavailable();
-    }
-    let Ok(connection) = open_read_write_cached(&store_path) else {
+    let Some(connection) = open_writer(request)? else {
         return unavailable();
     };
-    if connection.busy_timeout(BUSY_TIMEOUT).is_err()
-        || connection.execute_batch("BEGIN IMMEDIATE").is_err()
-    {
+    if connection.execute_batch("BEGIN IMMEDIATE").is_err() {
         return unavailable();
     }
     let ctx = Ctx {

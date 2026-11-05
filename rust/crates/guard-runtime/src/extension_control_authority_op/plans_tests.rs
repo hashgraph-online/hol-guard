@@ -9,10 +9,10 @@ use super::records::{
 use super::tests::{anchor, catalog, local, run, Home, AT, KEY};
 use crate::extension_control_proof::{mutation_digest, Mutation};
 
-const LATER: &str = "2026-10-21T00:05:00+00:00";
+pub(super) const LATER: &str = "2026-10-21T00:05:00+00:00";
 const SOON: &str = "2026-10-21T00:04:59.999999+00:00";
 
-fn view(health: &str, revision: i64) -> Value {
+pub(super) fn view(health: &str, revision: i64) -> Value {
     json!({
         "health": health,
         "revision": revision,
@@ -38,7 +38,7 @@ fn approved(mut commit: ExtensionControlCommitV1) -> ExtensionControlCommitV1 {
     commit
 }
 
-fn commit(revision: i64, expected_revision: i64) -> ExtensionControlCommitV1 {
+pub(super) fn commit(revision: i64, expected_revision: i64) -> ExtensionControlCommitV1 {
     approved(ExtensionControlCommitV1 {
         actor_id: format!("actor-{revision}"),
         idempotency_key: format!("idem-{revision}"),

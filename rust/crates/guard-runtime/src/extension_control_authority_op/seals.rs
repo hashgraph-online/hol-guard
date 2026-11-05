@@ -23,10 +23,10 @@ use super::records::{
 use super::Ctx;
 
 /// The owner-only copy of the latest committed snapshot beside `guard.db`.
-const LAST_GOOD_FILE_NAME: &str = "extension-control-last-good.json";
-const LAST_GOOD_SCHEMA: &str = "guard.extension-control-last-good.v1";
-const MAX_EXPORT_BYTES: usize = 1024 * 1024;
-const EXPORT_FIELDS: [&str; 5] = [
+pub(super) const LAST_GOOD_FILE_NAME: &str = "extension-control-last-good.json";
+pub(super) const LAST_GOOD_SCHEMA: &str = "guard.extension-control-last-good.v1";
+pub(super) const MAX_EXPORT_BYTES: usize = 1024 * 1024;
+pub(super) const EXPORT_FIELDS: [&str; 5] = [
     "revision",
     "catalog_digest",
     "layers_json",

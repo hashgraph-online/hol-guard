@@ -45,6 +45,10 @@ pub const EXTENSION_CONTROL_AUTHORITY_FEATURE: &str = "extension-control-authori
 /// available.
 pub const EXTENSION_CONTROL_AUTHORITY_WRITES_FEATURE: &str =
     "extension-control-authority-writes-v1";
+/// Capability advertised when the `bootstrap`, `commit_prepare`, `resume`,
+/// `migrate` and `write_manifest` writer ops are available.
+pub const EXTENSION_CONTROL_AUTHORITY_COMMIT_FEATURE: &str =
+    "extension-control-authority-commit-v1";
 /// Largest canonical request the resident accepts. A request carries at most
 /// two catalog manifests, one fingerprint per catalog target.
 ///
@@ -68,6 +72,7 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `managed_activation`, `managed_revision`, `load_manifest`,
     /// `validate_chain`, `history`, `commit_plan`, `resume_plan`,
     /// `rollback_plan`, `bootstrap_plan`, `migrate_plan`, `restore_plan`,
+    /// `bootstrap`, `commit_prepare`, `resume`, `migrate`, `write_manifest`,
     /// `seal_anchor`, `seal_manifest`, `seal_managed_revision`,
     /// `seal_managed_activation` or `anchor`.
     pub op: String,
@@ -136,15 +141,31 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// spells it, for the plan ops and `seal_manifest`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub now: Option<String>,
+    /// `resume`: the pending cloud-event capacity the change event is queued
+    /// under.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_queue_limit: Option<i64>,
+    /// `resume` from the commit that prepared the row: the hashed proof the
+    /// commit consumes in the same transaction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof_hash: Option<String>,
     /// `history`: how many prior snapshots to list.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<i64>,
     /// `commit_plan`: the mutation the caller's proof was validated against.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<ExtensionControlCommitV1>,
-    /// `migrate_plan`: the rebinding a read's `migrate_catalog` action named.
+    /// `migrate_plan` / `migrate`: the rebinding a read's `migrate_catalog`
+    /// action named.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub catalog_migration: Option<ExtensionControlCatalogMigrationV1>,
+    /// `migrate`: what the migration event records beside the rebinding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub migration_record: Option<ExtensionControlMigrationRecordV1>,
+    /// `write_manifest`: replace the manifest recorded for `catalog_digest`
+    /// instead of recording its first one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest_replace: Option<bool>,
     /// `seal_managed_activation`: the verified policy to activate on the
     /// authority committed under `catalog_digest`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -185,6 +206,20 @@ pub struct ExtensionControlCatalogMigrationV1 {
     /// Ordinary catalog migrations cannot change the active pack record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub installed_upgrade: Option<Value>,
+}
+
+/// What a committed catalog migration records: the provenance the caller
+/// settled before the store transaction opened, the older writer the store is
+/// handed back to when the migration is a downgrade, and the controls it
+/// retires.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlMigrationRecordV1 {
+    pub provenance: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub downgraded_from: Option<String>,
+    #[serde(default)]
+    pub retired_target_ids: Vec<String>,
 }
 
 /// One requested extension-control commit. The identities are sent as the
