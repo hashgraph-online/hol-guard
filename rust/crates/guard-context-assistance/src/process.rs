@@ -16,7 +16,7 @@ const MAX_RESPONSE: usize = 4 * 1024 * 1024;
 const SCHEMA: &str = "guard-cigar-bridge.v1";
 // The first launch of a freshly unpacked interpreter can be slow: macOS
 // translates an x64 build under Rosetta and Windows scans a new executable.
-const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
+pub(crate) const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 type Job = (Vec<u8>, SyncSender<Result<Vec<u8>, RuntimeError>>);
 
 pub(crate) struct JsonProcess {

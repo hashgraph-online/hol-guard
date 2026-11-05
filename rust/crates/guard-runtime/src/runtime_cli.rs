@@ -110,6 +110,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = desktop_core_onedir::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if exact_cloud_review::is_command(command) && flag == "--stdin" => {
+            let response = exact_cloud_review::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if trust_attestation_key::is_command(command) && flag == "--stdin" => {
             let response = trust_attestation_key::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -206,6 +210,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if cloud_actions_connect::is_command(command) && flag == "--stdin" => {
             let response = cloud_actions_connect::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if registry_trust::is_command(command) && flag == "--stdin" => {
+            let response = registry_trust::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if cloud_actions_health::is_command(command) && flag == "--stdin" => {

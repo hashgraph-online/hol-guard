@@ -331,3 +331,45 @@ fn file_url_spellings_never_weaken_a_read_decision() {
 
     let _ = std::fs::remove_dir_all(root);
 }
+
+/// An unresolved URL is never read as a project path, whatever its path
+/// spells. The selector parser used to split `file://host/a.md` at its last
+/// colon and treat the rest as a line selector only when it held a digit, so
+/// these digit-free spellings reached the plain-path proofs as a relative
+/// path under the project and were allowed.
+#[test]
+fn unresolved_file_urls_without_digits_keep_their_review() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let project = home.join("project");
+    std::fs::create_dir_all(&project).unwrap();
+
+    for target in [
+        "file://remote.example/srv/notes/readme.md",
+        "FILE://remote.example/srv/notes/readme.md",
+        "file://localhost.remote.example/srv/notes/readme.md",
+        "file:/srv/notes/readme.md",
+    ] {
+        assert_eq!(local_file_url_path(target), None, "{target}");
+        let decision = read_target(target, &home, &project);
+        assert_ne!(
+            decision.minimum_action, "allow",
+            "{target}: {}",
+            decision.reason_code
+        );
+        assert!(!decision.explicitly_benign, "{target}");
+        // Without verified roots the URL must still never pass as a plain path.
+        let bare = crate::pretool::evaluate_pre_tool_envelope(
+            "omp",
+            "PreToolUse",
+            &serde_json::json!({"tool_name": "read", "tool_input": {"path": target}}),
+        );
+        assert_ne!(
+            bare.minimum_action, "allow",
+            "{target} without roots: {}",
+            bare.reason_code
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(root);
+}

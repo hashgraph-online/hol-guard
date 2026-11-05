@@ -52,6 +52,8 @@ _CALL = BoundCall(
     error=NativeRunnerAuthorityError,
     refusal=NativeRunnerAuthorityRefusalError,
     sha_prefix="",
+    # Rust bounds the ASCII-escaped request: refuse it as too large here first.
+    bound_canonical=True,
     clock_after_prerequisite=True,
 )
 
