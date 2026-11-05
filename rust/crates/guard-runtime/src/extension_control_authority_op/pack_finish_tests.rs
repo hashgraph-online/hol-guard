@@ -106,16 +106,22 @@ struct Pack {
 /// Revision 1 committed over a retained baseline, and revision 2 prepared to
 /// activate a pending command pack reserved for it.
 fn pack() -> Pack {
+    pack_with(|_| {})
+}
+
+/// `pack`, with the reserved link's payload adjusted before it is sealed.
+fn pack_with(adjust: impl FnOnce(&mut Value)) -> Pack {
     let home = with_cloud_events(Home::new());
     home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
     let record = seal("activation", activation());
     let digest = record["digest"].as_str().unwrap().to_owned();
-    home.commit_activating(
+    home.commit_bound(
         2,
         &catalog('a'),
         &[local(&catalog('a'))],
         "prepared",
-        &digest,
+        Some(&digest),
+        true,
     );
     pack_tables(&home);
     let (before, after) = (floor("3.55.1"), floor("3.56.0"));
@@ -127,12 +133,11 @@ fn pack() -> Pack {
             |row| row.get(0),
         )
         .unwrap();
-    let link = seal(
-        "link",
-        json!({"control_revision": 2, "snapshot_digest": snapshot, "catalog_digest": catalog('a'),
-            "pack_record_digest": digest, "admitted_at": 1500,
-            "lifecycle_before": before, "lifecycle_after": after}),
-    );
+    let mut payload = json!({"control_revision": 2, "snapshot_digest": snapshot,
+        "catalog_digest": catalog('a'), "pack_record_digest": digest, "admitted_at": 1500,
+        "lifecycle_before": before, "lifecycle_after": after});
+    adjust(&mut payload);
+    let link = seal("link", payload);
     home.db
         .execute(
             "insert into extension_command_pack_pending values (2, ?, ?, ?, ?, ?, ?)",
@@ -264,6 +269,56 @@ fn resume_refuses_a_floor_the_pending_activation_was_not_prepared_against() {
     assert_eq!(
         other["reason"],
         json!("pack_lifecycle_prepared_floor_conflict")
+    );
+    assert_eq!(
+        count(
+            &pack.home,
+            "select count(*) from extension_command_pack_pending"
+        ),
+        1
+    );
+    assert_eq!(
+        count(
+            &pack.home,
+            "select revision from extension_control_authority_snapshot where singleton = 1"
+        ),
+        1
+    );
+}
+
+#[test]
+fn resume_names_the_legacy_evidence_a_link_sealed_before_lifecycle_binding_needs() {
+    let pack = pack_with(|payload| {
+        let link = payload.as_object_mut().unwrap();
+        link.remove("lifecycle_before");
+        link.remove("lifecycle_after");
+    });
+    let owed = resume(&pack, Some(&pack.after));
+    assert_eq!(owed["pack_legacy_owed"], json!(true), "{owed}");
+    assert_eq!(
+        count(
+            &pack.home,
+            "select count(*) from extension_command_pack_pending"
+        ),
+        1
+    );
+    assert_eq!(
+        count(
+            &pack.home,
+            "select revision from extension_control_authority_snapshot where singleton = 1"
+        ),
+        1
+    );
+}
+
+#[test]
+fn resume_refuses_an_activation_prepared_under_another_security_scope() {
+    let pack = pack_with(|payload| payload["security_digest"] = json!("5".repeat(64)));
+    let refused = resume(&pack, Some(&pack.after));
+    assert_eq!(refused["fault"], json!("pack"), "{refused}");
+    assert_eq!(
+        refused["reason"],
+        json!("active_security_prepared_scope_conflict")
     );
     assert_eq!(
         count(
