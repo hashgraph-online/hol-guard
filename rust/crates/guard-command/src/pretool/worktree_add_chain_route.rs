@@ -247,3 +247,75 @@ fn entered_directory(value: &str, context: super::super::PathContext<'_>) -> Opt
     }
     checkout_path(&target)
 }
+
+/// Whether every entry of the search path the command runs with is absolute
+/// and lies outside the checkout the add creates. Once the `cd` has entered
+/// the new checkout a relative entry names one of its folders, whose
+/// contents come from the ref it checks out, so a bare program name after
+/// the `cd` could run what that ref supplies. An absolute entry inside the
+/// destination says the same thing from the other side: the add refuses an
+/// existing destination, so nothing fills that folder but the checkout.
+pub(super) fn search_path_outside(
+    destination: &Path,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    let Some(search_path) = execution_environment
+        .map(|environment| std::ffi::OsString::from(&environment.path))
+        .or_else(|| std::env::var_os("PATH"))
+    else {
+        return false;
+    };
+    std::env::split_paths(&search_path)
+        .all(|directory| directory.is_absolute() && !entry_in_checkout(&directory, destination))
+}
+
+/// Whether one search path entry names a folder of the new checkout,
+/// directly or through a symbolic link that leads into it. The entry cannot
+/// be resolved on disk first: the destination does not exist until the add
+/// runs, so an entry inside it does not resolve yet either.
+fn entry_in_checkout(directory: &Path, destination: &Path) -> bool {
+    if directory.starts_with(destination) {
+        return true;
+    }
+    let Ok(target) = std::fs::read_link(directory) else {
+        return false;
+    };
+    if target.is_absolute() {
+        return target.starts_with(destination);
+    }
+    directory
+        .parent()
+        .is_none_or(|parent| parent.join(target).starts_with(destination))
+}
+
+/// A relative path after the `cd` names a file of the new checkout, which
+/// the ref supplies. A bare name uses the search path, which
+/// [`search_path_outside`] screens. The add refuses an existing
+/// destination, so an absolute path that resolves now names a program
+/// outside it; one that does not resolve could only come from the checkout.
+pub(super) fn resolved_outside(later: &CommandSegmentV1, destination: &Path) -> bool {
+    later.executable.as_deref().is_some_and(|value| {
+        !value.contains(['/', '\\'])
+            || (Path::new(value).is_absolute()
+                && std::fs::canonicalize(value)
+                    .is_ok_and(|resolved| !resolved.starts_with(destination)))
+    })
+}
+
+/// A step that only reads and prints writes no configuration, ref or hook a
+/// later Git read in the checkout could pick up, so it leaves the
+/// destination proof standing. `cd`, `pushd` and `popd` would move those
+/// reads out of the checkout the proof answers for, and `rg` runs a
+/// caller-chosen program through `--pre`. A bare name resolves on the
+/// search path, which [`search_path_outside`] screens, never inside the new
+/// checkout.
+pub(super) fn inert_step(later: &CommandSegmentV1) -> bool {
+    later.executable.as_deref().is_some_and(|value| {
+        super::super::executable_basename(value) == value
+            && !matches!(value, "cd" | "pushd" | "popd" | "rg")
+    }) && later.environment_names.is_empty()
+        && later.wrapper_chain.is_empty()
+        && !later.path_overridden
+        && !super::super::control_flow_flatten::command_word_changes_shell_state(&later.text)
+        && super::super::search::grep::creates_nothing(later)
+}

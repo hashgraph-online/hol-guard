@@ -185,7 +185,8 @@ fn prove(
             .map(super::super::executable_basename);
         segment.pipeline_index == 0 && matches!(name, Some("git" | "gh"))
     });
-    let inert_allowed = reads_git && search_path_is_absolute(execution_environment);
+    let inert_allowed =
+        reads_git && super::chain_route::search_path_outside(&destination, execution_environment);
     let mut links = Vec::new();
     (first..segments.len()).all(|index| {
         let joined = super::separator_between(model, index - 1, index);
@@ -213,7 +214,9 @@ fn prove(
             ) {
                 return true;
             }
-            return inert_allowed && inert_step(segment) && resolved_outside(segment, &destination);
+            return inert_allowed
+                && super::chain_route::inert_step(segment)
+                && super::chain_route::resolved_outside(segment, &destination);
         }
         if segment.executable.as_deref() == Some("mkdir") {
             return proven_mkdir(segment, &destination, context);
@@ -243,55 +246,6 @@ fn prove(
             execution_environment,
         )
     })
-}
-
-/// Whether every entry of the search path the command runs with is
-/// absolute. Once the `cd` has entered the new checkout a relative entry
-/// names one of its folders, whose contents come from the ref it checks
-/// out, so a bare program name after the `cd` could run what that ref
-/// supplies.
-fn search_path_is_absolute(
-    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
-) -> bool {
-    let Some(search_path) = execution_environment
-        .map(|environment| std::ffi::OsString::from(&environment.path))
-        .or_else(|| std::env::var_os("PATH"))
-    else {
-        return false;
-    };
-    std::env::split_paths(&search_path).all(|directory| directory.is_absolute())
-}
-
-/// A relative path after the `cd` names a file of the new checkout, which
-/// the ref supplies. A bare name uses the search path, which
-/// [`search_path_is_absolute`] screens. The add refuses an existing
-/// destination, so an absolute path that resolves now names a program
-/// outside it; one that does not resolve could only come from the checkout.
-fn resolved_outside(later: &CommandSegmentV1, destination: &Path) -> bool {
-    later.executable.as_deref().is_some_and(|value| {
-        !value.contains(['/', '\\'])
-            || (Path::new(value).is_absolute()
-                && std::fs::canonicalize(value)
-                    .is_ok_and(|resolved| !resolved.starts_with(destination)))
-    })
-}
-
-/// A step that only reads and prints writes no configuration, ref or hook a
-/// later Git read in the checkout could pick up, so it leaves the
-/// destination proof standing. `cd`, `pushd` and `popd` would move those
-/// reads out of the checkout the proof answers for, and `rg` runs a
-/// caller-chosen program through `--pre`. A bare name resolves on the
-/// search path, which [`search_path_is_absolute`] screens, never inside the
-/// new checkout.
-fn inert_step(later: &CommandSegmentV1) -> bool {
-    later.executable.as_deref().is_some_and(|value| {
-        super::super::executable_basename(value) == value
-            && !matches!(value, "cd" | "pushd" | "popd" | "rg")
-    }) && later.environment_names.is_empty()
-        && later.wrapper_chain.is_empty()
-        && !later.path_overridden
-        && !super::super::control_flow_flatten::command_word_changes_shell_state(&later.text)
-        && super::super::search::grep::creates_nothing(later)
 }
 
 /// A `mkdir` the write screens admit that creates nothing in or below the
@@ -483,12 +437,6 @@ fn entered_checkout(
     if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
         return None;
     }
-    // After the `cd` the shell looks up `git` and `gh` again, and a relative
-    // search path entry then names a folder of the new checkout, whose
-    // contents come from the ref it checks out.
-    if !search_path_is_absolute(execution_environment) {
-        return None;
-    }
     let is = |segment: &CommandSegmentV1, names: &[&str]| {
         segment.executable.as_deref().is_some_and(|value| {
             let basename = super::super::executable_basename(value);
@@ -507,6 +455,12 @@ fn entered_checkout(
         let Some((_, destination, _)) = super::planned_checkout(segment, context) else {
             continue;
         };
+        // After the `cd` the shell looks up `git` and `gh` again, and a
+        // search path entry that is relative, or that names a folder of the
+        // new checkout, then resolves to what the ref it checks out supplies.
+        if !super::chain_route::search_path_outside(&destination, execution_environment) {
+            return None;
+        }
         let after = after_creation(model, add);
         let next = model.segments.get(after)?;
         if next.executable.as_deref() != Some("cd") || next.pipeline_index != 0 {
@@ -519,9 +473,9 @@ fn entered_checkout(
         // A later pipeline stage reads only what the step before it prints:
         // a bounded `head`, `tail` or `wc` with no path of its own.
         let rest_is_git = model.segments[after + 1..].iter().all(|later| {
-            resolved_outside(later, &destination)
+            super::chain_route::resolved_outside(later, &destination)
                 && (is(later, &["git", "gh"])
-                    || inert_step(later)
+                    || super::chain_route::inert_step(later)
                     || (later.pipeline_index > 0
                         && super::chain_route::stdin_stage(later, context, execution_environment)))
         });
