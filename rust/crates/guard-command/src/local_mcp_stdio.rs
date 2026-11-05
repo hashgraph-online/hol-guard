@@ -499,6 +499,8 @@ struct RpcSession {
     inbox: mpsc::Receiver<Value>,
     catalog_generation: u64,
     cancellation: Arc<AtomicBool>,
+    /// Set when the server's output reached its end, not a probe limit.
+    output_ended: Arc<AtomicBool>,
     _drain: Option<thread::JoinHandle<()>>,
 }
 
@@ -507,16 +509,24 @@ impl RpcSession {
         let stdin = child.stdin.take()?;
         let stdout = child.stdout.take()?;
         let (tx, rx) = mpsc::channel::<Value>();
+        let output_ended = Arc::new(AtomicBool::new(false));
+        let drain_ended = Arc::clone(&output_ended);
         let drain = thread::spawn(move || {
-            drain_stream(stdout, tx);
+            drain_stream(stdout, tx, &drain_ended);
         });
         Some(RpcSession {
             stdin,
             inbox: rx,
             catalog_generation: 0,
             cancellation,
+            output_ended,
             _drain: Some(drain),
         })
+    }
+
+    /// Whether the server closed its output, which it does when it exits.
+    fn output_ended(&self) -> bool {
+        self.output_ended.load(Ordering::Acquire)
     }
 
     fn write(&mut self, message: &Value) {
@@ -551,15 +561,25 @@ impl RpcSession {
 }
 
 /// Drain `fd` into parsed JSON-RPC messages, honoring the output cap and the
-/// bounded 256-message queue. Runs on a dedicated thread.
-pub(crate) fn drain_stream(mut stdout: std::process::ChildStdout, tx: mpsc::Sender<Value>) {
+/// bounded 256-message queue. Runs on a dedicated thread. `output_ended` is
+/// set only at end of file; a read error or a probe limit leaves it.
+pub(crate) fn drain_stream(
+    mut stdout: std::process::ChildStdout,
+    tx: mpsc::Sender<Value>,
+    output_ended: &AtomicBool,
+) {
     let mut buffer: Vec<u8> = Vec::new();
     let mut output_bytes: usize = 0;
     let mut pending: usize = 0;
     loop {
         let mut chunk = [0u8; 8192];
         let n = match stdout.read(&mut chunk) {
-            Ok(0) | Err(_) => return,
+            Ok(0) => {
+                output_ended.store(true, Ordering::Release);
+                return;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => return,
             Ok(n) => n,
         };
         output_bytes += n;
@@ -911,6 +931,9 @@ fn negotiate_catalog(session: &mut RpcSession, deadline: Instant) -> McpCatalog 
     let initialize = _await_result(session, 1, deadline);
     let initialize = match initialize {
         Some(v) => v,
+        // A server that exits before answering, often because the probe's
+        // isolated home lacks a login it reads, is not a protocol failure.
+        None if session.output_ended() => return McpCatalog::reason_only("server_exited"),
         None => return McpCatalog::reason_only("initialize_failed"),
     };
     if initialize.get("error").is_some() {
@@ -1558,7 +1581,12 @@ pub fn run_mcp_stdio_probe(
             return McpCatalog::reason_only("transport_failed");
         }
     };
-    let catalog = negotiate_catalog(&mut session, deadline);
+    let mut catalog = negotiate_catalog(&mut session, deadline);
+    // Closed output alone does not prove an exit: a server can close stdout
+    // and keep running. Only a child that is gone is reported as exited.
+    if catalog.reason.as_deref() == Some("server_exited") && !child_exited(&mut child) {
+        catalog = McpCatalog::reason_only("initialize_failed");
+    }
     let result = if catalog.reason.is_some() {
         catalog
     } else {
@@ -1570,6 +1598,19 @@ pub fn run_mcp_stdio_probe(
     } else {
         result
     }
+}
+
+/// Whether the child has exited, allowing up to half a second for an exit
+/// that is still being reaped after its output closed.
+fn child_exited(child: &mut Child) -> bool {
+    for _ in 0..20 {
+        match child.try_wait() {
+            Ok(Some(_)) => return true,
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+            Err(_) => return false,
+        }
+    }
+    false
 }
 
 /// `_stop` — kill the child's process tree, then reap the direct child.

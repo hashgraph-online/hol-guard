@@ -321,10 +321,21 @@ fn operator(token: &Token) -> Option<&str> {
     token.1.then_some(token.0.as_str())
 }
 
-/// The repository holding `directory`, as native authority finds it. An
-/// absent home proves no root, as the Python peel's `home is None` did.
+/// The project holding `directory`, as native authority finds it. An absent
+/// home proves no root, as the Python peel's `home is None` did.
+///
+/// A project with a manifest and no repository roots a run here, as it does
+/// for the package-test route, because the sink peels only a command the
+/// classifier already admitted: reading fewer roots than the route that wrote
+/// the receipt would leave that receipt unredeemable and send the run to the
+/// sandbox whole. Admission stays with the classifier, which still needs a
+/// repository for every other route.
 fn sibling_root(directory: &Path, home_dir: Option<&str>) -> Option<PathBuf> {
-    contained_wrapper::sibling_project_root(directory, home_dir?)
+    contained_wrapper::project_root(
+        directory,
+        home_dir?,
+        contained_wrapper::ProjectRoots::RepositoryOrPackage,
+    )
 }
 
 /// Split like a POSIX shell into `(value, is_operator)` pairs, and report

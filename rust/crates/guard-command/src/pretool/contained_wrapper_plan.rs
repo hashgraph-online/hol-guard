@@ -89,8 +89,14 @@ pub fn contained_wrapper_plan(
     home_dir: Option<&str>,
     project_root_query: Option<&str>,
 ) -> ContainedWrapperPlan {
+    // The same roots the sink's own peel reads, so the directory question and
+    // the peel cannot answer differently about one run.
     let project_root = project_root_query.and_then(|directory| {
-        contained_wrapper::sibling_project_root(std::path::Path::new(directory), home_dir?)
+        contained_wrapper::project_root(
+            std::path::Path::new(directory),
+            home_dir?,
+            contained_wrapper::ProjectRoots::RepositoryOrPackage,
+        )
     });
     let worktree_add = super::generic::contained_publish::worktree::split(command).map(|parts| {
         let checkout = super::generic::contained_publish::worktree::resolved_checkout(

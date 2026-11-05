@@ -278,6 +278,69 @@ pub(crate) fn sets_ordinary_variables(segment: &CommandSegmentV1) -> bool {
             .all(|name| environment::ordinary_setting_name(name))
 }
 
+/// A list item such as `status=$?` or `dir=$ROOT` binds a name to another
+/// parameter's value. Plain `$NAME`, `${NAME}` and the special parameters
+/// expand to text and run nothing, so the item still runs no program. It is
+/// not literal, so it is no proof of its own: it reaches the compatibility
+/// pass instead of failing it. Command substitution, arithmetic, subscripts
+/// and the `${...}` operator forms can run code or set other names, and a
+/// read of a steering name such as `$GIT_DIR` carries that setting into an
+/// ordinary one, so any of them keeps the evaluation failure.
+fn binds_plain_parameters(segment: &CommandSegmentV1) -> bool {
+    !segment.environment_names.is_empty()
+        && segment.tokens.len() == segment.environment_names.len()
+        && segment.arguments.is_empty()
+        && segment.wrapper_chain.is_empty()
+        && plain_parameter_expansions(&segment.text)
+        && segment
+            .environment_names
+            .iter()
+            .all(|name| environment::ordinary_setting_name(name))
+}
+
+fn plain_parameter_expansions(text: &str) -> bool {
+    let characters: Vec<char> = text.chars().collect();
+    let name = |character: &char| *character == '_' || character.is_ascii_alphanumeric();
+    let special = |character: &char| {
+        character.is_ascii_digit() || matches!(character, '?' | '#' | '$' | '!' | '-' | '@' | '*')
+    };
+    let mut index = 0;
+    while index < characters.len() {
+        match characters[index] {
+            '`' => return false,
+            '\\' => index += 2,
+            '$' => {
+                let rest = &characters[index + 1..];
+                let braced = rest.first() == Some(&'{');
+                let inner = &rest[usize::from(braced)..];
+                let length = match inner.first() {
+                    // `${10}` names the tenth positional parameter; unbraced,
+                    // `$10` is `$1` followed by a literal `0`.
+                    Some(character) if braced && character.is_ascii_digit() => {
+                        inner.iter().take_while(|c| c.is_ascii_digit()).count()
+                    }
+                    Some(character) if special(character) => 1,
+                    Some(character) if name(character) => {
+                        let length = inner.iter().take_while(|c| name(c)).count();
+                        let referenced: String = inner[..length].iter().collect();
+                        if !environment::ordinary_setting_name(&referenced) {
+                            return false;
+                        }
+                        length
+                    }
+                    _ => return false,
+                };
+                if braced && inner.get(length) != Some(&'}') {
+                    return false;
+                }
+                index += 1 + length + 2 * usize::from(braced);
+            }
+            _ => index += 1,
+        }
+    }
+    true
+}
+
 pub fn compatibility_observations(
     command: &CanonicalCommandV1,
     deadline: Option<Instant>,
@@ -362,7 +425,8 @@ pub(crate) fn compatibility_observations_in(
         if assigned {
             steered.push(index);
         }
-        if (segment.executable.is_none() && !sets_ordinary_variables(segment))
+        if (segment.executable.is_none()
+            && !(sets_ordinary_variables(segment) || binds_plain_parameters(segment)))
             || segment.path_overridden
             || segment
                 .wrapper_chain

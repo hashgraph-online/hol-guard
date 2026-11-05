@@ -461,6 +461,66 @@ def test_claude_code_installing_another_commit_is_rolled_back(
     assert install.recorded_installs(guard_home) == {}
 
 
+def test_a_plugin_claude_code_could_not_uninstall_keeps_its_marketplace(
+    spec_file: Path, runtimes: FakeRuntimes
+) -> None:
+    runtimes.claude_commit = OTHER
+    runtimes.exit_codes[("claude", "plugin", "uninstall")] = 1
+    exit_code, _output, error = _install(spec_file, "--apply", "--yes", "--runtime", "claude-code")
+    assert exit_code == 4
+    assert "Guard could not remove it. Remove it yourself with: claude plugin uninstall toolgate@acme" in error
+    assert runtimes.ran[-1] == ["claude", "plugin", "uninstall", "toolgate@acme"]
+    assert ["claude", "plugin", "marketplace", "remove", "acme"] not in runtimes.ran
+
+
+def test_claude_code_install_is_rolled_back_when_its_commit_cannot_be_read(
+    spec_file: Path, runtimes: FakeRuntimes, guard_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An install whose commit Guard cannot read back is not left in place."""
+
+    read = install.claude_state
+
+    def claude_state(*args: object, **kwargs: object) -> dict[str, object]:
+        if any(argv[:3] == ["claude", "plugin", "install"] for argv in runtimes.ran):
+            raise install._StoppedError("failed", "native_plugin_kit_unavailable")
+        return read(*args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(install, "claude_state", claude_state)
+    exit_code, _output, error = _install(spec_file, "--apply", "--yes", "--runtime", "claude-code")
+    assert exit_code != 0
+    assert "native_plugin_kit_unavailable" in error
+    assert "could not check which commit Claude Code installed" in error
+    assert runtimes.ran[-2:] == [
+        ["claude", "plugin", "uninstall", "toolgate@acme"],
+        ["claude", "plugin", "marketplace", "remove", "acme"],
+    ]
+    assert install.recorded_installs(guard_home) == {}
+
+
+def test_claude_code_install_is_rolled_back_when_its_record_is_unreadable(
+    spec_file: Path, runtimes: FakeRuntimes, guard_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An install whose plugin record Guard cannot read afterwards is not left in place."""
+
+    read = install.claude_state
+
+    def claude_state(*args: object, **kwargs: object) -> dict[str, object]:
+        if any(argv[:3] == ["claude", "plugin", "install"] for argv in runtimes.ran):
+            return {"record": "unreadable"}
+        return read(*args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(install, "claude_state", claude_state)
+    exit_code, _output, error = _install(spec_file, "--apply", "--yes", "--runtime", "claude-code")
+    assert exit_code != 0
+    assert "Guard could not read Claude Code's plugin record" in error
+    assert "it removed the plugin again." in error
+    assert runtimes.ran[-2:] == [
+        ["claude", "plugin", "uninstall", "toolgate@acme"],
+        ["claude", "plugin", "marketplace", "remove", "acme"],
+    ]
+    assert install.recorded_installs(guard_home) == {}
+
+
 def test_claude_code_already_at_another_commit_is_left_as_it_is(
     spec_file: Path, runtimes: FakeRuntimes, guard_home: Path
 ) -> None:
@@ -1417,6 +1477,31 @@ def test_a_declared_command_install_is_removed_when_it_is_not_what_guard_showed(
     assert exit_code == 4
     assert reason in error
     assert "Guard removed it again." in error
+    assert ["claude", "plugin", "uninstall", "toolgate@acme"] in runtimes.ran
+    assert runtimes.ran[-1] == ["claude", "plugin", "marketplace", "remove", "acme"]
+    assert install.recorded_installs(guard_home) == {}
+
+
+def test_a_declared_command_install_is_removed_when_its_record_cannot_be_read(
+    spec_file: Path, runtimes: FakeRuntimes, guard_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A command that ran cannot be checked without Claude Code's record, so a
+    failed read after it removes the plugin and the marketplace it added."""
+
+    read = install.claude_state
+
+    def claude_state(*args: object, **kwargs: object) -> dict[str, object]:
+        if any("--accept-command" in argv for argv in runtimes.ran):
+            raise install._StoppedError("failed", "native_plugin_kit_unavailable")
+        return read(*args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(install, "claude_state", claude_state)
+    runtimes.declared = DECLARED
+    exit_code, _output, error = _install(
+        spec_file, "--apply", "--yes", "--runtime", "claude-code", "--accept-command", DECLARED
+    )
+    assert exit_code != 0
+    assert "could not check the install command Claude Code ran" in error
     assert ["claude", "plugin", "uninstall", "toolgate@acme"] in runtimes.ran
     assert runtimes.ran[-1] == ["claude", "plugin", "marketplace", "remove", "acme"]
     assert install.recorded_installs(guard_home) == {}

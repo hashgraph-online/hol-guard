@@ -33,6 +33,10 @@ _PUBLIC_FAILURE_CODES = frozenset(
         "mcp_launch_failed",
         "mcp_transport_failed",
         "mcp_initialize_failed",
+        # The server exited before answering, as one does when Guard's isolated
+        # probe home lacks a login it reads; the page says so instead of
+        # sending the reader to the host app.
+        "mcp_server_exited",
         "mcp_protocol_unsupported",
         "mcp_capability_rejected",
         # Codex host reads name the Codex problem to fix; without them every

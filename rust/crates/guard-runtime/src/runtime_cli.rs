@@ -27,6 +27,9 @@ pub(super) fn run() -> Result<(), String> {
         [command, rest @ ..] if command == contained_workspace_sink::LAUNCH_COMMAND => {
             std::process::exit(contained_workspace_sink::launch(rest))
         }
+        [command, rest @ ..] if command == codex_sandbox_check::CHECK_COMMAND => {
+            std::process::exit(codex_sandbox_check::run(rest))
+        }
         [command] if command == "capabilities" => write_json(&capabilities()),
         [command, flag] if command == "capabilities" && flag == "--json" => {
             write_json(&capabilities())
@@ -99,8 +102,20 @@ pub(super) fn run() -> Result<(), String> {
             let response = contained_output_match::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if verified_github_read::is_command(command) && flag == "--stdin" => {
+            let response = verified_github_read::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if desktop_core_onedir::is_command(command) && flag == "--stdin" => {
             let response = desktop_core_onedir::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if exact_cloud_review::is_command(command) && flag == "--stdin" => {
+            let response = exact_cloud_review::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if trust_attestation_key::is_command(command) && flag == "--stdin" => {
+            let response = trust_attestation_key::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if codex_hook_trust::is_command(command) && flag == "--stdin" => {
@@ -193,6 +208,18 @@ pub(super) fn run() -> Result<(), String> {
             let response = user_health_state::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if cloud_actions_connect::is_command(command) && flag == "--stdin" => {
+            let response = cloud_actions_connect::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if registry_trust::is_command(command) && flag == "--stdin" => {
+            let response = registry_trust::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if cloud_actions_health::is_command(command) && flag == "--stdin" => {
+            let response = cloud_actions_health::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if hermes_file_inspect::is_command(command) && flag == "--stdin" => {
             let response = hermes_file_inspect::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -207,6 +234,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if network_status_validation::is_command(command) && flag == "--stdin" => {
             let response = network_status_validation::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if cloud_actions_host_config::is_command(command) && flag == "--stdin" => {
+            let response = cloud_actions_host_config::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if local_skill_index::is_command(command) && flag == "--stdin" => {

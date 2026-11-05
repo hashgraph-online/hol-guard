@@ -114,3 +114,51 @@ fn an_expansion_glued_into_a_word_keeps_the_failure() {
         assert_eq!(decision(&controls, command).1, FAILED, "{command}");
     }
 }
+
+/// A list item that binds a name to another parameter, such as the exit
+/// status a script checks next, runs no program. It used to fail the
+/// evaluation outright, so `git show-ref --quiet refs/heads/x; s=$?` blocked
+/// with no approval left to give it.
+#[test]
+fn a_binding_to_a_plain_parameter_reaches_review() {
+    let controls = controls(github("enabled", None), false);
+    for command in [
+        "s=$?",
+        "rc=\"$?\"",
+        "count=$#",
+        "first=$1",
+        "dir=$ROOT",
+        "git show-ref --verify --quiet refs/heads/x; s=$?; echo $s",
+    ] {
+        let (action, code) = decision(&controls, command);
+        assert_ne!(code, FAILED, "{command}");
+        // `git` in the list asks for its own reapproval, which stands above
+        // the review the binding reaches.
+        let expected = if command.starts_with("git ") {
+            "require-reapproval"
+        } else {
+            "review"
+        };
+        assert_eq!(action, expected, "{command}: {code}");
+    }
+}
+
+/// The forms that run code or set another name while expanding keep the
+/// failure, or at least never pass as a plain binding.
+#[test]
+fn a_binding_that_evaluates_its_value_is_not_a_plain_binding() {
+    let controls = controls(github("enabled", None), false);
+    for command in [
+        "x=$(gh pr merge 17 --squash)",
+        "x=`gh pr merge 17 --squash`",
+        "x=$((I))",
+        "x=${ARRAY[I]}",
+        "x=${!NAME}",
+        "x=${PATH:=/tmp/tools}; ls",
+        "x=${X@P}",
+        "x=$GIT_DIR; ls",
+    ] {
+        let (action, _code) = decision(&controls, command);
+        assert_ne!(action, "allow", "{command}");
+    }
+}

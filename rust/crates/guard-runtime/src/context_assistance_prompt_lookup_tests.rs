@@ -7,6 +7,7 @@ fn request(root: &Path, query: &str) -> Request {
         query: query.into(),
         words: vec!["cart".into()],
         found: vec!["src/cart.ts".into()],
+        earlier: Vec::new(),
     }
 }
 
@@ -22,14 +23,14 @@ fn a_prompt_that_finds_cigar_starting_leaves_one_warm_up_for_the_next() {
     let service = Service::default();
     service.hold_start_for_tests();
     let ask = |query: &str| {
-        let soon = Instant::now() + Duration::from_millis(120);
+        let soon = Instant::now() + Duration::from_millis(120) + READ_RESERVE;
         lookup(&service, home.path(), request(project.path(), query), soon)
     };
 
     assert_eq!(
         ask("fix the cart"),
-        None,
-        "a starting CIGAR leaves the prompt the matched files"
+        Err(Miss::Starting),
+        "a starting CIGAR leaves the prompt to Guard's own read"
     );
     assert!(
         warming_now(&key),
@@ -37,8 +38,8 @@ fn a_prompt_that_finds_cigar_starting_leaves_one_warm_up_for_the_next() {
     );
     assert_eq!(
         ask("cart tax"),
-        None,
-        "a later prompt still gets the matched files"
+        Err(Miss::Starting),
+        "a later prompt is still told CIGAR is starting"
     );
 
     service.end_start_for_tests();
@@ -52,11 +53,21 @@ fn a_prompt_that_finds_cigar_starting_leaves_one_warm_up_for_the_next() {
     }
     assert_eq!(
         ask("fix the cart"),
-        Some(None),
+        Ok(None),
         "CIGAR neither starting nor running adds nothing"
     );
     assert!(
         !warming_now(&key),
         "no warm-up waits on a worker that is off"
     );
+}
+
+#[test]
+fn a_wait_on_cigar_leaves_guard_time_to_read_the_files_itself() {
+    let now = Instant::now();
+    let ample = now + Duration::from_secs(2);
+    assert_eq!(short_of(ample, now), ample - READ_RESERVE);
+    let short = now + Duration::from_millis(200);
+    assert_eq!(short_of(short, now), now + Duration::from_millis(100));
+    assert_eq!(short_of(now, now + Duration::from_millis(5)), now);
 }

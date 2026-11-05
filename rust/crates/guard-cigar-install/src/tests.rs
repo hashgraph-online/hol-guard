@@ -290,7 +290,10 @@ fn cancellation_and_deadlines_refuse_before_reading_inputs() {
         Err(InstallError::DeadlineExceeded)
     ));
     assert!(
-        PreparationControl::new(Arc::new(AtomicBool::new(false)), Duration::from_secs(121))
+        PreparationControl::new(Arc::new(AtomicBool::new(false)), Duration::from_secs(300)).is_ok()
+    );
+    assert!(
+        PreparationControl::new(Arc::new(AtomicBool::new(false)), Duration::from_secs(301))
             .is_err()
     );
 }

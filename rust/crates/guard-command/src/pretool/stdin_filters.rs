@@ -6,6 +6,24 @@
 //! read proof. `tr` never opens a file: every operand is a character set.
 //! `uniq` is the exception that writes — `uniq INPUT OUTPUT` truncates the
 //! second operand — so only a single operand is proven for it.
+//!
+//! `paste`, `join` and `column` belong here for the same reason: each one
+//! joins or lays out the columns of what it reads and has no option that
+//! names a file to write.
+//!
+//! `ul` and `tsort` render what they read the same way, and the `zcat`
+//! family does it through a decompressor. `numfmt` is not one of them: it
+//! rewrites the numbers it is handed and opens no file, so it is screened by
+//! `safe_number_arguments` rather than taking a read proof for an operand.
+//!
+//! `strings`, `hexdump`, `xxd`, `pr`, `shuf` and `iconv` belong here too:
+//! each prints a rendering of what it reads. `xxd` is the second exception
+//! that writes — `xxd INPUT OUTPUT` truncates its second operand — so only a
+//! single operand is proven for it.
+//!
+//! `nl`, `tac`, `rev`, `fold`, `expand`, `unexpand`, `fmt` and `comm` number,
+//! reverse, wrap, retab, reflow or compare the lines of what they read, and
+//! none of them has an option that names a file to write either.
 
 /// Enough operands for an ordinary command line, not a fan-out.
 const MAX_INPUTS: usize = 16;
@@ -21,9 +39,73 @@ pub(super) fn safe_arguments(tool: &str, arguments: &[String]) -> bool {
             .all(|argument| short_flags(argument, "cdui")),
         "cut" => safe_cut_arguments(arguments),
         "tr" => safe_tr_arguments(arguments),
-        "base64" => safe_base64_arguments(arguments),
+        "base64" | "base32" => safe_base64_arguments(arguments),
+        "paste" => {
+            let mut operands: Vec<&str> = Vec::new();
+            super::stdin_filter_options::safe_paste_arguments(arguments, &mut operands)
+                && stdin_operands(&operands)
+        }
+        "column" => {
+            let mut operands: Vec<&str> = Vec::new();
+            super::stdin_filter_options::safe_column_arguments(arguments, &mut operands)
+                && operands.is_empty()
+        }
+        "nl" | "tac" | "rev" | "fold" | "expand" | "unexpand" | "fmt" => {
+            let mut operands: Vec<&str> = Vec::new();
+            layout_arguments(tool, arguments, &mut operands) && operands.is_empty()
+        }
+        "strings" | "hexdump" | "xxd" | "pr" | "shuf" | "iconv" | "ul" | "tsort" => {
+            let mut operands: Vec<&str> = Vec::new();
+            dump_arguments(tool, arguments, &mut operands) && operands.is_empty()
+        }
+        name if super::decompress_reads::decompress_viewer(name) => {
+            let mut operands: Vec<&str> = Vec::new();
+            super::decompress_reads::decompress_arguments(name, arguments, &mut operands)
+                && operands.is_empty()
+        }
         _ => false,
     }
+}
+
+/// The dump and paging filters, each with its own option line. A tool this
+/// dispatcher does not name proves nothing and keeps the command under
+/// review.
+fn dump_arguments<'a>(tool: &str, arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
+    match tool {
+        "strings" => super::dump_filter_options::safe_strings_arguments(arguments, operands),
+        "hexdump" => super::dump_filter_options::safe_hexdump_arguments(arguments, operands),
+        "xxd" => super::dump_filter_options::safe_xxd_arguments(arguments, operands),
+        "pr" => super::dump_filter_options::safe_pr_arguments(arguments, operands),
+        "shuf" => super::dump_filter_options::safe_shuf_arguments(arguments, operands),
+        "ul" => super::dump_filter_options::safe_ul_arguments(arguments, operands),
+        "tsort" => super::dump_filter_options::safe_tsort_arguments(arguments, operands),
+        "numfmt" => super::dump_filter_options::safe_numfmt_arguments(arguments, operands),
+        "iconv" => super::dump_filter_options::safe_iconv_arguments(arguments, operands),
+        _ => false,
+    }
+}
+
+/// One layout filter's option line. Each of these reshapes the lines of what
+/// it reads; none of them has an option that names a file to write.
+fn layout_arguments<'a>(tool: &str, arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
+    match tool {
+        "nl" => super::stdin_filter_options::safe_nl_arguments(arguments, operands),
+        "tac" => super::stdin_filter_options::safe_tac_arguments(arguments, operands),
+        "rev" => super::stdin_filter_options::safe_rev_arguments(arguments, operands),
+        "fold" => super::stdin_filter_options::safe_fold_arguments(arguments, operands),
+        "expand" | "unexpand" => {
+            super::stdin_filter_options::safe_expand_arguments(arguments, operands)
+        }
+        "fmt" => super::stdin_filter_options::safe_fmt_arguments(arguments, operands),
+        "comm" => super::stdin_filter_options::safe_comm_arguments(arguments, operands),
+        _ => false,
+    }
+}
+
+/// `paste - -` reads standard input twice to pair its lines, so a dash is the
+/// one operand a piped `paste` may carry.
+fn stdin_operands(operands: &[&str]) -> bool {
+    operands.iter().all(|operand| *operand == "-")
 }
 
 fn short_flags(value: &str, allowed: &str) -> bool {
@@ -58,13 +140,12 @@ fn safe_tr_arguments(arguments: &[String]) -> bool {
     (1..=2).contains(&sets)
 }
 
-/// `base64` over standard input, writing only to stdout. Any operand or
-/// `-i`/`-o` names a file (BSD spells input and output that way), so neither
-/// is admitted; only decode, garbage and line-wrap options are.
+/// `base64` and `base32` over standard input, writing only to stdout. The two
+/// carry the same option line. Any operand or `-i`/`-o` names a file (BSD
+/// spells input and output that way), so neither is admitted; only decode,
+/// garbage and line-wrap options are.
 fn safe_base64_arguments(arguments: &[String]) -> bool {
-    let wrap = |value: &str| {
-        !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
-    };
+    let wrap = super::base64_reads::safe_wrap_count;
     let mut pending_wrap = false;
     for argument in arguments {
         if pending_wrap {
@@ -180,6 +261,57 @@ fn bounded_selection(value: &str) -> bool {
 
 /// The same filters given a file operand instead of a pipe. Every operand is
 /// opened for reading, so every operand takes the ordinary read proof.
+/// `numfmt` rewrites the numbers it is handed and reads standard input when
+/// it is handed none, so every operand is a number and none of them opens a
+/// file. A word that is not one of the numbers `numfmt` scales keeps the
+/// command under review rather than taking a read proof it never earns.
+pub(super) fn safe_number_arguments(arguments: &[String]) -> bool {
+    let mut operands: Vec<&str> = Vec::new();
+    super::dump_filter_options::safe_numfmt_arguments(arguments, &mut operands)
+        && operands.len() <= MAX_INPUTS
+        && operands.iter().all(|operand| numeric_operand(operand))
+}
+
+/// One number as `numfmt` reads it: digits with at most one fraction, and one
+/// of the unit letters it scales by, `i` marking the binary spellings. A sign
+/// is left out because the screen reads a leading dash as an option.
+fn numeric_operand(operand: &str) -> bool {
+    let (number, suffix) =
+        match operand.find(|character: char| !character.is_ascii_digit() && character != '.') {
+            Some(index) => operand.split_at(index),
+            None => (operand, ""),
+        };
+    let mut parts = number.split('.');
+    let whole = parts.next().unwrap_or_default();
+    let fraction = parts.next();
+    parts.next().is_none()
+        && !whole.is_empty()
+        && fraction.is_none_or(|fraction| !fraction.is_empty())
+        && matches!(
+            suffix,
+            "" | "K"
+                | "M"
+                | "G"
+                | "T"
+                | "P"
+                | "E"
+                | "Z"
+                | "Y"
+                | "R"
+                | "Q"
+                | "Ki"
+                | "Mi"
+                | "Gi"
+                | "Ti"
+                | "Pi"
+                | "Ei"
+                | "Zi"
+                | "Yi"
+                | "Ri"
+                | "Qi"
+        )
+}
+
 pub(super) fn safe_file_arguments(
     tool: &str,
     arguments: &[String],
@@ -190,10 +322,31 @@ pub(super) fn safe_file_arguments(
         "sort" => safe_sort_arguments(arguments, &mut operands),
         "uniq" => partition_short_flags(arguments, "cdui", &mut operands),
         "cut" => cut_arguments(arguments, &mut operands),
-        _ => false,
+        "paste" => super::stdin_filter_options::safe_paste_arguments(arguments, &mut operands),
+        "join" => super::stdin_filter_options::safe_join_arguments(arguments, &mut operands),
+        "column" => super::stdin_filter_options::safe_column_arguments(arguments, &mut operands),
+        "nl" | "tac" | "rev" | "fold" | "expand" | "unexpand" | "fmt" | "comm" => {
+            layout_arguments(tool, arguments, &mut operands)
+        }
+        name if super::decompress_reads::decompress_viewer(name) => {
+            super::decompress_reads::decompress_arguments(name, arguments, &mut operands)
+        }
+        other => dump_arguments(other, arguments, &mut operands),
     };
-    let maximum = if tool == "uniq" { 1 } else { MAX_INPUTS };
-    options_proven
+    let maximum = match tool {
+        "uniq" => 1,
+        // `join` pairs exactly two sorted inputs, and `comm` compares two.
+        "join" | "comm" => 2,
+        // `xxd INPUT OUTPUT` truncates the second operand.
+        "xxd" => 1,
+        _ => MAX_INPUTS,
+    };
+    // A file operand is opened, so it takes the read proof `cat` takes, and
+    // that proof only holds against a verified home and working directory.
+    // Without them the screen reads the spelling alone, which cannot tell a
+    // plain name from a link to a secret. The stdin forms above are unaffected.
+    super::safe_reads::verified_path_context(context.home_dir, context.cwd)
+        && options_proven
         && !operands.is_empty()
         && operands.len() <= maximum
         && operands
@@ -219,18 +372,6 @@ fn single_delimiter(value: &str) -> bool {
 /// screen names the reading options instead of allowing every leading dash.
 const SORT_READING_FLAGS: &str = "bCcdfghiMmnrsuVz";
 
-/// The value a `sort` key, separator, buffer size or worker count carries.
-/// It describes how to order the input rather than naming anything to open,
-/// so a short literal is admitted and an expansion is not.
-fn safe_sort_value(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 32
-        && !value.contains(['$', '`', '\\', '\'', '"'])
-        && value
-            .chars()
-            .all(|character| character == '\t' || !character.is_control())
-}
-
 /// `sort` reshapes what it reads and writes only to standard output. `-k`,
 /// `-t`, `-S` and the long `--key`, `--field-separator`, `--buffer-size` and
 /// `--parallel` take a value, attached or as the next word, so a key
@@ -241,7 +382,7 @@ fn safe_sort_arguments<'a>(arguments: &'a [String], operands: &mut Vec<&'a str>)
     for argument in arguments {
         let value = argument.as_str();
         if expecting_value {
-            if !safe_sort_value(value) {
+            if !super::stdin_filter_options::safe_filter_value(value) {
                 return false;
             }
             expecting_value = false;
@@ -276,7 +417,7 @@ fn safe_sort_long_option(long: &str, expecting_value: &mut bool) -> bool {
     };
     match name {
         "key" | "field-separator" | "buffer-size" | "parallel" => match attached {
-            Some(attached) => safe_sort_value(attached),
+            Some(attached) => super::stdin_filter_options::safe_filter_value(attached),
             None => {
                 *expecting_value = true;
                 true
@@ -284,7 +425,7 @@ fn safe_sort_long_option(long: &str, expecting_value: &mut bool) -> bool {
         },
         // `--check` reports on its own; `--sort` always carries its word.
         "check" => true,
-        "sort" => attached.is_some_and(safe_sort_value),
+        "sort" => attached.is_some_and(super::stdin_filter_options::safe_filter_value),
         "ignore-leading-blanks"
         | "dictionary-order"
         | "ignore-case"
@@ -304,28 +445,15 @@ fn safe_sort_long_option(long: &str, expecting_value: &mut bool) -> bool {
     }
 }
 
-/// One short `sort` cluster. A value-taking flag ends the cluster: the rest of
-/// the word is its value, or the next word is when nothing follows it.
+/// One short `sort` cluster, with `-k`, `-t` and `-S` as its value-taking
+/// flags.
 fn safe_sort_short_flags(cluster: &str, expecting_value: &mut bool) -> bool {
-    if cluster.is_empty() {
-        return false;
-    }
-    let mut characters = cluster.chars();
-    while let Some(flag) = characters.next() {
-        if SORT_READING_FLAGS.contains(flag) {
-            continue;
-        }
-        if !matches!(flag, 'k' | 't' | 'S') {
-            return false;
-        }
-        let attached = characters.as_str();
-        if attached.is_empty() {
-            *expecting_value = true;
-            return true;
-        }
-        return safe_sort_value(attached);
-    }
-    true
+    super::stdin_filter_options::screen_short_flags(
+        cluster,
+        SORT_READING_FLAGS,
+        "ktS",
+        expecting_value,
+    )
 }
 
 /// Split a short-flag command line into its flags and its file operands.

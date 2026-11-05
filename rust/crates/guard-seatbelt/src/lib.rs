@@ -12,8 +12,9 @@
 //! `EPERM`, so callers must invoke the worker unwrapped and let this profile
 //! be the only seatbelt application in the process.
 //!
-//! The crate also reads the boot session and continuous uptime, which need
-//! the same libSystem FFI.
+//! The crate also reads the boot session and continuous uptime, and asks
+//! the kernel what the sandbox around the process allows, which need the
+//! same libSystem FFI.
 
 #[cfg(target_os = "macos")]
 mod imp {
@@ -60,6 +61,10 @@ pub use imp::apply;
 
 #[cfg(target_os = "macos")]
 mod boot_session;
+#[cfg(target_os = "macos")]
+mod check;
 
 #[cfg(target_os = "macos")]
 pub use boot_session::{boot_session_uuid, continuous_uptime_ns};
+#[cfg(target_os = "macos")]
+pub use check::{account_home, denies_network, denies_write, user_temp_dir};

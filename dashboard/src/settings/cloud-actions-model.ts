@@ -1,47 +1,50 @@
 /**
- * What Settings shows about Cloud actions sign-ins on this computer.
+ * What Settings shows about Cloud actions on this computer.
  *
- * The daemon reports each saved sign-in (workspace, Guard Cloud site, when it
- * was made and when it ends) and the last answer Guard Cloud gave about it.
- * Everything here is read from that report and parsed defensively: an
- * unexpected shape becomes "not readable" instead of a guessed state. Signing
- * in to Cloud actions never changes how Guard protects this computer, so none
- * of these states may be presented as a protection problem.
+ * Cloud actions use this computer's `hol-guard connect` connection; there is
+ * no separate sign-in. The daemon reports that connection (workspace, Guard
+ * Cloud site, whether Cloud actions were left on when it connected) and the
+ * last answer Guard Cloud gave about Cloud actions. Everything here is read
+ * from that report and parsed defensively: an unexpected shape becomes "not
+ * readable" instead of a guessed state. Cloud actions never change how Guard
+ * protects this computer, so none of these states may be presented as a
+ * protection problem.
  */
 
-export const CLOUD_ACTIONS_STATUS_SCHEMA = "guard.cloud-actions.local-status.v1";
+export const CLOUD_ACTIONS_STATUS_SCHEMA = "guard.cloud-actions.local-status.v2";
+export const CLOUD_ACTIONS_CONNECT_COMMAND = "hol-guard connect";
 
-const MAX_SIGN_INS = 32;
 const MAX_MESSAGE_CHARS = 240;
-const PROFILE_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
 // Workspace IDs are placed in a copyable command, so only plain ID characters are accepted.
 const WORKSPACE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SITE_PATTERN = /^[A-Za-z0-9.-]{1,253}(?::\d{1,5})?$/;
 // Guard Cloud is reached over https; plain http is only accepted for this computer.
+// `hol-guard connect` opens this unless told otherwise.
+const DEFAULT_CONNECT_URL = "https://hol.org/guard/connect";
+const DEFAULT_CONNECT_SITE = "hol.org";
 const CLOUD_URL_PATTERN = /^(?:https:\/\/[A-Za-z0-9.-]{1,253}|http:\/\/(?:127\.0\.0\.1|localhost|host\.docker\.internal))(?::\d{1,5})?$/;
-const DEFAULT_CLOUD_URL = "https://hol.org";
 // Guard Cloud's pages sit at the site itself or under one short path such as /points.
 const CLOUD_BASE_PATH_PATTERN = /^(?:\/[a-z0-9-]{1,32})?$/;
 
 export type CloudActionsTone = "good" | "neutral" | "attention";
 
+/** Whether Cloud actions were left on when this computer connected; "unknown" when Guard Cloud did not say. */
+export type CloudActionsSetting = "on" | "off" | "unknown";
+
 export type CloudActionsCheck = {
+  /** The service answer's state code, or "not_checked". */
+  state: string;
   checkedAt: string | null;
   stale: boolean;
   message: string | null;
 };
 
-export type CloudActionsSignIn = {
-  profile: string;
+export type CloudActionsConnection = {
+  setting: CloudActionsSetting;
   workspace: string | null;
   site: string | null;
-  /** The Guard Cloud address to sign in to again; null when it is not known. */
-  cloudUrl: string | null;
-  /** Where Guard Cloud's pages live for this sign-in; null when Guard does not recognise the site. */
+  /** Where Guard Cloud's pages live for this connection; null when Guard does not recognise the site. */
   cloudBaseUrl: string | null;
-  signedInAt: string | null;
-  expiresAt: string | null;
-  state: string;
   check: CloudActionsCheck;
 };
 
@@ -49,7 +52,8 @@ export type CloudActionsStatus = {
   generatedAt: string | null;
   staleAfterSeconds: number;
   nextCheckAllowedAt: string | null;
-  signIns: CloudActionsSignIn[];
+  /** Null when this computer is not connected to Guard Cloud. */
+  connection: CloudActionsConnection | null;
 };
 
 export type CloudActionsLink = {
@@ -63,8 +67,8 @@ export type CloudActionsStateCopy = {
   tone: CloudActionsTone;
   /** What the member can do next, or null when nothing is needed. */
   remedy: string | null;
-  /** Whether signing in again is the way forward. */
-  signInAgain: boolean;
+  /** Whether connecting this computer again is the way forward. */
+  reconnect: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -84,17 +88,17 @@ function moment(value: unknown): string | null {
   return raw !== null && Number.isFinite(Date.parse(raw)) ? raw : null;
 }
 
+const NOT_CHECKED: CloudActionsCheck = { state: "not_checked", checkedAt: null, stale: false, message: null };
+
 function normalizeCheck(value: unknown): CloudActionsCheck {
-  if (!isRecord(value) || value["state"] === "not_checked") {
-    return { checkedAt: null, stale: false, message: null };
-  }
+  if (!isRecord(value) || value["state"] === "not_checked" || !isRecord(value["service"])) return NOT_CHECKED;
+  const service = value["service"];
+  const state = text(service["state"], /^[a-z_]{1,40}$/);
+  if (state === null) return NOT_CHECKED;
   const checkedAt = moment(value["checked_at"]);
-  const connection = isRecord(value["connection"]) ? value["connection"] : null;
-  const service = isRecord(value["service"]) ? value["service"] : null;
-  // The connection answer is the more specific one once the service check passed.
-  const source = service && service["state"] !== "current" ? service : connection;
-  const message = text(source?.["message"]);
+  const message = text(service["message"]);
   return {
+    state,
     checkedAt,
     stale: checkedAt === null || value["stale"] === true,
     message: message === null ? null : message.slice(0, MAX_MESSAGE_CHARS),
@@ -107,103 +111,77 @@ function cloudBase(value: unknown, cloudUrl: string | null): string | null {
   return CLOUD_BASE_PATH_PATTERN.test(base.slice(cloudUrl.length)) ? base : null;
 }
 
-function normalizeSignIn(value: unknown): CloudActionsSignIn | null {
-  if (!isRecord(value)) return null;
-  const profile = text(value["profile"], PROFILE_PATTERN);
-  const state = text(value["state"], /^[a-z_]{1,40}$/);
-  if (profile === null || state === null) return null;
+function normalizeConnection(value: Record<string, unknown>): CloudActionsConnection {
   const site = text(value["site"], SITE_PATTERN);
   const reported = text(value["cloud_url"], CLOUD_URL_PATTERN);
-  // The address must name the same site the row shows.
+  // The address must name the same site the page shows.
   const cloudUrl = reported !== null && site !== null && reported.replace(/^https?:\/\//, "") === site ? reported : null;
+  const setting = value["state"];
   return {
-    profile,
+    setting: setting === "on" || setting === "off" ? setting : "unknown",
     workspace: text(value["workspace"], WORKSPACE_PATTERN),
     site,
-    cloudUrl,
     cloudBaseUrl: cloudBase(value["cloud_base_url"], cloudUrl),
-    signedInAt: moment(value["signed_in_at"]),
-    expiresAt: moment(value["expires_at"]),
-    state,
     check: normalizeCheck(value["check"]),
   };
 }
 
 export function normalizeCloudActionsStatus(payload: unknown): CloudActionsStatus | null {
   if (!isRecord(payload) || payload["schema"] !== CLOUD_ACTIONS_STATUS_SCHEMA) return null;
-  const rows = Array.isArray(payload["sign_ins"]) ? payload["sign_ins"].slice(0, MAX_SIGN_INS) : null;
-  if (rows === null) return null;
+  const connection = payload["connection"];
+  if (!isRecord(connection) || typeof connection["state"] !== "string") return null;
   const staleAfter = payload["stale_after_seconds"];
   return {
     generatedAt: moment(payload["generated_at"]),
     staleAfterSeconds: typeof staleAfter === "number" && Number.isFinite(staleAfter) && staleAfter > 0 ? staleAfter : 300,
     nextCheckAllowedAt: moment(payload["next_check_allowed_at"]),
-    signIns: rows.map(normalizeSignIn).filter((row): row is CloudActionsSignIn => row !== null),
+    connection: connection["state"] === "not_paired" ? null : normalizeConnection(connection),
   };
 }
 
 const STATE_COPY: Record<string, CloudActionsStateCopy> = {
-  connected: { label: "Connected", tone: "good", remedy: null, signInAgain: false },
-  current: { label: "Connected", tone: "good", remedy: null, signInAgain: false },
+  current: { label: "Available", tone: "good", remedy: null, reconnect: false },
   not_checked: {
     label: "Not checked yet",
     tone: "neutral",
-    remedy: "Select Check now to ask Guard Cloud about this sign-in.",
-    signInAgain: false,
+    remedy: "Select Check now to ask Guard Cloud about Cloud actions.",
+    reconnect: false,
   },
   offline: {
     label: "Guard Cloud not reachable",
     tone: "neutral",
     remedy: "Check this computer's internet connection, then check again.",
-    signInAgain: false,
+    reconnect: false,
   },
   not_turned_on: {
     label: "Not turned on",
     tone: "neutral",
     remedy: "Cloud actions are not turned on for this Guard Cloud. Nothing on this computer needs changing.",
-    signInAgain: false,
-  },
-  sign_in_expired: {
-    label: "Sign-in ended",
-    tone: "attention",
-    remedy: "This sign-in has ended. Sign in again to keep using Cloud actions.",
-    signInAgain: true,
-  },
-  sign_in_again: {
-    label: "Sign in again",
-    tone: "attention",
-    remedy: "Guard Cloud no longer accepts this sign-in. Sign in again to keep using Cloud actions.",
-    signInAgain: true,
+    reconnect: false,
   },
   changed: {
-    label: "Sign in again",
+    label: "Reconnect",
     tone: "attention",
-    remedy: "Guard Cloud changed what Cloud actions offer. Sign in again to pick up the change.",
-    signInAgain: true,
+    remedy: "Guard Cloud changed what Cloud actions offer. Reconnect this computer to pick up the change.",
+    reconnect: true,
   },
-  not_permitted: {
-    label: "No access",
+  reconnect: {
+    label: "Reconnect",
     tone: "attention",
-    remedy: "This member may not use Cloud actions in this workspace. Ask a workspace owner for access.",
-    signInAgain: false,
-  },
-  workspace_mismatch: {
-    label: "Workspace refused",
-    tone: "attention",
-    remedy: "Guard Cloud refused this workspace. Sign in again with a workspace you belong to.",
-    signInAgain: true,
+    remedy: "Guard Cloud no longer accepts this computer's connection. Connect this computer again.",
+    reconnect: true,
   },
   unexpected_answer: {
     label: "Unexpected answer",
     tone: "neutral",
     remedy: "Guard Cloud gave an answer Guard did not expect. Check again in a few minutes.",
-    signInAgain: false,
+    reconnect: false,
   },
-  profile_damaged: {
-    label: "Needs repair",
-    tone: "attention",
-    remedy: "This saved sign-in cannot be read. Sign out of it, then sign in again.",
-    signInAgain: true,
+  off: {
+    label: "Off on this computer",
+    tone: "neutral",
+    remedy: "Cloud actions were left off when this computer connected. To turn them on, reconnect and leave them on in the browser.",
+    reconnect: true,
   },
 };
 
@@ -211,7 +189,7 @@ const UNKNOWN_STATE: CloudActionsStateCopy = {
   label: "Unknown",
   tone: "neutral",
   remedy: "Check again, or update Guard if this keeps happening.",
-  signInAgain: false,
+  reconnect: false,
 };
 
 export function cloudActionsStateCopy(state: string): CloudActionsStateCopy {
@@ -219,23 +197,37 @@ export function cloudActionsStateCopy(state: string): CloudActionsStateCopy {
 }
 
 /**
- * The command that renews this sign-in on the same Guard Cloud. When the
- * address is unknown the command names a placeholder instead of falling back
- * to the default site.
+ * The state to show: Cloud actions left off on this computer outrank what Guard Cloud offers,
+ * but a connection Guard Cloud refused outranks both, since turning them on needs a new connection.
  */
-export function cloudActionsSignInCommand(signIn: Pick<CloudActionsSignIn, "profile" | "workspace" | "cloudUrl">): string {
-  let command = "hol-guard cloud-actions login";
-  if (signIn.cloudUrl === null) command += " --cloud-url <guard-cloud-address>";
-  else if (signIn.cloudUrl !== DEFAULT_CLOUD_URL) command += ` --cloud-url ${signIn.cloudUrl}`;
-  if (signIn.workspace !== null) command += ` --cloud-workspace ${signIn.workspace}`;
-  if (signIn.profile !== "default") command += ` --profile ${signIn.profile}`;
-  return command;
+export function cloudActionsCurrentState(connection: Pick<CloudActionsConnection, "setting" | "check">): string {
+  if (connection.check.state === "reconnect") return "reconnect";
+  return connection.setting === "off" ? "off" : connection.check.state;
 }
 
-export function cloudActionsSignOutCommand(signIn: Pick<CloudActionsSignIn, "profile">): string {
-  return signIn.profile === "default"
-    ? "hol-guard cloud-actions logout"
-    : `hol-guard cloud-actions logout --profile ${signIn.profile}`;
+/** The command that connects this computer again to the same Guard Cloud and workspace. */
+/**
+ * The command that reconnects to the same Guard Cloud and workspace, or null when the
+ * site is known but its connect page is not, so no command can name it safely.
+ */
+export function cloudActionsReconnectCommand(
+  connection: Pick<CloudActionsConnection, "workspace" | "site" | "cloudBaseUrl"> | null,
+): string | null {
+  if (connection === null) return CLOUD_ACTIONS_CONNECT_COMMAND;
+  if (connection.cloudBaseUrl === null && connection.site !== null && connection.site !== DEFAULT_CONNECT_SITE) {
+    return null;
+  }
+  const parts = [CLOUD_ACTIONS_CONNECT_COMMAND];
+  const connectUrl = connection.cloudBaseUrl === null ? null : `${connection.cloudBaseUrl}/guard/connect`;
+  if (connectUrl !== null && connectUrl !== DEFAULT_CONNECT_URL) parts.push(`--connect-url ${connectUrl}`);
+  if (connection.workspace !== null) parts.push(`--cloud-workspace ${connection.workspace}`);
+  return parts.join(" ");
+}
+
+export function cloudActionsSettingCopy(setting: CloudActionsSetting): string {
+  if (setting === "on") return "On";
+  if (setting === "off") return "Off";
+  return "Not reported by Guard Cloud";
 }
 
 function elapsedCopy(seconds: number): string {
@@ -260,38 +252,32 @@ export function cloudActionsCheckedCopy(check: CloudActionsCheck, now: Date, sta
   return check.stale || seconds > staleAfterSeconds ? `${when}. This answer may be out of date.` : when;
 }
 
-/** The state to show now: a sign-in whose end time has passed has ended, whatever the last answer said. */
-export function cloudActionsCurrentState(signIn: Pick<CloudActionsSignIn, "state" | "expiresAt">, now: Date): string {
-  if (signIn.state === "profile_damaged" || signIn.expiresAt === null) return signIn.state;
-  return Date.parse(signIn.expiresAt) <= now.getTime() ? "sign_in_expired" : signIn.state;
-}
-
 export function cloudActionsRetryAfterSeconds(nextCheckAllowedAt: string | null, now: Date): number {
   if (nextCheckAllowedAt === null) return 0;
   const seconds = Math.ceil((Date.parse(nextCheckAllowedAt) - now.getTime()) / 1000);
   return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, 60) : 0;
 }
 
-export function cloudActionsSummary(status: CloudActionsStatus, now: Date): string {
-  const count = status.signIns.length;
-  if (count === 0) return "No AI tool on this computer is signed in to Cloud actions.";
-  const needsAttention = status.signIns.filter(
-    (row) => cloudActionsStateCopy(cloudActionsCurrentState(row, now)).tone === "attention",
-  ).length;
-  const signedIn = count === 1 ? "1 sign-in" : `${count} sign-ins`;
-  if (needsAttention === 0) return `${signedIn} on this computer.`;
-  return `${signedIn} on this computer. ${needsAttention === 1 ? "1 needs" : `${needsAttention} need`} attention.`;
+export function cloudActionsSummary(status: CloudActionsStatus): string {
+  const connection = status.connection;
+  if (connection === null) return "This computer is not connected to Guard Cloud.";
+  const where = connection.workspace === null ? "Connected to Guard Cloud." : `Connected to workspace ${connection.workspace}.`;
+  const state = cloudActionsCurrentState(connection);
+  // A revoked connection is not "connected"; say so instead of naming the workspace.
+  if (state === "reconnect") return "Guard Cloud no longer accepts this computer's connection.";
+  const copy = cloudActionsStateCopy(state);
+  return copy.tone === "attention" ? `${where} Cloud actions need attention.` : where;
 }
 
 /**
- * Guard Cloud pages for this sign-in's workspace, or none when the site or
+ * Guard Cloud pages for this connection's workspace, or none when the site or
  * workspace is not known. Links carry only the workspace; Guard Cloud checks
  * the member's own browser sign-in before showing anything.
  */
-export function cloudActionsLinks(signIn: Pick<CloudActionsSignIn, "workspace" | "cloudBaseUrl">): CloudActionsLink[] {
-  if (signIn.workspace === null || signIn.cloudBaseUrl === null) return [];
-  const base = signIn.cloudBaseUrl;
-  const workspace = encodeURIComponent(signIn.workspace);
+export function cloudActionsLinks(connection: Pick<CloudActionsConnection, "workspace" | "cloudBaseUrl">): CloudActionsLink[] {
+  if (connection.workspace === null || connection.cloudBaseUrl === null) return [];
+  const base = connection.cloudBaseUrl;
+  const workspace = encodeURIComponent(connection.workspace);
   return [
     {
       label: "Review requests",

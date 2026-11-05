@@ -91,13 +91,18 @@ def primary_content_sources_from_artifacts(
 ) -> tuple[GuardAibomPrimaryContentSource, ...]:
     items_by_id = {item.item_id: item for item in snapshot.items}
     candidates: list[tuple[str, GuardAgentInventoryItem, str, Path]] = []
+    claimed_item_ids: set[str] = set()
     for artifact in artifacts:
         artifact_type = str(getattr(artifact, "artifact_type", ""))
         if artifact_type not in {"skill", "instruction"}:
             continue
         item = items_by_id.get(str(getattr(artifact, "artifact_id", "")))
-        if item is None:
+        # A harness can report one id more than once, such as every cached
+        # version of a plugin. The snapshot item was built from the first of
+        # them, so only that path holds the body its hash names.
+        if item is None or item.item_id in claimed_item_ids:
             continue
+        claimed_item_ids.add(item.item_id)
         primary_content_hash = _primary_content_hash(item, artifact_type=artifact_type)
         if primary_content_hash is None:
             continue

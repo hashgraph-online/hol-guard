@@ -254,3 +254,10 @@ b6926bac2ef58d0794d1df6e2bb9ee401d8ac18b:tests/test_guard_runtime.py:generic-api
 # Synthetic canary value in the Cloud actions settings preview tests, not a credential.
 30151f99e991cfd2da9cca4a26b18c01880ea499:tests/test_guard_cloud_actions_host_config.py:generic-api-key:28
 30151f99e991cfd2da9cca4a26b18c01880ea499:tests/test_guard_cloud_actions_host_config.py:generic-api-key:30
+# Synthetic PEM armour in a CIGAR prompt-read test that checks key-shaped files are
+# never read (rewritten in the next commit), not a key.
+476e1b4a9ab225700ef584bb795e5e5dc0b11ac4:rust/crates/guard-runtime/src/context_assistance_engine_quick_tests.rs:private-key:116
+# Synthetic placeholder ("header.e30.signature") in the connect Cloud actions tests, not a credential.
+486624632b8665166ff84788ff8e976bfa71791f:tests/test_guard_connect_cloud_actions.py:generic-api-key:71
+# Synthetic sk- key in the inventory description redaction vectors, not a credential.
+029f6e816d3bfda39fc459be662433da45d922b0:rust/crates/guard-runtime/testdata/inventory_item_description/description_vectors.json:generic-api-key:787

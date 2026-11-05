@@ -396,3 +396,50 @@ fn a_wait_that_builds_up_across_passes_keeps_its_review() {
         assert_eq!(flatten(command), None, "{command}");
     }
 }
+
+/// The shell removes quoting inside a word, so a split-quoted `-v` is still
+/// printf's assigning option, while a `-v` after the format is printed data.
+#[test]
+fn split_quoted_printf_option_still_assigns() {
+    for text in [
+        "printf -v NAME value",
+        "printf \"-\"v NAME value",
+        "printf -''v NAME value",
+        "printf -\"v\" NAME value",
+        "printf '-''v' PATH '%s'",
+        "printf 'x%n' PATH",
+        "printf \"a $f\" PATH",
+        "printf 2>/dev/null -v PATH /tmp/tools",
+        "printf > out -v PATH /tmp/tools",
+        "printf -v>/dev/null PATH /tmp/tools",
+        "printf $'\\x25n' PATH",
+        "printf $'\\45n' PATH",
+        "printf $'\\445n' PATH",
+        "printf $'\\u0025n' PATH",
+        "printf $'\\x2dv' PATH /tmp/tools",
+        "printf $'%\\x00'n PATH",
+        "printf $'%\\0'n PATH",
+        "printf \"%\\\nn\" PATH",
+        "printf {-v,PATH,%s,/tmp/x}",
+        "printf %[n] PATH",
+    ] {
+        assert!(super::command_word_changes_shell_state(text), "{text}");
+    }
+    for text in [
+        "printf '%s\\n' -version",
+        "printf -- -v",
+        "printf '%s' value",
+        "printf -- '%s\\n' hello",
+        "printf '$HOME'",
+        "printf '%s %s\\n' \"$a\" \"$b\"",
+        "printf '%%n'",
+        "printf $'%s\\n' hello",
+        "printf '%s\\n' hello 2>/dev/null",
+        "printf 2>&1 '%s\\n' hello",
+        // A numeric escape that names a printed character assigns nothing.
+        "printf $'\\u2713 done\\n'",
+        "printf $'\\U0001F680 deploy\\n'",
+    ] {
+        assert!(!super::command_word_changes_shell_state(text), "{text}");
+    }
+}

@@ -1,5 +1,6 @@
 import { fetchWithGuardAuth } from "../guard-api";
 import { isGuardDemoMode } from "../guard-demo";
+import { forgetTurnOn } from "./setup-resume";
 import { parseContextAssistanceStatus } from "./status";
 import type { ContextAssistanceStatus, ContextControlAction } from "./types";
 
@@ -38,5 +39,7 @@ export function controlContextAssistance(action: ContextControlAction, signal?: 
   if (!["recheck", "activate", "stop"].includes(action)) {
     return Promise.reject(new ContextAssistanceApiError("action_invalid", "Invalid context assistance action."));
   }
+  // Turning CIGAR off from any page cancels an unfinished Turn on click.
+  if (action === "stop") forgetTurnOn();
   return request(`/v1/context-assistance/${action}`, action, signal);
 }

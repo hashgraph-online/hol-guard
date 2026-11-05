@@ -385,7 +385,7 @@ pub(crate) fn dumps(value: &PyVal, ensure_ascii: bool, unmap: bool, out: &mut St
     }
 }
 
-fn float_text(number: f64) -> String {
+pub(crate) fn float_text(number: f64) -> String {
     if number.is_nan() {
         "NaN".to_owned()
     } else if number.is_infinite() {
@@ -425,7 +425,7 @@ pub(crate) fn json_string(text: &str, ensure_ascii: bool, unmap: bool) -> String
     out
 }
 
-fn write_string(text: &str, ensure_ascii: bool, unmap: bool, out: &mut String) {
+pub(crate) fn write_string(text: &str, ensure_ascii: bool, unmap: bool, out: &mut String) {
     out.push('"');
     for character in text.chars() {
         match character {

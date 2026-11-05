@@ -4,6 +4,19 @@
   "pending_fix": {},
   "cases": [
     {
+      "id": "codex-exit-status-binding",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git show-ref --verify --quiet refs/heads/weekly-report; branch_status=$?; if [ \"$branch_status\" -eq 0 ]; then echo 'weekly-report exists'; else echo 'weekly-report unused'; fi"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
       "id": "guard-repair-dry-run",
       "fix_area": "shell",
       "harnesses": [
@@ -741,6 +754,102 @@
       "tool": "shell",
       "tool_input": {
         "command": "node server.js & echo started"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "toolchain-inventory-newest-version-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "latest=$(find \"$HOME/.toolchains/versions\" -mindepth 1 -maxdepth 1 -type d -exec basename {} \\; | sort -V | tail -n 1); printf 'latest=%s\\n' \"$latest\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "toolchain-inventory-walk-then-parameter",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find src -type d -exec basename {} \\; | sort -V; printf 'latest=%s\\n' \"$latest\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "toolchain-inventory-version-value-from-a-pipeline",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "version=$(cat package.json | head -n 20 | tail -n 1); printf 'version=%s\\n' \"$version\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "toolchain-inventory-quoted-version-value",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "version=\"$(cat package.json | head -n 20 | tail -n 1)\"; printf 'version=%s\\n' \"$version\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "toolchain-inventory-version-printed-in-parentheses",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "version=$(cat package.json | head -n 1); printf \"(%s)\\n\" \"$version\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "search-text-that-spells-a-find-action",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "matches=$(grep -rl -- \"-exec\" src); printf '%s\\n' \"$matches\""
       },
       "cwd": "worktree",
       "expect": "allow_or_review"
@@ -5964,6 +6073,21 @@
       "expect": "allow"
     },
     {
+      "id": "read-jsx-password-prop",
+      "fix_area": "read",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "read",
+      "event": "PostToolUse",
+      "tool_input": {
+        "path": "${WORKTREE}/src/password-reset-email.tsx"
+      },
+      "source_ref": true,
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "omp-read-auth-feature-directory",
       "fix_area": "read",
       "harnesses": [
@@ -5976,6 +6100,90 @@
       },
       "cwd": "feature_app",
       "expect": "allow"
+    },
+    {
+      "id": "omp-read-file-url-sibling-checkout",
+      "fix_area": "read",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://${HOME}/other-project"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-read-file-url-sibling-note",
+      "fix_area": "read",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://${HOME}/other-project/notes.md"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-read-file-url-localhost-sibling-source",
+      "fix_area": "read",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://localhost${HOME}/other-project/src/report.ts"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-omp-read-file-url-remote-authority",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://remote.example${HOME}/other-project/notes.md"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-read-file-url-encoded-credential-directory",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://${HOME}/%2essh/id_rsa"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-read-file-url-encoded-climb-to-credential",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "read",
+      "tool_input": {
+        "path": "file://${HOME}/other-project/%2e%2e/.ssh/id_rsa"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
     },
     {
       "id": "read-auth-feature-readme",
@@ -12450,6 +12658,57 @@
       "cwd": "worktree",
       "expect": "allow",
       "requires_sandbox": true
+    },
+    {
+      "id": "gauntlet-sibling-cd-jest-cat-escapes",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js --ci 2>&1 | cat -A | head -30"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "gauntlet-sibling-cd-jest-cat-nonprinting",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js --ci 2>&1 | cat -v"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-sibling-cd-jest-cat-reads-private-key",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js --ci 2>&1 | cat ${HOME}/.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "status-tail-cd-sibling-jest-entry",
@@ -21804,6 +22063,19 @@
       "expect": "allow"
     },
     {
+      "id": "omp-glob-blank-path",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "path": ""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "omp-glob-recursive-sh",
       "fix_area": "omp",
       "harnesses": [
@@ -27170,6 +27442,254 @@
       "requires_sandbox": true
     },
     {
+      "id": "parent-npx-tape-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tape test/a.js"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-tape-require",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tape -r tsm test/a.js"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-tsd-project",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsd"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-tsd-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsd --files test/types.test-d.ts --show-diff"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-tape-outside-require-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tape -r /etc/setup.js test/a.js"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-tsd-outside-typings-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsd --typings /etc/index.d.ts"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-cucumber-js-run",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx cucumber-js"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-cucumber-js-feature-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx cucumber-js features/login.feature"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-cucumber-js-require-support",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx cucumber-js --require features/support/world.js"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-cucumber-js-report-file-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx cucumber-js --format html:reports/cucumber.html"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-cucumber-js-short-report-file-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx cucumber-js -f junit:report.xml"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-cucumber-js-digit-report-target-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx cucumber-js --format html:12"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-cucumber-js-scenario-line-runs",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx cucumber-js features/login.feature:12"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-cucumber-js-publish-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx cucumber-js --publish"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-cucumber-js-outside-config-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx cucumber-js --config ../../other/cucumber.cjs"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
       "id": "parent-npx-jasmine-init-reviews",
       "fix_area": "shell",
       "harnesses": [
@@ -27277,6 +27797,349 @@
       "tool": "shell",
       "tool_input": {
         "command": "npx uvu --cwd /tmp/elsewhere"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-tap-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tap --no-coverage test/"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-tap-coverage-disabled",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tap --disable-coverage test/unit.js"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-borp-plain",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx borp"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-borp-reporter",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx borp --reporter=spec test/unit.test.js"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-poku-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx poku test"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-lab-plain",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx lab"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-lab-reporter",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx lab -r console -o stdout"
+      },
+      "cwd": "parent",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "parent-npx-tap-default-coverage-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tap"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-tap-coverage-turned-back-on-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tap --no-coverage --coverage test/"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-tap-coverage-text-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tap --coverage-report=text test/unit.js"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-borp-short-group-reporter-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx borp -Cr tap:results.txt"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-tap-report-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tap report"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-tap-node-arg-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tap --node-arg=--inspect-brk"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-tap-test-env-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tap --test-env=NODE_OPTIONS=--inspect-brk"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-tap-html-coverage-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tap --coverage-report=html"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-borp-watch-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx borp --watch"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-borp-watch-off-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx borp --watch=false"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-poku-watch-off-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx poku --watch=false"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-poku-kill-port-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx poku --killPort=3000"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-poku-env-file-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx poku --envFile=.env"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "parent-npx-lab-inspect-reviews",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx lab --inspect"
       },
       "cwd": "parent",
       "expect": "not_allow"
@@ -27972,7 +28835,8 @@
         "command": "(cd dashboard && ./node_modules/.bin/vite build) && (cd src && ls)"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "neg-subshell-group-list-upload",
@@ -29807,7 +30671,8 @@
         "command": "for d in dashboard src; do (cd \"$d\" && ls); done"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "control-flow-if-branch-subshell-linked-modules-build",
@@ -29823,7 +30688,8 @@
         "command": "if [ -d dashboard ]; then (cd dashboard && ./node_modules/.bin/vite build); fi"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "session-for-loop-bare-glob-echo",
@@ -34969,6 +35835,1332 @@
       "expect": "not_allow"
     },
     {
+      "id": "paste-tab-delimiter-worktree-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "paste -d$'\\t' README.md README.md | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "paste-tab-delimiter-pipe-pairs",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | paste -d$'\\t' - - | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "join-tab-separator-worktree-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "join -t$'\\t' README.md README.md | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "column-tab-separator-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "column -t -s$'\\t' README.md | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "paste-delimiter-worktree-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "paste -d: README.md README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "paste-delimiter-pipe-pairs",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | paste -d: - -"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "join-separator-worktree-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "join -t: README.md README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "column-table-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "column -t README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "column-separator-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "column -t -s: README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-paste-home-ssh-key",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "paste -d: ${HOME}/.ssh/id_rsa README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-join-third-operand",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "join -t: README.md README.md README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-column-unmodeled-option",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "column -t --json README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "strings-printable-runs-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "strings README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "strings-printable-runs-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | strings"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "hexdump-canonical-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hexdump -C README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "hexdump-canonical-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | hexdump -C"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "xxd-dump-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "xxd README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "xxd-dump-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | xxd"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pr-plain-pages-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pr -t README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pr-attached-separator-pages-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pr -ts: README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pr-plain-pages-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | pr -t"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "base32-encode-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "base32 README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "base32-encode-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | base32"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shuf-head-count-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "shuf -n 3 README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shuf-head-count-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | shuf -n 3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "iconv-recode-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "iconv -f utf-8 -t utf-8 README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "iconv-recode-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | iconv -f utf-8 -t utf-8"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "zcat-decompress-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "zcat README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gzcat-decompress-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gzcat README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "zstdcat-decompress-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | zstdcat"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "xzcat-threads-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "xzcat --threads=2 README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "bzcat-small-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bzcat -s README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "ul-render-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ul README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tsort-order-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "tsort README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "numfmt-scale-literal-number",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "numfmt --to=iec --field=2 1048576 | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-zcat-chosen-suffix-operand",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "zcat -f --suffix=nv README.m | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-zcat-short-suffix-operand",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "zcat -S nv README.m | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "zstdcat-attached-thread-count",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "zstdcat -T4 README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "numfmt-grouping-literal-number",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "numfmt --grouping 1048576 | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-numfmt-file-operand",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "numfmt --to=iec README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-zstdcat-aggregated-output-flag",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "zstdcat -T4o decoded.txt README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-zstdcat-output-operand",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "zstdcat -o decoded.txt README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-xxd-second-operand",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "xxd README.md dumped.hex | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-pr-separator-is-attached",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pr -s /etc/passwd README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-xxd-plain-is-one-option",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "xxd -ps /etc/passwd README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-strings-argument-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "strings @args.txt README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-strings-argument-file-as-value",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "strings -n @args.txt README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-xxd-operand-ends-the-options",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "xxd README.md -p | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-pr-separator-takes-the-cluster",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pr -sh /etc/passwd README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-shuf-output-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "shuf -n 3 -o shuffled.txt README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-iconv-output-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "iconv -f utf-8 -t ascii -o converted.txt README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "base64-wrap-count-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "base64 -w 0 README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "base64-wrap-long-option-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "base64 --wrap=76 README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-base64-wrap-not-a-count",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "base64 -w notanumber README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-hexdump-format-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hexdump -f format.txt README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-strings-home-private-key",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "strings ${HOME}/.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "nl-tab-separator-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "nl -s$'\\t' README.md | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "nl-tab-separator-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | nl -s$'\\t' | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tac-tab-separator-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "tac -s$'\\t' README.md | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "comm-tab-delimiter-worktree-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "comm -12 --output-delimiter=$'\\t' README.md README.md | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "nl-body-numbering-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "nl -ba README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "nl-body-numbering-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | nl -ba"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tac-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "tac README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tac-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | tac"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rev-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rev README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rev-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | rev"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "fold-width-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fold -w 72 README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "fold-width-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | fold -w 72"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "expand-tabs-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "expand -t 4 README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "expand-tabs-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | expand -t 4"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "unexpand-all-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "unexpand -a README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "unexpand-all-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | unexpand -a"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "fmt-width-cluster-worktree-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fmt -72 README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "fmt-width-cluster-piped",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c $USER README.md | fmt -72"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "comm-common-lines-worktree-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "comm -12 README.md README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-nl-home-private-key",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "nl -ba ${HOME}/.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fmt-output-option",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fmt --output=$OUT README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-comm-third-operand",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "comm -12 README.md README.md README.md | grep -c $USER"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "uniq-count-worktree-file",
       "fix_area": "shell",
       "harnesses": [
@@ -36151,6 +38343,70 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "pattern-value-report-dir-prefix-npx-jest-no-local-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "REPORT_DIR=reports/* npx jest --ci"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "pattern-value-debug-prefix-npx-jest-no-local-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "DEBUG=app:* npx jest --ci"
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-pattern-value-substitution-debug-prefix-npx-jest-no-local-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "DEBUG=$(id) npx jest --ci"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-separator-value-debug-prefix-npx-jest-no-local-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "DEBUG='app:*;id' npx jest --ci"
+      },
+      "cwd": "home_project",
+      "expect": "not_allow"
     },
     {
       "id": "pattern-value-quoted-debug-prefix-npx-vitest",
@@ -41058,7 +43314,8 @@
         "command": "{ cd dashboard && ./node_modules/.bin/vite build; } && echo done"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "brace-group-leading-conditional-ls",
@@ -44537,6 +46794,118 @@
       "tool": "read",
       "tool_input": {
         "path": "${ORG}/app-portal/.git/hooks/pre-commit.sh"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "read-repo-hidden-circleci-configuration",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.circleci/config.yml"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "read-repo-hidden-changeset-configuration",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.changeset/config.json"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "read-repo-hidden-storybook-settings",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.storybook/settings.json"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-read-repo-hidden-configuration-holding-a-credential",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.cargo/config.toml"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-repo-hidden-configuration-holding-a-multiline-credential",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.storybook/config.toml"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-repo-hidden-configuration-holding-an-indented-credential",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.storybook/config.yml"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-repo-hidden-configuration-holding-a-quoted-null",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.changeset/settings.json"
       },
       "cwd": "org_app",
       "expect": "not_allow"
@@ -49554,6 +51923,32 @@
       "cwd": "worktree",
       "expect": "allow",
       "requires_sandbox": true
+    },
+    {
+      "id": "claude-code-heredoc-commit-message",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add docs/notes.md && git commit -m \"$(cat <<'EOF'\nAdd notes\n\nExplain the retry window.\nEOF\n)\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "claude-code-grouped-find-xargs-quiet-errors",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find . -type f \\( -name \"*.ts\" -o -name \"*.json\" \\) -not -path \"*/node_modules/*\" | xargs grep -l \"canonical\" 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
     }
   ],
   "mcp_cases": [

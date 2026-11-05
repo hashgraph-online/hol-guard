@@ -1,19 +1,22 @@
 """Early dispatch for `cloud-actions`.
 
-`login`, `logout`, `status`, `doctor` and `workspace select` act on a saved
-sign-in (profile). `status` and `doctor` also ask Guard Cloud whether it still
-accepts that sign-in (`cloud_actions_health`); `status --offline` does not.
-`ai-tools configure --dry-run` previews an AI tool's settings change without
-writing it, `--apply` writes it and keeps a copy of the previous file, and
-`ai-tools restore` undoes that change. `accounts connect` opens the
-workspace's connected accounts in Guard Cloud, where the member signs in with
-the provider in the browser; no provider password or key passes through this
-command. The other commands still report, without touching this device or the
-network, that they cannot act yet, and echo the contexts they parsed so
-scripts and tests can see which one each value landed in.
+Cloud actions have no sign-in of their own: every command uses this
+computer's `hol-guard connect` pairing. `status` and `doctor` read it and ask
+Guard Cloud whether it accepts it (`cloud_actions_health`); `status --offline`
+does not ask. `ai-tools configure --dry-run` previews an AI tool's settings
+change without writing it, `--apply` gets that AI tool's access from the
+pairing and writes the change, keeping a copy of the previous file, and
+`ai-tools restore` undoes the change and ends the access. `accounts connect`
+opens the workspace's connected accounts in Guard Cloud, where the member
+signs in with the provider in the browser; no provider password or key passes
+through this command. `login`, `logout` and `workspace select` existed only in
+alpha builds; they now say to use `hol-guard connect`. The other commands still
+report, without touching this device or the network, that they cannot act
+yet, and echo the contexts they parsed so scripts and tests can see which one
+each value landed in.
 
-The commands_support facade imports this module on every hook, so the sign-in
-modules are imported only when a sign-in command runs.
+The commands_support facade imports this module on every hook, so the Cloud
+actions modules are imported only when a Cloud actions command runs.
 """
 
 from __future__ import annotations
@@ -22,21 +25,17 @@ import argparse
 import json
 import sys
 import urllib.parse
-from collections.abc import Callable
-from typing import TYPE_CHECKING, TextIO
+from typing import TextIO
 
 from ..browser_opener import open_browser_url
 from ..config import resolve_guard_home
-
-if TYPE_CHECKING:
-    from .cloud_actions_session import CloudActionsProfile, CloudActionsSessionStore
 
 CLOUD_ACTIONS_SCHEMA = "guard.cloud-actions.v1"
 CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT = 1
 # Distinct from argparse's usage error (2): the command was understood.
 CLOUD_ACTIONS_UNAVAILABLE_EXIT = 3
 CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT = 4
-CLOUD_ACTIONS_CANCELLED_EXIT = 130
+_RECONNECT_COMMAND = "hol-guard connect"
 
 
 def _command_path(args: argparse.Namespace) -> str:
@@ -81,113 +80,27 @@ class _Reply:
         return code
 
 
-def _profile_fields(profile: CloudActionsProfile) -> dict[str, object]:
-    return {
-        "profile": profile.name,
-        "cloud_url": profile.issuer,
-        "cloud_workspace": profile.workspace_id,
-        "scopes": list(profile.scopes),
-        "expires_at": profile.expires_at,
-    }
+def _removed(args: argparse.Namespace, reply: _Reply) -> int:
+    """`login`, `logout` and `workspace select` from alpha builds point to `hol-guard connect`."""
 
-
-def _login_hint(profile: str, workspace: str | None) -> str:
-    command = "hol-guard cloud-actions login"
-    if workspace is not None:
-        command += f" --cloud-workspace {workspace}"
-    if profile != "default":
-        command += f" --profile {profile}"
-    return command
-
-
-def _login(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Reply, notice: TextIO) -> int:
-    from .cloud_actions_login import sign_in
-    from .cloud_actions_oauth import CloudActionsSignInError
-
-    opener: Callable[[str], bool] | None = None if args.no_browser else open_browser_url
-    try:
-        profile = sign_in(
-            store=store,
-            profile_name=args.profile,
-            cloud_url=args.cloud_url,
-            workspace_id=args.cloud_workspace,
-            timeout_seconds=args.timeout,
-            open_browser=opener,
-            notice=notice,
+    command = args.cloud_actions_command
+    if command == "logout":
+        text = (
+            "Cloud actions no longer have a separate sign-in to sign out of. To stop an AI tool using Cloud actions, "
+            "run `hol-guard cloud-actions ai-tools restore <ai-tool>`; to turn Cloud actions off for this computer, "
+            f"run `{_RECONNECT_COMMAND}` and leave them off."
         )
-    except CloudActionsSignInError as error:
-        return reply(
-            CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
-            f"Sign-in did not finish: {error} Nothing was saved.",
-            state="failed",
-            reason=error.reason,
-            message=str(error),
-            profile=args.profile,
-        )
-    return reply(
-        0,
-        f"Signed in to Cloud actions for workspace {profile.workspace_id} (profile {profile.name}).",
-        state="signed_in",
-        **_profile_fields(profile),
-    )
-
-
-def _logout(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Reply) -> int:
-    from .cloud_actions_login import sign_out
-    from .cloud_actions_oauth import CloudActionsSignInError
-
-    try:
-        was_signed_in, revoked = sign_out(store=store, profile_name=args.profile)
-    except CloudActionsSignInError as error:
-        return reply(
-            CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
-            f"Sign-out did not finish: {error} Nothing was removed.",
-            state="failed",
-            reason=error.reason,
-            message=str(error),
-            profile=args.profile,
-        )
-    if not was_signed_in:
-        text = f"Profile {args.profile} was not signed in. Nothing to remove."
-    elif revoked:
-        text = f"Signed out of Cloud actions (profile {args.profile}). Guard Cloud ended the sign-in."
     else:
         text = (
-            f"Removed the saved sign-in (profile {args.profile}). Guard Cloud did not confirm that it ended "
-            "the sign-in; it stops working when it expires, or you can end it from Guard Cloud."
-        )
-    return reply(0, text, state="signed_out", profile=args.profile, was_signed_in=was_signed_in, revoked=revoked)
-
-
-def _workspace_select(args: argparse.Namespace, store: CloudActionsSessionStore, reply: _Reply) -> int:
-    requested = args.cloud_workspace
-    profile = store.load(args.profile)
-    hint = _login_hint(args.profile, requested)
-    if profile is None or store.load_secrets(args.profile) is None:
-        return reply(
-            CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT,
-            f"Not signed in (profile {args.profile}). Run `{hint}`.",
-            state="signed_out",
-            reason="not_signed_in",
-            profile=args.profile,
-            cloud_workspace=requested,
-        )
-    if profile.workspace_id != requested:
-        return reply(
-            CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT,
-            f"Profile {profile.name} is signed in to workspace {profile.workspace_id}. "
-            f"A sign-in covers one workspace; run `{hint}`, or use another --profile.",
-            state="signed_in",
-            reason="workspace_needs_sign_in",
-            profile=profile.name,
-            cloud_workspace=requested,
-            signed_in_workspace=profile.workspace_id,
+            "Cloud actions no longer have a separate sign-in. They use this computer's Guard Cloud connection: "
+            f"run `{_RECONNECT_COMMAND}`, then `hol-guard cloud-actions ai-tools configure <ai-tool> --apply`."
         )
     return reply(
-        0,
-        f"Profile {profile.name} uses workspace {profile.workspace_id}.",
-        state="selected",
-        **_profile_fields(profile),
+        CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT,
+        f"`hol-guard cloud-actions {_command_path(args)}` was removed. {text}",
+        state="removed",
+        reason="use_hol_guard_connect",
+        next_command=_RECONNECT_COMMAND,
     )
 
 
@@ -223,24 +136,35 @@ def connected_accounts_url(origin: str, workspace: str) -> str:
 
 
 def _connect_account(args: argparse.Namespace, reply: _Reply) -> int:
-    from .cloud_actions_oauth import CloudActionsSignInError, resolve_cloud_origin
+    from . import cloud_actions_access
 
     try:
-        origin = resolve_cloud_origin(args.cloud_url)
-    except CloudActionsSignInError as error:
+        store = cloud_actions_access.open_paired_store(resolve_guard_home(getattr(args, "guard_home", None)))
+        pairing = cloud_actions_access.read_cloud_actions_pairing(store)
+    except cloud_actions_access.CloudActionsAccessError as error:
         return reply(
-            CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
+            CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT,
             f"{error} Nothing was changed.",
             state="failed",
             reason=error.reason,
             message=str(error),
         )
-    url = connected_accounts_url(origin, args.cloud_workspace)
+    workspace = args.cloud_workspace or pairing.workspace_id
+    if workspace is None:
+        return reply(
+            CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT,
+            "Guard Cloud did not say which workspace this computer is connected to. "
+            "Name it with --cloud-workspace <id>. Nothing was changed.",
+            state="failed",
+            reason="workspace_unknown",
+        )
+    origin = pairing.origin
+    url = connected_accounts_url(origin, workspace)
     # Provider sign-in happens in the browser, so nothing secret is typed here.
     opened = not args.no_browser and open_browser_url(url)
     name = provider_name(args.provider)
     step = (
-        f"To connect a {name} account to workspace {args.cloud_workspace}, "
+        f"To connect a {name} account to workspace {workspace}, "
         f"choose Connect {name} under Connected accounts and sign in with {name} there."
     )
     lead = "Opened Guard Cloud in your browser." if opened else "Open this link in a browser where you use Guard Cloud:"
@@ -251,7 +175,7 @@ def _connect_account(args: argparse.Namespace, reply: _Reply) -> int:
         opened=opened,
         url=url,
         provider=args.provider,
-        cloud_workspace=args.cloud_workspace,
+        cloud_workspace=workspace,
     )
 
 
@@ -266,29 +190,28 @@ def _run_guard_cloud_actions_command(
     stream = output_stream if output_stream is not None else sys.stdout
     reply = _Reply(args, stream)
     command = args.cloud_actions_command
-    workspace_command = getattr(args, "cloud_actions_workspace_command", None)
-    if command in {"login", "logout", "status", "doctor"} or workspace_command == "select":
-        from .cloud_actions_session import CloudActionsSessionStore
+    if command == "bridge":
+        from .cloud_actions_bridge import run_cloud_actions_bridge
 
-        store = CloudActionsSessionStore(resolve_guard_home(getattr(args, "guard_home", None)))
-        if command == "login":
-            notice = notice_stream if notice_stream is not None else sys.stderr
-            try:
-                return _login(args, store, reply, notice)
-            except KeyboardInterrupt:
-                return reply(
-                    CLOUD_ACTIONS_CANCELLED_EXIT,
-                    "Sign-in cancelled. Nothing was saved.",
-                    state="cancelled",
-                    profile=args.profile,
-                )
-        if command == "logout":
-            return _logout(args, store, reply)
-        if command in {"status", "doctor"}:
-            from .commands_dispatch_cloud_actions_status import doctor, status
+        return run_cloud_actions_bridge(
+            resolve_guard_home(getattr(args, "guard_home", None)),
+            ai_tool=args.ai_tool,
+            input_stream=sys.stdin,
+            output_stream=stream,
+        )
+    from .cloud_actions_alpha_cleanup import ALPHA_SIGN_IN_REMOVED_NOTICE, remove_alpha_sign_ins
+    from .commands_dispatch_cloud_actions_ai_tools import settings_guard_home
 
-            return (status if command == "status" else doctor)(args, store, reply)
-        return _workspace_select(args, store, reply)
+    # The two previews Guard admits as reads (`status --offline`, `ai-tools configure --dry-run`) change nothing.
+    preview = (command == "status" and bool(getattr(args, "offline", False))) or bool(getattr(args, "dry_run", False))
+    if not preview and remove_alpha_sign_ins(settings_guard_home(args)):
+        print(ALPHA_SIGN_IN_REMOVED_NOTICE, file=notice_stream if notice_stream is not None else sys.stderr)
+    if command in {"login", "logout", "workspace"}:
+        return _removed(args, reply)
+    if command in {"status", "doctor"}:
+        from .commands_dispatch_cloud_actions_status import doctor, status
+
+        return (status if command == "status" else doctor)(args, reply)
     ai_tools_command = getattr(args, "cloud_actions_ai_tools_command", None)
     if ai_tools_command in {"configure", "restore"}:
         from .commands_dispatch_cloud_actions_ai_tools import configure_ai_tool, restore_ai_tool
@@ -306,7 +229,6 @@ def _run_guard_cloud_actions_command(
 
 
 __all__ = [
-    "CLOUD_ACTIONS_CANCELLED_EXIT",
     "CLOUD_ACTIONS_NEEDS_SIGN_IN_EXIT",
     "CLOUD_ACTIONS_SCHEMA",
     "CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT",

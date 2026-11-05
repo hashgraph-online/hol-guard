@@ -792,8 +792,8 @@ def _verify(args: argparse.Namespace) -> int:
                 exit_code=install.EXIT_NOTHING,
                 code="not_installed",
             )
-        ledger = verify.fetch_ledger(slug, verify.ledger_endpoint(endpoint), spec_slug=spec.get("slug"))
-        result = verify.compare(installed, ledger)
+        ledger = verify.fetch_ledger(slug, verify.ledger_endpoint(endpoint))
+        result = verify.compare(installed, ledger, slug=slug, spec_slug=spec.get("slug"))
     except install.PluginInstallError as error:
         print(f"Error: {error}", file=sys.stderr)
         document["error"] = {"code": error.code, "message": str(error)}

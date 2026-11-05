@@ -7,6 +7,7 @@ import { ContextWorkspacesPanel } from "./workspaces-panel";
 import { CigarWorkspace } from "./workspace";
 import { CigarVersionsPanel } from "./versions-panel";
 import { CigarSetupProof } from "./one-click-setup";
+import { CodexLeanSessions } from "./codex-lean";
 import { useCigarOneClick } from "./use-one-click";
 import { CigarAllowFilesProof, useCigarAllowFiles } from "./allow-files";
 import { commitDashboardLocation } from "../dashboard-location";
@@ -188,6 +189,8 @@ export function ContextAssistanceSettings(props: Props) {
   const controls = <ContextSettingsControls value={value} status={status} installations={installations}
     loading={loading} busy={busy} disabled={props.disabled} locked={props.locked}
     dirty={dirty} error={workspace ? null : error}
+    headerControls={workspace}
+    lean={workspace ? <CodexLeanSessions gate={props.gate ?? null} disabled={props.disabled} /> : undefined}
     onChange={props.onChange} onRefresh={() => void refresh()}
     onChooseRuntime={() => void perform("installations")} onControl={(action) => void perform(action)}
     onManageVersions={workspace ? () => {
@@ -204,7 +207,8 @@ export function ContextAssistanceSettings(props: Props) {
   return workspace ? <><CigarWorkspace status={status} installations={installations} loading={loading}
     busy={busy} disabled={props.disabled} dirty={dirty} error={error} setup={setup} allowFiles={allowFiles}
     stopAvailable={Boolean(value?.enabled || saved?.enabled || status?.job || status?.effective_enabled || error)}
-    controls={controls} access={access} data={props.data}
+    controls={controls}
+    access={access} data={props.data}
     versions={<CigarVersionsPanel status={status} disabled={props.disabled || busy} locked={props.locked}
       dirty={dirty} gate={props.gate ?? null} captureStatus={captureVersionStatus} />}
     onRefresh={() => { void refresh(); void setup.refresh(); }}

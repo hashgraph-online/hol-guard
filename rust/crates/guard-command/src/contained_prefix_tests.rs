@@ -255,6 +255,31 @@ fn a_setting_that_steers_a_run_is_no_inert_assignment() {
 }
 
 #[test]
+fn an_inert_node_options_value_is_carried_off_the_front() {
+    for value in ["--max-old-space-size=4096", "--experimental-vm-modules"] {
+        let setting = format!("NODE_OPTIONS={value}");
+        let (core, carried) = split(&[&setting, "npx", "jest", "--ci"], false);
+
+        assert_eq!(core, words(&["npx", "jest", "--ci"]), "{value}");
+        assert_eq!(
+            carried,
+            vec![("NODE_OPTIONS".to_string(), value.to_string())]
+        );
+    }
+    for value in [
+        "--import=x",
+        "--inspect",
+        "--max-old-space-size=4096 --require=x",
+    ] {
+        let setting = format!("NODE_OPTIONS={value}");
+        let (core, carried) = split(&[&setting, "npx", "jest"], true);
+
+        assert_eq!(core, words(&[&setting, "npx", "jest"]), "{value}");
+        assert!(carried.is_empty(), "{value}");
+    }
+}
+
+#[test]
 fn the_peel_stops_at_the_first_setting_it_cannot_carry() {
     let (core, carried) = split(&["CI=1", "APP_FLAG=1", "bun"], false);
 
@@ -332,4 +357,136 @@ fn a_tool_setting_whose_value_failed_the_screen_stays_in_the_command() {
         ])
     );
     assert!(carried.is_empty());
+}
+
+/// The review grants a read-only profile to a command whose only setting is
+/// plain data, on the reading that the launcher's environment filter drops it.
+/// A pattern in the value is still plain data — a shell never expands an
+/// assignment's value — so the peel here has to read it the same way. If it
+/// did not, the granted command would reach the planners with the assignment
+/// still in front of its program and be refused.
+#[test]
+fn a_pattern_in_a_data_value_is_dropped_like_any_other_data() {
+    for written in [
+        "REPORT_DIR=reports/*",
+        "JEST_PATTERN=src/**/*.test.ts",
+        "LOG_NAMESPACES=app:*,db:*",
+        "SUITES=unit,{api,web}",
+        "SHARD=shard-[12]",
+        "ONE_CHAR=a?c",
+    ] {
+        assert_eq!(
+            split(&[written, "pytest"], true).0,
+            words(&["pytest"]),
+            "{written} is data the read-only launcher drops"
+        );
+        assert!(
+            dropped(&[written, "pytest"], true),
+            "{written} is dropped rather than carried"
+        );
+    }
+}
+
+/// A value the shell or the run would act on stays in the command, pattern or
+/// not, so the planners judge the word rather than a run that lost it.
+#[test]
+fn a_pattern_never_widens_what_else_counts_as_data() {
+    for written in [
+        "NODE_PATH=lib/*",
+        "TMPDIR=/tmp/*",
+        "REPORT_DIR=-reports/*",
+        "REPORT_DIR=a;id",
+        "REPORT_DIR=a b",
+        "REPORT_DIR=$HOME/*",
+    ] {
+        assert_eq!(
+            split(&[written, "pytest"], true).0,
+            words(&[written, "pytest"]),
+            "{written} is not plain data"
+        );
+    }
+}
+
+#[test]
+fn a_dropped_word_forgets_what_the_prefix_carried_under_the_same_name() {
+    // The run reads the last assignment, so `NODE_OPTIONS=` is a command that
+    // starts Node with no options at all. The empty value is no inert
+    // `NODE_OPTIONS`, so the peel drops it as plain data; carrying the word in
+    // front of it would hand the run options the command had already cleared.
+    let (core, carried) = split(
+        &[
+            "NODE_OPTIONS=--no-warnings",
+            "NODE_OPTIONS=",
+            "node",
+            "--test",
+        ],
+        true,
+    );
+
+    assert_eq!(core, words(&["node", "--test"]));
+    assert!(carried.is_empty(), "{carried:?}");
+}
+
+#[test]
+fn a_carried_word_behind_a_dropped_one_is_still_the_value_the_run_reads() {
+    // Only the word in front of the drop is forgotten. A later assignment is
+    // the one the run reads, so the peel carries it.
+    let (core, carried) = split(
+        &[
+            "NODE_OPTIONS=--no-warnings",
+            "NODE_OPTIONS=",
+            "NODE_OPTIONS=--max-old-space-size=4096",
+            "node",
+            "--test",
+        ],
+        true,
+    );
+
+    assert_eq!(core, words(&["node", "--test"]));
+    assert_eq!(
+        carried,
+        vec![(
+            "NODE_OPTIONS".to_string(),
+            "--max-old-space-size=4096".to_string()
+        )]
+    );
+}
+
+#[test]
+fn a_drop_behind_a_transparent_prefix_forgets_the_same_name() {
+    // The settings a transparent prefix holds are peeled by the same reading,
+    // so the shadow has to reach a name carried on an earlier round too.
+    let (core, carried) = split(
+        &[
+            "NODE_OPTIONS=--no-warnings",
+            "env",
+            "NODE_OPTIONS=",
+            "CI=1",
+            "node",
+            "--test",
+        ],
+        true,
+    );
+
+    assert_eq!(core, words(&["node", "--test"]));
+    assert_eq!(carried, vec![("CI".to_string(), "1".to_string())]);
+}
+
+#[test]
+fn a_drop_forgets_only_its_own_name() {
+    let (core, carried) = split(
+        &[
+            "NODE_OPTIONS=--no-warnings",
+            "REPORT_DIR=/tmp/r",
+            "node",
+            "--test",
+        ],
+        true,
+    );
+
+    assert_eq!(core, words(&["node", "--test"]));
+    assert_eq!(
+        carried,
+        vec![("NODE_OPTIONS".to_string(), "--no-warnings".to_string())]
+    );
 }

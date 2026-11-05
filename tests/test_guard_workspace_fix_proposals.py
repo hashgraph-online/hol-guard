@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority as runner_authority
 from codex_plugin_scanner.guard import store_connection_schema as connection_schema
 from codex_plugin_scanner.guard import workspace_assessment_fix_proposals as fixes
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
@@ -402,6 +403,29 @@ def test_a_complete_supply_chain_run_without_the_finding_marks_it_fixed(tmp_path
     [listed] = fixes.list_proposals(store, KEYS, now_ms=NOW + 99_000)
     assert listed["verification_run_id"] and listed["verified_at_ms"] == NOW + 99_000
     assert listed["diff"] is None
+
+
+def test_a_run_that_finishes_during_verification_decides_instead(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, proposal_id = _applied(tmp_path)
+    _verification_run(store, snapshot="after", findings=[])
+    real = runner_authority.native_runner_authority
+    calls: list[str] = []
+
+    def racing(kind: str, args: dict[str, object]) -> dict[str, object]:
+        calls.append(kind)
+        if len(calls) > 1:
+            return real(kind, args)
+        # A newer run still sees the finding while the resident answers for
+        # the older one.
+        assess(store, snapshot="later", at=NOW + 5_000)
+        return {"updates": [{"proposal_id": proposal_id, "state": "verified_fixed"}]}
+
+    monkeypatch.setattr(runner_authority, "native_runner_authority", racing)
+
+    assert _state(store, proposal_id) == "still_present"
+    assert calls == ["workspace_fix_verify", "workspace_fix_verify"]
 
 
 def test_a_complete_run_that_still_has_the_finding_marks_it_still_present(tmp_path: Path) -> None:

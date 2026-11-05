@@ -435,8 +435,8 @@ pub(crate) use command_parse_surface::{
     parse_posix_command, uncertain, Quote, RawSegment,
 };
 pub use command_parse_surface::{
-    parse_command, CanonicalCommandV1, CommandModelRequestV1, CommandSegmentV1, CommandSpanV1,
-    MAX_COMMAND_BYTES, MAX_COMMAND_SEGMENTS, MAX_COMMAND_TOKENS,
+    inline_shell_script_text, parse_command, CanonicalCommandV1, CommandModelRequestV1,
+    CommandSegmentV1, CommandSpanV1, MAX_COMMAND_BYTES, MAX_COMMAND_SEGMENTS, MAX_COMMAND_TOKENS,
 };
 pub use critical_floor_context::critical_floor_action;
 
@@ -488,6 +488,7 @@ pub mod contained_argv;
 #[cfg(unix)]
 pub mod contained_execution;
 mod contained_git;
+mod contained_inline_target;
 
 /// Whether `argv` is a protected Git read the contained planner admits, for
 /// the `contained_path` fuzz target, which no operation reaches it through.

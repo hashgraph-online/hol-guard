@@ -31,10 +31,8 @@ from .fleet_posture_common import (
     MAX_PAYLOAD_BYTES,
     SCHEMA_VERSION,
     SETTINGS_STATE_KEY,
-    clip,
     iso,
     load_hash_key,
-    normalized_timestamp,
     utc,
 )
 from .fleet_posture_inventory import chunked_last, committed_state, projected_rows, store_home
@@ -130,50 +128,21 @@ def _clear_full_inventory_request(store: GuardStore, now: str) -> None:
 # --------------------------------------------------------------------------- policy
 
 
-def _int_or_none(value: object) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int) and value >= 1:
-        return value
-    return None
-
-
 def policy_section(store: GuardStore, acknowledgement: Mapping[str, object] | None) -> dict[str, object]:
-    """Mirror the acknowledgement Guard is sending in the same request."""
+    """Mirror the acknowledgement Guard is sending in the same request.
 
-    section: dict[str, object] = {
-        "appliedBundleVersion": None,
-        "appliedBundleHash": None,
-        "appliedPolicyVersionNumber": None,
-        "status": "none",
-        "errorCode": None,
-        "appliedAt": None,
-    }
-    if isinstance(acknowledgement, Mapping) and acknowledgement:
-        bundle_hash = acknowledgement.get("bundleHash")
-        status = str(acknowledgement.get("status") or "")
-        mapped = {"applied": "applied", "synced": "applied", "validated": "validated", "failed": "rejected"}.get(
-            status, "none"
-        )
-        error_code = acknowledgement.get("errorCode") or acknowledgement.get("reason")
-        section.update(
-            {
-                "appliedBundleVersion": _int_or_none(acknowledgement.get("bundleVersion")),
-                "appliedBundleHash": clip(bundle_hash, 80) if isinstance(bundle_hash, str) else None,
-                "appliedPolicyVersionNumber": _int_or_none(acknowledgement.get("policyRevision")),
-                "status": mapped,
-                "errorCode": clip(error_code, 80) if mapped == "rejected" and isinstance(error_code, str) else None,
-                "appliedAt": normalized_timestamp(
-                    acknowledgement.get("appliedAt") or acknowledgement.get("observedAt")
-                ),
-            }
-        )
-        return section
-    last_error = store.get_sync_payload("policy_bundle_last_error")
-    if isinstance(last_error, dict) and isinstance(last_error.get("reason"), str):
-        section["status"] = "rejected"
-        section["errorCode"] = clip(str(last_error["reason"]), 80)
-    return section
+    Without one, the section reports the last policy bundle error the store
+    recorded. The native runtime shapes the section.
+    """
+
+    return native_runner_authority(
+        "fleet_policy_section",
+        {
+            "acknowledgement": dict(acknowledgement) if isinstance(acknowledgement, Mapping) else None,
+            "last_error": store.get_sync_payload("policy_bundle_last_error"),
+        },
+        store_home(store),
+    )
 
 
 # --------------------------------------------------------------------------- build

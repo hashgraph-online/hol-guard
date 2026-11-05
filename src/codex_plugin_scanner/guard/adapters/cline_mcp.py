@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .base import HarnessContext
 from .cline_paths import cline_data_dir
-from .mcp_servers import ManagedMcpServer, is_guard_proxy_command, proxy_launcher_entry
+from .mcp_servers import ManagedMcpServer, proxy_launcher_entry
 
 
 def cline_mcp_settings_candidates(context: HarnessContext) -> tuple[Path, ...]:
@@ -72,56 +72,61 @@ def _json_object(path: Path) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _servers_object(payload: dict[str, object]) -> tuple[str, dict[str, object]]:
-    for key in ("mcpServers", "mcp"):
-        value = payload.get(key)
-        if isinstance(value, dict):
-            return key, {str(name): config for name, config in value.items() if isinstance(name, str)}
-    return "mcpServers", {}
+def _strings(value: object) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
-def _string_env(value: object) -> dict[str, str]:
-    if not isinstance(value, dict):
-        return {}
-    return {
-        key.strip(): item
-        for key, item in value.items()
-        if isinstance(key, str) and key.strip() and isinstance(item, str)
-    }
-
-
-def _server_args(raw: dict[str, object]) -> tuple[str, ...]:
-    value = raw.get("args")
-    return tuple(item for item in value if isinstance(item, str)) if isinstance(value, list) else ()
-
-
-def _transport(raw: dict[str, object]) -> str:
-    transport = raw.get("type") or raw.get("transport")
-    url = raw.get("url") or raw.get("endpoint")
-    if isinstance(transport, str) and transport.strip():
-        return transport.strip().lower()
-    return "http" if isinstance(url, str) and url.strip() else "stdio"
-
-
-def _managed_server(path: Path, name: str, raw: dict[str, object]) -> ManagedMcpServer | None:
-    command = raw.get("command")
-    if not isinstance(command, str) or not command.strip() or raw.get("disabled") is True:
-        return None
-    args = _server_args(raw)
-    transport = _transport(raw)
-    if transport not in {"stdio", "local"} or is_guard_proxy_command(command, args):
-        return None
-    return ManagedMcpServer(
-        harness="cline",
-        name=name,
-        source_scope="global",
-        config_path=str(path),
-        command=command,
-        args=args,
-        transport=transport,
-        env=_string_env(raw.get("env", raw.get("environment"))),
-        enabled=True,
+def _well_formed(row: object) -> bool:
+    return (
+        isinstance(row, dict)
+        and set(row) == {"name", "command", "args", "transport", "env"}
+        and all(isinstance(row[key], str) for key in ("name", "command", "transport"))
+        and _strings(row["args"])
+        and isinstance(row["env"], dict)
+        and _strings(list(row["env"].values()))
     )
+
+
+def _proxy_plan(
+    context: HarnessContext, path: Path, payload: dict[str, object]
+) -> tuple[str, list[ManagedMcpServer], list[str]]:
+    """Ask the native ``cline_install_plan`` kind which servers of one settings file to proxy."""
+
+    from ..native_context import _resolve_existing_digest_home
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    request = {"op": "mcp_proxy", "settings": json.dumps(payload)}
+    try:
+        answer = native_runner_authority(
+            "cline_install_plan", request, guard_home=_resolve_existing_digest_home(context.guard_home)
+        )
+        plan = json.loads(answer["plan"]) if set(answer) == {"plan"} and isinstance(answer["plan"], str) else None
+    except (NativeRunnerAuthorityError, json.JSONDecodeError) as error:
+        raise RuntimeError("Could not plan the Cline MCP proxy install.") from error
+    if (
+        not isinstance(plan, dict)
+        or set(plan) != {"key", "managed", "remote"}
+        or plan["key"] not in {"mcpServers", "mcp"}
+        or not isinstance(plan["managed"], list)
+        or not all(_well_formed(row) for row in plan["managed"])
+        or not _strings(plan["remote"])
+    ):
+        raise RuntimeError("Could not plan the Cline MCP proxy install.")
+    servers = [
+        ManagedMcpServer(
+            harness="cline",
+            name=row["name"],
+            source_scope="global",
+            config_path=str(path),
+            command=row["command"],
+            args=tuple(row["args"]),
+            transport=row["transport"],
+            env=row["env"],
+            enabled=True,
+        )
+        for row in plan["managed"]
+    ]
+    return plan["key"], servers, plan["remote"]
 
 
 def _backup_root(context: HarnessContext) -> Path:
@@ -164,18 +169,10 @@ def install_cline_mcp_proxies(context: HarnessContext) -> dict[str, object]:
         payload = _json_object(path)
         if not payload:
             continue
-        key, entries = _servers_object(payload)
-        replacements: dict[str, object] = {}
-        for name, raw_value in entries.items():
-            if not isinstance(raw_value, dict):
-                continue
-            raw = {str(item_key): value for item_key, value in raw_value.items() if isinstance(item_key, str)}
-            server = _managed_server(path, name, raw)
-            if server is not None:
-                replacements[name] = _proxy_entry(context, server)
-                managed_servers.append(name)
-            elif _transport(raw) not in {"stdio", "local"}:
-                skipped_remote.append(name)
+        key, servers, remote = _proxy_plan(context, path, payload)
+        skipped_remote.extend(remote)
+        replacements = {server.name: _proxy_entry(context, server) for server in servers}
+        managed_servers.extend(replacements)
         if not replacements:
             continue
         original_bytes = path.read_bytes()
@@ -189,8 +186,8 @@ def install_cline_mcp_proxies(context: HarnessContext) -> dict[str, object]:
                 "managed_sha256": None,
             }
             _atomic_write_bytes(backup_path, (json.dumps(backup_payload, sort_keys=True) + "\n").encode("utf-8"))
-        entries.update(replacements)
-        payload[key] = entries
+        entries = payload.get(key)
+        payload[key] = {**(entries if isinstance(entries, dict) else {}), **replacements}
         managed_bytes = (json.dumps(payload, indent=2) + "\n").encode("utf-8")
         _atomic_write_bytes(path, managed_bytes)
         backup_payload = _json_object(backup_path)

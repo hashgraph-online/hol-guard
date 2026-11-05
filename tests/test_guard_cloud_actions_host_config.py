@@ -8,7 +8,6 @@ exactly as before, and must never show a value Guard did not write.
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -23,9 +22,8 @@ from codex_plugin_scanner.guard.cli.cloud_actions_host_config import (
     settings_path,
 )
 from codex_plugin_scanner.guard.codex_config import tomllib
+from tests.cloud_actions_pairing_support import URL, WS, FakeCloud, entry, pair, wanted
 
-WS = "11111111-1111-4111-8111-111111111111"
-URL = "https://hol.org/api/guard/gateway/mcp"
 CANARY = "sk-test-CANARY-7f3a9c"
 HEADER_SECRET = "Bearer hdr-CANARY-41be"
 QUERY_SECRET = "qs-CANARY-90d2"
@@ -117,6 +115,11 @@ def _configure(home: Path, tool: str, *extra: str) -> int:
         return int(exit_.code or 0)
 
 
+@pytest.fixture(autouse=True)
+def _paired(monkeypatch: pytest.MonkeyPatch) -> FakeCloud:
+    return pair(monkeypatch)
+
+
 def _snapshot(home: Path) -> dict[str, bytes]:
     return {str(path.relative_to(home)): path.read_bytes() for path in home.rglob("*") if path.is_file()}
 
@@ -128,15 +131,14 @@ def test_preview_adds_only_the_guard_entry_and_writes_nothing(
     path = _seed(tmp_path, tool)
     before_files = _snapshot(tmp_path)
 
-    plan = plan_host_config(tool, path=path, url=URL)
+    plan = plan_host_config(tool, path=path, entry=entry(tool), url=URL)
     assert plan.action == "add"
     assert plan.after is not None
     assert plan.before is not None
     assert plan.before == path.read_bytes()
     before, after = _parse(tool, plan.before), _parse(tool, plan.after)
     assert _without_guard_entry(tool, after) == _without_guard_entry(tool, before)
-    expected = {"type": "http", "url": URL} if tool == "claude-code" else {"url": URL}
-    assert after[_table(tool)][CLOUD_ACTIONS_SERVER_NAME] == expected
+    assert after[_table(tool)][CLOUD_ACTIONS_SERVER_NAME] == wanted(tool)
 
     assert _configure(tmp_path, tool, "--dry-run") == 0
     text_out = capsys.readouterr().out
@@ -147,8 +149,9 @@ def test_preview_adds_only_the_guard_entry_and_writes_nothing(
     assert payload["written"] is False
     assert payload["other_entries"] == len(_parse(tool, plan.before)[_table(tool)])
     assert payload["url"] == URL
-    assert URL in text_out and "Nothing was written." in text_out
-    for leaked in (CANARY, HEADER_SECRET, "someone@example.test", "server-github", "/opt/hol-guard"):
+    assert "cloud-actions" in text_out and "bridge" in text_out and "Nothing was written." in text_out
+    assert "does not sign in separately" in text_out
+    for leaked in (CANARY, HEADER_SECRET, "someone@example.test", "server-github", "/opt/hol-guard/bin"):
         assert leaked not in text_out + json_out
     assert _snapshot(tmp_path) == before_files
 
@@ -156,27 +159,36 @@ def test_preview_adds_only_the_guard_entry_and_writes_nothing(
 def test_codex_preview_keeps_every_line_and_comment(tmp_path: Path) -> None:
     path = _seed(tmp_path, "codex")
 
-    plan = plan_host_config("codex", path=path, url=URL)
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
 
     assert plan.after is not None
-    block = f'[mcp_servers.{CLOUD_ACTIONS_SERVER_NAME}]\nurl = "{URL}"\n\n'
+    fields = entry("codex")
+    block = (
+        f"[mcp_servers.{CLOUD_ACTIONS_SERVER_NAME}]\n"
+        f"command = {json.dumps(fields['command'])}\n"
+        f"args = {json.dumps(fields['args'])}\n\n"
+    )
     assert plan.after.decode() == CODEX_SETTINGS.replace("[profiles.fast]", block + "[profiles.fast]")
 
 
 def test_codex_preview_appends_after_the_last_line(tmp_path: Path) -> None:
     path = _write(tmp_path, "codex", 'model = "gpt-5"\n')
 
-    plan = plan_host_config("codex", path=path, url=URL)
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
 
     assert plan.after is not None
-    assert plan.after.decode() == f'model = "gpt-5"\n\n[mcp_servers.{CLOUD_ACTIONS_SERVER_NAME}]\nurl = "{URL}"\n'
+    assert tomllib.loads(plan.after.decode()) == {
+        "model": "gpt-5",
+        "mcp_servers": {CLOUD_ACTIONS_SERVER_NAME: entry("codex")},
+    }
+    assert plan.after.decode().startswith('model = "gpt-5"\n\n[mcp_servers.')
 
 
 def test_json_preview_keeps_indentation_and_line_endings(tmp_path: Path) -> None:
     original = json.dumps(CURSOR_SETTINGS, indent=4).replace("\n", "\r\n") + "\r\n"
     path = _write(tmp_path, "cursor", original)
 
-    plan = plan_host_config("cursor", path=path, url=URL)
+    plan = plan_host_config("cursor", path=path, entry=entry("cursor"), url=URL)
 
     assert plan.after is not None
     after_text = plan.after.decode()
@@ -188,11 +200,11 @@ def test_json_preview_keeps_indentation_and_line_endings(tmp_path: Path) -> None
 @pytest.mark.parametrize("tool", sorted(PATHS))
 def test_preview_of_the_previewed_file_changes_nothing(tool: str, tmp_path: Path) -> None:
     path = _seed(tmp_path, tool)
-    first = plan_host_config(tool, path=path, url=URL)
+    first = plan_host_config(tool, path=path, entry=entry(tool), url=URL)
     assert first.after is not None
     path.write_bytes(first.after)
 
-    second = plan_host_config(tool, path=path, url=URL)
+    second = plan_host_config(tool, path=path, entry=entry(tool), url=URL)
 
     assert second.action == "unchanged"
     assert second.after == first.after
@@ -202,7 +214,7 @@ def test_preview_of_the_previewed_file_changes_nothing(tool: str, tmp_path: Path
 def test_new_file_holds_only_the_guard_entry(tool: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     path = settings_path(tool, home=tmp_path, environ=None)
 
-    plan = plan_host_config(tool, path=path, url=URL)
+    plan = plan_host_config(tool, path=path, entry=entry(tool), url=URL)
 
     assert plan.action == "create_file"
     assert plan.after is not None
@@ -238,7 +250,7 @@ def test_update_shows_the_old_address_without_its_query(tmp_path: Path, capsys: 
 def test_update_display_drops_user_and_survives_bad_ports(old: str, shown: str | None, tmp_path: Path) -> None:
     path = _write(tmp_path, "cursor", json.dumps({"mcpServers": {CLOUD_ACTIONS_SERVER_NAME: {"url": old}}}))
 
-    plan = plan_host_config("cursor", path=path, url=URL)
+    plan = plan_host_config("cursor", path=path, entry=entry("cursor"), url=URL)
 
     assert plan.action == "update"
     assert plan.previous_url == shown
@@ -260,7 +272,7 @@ def test_update_is_not_offered_when_another_entry_already_reaches_the_server(tmp
     servers = {CLOUD_ACTIONS_SERVER_NAME: {"url": staging}, "guard": {"url": URL}}
     path = _write(tmp_path, "cursor", json.dumps({"mcpServers": servers}))
 
-    plan = plan_host_config("cursor", path=path, url=URL)
+    plan = plan_host_config("cursor", path=path, entry=entry("cursor"), url=URL)
 
     assert plan.action == "already_configured"
     assert plan.configured_as == ("guard",)
@@ -351,34 +363,11 @@ def test_unreadable_settings_are_left_alone_and_not_echoed(
     assert path.read_bytes() == before
 
 
-def test_codex_settings_are_read_with_tomli_before_python_3_11(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    class _Python310:
-        version_info = (3, 10, 14)
-
-    imported: list[str] = []
-    real_import = cloud_actions_host_config.importlib.import_module
-
-    def _import(name: str) -> object:
-        imported.append(name)
-        if name in {"tomli", "tomllib"}:
-            return real_import("tomllib" if sys.version_info >= (3, 11) else "tomli")
-        return real_import(name)
-
-    monkeypatch.setattr(cloud_actions_host_config, "sys", _Python310)
-    monkeypatch.setattr(cloud_actions_host_config.importlib, "import_module", _import)
-    path = _seed(tmp_path, "codex")
-
-    plan = plan_host_config("codex", path=path, url=URL)
-
-    assert plan.action == "add"
-    assert "tomllib" not in imported and "tomli" in imported
-
-
 def test_settings_path_that_is_a_folder_is_unreadable(tmp_path: Path) -> None:
     path = tmp_path / ".cursor" / "mcp.json"
     path.mkdir(parents=True)
 
-    assert plan_host_config("cursor", path=path, url=URL).action == "unreadable"
+    assert plan_host_config("cursor", path=path, entry=entry("cursor"), url=URL).action == "unreadable"
 
 
 def test_settings_path_follows_the_ai_tool_home_unless_home_is_given(tmp_path: Path) -> None:
@@ -392,25 +381,21 @@ def test_settings_path_follows_the_ai_tool_home_unless_home_is_given(tmp_path: P
         _ = settings_path("windsurf", home=tmp_path, environ=env)
 
 
-def test_unsupported_ai_tool_names_the_supported_ones(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    assert _configure(tmp_path, "windsurf", "--dry-run", "--json") == 3
-    payload = json.loads(capsys.readouterr().out)
+def test_an_earlier_address_only_entry_is_replaced_with_the_bridge(tmp_path: Path) -> None:
+    path = _write(tmp_path, "codex", f'[mcp_servers.{CLOUD_ACTIONS_SERVER_NAME}]\nurl = "{URL}"\n')
 
-    assert payload["reason"] == "ai_tool_not_supported"
-    assert payload["supported_ai_tools"] == ["claude-code", "codex", "cursor"]
+    plan = plan_host_config("codex", path=path, entry=entry("codex"), url=URL)
 
-
-def test_cloud_url_off_hol_is_refused(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    assert _configure(tmp_path, "cursor", "--dry-run", "--json", "--cloud-url", "https://evil.example") == 1
-
-    assert json.loads(capsys.readouterr().out)["reason"] == "cloud_url_not_allowed"
-    assert not any(tmp_path.iterdir())
+    assert plan.action == "update"
+    assert plan.after is not None
+    assert tomllib.loads(plan.after.decode()) == {"mcp_servers": {CLOUD_ACTIONS_SERVER_NAME: entry("codex")}}
 
 
-def test_cloud_url_sets_the_address(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    assert _configure(tmp_path, "codex", "--dry-run", "--json", "--cloud-url", "http://127.0.0.1:3061/points") == 0
+def test_a_bridge_entry_for_another_ai_tool_is_not_guards(tmp_path: Path) -> None:
+    servers = {CLOUD_ACTIONS_SERVER_NAME: entry("codex")}
+    path = _write(tmp_path, "cursor", json.dumps({"mcpServers": servers}))
 
-    assert json.loads(capsys.readouterr().out)["url"] == "http://127.0.0.1:3061/api/guard/gateway/mcp"
+    assert plan_host_config("cursor", path=path, entry=entry("cursor"), url=URL).action == "conflict"
 
 
 def test_home_option_ignores_the_ai_tool_home_variables(
@@ -423,19 +408,23 @@ def test_home_option_ignores_the_ai_tool_home_variables(
     assert json.loads(capsys.readouterr().out)["settings_file"] == str(tmp_path / ".codex" / "config.toml")
 
 
-@pytest.mark.parametrize("tool", sorted(PATHS))
-def test_a_rendering_that_changes_another_entry_is_refused(
-    tool: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_without_the_native_runtime_the_preview_changes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    path = _seed(tmp_path, tool)
-    honest = cloud_actions_host_config._render_edit  # pyright: ignore[reportPrivateUsage]
+    from codex_plugin_scanner.guard.mdm import runtime_request
 
-    def lossy(ai_tool: object, before: bytes, url: str) -> bytes:
-        return honest(ai_tool, before.replace(CANARY.encode(), b"changed"), url)  # pyright: ignore[reportArgumentType]
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        return None
 
-    monkeypatch.setattr(cloud_actions_host_config, "_render_edit", lossy)
+    monkeypatch.setattr(runtime_request, "runtime_answer", unavailable)
+    path = _seed(tmp_path, "cursor")
 
-    plan = plan_host_config(tool, path=path, url=URL)
+    plan = plan_host_config("cursor", path=path, entry=entry("cursor"), url=URL)
 
     assert plan.action == "unreadable"
     assert plan.after is None
+    assert plan.problem is not None and "native runtime" in plan.problem
+    with pytest.raises(cloud_actions_host_config.HostConfigNativeUnavailableError):
+        _ = cloud_actions_host_config.render_entry_undo(
+            "cursor", current=path.read_bytes(), written=entry("cursor"), prior=None
+        )

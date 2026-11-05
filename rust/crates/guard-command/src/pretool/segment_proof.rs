@@ -54,8 +54,12 @@ pub(crate) fn benign_command_segments(
         .iter()
         .enumerate()
         .map(|(index, segment)| {
+            // `$((PATH=10))` assigns as it expands, which a later step sees.
+            let assigns = index + 1 < model.segments.len()
+                && super::shell_arithmetic::arithmetic_assigns(&segment.text);
             (index == 0 && cwd.is_some())
-                || exact_safe_segment_with_context(model, segment, false, proof_context)
+                || (!assigns
+                    && exact_safe_segment_with_context(model, segment, false, proof_context))
         })
         .collect();
     let mut all_previous_benign = true;
@@ -103,6 +107,7 @@ pub(crate) fn benign_command_segments(
                         basename,
                     "ls" | "cat"
                         | "base64"
+                        | "base32"
                         | "dd"
                         | "cp"
                         | "mkdir"
@@ -129,6 +134,30 @@ pub(crate) fn benign_command_segments(
                         | "npm"
                         | "jq"
                         | "pkill"
+                        // A filter given a file operand opens that file, so
+                        // its coverage takes the same session proof `cat`
+                        // takes. The stdin forms are path-free above.
+                        | "sort"
+                        | "uniq"
+                        | "cut"
+                        | "tr"
+                        | "paste"
+                        | "join"
+                        | "column"
+                        | "nl"
+                        | "tac"
+                        | "rev"
+                        | "fold"
+                        | "expand"
+                        | "unexpand"
+                        | "fmt"
+                        | "comm"
+                        | "strings"
+                        | "hexdump"
+                        | "xxd"
+                        | "pr"
+                        | "shuf"
+                        | "iconv"
                 ))
                 // A file operand prints a source line on a syntax error, so it
                 // gets the same session proof as `cat`.
@@ -324,8 +353,11 @@ pub(super) fn exact_safe_segment_with_context(
                 && matches!(segment.arguments.as_slice(), [target] if safe_directory_target(target))
                 && super::directory_targets::drive_targets_quoted(segment)
         }
+        // `printf -v NAME` and `%n` assign a shell variable rather than print.
         "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" => {
-            super::glob_words::printed_globs_listable(model, segment, context)
+            !super::printf_words::printf_sets_variable(segment)
+                && !super::control_flow_flatten::command_word_changes_shell_state(&segment.text)
+                && super::glob_words::printed_globs_listable(model, segment, context)
         }
         "exit" => super::shell_flow::safe_exit_arguments(&segment.arguments),
         "break" | "continue" => super::shell_flow::safe_loop_control_arguments(&segment.arguments),
@@ -379,7 +411,7 @@ pub(super) fn exact_safe_segment_with_context(
             (segment.pipeline_index > 0 && safe_reads::safe_cat_stdin_arguments(&segment.arguments))
                 || safe_reads::safe_plain_file_arguments(&segment.arguments, context)
         }
-        "base64" => {
+        "base64" | "base32" => {
             super::base64_reads::safe_base64_arguments(&segment.arguments, context)
                 || (segment.pipeline_index > 0
                     && super::stdin_filters::safe_arguments(basename, &segment.arguments))
@@ -514,7 +546,16 @@ pub(super) fn exact_safe_segment_with_context(
                 context,
             )
         }
-        "sort" | "uniq" | "cut" | "tr" => {
+        // `numfmt` takes numbers, not files. Its operands are the numbers it
+        // rewrites, and it reads standard input when it is given none, so a
+        // file name there is an invalid number rather than a read. Proving
+        // the operands as files would claim a read that never happens and
+        // would leave the ordinary `numfmt --to=iec 1048576` under review.
+        "numfmt" => super::stdin_filters::safe_number_arguments(&segment.arguments),
+        "sort" | "uniq" | "cut" | "tr" | "paste" | "join" | "column" | "nl" | "tac" | "rev"
+        | "fold" | "expand" | "unexpand" | "fmt" | "comm" | "strings" | "hexdump" | "xxd"
+        | "pr" | "shuf" | "iconv" | "ul" | "tsort" | "zcat" | "gzcat" | "bzcat" | "xzcat"
+        | "lzcat" | "zstdcat" => {
             (segment.pipeline_index > 0
                 && super::stdin_filters::safe_arguments(basename, &segment.arguments))
                 || super::stdin_filters::safe_file_arguments(basename, &segment.arguments, context)

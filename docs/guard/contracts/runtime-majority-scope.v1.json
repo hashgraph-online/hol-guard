@@ -325,7 +325,7 @@
       {
         "id": "install-uninstall-doctor",
         "category": "install_config",
-        "reason": "Install/uninstall/doctor/connect/pairing/OAuth/desktop-bootstrap CLI flows and repair/inverse lifecycle. codex_hook_recovery.py/codex_hook_rollback.py are the hook-publication journal, called only from CodexHarnessAdapter._write_authenticated_hook_config_owned, prepare_* migration/backup functions, prepare_install, the shim and cursor prepare functions and the excluded repair/inverse modules. commands_remove_hooks, hook_removal_presence, daemon_stop and commands_repair back the uninstall/repair CLI commands and are imported only by the commands_support facade and the excluded parser/dispatchers. cloud_actions_* and commands_dispatch_cloud_actions back `hol-guard cloud-actions` sign-in, sign-out and profile status (a browser OAuth flow for Guard Cloud actions). The commands_support facade imports the dispatcher, which hook_worker also loads, but the dispatcher imports cloud_actions_* only inside its sign-in handlers, so no hook run loads them.",
+        "reason": "Install/uninstall/doctor/connect/pairing/OAuth/desktop-bootstrap CLI flows and repair/inverse lifecycle. codex_hook_recovery.py/codex_hook_rollback.py are the hook-publication journal, called only from CodexHarnessAdapter._write_authenticated_hook_config_owned, prepare_* migration/backup functions, prepare_install, the shim and cursor prepare functions and the excluded repair/inverse modules. commands_remove_hooks, hook_removal_presence, daemon_stop and commands_repair back the uninstall/repair CLI commands and are imported only by the commands_support facade and the excluded parser/dispatchers. cloud_actions_* and commands_dispatch_cloud_actions back `hol-guard cloud-actions` status, doctor, AI tool setup and the AI tool bridge, all of which use the `hol-guard connect` pairing, plus the one-time removal of sign-ins saved by alpha builds. The commands_support facade imports the dispatcher, which hook_worker also loads, but the dispatcher imports cloud_actions_* only inside its command handlers, so no hook run loads them.",
         "path": [
           "src/codex_plugin_scanner/guard/cli/install_*.py",
           "src/codex_plugin_scanner/guard/cli/uninstall_commands.py",
@@ -334,6 +334,7 @@
           "src/codex_plugin_scanner/guard/cli/doctor_*.py",
           "src/codex_plugin_scanner/guard/cli/desktop_*.py",
           "src/codex_plugin_scanner/guard/cli/daemon_serve.py",
+          "src/codex_plugin_scanner/guard/cli/connect_cloud_actions.py",
           "src/codex_plugin_scanner/guard/cli/connect_flow.py",
           "src/codex_plugin_scanner/guard/cli/connect_sync_result.py",
           "src/codex_plugin_scanner/guard/cli/remote_pair_flow.py",
@@ -1060,7 +1061,6 @@
           "_MODE_ACRONYMS",
           "_SEVERITY_COLORS",
           "_KNOWN_MANAGED_INSTALL_MODES",
-          "_protect_guidance_lines",
           "_plain_text_protect",
           "_render_detect",
           "_render_start",
@@ -1651,6 +1651,7 @@
         "path": "src/codex_plugin_scanner/guard/cli/commands_support_connect.py",
         "symbols": [
           "_validate_policy_scope",
+          "_undo_unwanted_guard_connect_pairing",
           "_resolve_policy_expiry",
           "_guard_doctor_connect_health_payload",
           "_guard_doctor_oauth_storage_health_payload_from_health",
@@ -1858,10 +1859,11 @@
           "ClineHarnessAdapter.install",
           "ClineHarnessAdapter.uninstall",
           "ClineHarnessAdapter._install_transport",
-          "ClineHarnessAdapter._reconcile_transport"
+          "ClineHarnessAdapter._reconcile_transport",
+          "_install_plan"
         ],
         "entry_points": [],
-        "reason": "Cline adapter install and uninstall, including transport selection and inactive-transport cleanup used only by them.",
+        "reason": "Cline adapter install and uninstall and the native request helper used only by install; transport selection, inactive-transport cleanup, coverage and blind spots are decided by the native cline_install_plan runner-authority kind, and Python keeps the transport installs, probes and file I/O.",
         "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. Install-only imports live inside these methods so the retained module imports only state and detection helpers."
       },
       {
@@ -1905,12 +1907,12 @@
           "install_cline_mcp_proxies",
           "restore_cline_mcp_proxies",
           "_proxy_entry",
-          "_managed_server",
+          "_proxy_plan",
           "_backup_path",
           "_atomic_write_bytes"
         ],
         "entry_points": [],
-        "reason": "Cline MCP settings rewrite to the Guard proxy on install and restore on uninstall.",
+        "reason": "Cline MCP settings rewrite to the Guard proxy on install and restore on uninstall; _proxy_plan asks the native cline_install_plan kind which servers to proxy.",
         "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {

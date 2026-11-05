@@ -33,16 +33,29 @@ assert.doesNotMatch(everyday, />Advanced</, "Advanced is one area on the CIGAR p
 const pending = { ...ready, effective_enabled: false, availability: "checking" as const,
   runtime: null, job: { id: "4", operation: "activate" as const, phase: "verifying" as const } };
 assert.equal(buttonDisabled(render({ status: pending }), "Turn off now"), false);
-assert.equal(buttonDisabled(render({ status: pending }), "Start context assistance"), true,
+assert.equal(buttonDisabled(render({ status: pending }), "Start CIGAR"), true,
   "a pending native job cannot be started twice");
 
 const requested = { ...ready, effective_enabled: false, availability: "unavailable" as const,
   runtime: null, diagnostic: "runtime_not_verified" };
 assert.doesNotMatch(render({ status: requested }), /Ready\./);
-assert.equal(buttonDisabled(render({ status: requested, dirty: true }), "Start context assistance"), true);
-assert.equal(buttonDisabled(render({ status: requested, dirty: false }), "Start context assistance"), false);
-assert.match(render({ installations: [] }), /No registered CIGAR runtime is available/);
-assert.match(render({ installations: [] }), /Python 3\.14 may already be installed/);
+assert.equal(buttonDisabled(render({ status: requested, dirty: true }), "Start CIGAR"), true);
+assert.equal(buttonDisabled(render({ status: requested, dirty: false }), "Start CIGAR"), false);
+const leanFirst = render({ lean: createElement("p", null, "Lean sessions slot") });
+assert.ok(leanFirst.indexOf("Lean sessions slot") < leanFirst.indexOf(">This computer<"),
+  "the long-session switch sits right under the status card, ahead of the form");
+const raw = ready.preferences.runtime_id;
+assert.ok(raw && everyday.indexOf(raw) > everyday.indexOf(">More settings<"), "the raw runtime ID is a detail, kept under More settings");
+const underHeader = render({ status: { ...ready, effective_enabled: false, availability: "unavailable" as const, runtime: null, diagnostic: "runtime_not_verified" }, headerControls: true });
+assert.doesNotMatch(underHeader, />Start CIGAR<|>Turn off now</, "the page header owns Turn on and Turn off, so the card does not repeat them");
+assert.match(underHeader, />Check CIGAR</);
+const noRuntime = render({ installations: [] });
+assert.match(noRuntime, /CIGAR is not set up on this computer yet\. Turn on CIGAR at the top of this page/);
+assert.doesNotMatch(render(), /every command/, "CIGAR's note promises nothing about how Guard decides commands");
+const blank = { ...ready.preferences, runtime_id: "" };
+const unselected = render({ value: blank, status: { ...ready, preferences: blank }, installations: [] });
+assert.doesNotMatch(unselected, />Check CIGAR</, "nothing to check before a runtime is chosen");
+assert.match(unselected, />Not set up yet</);
 assert.match(render({ status: null, error: "Status is unavailable." }), /role="alert"/);
 assert.equal(buttonDisabled(render({ status: null }), "Turn off now"), false,
   "lost availability cannot remove opt-out for an enabled saved preference");
@@ -54,8 +67,8 @@ const restricted = parseContextAssistanceStatus(receipt.restriction_observation)
 const managed = render({ value: restricted.preferences, status: restricted, locked: true });
 assert.match(managed, /preference is saved/);
 assert.equal(buttonDisabled(managed, "Turn off now"), false);
-assert.equal(buttonDisabled(managed, "Check selected runtime"), true);
-assert.equal(buttonDisabled(managed, "Start context assistance"), true);
+assert.equal(buttonDisabled(managed, "Check CIGAR"), true);
+assert.equal(buttonDisabled(managed, "Start CIGAR"), true);
 
 function executionSwitch(html: string) {
   const id = html.match(/<p id="([^"]+)"[^>]*>Associate native context with execution<\/p>/)?.[1];
@@ -75,3 +88,8 @@ assert.deepEqual(executionSwitch(render({ value: executionSelected })), { disabl
 assert.equal(executionSwitch(render({ status: executionCapable,
   value: { ...ready.preferences, sources: { ...ready.preferences.sources, native_policy_facts: false } } })).disabled, true);
 console.log("Context assistance settings rendering and unavailable/managed/cancellation controls passed.");
+
+// The version row never calls a missing or still-loading installation "Installed".
+assert.match(render(), /Looking up version details/);
+assert.match(render({ installations: [] }), /Picked, but not found on this computer/);
+assert.doesNotMatch(render({ installations: [] }), />Installed</);

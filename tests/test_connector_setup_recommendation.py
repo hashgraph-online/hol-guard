@@ -34,21 +34,26 @@ _CLI_ID = "local-cli.lanectl-0123abcd"
 _GROUP = f"connector:{_HASH}:0123456789abcdef"
 
 
+# A literal hint, so collecting the parametrized cases below never needs the
+# native runtime; the first test proves it passes the shape check.
+_RAW_HINT: dict[str, object] = {
+    "schema": CONNECTOR_SETUP_HINT_SCHEMA,
+    "identity_hash": _HASH,
+    "cli_id": _CLI_ID,
+    "surface": "cli",
+    "display_name": "lanectl",
+    "deep_link": connector_setup_deep_link(_CLI_ID),
+    "card_recommendation": {"state": "allowed", "capabilities": []},
+    "risk_classes": [],
+}
+
+
 def _hint(**overrides: object) -> dict[str, object]:
-    hint = validated_connector_setup_hint(
-        {
-            "schema": CONNECTOR_SETUP_HINT_SCHEMA,
-            "identity_hash": _HASH,
-            "cli_id": _CLI_ID,
-            "surface": "cli",
-            "display_name": "lanectl",
-            "deep_link": connector_setup_deep_link(_CLI_ID),
-            "card_recommendation": {"state": "allowed", "capabilities": []},
-            "risk_classes": [],
-        }
-    )
-    assert hint is not None
-    return {**hint, **overrides}
+    return {**_RAW_HINT, **overrides}
+
+
+def test_the_fixture_hint_passes_the_shape_check() -> None:
+    assert validated_connector_setup_hint(_RAW_HINT) == _RAW_HINT
 
 
 def _snapshot(health: AuthorityHealth = AuthorityHealth.PROTECTED) -> ExtensionControlRuntimeSnapshot:
@@ -267,6 +272,35 @@ def test_caution_when_any_grouped_row_carries_a_caution_class(monkeypatch: pytes
     assert result is not None
     assert result["caution"] is True
     assert result["caution_risk_classes"] == ["destructive"]
+
+
+def test_an_unchecked_grouped_row_keeps_the_caution(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+
+    _items(monkeypatch)
+    checked = recommendation.validated_connector_setup_hint
+    deadlines: list[float | None] = []
+
+    def unavailable_for_siblings(
+        value: object, *, strict: bool = False, deadline_monotonic: float | None = None
+    ) -> dict[str, object] | None:
+        if strict:
+            deadlines.append(deadline_monotonic)
+            raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+        return checked(value)
+
+    monkeypatch.setattr(recommendation, "validated_connector_setup_hint", unavailable_for_siblings)
+
+    store = _Store({"req-2": _hint(risk_classes=["destructive"]), "req-3": _hint()})
+    result = _build(_approval(_hint()), store)
+
+    assert result is not None
+    assert result["caution"] is True
+    assert result["caution_risk_classes"] == []
+    # Every sibling check shares the scan's one deadline.
+    assert len(deadlines) == 2
+    assert deadlines[0] is not None
+    assert set(deadlines) == {deadlines[0]}
 
 
 def test_the_resident_of_the_stores_home_decides_the_caution(

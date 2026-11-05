@@ -369,3 +369,73 @@ fn a_detached_or_quoted_two_is_an_argument_rather_than_a_stderr_redirect() {
     }
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A project directory beside the session's workspace that carries a manifest
+/// and no repository, under `/tmp` for the reason [`sibling_root`] gives.
+#[cfg(unix)]
+fn scratch_project(name: &str) -> std::path::PathBuf {
+    let root = std::path::Path::new("/tmp")
+        .join(format!("guard-plan-scratch-{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("scratch project");
+    std::fs::write(
+        root.join("package.json"),
+        "{\"name\": \"slug-repro\", \"scripts\": {\"test\": \"node --test\"}}",
+    )
+    .expect("manifest");
+    root.canonicalize().expect("scratch project")
+}
+
+/// `cd <project without a repository> && npm test` is peeled into that
+/// project, so the read-only package-test route and the sink that redeems its
+/// receipt agree on where the run happens.
+///
+/// A colleague's reproduction unpacked under a temporary root is a project
+/// with a manifest and no `.git`. Reading only a repository marker left it
+/// with no root at all, the peel refused the shape, and the same `npm test`
+/// that ran contained in the session's own directory fell through to the
+/// generic package prompt.
+#[cfg(unix)]
+#[test]
+fn a_project_without_a_repository_is_peeled_as_its_own_root() {
+    let root = scratch_project("no-repository");
+    let session = workspace("plan-scratch-project", true);
+    let workspace_path = session.to_str().expect("workspace path");
+    let command = format!("cd {} && npm test", root.display());
+
+    let plan = wrapper_plan(
+        &command,
+        workspace_path,
+        Some(workspace_path),
+        Some(HOME),
+        false,
+    )
+    .plan
+    .expect("peeled into the scratch project");
+    assert_eq!(plan.core, "npm test");
+    assert_eq!(
+        std::fs::canonicalize(&plan.directory).expect("directory"),
+        root
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A package below a checkout still resolves to the checkout, so a monorepo
+/// keeps the root that holds its hoisted install.
+#[cfg(unix)]
+#[test]
+fn a_package_below_a_checkout_keeps_the_checkout_as_its_root() {
+    let root = sibling_root("nested-package");
+    let package = root.join("packages/web");
+    std::fs::create_dir_all(&package).expect("package directory");
+    std::fs::write(package.join("package.json"), "{}").expect("manifest");
+    assert_eq!(
+        crate::pretool::contained_wrapper::project_root(
+            &package,
+            HOME,
+            crate::pretool::contained_wrapper::ProjectRoots::RepositoryOrPackage
+        ),
+        Some(root.clone())
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

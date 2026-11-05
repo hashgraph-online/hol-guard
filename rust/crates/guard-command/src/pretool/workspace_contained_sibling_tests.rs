@@ -799,3 +799,6 @@ fn a_quoted_delimiter_in_a_peeled_stage_stays_contained() {
     );
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
+
+#[path = "workspace_contained_sibling_cat_tests.rs"]
+mod cat;

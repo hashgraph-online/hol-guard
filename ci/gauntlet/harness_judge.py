@@ -20,6 +20,7 @@ from .approval_retry_action import pinned_file_tool
 from .approval_retry_action import relative_path as _relative
 from .approval_retry_bash import BASH_LIFECYCLE_ORACLE
 from .approval_retry_bash import assessment as bash_lifecycle_assessment
+from .approval_retry_marker import assessment as marker_assessment
 from .catalog import Scenario
 from .codex_contained import routed_calls, shell_script
 from .connector_judge import connector_setup_outcome, connector_tool_outcome, reason_text, ungranted_stop
@@ -261,7 +262,7 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
             )
         ):
             return pinned
-        return outcome
+        return marker_assessment(scenario.id, case, outcome)
     if scenario.oracle == "mixed-read-batch":
         return _mixed_reads(case, decisions)
     if scenario.oracle == "connector-tool" and (tool_result := connector_tool_outcome(scenario, decisions, calls)):

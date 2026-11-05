@@ -65,6 +65,10 @@ pub enum ApprovalExtensionRecommendationQueryV1 {
     },
     /// The subset of `risk_classes` that calls for a caution.
     CautionRiskClasses { risk_classes: Vec<String> },
+    /// Label a stored coverage hint, which extension matched which step,
+    /// from the active catalog. `hint` is the stored value as read; the op
+    /// shape-checks it.
+    Coverage { hint: serde_json::Value },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -119,6 +123,9 @@ pub enum ApprovalExtensionRecommendationPayloadV1 {
     },
     /// The asked risk classes that call for a caution, sorted without repeats.
     CautionRiskClasses { risk_classes: Vec<String> },
+    /// The labelled steps, or null when no stored step names an extension
+    /// this catalog carries.
+    Coverage { coverage: Option<serde_json::Value> },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

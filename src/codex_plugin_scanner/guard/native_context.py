@@ -111,6 +111,8 @@ _RESULT_CODES = {
 # comment below).  Every other kind is a pure function of request content.
 _UNCACHEABLE_DIGEST_KINDS = frozenset(
     {
+        # Builds the artifact's launch identity from the ambient environment.
+        "consumer_approval_context_token",
         "generic_hook_approval_context",
         # Builds a launch identity per previewed argv, so it reads the
         # executable's bytes, and it carries the prepared launch

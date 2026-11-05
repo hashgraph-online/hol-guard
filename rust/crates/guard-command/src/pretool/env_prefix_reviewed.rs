@@ -70,9 +70,20 @@ fn plain_data(name: &str, value: &str) -> bool {
         && !forwarded(name)
         && value.len() <= MAX_DATA_CHARS
         && !value.starts_with('-')
-        && value
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || "/._+@:,%-".contains(character))
+        && value.chars().all(data_character)
+}
+
+/// A character a value may hold and still be data the read-only launchers
+/// drop. The pathname and brace characters are in the set for the same
+/// reason `plain_project_value` holds them: a shell
+/// applies neither field splitting nor pathname expansion to an assignment's
+/// value, so `DEBUG=app:*` is the five characters `app:*` and nothing else,
+/// and the word reached here only after `literal_assignment_word`
+/// refused `$`, a backtick, an escape, a parenthesis, `~`, `!` and a
+/// redirection. A command separator, a redirection or an expansion in the
+/// value still falls outside the set, so such a setting keeps its review.
+fn data_character(character: char) -> bool {
+    character.is_ascii_alphanumeric() || "/._+@:,%-*?[]{}".contains(character)
 }
 
 #[cfg(unix)]
@@ -136,3 +147,7 @@ fn rank(action: &str) -> u8 {
         _ => 5,
     }
 }
+
+#[cfg(test)]
+#[path = "env_prefix_reviewed_tests.rs"]
+mod tests;

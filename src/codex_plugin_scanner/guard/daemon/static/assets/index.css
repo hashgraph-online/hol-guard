@@ -5881,7 +5881,7 @@
     text-decoration-line: underline;
   }
 
-  .decoration-brand-blue\/30 {
+  .decoration-brand-blue, .decoration-brand-blue\/30 {
     -webkit-text-decoration-color: var(--brand-blue);
     -webkit-text-decoration-color: var(--brand-blue);
     text-decoration-color: var(--brand-blue);
@@ -7098,6 +7098,10 @@
       text-decoration-color: var(--brand-blue);
     }
 
+    .hover\:decoration-2:hover {
+      text-decoration-thickness: 2px;
+    }
+
     .hover\:opacity-80:hover {
       opacity: .8;
     }
@@ -7396,6 +7400,10 @@
     .focus-visible\:ring-brand-blue\/60:focus-visible {
       --tw-ring-color: color-mix(in oklab, var(--brand-blue) 60%, transparent);
     }
+  }
+
+  .focus-visible\:ring-brand-dark:focus-visible {
+    --tw-ring-color: var(--brand-dark);
   }
 
   .focus-visible\:ring-red-400\/40:focus-visible {

@@ -82,8 +82,66 @@ pub(crate) fn local_uvu_entry(argument: &str) -> bool {
     local_package_entry(argument, "uvu/bin.js") || local_bin_entry(argument, "uvu")
 }
 
+/// tape's installed entry point, and the link its installer writes beside it.
+/// tape declares `bin/tape` as its `bin`, an extensionless file it has
+/// shipped at that path since 4.0.
+pub(crate) fn local_tape_entry(argument: &str) -> bool {
+    local_package_entry(argument, "tape/bin/tape") || local_bin_entry(argument, "tape")
+}
+
+/// tsd's installed entry point, and the link its installer writes beside it.
+/// tsd compiles its TypeScript CLI to `dist/cli.js` and declares that file as
+/// its `bin`.
+pub(crate) fn local_tsd_entry(argument: &str) -> bool {
+    local_package_entry(argument, "tsd/dist/cli.js") || local_bin_entry(argument, "tsd")
+}
+
+/// tap's installed entry points. tap 21 declares `dist/esm/run.mjs`; tap 16
+/// through 20 published the same entry as `bin/run.js`. The sink runs
+/// whichever of them this workspace holds, so reading only the current
+/// spelling would send a working `node node_modules/tap/bin/run.js` to review
+/// while the `npx tap` beside it runs. The installer's link to that entry
+/// names the same run.
+pub(crate) fn local_tap_entry(argument: &str) -> bool {
+    local_package_entry(argument, "tap/dist/esm/run.mjs")
+        || local_package_entry(argument, "tap/bin/run.js")
+        || local_bin_entry(argument, "tap")
+}
+
+/// borp's installed entry point, and the link its installer writes beside it.
+/// borp declares `borp.js` at the package root rather than under a `bin`
+/// directory, and has published it there since 0.1.
+pub(crate) fn local_borp_entry(argument: &str) -> bool {
+    local_package_entry(argument, "borp/borp.js") || local_bin_entry(argument, "borp")
+}
+
+/// poku's installed entry point, and the link its installer writes beside it.
+/// poku declares `lib/bin/index.js`, the compiled CLI its package ships.
+pub(crate) fn local_poku_entry(argument: &str) -> bool {
+    local_package_entry(argument, "poku/lib/bin/index.js") || local_bin_entry(argument, "poku")
+}
+
+/// lab's installed entry point, and the link its installer writes beside it.
+/// lab is published under a scope, so its entry is spelled with the scope
+/// directory the installer writes it into; the extensionless `bin/lab` is the
+/// module `@hapi/lab` has declared since lab 20.
+pub(crate) fn local_lab_entry(argument: &str) -> bool {
+    local_package_entry(argument, "@hapi/lab/bin/lab") || local_bin_entry(argument, "lab")
+}
+
+/// cucumber-js's installed entry point, and the link its installer writes
+/// beside it. The package is scoped, so the entry it declares lands at
+/// `node_modules/@cucumber/cucumber/bin/cucumber.js`, while the link takes
+/// the executable's own name, `cucumber-js`. That file is a shim that
+/// requires the package's `lib/cli/run.js`, and the package has declared it
+/// at that path since cucumber-js 8.
+pub(crate) fn local_cucumber_entry(argument: &str) -> bool {
+    local_package_entry(argument, "@cucumber/cucumber/bin/cucumber.js")
+        || local_bin_entry(argument, "cucumber-js")
+}
+
 /// Whether a word names one of those installed entry points. A runtime handed
-/// this path starts the workspace's own runner, whichever of the three it is.
+/// this path starts the workspace's own runner, whichever of them it is.
 pub(crate) fn local_runner_entry(argument: &str) -> bool {
     let entry = argument.replace('\\', "/");
     local_vitest_entry(&entry)
@@ -93,6 +151,13 @@ pub(crate) fn local_runner_entry(argument: &str) -> bool {
         || local_jasmine_entry(&entry)
         || local_qunit_entry(&entry)
         || local_uvu_entry(&entry)
+        || local_tape_entry(&entry)
+        || local_tsd_entry(&entry)
+        || local_tap_entry(&entry)
+        || local_borp_entry(&entry)
+        || local_poku_entry(&entry)
+        || local_lab_entry(&entry)
+        || local_cucumber_entry(&entry)
 }
 
 /// Whether a call hands Bun one of those entry points as the file to run.
@@ -419,8 +484,12 @@ pub(crate) use runner_calls::{
     workspace_test_script,
 };
 pub(crate) use single_pass_runners::{
-    jasmine_contained_call, jasmine_runs_once, jasmine_sets_no_environment, qunit_contained_call,
-    qunit_runs_once, uvu_contained_call,
+    borp_contained_call, borp_runs_once, cucumber_contained_call, cucumber_prints_its_report,
+    cucumber_runs_once, jasmine_contained_call, jasmine_runs_once, jasmine_sets_no_environment,
+    lab_contained_call, lab_runs_once, poku_contained_call, poku_runs_once,
+    poku_touches_nothing_else, qunit_contained_call, qunit_runs_once, tap_contained_call,
+    tap_runs_tests_once, tap_sets_no_environment, tape_contained_call, tsd_contained_call,
+    uvu_contained_call,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
@@ -461,6 +530,13 @@ fn runner_tail(arguments: &[String]) -> Option<(&'static str, Vec<String>)> {
                 "jasmine" => "jasmine",
                 "qunit" => "qunit",
                 "uvu" => "uvu",
+                "tape" => "tape",
+                "tsd" => "tsd",
+                "tap" => "tap",
+                "borp" => "borp",
+                "poku" => "poku",
+                "lab" => "lab",
+                "cucumber-js" => "cucumber-js",
                 _ => "vitest",
             },
             rest.to_vec(),
@@ -532,6 +608,76 @@ fn runner_tail_or_error(
             Some("uvu") => Err(RestrictedPytestError::new(
                 VITEST_INVALID,
                 "Protected uvu reads its modules from this workspace.",
+            )),
+            Some("tape") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected tape reads its modules from this workspace.",
+            )),
+            Some("tsd") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected tsd reads its types from this workspace.",
+            )),
+            Some("tap") if !tap_runs_tests_once(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected tap runs tests; it does not report, build or open a browser.",
+                ))
+            }
+            Some("tap") if !tap_sets_no_environment(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected tap takes its environment from the run, not from its arguments.",
+                ))
+            }
+            Some("tap") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected tap reads its configuration and modules from this workspace.",
+            )),
+            Some("borp") if !borp_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected borp requires a run that does not watch.",
+            )),
+            Some("borp") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected borp reads its modules from this workspace.",
+            )),
+            Some("poku") if !poku_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected poku requires a run that does not watch.",
+            )),
+            Some("poku") if !poku_touches_nothing_else(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected poku runs tests; it does not end processes or load an environment file.",
+                ))
+            }
+            Some("poku") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected poku reads its modules from this workspace.",
+            )),
+            Some("lab") if !lab_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected lab runs tests; it does not start a debugger.",
+            )),
+            Some("lab") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected lab reads its modules from this workspace.",
+            )),
+            Some("cucumber-js") if !cucumber_prints_its_report(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected cucumber-js prints its report here; it does not write it to a file.",
+                ))
+            }
+            Some("cucumber-js") if !cucumber_runs_once(&arguments[1..]) => {
+                Err(RestrictedPytestError::new(
+                    VITEST_INVALID,
+                    "Protected cucumber-js runs its features here; it does not publish the report.",
+                ))
+            }
+            Some("cucumber-js") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected cucumber-js reads its features and support code from this workspace.",
             )),
             _ => invalid_vitest(),
         },
@@ -728,7 +874,20 @@ pub fn contained_runner_invocation(
             args.to_vec()
         } else if matches!(
             name,
-            "vitest" | "jest" | "mocha" | "ava" | "jasmine" | "qunit" | "uvu"
+            "vitest"
+                | "jest"
+                | "mocha"
+                | "ava"
+                | "jasmine"
+                | "qunit"
+                | "uvu"
+                | "tape"
+                | "tsd"
+                | "tap"
+                | "borp"
+                | "poku"
+                | "lab"
+                | "cucumber-js"
         ) {
             let mut call = vec![name.to_owned()];
             call.extend_from_slice(&argv[1..]);
@@ -753,6 +912,20 @@ pub fn contained_runner_invocation(
                 "qunit"
             } else if local_uvu_entry(&entry) {
                 "uvu"
+            } else if local_tape_entry(&entry) {
+                "tape"
+            } else if local_tsd_entry(&entry) {
+                "tsd"
+            } else if local_tap_entry(&entry) {
+                "tap"
+            } else if local_borp_entry(&entry) {
+                "borp"
+            } else if local_poku_entry(&entry) {
+                "poku"
+            } else if local_lab_entry(&entry) {
+                "lab"
+            } else if local_cucumber_entry(&entry) {
+                "cucumber-js"
             } else {
                 return invalid_vitest();
             };
@@ -786,6 +959,11 @@ fn invalid_vitest<T>() -> Result<T, RestrictedPytestError> {
 /// own answer: a trailing group's command list, an activation's target, or
 /// both. A sink that plans the call again has to plan the text the pre-tool
 /// pass answered for, or it refuses the work that answer already admitted.
+///
+/// A bounded inline shell whose script is one command, such as
+/// `bash -ec 'pytest -q'`, is read as that command, because it is what the
+/// review read. The caller re-authorizes the projected text on its own, so a
+/// command the review would not contain still gets refused there.
 fn contained_target(input: &Value) -> Value {
     let text = input
         .get("text")
@@ -796,7 +974,9 @@ fn contained_target(input: &Value) -> Value {
         cwd: input.get("cwd").and_then(Value::as_str),
         ..Default::default()
     };
-    crate::pretool::generic::contained_target(text, context).map_or(Value::Null, Value::String)
+    crate::pretool::generic::contained_target(text, context)
+        .or_else(|| crate::contained_inline_target::inline_shell_target(text))
+        .map_or(Value::Null, Value::String)
 }
 
 /// The words a manifest script spells, read with the lexer that reads it in
@@ -991,7 +1171,22 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let vitest = !command.is_empty()
         && (matches!(
             name,
-            "bunx" | "npx" | "vitest" | "jest" | "mocha" | "ava" | "jasmine" | "qunit" | "uvu"
+            "bunx"
+                | "npx"
+                | "vitest"
+                | "jest"
+                | "mocha"
+                | "ava"
+                | "jasmine"
+                | "qunit"
+                | "uvu"
+                | "tape"
+                | "tsd"
+                | "tap"
+                | "borp"
+                | "poku"
+                | "lab"
+                | "cucumber-js"
         ) || manager_exec_runner(command).is_some()
             || bun.is_some()
             || bun_runner_entry_launch(command)
@@ -1006,6 +1201,13 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                         || local_jasmine_entry(&entry)
                         || local_qunit_entry(&entry)
                         || local_uvu_entry(&entry)
+                        || local_tape_entry(&entry)
+                        || local_tsd_entry(&entry)
+                        || local_tap_entry(&entry)
+                        || local_borp_entry(&entry)
+                        || local_poku_entry(&entry)
+                        || local_lab_entry(&entry)
+                        || local_cucumber_entry(&entry)
                 })));
     let node_tool = bun.is_none()
         && !bun_test

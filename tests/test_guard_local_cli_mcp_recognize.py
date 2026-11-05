@@ -387,7 +387,8 @@ def test_configured_refresh_preserves_initialize_failure_and_stored_permissions(
     result = service.recognize({"cli_id": cli_id, "refresh": True})
     assert result["item"]["cli_id"] == cli_id
     assert result["help_status"] == "failed"
-    assert result["discovery_error"] == "mcp_initialize_failed"
+    # The configured script is missing, so the server exits before it answers.
+    assert result["discovery_error"] == "mcp_server_exited"
     assert result["item"]["commands"] == before["commands"]
     assert result["item"]["grant_revision"] == before["grant_revision"]
     assert "missing_server.py" not in result["summary"]

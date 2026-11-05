@@ -1,20 +1,23 @@
 //! The HOL Guard Plugin Kit: check a plugin source, package it for every
 //! agent runtime that can load it, and print its install links.
 //!
-//! The Kit reads only the repository it is pointed at, plus the record of
-//! what `plugin install` added under the Guard home. It runs no commands and
-//! makes no network calls. `hol-guard plugin` sends one JSON request on stdin
+//! The Kit reads only the repository it is pointed at, the record of what
+//! `plugin install` added under the Guard home, and Claude Code's own plugin
+//! records and marketplace checkouts. It runs no commands and makes no
+//! network calls. `hol-guard plugin` sends one JSON request on stdin
 //! to `hol-guard-runtime plugin-kit --stdin` and gets one response back:
 //! `{"ok": true, "result": ...}` or `{"ok": false, "error": <code>}`.
 
 mod agent_plugins;
 mod card;
 mod check;
+mod claude;
 mod config;
 mod detect;
 mod emit;
 mod init;
 mod install;
+mod integrity;
 mod ledger;
 mod links;
 mod model;
@@ -131,6 +134,25 @@ enum Request {
     },
     /// Checks an install-spec endpoint override; see `install::endpoint_origin`.
     Endpoint { value: String },
+    /// What Claude Code recorded under its config folder; see `claude::state`.
+    Claude {
+        home: String,
+        #[serde(default)]
+        plugin_id: Option<String>,
+        #[serde(default)]
+        marketplace: Option<String>,
+    },
+    /// The commit a checkout is at; see `claude::git_head`.
+    #[serde(rename = "git_head")]
+    GitHead { root: String },
+    /// HOL's integrity ledger held against an install; see `integrity::check`.
+    Integrity {
+        slug: String,
+        #[serde(default)]
+        spec_slug: Value,
+        installed: integrity::Installed,
+        ledger: Value,
+    },
 }
 
 /// Runs one request and wraps the outcome in the native response envelope.
@@ -258,6 +280,18 @@ fn handle(request: Request) -> Result<Value, String> {
             guard_home,
             recover,
         } => ledger::installs(&guard_home, recover),
+        Request::Claude {
+            home,
+            plugin_id,
+            marketplace,
+        } => claude::state(&home, plugin_id.as_deref(), marketplace.as_deref()),
+        Request::GitHead { root } => Ok(claude::git_head(&root)),
+        Request::Integrity {
+            slug,
+            spec_slug,
+            installed,
+            ledger,
+        } => Ok(integrity::check(&installed, &ledger, &slug, &spec_slug)),
         Request::Endpoint { value } => install::endpoint_origin(&value)
             .map(|origin| json!({ "origin": origin }))
             .ok_or_else(|| "plugin_kit_install_endpoint_invalid".to_owned()),

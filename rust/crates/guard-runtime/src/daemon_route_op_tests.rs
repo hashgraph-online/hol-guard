@@ -18,6 +18,7 @@ fn context_assistance_control_routes_require_existing_dashboard_or_header_author
         "/v1/context-assistance/workspace-access",
         "/v1/context-assistance/workspace-grant",
         "/v1/context-assistance/folders",
+        "/v1/context-assistance/codex-lean",
     ] {
         assert!(crate::daemon_route_paths::requires_header_token(path));
         assert!(crate::daemon_route_paths::session_path("GET", path));

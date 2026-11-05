@@ -1,10 +1,11 @@
-"""The local dashboard's view of Cloud actions sign-ins.
+"""The local dashboard's view of Cloud actions on this computer.
 
-`GET /v1/cloud-actions/status` reads saved sign-ins and the last check without
-calling Guard Cloud; `POST` runs one check a minute. The tests check that every
-answer is labelled with its age, that nothing secret or path-like leaves the
-daemon, and that a Cloud actions sign-in can never stand in for the daemon's
-own token.
+Cloud actions use the `hol-guard connect` pairing. `GET /v1/cloud-actions/status`
+reads the pairing, what connect said about Cloud actions and the last saved
+check, without calling Guard Cloud; `POST` asks Guard Cloud's public
+description at most once a minute. The tests check that every answer is
+labelled with its age, that nothing secret or path-like leaves the daemon, and
+that Cloud actions access can never stand in for the daemon's own token.
 """
 
 from __future__ import annotations
@@ -13,24 +14,21 @@ import json
 import os
 import urllib.error
 import urllib.request
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.cloud_actions_session import (
-    CloudActionsProfile,
-    CloudActionsSecrets,
-    CloudActionsSessionStore,
-)
+from codex_plugin_scanner.guard.cli import cloud_actions_access
+from codex_plugin_scanner.guard.cli.cloud_actions_access import CloudActionsAccessError, CloudActionsPairing
+from codex_plugin_scanner.guard.cli.connect_cloud_actions import record_cloud_actions_connect_report
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import cloud_actions_status as status_module
 from codex_plugin_scanner.guard.daemon.cloud_actions_status import (
     CheckResult,
     CloudActionsCheckedRecentlyError,
+    CloudActionsNotPairedError,
     check_cloud_actions,
     cloud_actions_local_status,
 )
@@ -38,82 +36,177 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
 NOW = datetime(2026, 11, 3, 12, 0, tzinfo=timezone.utc)
-ACCESS = "cloud-actions-access-canary-3c9d"
-REFRESH = "cloud-actions-refresh-canary-81aa"
 WS = "11111111-1111-4111-8111-111111111111"
+SITE = "https://cloud.example.test:8443"
+ACCESS = "cloud-actions-access-canary-3c9d"
 
 
-def _sign_in(
+def _pair(
+    monkeypatch: pytest.MonkeyPatch,
     home: Path,
-    name: str = "default",
     *,
-    expires: datetime | None = None,
-    signed_in: str = "",
-    issuer: str = "https://cloud.example.test:8443",
+    origin: str = SITE,
+    report: Literal["on", "off"] | None = None,
+    grant_id: str = "grant-1",
+) -> GuardStore:
+    """Pair `home` with `origin`; `report` is what connect said about Cloud actions."""
+
+    def read_pairing(_store: object) -> CloudActionsPairing:
+        return CloudActionsPairing(origin=origin, workspace_id=WS)
+
+    monkeypatch.setattr(cloud_actions_access, "read_cloud_actions_pairing", read_pairing)
+    monkeypatch.setattr(
+        GuardStore, "get_oauth_local_credential_health", lambda _self: {"state": "healthy", "grant_id": grant_id}
+    )
+    store = GuardStore(home)
+    if report is not None:
+        record_cloud_actions_connect_report(
+            store, grant_id=grant_id, report={"status": report, "workspace_id": WS}, now="2026-11-03T11:00:00Z"
+        )
+    return store
+
+
+def _connection(projection: dict[str, object]) -> Any:
+    return projection["connection"]
+
+
+def _unpaired(monkeypatch: pytest.MonkeyPatch, home: Path) -> GuardStore:
+    def read_pairing(_store: object) -> CloudActionsPairing:
+        raise CloudActionsAccessError("not_paired", "Not paired.")
+
+    monkeypatch.setattr(cloud_actions_access, "read_cloud_actions_pairing", read_pairing)
+    return GuardStore(home)
+
+
+def _current(origin: str) -> CheckResult:
+    assert origin == SITE
+    return CheckResult("current", "Guard Cloud offers Cloud actions.", 200)
+
+
+@pytest.fixture(autouse=True)
+def _connection_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Guard Cloud accepts the connection unless a test says otherwise."""
+
+    monkeypatch.setattr(status_module, "_live_pairing_checker", lambda _store: None)
+
+
+_LIVE_PAIRING_CHECKER = status_module._live_pairing_checker  # pyright: ignore[reportPrivateUsage]
+
+
+def _refresh_raising(monkeypatch: pytest.MonkeyPatch, error: Exception) -> list[bool]:
+    """Use the real connection check, with a renewal that fails with `error`."""
+    from codex_plugin_scanner.guard.runtime import runner
+
+    monkeypatch.setattr(status_module, "_live_pairing_checker", _LIVE_PAIRING_CHECKER)
+    calls: list[bool] = []
+
+    def resolve(_store: object, *, force_refresh: bool = False, **_kwargs: object) -> dict[str, object]:
+        calls.append(force_refresh)
+        raise error
+
+    monkeypatch.setattr(runner, "_resolve_guard_sync_auth_context", resolve)
+    return calls
+
+
+def test_a_revoked_connection_asks_to_reconnect(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import runner
+
+    store = _pair(monkeypatch, tmp_path, report="on")
+    calls = _refresh_raising(
+        monkeypatch,
+        runner.GuardSyncAuthorizationExpiredError(runner._guard_oauth_reconnect_after_revoked_message()),  # pyright: ignore[reportPrivateUsage]
+    )
+
+    checked = check_cloud_actions(store, now=NOW, checker=_current)
+
+    assert calls == [True]
+    assert _connection(checked)["check"]["service"] == {
+        "state": "reconnect",
+        "message": "Guard Cloud refused to renew this computer's access.",
+    }
+    _assert_nothing_private(checked, tmp_path)
+
+
+def _not_proof_of_revocation() -> list[Exception]:
+    from codex_plugin_scanner.guard.runtime import runner
+
+    expired = runner.GuardSyncAuthorizationExpiredError
+    rejected = runner._GuardOAuthRefreshRejectedError  # pyright: ignore[reportPrivateUsage]
+    reauthorize = runner._guard_oauth_reauthorization_message()  # pyright: ignore[reportPrivateUsage]
+    return [
+        RuntimeError("rate limited"),
+        OSError("unreachable"),
+        ValueError("bad answer"),
+        # A malformed renewal answer or a proof Guard could not sign.
+        expired(reauthorize),
+        expired(f"{reauthorize} could not sign the proof"),
+        # Guard Cloud refused the request for another reason than invalid_grant.
+        rejected(f"{reauthorize} Guard Cloud answered 400 invalid_request (invalid_grant hint)."),
+    ]
+
+
+@pytest.mark.parametrize("error", _not_proof_of_revocation())
+def test_a_connection_check_that_cannot_tell_keeps_the_service_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: Exception
 ) -> None:
-    store = CloudActionsSessionStore(home)
-    profile = CloudActionsProfile(
-        name=name,
-        issuer=issuer,
-        resource=f"{issuer}/api/guard/gateway/mcp",
-        client_id="client-1",
-        workspace_id=WS,
-        scopes=("guard:gateway",),
-        expires_at=(expires or NOW + timedelta(hours=1)).isoformat().replace("+00:00", "Z"),
-        grant_id="grant-1",
-        signed_in_at=signed_in or "2026-11-03T11:00:00Z",
-    )
-    with store.lock(name):
-        store.save(profile, CloudActionsSecrets(access_token=ACCESS, refresh_token=REFRESH))
+    store = _pair(monkeypatch, tmp_path, report="on")
+    _refresh_raising(monkeypatch, error)
+
+    checked = check_cloud_actions(store, now=NOW, checker=_current)
+
+    assert _connection(checked)["check"]["service"]["state"] == "current"
 
 
-def _connected(_profile: CloudActionsProfile, access: str, _deadline: float = 0.0) -> tuple[CheckResult, CheckResult]:
-    assert access == ACCESS
-    return (
-        CheckResult("current", "Guard Cloud offers Cloud actions as this sign-in expects.", 200),
-        CheckResult("connected", "Guard Cloud accepted this sign-in.", 501),
+def test_an_unreachable_guard_cloud_skips_the_connection_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _pair(monkeypatch, tmp_path, report="on")
+    calls = _refresh_raising(monkeypatch, RuntimeError("not reached"))
+
+    checked = check_cloud_actions(
+        store, now=NOW, checker=lambda _origin: CheckResult("offline", "Guard Cloud could not be reached.")
     )
+
+    assert calls == []
+    assert _connection(checked)["check"]["service"]["state"] == "offline"
 
 
 def _assert_nothing_private(payload: object, home: Path) -> None:
     text = json.dumps(payload)
-    for secret in (ACCESS, REFRESH, "secret_ref", "cloud-actions-default-", str(home), "/api/guard/gateway"):
-        assert secret not in text
+    for value in (ACCESS, "secret_ref", str(home), "/api/guard/gateway", "grant-1"):
+        assert value not in text
 
 
-def test_no_sign_ins_reports_nothing_and_no_numbers(tmp_path: Path) -> None:
-    payload = cloud_actions_local_status(tmp_path, now=NOW)
+def test_before_connect_reports_not_paired_and_no_numbers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = cloud_actions_local_status(_unpaired(monkeypatch, tmp_path), now=NOW)
 
-    assert payload["sign_ins"] == []
+    assert payload["schema"] == "guard.cloud-actions.local-status.v2"
+    assert payload["connection"] == {"state": "not_paired", "check": {"state": "not_checked"}}
     assert payload["included_actions"] == "not_available_yet"
     assert payload["accounts"] == "not_available_yet"
     assert payload["next_check_allowed_at"] is None
+    assert "sign_ins" not in payload
 
 
-def test_saved_sign_in_is_shown_unchecked_with_host_only(tmp_path: Path) -> None:
-    _sign_in(tmp_path)
+@pytest.mark.parametrize(("report", "state"), [(None, "unknown"), ("on", "on"), ("off", "off")])
+def test_the_pairing_is_shown_unchecked_with_host_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, report: Literal["on", "off"] | None, state: str
+) -> None:
+    store = _pair(monkeypatch, tmp_path, report=report)
 
-    payload = cloud_actions_local_status(tmp_path, now=NOW)
+    payload = cloud_actions_local_status(store, now=NOW)
 
-    assert payload["sign_ins"] == [
-        {
-            "profile": "default",
-            "workspace": WS,
-            "site": "cloud.example.test:8443",
-            "cloud_url": "https://cloud.example.test:8443",
-            "cloud_base_url": None,
-            "signed_in_at": "2026-11-03T11:00:00Z",
-            "expires_at": "2026-11-03T13:00:00Z",
-            "expired": False,
-            "state": "not_checked",
-            "check": {"state": "not_checked"},
-        }
-    ]
+    assert payload["connection"] == {
+        "state": state,
+        "workspace": WS,
+        "site": "cloud.example.test:8443",
+        "cloud_url": SITE,
+        "cloud_base_url": None,
+        "check": {"state": "not_checked"},
+    }
     _assert_nothing_private(payload, tmp_path)
 
 
 @pytest.mark.parametrize(
-    ("issuer", "staging", "expected"),
+    ("origin", "staging", "expected"),
     [
         ("https://hol.org", "", "https://hol.org"),
         ("https://staging.example.test", "https://staging.example.test|/points", "https://staging.example.test/points"),
@@ -123,228 +216,104 @@ def test_saved_sign_in_is_shown_unchecked_with_host_only(tmp_path: Path) -> None
     ],
 )
 def test_guard_cloud_pages_are_offered_only_for_sites_guard_recognises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, issuer: str, staging: str, expected: str | None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, origin: str, staging: str, expected: str | None
 ) -> None:
     monkeypatch.setenv("HOL_GUARD_STAGING_ORIGIN", staging)
-    _sign_in(tmp_path, issuer=issuer)
+    store = _pair(monkeypatch, tmp_path, origin=origin)
 
-    row = cloud_actions_local_status(tmp_path, now=NOW)["sign_ins"][0]
+    row = _connection(cloud_actions_local_status(store, now=NOW))
 
     assert row["cloud_base_url"] == expected
-    _assert_nothing_private(row, tmp_path)
 
 
-def test_check_is_saved_privately_and_labelled_stale_after_five_minutes(tmp_path: Path) -> None:
-    _sign_in(tmp_path)
+def test_check_is_saved_privately_and_labelled_stale_after_five_minutes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _pair(monkeypatch, tmp_path)
 
-    checked = check_cloud_actions(tmp_path, now=NOW, checker=_connected)
-    later = cloud_actions_local_status(tmp_path, now=NOW + timedelta(minutes=5, seconds=1))
+    checked = check_cloud_actions(store, now=NOW, checker=_current)
+    later = cloud_actions_local_status(store, now=NOW + timedelta(minutes=5, seconds=1))
 
-    row = checked["sign_ins"][0]
-    assert row["state"] == "connected"
-    assert row["check"]["checked_at"] == "2026-11-03T12:00:00Z"
-    assert row["check"]["stale"] is False
-    assert later["sign_ins"][0]["check"]["stale"] is True
-    assert later["sign_ins"][0]["state"] == "connected"
-    cache = tmp_path / "cloud-actions" / "last-check.json"
-    assert ACCESS not in cache.read_text() and REFRESH not in cache.read_text()
+    check = _connection(checked)["check"]
+    assert check == {
+        "checked_at": "2026-11-03T12:00:00Z",
+        "stale": False,
+        "service": {"state": "current", "message": "Guard Cloud offers Cloud actions.", "http_status": 200},
+    }
+    assert _connection(later)["check"]["stale"] is True
+    cache = tmp_path / "cloud-actions" / "service-check.json"
     if os.name != "nt":
         assert cache.stat().st_mode & 0o077 == 0
     _assert_nothing_private(checked, tmp_path)
-    _assert_nothing_private(later, tmp_path)
 
 
-def test_checks_run_at_most_once_a_minute(tmp_path: Path) -> None:
-    _sign_in(tmp_path)
-    check_cloud_actions(tmp_path, now=NOW, checker=_connected)
+def test_checks_run_at_most_once_a_minute(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _pair(monkeypatch, tmp_path)
+    check_cloud_actions(store, now=NOW, checker=_current)
 
     with pytest.raises(CloudActionsCheckedRecentlyError) as error:
-        check_cloud_actions(tmp_path, now=NOW + timedelta(seconds=20), checker=_connected)
+        check_cloud_actions(store, now=NOW + timedelta(seconds=20), checker=_current)
 
     assert error.value.retry_after_seconds == 40
-    again = check_cloud_actions(tmp_path, now=NOW + timedelta(seconds=61), checker=_connected)
-    assert again["sign_ins"][0]["check"]["checked_at"] == "2026-11-03T12:01:01Z"
+    again = check_cloud_actions(store, now=NOW + timedelta(seconds=61), checker=_current)
+    assert _connection(again)["check"]["checked_at"] == "2026-11-03T12:01:01Z"
 
 
-def test_offline_answer_is_reported_as_offline(tmp_path: Path) -> None:
-    _sign_in(tmp_path)
+def test_a_check_before_connect_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _unpaired(monkeypatch, tmp_path)
 
-    def offline(_profile: CloudActionsProfile, _access: str, _deadline: float) -> tuple[CheckResult, CheckResult]:
-        result = CheckResult("offline", "Guard Cloud could not be reached.")
-        return result, result
+    with pytest.raises(CloudActionsNotPairedError):
+        check_cloud_actions(store, now=NOW, checker=_current)
 
-    payload = check_cloud_actions(tmp_path, now=NOW, checker=offline)
-
-    row = payload["sign_ins"][0]
-    assert row["state"] == "offline"
-    assert row["check"]["connection"] == {"state": "offline", "message": "Guard Cloud could not be reached."}
+    assert not (tmp_path / "cloud-actions" / "service-check.json").exists()
 
 
-def test_a_new_sign_in_drops_the_previous_check(tmp_path: Path) -> None:
-    _sign_in(tmp_path)
-    check_cloud_actions(tmp_path, now=NOW, checker=_connected)
-    _sign_in(tmp_path, signed_in="2026-11-03T12:00:30Z")
+def test_a_check_of_another_guard_cloud_is_not_shown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _pair(monkeypatch, tmp_path)
+    check_cloud_actions(store, now=NOW, checker=_current)
+    store = _pair(monkeypatch, tmp_path, origin="https://hol.org")
 
-    payload = cloud_actions_local_status(tmp_path, now=NOW + timedelta(seconds=40))
+    payload = cloud_actions_local_status(store, now=NOW + timedelta(seconds=30))
 
-    assert payload["sign_ins"][0]["state"] == "not_checked"
-    assert payload["sign_ins"][0]["check"] == {"state": "not_checked"}
-
-
-def test_expiry_after_the_last_check_wins(tmp_path: Path) -> None:
-    _sign_in(tmp_path, expires=NOW + timedelta(minutes=2))
-    check_cloud_actions(tmp_path, now=NOW, checker=_connected)
-
-    payload = cloud_actions_local_status(tmp_path, now=NOW + timedelta(minutes=3))
-
-    assert payload["sign_ins"][0]["state"] == "sign_in_expired"
-    assert payload["sign_ins"][0]["expired"] is True
+    assert _connection(payload)["check"] == {"state": "not_checked"}
+    assert payload["next_check_allowed_at"] is None
 
 
-def test_missing_secret_or_damaged_profile_is_profile_damaged(tmp_path: Path) -> None:
-    _sign_in(tmp_path)
-    _sign_in(tmp_path, "work")
-    profiles = tmp_path / "cloud-actions" / "profiles"
-    record = json.loads((profiles / "default.json").read_text())
-    record["secret_ref"] = "cloud-actions-default-0000000000000000"
-    (profiles / "default.json").write_text(json.dumps(record))
-    (profiles / "work.json").write_text("{not json")
-
-    payload = cloud_actions_local_status(tmp_path, now=NOW)
-
-    states = {row["profile"]: row["state"] for row in payload["sign_ins"]}
-    assert states == {"default": "profile_damaged", "work": "profile_damaged"}
-    _assert_nothing_private(payload, tmp_path)
-
-
-def test_a_profile_without_a_time_zone_reads_as_expired(tmp_path: Path) -> None:
-    _sign_in(tmp_path)
-    profiles = tmp_path / "cloud-actions" / "profiles"
-    record = json.loads((profiles / "default.json").read_text())
-    record["expires_at"] = "2026-11-03T13:00:00"
-    (profiles / "default.json").write_text(json.dumps(record))
-
-    payload = cloud_actions_local_status(tmp_path, now=NOW)
-
-    assert payload["sign_ins"][0]["expired"] is True
-    assert payload["sign_ins"][0]["state"] == "sign_in_expired"
-
-
-def test_the_site_and_access_value_are_read_under_the_profile_lock(
+def test_reconnecting_clears_the_check_of_the_revoked_connection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _sign_in(tmp_path)
-    held: list[str] = []
-    reads: list[tuple[str, bool]] = []
-    real_lock = CloudActionsSessionStore.lock
-    real_load = CloudActionsSessionStore.load
-    real_secrets = CloudActionsSessionStore.load_secrets
+    store = _pair(monkeypatch, tmp_path, report="on")
+    check_cloud_actions(
+        store, now=NOW, checker=_current, pairing_checker=lambda _store: CheckResult("reconnect", "refused")
+    )
+    store = _pair(monkeypatch, tmp_path, report="on", grant_id="grant-2")
 
-    @contextmanager
-    def tracked_lock(self: CloudActionsSessionStore, name: str, *, timeout: float | None = None) -> Iterator[None]:
-        with real_lock(self, name, timeout=timeout):
-            held.append(name)
-            try:
-                yield
-            finally:
-                held.remove(name)
+    payload = cloud_actions_local_status(store, now=NOW + timedelta(seconds=30))
+    assert _connection(payload)["check"] == {"state": "not_checked"}
+    assert payload["next_check_allowed_at"] is None
 
-    def tracked_load(self: CloudActionsSessionStore, name: str) -> CloudActionsProfile | None:
-        reads.append(("profile", name in held))
-        return real_load(self, name)
-
-    def tracked_secrets(self: CloudActionsSessionStore, name: str) -> CloudActionsSecrets | None:
-        reads.append(("secrets", name in held))
-        return real_secrets(self, name)
-
-    monkeypatch.setattr(CloudActionsSessionStore, "lock", tracked_lock)
-    monkeypatch.setattr(CloudActionsSessionStore, "load", tracked_load)
-    monkeypatch.setattr(CloudActionsSessionStore, "load_secrets", tracked_secrets)
-    reads_before = len(reads)
-    seen: list[str] = []
-
-    def checker(profile: CloudActionsProfile, access: str, _deadline: float) -> tuple[CheckResult, CheckResult]:
-        seen.extend(kind for kind, locked in reads[reads_before:] if locked)
-        return _connected(profile, access)
-
-    check_cloud_actions(tmp_path, now=NOW, checker=checker)
-
-    assert seen == ["profile", "secrets"]
+    checked = check_cloud_actions(store, now=NOW + timedelta(seconds=30), checker=_current)
+    assert _connection(checked)["check"]["service"]["state"] == "current"
 
 
-def test_a_check_stops_at_its_time_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _sign_in(tmp_path, "client")
-    _sign_in(tmp_path, "work")
-    clock = [100.0]
-    monkeypatch.setattr(status_module, "_clock", lambda: clock[0])
-    deadlines: list[float] = []
+def test_a_damaged_saved_check_reads_as_not_checked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _pair(monkeypatch, tmp_path)
+    cache = tmp_path / "cloud-actions" / "service-check.json"
+    cache.parent.mkdir(parents=True)
+    cache.write_text("{not json", encoding="utf-8")
 
-    def slow(profile: CloudActionsProfile, access: str, deadline: float) -> tuple[CheckResult, CheckResult]:
-        deadlines.append(deadline)
-        clock[0] += 30.0
-        return _connected(profile, access)
-
-    payload = check_cloud_actions(tmp_path, now=NOW, checker=slow, budget_seconds=20.0)
-
-    assert deadlines == [120.0]
-    states = {row["profile"]: row["check"].get("state", "checked") for row in payload["sign_ins"]}
-    assert states == {"client": "checked", "work": "not_checked"}
+    assert _connection(cloud_actions_local_status(store, now=NOW))["check"] == {"state": "not_checked"}
 
 
-def test_a_later_check_starts_with_the_sign_in_the_budget_missed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _sign_in(tmp_path, "client")
-    _sign_in(tmp_path, "work")
-    clock = [100.0]
-    monkeypatch.setattr(status_module, "_clock", lambda: clock[0])
-    order: list[str] = []
+def test_reading_status_removes_alpha_sign_ins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _pair(monkeypatch, tmp_path)
+    profiles = tmp_path / "cloud-actions" / "profiles"
+    profiles.mkdir(parents=True)
+    (profiles / "default.json").write_text("{}", encoding="utf-8")
 
-    def slow(profile: CloudActionsProfile, access: str, deadline: float) -> tuple[CheckResult, CheckResult]:
-        order.append(profile.name)
-        clock[0] += 30.0
-        return _connected(profile, access)
+    cloud_actions_local_status(store, now=NOW)
 
-    check_cloud_actions(tmp_path, now=NOW, checker=slow, budget_seconds=20.0)
-    later = NOW + timedelta(minutes=2)
-    payload = check_cloud_actions(tmp_path, now=later, checker=slow, budget_seconds=20.0)
-
-    assert order == ["client", "work"]
-    checked_at = {row["profile"]: row["check"].get("checked_at") for row in payload["sign_ins"]}
-    # The first answer for "client" is kept rather than erased by the second check.
-    assert checked_at == {"client": "2026-11-03T12:00:00Z", "work": "2026-11-03T12:02:00Z"}
-
-
-def test_waiting_for_a_busy_sign_in_counts_against_the_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _sign_in(tmp_path, "client")
-    _sign_in(tmp_path, "work")
-    clock = [100.0]
-    monkeypatch.setattr(status_module, "_clock", lambda: clock[0])
-    real_lock = CloudActionsSessionStore.lock
-    timeouts: dict[str, float | None] = {}
-    checked: list[str] = []
-
-    @contextmanager
-    def waiting_lock(self: CloudActionsSessionStore, name: str, *, timeout: float | None = None) -> Iterator[None]:
-        timeouts[name] = timeout
-        with real_lock(self, name, timeout=timeout):
-            # Another process held "work" until after the budget ran out.
-            if name == "work":
-                clock[0] += 30.0
-            yield
-
-    def quick(profile: CloudActionsProfile, access: str, deadline: float) -> tuple[CheckResult, CheckResult]:
-        checked.append(profile.name)
-        clock[0] += 15.0
-        return _connected(profile, access)
-
-    monkeypatch.setattr(CloudActionsSessionStore, "lock", waiting_lock)
-    payload = check_cloud_actions(tmp_path, now=NOW, checker=quick, budget_seconds=20.0)
-
-    assert timeouts == {"client": 20.0, "work": 5.0}
-    assert checked == ["client"]
-    states = {row["profile"]: row["check"].get("state", "checked") for row in payload["sign_ins"]}
-    assert states == {"client": "checked", "work": "not_checked"}
+    assert not profiles.exists()
 
 
 def _request(
@@ -374,10 +343,9 @@ def _request(
 
 @pytest.fixture
 def daemon(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
-    # The daemon reads the real clock, so its sign-in expires relative to it.
-    _sign_in(tmp_path, expires=datetime.now(timezone.utc) + timedelta(hours=1))
-    monkeypatch.setattr(status_module, "_live_checker", _connected)
-    server = GuardDaemonServer(GuardStore(tmp_path), host="127.0.0.1", port=0)
+    store = _pair(monkeypatch, tmp_path)
+    monkeypatch.setattr(status_module, "_live_checker", _current)
+    server = GuardDaemonServer(store, host="127.0.0.1", port=0)
     server.start()
     try:
         yield server
@@ -386,12 +354,12 @@ def daemon(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
 
 
 @pytest.mark.parametrize("method", ["GET", "POST"])
-def test_a_cloud_actions_sign_in_cannot_authorize_the_daemon(daemon: Any, tmp_path: Path, method: str) -> None:
-    for headers in ({"Authorization": f"Bearer {ACCESS}"}, {"X-Guard-Token": ACCESS}, {"X-Guard-Token": REFRESH}):
+def test_cloud_actions_access_cannot_authorize_the_daemon(daemon: Any, tmp_path: Path, method: str) -> None:
+    for headers in ({"Authorization": f"Bearer {ACCESS}"}, {"X-Guard-Token": ACCESS}):
         status, payload = _request(daemon.port, "/v1/cloud-actions/status", method=method, headers=headers)
         assert status == 401, headers
         _assert_nothing_private(payload, tmp_path)
-    assert not (tmp_path / "cloud-actions" / "last-check.json").exists()
+    assert not (tmp_path / "cloud-actions" / "service-check.json").exists()
 
 
 def test_daemon_serves_the_projection_and_one_check_a_minute(daemon: Any, tmp_path: Path) -> None:
@@ -402,13 +370,39 @@ def test_daemon_serves_the_projection_and_one_check_a_minute(daemon: Any, tmp_pa
     again_status, again = _request(daemon.port, "/v1/cloud-actions/status", method="POST", headers=token)
 
     assert read_status == 200
-    assert read["sign_ins"][0]["state"] == "not_checked"
+    assert _connection(read)["check"] == {"state": "not_checked"}
     assert check_status == 200
-    assert checked["sign_ins"][0]["state"] == "connected"
-    assert checked["sign_ins"][0]["check"]["stale"] is False
+    assert _connection(checked)["check"]["service"]["state"] == "current"
+    assert _connection(checked)["check"]["stale"] is False
     assert again_status == 429
     assert again["error"] == "checked_recently"
     for payload in (read, checked, again):
+        _assert_nothing_private(payload, tmp_path)
+
+
+def test_daemon_check_before_connect_is_refused(daemon: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _unpaired(monkeypatch, tmp_path)
+    token = {"X-Guard-Token": daemon._server.auth_token}
+
+    status, payload = _request(daemon.port, "/v1/cloud-actions/status", method="POST", headers=token)
+
+    assert (status, payload["error"]) == (409, "not_paired")
+
+
+def test_daemon_answers_unavailable_when_the_native_runtime_cannot_read_the_check(
+    daemon: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, Any]:
+        raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    token = {"X-Guard-Token": daemon._server.auth_token}
+
+    for method in ("GET", "POST"):
+        status, payload = _request(daemon.port, "/v1/cloud-actions/status", method=method, headers=token)
+        assert (status, payload["error"]) == (503, "status_unavailable"), method
         _assert_nothing_private(payload, tmp_path)
 
 
@@ -460,10 +454,12 @@ def test_a_guard_cloud_decision_id_cannot_resolve_anything_on_this_computer(
         assert status >= 400, (cloud_id, action, payload)
         assert payload.get("resolved") is not True
 
-    assert GuardStore(tmp_path).get_approval_request(pending)["status"] == "pending"
+    approval = GuardStore(tmp_path).get_approval_request(pending)
+    assert approval is not None
+    assert approval["status"] == "pending"
 
 
-@pytest.mark.parametrize("cloud_answer", ["connected", "offline", "expired", "out_of_actions"])
+@pytest.mark.parametrize("cloud_answer", ["current", "offline", "not_paired", "out_of_actions"])
 def test_local_approvals_keep_working_whatever_guard_cloud_says(
     daemon: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cloud_answer: str
 ) -> None:
@@ -471,24 +467,19 @@ def test_local_approvals_keep_working_whatever_guard_cloud_says(
     token = {"X-Guard-Token": daemon._server.auth_token}
     if cloud_answer == "offline":
         monkeypatch.setattr(
-            status_module,
-            "_live_checker",
-            lambda *_args: (CheckResult("offline", "Guard Cloud did not answer.", None),) * 2,
+            status_module, "_live_checker", lambda _origin: CheckResult("offline", "Guard Cloud did not answer.")
         )
     if cloud_answer == "out_of_actions":
         # Guard Cloud refusing work, as when a workspace has used its included actions.
         monkeypatch.setattr(
             status_module,
             "_live_checker",
-            lambda *_args: (
-                CheckResult("current", "Guard Cloud answered.", 200),
-                CheckResult("unexpected_answer", "Guard Cloud answered HTTP 402.", 402),
-            ),
+            lambda _origin: CheckResult("unexpected_answer", "Guard Cloud answered HTTP 402.", 402),
         )
-    if cloud_answer == "expired":
-        _sign_in(tmp_path, expires=datetime.now(timezone.utc) - timedelta(hours=1))
+    if cloud_answer == "not_paired":
+        _unpaired(monkeypatch, tmp_path)
 
-    check_status, checked = _request(daemon.port, "/v1/cloud-actions/status", method="POST", headers=token)
+    check_status, _ = _request(daemon.port, "/v1/cloud-actions/status", method="POST", headers=token)
     status, payload = _request(
         daemon.port,
         f"/v1/requests/{pending}/approve",
@@ -497,14 +488,9 @@ def test_local_approvals_keep_working_whatever_guard_cloud_says(
         body={"scope": "artifact", "reason": "approved on this computer"},
     )
 
-    expected = {
-        "connected": "connected",
-        "offline": "offline",
-        "expired": "sign_in_expired",
-        "out_of_actions": "unexpected_answer",
-    }[cloud_answer]
-    assert check_status == 200
-    assert checked["sign_ins"][0]["state"] == expected
+    assert check_status == (409 if cloud_answer == "not_paired" else 200)
     assert status == 200
     assert payload["resolved"] is True
-    assert GuardStore(tmp_path).get_approval_request(pending)["status"] != "pending"
+    approval = GuardStore(tmp_path).get_approval_request(pending)
+    assert approval is not None
+    assert approval["status"] != "pending"

@@ -82,6 +82,7 @@ from ..native_directory_trust import (
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_evidence_writer import NativeHookEvidenceWriter, unreachable_writer_stats
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
+from ..native_resident_client import record_native_resident_client_failure_code
 from ..native_resident_revival import native_route_unavailable_body
 from ..native_resident_watchdog import start_native_resident_watchdog
 from ..native_runtime_request_scope import scoped_hook_post
@@ -374,6 +375,8 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     # Set while the control API serves the core registry because startup could
     # not read the installed authority.
     _extension_control_on_core_registry: bool = False
+    # Set once the HTTP superclass has bound the listening socket.
+    _socket_bound: bool = False
     store: GuardStore
     runtime: GuardSurfaceRuntime
     auth_token: str
@@ -587,6 +590,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self._initialize_request_services()
         self.request_executors_stopped = False
         super().__init__(server_address, handler_class)
+        self._socket_bound = True
 
     def _initialize_request_services(self) -> None:
         from .hook_direct_counters import bind_hook_counter_sink
@@ -1330,6 +1334,12 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         return int(self.server_address[1])
 
     def publish_trust_state(self, trust_status: dict[str, object] | None = None) -> None:
+        # The store can report an integrity change while the hook worker starts,
+        # before the listening socket is bound. `server_address` is assigned
+        # before the bind, so with port 0 it would still name no port; the
+        # daemon publishes its trust state once it listens.
+        if not self._socket_bound:
+            return
         write_guard_daemon_state(
             self.store.guard_home,
             self.daemon_port(),
@@ -1367,6 +1377,18 @@ _ROOT_STATIC_FILES = {
 }
 
 
+def _is_public_static_path(path: str) -> bool:
+    """Whether ``path`` names a dashboard file bundled with the package.
+
+    These files are the same for every caller, and a page on any site can load
+    them with a plain script or image tag, which sends no ``Origin``. Asking the
+    native runtime about the caller's origin protects nothing here. The
+    dashboard requests a few dozen of them at once when it opens, and on a slow
+    machine that burst outlasted the origin check's budget and the page broke.
+    """
+    return path in _ROOT_STATIC_FILES or path.startswith(("/assets/", "/brand/"))
+
+
 _DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS = 60.0
 _DEFAULT_SUPPLY_CHAIN_REFRESH_INTERVAL_SECONDS = 15 * 60.0
 _EPHEMERAL_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 5
@@ -1393,6 +1415,7 @@ class _GuardDaemonHandler(
     BaseHTTPRequestHandler,
 ):
     _MAX_BODY_BYTES = 1_000_000
+    _native_gate_unavailable = False
     server: _GuardDaemonHttpServer  # pyright: ignore[reportIncompatibleVariableOverride]
 
     def end_headers(self) -> None:
@@ -1404,6 +1427,10 @@ class _GuardDaemonHandler(
         super().end_headers()
 
     def parse_request(self) -> bool:
+        # A kept-alive connection reuses this thread, so each request starts
+        # without the previous request's gate or resident failure.
+        self._native_gate_unavailable = False
+        record_native_resident_client_failure_code(None)
         parsed = super().parse_request()
         self._daemon_server().classify_connection(self.request)
         if not parsed:
@@ -1467,7 +1494,7 @@ class _GuardDaemonHandler(
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
         path_parts = [part for part in parsed.path.split("/") if part]
-        if not self._origin_is_allowed_for_request(parsed.path):
+        if not _is_public_static_path(parsed.path) and not self._origin_is_allowed_for_request(parsed.path):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         if parsed.path == "/healthz":
@@ -2615,6 +2642,7 @@ class _GuardDaemonHandler(
         try:
             return native_route_facts(self.command, path, guard_home=self._route_home()).session_path
         except NativeDaemonRouteError:
+            self._native_gate_unavailable = True
             return False
 
     def _header_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
@@ -2634,6 +2662,7 @@ class _GuardDaemonHandler(
         try:
             return native_origin_decision(normalized_origin, path, guard_home=self._route_home()).allowed
         except NativeDaemonRouteError:
+            self._native_gate_unavailable = True
             return False
 
     def _is_hosted_dashboard_origin(self) -> bool:
@@ -2653,6 +2682,7 @@ class _GuardDaemonHandler(
                 value.strip(), self._normalize_origin(value), guard_home=self._route_home()
             )
         except NativeDaemonRouteError:
+            self._native_gate_unavailable = True
             return None
 
     def _dashboard_session_claims_authorize_request(
@@ -2672,6 +2702,7 @@ class _GuardDaemonHandler(
                 guard_home=self._route_home(),
             )
         except NativeDaemonRouteError:
+            self._native_gate_unavailable = True
             return False
         if verdict.consume_nonce is not None and not self._consume_dashboard_session_nonce(verdict.consume_nonce):
             return False
@@ -3002,8 +3033,14 @@ class _GuardDaemonHandler(
     ) -> dict[str, str] | None:
         parsed = urlparse(self.path)
         origin = self._normalize_origin(self.headers.get("Origin"))
-        if origin is None or not self._origin_is_allowed_for_request(parsed.path):
-            return None
+        # Choosing response headers is not the gate that refused the request,
+        # so a busy resident here must not turn a real denial into a retry.
+        gate_unavailable = self._native_gate_unavailable
+        try:
+            if origin is None or not self._origin_is_allowed_for_request(parsed.path):
+                return None
+        finally:
+            self._native_gate_unavailable = gate_unavailable
         return self._cors_headers(origin, allow_methods=allow_methods, allow_headers=allow_headers)
 
     def _native_handler_decision(self, ask: Callable[[], HandlerDecision]) -> HandlerDecision | None:
@@ -3117,6 +3154,12 @@ class _GuardDaemonHandler(
         status: int = 200,
         extra_headers: dict[str, str] | None = None,
     ) -> None:
+        # A denial written after an origin or session check could not reach the
+        # resident is not a verdict on the caller: the request stays refused, but
+        # as the retryable 503 a busy resident gets everywhere else, so the
+        # dashboard retries instead of dropping its session.
+        if status in (401, 403) and self._native_gate_unavailable:
+            payload, status = native_route_unavailable_body(), 503
         body = escape_json_for_html(json.dumps(payload).encode("utf-8"))
         self._write_json_bytes(body, status=status, extra_headers=extra_headers)
 

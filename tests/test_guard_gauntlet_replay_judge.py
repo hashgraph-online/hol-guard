@@ -274,6 +274,9 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-rg-files-no-ignore-service-lane",
         "neg-rg-path-before-files-flag-credential-store",
         "neg-rg-replace-widens-home-search",
+        # A `cat` that names a private key after a sibling run: the review stands,
+        # and a contained run in the sibling root reaches no key at all.
+        "neg-sibling-cd-jest-cat-reads-private-key",
         # A sibling checkout's workflows and test runner: a contained run reads only the
         # workspace, so `-exec cat`, a preloaded module or a dotfile probe reaches no secret.
         "neg-sibling-find-github-exec-cat",

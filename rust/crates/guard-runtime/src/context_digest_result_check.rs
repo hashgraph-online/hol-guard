@@ -64,6 +64,7 @@ pub(crate) fn kind_name(kind: &Kind) -> &'static str {
         Kind::McpToolCatalogFingerprint { .. } => "mcp_tool_catalog_fingerprint",
         Kind::RuntimeHookApprovalContext { .. } => "runtime_hook_approval_context",
         Kind::GenericHookApprovalContext { .. } => "generic_hook_approval_context",
+        Kind::ConsumerApprovalContextToken { .. } => "consumer_approval_context_token",
         Kind::PackageRunnerTarget { .. } => "package_runner_target",
     }
 }
@@ -71,7 +72,7 @@ pub(crate) fn kind_name(kind: &Kind) -> &'static str {
 /// Output a successful result of this kind must carry, truthy.
 fn required_output(kind: &str) -> Option<&'static str> {
     Some(match kind {
-        "build_approval_context_token" => "token",
+        "build_approval_context_token" | "consumer_approval_context_token" => "token",
         "configured_environment_hash"
         | "configured_headers_hash"
         | "launch_argv_digest"

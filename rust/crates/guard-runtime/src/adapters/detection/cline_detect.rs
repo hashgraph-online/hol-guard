@@ -189,8 +189,8 @@ fn first_truthy<'a>(raw: &'a PyVal, first: &str, second: &str) -> Option<&'a PyV
         .or_else(|| raw.get(second))
 }
 
-/// `_transport`.
-fn transport(raw: &PyVal) -> String {
+/// `_transport`, which `cline_install_plan` shares for the MCP proxy install.
+pub(crate) fn transport(raw: &PyVal) -> String {
     if let Some(kind) = first_truthy(raw, "type", "transport").and_then(PyVal::as_str) {
         let kind = python_strip(kind);
         if !kind.is_empty() {

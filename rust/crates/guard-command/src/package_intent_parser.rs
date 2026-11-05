@@ -170,10 +170,14 @@ static PACKAGE_COMMAND_NAMES: LazyLock<HashSet<&'static str>> = LazyLock::new(||
     .collect()
 });
 
-// package_intent_parser.py :104  `_LOCAL_EXECUTABLE_PACKAGE_ALIASES`
+/// The package a locally installed executable is published under, where the
+/// two differ: `tsc` ships inside `typescript` and `lab` inside `@hapi/lab`.
+/// An executable published under its own name is its own package.
 fn local_executable_package_alias(name: &str) -> &str {
     match name {
         "tsc" => "typescript",
+        "lab" => "@hapi/lab",
+        "cucumber-js" => "@cucumber/cucumber",
         other => other,
     }
 }

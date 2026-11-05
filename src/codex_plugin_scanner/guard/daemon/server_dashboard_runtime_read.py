@@ -195,9 +195,15 @@ class _DashboardRuntimeReadRoutes:
             self._write_json(cloud_review_settings_status(store), extra_headers={"Cache-Control": "no-store"})
             return True
         if parsed.path == "/v1/cloud-actions/status":
-            from .cloud_actions_status import cloud_actions_local_status
+            from .cloud_actions_status import CloudActionsStatusUnavailableError, cloud_actions_local_status
+            from .cloud_actions_status_http import write_cloud_actions_unavailable
 
-            self._write_json(cloud_actions_local_status(store.guard_home), extra_headers={"Cache-Control": "no-store"})
+            try:
+                status = cloud_actions_local_status(store)
+            except CloudActionsStatusUnavailableError:
+                write_cloud_actions_unavailable(self)
+                return True
+            self._write_json(status, extra_headers={"Cache-Control": "no-store"})
             return True
         if parsed.path == "/v1/plugins/updates":
             handle_plugin_updates_read(self)
