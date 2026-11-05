@@ -226,11 +226,11 @@ fn a_quoted_heredoc_read_by_cat_becomes_its_own_text() {
             "git commit -m \"$(cat <<'EOF'\nsubject\n\n\nEOF\n)\"",
             "git commit -m \"subject\"",
         ),
-        // A `[` in the body is a character of the message, not a pattern:
-        // the word is read with the body blanked.
+        // Parentheses are ordinary message text: a conventional-commit scope
+        // is the commonest thing an agent writes here.
         (
-            "git commit -m \"$(cat <<'EOF'\nfix: drop the (old) [legacy] path\nEOF\n)\"",
-            "git commit -m \"fix: drop the (old) [legacy] path\"",
+            "git commit -m \"$(cat <<'EOF'\nfix(x): drop the old path\n\nRefs: #12\nEOF\n)\"",
+            "git commit -m \"fix(x): drop the old path\n\nRefs: #12\"",
         ),
     ] {
         assert_eq!(projected(command).as_deref(), Some(expected), "{command}");
@@ -274,6 +274,10 @@ fn a_cat_that_reads_more_than_a_quoted_heredoc_stays_opaque() {
         "git commit -m \"$(cat <<'EOF'\ncost $(id)\nEOF\n)\"",
         "git commit -m \"$(cat <<'EOF'\nsay \"hi\"\nEOF\n)\"",
         "git commit -m \"$(cat <<'EOF'\nwipe *\nEOF\n)\"",
+        // A pattern character is refused even though the double quotes keep
+        // the shell from matching it: the screens downstream read the
+        // projection as a command, and a bracket there is a glob.
+        "git commit -m \"$(cat <<'EOF'\ndrop [legacy]\nEOF\n)\"",
         "git commit -m \"$(cat <<'EOF'\npath\\\\x\nEOF\n)\"",
     ] {
         assert_eq!(projected(command), None, "{command}");

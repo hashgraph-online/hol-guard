@@ -149,7 +149,10 @@ pub(super) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
     {
         return None;
     }
-    judged.iter().all(|text| allowed(text.as_str())).then_some(out)
+    judged
+        .iter()
+        .all(|text| allowed(text.as_str()))
+        .then_some(out)
 }
 
 /// The literal text a `$(cat <<'EOF' ... EOF)` prints, when that is the whole
