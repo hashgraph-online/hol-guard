@@ -17,7 +17,10 @@
 //! - Guard's risk level (high, medium or low)
 //! - Guard's risk headline, through the same secret filter used for Guard Cloud
 //! - the names of the programs being run, without flags, arguments, paths or
-//!   environment values
+//!   environment values, and only when the Guard Cloud secret filter leaves
+//!   them unchanged
+//! - the decision the grant is bound to (allow or block, and its scope),
+//!   mapped from closed lists
 //!
 //! Anything Guard cannot read or reduce is left out rather than guessed.
 
@@ -56,27 +59,59 @@ pub(crate) struct StoredRequest {
 }
 
 /// The summary for one Pulse request. Empty for every purpose other than
-/// queued approval requests, and whenever a request cannot be read.
+/// queued approval requests. The decision row comes from the `action` and
+/// `scope` the grant is bound to, so it is shown even when the stored
+/// request cannot be read.
 pub(crate) fn summary_for(
     guard_home: &Path,
     purpose: &str,
+    action: Option<&str>,
+    scope: Option<&str>,
     subject: Option<&str>,
     batch_ids: &[String],
 ) -> ActionSummary {
     if purpose != "approval_decision" {
         return ActionSummary::default();
     }
-    if let Some(hash) = subject.and_then(|s| s.strip_prefix(BATCH_SUBJECT_PREFIX)) {
-        return read_batch(guard_home, hash, batch_ids)
+    let decision = decision_label(action, scope);
+    let summary = if let Some(hash) = subject.and_then(|s| s.strip_prefix(BATCH_SUBJECT_PREFIX)) {
+        read_batch(guard_home, hash, batch_ids)
             .map(|rows| summarize_batch(&rows))
-            .unwrap_or_default();
-    }
-    let Some(request_id) = subject.and_then(|s| s.strip_prefix(REQUEST_SUBJECT_PREFIX)) else {
-        return ActionSummary::default();
+            .unwrap_or_default()
+    } else if let Some(request_id) = subject.and_then(|s| s.strip_prefix(REQUEST_SUBJECT_PREFIX)) {
+        read_request(guard_home, request_id)
+            .map(|stored| summarize(&stored))
+            .unwrap_or_default()
+    } else {
+        ActionSummary::default()
     };
-    read_request(guard_home, request_id)
-        .map(|stored| summarize(&stored))
-        .unwrap_or_default()
+    ActionSummary {
+        decision,
+        ..summary
+    }
+}
+
+/// The decision a grant is bound to, as the YID app shows it: "Allow" or
+/// "Block", then what it covers. An unknown action shows nothing; an
+/// unknown scope shows the action alone.
+pub(crate) fn decision_label(action: Option<&str>, scope: Option<&str>) -> Option<String> {
+    let verb = match action? {
+        "allow" => "Allow",
+        "block" => "Block",
+        _ => return None,
+    };
+    let covers = match scope.unwrap_or_default() {
+        "artifact" => Some("this item"),
+        "workspace" => Some("everything in this workspace"),
+        "publisher" => Some("everything from this publisher"),
+        "harness" => Some("everything this agent runs"),
+        "global" => Some("everywhere"),
+        _ => None,
+    };
+    Some(match covers {
+        Some(covers) => format!("{verb}, {covers}"),
+        None => verb.to_owned(),
+    })
 }
 
 /// `uuid.uuid5(uuid.NAMESPACE_URL, "\0".join(sorted(ids))).hex`, as the bulk
@@ -153,6 +188,7 @@ pub(crate) fn summarize_batch(rows: &[StoredRequest]) -> ActionSummary {
         reason,
         programs: distinct(|s| s.programs.as_ref()),
         action_count: Some(rows.len()),
+        decision: None,
     }
 }
 
@@ -209,6 +245,7 @@ pub(crate) fn summarize(stored: &StoredRequest) -> ActionSummary {
             .filter(|text| !text.trim().is_empty()),
         programs: stored.command.as_deref().and_then(program_names),
         action_count: None,
+        decision: None,
     }
 }
 
@@ -328,14 +365,16 @@ pub(crate) fn program_names(command: &str) -> Option<String> {
     (count > 0).then_some(joined)
 }
 
-/// The last path component of a program token, if it is a plain name.
+/// The last path component of a program token, if it is a plain name that
+/// the Guard Cloud secret filter leaves unchanged. A name the filter would
+/// redact is left out entirely, not sent in its redacted form.
 fn file_name(token: &str) -> Option<String> {
     let name = Path::new(token).file_name()?.to_str()?;
     let plain = !name.is_empty()
         && name.len() <= 64
         && !name.contains('=')
         && name.chars().all(|c| !c.is_whitespace() && !c.is_control());
-    plain.then(|| name.to_owned())
+    (plain && cloud_scrub_text(name) == name).then(|| name.to_owned())
 }
 
 #[cfg(test)]

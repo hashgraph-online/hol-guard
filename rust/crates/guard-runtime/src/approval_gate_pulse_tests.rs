@@ -904,3 +904,6 @@ fn a_zero_pulse_cooldown_without_pulse_changes_nothing() {
     assert_eq!(code(&real), "approval_gate_pulse_not_enabled", "{real}");
     let _ = std::fs::remove_dir_all(&home);
 }
+
+#[path = "approval_gate_pulse_review_tests.rs"]
+mod review;

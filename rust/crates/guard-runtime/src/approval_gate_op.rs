@@ -392,7 +392,8 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
         }
         ApprovalGateMethodV1::PulseRequest => pulse::pulse_request(
             &guard_home,
-            request.purpose.as_deref().unwrap_or("approval_decision"),
+            // The same default as `Verify`, so a request and its verify agree.
+            request.purpose.as_deref().unwrap_or("generic"),
             request.strict,
             pstr(params, "action"),
             pstr(params, "scope"),
@@ -435,10 +436,10 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
             now,
         ),
         ApprovalGateMethodV1::DisablePulse => {
-            pulse_enrollment::disable_pulse(&guard_home, grants, grant_ref, now)
+            crate::approval_gate_pulse_disable::disable_pulse(&guard_home, grants, grant_ref, now)
         }
         ApprovalGateMethodV1::RecoverPulse => {
-            pulse_enrollment::recover_pulse(&guard_home, grants, input_ref, now)
+            crate::approval_gate_pulse_disable::recover_pulse(&guard_home, grants, input_ref, now)
         }
         ApprovalGateMethodV1::AuditPayload => Ok(json!({"approval_gate": {
             "purpose": request.purpose,

@@ -163,16 +163,32 @@ fn only_a_single_queued_approval_gets_a_summary() {
     let connection = Connection::open(home.join(STORE_FILE_NAME)).unwrap();
     seed(&connection, &[("r1", request("rm -rf build"))]);
     drop(connection);
-    let full = summary_for(&home, "approval_decision", Some("approval-request:r1"), &[]);
+    let full = summary_for(
+        &home,
+        "approval_decision",
+        None,
+        None,
+        Some("approval-request:r1"),
+        &[],
+    );
     assert_eq!(full.programs.as_deref(), Some("rm"));
     assert_eq!(
-        summary_for(&home, "settings_write", Some("approval-request:r1"), &[]),
+        summary_for(
+            &home,
+            "settings_write",
+            None,
+            None,
+            Some("approval-request:r1"),
+            &[]
+        ),
         ActionSummary::default()
     );
     assert_eq!(
         summary_for(
             &home,
             "approval_decision",
+            None,
+            None,
             Some("approval-request-batch:abc"),
             &[]
         ),
@@ -182,6 +198,8 @@ fn only_a_single_queued_approval_gets_a_summary() {
         summary_for(
             &home,
             "approval_decision",
+            None,
+            None,
             Some("approval-request:missing"),
             &[]
         ),
@@ -189,7 +207,14 @@ fn only_a_single_queued_approval_gets_a_summary() {
     );
     let _ = std::fs::remove_dir_all(&home);
     assert_eq!(
-        summary_for(&home, "approval_decision", Some("approval-request:r1"), &[]),
+        summary_for(
+            &home,
+            "approval_decision",
+            None,
+            None,
+            Some("approval-request:r1"),
+            &[]
+        ),
         ActionSummary::default(),
         "no store means no summary"
     );
@@ -257,6 +282,8 @@ fn a_batch_summary_needs_the_exact_ids_of_the_subject() {
     let full = summary_for(
         &home,
         "approval_decision",
+        None,
+        None,
         Some(&subject),
         &ids(&["r2", "r1"]),
     );
@@ -273,7 +300,14 @@ fn a_batch_summary_needs_the_exact_ids_of_the_subject() {
         Vec::new(),
     ] {
         assert_eq!(
-            summary_for(&home, "approval_decision", Some(&subject), &wrong),
+            summary_for(
+                &home,
+                "approval_decision",
+                None,
+                None,
+                Some(&subject),
+                &wrong
+            ),
             ActionSummary::default(),
             "{wrong:?}"
         );
@@ -286,6 +320,8 @@ fn a_batch_summary_needs_the_exact_ids_of_the_subject() {
         summary_for(
             &home,
             "approval_decision",
+            None,
+            None,
             Some(&missing),
             &ids(&["r1", "gone"])
         ),
@@ -293,4 +329,75 @@ fn a_batch_summary_needs_the_exact_ids_of_the_subject() {
         "one missing row means no summary"
     );
     let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn the_phone_sees_what_the_grant_will_decide() {
+    assert_eq!(
+        decision_label(Some("allow"), Some("artifact")).as_deref(),
+        Some("Allow, this item")
+    );
+    assert_eq!(
+        decision_label(Some("allow"), Some("publisher")).as_deref(),
+        Some("Allow, everything from this publisher")
+    );
+    assert_eq!(
+        decision_label(Some("block"), Some("workspace")).as_deref(),
+        Some("Block, everything in this workspace")
+    );
+    assert_eq!(
+        decision_label(Some("allow"), Some("something-new")).as_deref(),
+        Some("Allow"),
+        "an unknown scope shows the action alone"
+    );
+    assert_eq!(decision_label(Some("delete-all"), Some("artifact")), None);
+    assert_eq!(decision_label(None, Some("artifact")), None);
+
+    let home = temp_home("decision");
+    let connection = Connection::open(home.join(STORE_FILE_NAME)).unwrap();
+    seed(&connection, &[("r1", request("rm -rf build"))]);
+    drop(connection);
+    let full = summary_for(
+        &home,
+        "approval_decision",
+        Some("allow"),
+        Some("harness"),
+        Some("approval-request:r1"),
+        &[],
+    );
+    assert_eq!(
+        full.decision.as_deref(),
+        Some("Allow, everything this agent runs")
+    );
+    assert_eq!(full.programs.as_deref(), Some("rm"));
+    assert_eq!(
+        summary_for(
+            &home,
+            "settings_write",
+            Some("allow"),
+            Some("harness"),
+            None,
+            &[]
+        ),
+        ActionSummary::default(),
+        "only approval decisions describe a decision"
+    );
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn a_program_name_the_secret_filter_would_change_is_left_out() {
+    // Built in two parts so secret scanners do not flag the test itself.
+    let token = format!("ghp_{}", "0123456789abcdefghijklmnopqrstuvwxyzAB");
+    assert_ne!(
+        cloud_scrub_text(&token),
+        token,
+        "the filter must catch this token"
+    );
+    assert_eq!(program_names(&format!("/tmp/{token} --flag")), None);
+    assert_eq!(
+        program_names(&format!("git status; /opt/{token}")).as_deref(),
+        Some("git")
+    );
+    assert_eq!(program_names("rm -rf build").as_deref(), Some("rm"));
 }

@@ -65,6 +65,9 @@ pub struct ActionSummary {
     /// How many paused actions one approval covers. Set only for a batch;
     /// the rows then summarize all of them.
     pub action_count: Option<usize>,
+    /// The decision the grant is bound to, for example "Allow, this item
+    /// only" or "Block, every item from this publisher".
+    pub decision: Option<String>,
 }
 
 /// Invisible characters that change how text is drawn without being seen:
@@ -213,6 +216,9 @@ pub fn build_terms_with_summary(
     let clean = |value: &Option<String>| value.as_deref().and_then(summary_value);
     let programs = clean(&summary.programs);
     let mut details = vec![json!({"label": "Request", "value": label, "emphasized": true})];
+    if let Some(decision) = clean(&summary.decision) {
+        details.push(json!({"label": "Decision", "value": decision, "emphasized": true}));
+    }
     for (row, value, emphasized) in [
         (plural("Program", "Programs"), programs.clone(), true),
         (plural("Agent", "Agents"), clean(&summary.agent), false),
@@ -336,6 +342,7 @@ mod tests {
             reason: Some("Deletes files.".into()),
             programs: Some("rm".into()),
             action_count: None,
+            decision: None,
         }
     }
 
@@ -371,6 +378,26 @@ mod tests {
         );
         let headline = terms["summary"].as_str().unwrap();
         assert!(headline.starts_with("Approve an agent action Guard paused: rm. Match code "));
+    }
+
+    #[test]
+    fn the_decision_shows_right_after_the_request() {
+        let with_decision = ActionSummary {
+            decision: Some("Allow, every item from this publisher".into()),
+            ..summary()
+        };
+        let terms = build_terms_with_summary(&KEY, &binding("a"), &with_decision).unwrap();
+        let shown = rows(&terms);
+        assert_eq!(shown[0].0, "Request");
+        assert_eq!(
+            shown[1],
+            (
+                "Decision".to_owned(),
+                "Allow, every item from this publisher".to_owned()
+            )
+        );
+        let decision_row = &terms["details"][1];
+        assert_eq!(decision_row["emphasized"], json!(true));
     }
 
     #[test]
@@ -432,6 +459,7 @@ mod tests {
             reason: Some("d".repeat(5000)),
             programs: Some("e".repeat(5000)),
             action_count: Some(usize::MAX),
+            decision: Some("f".repeat(5000)),
         };
         let terms = build_terms_with_summary(&KEY, &binding("a"), &huge).unwrap();
         assert!(serde_json::to_vec(&terms).unwrap().len() <= MAX_TERMS_BYTES);

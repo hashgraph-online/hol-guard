@@ -35,15 +35,19 @@ use serde_json::{json, Value};
 use zeroize::Zeroizing;
 
 use crate::approval_gate_grants::ApprovalGateErrorV1;
-pub(crate) use crate::approval_gate_pulse_store::{
-    insert_pending, ledger_reserve, pulse_cooldown_covers, take_pending, verify_with_cached_keys,
-    with_transport, PendingKind, PendingPulse,
-};
 use crate::approval_gate_pulse_store::{
-    pending, pending_key, record_pulse_cooldown, restore_pending, PULSE_COOLDOWN_STATE_KEY,
+    clear_pending_for_home, pending, pending_key, record_pulse_cooldown, PULSE_COOLDOWN_STATE_KEY,
+};
+pub(crate) use crate::approval_gate_pulse_store::{
+    insert_pending, ledger_error, ledger_reserve, pending_has_room, pulse_busy,
+    pulse_cooldown_covers, restore_pending, same_pulse_factor, take_pending,
+    verify_with_cached_keys, with_transport, PendingKind, PendingPulse,
 };
 #[cfg(test)]
-pub(crate) use crate::approval_gate_pulse_store::{pending_len, TEST_TRANSPORT};
+pub(crate) use crate::approval_gate_pulse_store::{
+    pending_len, TEST_AFTER_TRANSPORT, TEST_MAX_PENDING_PER_HOME, TEST_PULSE_LEDGER_MAX,
+    TEST_TRANSPORT,
+};
 use crate::approval_gate_state::{
     constant_time_eq, epoch, iso_from_epoch, load_state, optional_int, optional_string, write_state,
 };
@@ -235,12 +239,18 @@ pub(crate) fn pulse_request(
         generation,
     );
     // What the YID app shows comes from Guard's own record of the request.
-    let summary =
-        crate::approval_gate_pulse_summary::summary_for(guard_home, purpose, subject, batch_ids);
+    let summary = crate::approval_gate_pulse_summary::summary_for(
+        guard_home, purpose, action, scope, subject, batch_ids,
+    );
     let terms = build_terms_with_summary(&config.binding_key, &binding, &summary)
         .map_err(|e| pulse_error(&e))?;
     let digest = binding_digest(&config.binding_key, &binding).map_err(|e| pulse_error(&e))?;
     let consent_not_after = now_epoch as i64 + DECISION_WINDOW_SECONDS + CONSENT_GRACE_SECONDS;
+    // Checked before anything reaches the phone, so a caller that keeps
+    // asking cannot keep sending prompts.
+    if !pending_has_room(guard_home, now_epoch as i64) {
+        return Err(pulse_busy());
+    }
     let created = with_transport(&config.agent_key, |t| {
         t.create_authorization(
             &terms,
@@ -250,7 +260,7 @@ pub(crate) fn pulse_request(
     })
     .map_err(|e| pulse_error(&e))?;
     let code = match_code(&digest);
-    insert_pending(
+    let inserted = insert_pending(
         guard_home,
         &created.request_id,
         PendingPulse {
@@ -265,6 +275,10 @@ pub(crate) fn pulse_request(
         },
         now_epoch as i64,
     );
+    if !inserted {
+        // Another request took the last slot during the network call.
+        return Err(pulse_busy());
+    }
     Ok(json!({
         "status": "pending",
         "request_id": created.request_id,
@@ -410,11 +424,17 @@ pub(crate) fn verify_pulse_stage(
         verify_with_cached_keys(t, &artifact, &policy)
     })
     .map_err(|e| pulse_error(&e))?;
+    // The network call above can take seconds. Commit against what is saved
+    // now, not the copy loaded before it: if Pulse was turned off or
+    // replaced meanwhile, writing the old copy would bring it back.
+    let fresh = load_state(guard_home);
+    if !same_pulse_factor(state, &fresh) {
+        return Err(pulse_error(&PulseError::TermsMismatch));
+    }
+    *state = fresh;
     // Spend it locally and durably first, then at Pulse. A crash between the
     // two leaves the receipt spent, never reusable.
-    if !ledger_reserve(state, &receipt, now) {
-        return Err(pulse_error(&PulseError::Replayed));
-    }
+    ledger_reserve(state, &receipt, now).map_err(ledger_error)?;
     write_state(guard_home, state, Some(&iso_from_epoch(now_epoch))).map_err(|_| state_io())?;
     let token = consumer_token(&config.binding_key, &receipt.jti).map_err(|e| pulse_error(&e))?;
     with_transport(&config.agent_key, |t| t.consume(&artifact, &token))
@@ -445,6 +465,8 @@ pub(crate) const TOTP_PAUSED_BY_PULSE: &str = "totp_paused_by_pulse";
 /// Remove Pulse's settings and secrets. An authenticator Pulse paused comes
 /// back as it was, if its secret is still stored.
 pub(crate) fn clear_pulse_state(guard_home: &Path, state: &mut Value) {
+    // Requests made under the old factor can never verify; free their slots.
+    clear_pending_for_home(guard_home);
     let mut store = TotpSecretStore::new(guard_home);
     for key in ["pulse_agent_secret_id", "pulse_binding_secret_id"] {
         if let Some(id) = optional_string(state.get(key)) {
