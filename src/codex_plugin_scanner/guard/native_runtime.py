@@ -19,6 +19,7 @@ from pathlib import Path
 from .codex_hook_launch_runtime import BoundedHookProcessResult, run_isolated_hook_process
 from .group_write_trust import trusted_owner_and_mode as _trusted_owner_and_mode
 from .native_binary_identity import validate_native_binary as _validate_binary
+from .native_process_stop_scope import scoped_native_stop_event
 from .native_response_decoder import native_error as _native_error  # noqa: F401
 from .native_runtime_process_cache import (
     forget_process_status,
@@ -257,6 +258,10 @@ def _run_native_process_result(
     key and a directory it could not create.
     """
 
+    if stop_event is None:
+        stop_event = scoped_native_stop_event()
+    if stop_event is not None and stop_event.is_set():
+        return BoundedHookProcessResult(returncode=None, stdout="", output_limit_exceeded=False, timed_out=False)
     return run_isolated_hook_process(
         (str(path), *args),
         input_text=input_text,
