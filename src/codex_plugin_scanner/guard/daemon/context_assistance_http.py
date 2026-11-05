@@ -6,7 +6,7 @@ from typing import Any
 
 from ..approval_gate import ApprovalGateError, input_from_mapping, require_high_risk, require_settings_write
 from ..native_context_assistance import ContextAssistanceError, control, folders, workspace
-from . import codex_lean_http
+from . import codex_lean_http, context_usage_http
 from .context_assistance_versions_http import READ_PATHS as VERSION_READ_PATHS
 from .context_assistance_versions_http import respond as respond_versions
 
@@ -14,6 +14,7 @@ READ_PATHS = {
     "/v1/context-assistance": "status",
     "/v1/context-assistance/installations": "installations",
     codex_lean_http.PATH: codex_lean_http.KIND,
+    context_usage_http.PATH: context_usage_http.KIND,
     **VERSION_READ_PATHS,
 }
 WRITE_PATHS = {
@@ -54,6 +55,9 @@ def _refusal(handler: Any, error: ContextAssistanceError) -> None:
 def respond(handler: Any, kind: str, payload: dict[str, object] | None = None) -> None:
     if kind == codex_lean_http.KIND:
         codex_lean_http.respond(handler, payload)
+        return
+    if kind == context_usage_http.KIND:
+        context_usage_http.respond(handler)
         return
     if kind == "versions" or kind.startswith("versions_"):
         respond_versions(handler, kind, payload or {})
