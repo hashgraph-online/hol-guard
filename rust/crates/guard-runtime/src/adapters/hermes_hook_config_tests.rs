@@ -81,9 +81,17 @@ fn an_isolated_script_matches_only_the_same_resolved_script() {
         json!({"keep": [1, 2], "removed": ["/other/python -I /opt/guard/../guard/pretool-hook.py"]})
     );
     assert_eq!(
-        plan(entries, None),
+        plan(entries.clone(), None),
         json!({"keep": [0, 1, 2], "removed": []})
     );
+    let without_cwd = dispatch(&json!({
+        "op": "pretool_plan",
+        "entries": entries,
+        "expected_command": COMMAND,
+        "cwd": null,
+    }))
+    .expect("plan without cwd");
+    assert_eq!(without_cwd, json!({"keep": [0, 1, 2], "removed": []}));
 }
 
 fn registered(entries: Value, approvals: Value) -> Value {
@@ -179,6 +187,7 @@ fn malformed_requests_are_refused() {
     for request in [
         json!({"op": "pretool_plan", "entries": {}, "cwd": cwd()}),
         json!({"op": "pretool_plan", "entries": [], "cwd": "relative"}),
+        json!({"op": "pretool_plan", "entries": [], "cwd": 1}),
         json!({"op": "pretool_plan", "entries": [], "expected_command": 1, "cwd": cwd()}),
         json!({"op": "registered", "entries": [], "approvals": true}),
         json!({"op": "allowlist_plan", "approvals": [], "command": COMMAND, "mode": "other"}),

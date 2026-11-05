@@ -51,6 +51,7 @@ def test_removing_every_entry_drops_the_hooks_section(monkeypatch: pytest.Monkey
 
     assert hermes_runtime_hooks.remove_guard_pretool_hooks(config) == ["old"]
     assert sent[0]["expected_command"] is None
+    assert sent[0]["cwd"] is None
     assert config == {}
 
 
@@ -64,26 +65,57 @@ def test_registration_sends_unreadable_allowlist_as_false(monkeypatch: pytest.Mo
     assert sent[0]["approvals"] is False
 
 
-def test_an_unencodable_approval_is_masked_and_kept(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_only_the_matched_fields_are_sent_and_items_are_kept_whole(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     allowlist = tmp_path / "shell-hooks-allowlist.json"
     odd = {"event": "pre_tool_call", "command": "\ud800"}
-    allowlist.write_text(json.dumps({"approvals": [odd]}), encoding="utf-8")
-    sent = _fake(monkeypatch, {"keep": [0], "append": True})
+    noted = {"event": "pre_tool_call", "command": "user", "note": "\ud800"}
+    allowlist.write_text(json.dumps({"approvals": [odd, noted, 3]}), encoding="utf-8")
+    sent = _fake(monkeypatch, {"keep": [0, 1], "append": True})
 
     hermes_runtime_hooks.merge_guard_hook_allowlist(tmp_path, command=_COMMAND)
 
-    assert sent[0]["approvals"] == [{}]
+    assert sent[0]["approvals"] == [{"event": "pre_tool_call"}, {"event": "pre_tool_call", "command": "user"}, None]
     written = json.loads(allowlist.read_text(encoding="utf-8"))
-    assert written["approvals"] == [odd, {"event": "pre_tool_call", "command": _COMMAND_TEXT}]
+    assert written["approvals"] == [odd, noted, {"event": "pre_tool_call", "command": _COMMAND_TEXT}]
+
+
+def test_registration_probe_fails_closed_when_the_resident_cannot_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unavailable(kind: str, request: dict[str, object], **_: object) -> object:
+        raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    config = {"hooks": {"pre_tool_call": [{"command": _COMMAND_TEXT}]}}
+
+    assert hermes_runtime_hooks.guard_pretool_hook_registered(config) is False
+
+
+@pytest.mark.parametrize("answer", [{"keep": [0]}, {"keep": [0], "append": "yes"}])
+def test_an_allowlist_plan_without_a_boolean_append_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, answer: object
+) -> None:
+    (tmp_path / "shell-hooks-allowlist.json").write_text(json.dumps({"approvals": [{}]}), encoding="utf-8")
+    _fake(monkeypatch, answer)
+
+    with pytest.raises(authority.NativeRunnerAuthorityError, match="native_hermes_hook_config_invalid"):
+        hermes_runtime_hooks.merge_guard_hook_allowlist(tmp_path, command=_COMMAND)
 
 
 @pytest.mark.parametrize(
     "answer",
-    [None, {"keep": [5], "removed": []}, {"keep": [True], "removed": []}, {"keep": [0], "removed": [1]}],
+    [
+        None,
+        {"keep": [5], "removed": []},
+        {"keep": [True], "removed": []},
+        {"keep": [0], "removed": [1]},
+        {"keep": [0, 0], "removed": []},
+        {"keep": [1, 0], "removed": []},
+    ],
 )
 def test_a_malformed_answer_fails_closed(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
     _fake(monkeypatch, answer)
-    config: dict[str, object] = {"hooks": {"pre_tool_call": [{"command": "user"}]}}
+    config: dict[str, object] = {"hooks": {"pre_tool_call": [{"command": "user"}, {"command": "other"}]}}
 
     with pytest.raises(authority.NativeRunnerAuthorityError, match="native_hermes_hook_config_invalid"):
         hermes_runtime_hooks.remove_guard_pretool_hooks(config)

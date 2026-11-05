@@ -10,6 +10,7 @@ import json
 import os
 import shlex
 from collections.abc import Mapping, Sequence
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -54,34 +55,67 @@ def _invalid() -> NoReturn:
     raise NativeRunnerAuthorityError("native_hermes_hook_config_invalid")
 
 
-def _wire_approvals(items: list[object]) -> list[object]:
-    """Approvals as sent to the resident, which refuses text it cannot encode.
+_ENTRY_FIELDS = ("id", "command", "matcher", "fail_closed", "failClosed")
+_APPROVAL_FIELDS = ("event", "command")
 
-    An approval holding such text can never be Guard's own, so it is sent as an
-    empty object: still kept, never matched.
+
+def _wire(items: list[object], fields: tuple[str, ...]) -> list[object]:
+    """Items as sent to the resident: only the fields ownership is decided on.
+
+    The rest of an item never reaches the resident, so it neither inflates the
+    request nor hides the item. A field holding text the resident cannot encode
+    is left out; such text can never be Guard's own id or command.
     """
 
     wire: list[object] = []
     for item in items:
-        try:
-            json.dumps(item, ensure_ascii=False).encode()
-        except UnicodeEncodeError:
-            item = {} if isinstance(item, dict) else None
-        wire.append(item)
+        if not isinstance(item, dict):
+            wire.append(None)
+            continue
+        projected: dict[str, object] = {}
+        for field in fields:
+            value = item.get(field)
+            if isinstance(value, str):
+                try:
+                    value.encode()
+                except UnicodeEncodeError:
+                    continue
+            elif not isinstance(value, bool):
+                continue
+            projected[field] = value
+        wire.append(projected)
     return wire
 
 
 def _kept(items: list[object], indices: object) -> list[object]:
     if not isinstance(indices, list) or not all(type(index) is int and 0 <= index < len(items) for index in indices):
         _invalid()
+    if any(left >= right for left, right in pairwise(indices)):
+        _invalid()
     return [items[index] for index in indices]
+
+
+def _install_cwd() -> str | None:
+    """The directory a relative hook script resolves from; ``None`` when it is gone."""
+
+    try:
+        return os.getcwd()
+    except OSError:
+        return None
 
 
 def _pretool_plan(entries: list[object], *, expected_command: str | None) -> tuple[list[object], list[str]]:
     """Entries to keep and the commands of the Guard entries dropped."""
 
+    # Only an install compares script paths, so only an install needs a cwd.
+    cwd = _install_cwd() if expected_command is not None else None
     answer = _hook_config(
-        {"op": "pretool_plan", "entries": entries, "expected_command": expected_command, "cwd": os.getcwd()}
+        {
+            "op": "pretool_plan",
+            "entries": _wire(entries, _ENTRY_FIELDS),
+            "expected_command": expected_command,
+            "cwd": cwd,
+        }
     )
     removed = answer.get("removed")
     if not isinstance(removed, list) or not all(isinstance(item, str) for item in removed):
@@ -97,14 +131,17 @@ def _allowlist_plan(payload: Mapping[str, object], *, command: str, retire: list
     answer = _hook_config(
         {
             "op": "allowlist_plan",
-            "approvals": _wire_approvals(items),
+            "approvals": _wire(items, _APPROVAL_FIELDS),
             "command": command,
             "retire": retire,
             "mode": mode,
         }
     )
+    append = answer.get("append")
+    if not isinstance(append, bool):
+        _invalid()
     kept = _kept(items, answer.get("keep"))
-    if answer.get("append") is True:
+    if append:
         kept.append({"event": _PRETOOL_EVENT, "command": command})
     return kept
 
@@ -140,17 +177,24 @@ def guard_pretool_hook_registered(
     entries = _pretool_entries(hooks)
     if not entries:
         return False
+    from ..native_runner_authority import NativeRunnerAuthorityError
+
     approvals: object = None
     if allowlist_path is not None:
         payload = _read_allowlist(allowlist_path)
-        approvals = False if payload is None else _wire_approvals(list(payload.get("approvals", [])))
-    answer = _hook_config(
-        {"op": "registered", "entries": entries, "expected_command": expected_command, "approvals": approvals}
-    )
-    registered = answer.get("registered")
-    if not isinstance(registered, bool):
-        _invalid()
-    return registered
+        approvals = False if payload is None else _wire(list(payload.get("approvals", [])), _APPROVAL_FIELDS)
+    request: dict[str, object] = {
+        "op": "registered",
+        "entries": _wire(entries, _ENTRY_FIELDS),
+        "expected_command": expected_command,
+        "approvals": approvals,
+    }
+    # A read-only probe: a resident that cannot answer leaves the hook unproven.
+    try:
+        registered = _hook_config(request).get("registered")
+    except NativeRunnerAuthorityError:
+        return False
+    return registered if isinstance(registered, bool) else False
 
 
 def merge_guard_pretool_hook(

@@ -47,7 +47,7 @@ fn pretool_plan(fields: &Map<String, Value>) -> KindResult {
     for (index, entry) in entries.iter().enumerate() {
         let legacy = entry
             .as_object()
-            .is_some_and(|object| legacy_command(object.get("command"), expected, &cwd));
+            .is_some_and(|object| legacy_command(object.get("command"), expected, cwd.as_deref()));
         if !(is_guard_entry(entry, expected) || legacy) {
             keep.push(index);
             continue;
@@ -156,7 +156,7 @@ fn is_guard_object(entry: &Map<String, Value>, expected: Option<&str>) -> bool {
 /// A command an earlier Guard release registered: the bounded hook flag, an
 /// inline bridge bootstrap, or `<python> -I <script>` naming the same script
 /// as the command about to be installed.
-fn legacy_command(command: Option<&Value>, expected: Option<&str>, cwd: &Path) -> bool {
+fn legacy_command(command: Option<&Value>, expected: Option<&str>, cwd: Option<&Path>) -> bool {
     let Some(command) = command.and_then(Value::as_str) else {
         return false;
     };
@@ -177,6 +177,11 @@ fn legacy_command(command: Option<&Value>, expected: Option<&str>, cwd: &Path) -
             return true;
         }
     }
+    // Without a working directory a script path cannot be resolved the way
+    // the caller would, so no script is claimed.
+    let Some(cwd) = cwd else {
+        return false;
+    };
     if tokens.len() != 3 || tokens[1] != "-I" {
         return false;
     }
@@ -194,14 +199,15 @@ fn resolved(cwd: &Path, value: &str) -> String {
     resolve_absolute(&cwd.join(value).to_string_lossy())
 }
 
-fn cwd(fields: &Map<String, Value>) -> Result<PathBuf, &'static str> {
-    let text = fields
-        .get("cwd")
-        .and_then(Value::as_str)
-        .ok_or(ERR_INVALID)?;
+/// The caller's absolute working directory; `null` when it has none, as on
+/// uninstall or from a deleted directory.
+fn cwd(fields: &Map<String, Value>) -> Result<Option<PathBuf>, &'static str> {
+    let Some(text) = optional_str(fields, "cwd")? else {
+        return Ok(None);
+    };
     let path = PathBuf::from(text);
     if path.is_absolute() {
-        Ok(path)
+        Ok(Some(path))
     } else {
         Err(ERR_INVALID)
     }
