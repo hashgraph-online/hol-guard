@@ -20,6 +20,15 @@
 //! nothing while the real one matches every name beginning with the year,
 //! `2026-prod.env` among them.
 //!
+//! One substitution is read as a value rather than approximated by a
+//! stand-in: `"$(cat <<'EOF' ... EOF)"`, the shape an agent writes to hand a
+//! multi-line commit message to `git commit -m`. A quoted delimiter makes the
+//! body literal data and a bare `cat` prints it unchanged, so the message
+//! itself is written into the projection and the screens downstream read the
+//! words the shell passes. It is recognised only as a whole double-quoted
+//! word, where the value is neither split nor matched, and only when the body
+//! spells nothing that could reopen the shell.
+//!
 //! A line break between commands separates them as `;` does. A heredoc body
 //! is not shell text: one with a quoted delimiter (`<<'EOF'`, `<<"EOF"`) is
 //! literal data, so the backticks and `$(` of a script it carries are never
@@ -42,6 +51,9 @@ pub(super) const DATE_VALUE: &str = "hol-guard-substituted-date";
 
 const MAX_SUBSTITUTIONS: usize = 8;
 const MAX_BODY_CHARS: usize = 128;
+/// The longest heredoc a `cat` substitution may print. A commit message runs
+/// to a few paragraphs; anything longer is not the form this models.
+const MAX_HEREDOC_VALUE_CHARS: usize = 4096;
 
 /// Conversions that print only digits, `-` or `:`, never a space, a letter
 /// or a path separator.
@@ -66,37 +78,61 @@ pub(super) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
     }
     let chars: Vec<char> = command.chars().collect();
     let masked: Vec<char> = masked.chars().collect();
+    // Each substitution's own text, replaced by a character that is neither a
+    // pattern nor a word break. The word around a substitution is read from
+    // this: what the substitution prints is one value, so a `[` the inner
+    // command spells is never a pattern the shell expands around it.
+    let mut patterned = masked.clone();
+    for substitution in &substitutions {
+        for character in patterned
+            .iter_mut()
+            .take(substitution.body_end.min(masked.len()))
+            .skip(substitution.body_start.min(masked.len()))
+        {
+            *character = 'x';
+        }
+    }
     let mut out = String::with_capacity(command.len());
     // The projection's shell text, heredoc bodies still blanked.
     let mut shell = String::with_capacity(command.len());
     let mut cursor = 0usize;
-    let mut judged: Vec<&str> = Vec::new();
+    let mut judged: Vec<String> = Vec::new();
     let mut temporary = false;
     for substitution in &substitutions {
         let (open, close) = match substitution.kind {
             "dollar" => ("$(", ")"),
             _ => ("`", "`"),
         };
-        if substitution.start < cursor || patterned_word(&chars, substitution) {
+        if substitution.start < cursor || patterned_word(&patterned, substitution) {
             return None;
         }
-        let text: String = chars
-            .get(substitution.start..substitution.end)?
-            .iter()
-            .collect();
-        let inner = text
-            .strip_prefix(open)
-            .and_then(|rest| rest.strip_suffix(close))?;
-        if inner.trim() != substitution.body {
-            return None;
-        }
-        let value = stand_in(&substitution.body)?;
-        if !judged.contains(&substitution.body.as_str()) {
-            judged.push(&substitution.body);
+        let (value, judged_text) = match heredoc_value(&chars, substitution) {
+            // The heredoc is the whole of what the `cat` reads, so judging
+            // the bare `cat` is judging the command the shell runs.
+            Some(value) => (value, "cat".to_owned()),
+            None => {
+                let text: String = chars
+                    .get(substitution.start..substitution.end)?
+                    .iter()
+                    .collect();
+                let inner = text
+                    .strip_prefix(open)
+                    .and_then(|rest| rest.strip_suffix(close))?;
+                if inner.trim() != substitution.body {
+                    return None;
+                }
+                (
+                    stand_in(&substitution.body)?.to_owned(),
+                    substitution.body.clone(),
+                )
+            }
+        };
+        if !judged.contains(&judged_text) {
+            judged.push(judged_text);
         }
         temporary |= value == TEMPORARY_VALUE;
         out.extend(&chars[cursor..substitution.start]);
-        out.push_str(value);
+        out.push_str(&value);
         shell.extend(&masked[cursor..substitution.start]);
         cursor = substitution.end;
     }
@@ -113,7 +149,96 @@ pub(super) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
     {
         return None;
     }
-    judged.into_iter().all(allowed).then_some(out)
+    judged.iter().all(|text| allowed(text.as_str())).then_some(out)
+}
+
+/// The literal text a `$(cat <<'EOF' ... EOF)` prints, when that is the whole
+/// of the substitution and it stands alone inside double quotes.
+///
+/// A heredoc with a quoted delimiter is literal data, and a bare `cat` prints
+/// what it reads unchanged, so the value is known here exactly rather than
+/// approximated. The text is therefore written in place of the substitution as
+/// it is, not as a stand-in: every screen downstream then reads the words the
+/// shell itself would pass.
+///
+/// That holds only inside the double quotes. There the value is one word and
+/// nothing in it is split, matched or expanded, so its characters reach the
+/// program as they are written. Unquoted, the same value would be split on
+/// whitespace and matched as a pattern, so the form is not recognised there.
+///
+/// The outer heredoc scan steps over a command substitution whole, so the
+/// heredoc inside one is read from the substitution's own text. Everything
+/// outside that heredoc has to be the word `cat` and whitespace, which leaves
+/// nowhere for a second `<<`, a redirect or another command to hide.
+fn heredoc_value(chars: &[char], substitution: &ShellCommandSubstitution) -> Option<String> {
+    if substitution.kind != "dollar" || !double_quoted_word(chars, substitution) {
+        return None;
+    }
+    let inner: String = chars
+        .get(substitution.body_start..substitution.body_end)?
+        .iter()
+        .collect();
+    let length = inner.chars().count();
+    let heredocs = extract_heredocs(&inner);
+    let [heredoc] = &heredocs[..] else {
+        return None;
+    };
+    // A body that runs to the end never met its delimiter, so the text the
+    // `cat` reads is not the text here.
+    if !heredoc.quoted || heredoc.strip_tabs || heredoc.body_end >= length {
+        return None;
+    }
+    let inner: Vec<char> = inner.chars().collect();
+    // `cat`, then the operator, then nothing but the body and its delimiter.
+    if text_between(&inner, 0, heredoc.operator_start)?.trim() != "cat"
+        || !text_between(&inner, heredoc.declaration_end, heredoc.body_start)?
+            .chars()
+            .all(char::is_whitespace)
+        || !text_between(&inner, heredoc.end, length)?
+            .chars()
+            .all(char::is_whitespace)
+    {
+        return None;
+    }
+    let body = &heredoc.body;
+    if body.chars().count() > MAX_HEREDOC_VALUE_CHARS
+        || !body.chars().all(|character| {
+            (character == '\n' || character == ' ' || character.is_ascii_graphic())
+                && !matches!(
+                    character,
+                    '"' | '\'' | '`' | '$' | '\\' | '*' | '?' | '[' | ']' | '{' | '}' | '~'
+                )
+        })
+    {
+        return None;
+    }
+    // A substitution drops every line break at the end of what it read.
+    Some(body.trim_end_matches('\n').to_owned())
+}
+
+fn double_quoted_word(chars: &[char], substitution: &ShellCommandSubstitution) -> bool {
+    let opens = substitution.start.checked_sub(1);
+    if opens.and_then(|at| chars.get(at)) != Some(&'"') || chars.get(substitution.end) != Some(&'"')
+    {
+        return false;
+    }
+    let before = opens
+        .and_then(|at| at.checked_sub(1))
+        .map(|at| chars[at])
+        .is_none_or(|character| character.is_ascii_whitespace());
+    let after = chars
+        .get(substitution.end + 1)
+        .is_none_or(|character| character.is_ascii_whitespace());
+    before && after
+}
+
+/// The text between two character offsets, or `None` when either is out of
+/// range or they are the wrong way round.
+fn text_between(chars: &[char], from: usize, to: usize) -> Option<String> {
+    (from <= to)
+        .then(|| chars.get(from..to))
+        .flatten()
+        .map(|slice| slice.iter().collect())
 }
 
 /// The command substitutions the shell runs in `command`, read with every

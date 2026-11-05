@@ -52069,17 +52069,18 @@
       "requires_sandbox": true
     },
     {
-      "id": "claude-code-heredoc-commit-message",
+      "id": "session-git-commit-heredoc-message",
       "fix_area": "shell",
       "harnesses": [
+        "omp",
         "claude-code"
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "git add docs/notes.md && git commit -m \"$(cat <<'EOF'\nAdd notes\n\nExplain the retry window.\nEOF\n)\""
+        "command": "git add README.md && git commit -m \"$(cat <<'EOF'\nAdd notes\n\nExplain the retry window.\nEOF\n)\""
       },
       "cwd": "worktree",
-      "expect": "allow_or_review"
+      "expect": "allow"
     },
     {
       "id": "claude-code-grouped-find-xargs-quiet-errors",

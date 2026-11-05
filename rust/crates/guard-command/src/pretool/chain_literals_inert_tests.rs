@@ -208,3 +208,86 @@ fn heredocs_that_could_expand_or_never_close_keep_the_command_opaque() {
         assert_eq!(projected(&command), None, "{command}");
     }
 }
+
+/// The commit-message form an agent writes by hand: a quoted heredoc read by
+/// a bare `cat`, inside the double quotes of `-m`. The value is known exactly,
+/// so the projection carries the message itself and every screen downstream
+/// reads the words the shell passes.
+#[test]
+fn a_quoted_heredoc_read_by_cat_becomes_its_own_text() {
+    for (command, expected) in [
+        (
+            "git commit -m \"$(cat <<'EOF'\nfeat(x): subject\n\nbody line\nEOF\n)\"",
+            "git commit -m \"feat(x): subject\n\nbody line\"",
+        ),
+        ("echo \"$(cat <<\"EOF\"\nhello\nEOF\n)\"", "echo \"hello\""),
+        // Trailing blank lines go the way the shell drops them.
+        (
+            "git commit -m \"$(cat <<'EOF'\nsubject\n\n\nEOF\n)\"",
+            "git commit -m \"subject\"",
+        ),
+        // A `[` in the body is a character of the message, not a pattern:
+        // the word is read with the body blanked.
+        (
+            "git commit -m \"$(cat <<'EOF'\nfix: drop the (old) [legacy] path\nEOF\n)\"",
+            "git commit -m \"fix: drop the (old) [legacy] path\"",
+        ),
+    ] {
+        assert_eq!(projected(command).as_deref(), Some(expected), "{command}");
+    }
+    let seen = RefCell::new(Vec::new());
+    let opened = project("git commit -m \"$(cat <<'EOF'\nsubject\nEOF\n)\"", |body| {
+        seen.borrow_mut().push(body.to_owned());
+        true
+    });
+    assert!(opened.is_some());
+    // The heredoc is the whole of what the `cat` reads, so the command judged
+    // is the bare `cat`, not the text of the message.
+    assert_eq!(*seen.borrow(), ["cat"]);
+    assert_eq!(
+        project("git commit -m \"$(cat <<'EOF'\nsubject\nEOF\n)\"", |_| {
+            false
+        }),
+        None
+    );
+}
+
+#[test]
+fn a_cat_that_reads_more_than_a_quoted_heredoc_stays_opaque() {
+    for command in [
+        // An unquoted delimiter expands the body, so its text is not data.
+        "git commit -m \"$(cat <<EOF\nsubject\nEOF\n)\"",
+        // A tab-stripping body is not the text the shell would pass.
+        "git commit -m \"$(cat <<-'EOF'\n\tsubject\n\tEOF\n)\"",
+        // The `cat` also reads a file.
+        "git commit -m \"$(cat notes.txt <<'EOF'\nsubject\nEOF\n)\"",
+        // Another command runs inside the substitution.
+        "git commit -m \"$(cat <<'EOF'\nsubject\nEOF\n; id)\"",
+        "git commit -m \"$(id; cat <<'EOF'\nsubject\nEOF\n)\"",
+        // Unquoted, the shell would split and glob the value.
+        "git commit -m $(cat <<'EOF'\nsubject\nEOF\n)",
+        // The word carries more than the substitution, so the value would be
+        // spliced into text the shell quotes differently.
+        "git commit -m x\"$(cat <<'EOF'\nsubject\nEOF\n)\"",
+        // A body that could reopen the shell is never spliced.
+        "git commit -m \"$(cat <<'EOF'\nuse `id` here\nEOF\n)\"",
+        "git commit -m \"$(cat <<'EOF'\ncost $(id)\nEOF\n)\"",
+        "git commit -m \"$(cat <<'EOF'\nsay \"hi\"\nEOF\n)\"",
+        "git commit -m \"$(cat <<'EOF'\nwipe *\nEOF\n)\"",
+        "git commit -m \"$(cat <<'EOF'\npath\\\\x\nEOF\n)\"",
+    ] {
+        assert_eq!(projected(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_heredoc_message_longer_than_the_bound_stays_opaque() {
+    let line = "a".repeat(80);
+    let long: Vec<&str> = std::iter::repeat(line.as_str()).take(60).collect();
+    let command = format!(
+        "git commit -m \"$(cat <<'EOF'\n{}\nEOF\n)\"",
+        long.join("\n")
+    );
+    assert!(command.len() < super::MAX_COMMAND_CHARS);
+    assert_eq!(projected(&command), None);
+}
