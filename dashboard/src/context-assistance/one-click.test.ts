@@ -339,6 +339,14 @@ const plan = install;
     : { ...saved, requested_enabled: false, job: null });
   await assert.rejects(runCigarSetup(planCigarStart(saved, false)!, saved, deps), CigarSetupStopped);
 }
+{
+  // The browser's "Failed to fetch" is not something a person can act on.
+  const { deps } = fakeGuard({ initial: saved });
+  deps.saveSettings = async () => { throw new TypeError("Failed to fetch"); };
+  const elsewhere = { ...saved, preferences: { ...saved.preferences, enabled: false } };
+  await assert.rejects(runCigarSetup(planCigarStart(saved, false)!, elsewhere, deps),
+    (cause: unknown) => cause instanceof CigarSetupError && /Guard did not answer/.test(cause.message) && !/fetch/i.test(cause.message));
+}
 console.log("CIGAR one-click planning, approval, stop, retry and live-readiness contracts passed.");
 
 {

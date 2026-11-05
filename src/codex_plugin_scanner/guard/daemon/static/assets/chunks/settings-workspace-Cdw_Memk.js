@@ -6018,13 +6018,18 @@ const failedPhases = /* @__PURE__ */ new Set(["failed", "cancelled", "recovery_r
 const isCigarProofError = (cause) => cause instanceof ContextAssistanceApiError && (cause.code.startsWith("approval_gate") || cause.code === "approval_required");
 const transient = (cause) => !(cause instanceof ContextAssistanceApiError) || cause.code.endsWith("context_stale") || cause.code.endsWith("outcome_unknown") || cause.code === "context_assistance_unavailable";
 const missingJob = (cause) => cause instanceof ContextAssistanceApiError && cause.code.endsWith("job_missing");
+const NO_ANSWER = "Guard did not answer. It may still be starting or busy. Try again in a minute.";
+function cigarSetupReason(cause, fallback) {
+  if (cause instanceof TypeError || cause instanceof DOMException) return NO_ANSWER;
+  return cause instanceof Error ? cause.message : fallback;
+}
 function guard(deps) {
   if (deps.stopped()) throw new CigarSetupStopped();
 }
 function failure$1(stage, cause) {
   if (cause instanceof CigarSetupStopped || cause instanceof CigarSetupError) throw cause;
   if (isCigarProofError(cause)) throw new CigarSetupError(stage, "Guard needs your approval password to continue.", true);
-  throw new CigarSetupError(stage, cause instanceof Error ? cause.message : "Guard did not confirm this step.");
+  throw new CigarSetupError(stage, cigarSetupReason(cause, "Guard did not confirm this step."));
 }
 function failedJobCopy(code) {
   if (code.endsWith("deadline_exceeded")) {
@@ -7896,7 +7901,7 @@ function useCigarOneClick(options) {
           phase: "failed",
           stages,
           stage: cause instanceof CigarSetupError ? cause.stage : stage,
-          message: cause instanceof Error ? cause.message : "CIGAR did not finish turning on. Nothing else changed."
+          message: cigarSetupReason(cause, "CIGAR did not finish turning on. Nothing else changed.")
         });
       }
     } finally {

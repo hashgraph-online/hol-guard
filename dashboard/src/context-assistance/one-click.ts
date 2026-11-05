@@ -168,13 +168,20 @@ const transient = (cause: unknown) => !(cause instanceof ContextAssistanceApiErr
   || cause.code.endsWith("context_stale") || cause.code.endsWith("outcome_unknown") || cause.code === "context_assistance_unavailable";
 const missingJob = (cause: unknown) => cause instanceof ContextAssistanceApiError && cause.code.endsWith("job_missing");
 
+// The browser's own wording for a dropped or timed-out request ("Failed to fetch", "signal timed out") means nothing to people.
+const NO_ANSWER = "Guard did not answer. It may still be starting or busy. Try again in a minute.";
+export function cigarSetupReason(cause: unknown, fallback: string): string {
+  if (cause instanceof TypeError || cause instanceof DOMException) return NO_ANSWER;
+  return cause instanceof Error ? cause.message : fallback;
+}
+
 function guard(deps: CigarSetupDeps) {
   if (deps.stopped()) throw new CigarSetupStopped();
 }
 function failure(stage: CigarSetupStage, cause: unknown): never {
   if (cause instanceof CigarSetupStopped || cause instanceof CigarSetupError) throw cause;
   if (isCigarProofError(cause)) throw new CigarSetupError(stage, "Guard needs your approval password to continue.", true);
-  throw new CigarSetupError(stage, cause instanceof Error ? cause.message : "Guard did not confirm this step.");
+  throw new CigarSetupError(stage, cigarSetupReason(cause, "Guard did not confirm this step."));
 }
 
 function failedJobCopy(code: string): string {
