@@ -31873,6 +31873,17 @@ function blockButtonLabel(scope) {
 }
 const INTENT_FIELDS = ["description", "justification"];
 const MAX_INTENT_CHARS = 300;
+const SHELL_TOOL_NAMES = /* @__PURE__ */ new Set([
+  "bash",
+  "shell",
+  "sh",
+  "zsh",
+  "terminal",
+  "run_command",
+  "run_terminal_command",
+  "run_shell_command"
+]);
+const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"];
 const UNSAFE_CHARACTERS = new RegExp(
   "[\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
   "g"
@@ -31888,7 +31899,12 @@ function resolveAgentStatedIntent(item) {
   if (envelope.mcp_server) {
     return null;
   }
-  const toolInput = recordValue(recordValue(envelope.raw_payload_redacted)?.tool_input);
+  const raw = recordValue(envelope.raw_payload_redacted);
+  const toolName = envelope.tool_name ?? (typeof raw?.tool_name === "string" ? raw.tool_name : null);
+  if (toolName === null || !SHELL_TOOL_NAMES.has(toolName.trim().toLowerCase())) {
+    return null;
+  }
+  const toolInput = firstToolInput(raw);
   if (toolInput === null) {
     return null;
   }
@@ -31905,6 +31921,18 @@ function resolveAgentStatedIntent(item) {
       text: text2.length > MAX_INTENT_CHARS ? `${text2.slice(0, MAX_INTENT_CHARS)}…` : text2,
       field
     };
+  }
+  return null;
+}
+function firstToolInput(raw) {
+  if (raw === null) {
+    return null;
+  }
+  for (const key of TOOL_INPUT_KEYS) {
+    const input = recordValue(raw[key]);
+    if (input !== null) {
+      return input;
+    }
   }
   return null;
 }

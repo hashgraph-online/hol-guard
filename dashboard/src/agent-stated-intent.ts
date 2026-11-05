@@ -20,6 +20,22 @@ export type AgentStatedIntent = {
 
 const INTENT_FIELDS = ["description", "justification"] as const;
 const MAX_INTENT_CHARS = 300;
+// Core also classes a non-shell tool as `shell_command` when its input has a
+// command-like key such as `query`, so the tool's own name decides. These are
+// `SHELL_TOOL_NAMES` in `hook_adapter_envelope_tables.rs` plus Gemini's
+// `run_shell_command`, whose `description` is documented as the model's account.
+const SHELL_TOOL_NAMES = new Set([
+  "bash",
+  "shell",
+  "sh",
+  "zsh",
+  "terminal",
+  "run_command",
+  "run_terminal_command",
+  "run_shell_command",
+]);
+// The keys `tool_input_from_payload` reads the tool input from, in its order.
+const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"] as const;
 // Control characters and bidirectional overrides could hide or reorder the
 // quoted text on screen; whitespace runs are collapsed so the line stays one line.
 // Built from escaped text so the bundled file carries no literal bidi characters.
@@ -42,7 +58,12 @@ export function resolveAgentStatedIntent(item: GuardApprovalRequest): AgentState
   if (envelope.mcp_server) {
     return null;
   }
-  const toolInput = recordValue(recordValue(envelope.raw_payload_redacted)?.tool_input);
+  const raw = recordValue(envelope.raw_payload_redacted);
+  const toolName = envelope.tool_name ?? (typeof raw?.tool_name === "string" ? raw.tool_name : null);
+  if (toolName === null || !SHELL_TOOL_NAMES.has(toolName.trim().toLowerCase())) {
+    return null;
+  }
+  const toolInput = firstToolInput(raw);
   if (toolInput === null) {
     return null;
   }
@@ -59,6 +80,19 @@ export function resolveAgentStatedIntent(item: GuardApprovalRequest): AgentState
       text: text.length > MAX_INTENT_CHARS ? `${text.slice(0, MAX_INTENT_CHARS)}…` : text,
       field,
     };
+  }
+  return null;
+}
+
+function firstToolInput(raw: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (raw === null) {
+    return null;
+  }
+  for (const key of TOOL_INPUT_KEYS) {
+    const input = recordValue(raw[key]);
+    if (input !== null) {
+      return input;
+    }
   }
   return null;
 }

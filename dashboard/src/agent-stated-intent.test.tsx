@@ -93,7 +93,10 @@ function requestWith(
 // Codex escalation calls carry `justification` instead.
 {
   const intent = resolveAgentStatedIntent(
-    requestWith({ harness: "codex" }, { command: ["rm", "-rf", "build"], justification: "Clean the build output" }),
+    requestWith(
+      { harness: "codex", tool_name: "shell" },
+      { command: ["rm", "-rf", "build"], justification: "Clean the build output" },
+    ),
   );
   assert(intent?.text === "Clean the build output", "falls back to justification");
   assert(intent?.field === "justification", "reports the justification field");
@@ -120,6 +123,28 @@ assert(
   resolveAgentStatedIntent(requestWith({ action_type: "file_write" }, { description: "Notes" })) === null,
   "file writes are not read",
 );
+// Core classes a non-shell tool as shell_command when its input has a
+// command-like key; the tool name keeps its `description` off the card.
+assert(
+  resolveAgentStatedIntent(
+    requestWith({ tool_name: "Search" }, { query: "deploy keys", description: "Saved search notes" }),
+  ) === null,
+  "a non-shell tool with a command-like input is not read",
+);
+
+// The input is read from the same keys Core accepts, under the raw tool name
+// when the envelope has none.
+{
+  const request = requestWith({
+    harness: "gemini",
+    tool_name: null,
+    raw_payload_redacted: {
+      tool_name: "run_shell_command",
+      toolInput: { command: "npm test", description: "Run the unit tests" },
+    },
+  });
+  assert(resolveAgentStatedIntent(request)?.text === "Run the unit tests", "reads toolInput under run_shell_command");
+}
 
 // Missing or unusable input renders nothing.
 assert(resolveAgentStatedIntent({ ...BASE_REQUEST, action_envelope_json: null }) === null, "no envelope");
