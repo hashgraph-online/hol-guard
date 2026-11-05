@@ -343,7 +343,12 @@ fn outside_checkout(entry: &Path, destination: &Path) -> bool {
         }
         let actual = actual.as_os_str().to_string_lossy();
         let expected = expected.as_os_str().to_string_lossy();
-        if actual.to_lowercase() == expected.to_lowercase() {
+        // Lowercasing alone leaves a character that is already lowercase but
+        // folds onto ASCII, such as U+017F long s, apart from the ASCII
+        // letter a case-ignoring filesystem reads it as. Going up first and
+        // back down brings the pair together before the ASCII rule applies.
+        let folded = |name: &str| name.to_uppercase().to_lowercase();
+        if folded(&actual) == folded(&expected) {
             continue;
         }
         return actual.is_ascii() || expected.is_ascii();

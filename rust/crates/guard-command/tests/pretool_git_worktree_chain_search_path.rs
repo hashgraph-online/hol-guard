@@ -252,3 +252,25 @@ fn an_accented_entry_outside_the_new_checkout_keeps_the_proof() {
         "git worktree add -b flat ../app-flat origin/main && cd ../app-flat && git status --short",
     );
 }
+
+/// A character that is already lowercase can still fold onto an ASCII
+/// letter: U+017F long s uppercases to `S`. A case-ignoring filesystem
+/// reads `toolſ` and `tools` as one folder, so an entry spelled with it
+/// names the checkout the add creates and must not read as outside it.
+#[test]
+fn a_long_s_entry_inside_the_new_checkout_revokes_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-path-long-s");
+    let parent = repository.parent().unwrap().to_path_buf();
+    let add = "git worktree add -b flat ../tools origin/main";
+    for entry in [
+        parent.join("tool\u{17f}").join("bin"),
+        parent.join("tool\u{17f}"),
+    ] {
+        assert_reviewed_on_search_path(
+            &home,
+            &repository,
+            &entry,
+            &format!("{add} && cd ../tools && git status --short"),
+        );
+    }
+}
