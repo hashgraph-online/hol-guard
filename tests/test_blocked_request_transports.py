@@ -1,6 +1,5 @@
 """Default denial keeps transport execution and approval surfaces closed."""
 
-import re
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -86,12 +85,9 @@ def _held_package_install_output(tmp_path, capsys, monkeypatch, *, token: bool, 
         localize_pending_approval_copy=_unexpected_prompt,
     )
     request = store.list_approval_requests(status="pending")[0]
-    render.emit_guard_payload(
-        "protect",
-        _protect_payload_for_human_output(payload, guard_home=context.guard_home),
-        False,
-    )
-    return payload, request, capsys.readouterr().out
+    human_payload = _protect_payload_for_human_output(payload, guard_home=context.guard_home)
+    render.emit_guard_payload("protect", human_payload, False)
+    return human_payload, request, capsys.readouterr().out
 
 
 def test_local_package_denial_prints_signed_link_to_the_running_daemon(tmp_path, capsys, monkeypatch):
@@ -118,9 +114,11 @@ def test_local_package_denial_without_an_openable_link_keeps_wait_guidance(
         tmp_path, capsys, monkeypatch, token=token, daemon_url=daemon_url
     )
 
-    assert payload["supply_chain_evaluation"]["user_copy"]["dashboard_url"] is None
-    flat = " ".join(re.sub(r"[\u2500-\u257f]", " ", output).split())
-    assert f"hol-guard approvals wait {request['request_id']}" in flat
+    user_copy = payload["supply_chain_evaluation"]["user_copy"]
+    assert user_copy["dashboard_url"] is None
+    assert f"hol-guard approvals wait {request['request_id']}" in user_copy["harness_message"]
+    assert "could not create a signed approval link" not in user_copy["harness_message"]
+    assert request["request_id"] in output
     assert "#guard-token=" not in output
     assert "could not create a signed approval link" not in output
 
