@@ -2230,3 +2230,30 @@ def test_approval_gate_password_material_stays_out_of_public_payloads(tmp_path: 
     assert "approval_password" not in combined_public
     assert "approval_totp_code" not in combined_public
     assert "otpauth://" not in combined_public
+
+
+def test_public_config_keeps_the_pulse_fields_the_resident_reports() -> None:
+    from codex_plugin_scanner.guard.approval_gate_types import config_from_wire
+
+    wire = {
+        "enabled": True,
+        "configured": True,
+        "cooldown_seconds": 0,
+        "cooldown_active": False,
+        "fail_closed": False,
+        "strict_all_decisions": False,
+        "totp_enabled": False,
+        "totp_pending": False,
+        "pulse_enabled": True,
+        "pulse_cooldown_seconds": 900,
+    }
+    config = config_from_wire(wire)
+    assert config is not None
+    assert config.pulse_enabled is True
+    assert config.pulse_cooldown_seconds == 900
+    assert config.to_dict()["pulse_enabled"] is True
+
+    without_pulse = config_from_wire({k: v for k, v in wire.items() if not k.startswith("pulse_")})
+    assert without_pulse is not None
+    assert without_pulse.pulse_enabled is False
+    assert without_pulse.pulse_cooldown_seconds == 0

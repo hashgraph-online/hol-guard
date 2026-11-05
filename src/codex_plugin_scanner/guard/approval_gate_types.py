@@ -115,6 +115,8 @@ def config_from_wire(payload: object) -> ApprovalGatePublicConfig | None:
             totp_enabled=bool(payload["totp_enabled"]),
             totp_pending=bool(payload["totp_pending"]),
             totp_recent_satisfied=bool(payload.get("totp_recent_satisfied", False)),
+            pulse_enabled=payload.get("pulse_enabled") is True,
+            pulse_cooldown_seconds=int(payload.get("pulse_cooldown_seconds") or 0),
         )
     except (KeyError, TypeError, ValueError):
         return None
