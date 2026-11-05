@@ -158,7 +158,21 @@ fn prove(
     // them, so a search path entry inside the new checkout decides what the
     // chain's own reads run. The add refuses an existing destination, so
     // nothing but the ref it checks out fills such an entry.
-    if entered && !super::chain_route::search_path_outside(&destination, execution_environment) {
+    //
+    // A chain that routes its steps with `git -C <checkout>` reaches the
+    // same directory without entering it, and looks `git` up on the same
+    // search path, so it answers for the same entry. Its own directory does
+    // not move, which is what lets a relative entry be read here at all.
+    let screened = if entered {
+        super::chain_route::search_path_outside(&destination, execution_environment)
+    } else {
+        super::chain_route::routed_search_path_outside(
+            &destination,
+            context.cwd.map(std::path::Path::new),
+            execution_environment,
+        )
+    };
+    if !screened {
         return false;
     }
     // Reads are proven in the repository the checkout belongs to. If the

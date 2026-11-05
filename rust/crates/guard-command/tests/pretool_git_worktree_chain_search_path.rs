@@ -163,3 +163,92 @@ fn a_case_variant_entry_inside_the_new_checkout_revokes_the_proof() {
         );
     }
 }
+
+/// A chain that routes its steps with `git -C <checkout>` never enters the
+/// checkout, but it looks `git` up on the same search path the entered form
+/// does. An entry the new checkout supplies therefore decides what each
+/// routed step runs, and the chain answers for it either way.
+#[test]
+fn a_search_path_entry_inside_a_routed_checkout_revokes_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-path-routed");
+    let checkout = repository.parent().unwrap().join("app-flat");
+    let add = "git worktree add -b flat ../app-flat origin/main";
+    for entry in [checkout.join("bin"), checkout.clone()] {
+        for tail in [
+            " && git -C ../app-flat status --short",
+            " && git -C ../app-flat status --short && git -C ../app-flat log --oneline -1",
+        ] {
+            assert_reviewed_on_search_path(&home, &repository, &entry, &format!("{add}{tail}"));
+        }
+    }
+}
+
+/// Screening a routed chain must not turn an ordinary search path into a
+/// block. A folder beside the checkout is one the ref never fills.
+#[test]
+fn a_search_path_entry_beside_a_routed_checkout_keeps_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-path-routed-beside");
+    let beside = repository.parent().unwrap().join("app-flat-tools");
+    std::fs::create_dir_all(&beside).unwrap();
+    assert_allowed_on_search_path(
+        &home,
+        &repository,
+        &beside,
+        "git worktree add -b flat ../app-flat origin/main && git -C ../app-flat status --short",
+    );
+}
+
+/// A relative entry is read against the shell's own directory, which a
+/// routed chain never moves. `../app-flat/bin` from the repository is the
+/// checkout's own folder, so it revokes the proof there as an absolute
+/// spelling of it would.
+#[test]
+fn a_relative_search_path_entry_inside_a_routed_checkout_revokes_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-path-routed-relative");
+    assert_reviewed_on_search_path(
+        &home,
+        &repository,
+        std::path::Path::new("../app-flat/bin"),
+        "git worktree add -b flat ../app-flat origin/main && git -C ../app-flat status --short",
+    );
+}
+
+/// APFS reads every normalization of a name as the same folder, so an entry
+/// spelled with a combining accent names the checkout `git worktree add`
+/// creates from the composed spelling. Folding case alone leaves the two
+/// unequal, and reading the entry as outside the checkout would hand the
+/// chain a proof over programs the checked-out ref supplies.
+#[test]
+fn a_decomposed_entry_inside_the_new_checkout_revokes_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-path-normalization");
+    let parent = repository.parent().unwrap().to_path_buf();
+    let add = "git worktree add -b flat ../caf\u{e9} origin/main";
+    for entry in [
+        parent.join("cafe\u{301}").join("bin"),
+        parent.join("cafe\u{301}"),
+    ] {
+        assert_reviewed_on_search_path(
+            &home,
+            &repository,
+            &entry,
+            &format!("{add} && cd ../caf\u{e9} && git status --short"),
+        );
+    }
+}
+
+/// Withholding the proof over a pair no comparison can settle must not
+/// withhold it over a name that differs in ASCII. An ASCII name is its own
+/// canonical form, so a folder whose name carries an accent is beside the
+/// checkout `../app-flat` whatever normalization it is stored in.
+#[test]
+fn an_accented_entry_outside_the_new_checkout_keeps_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-path-accent-beside");
+    let beside = repository.parent().unwrap().join("caf\u{e9}-tools");
+    std::fs::create_dir_all(&beside).unwrap();
+    assert_allowed_on_search_path(
+        &home,
+        &repository,
+        &beside,
+        "git worktree add -b flat ../app-flat origin/main && cd ../app-flat && git status --short",
+    );
+}
