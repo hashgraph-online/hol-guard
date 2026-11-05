@@ -22,30 +22,34 @@ _FAILED = "failed"
 
 
 def failed_acknowledgement(
-    store: GuardStore,
+    previous: object,
     *,
     policy_bundle: object,
     reason: str | None,
     device_id: str,
     device_name: str,
     synced_at: str,
-) -> dict[str, object]:
+) -> dict[str, object] | None:
     """Return the failed acknowledgement to store when Guard rejects or drops a bundle.
 
-    The native builder retracts the stored acknowledgement when it told Cloud a
-    bundle was delivered, and otherwise reports ``policy_bundle``. A native
-    outage is not a verdict about the bundle, so it reports nothing.
+    ``previous`` is the stored acknowledgement. The native builder retracts it
+    when it told Cloud a bundle was delivered, and otherwise reports
+    ``policy_bundle``. ``None`` means there is nothing to report: a native
+    outage is not a verdict about the bundle.
     """
 
     if not reason or reason == NATIVE_UNAVAILABLE_REJECTION:
-        return {}
-    return policy_bundle_failure_acknowledgement(
-        device_id=device_id,
-        device_name=device_name,
-        policy_bundle=policy_bundle,
-        error_code=reason,
-        previous=store.get_sync_payload(_ACK_STATE_KEY),
-        synced_at=synced_at,
+        return None
+    return (
+        policy_bundle_failure_acknowledgement(
+            device_id=device_id,
+            device_name=device_name,
+            policy_bundle=policy_bundle,
+            error_code=reason,
+            previous=previous,
+            synced_at=synced_at,
+        )
+        or None
     )
 
 
@@ -92,7 +96,7 @@ def cached_bundle_failure_acknowledgement(
         return None
     synced_at = datetime.now(timezone.utc).isoformat()
     failed = failed_acknowledgement(
-        store,
+        acknowledgement,
         policy_bundle=payload,
         reason=reason,
         device_id=device_id,

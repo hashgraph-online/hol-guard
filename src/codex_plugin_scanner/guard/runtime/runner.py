@@ -3877,19 +3877,18 @@ def _clear_policy_bundle_authority_reporting_failure(
 ) -> None:
     """Clear remote authority and leave a ``failed`` acknowledgement for Cloud."""
 
-    failed = failed_acknowledgement(
-        store,
-        policy_bundle=policy_bundle,
-        reason=reason,
-        device_id=device_id,
-        device_name=device_name,
-        synced_at=now,
-    )
     store.clear_policy_bundle_authority(
         now,
         policy_bundle_last_error=policy_bundle_last_error,
         managed_controls_publish=managed_controls_publish,
-        policy_bundle_ack=failed,
+        policy_bundle_ack=lambda stored: failed_acknowledgement(
+            stored,
+            policy_bundle=policy_bundle,
+            reason=reason,
+            device_id=device_id,
+            device_name=device_name,
+            synced_at=now,
+        ),
     )
 
 

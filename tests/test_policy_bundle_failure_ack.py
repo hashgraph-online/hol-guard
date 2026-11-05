@@ -82,7 +82,7 @@ def test_clearing_authority_stores_the_failed_acknowledgement(tmp_path: Path) ->
     store.clear_policy_bundle_authority(
         "2026-04-19T00:05:00+00:00",
         policy_bundle_last_error={"reason": "wrong_workspace"},
-        policy_bundle_ack=failed,
+        policy_bundle_ack=lambda _stored: failed,
     )
 
     assert store.get_sync_payload("policy_bundle") is None
