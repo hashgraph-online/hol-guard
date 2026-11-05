@@ -274,7 +274,22 @@ pub(super) fn search_path_outside(
 /// an entry the shell cannot be shown to name a folder outside the
 /// destination counts as inside it.
 fn entry_in_checkout(directory: &Path, destination: &Path) -> bool {
-    normalized_entry(directory).is_none_or(|entry| entry.starts_with(destination))
+    normalized_entry(directory).is_none_or(|entry| {
+        entry.starts_with(destination) || folded(&entry).starts_with(folded(destination))
+    })
+}
+
+/// A path with its letters folded down, so that two spellings of one folder
+/// compare equal on a filesystem that ignores case. macOS and Windows both
+/// ship one by default, and there `<parent>/APP-FLAT/bin` is a folder of the
+/// checkout `git worktree add ../app-flat` creates, however it is written.
+///
+/// Folding compares whole components, so a sibling whose name merely begins
+/// with the destination's stays outside it. Where the filesystem does keep
+/// case, folding can only read an entry outside the checkout as inside it,
+/// which withholds the proof and leaves the chain reviewed.
+fn folded(path: &Path) -> PathBuf {
+    PathBuf::from(path.as_os_str().to_string_lossy().to_lowercase())
 }
 
 /// A search path entry resolved the way the kernel will resolve it once the

@@ -144,3 +144,22 @@ fn a_resolved_entry_outside_the_new_checkout_keeps_the_proof() {
         );
     }
 }
+
+/// macOS and Windows ship filesystems that ignore case, so an entry spelled
+/// `APP-FLAT/bin` names the folder `git worktree add ../app-flat` creates and
+/// the ref fills. Comparing the spelling alone would read it as outside the
+/// checkout and hand the chain a proof over programs that ref supplies.
+#[test]
+fn a_case_variant_entry_inside_the_new_checkout_revokes_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-path-case");
+    let parent = repository.parent().unwrap().to_path_buf();
+    let add = "git worktree add -b flat ../app-flat origin/main";
+    for entry in [parent.join("APP-FLAT").join("bin"), parent.join("App-Flat")] {
+        assert_reviewed_on_search_path(
+            &home,
+            &repository,
+            &entry,
+            &format!("{add} && cd ../app-flat && git status --short"),
+        );
+    }
+}
