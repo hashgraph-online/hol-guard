@@ -4360,6 +4360,7 @@ clearer UX and an implementation plan with technical references.
             *,
             session: dict[str, object],
             auth_context: dict[str, object] | None = None,
+            catalog_failures: list[Exception] | None = None,
         ) -> dict[str, object]:
             assert current_store is store
             call_order.append("runtime")
@@ -4490,6 +4491,7 @@ clearer UX and an implementation plan with technical references.
             *,
             session: dict[str, object],
             auth_context: dict[str, object] | None = None,
+            catalog_failures: list[Exception] | None = None,
         ) -> dict[str, object]:
             assert current_store is store
             assert auth_context is shared_auth_context

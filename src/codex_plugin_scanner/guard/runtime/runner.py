@@ -1826,8 +1826,14 @@ def sync_runtime_session(
     *,
     session: dict[str, object],
     auth_context: dict[str, object] | None = None,
+    catalog_failures: list[Exception] | None = None,
 ) -> dict[str, object]:
-    """Publish the active Guard runtime session so the dashboard can show the machine immediately."""
+    """Publish the active Guard runtime session so the dashboard can show the machine immediately.
+
+    A caller that passes ``catalog_failures`` takes over a failed Extension
+    catalog step: the error is appended there instead of raised, so the caller
+    can finish the rest of its sync before reporting it.
+    """
 
     resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
     sync_url = _sync.normalized_runtime_sessions_sync_url(
@@ -1890,14 +1896,23 @@ def sync_runtime_session(
         raise RuntimeError(_sync_url_error_message(error)) from error
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
-    catalog_sync = _sync_extension_catalog_from_runtime_handshake(
-        store=store,
-        guard_home=store.guard_home,
-        auth_context=resolved_auth_context,
-        runtime_sync_url=sync_url,
-        runtime_response=payload,
-        session_payload=session_payload,
-    )
+    try:
+        catalog_sync = _sync_extension_catalog_from_runtime_handshake(
+            store=store,
+            guard_home=store.guard_home,
+            auth_context=resolved_auth_context,
+            runtime_sync_url=sync_url,
+            runtime_response=payload,
+            session_payload=session_payload,
+        )
+    except Exception as error:
+        if catalog_failures is None:
+            raise
+        catalog_failures.append(error)
+        catalog_sync = {
+            "extension_catalog_sync_status": "failed",
+            "extension_catalog_sync_reason": "catalog_sync_failed",
+        }
     synced_at = _sync_timestamp(payload)
     summary = runtime_session_success_summary(
         session_payload=session_payload,
@@ -1977,6 +1992,10 @@ def sync_local_guard_cloud_proof(
         resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
         device_id = store.get_or_create_installation_id()
         workspace_id = store.get_cloud_workspace_id()
+        # The policy bundle arrives with the receipts sync. A failed Extension
+        # catalog step must not keep it from this device, so it is reported
+        # only after the receipts sync has delivered and acknowledged policy.
+        catalog_failures: list[Exception] = []
         runtime_summary = sync_runtime_session(
             store,
             session=_local_guard_runtime_session(
@@ -1984,6 +2003,7 @@ def sync_local_guard_cloud_proof(
                 workspace_id=workspace_id,
             ),
             auth_context=resolved_auth_context,
+            catalog_failures=catalog_failures,
         )
         receipts_summary = sync_receipts(
             store,
@@ -1996,6 +2016,8 @@ def sync_local_guard_cloud_proof(
             force_aibom=force_aibom,
             managed_controls_publish=managed_controls_publish,
         )
+        if catalog_failures:
+            raise catalog_failures[0]
         summary = dict(receipts_summary)
         summary.update(
             {
