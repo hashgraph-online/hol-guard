@@ -178,3 +178,63 @@ fn only_the_inert_node_options_variable_itself_is_carried() {
         Some("--trace-warnings"),
     );
 }
+
+/// The sink's own arguments. The route this test drives never asks the
+/// resident, so none of these values is read.
+fn arguments() -> Arguments {
+    Arguments {
+        harness: "claude-code".to_owned(),
+        guard_home: std::path::PathBuf::from("/guard"),
+        workspace: std::path::PathBuf::from("/work"),
+        request_file: std::path::PathBuf::from("/work/request.json"),
+        request_sha256: String::new(),
+        home: std::path::PathBuf::from("/home"),
+    }
+}
+
+#[test]
+fn settling_a_run_is_what_carries_the_written_options() {
+    // Driven through `settle` rather than the helper it ends with: the run
+    // reaches the wiring, not the helper, and a route that settles its
+    // environment without that step starts Node on the caller's variables or
+    // drops the ones the reviewed command wrote.
+    let arguments = arguments();
+    let authority = Authority {
+        arguments: &arguments,
+        workspace: "/work".to_owned(),
+    };
+    let plan = plan(
+        NODE_TEST_PROFILE,
+        &[("NODE_OPTIONS", "--experimental-vm-modules")],
+    );
+    assert_ne!(
+        plan.backend,
+        backend::BUBBLEWRAP,
+        "the sandbox probe would run"
+    );
+    let mut environment = BTreeMap::from([
+        ("NODE_OPTIONS".to_owned(), "--require ./x.js".to_owned()),
+        ("NODE_PATH".to_owned(), "/caller/modules".to_owned()),
+        ("CI".to_owned(), "1".to_owned()),
+    ]);
+    let signals = process::Signals::install();
+
+    settle(
+        &Map::new(),
+        std::path::Path::new("/work"),
+        &authority,
+        &plan,
+        &mut environment,
+        &signals,
+        5,
+    )
+    .expect("the run settles with no probe to make");
+
+    // The caller's own Node variables went; the command's own value is back.
+    assert_eq!(
+        environment.get("NODE_OPTIONS").map(String::as_str),
+        Some("--experimental-vm-modules"),
+    );
+    assert_eq!(environment.get("NODE_PATH"), None);
+    assert_eq!(environment.get("CI").map(String::as_str), Some("1"));
+}

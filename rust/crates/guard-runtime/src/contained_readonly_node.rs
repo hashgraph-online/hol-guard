@@ -35,10 +35,32 @@ pub(in super::super) fn settle(
 ) -> Outcome<()> {
     environment.remove("NODE_OPTIONS");
     environment.remove("NODE_PATH");
-    if plan.backend != backend::BUBBLEWRAP {
-        carry_written_options(plan, environment);
-        return Ok(());
+    if plan.backend == backend::BUBBLEWRAP {
+        settle_wasm_trap_option(
+            payload,
+            workspace,
+            authority,
+            plan,
+            environment,
+            signals,
+            timeout,
+        )?;
     }
+    carry_written_options(plan, environment);
+    Ok(())
+}
+
+/// Set `--disable-wasm-trap-handler` when the planned runtime takes it,
+/// asked under the same read-only sandbox the run itself gets.
+fn settle_wasm_trap_option(
+    payload: &Map<String, Value>,
+    workspace: &Path,
+    authority: &Authority<'_>,
+    plan: &ReadonlyPlan,
+    environment: &mut BTreeMap<String, String>,
+    signals: &process::Signals,
+    timeout: u64,
+) -> Outcome<()> {
     let help = vec![plan.executable.clone(), "--help".to_owned()];
     let mut contexts = vec![path_text(workspace)?];
     if !contexts.contains(&plan.cwd) {
@@ -94,12 +116,13 @@ pub(in super::super) fn settle(
             String::from_utf8_lossy(WASM_TRAP_OPTION).into_owned(),
         );
     }
-    carry_written_options(plan, environment);
     Ok(())
 }
 
 /// Put back the `NODE_OPTIONS` the command wrote in front of the runner,
-/// behind whatever Guard itself settled.
+/// behind whatever Guard itself settled. `settle` is the one caller, and it
+/// calls this on its way out whichever backend it settled, so a route added
+/// later cannot reach the runner without it.
 ///
 /// The review reads such a prefix as inert and projects it away before it
 /// classifies the command, so the sink receives a run that was authorized

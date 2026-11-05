@@ -406,3 +406,87 @@ fn a_pattern_never_widens_what_else_counts_as_data() {
         );
     }
 }
+
+#[test]
+fn a_dropped_word_forgets_what_the_prefix_carried_under_the_same_name() {
+    // The run reads the last assignment, so `NODE_OPTIONS=` is a command that
+    // starts Node with no options at all. The empty value is no inert
+    // `NODE_OPTIONS`, so the peel drops it as plain data; carrying the word in
+    // front of it would hand the run options the command had already cleared.
+    let (core, carried) = split(
+        &[
+            "NODE_OPTIONS=--no-warnings",
+            "NODE_OPTIONS=",
+            "node",
+            "--test",
+        ],
+        true,
+    );
+
+    assert_eq!(core, words(&["node", "--test"]));
+    assert!(carried.is_empty(), "{carried:?}");
+}
+
+#[test]
+fn a_carried_word_behind_a_dropped_one_is_still_the_value_the_run_reads() {
+    // Only the word in front of the drop is forgotten. A later assignment is
+    // the one the run reads, so the peel carries it.
+    let (core, carried) = split(
+        &[
+            "NODE_OPTIONS=--no-warnings",
+            "NODE_OPTIONS=",
+            "NODE_OPTIONS=--max-old-space-size=4096",
+            "node",
+            "--test",
+        ],
+        true,
+    );
+
+    assert_eq!(core, words(&["node", "--test"]));
+    assert_eq!(
+        carried,
+        vec![(
+            "NODE_OPTIONS".to_string(),
+            "--max-old-space-size=4096".to_string()
+        )]
+    );
+}
+
+#[test]
+fn a_drop_behind_a_transparent_prefix_forgets_the_same_name() {
+    // The settings a transparent prefix holds are peeled by the same reading,
+    // so the shadow has to reach a name carried on an earlier round too.
+    let (core, carried) = split(
+        &[
+            "NODE_OPTIONS=--no-warnings",
+            "env",
+            "NODE_OPTIONS=",
+            "CI=1",
+            "node",
+            "--test",
+        ],
+        true,
+    );
+
+    assert_eq!(core, words(&["node", "--test"]));
+    assert_eq!(carried, vec![("CI".to_string(), "1".to_string())]);
+}
+
+#[test]
+fn a_drop_forgets_only_its_own_name() {
+    let (core, carried) = split(
+        &[
+            "NODE_OPTIONS=--no-warnings",
+            "REPORT_DIR=/tmp/r",
+            "node",
+            "--test",
+        ],
+        true,
+    );
+
+    assert_eq!(core, words(&["node", "--test"]));
+    assert_eq!(
+        carried,
+        vec![("NODE_OPTIONS".to_string(), "--no-warnings".to_string())]
+    );
+}
