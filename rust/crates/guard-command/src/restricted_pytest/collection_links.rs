@@ -1,4 +1,3 @@
-use super::super::credentials::patterns;
 use super::*;
 use std::collections::{BTreeSet, VecDeque};
 

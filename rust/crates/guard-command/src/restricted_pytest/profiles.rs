@@ -1,6 +1,6 @@
 //! Native OS policy construction for a contained launch plan.
 use super::authority::{ancestor_paths, dedupe_parent_paths, runtime_roots};
-use super::credentials::{denials, seatbelt_string};
+use super::credentials::{denials, patterns, seatbelt_string};
 use super::framework_grants::{framework_grants, sealed_on_disk, FrameworkGrants};
 use super::*;
 use collection_links::collection_link_metadata;
