@@ -298,3 +298,34 @@ def test_hook_worker_quarantine_retry_stays_inside_the_close_deadline(monkeypatc
         started = time.monotonic()
         assert worker.close_contained(deadline_monotonic=started + 0.05) is False
         assert time.monotonic() - started < 0.5
+
+
+def test_quarantine_retry_keeps_unvisited_helpers_once_the_deadline_passes(monkeypatch):
+    visited: list[object] = []
+
+    class ExitedHelper:
+        pid = 987_656
+        stdin = stdout = stderr = None
+
+        def poll(self) -> int:
+            return 0
+
+        def wait(self, timeout: float | None = None) -> int:
+            del timeout
+            time.sleep(0.3)
+            return 0
+
+    helpers = [
+        launch_runtime._QuarantinedHookProcess(cast("subprocess.Popen[bytes]", ExitedHelper()), None, ())
+        for _ in range(3)
+    ]
+    latch = threading.Event()
+    latch.set()
+    monkeypatch.setattr(launch_runtime, "_HOOK_PROCESS_CONTAINMENT_FAILED", latch)
+    monkeypatch.setattr(launch_runtime, "_HOOK_PROCESS_QUARANTINE", list(helpers))
+    monkeypatch.setattr(launch_runtime, "_kill_hook_process", lambda process, _job: visited.append(process) or True)
+
+    assert launch_runtime.hook_processes_contained(deadline_monotonic=time.monotonic() + 0.2) is False
+    assert visited == [helpers[0].process]
+    assert helpers[1:] == launch_runtime._HOOK_PROCESS_QUARANTINE
+    assert latch.is_set()

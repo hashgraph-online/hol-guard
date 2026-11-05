@@ -120,7 +120,11 @@ def _retry_quarantined_hook_processes(*, deadline_monotonic: float | None = None
         retry_deadline = min(retry_deadline, deadline_monotonic)
     try:
         survivors: list[_QuarantinedHookProcess] = []
-        for quarantined in _HOOK_PROCESS_QUARANTINE:
+        for index, quarantined in enumerate(_HOOK_PROCESS_QUARANTINE):
+            if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+                # Leave unvisited helpers quarantined for the next retry.
+                survivors.extend(_HOOK_PROCESS_QUARANTINE[index:])
+                break
             contained = _kill_hook_process(quarantined.process, quarantined.windows_job)
             remaining = max(0.0, retry_deadline - time.monotonic())
             try:
