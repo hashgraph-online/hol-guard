@@ -254,7 +254,9 @@ def pytest_tail(python: Path, project: Path, *args: str) -> str:
     except subprocess.TimeoutExpired:
         return f"timed out after {CHECK_TIMEOUT}s"
     lines = re.sub(r"\x1b\[[0-9;]*m", "", done.stdout + done.stderr).strip().splitlines()
-    return lines[-1] if lines else "no output"
+    last = lines[-1] if lines else "no output"
+    # A sandbox or pytest failure can still end on a summary line that reads as a pass.
+    return last if done.returncode == 0 else f"exit status {done.returncode}: {last}"
 
 
 def check_step(python: Path, project: Path) -> dict:
@@ -274,7 +276,10 @@ def check_step(python: Path, project: Path) -> dict:
 def passed(results: dict) -> bool:
     """Every check's pytest summary line reports passes and no failures ("xfailed" is not a failure)."""
     return all(
-        " passed" in value and not re.search(r"\b(failed|errors?)\b", value) and "no output" not in value
+        " passed" in value
+        and not re.search(r"\b(failed|errors?)\b", value)
+        and "no output" not in value
+        and not value.startswith("exit status")
         for value in results.values()
     )
 

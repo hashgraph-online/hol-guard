@@ -190,6 +190,15 @@ def test_report_leaves_errored_reps_out_of_the_statistics() -> None:
     assert "| cigar | 2 | 1 | NO | 2,000,000 |" in bench.markdown(bench.report(rows, "base", ["cigar"]))
 
 
+def test_report_drops_an_errored_rep_once_it_reran_clean() -> None:
+    crashed = _row("cigar", 2, 0, passed=False) | {"error": "step 3: codex exec exited 1"}
+    rows = [_row("base", 1, 4_000_000), _row("cigar", 1, 2_000_000), crashed, _row("cigar", 2, 2_000_000)]
+    stats = bench.report(rows, "base", ["cigar"])["arms"]["cigar"]
+    assert stats["n"] == 2
+    assert stats["errored"] == 0
+    assert stats["all_passed"] is True
+
+
 def test_report_needs_the_base_arm() -> None:
     with pytest.raises(ValueError, match="base"):
         bench.report([_row("cigar", 1, 1)], "base", ["cigar"])
@@ -274,6 +283,17 @@ def test_checks_run_inside_the_codex_sandbox_without_network(tmp_path: Path, mon
     assert command[command.index("--") + 1 :][:3] == ["python", "-m", "pytest"]
     assert seen["env"]["CODEX_HOME"] == str(tmp_path / "sandbox_home")
     assert seen["cwd"] == project
+
+
+def test_a_check_that_exits_nonzero_does_not_pass(tmp_path: Path, monkeypatch) -> None:
+    project = tmp_path / "projects" / "base-r1"
+    project.mkdir(parents=True)
+    monkeypatch.setattr(
+        bench.subprocess, "run", lambda command, **_: subprocess.CompletedProcess(command, 1, "1 passed in 0.1s\n", "")
+    )
+    tail = bench.pytest_tail(Path("python"), project, "tests")
+    assert tail == "exit status 1: 1 passed in 0.1s"
+    assert not bench.passed({"suite": tail})
 
 
 def _git(path: Path, *args: str) -> str:

@@ -12,8 +12,9 @@ EFFORT = "medium"
 
 def summarize(rows: list[dict]) -> dict:
     # A rep whose codex exec crashed or timed out holds partial (or zero) tokens: count it, keep it out of
-    # the statistics.
-    failed = [row for row in rows if row.get("error")]
+    # the statistics. Once a clean rerun of the same rep is recorded, the errored row no longer counts.
+    clean = {row["rep"] for row in rows if not row.get("error")}
+    failed = [row for row in rows if row.get("error") and row["rep"] not in clean]
     rows = [row for row in rows if not row.get("error")]
     inputs = [row["tokens"]["input_tokens"] for row in rows]
     return {
