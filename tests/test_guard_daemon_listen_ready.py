@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import sqlite3
 import sys
 import threading
@@ -75,6 +76,78 @@ def test_daemon_serve_publishes_listen_state_before_artifact_reconciliation(
         assert refresh["running"] is False
         assert refresh["sync_running"] is False
     finally:
+        release_reconcile.set()
+        daemon.stop()
+        worker.join(timeout=8)
+        assert worker.is_alive() is False
+
+
+def test_request_held_for_its_headers_is_answered_during_cold_home_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Desktop opens the published URL while the daemon is still doing its
+    # cold-home work. A connection accepted before its headers arrive is held
+    # for the unclassified-connection watchdog. If that watchdog only starts
+    # after the work, the request waits it out and is then closed with no
+    # response, which the Desktop window shows as a terminated connection.
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    reconcile_started = threading.Event()
+    release_reconcile = threading.Event()
+
+    def reconcile(
+        _store: GuardStore,
+        *,
+        home_dir: Path | None = None,
+    ) -> RuntimeArtifactReconciliation:
+        del home_dir
+        reconcile_started.set()
+        assert release_reconcile.wait(timeout=8)
+        return RuntimeArtifactReconciliation(
+            refreshed_launchers=(),
+            repaired_harnesses=(),
+            repaired_package_managers=(),
+            failed_harnesses=(),
+            errors=(),
+        )
+
+    monkeypatch.setattr(daemon_server_module, "reconcile_runtime_artifacts", reconcile)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
+    http_server = daemon._server
+
+    worker = threading.Thread(target=daemon.serve, name="guard-daemon-held-request", daemon=True)
+    worker.start()
+    client = None
+    try:
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if load_guard_daemon_url(store.guard_home):
+                break
+            time.sleep(0.05)
+        assert load_guard_daemon_url(store.guard_home) is not None
+        assert reconcile_started.wait(timeout=8)
+
+        client = socket.create_connection(("127.0.0.1", daemon.port), timeout=2)
+        held = False
+        deadline = time.monotonic() + 1
+        while not held and time.monotonic() < deadline:
+            with http_server.unclassified_connections_lock:
+                held = bool(http_server.pending_classifications)
+            if not held:
+                time.sleep(0.005)
+        assert held, "the connection was not held for its request headers"
+
+        # Send the request well inside the 0.4 s header deadline.
+        client.sendall(b"GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        try:
+            reply = client.recv(64)
+        except TimeoutError:
+            reply = b""
+        assert reply.startswith(b"HTTP/1."), "a held request got no answer during cold-home work"
+        assert release_reconcile.is_set() is False
+    finally:
+        if client is not None:
+            client.close()
         release_reconcile.set()
         daemon.stop()
         worker.join(timeout=8)
