@@ -243,15 +243,23 @@ pub(super) fn run(
         site_packages: destination.join("site-packages"),
         work_dir: work.clone(),
     };
+    // A deadline that fires here surfaces as a cancellation; report it as the deadline.
+    let failed = |e: guard_context_assistance::RuntimeError| {
+        if deadline.expired.load(Ordering::Acquire) {
+            error("install_deadline_exceeded")
+        } else {
+            error(e.code())
+        }
+    };
     let approval =
         guard_context_assistance::inspect_release_bundle_cancellable(&selection, release, &cancel)
-            .map_err(|e| error(e.code()))?;
+            .map_err(failed)?;
     if approval.python_sha256 != interpreter.python_sha256 {
         return Err(error("interpreter_changed"));
     }
     let mut runtime =
         VerifiedRuntime::start_release_cancellable(selection, &approval, release, cancel)
-            .map_err(|e| error(e.code()))?;
+            .map_err(failed)?;
     let result = (|| {
         if runtime.status().interpreter != interpreter.facts {
             return Err(error("interpreter_changed"));
