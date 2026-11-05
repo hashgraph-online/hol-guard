@@ -9,10 +9,15 @@ counts is the sum of `token_usage_record` input tokens in the thread's
 rollout, which includes compaction calls; `turn.completed` usage and the
 per-step `session` rows are cumulative and must not be summed.
 
-    bench_guard_cigar_long_task.py fixture --work DIR
-    bench_guard_cigar_long_task.py arm-init base --work DIR
-    bench_guard_cigar_long_task.py run --work DIR --arm base --reps 5
-    bench_guard_cigar_long_task.py report --work DIR --base base cigar
+    bench_guard_cigar_long_task.py --work DIR fixture
+    bench_guard_cigar_long_task.py --work DIR arm-init base
+    bench_guard_cigar_long_task.py --work DIR run --arm base --reps 5
+    bench_guard_cigar_long_task.py --work DIR report --base base cigar
+
+The agent edits the fixture under Codex's workspace-write sandbox, but the
+suite and acceptance checks then run that edited code on the host, as any
+test run of a checkout does. Run the benchmark under a scratch account or
+machine, not next to anything the fixture's tests could reach.
 """
 
 from __future__ import annotations
@@ -44,7 +49,9 @@ TEAMMATE_STEP = 4
 ACCEPTANCE = ("t1", "t2", "s3")
 READ_COMMANDS = {"cat", "sed", "nl", "head", "tail", "awk", "less", "bat"}
 LIST_COMMANDS = {"ls", "find", "fd", "tree"}
+TEST_COMMANDS = {"pytest", "tox", "nox", "py.test"}
 STEP_TIMEOUT = 3600
+CHECK_TIMEOUT = 600
 
 # The teammate's change at step 4: the same two bugs as the single-task
 # variant, applied as exact text so the step cannot drift.
@@ -79,8 +86,10 @@ def kind(command: str) -> str:
 
 
 def segment_kind(segment: str) -> str:
-    first = re.split(r"\s+", segment.strip().split("|")[0].strip() or "?")[0]
-    if re.search(r"pytest|unittest|tox|nox", segment):
+    words = re.split(r"\s+", segment.strip().split("|")[0].strip() or "?")
+    first = words[0]
+    module = words[2] if len(words) > 2 and words[1] == "-m" else ""
+    if first in TEST_COMMANDS or module in ("pytest", "unittest", "tox", "nox"):
         return "test"
     if first in READ_COMMANDS:
         return "read"
@@ -161,6 +170,12 @@ def git(project: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=project, env=env, check=True, capture_output=True, text=True).stdout
 
 
+def commit(project: Path, message: str, *paths: str) -> None:
+    """Commit the given paths, or everything when none are given, as the bench identity."""
+    git(project, "add", "-A", "--", *paths)
+    git(project, "-c", "user.name=bench", "-c", "user.email=bench@example.invalid", "commit", "-qm", message)
+
+
 def fixture(work: Path) -> Path:
     """The fixture checkout at the pinned commit, with pytest in its own venv."""
     pristine = work / "pristine"
@@ -204,29 +219,24 @@ def fresh_project(work: Path, arm: str, rep: int) -> Path:
     shutil.copytree(work / "pristine", project, symlinks=True)
     with (project / ".git" / "info" / "exclude").open("a", encoding="utf-8") as exclude:
         exclude.write(".bench_accept/\n")
-    git(project, "add", "-A")
-    git(
-        project,
-        "-c",
-        "user.name=bench",
-        "-c",
-        "user.email=bench@example.invalid",
-        "commit",
-        "-qm",
-        "start",
-        "--allow-empty",
-    )
+    dirty = git(project, "status", "--porcelain").strip()
+    if dirty or git(project, "rev-parse", "HEAD^{tree}").strip() != FIXTURE_TREE:
+        raise RuntimeError(f"{project} is not a clean copy of the pinned fixture")
     return project
 
 
 def pytest_tail(python: Path, project: Path, *args: str) -> str:
-    done = subprocess.run(
-        [str(python), "-m", "pytest", "-q", "-p", "no:cacheprovider", *args],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        env=dict(os.environ, PYTHONPATH=str(project / "src")),
-    )
+    try:
+        done = subprocess.run(
+            [str(python), "-m", "pytest", "-q", "-p", "no:cacheprovider", *args],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            timeout=CHECK_TIMEOUT,
+            env=dict(os.environ, PYTHONPATH=str(project / "src")),
+        )
+    except subprocess.TimeoutExpired:
+        return f"timed out after {CHECK_TIMEOUT}s"
     lines = re.sub(r"\x1b\[[0-9;]*m", "", done.stdout + done.stderr).strip().splitlines()
     return lines[-1] if lines else "no output"
 
@@ -253,7 +263,13 @@ def passed(results: dict) -> bool:
     )
 
 
-def codex_exec(project: Path, codex_home: Path, home: Path | None, prompt: str, thread: str | None, out: Path) -> None:
+class StepError(RuntimeError):
+    """A Codex step did not finish; the rep is recorded as failed and the next one starts."""
+
+
+def codex_exec(
+    project: Path, codex_home: Path, home: Path | None, python: Path, prompt: str, thread: str | None, out: Path
+) -> None:
     command = ["codex", "exec"]
     if thread:
         command.append("resume")
@@ -261,20 +277,19 @@ def codex_exec(project: Path, codex_home: Path, home: Path | None, prompt: str, 
     if thread:
         command.append(thread)
     command.append(prompt)
-    env = dict(os.environ, CODEX_HOME=str(codex_home), PYTHONPATH=str(project / "src"))
+    # The fixture venv goes first on PATH so the agent's `python`/`pytest` are the checked ones.
+    path = os.pathsep.join([str(python.parent), os.environ.get("PATH", "")])
+    env = dict(os.environ, CODEX_HOME=str(codex_home), PYTHONPATH=str(project / "src"), PATH=path)
     if home:
         env["HOME"] = str(home)
     with out.open("w", encoding="utf-8") as stdout, out.with_suffix(".err").open("a", encoding="utf-8") as stderr:
-        subprocess.run(
-            command,
-            cwd=project,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=stdout,
-            stderr=stderr,
-            timeout=STEP_TIMEOUT,
-            check=False,
-        )
+        try:
+            streams = {"stdin": subprocess.DEVNULL, "stdout": stdout, "stderr": stderr}
+            done = subprocess.run(command, cwd=project, env=env, timeout=STEP_TIMEOUT, **streams)
+        except subprocess.TimeoutExpired as error:
+            raise StepError(f"codex exec timed out after {STEP_TIMEOUT}s") from error
+    if done.returncode != 0:
+        raise StepError(f"codex exec exited {done.returncode}; see {out.with_suffix('.err')}")
 
 
 def thread_of(events: list[dict]) -> str | None:
@@ -290,6 +305,8 @@ def run_session(work: Path, arm: str, rep: int) -> dict:
     home = arm_dir(work, arm) / "home"
     if not (codex_home / "config.toml").exists():
         raise SystemExit(f"arm {arm!r} has no codex_home/config.toml under {arm_dir(work, arm)}")
+    if any(row["arm"] == arm and row["rep"] == rep for row in load_results(work)):
+        raise SystemExit(f"{arm} r{rep} is already recorded under {work / 'runs'}; pick another --first-rep")
     python = work / "venv" / "bin" / "python"
     project = fresh_project(work, arm, rep)
     runs = work / "runs"
@@ -298,24 +315,23 @@ def run_session(work: Path, arm: str, rep: int) -> dict:
     steps = []
     all_events: list[dict] = []
     started = time.time()
+    error = None
     for step in range(1, STEPS + 1):
         if step == TEAMMATE_STEP:
+            # The agent's own work so far is committed first so the teammate commit holds only its two edits.
+            if git(project, "status", "--porcelain").strip():
+                commit(project, f"agent work through step {step - 1}")
             apply_teammate_change(project)
-            git(project, "add", "-A")
-            git(
-                project,
-                "-c",
-                "user.name=bench",
-                "-c",
-                "user.email=bench@example.invalid",
-                "commit",
-                "-qm",
-                "teammate change",
-            )
+            commit(project, "teammate change", *(relative for relative, _, _ in TEAMMATE_EDITS))
         prompt = (DATA / "steps" / f"s{step}.txt").read_text(encoding="utf-8").strip()
         out = runs / f"{arm}-r{rep}-s{step}.jsonl"
         at = time.time()
-        codex_exec(project, codex_home, home if home.is_dir() else None, prompt, thread, out)
+        try:
+            codex_exec(project, codex_home, home if home.is_dir() else None, python, prompt, thread, out)
+        except StepError as failure:
+            error = f"step {step}: {failure}"
+            print(f"{arm} r{rep} s{step} FAIL {error}", flush=True)
+            break
         events = events_of(out)
         all_events.extend(events)
         thread = thread or thread_of(events)
@@ -326,9 +342,10 @@ def run_session(work: Path, arm: str, rep: int) -> dict:
         print(
             f"{arm} r{rep} s{step} {thread} {'pass' if steps[-1]['passed'] else 'FAIL'} {checks['suite']}", flush=True
         )
-    rollout = rollout_path(codex_home, thread)
-    if rollout is None:
-        raise RuntimeError(f"no rollout for thread {thread} under {codex_home}")
+    rollout = rollout_path(codex_home, thread) if thread else None
+    tokens = rollout_sum(rollout) if rollout else empty_tokens()
+    if error is None and (rollout is None or not tokens["requests"]):
+        raise RuntimeError(f"no rollout with usage records for thread {thread} under {codex_home}")
     result = {
         "arm": arm,
         "rep": rep,
@@ -337,15 +354,22 @@ def run_session(work: Path, arm: str, rep: int) -> dict:
         "fixture": FIXTURE_SHA,
         "model": MODEL,
         "effort": EFFORT,
-        "rollout": str(rollout),
-        "tokens": rollout_sum(rollout),
+        "rollout": str(rollout) if rollout else None,
+        "tokens": tokens,
         "tool_output": output_breakdown(all_events),
         "steps": steps,
-        "passed": steps[-1]["passed"],
+        "error": error,
+        "passed": error is None and len(steps) == STEPS and steps[-1]["passed"],
     }
     with (runs / "results.jsonl").open("a", encoding="utf-8") as sink:
         sink.write(json.dumps(result) + "\n")
     return result
+
+
+def empty_tokens() -> dict:
+    return dict.fromkeys(
+        ("input_tokens", "cached_input_tokens", "uncached_input_tokens", "output_tokens", "requests", "compactions"), 0
+    )
 
 
 def load_results(work: Path) -> list[dict]:
@@ -379,9 +403,10 @@ def report(rows: list[dict], base: str, arms: list[str]) -> dict:
     by_arm = collections.defaultdict(list)
     for row in rows:
         by_arm[row["arm"]].append(row)
-    if base not in by_arm:
-        raise ValueError(f"no runs for base arm {base!r}")
-    summary = {arm: summarize(by_arm[arm]) for arm in [base, *arms] if arm in by_arm}
+    missing = [arm for arm in [base, *arms] if arm not in by_arm]
+    if missing:
+        raise ValueError(f"no recorded runs for arm(s) {', '.join(missing)}; recorded: {', '.join(sorted(by_arm))}")
+    summary = {arm: summarize(by_arm[arm]) for arm in dict.fromkeys([base, *arms])}
     base_mean = summary[base]["mean_input"]
     for stats in summary.values():
         stats["change_vs_base"] = round((stats["mean_input"] - base_mean) / base_mean, 3) if base_mean else 0.0

@@ -1,13 +1,13 @@
 import json
-import sys
+import subprocess
 from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO / "scripts"))
+from tests.delivery_scripts import script
 
-import bench_guard_cigar_long_task as bench  # noqa: E402
+# Imported through the helper so scripts/ (which has its own `ci` directory) never stays on sys.path.
+bench = script("bench_guard_cigar_long_task")
 
 
 def _usage(thread: str, input_tokens: int, cached: int) -> str:
@@ -77,6 +77,10 @@ def test_rollout_path_is_none_without_sessions(tmp_path: Path) -> None:
         ("/bin/zsh -lc \"git diff --check; git status --short; sed -n '284,340p' src/click/types.py\"", "read"),
         ("/bin/zsh -lc \"rg -n 'Choice' src tests; git diff --stat\"", "search"),
         ("/bin/zsh -lc \"sed -n '1,20p' a.py; python -m pytest -q tests\"", "test"),
+        ("/bin/zsh -lc 'cat tox.ini'", "read"),
+        ("/bin/zsh -lc 'rg -n pytest setup.cfg'", "search"),
+        ("/bin/zsh -lc 'pytest -q tests/test_types.py'", "test"),
+        ("/bin/zsh -lc 'python3 -m unittest discover'", "test"),
     ],
 )
 def test_kind_classifies_agent_commands(command: str, expected: str) -> None:
@@ -178,6 +182,89 @@ def test_report_changes_against_the_base_mean() -> None:
 def test_report_needs_the_base_arm() -> None:
     with pytest.raises(ValueError, match="base"):
         bench.report([_row("cigar", 1, 1)], "base", ["cigar"])
+
+
+def test_report_rejects_an_arm_with_no_runs() -> None:
+    with pytest.raises(ValueError, match=r"lean.*recorded: base, cigar"):
+        bench.report([_row("base", 1, 1), _row("cigar", 1, 1)], "base", ["cigar", "lean"])
+
+
+def test_passed_rejects_a_timed_out_check() -> None:
+    assert not bench.passed({"suite": "timed out after 600s", "t1": "4 passed in 0.1s"})
+
+
+def test_codex_exec_raises_on_nonzero_exit_and_timeout(tmp_path: Path, monkeypatch) -> None:
+    out = tmp_path / "s1.jsonl"
+    monkeypatch.setattr(bench.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 2))
+    with pytest.raises(bench.StepError, match="exited 2"):
+        bench.codex_exec(tmp_path, tmp_path, None, tmp_path / "bin" / "python", "go", None, out)
+
+    def timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+
+    monkeypatch.setattr(bench.subprocess, "run", timeout)
+    with pytest.raises(bench.StepError, match="timed out"):
+        bench.codex_exec(tmp_path, tmp_path, None, tmp_path / "bin" / "python", "go", None, out)
+
+
+def test_codex_exec_puts_the_fixture_venv_first_on_path(tmp_path: Path, monkeypatch) -> None:
+    seen = {}
+
+    def record(command, **kwargs):
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(bench.subprocess, "run", record)
+    bench.codex_exec(tmp_path, tmp_path, None, tmp_path / "venv" / "bin" / "python", "go", None, tmp_path / "s.jsonl")
+    assert seen["env"]["PATH"].split(bench.os.pathsep)[0] == str(tmp_path / "venv" / "bin")
+
+
+def test_run_session_refuses_a_rep_that_is_already_recorded(tmp_path: Path) -> None:
+    arm = tmp_path / "arms" / "base" / "codex_home"
+    arm.mkdir(parents=True)
+    (arm / "config.toml").write_text("", encoding="utf-8")
+    (tmp_path / "runs").mkdir()
+    (tmp_path / "runs" / "results.jsonl").write_text(json.dumps(_row("base", 1, 1)) + "\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="already recorded"):
+        bench.run_session(tmp_path, "base", 1)
+
+
+def _git(path: Path, *args: str) -> str:
+    return bench.git(path, *args)
+
+
+def test_run_session_records_a_failed_step_and_keeps_the_teammate_commit_small(tmp_path: Path, monkeypatch) -> None:
+    pristine = tmp_path / "pristine"
+    (pristine / "src" / "click").mkdir(parents=True)
+    (pristine / "src" / "click" / "parser.py").write_text("state.rargs.insert(0, explicit_value)\n", encoding="utf-8")
+    (pristine / "src" / "click" / "types.py").write_text("        return bound + dir\n", encoding="utf-8")
+    _git(pristine, "init", "-q")
+    bench.commit(pristine, "fixture")
+    monkeypatch.setattr(bench, "FIXTURE_TREE", _git(pristine, "rev-parse", "HEAD^{tree}").strip())
+    arm = tmp_path / "arms" / "base" / "codex_home"
+    arm.mkdir(parents=True)
+    (arm / "config.toml").write_text("", encoding="utf-8")
+    (tmp_path / "venv" / "bin").mkdir(parents=True)
+    calls = []
+
+    def fake_exec(project, codex_home, home, python, prompt, thread, out):
+        calls.append(prompt)
+        if len(calls) == bench.TEAMMATE_STEP:
+            raise bench.StepError("codex exec exited 1")
+        (project / "agent.txt").write_text(str(len(calls)), encoding="utf-8")
+        out.write_text(json.dumps({"type": "thread.started", "thread_id": "t-1"}) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(bench, "codex_exec", fake_exec)
+    monkeypatch.setattr(bench, "check_step", lambda python, project: {"suite": "1 passed in 0.1s"})
+    result = bench.run_session(tmp_path, "base", 1)
+    assert result["passed"] is False
+    assert result["error"] == "step 4: codex exec exited 1"
+    assert len(result["steps"]) == 3
+    project = tmp_path / "projects" / "base-r1"
+    assert _git(project, "log", "--format=%s", "-1").strip() == "teammate change"
+    assert _git(project, "show", "--stat", "--format=", "HEAD").count("|") == 2
+    assert _git(project, "log", "--format=%s", "-2").splitlines()[1] == "agent work through step 3"
+    assert json.loads((tmp_path / "runs" / "results.jsonl").read_text(encoding="utf-8"))["error"]
 
 
 def test_step_prompts_and_acceptance_tests_ship_with_the_script() -> None:
