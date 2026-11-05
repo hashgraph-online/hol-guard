@@ -321,15 +321,19 @@ fn generic_ack(request: &AckRequest) -> Result<Obj, String> {
 }
 
 /// The status that follows `previous` for the same identity. An applied
-/// acknowledgement stays applied. Cloud moves a failed or offline
+/// acknowledgement stays applied. Cloud moves a failed or offline generic
 /// acknowledgement back only through received and validated, one step per
 /// acknowledgement, so a bundle that failed and now validates climbs back to
 /// applied over the next syncs instead of being refused.
-fn next_status(requested: &str, previous: Option<&str>) -> &'static str {
+///
+/// A managed acknowledgement does not climb: Guard reports a managed failure
+/// by retracting it in the legacy shape, so a stored managed failure for the
+/// same delivery keeps the transition check that refuses it.
+fn next_status(requested: &str, previous: Option<&str>, generic: bool) -> &'static str {
     match previous {
         Some("applied") => "applied",
-        Some("failed" | "offline") => "received",
-        Some("received") => "validated",
+        Some("failed" | "offline") if generic => "received",
+        Some("received") if generic => "validated",
         _ if requested == "applied" => "applied",
         _ => "validated",
     }
@@ -355,6 +359,7 @@ fn sequenced_ack(request: &AckRequest, candidate: Obj, identity: &[&str]) -> Res
     let status = next_status(
         request.status,
         matching.and_then(|previous| previous.get("status").and_then(Value::as_str)),
+        generic,
     );
     let observed =
         normalized_observed_at(request.synced_at).ok_or("invalid_policy_bundle_acknowledgement")?;
