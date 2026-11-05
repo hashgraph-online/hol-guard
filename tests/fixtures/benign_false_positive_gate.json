@@ -51936,6 +51936,19 @@
       },
       "cwd": "worktree",
       "expect": "allow_or_review"
+    },
+    {
+      "id": "claude-code-grouped-find-xargs-quiet-errors",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find . -type f \\( -name \"*.ts\" -o -name \"*.json\" \\) -not -path \"*/node_modules/*\" | xargs grep -l \"canonical\" 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
     }
   ],
   "mcp_cases": [
