@@ -12356,8 +12356,25 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 .cigar-footer a { color: #416aa7; font-weight: 600; text-underline-offset: 3px; }
 .cigar-footer strong { margin-left: auto; flex-shrink: 0; font-weight: 600; color: #684eb0; }
 .cigar-note .cigar-setup-action { margin-top: .9rem; }
+.cigar-note button { margin-top: .9rem; }
+.cigar-usage { display: grid; gap: 1rem; }
+.cigar-usage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
+.cigar-usage-card h3 { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; font-size: 1rem; }
+.cigar-usage-card h3 span { font-size: .75rem; font-weight: 500; color: #64748b; }
+.cigar-usage-table { width: 100%; margin-top: .9rem; border-collapse: collapse; font-size: .8rem; }
+.cigar-usage-table th, .cigar-usage-table td { padding: .5rem 0; border-top: 1px solid #eef1f6; }
+.cigar-usage-table thead th { border-top: 0; padding-top: 0; font-size: .7rem; font-weight: 600; color: #64748b; text-align: right; }
+.cigar-usage-table tbody th { font-weight: 500; color: #475569; text-align: left; padding-right: .75rem; }
+.cigar-usage-table td { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--brand-dark); padding-left: .75rem; white-space: nowrap; }
+.cigar-usage-recent { margin-top: .9rem; border-top: 1px solid #eef1f6; }
+.cigar-usage-recent summary { cursor: pointer; min-height: 2.75rem; padding: .7rem 0; font-size: .8rem; font-weight: 600; }
+.cigar-usage-recent ul { display: grid; gap: .7rem; font-size: .75rem; color: #64748b; }
+.cigar-usage-recent li { display: grid; gap: .1rem; min-width: 0; }
+.cigar-usage-recent li strong { color: var(--brand-dark); font-weight: 600; overflow-wrap: anywhere; }
+.cigar-usage-foot { max-width: 52rem; font-size: .75rem; line-height: 1.75; color: #64748b; }
 @media (max-width: 64rem) {
   .cigar-home { grid-template-columns: minmax(0, 1fr); }
+  .cigar-usage-grid { grid-template-columns: minmax(0, 1fr); }
   .cigar-benefits { grid-template-columns: minmax(0, 1fr); }
   .cigar-story-pair { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
 }
@@ -12378,6 +12395,7 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 }
 @media (prefers-reduced-motion: reduce) { .cigar-tabs [role="tab"], .cigar-explore-row, .cigar-explore-arrow { transition: none; } .cigar-demo-files li[data-match] { animation: none; } }
 @media (forced-colors: active) {
+  .cigar-usage-table th, .cigar-usage-table td { border-color: CanvasText; }
   .cigar-home, .cigar-card, .cigar-note, .cigar-demo { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
   .cigar-home :is(h2, p, li, span, button, svg, code) { color: CanvasText; }
   .cigar-demo-files li { animation: none; }
