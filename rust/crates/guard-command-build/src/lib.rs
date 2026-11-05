@@ -83,6 +83,8 @@ mod command_tokens;
 pub mod contained_argv;
 #[path = "../../guard-command/src/contained_git.rs"]
 mod contained_git;
+#[path = "../../guard-command/src/contained_inline_target.rs"]
+mod contained_inline_target;
 #[path = "../../guard-command/src/contained_node_tool.rs"]
 mod contained_node_tool;
 #[path = "../../guard-command/src/contained_package_test.rs"]
