@@ -600,8 +600,17 @@ class StorePolicyMixin:
         *,
         policy_bundle_last_error: Mapping[str, object],
         managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
+        policy_bundle_ack: Callable[[object], Mapping[str, object] | None] | None = None,
     ) -> None:
-        """Atomically remove all cached and materialized remote authority."""
+        """Atomically remove all cached and materialized remote authority.
+
+        When ``policy_bundle_ack`` is given, it is called with the acknowledgement
+        stored at the moment of the clear, read inside the clearing transaction,
+        and its result replaces that acknowledgement in the same write. A crash
+        cannot leave the bundle cleared with no failed acknowledgement queued for
+        Cloud, and a concurrent sync cannot swap the bundle between the read and
+        the clear.
+        """
 
         normalized_now = _canonical_utc_timestamp(now)
         state_payloads: dict[str, object] = {
@@ -691,6 +700,15 @@ class StorePolicyMixin:
                     self._seal_managed_revision(managed_revision, key=managed_authority_key),
                     allow_nan=False,
                 )
+            if policy_bundle_ack is not None:
+                ack_row = connection.execute(
+                    "select payload_json from sync_state where state_key = ?",
+                    ("policy_bundle_ack",),
+                ).fetchone()
+                stored_ack = None if ack_row is None else json.loads(str(ack_row["payload_json"]))
+                failed_ack = policy_bundle_ack(stored_ack)
+                if failed_ack is not None:
+                    encoded_payloads["policy_bundle_ack"] = json.dumps(dict(failed_ack), allow_nan=False)
             self._replace_remote_policy_rows_locked(connection, ())
             connection.execute(
                 "delete from sync_state where state_key in (?, ?, ?, ?)",

@@ -3572,6 +3572,14 @@ class GuardDaemonServer:
             # file, not for hook workers or artifact reconciliation. Accept
             # HTTP and publish that file before the 60s+ cold-home work.
             with timed_phase("serve_thread_start", self._diagnostics.record_phase):
+                # A connection accepted before its request headers arrive is
+                # parked for this watchdog. Start it before the first accept:
+                # otherwise a request parked during the cold-home work waits
+                # for that work to end and is then closed unanswered, which
+                # Desktop's window shows as a terminated connection. The later
+                # call in start_post_listen_workers is a no-op, and
+                # _finish_service stops it if startup fails.
+                self._server.start_unclassified_watchdog()
                 start_serve_thread(self, already_locked=True)
                 if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
                     raise RuntimeError("Guard daemon serve thread did not become ready")
