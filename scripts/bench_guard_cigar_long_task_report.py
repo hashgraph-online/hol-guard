@@ -12,15 +12,6 @@ MODEL = "gpt-6-luna"
 EFFORT = "medium"
 
 
-def tokens_of(row: dict) -> dict:
-    """The row's usage in the current shape; rows recorded before cache writes were tracked have none."""
-    return {**usage.empty(), **row["tokens"]}
-
-
-def cost_of(row: dict) -> dict:
-    return row.get("cost") or usage.cost(tokens_of(row), row.get("model") or MODEL)
-
-
 def summarize(rows: list[dict]) -> dict:
     # A rep whose codex exec crashed or timed out holds partial (or zero) tokens: count it, keep it out of
     # the statistics. Once a clean rerun of the same rep is recorded, the errored row no longer counts.
@@ -41,12 +32,12 @@ def summarize(rows: list[dict]) -> dict:
         "median_input": round(statistics.median(inputs)) if inputs else 0,
         "min_input": min(inputs) if inputs else 0,
         "max_input": max(inputs) if inputs else 0,
-        "mean_usd": mean((cost_of(row)["usd"] for row in rows), 4),
-        "mean_input_usd": mean((cost_of(row)["input_usd"] for row in rows), 4),
-        "mean_paid_tokens": mean(cost_of(row)["paid_tokens"] for row in rows),
-        "mean_cached": mean(tokens_of(row)["cached_input_tokens"] for row in rows),
-        "mean_cache_write": mean(tokens_of(row)["cache_write_tokens"] for row in rows),
-        "mean_output": mean(tokens_of(row)["output_tokens"] for row in rows),
+        "mean_usd": mean((row["cost"]["usd"] for row in rows), 4),
+        "mean_input_usd": mean((row["cost"]["input_usd"] for row in rows), 4),
+        "mean_paid_tokens": mean(row["cost"]["paid_tokens"] for row in rows),
+        "mean_cached": mean(row["tokens"]["cached_input_tokens"] for row in rows),
+        "mean_cache_write": mean(row["tokens"]["cache_write_tokens"] for row in rows),
+        "mean_output": mean(row["tokens"]["output_tokens"] for row in rows),
         "mean_uncached": round(statistics.fmean(row["tokens"]["uncached_input_tokens"] for row in rows)) if rows else 0,
         "mean_requests": round(statistics.fmean(row["tokens"]["requests"] for row in rows), 1) if rows else 0,
         "mean_compactions": round(statistics.fmean(row["tokens"]["compactions"] for row in rows), 1) if rows else 0,
@@ -65,6 +56,9 @@ def report(rows: list[dict], base: str, arms: list[str]) -> dict:
     missing = [arm for arm in [base, *arms] if arm not in by_arm]
     if missing:
         raise ValueError(f"no recorded runs for arm(s) {', '.join(missing)}; recorded: {', '.join(sorted(by_arm))}")
+    old = sorted({row["arm"] for row in rows if row["arm"] in [base, *arms] and not {"model", "cost"} <= row.keys()})
+    if old:
+        raise ValueError(f"arm(s) {', '.join(old)} have runs without model and cost; record them again")
     summary = {arm: summarize(by_arm[arm]) for arm in dict.fromkeys([base, *arms])}
     base_mean = summary[base]["mean_input"]
     base_usd = summary[base]["mean_usd"]
@@ -72,7 +66,7 @@ def report(rows: list[dict], base: str, arms: list[str]) -> dict:
         stats["change_vs_base"] = round((stats["mean_input"] - base_mean) / base_mean, 3) if base_mean else 0.0
         stats["paid_change_vs_base"] = round((stats["mean_usd"] - base_usd) / base_usd, 3) if base_usd else 0.0
         stats["all_passed"] = stats["n"] > 0 and stats["passed"] == stats["n"] and not stats["errored"]
-    models = sorted({row.get("model") or MODEL for row in rows if row["arm"] in summary})
+    models = sorted({row["model"] for row in rows if row["arm"] in summary})
     return {
         "base": base,
         "fixture": FIXTURE_SHA,

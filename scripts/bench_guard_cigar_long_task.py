@@ -52,7 +52,6 @@ READ_COMMANDS = {"cat", "sed", "nl", "head", "tail", "awk", "less", "bat"}
 LIST_COMMANDS = {"ls", "find", "fd", "tree"}
 TEST_COMMANDS = {"pytest", "tox", "nox", "py.test"}
 STEP_TIMEOUT = 3600
-CLAUDE_PROJECTS = Path.home() / ".claude" / "projects"
 CHECK_TIMEOUT = 600
 
 # The teammate's change at step 4: the same two bugs as the single-task
@@ -114,7 +113,6 @@ def rollout_path(codex_home: Path, thread_id: str) -> Path | None:
 
 
 # Kept under its old name: the Codex ledger reader now lives with the other harnesses' readers.
-rollout_sum = usage.codex_rollout
 
 
 def output_breakdown(events: list[dict]) -> dict:
@@ -270,6 +268,12 @@ def passed(results: dict) -> bool:
     )
 
 
+def claude_projects() -> Path:
+    """Where Claude Code writes its transcripts under the environment claude_exec gives it."""
+    config = os.environ.get("CLAUDE_CONFIG_DIR")
+    return (Path(config).expanduser() if config else Path.home() / ".claude") / "projects"
+
+
 def agent_env(project: Path, codex_home: Path, home: Path | None, python: Path) -> dict:
     """The environment Codex and its shell commands get, the same for every arm.
 
@@ -408,14 +412,14 @@ def run_session(work: Path, arm: str, rep: int) -> dict:
         )
     if harness == claude.HARNESS:
         model = claude.MODEL
-        ledger = usage.claude_transcripts(CLAUDE_PROJECTS, thread)
+        ledger = usage.claude_transcripts(claude_projects(), thread)
         tokens = usage.claude_transcript(ledger) if ledger else usage.empty()
         tool_output = claude.tool_output(ledger, kind)
     else:
         model = MODEL
         rollout = rollout_path(codex_home, thread) if thread else None
         ledger = [rollout] if rollout else []
-        tokens = rollout_sum(rollout) if rollout else usage.empty()
+        tokens = usage.codex_rollout(rollout) if rollout else usage.empty()
         tool_output = output_breakdown(all_events)
     if error is None and not tokens["requests"]:
         raise RuntimeError(f"no usage ledger with requests for session {thread} of arm {arm}")
