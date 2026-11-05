@@ -96,7 +96,7 @@ def test_local_package_denial_prints_signed_link_to_the_running_daemon(tmp_path,
     )
 
     review_url = f"{_LIVE_DAEMON_URL}/requests/{request['request_id']}"
-    assert payload["supply_chain_evaluation"]["user_copy"]["dashboard_url"] == review_url
+    assert payload["supply_chain_evaluation"]["user_copy"]["dashboard_url"].startswith(f"{review_url}#guard-token=gld1.")
     assert f"{review_url}#guard-token=gld1." in output
     assert request["request_id"] in output
     assert "synthetic-daemon-token" not in output
