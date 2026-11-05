@@ -466,6 +466,11 @@ impl CompiledNativeCommandControls {
         // GitHub permission-only owners run last so they never hide an
         // ungranted rule.
         covered.extend(self.github_granted_segments(permission_observations));
+        // An extension whose every permission the user explicitly enabled
+        // covers the programs it watches, including the spellings no rule
+        // models. It runs after the loop above so it never hides a rule the
+        // user left off.
+        covered.extend(self.fully_allowed_extension_segments(command));
         // A `cd` into the checkout a `git worktree add` of this command
         // creates, and the `head`/`tail`/`wc` stages after it, are covered
         // when the Git and GitHub steps after it are.
@@ -482,6 +487,83 @@ impl CompiledNativeCommandControls {
         // verified rule observations or the native benign proof can cover a
         // segment; an extra unclassified command retains its own review.
         (0..command.segments.len()).all(|index| covered.contains(&index))
+    }
+
+    /// Segments whose program belongs to an extension the user turned on in
+    /// full.
+    ///
+    /// A rule names a shape Guard already models, so a program the extension
+    /// watches that no rule claims -- `git ls-remote`, `git archive`, a verb
+    /// a later Git release adds -- carries no observation at all, and nothing
+    /// can cover it. An Allow that reaches only the modelled spellings stops
+    /// the ones beside them, which is what users report as "I allowed git and
+    /// it still asks". Reading the whole extension as covering the programs
+    /// it watches answers for those variations too.
+    ///
+    /// Only an extension whose every declared permission the user explicitly
+    /// enabled counts, so a partial Allow still covers exactly its own rules.
+    /// This widens coverage, not the floors around it: `fixed_command_floor`,
+    /// `protected_checkout_destination`, the caller's bounded and
+    /// sensitive-target checks and every floor Rust raises after the controls
+    /// run all keep their answer.
+    fn fully_allowed_extension_segments(&self, command: &CanonicalCommandV1) -> BTreeSet<usize> {
+        let watched: BTreeSet<String> = self
+            .program
+            .extensions
+            .iter()
+            .enumerate()
+            .filter(|(_, extension)| self.allowed_in_full(extension))
+            .flat_map(|(index, extension)| {
+                self.program.extension_known_names(
+                    index,
+                    unmodeled::compatibility_executables(&extension.extension_id),
+                )
+            })
+            .collect();
+        if watched.is_empty() {
+            return BTreeSet::new();
+        }
+        command
+            .segments
+            .iter()
+            .enumerate()
+            .filter(|(_, segment)| {
+                segment.executable.as_deref().is_some_and(|executable| {
+                    watched.contains(
+                        &crate::command_ascii_comparison::lowercase_for_ascii_comparison(
+                            crate::native_command_program::basename(executable),
+                        ),
+                    )
+                })
+            })
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    /// Whether the user explicitly enabled every permission `extension`
+    /// declares that they can turn on, with none of them blocked and the
+    /// extension itself active. An extension that declares no such permission
+    /// is left out rather than read as allowed by default.
+    ///
+    /// A permission the user cannot configure is not read as missing consent,
+    /// because no answer of theirs could supply it. Its protection is kept
+    /// elsewhere: a segment that matches its rule carries an observation
+    /// whose permission is not explicitly enabled, and the loop above refuses
+    /// the whole command before this coverage is added.
+    fn allowed_in_full(&self, extension: &crate::native_command_program::ProgramExtension) -> bool {
+        let mut configurable = extension
+            .permissions
+            .iter()
+            .filter(|permission| permission.configurable)
+            .peekable();
+        configurable.peek().is_some()
+            && self.active_extensions.contains(&extension.extension_id)
+            && !self.blocked_extensions.contains(&extension.extension_id)
+            && configurable.all(|permission| {
+                self.explicitly_enabled_permissions
+                    .contains(&permission.permission_id)
+                    && !self.blocked_permissions.contains(&permission.permission_id)
+            })
     }
 
     /// Whether the user's authenticated extension permissions settle
