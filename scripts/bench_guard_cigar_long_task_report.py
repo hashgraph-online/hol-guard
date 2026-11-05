@@ -11,9 +11,14 @@ EFFORT = "medium"
 
 
 def summarize(rows: list[dict]) -> dict:
+    # A rep whose codex exec crashed or timed out holds partial (or zero) tokens: count it, keep it out of
+    # the statistics.
+    failed = [row for row in rows if row.get("error")]
+    rows = [row for row in rows if not row.get("error")]
     inputs = [row["tokens"]["input_tokens"] for row in rows]
     return {
         "n": len(rows),
+        "errored": len(failed),
         "passed": sum(1 for row in rows if row["passed"]),
         "mean_input": round(statistics.fmean(inputs)) if inputs else 0,
         "median_input": round(statistics.median(inputs)) if inputs else 0,
@@ -41,7 +46,7 @@ def report(rows: list[dict], base: str, arms: list[str]) -> dict:
     base_mean = summary[base]["mean_input"]
     for stats in summary.values():
         stats["change_vs_base"] = round((stats["mean_input"] - base_mean) / base_mean, 3) if base_mean else 0.0
-        stats["all_passed"] = stats["n"] > 0 and stats["passed"] == stats["n"]
+        stats["all_passed"] = stats["n"] > 0 and stats["passed"] == stats["n"] and not stats["errored"]
     return {"base": base, "fixture": FIXTURE_SHA, "model": MODEL, "effort": EFFORT, "arms": summary}
 
 
@@ -53,14 +58,15 @@ def markdown(summary: dict) -> str:
     lines = [
         head,
         "",
-        "| Arm | n | all pass | mean input | median | min-max | vs base "
+        "| Arm | n | errored | all pass | mean input | median | min-max | vs base "
         "| uncached | requests | compactions | read chars |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for arm, stats in summary["arms"].items():
         cells = [
             arm,
             str(stats["n"]),
+            str(stats["errored"]),
             "yes" if stats["all_passed"] else "NO",
             f"{stats['mean_input']:,}",
             f"{stats['median_input']:,}",

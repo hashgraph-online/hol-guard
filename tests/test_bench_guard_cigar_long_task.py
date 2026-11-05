@@ -175,8 +175,19 @@ def test_report_changes_against_the_base_mean() -> None:
     assert summary["arms"]["base"]["all_passed"] is True
     assert summary["arms"]["cigar"]["all_passed"] is False
     table = bench.markdown(summary)
-    assert "| cigar | 2 | NO | 1,660,000 |" in table
+    assert "| cigar | 2 | 0 | NO | 1,660,000 |" in table
     assert "-60.0%" in table
+
+
+def test_report_leaves_errored_reps_out_of_the_statistics() -> None:
+    crashed = _row("cigar", 3, 0, passed=False) | {"error": "step 1: codex exec timed out after 1800s"}
+    rows = [_row("base", 1, 4_000_000), _row("cigar", 1, 2_000_000), _row("cigar", 2, 2_000_000), crashed]
+    stats = bench.report(rows, "base", ["cigar"])["arms"]["cigar"]
+    assert stats["n"] == 2
+    assert stats["errored"] == 1
+    assert stats["mean_input"] == stats["min_input"] == 2_000_000
+    assert stats["all_passed"] is False
+    assert "| cigar | 2 | 1 | NO | 2,000,000 |" in bench.markdown(bench.report(rows, "base", ["cigar"]))
 
 
 def test_report_needs_the_base_arm() -> None:
@@ -227,6 +238,42 @@ def test_run_session_refuses_a_rep_that_is_already_recorded(tmp_path: Path) -> N
     (tmp_path / "runs" / "results.jsonl").write_text(json.dumps(_row("base", 1, 1)) + "\n", encoding="utf-8")
     with pytest.raises(SystemExit, match="already recorded"):
         bench.run_session(tmp_path, "base", 1)
+
+
+def test_run_session_reruns_a_rep_that_errored(tmp_path: Path, monkeypatch) -> None:
+    arm = tmp_path / "arms" / "base" / "codex_home"
+    arm.mkdir(parents=True)
+    (arm / "config.toml").write_text("", encoding="utf-8")
+    (tmp_path / "runs").mkdir()
+    errored = _row("base", 1, 0, passed=False) | {"error": "step 1: codex exec exited 1"}
+    (tmp_path / "runs" / "results.jsonl").write_text(json.dumps(errored) + "\n", encoding="utf-8")
+
+    def stop(*args):
+        raise RuntimeError("reached the fixture copy")
+
+    monkeypatch.setattr(bench, "fresh_project", stop)
+    with pytest.raises(RuntimeError, match="fixture copy"):
+        bench.run_session(tmp_path, "base", 1)
+
+
+def test_checks_run_inside_the_codex_sandbox_without_network(tmp_path: Path, monkeypatch) -> None:
+    seen = {}
+
+    def record(command, **kwargs):
+        seen.update(kwargs, command=command)
+        return subprocess.CompletedProcess(command, 0, "1 passed in 0.1s\n", "")
+
+    project = tmp_path / "projects" / "base-r1"
+    project.mkdir(parents=True)
+    monkeypatch.setattr(bench.subprocess, "run", record)
+    assert bench.pytest_tail(Path("python"), project, "tests") == "1 passed in 0.1s"
+    command = seen["command"]
+    assert command[:2] == ["codex", "sandbox"]
+    assert 'sandbox_mode="workspace-write"' in command
+    assert "sandbox_workspace_write.network_access=false" in command
+    assert command[command.index("--") + 1 :][:3] == ["python", "-m", "pytest"]
+    assert seen["env"]["CODEX_HOME"] == str(tmp_path / "sandbox_home")
+    assert seen["cwd"] == project
 
 
 def _git(path: Path, *args: str) -> str:
@@ -281,7 +328,7 @@ def test_report_command_fails_when_a_rep_failed(tmp_path: Path, capsys) -> None:
     rows = [_row("base", 1, 4_000_000), _row("cigar", 1, 1_600_000, passed=False)]
     (runs / "results.jsonl").write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
     assert bench.main(["--work", str(tmp_path), "report", "--base", "base", "cigar"]) == 1
-    assert "| cigar | 1 | NO |" in capsys.readouterr().out
+    assert "| cigar | 1 | 0 | NO |" in capsys.readouterr().out
     rows[1]["passed"] = True
     (runs / "results.jsonl").write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
     assert bench.main(["--work", str(tmp_path), "report", "--base", "base", "cigar"]) == 0

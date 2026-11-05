@@ -223,15 +223,33 @@ def fresh_project(work: Path, arm: str, rep: int) -> Path:
     return project
 
 
+def sandboxed(command: list[str]) -> list[str]:
+    """Wrap a check in the sandbox the agent ran under: writes only inside the project, no network."""
+    return [
+        "codex",
+        "sandbox",
+        "-c",
+        'sandbox_mode="workspace-write"',
+        "-c",
+        "sandbox_workspace_write.network_access=false",
+        "--",
+        *command,
+    ]
+
+
 def pytest_tail(python: Path, project: Path, *args: str) -> str:
+    # The suite runs code the agent edited, so it gets the agent's sandbox, not the host. An empty
+    # bench-owned CODEX_HOME (beside the projects folder) keeps the user's Codex config out of it.
+    sandbox_home = project.parent.parent / "sandbox_home"
+    sandbox_home.mkdir(exist_ok=True)
     try:
         done = subprocess.run(
-            [str(python), "-m", "pytest", "-q", "-p", "no:cacheprovider", *args],
+            sandboxed([str(python), "-m", "pytest", "-q", "-p", "no:cacheprovider", *args]),
             cwd=project,
             capture_output=True,
             text=True,
             timeout=CHECK_TIMEOUT,
-            env=dict(os.environ, PYTHONPATH=str(project / "src")),
+            env=dict(os.environ, PYTHONPATH=str(project / "src"), CODEX_HOME=str(sandbox_home)),
         )
     except subprocess.TimeoutExpired:
         return f"timed out after {CHECK_TIMEOUT}s"
@@ -330,7 +348,8 @@ def run_session(work: Path, arm: str, rep: int) -> dict:
     home = arm_dir(work, arm) / "home"
     if not (codex_home / "config.toml").exists():
         raise SystemExit(f"arm {arm!r} has no codex_home/config.toml under {arm_dir(work, arm)}")
-    if any(row["arm"] == arm and row["rep"] == rep for row in load_results(work)):
+    # A rep that errored (codex exec crashed or timed out) may be run again; the report leaves it out.
+    if any(row["arm"] == arm and row["rep"] == rep and not row.get("error") for row in load_results(work)):
         raise SystemExit(f"{arm} r{rep} is already recorded under {work / 'runs'}; pick another --first-rep")
     python = work / "venv" / "bin" / "python"
     project = fresh_project(work, arm, rep)
