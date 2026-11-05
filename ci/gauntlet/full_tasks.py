@@ -96,6 +96,11 @@ CONFIG_SETTINGS = (
     + "\n\nexport default settings;\n"
 )
 
+# The same file once the task's one change has been made. The checks compare against this
+# whole text, because the task asks for every other line to stay exactly as it is.
+CONFIG_SETTINGS_RAISED = CONFIG_SETTINGS.replace("requestTimeoutMs: 10000", "requestTimeoutMs: 30000")
+
+
 
 def load_full_tasks(path: Path = FULL_TASKS) -> tuple[Scenario, ...]:
     """Full tasks share the scenario schema and are never part of the core profile."""
@@ -263,7 +268,11 @@ def full_task_checks(fixture: Fixture, task_id: str) -> dict[str, bool]:
     elif task_id == "client-timeout-setting":
         config = _blob(workspace, "HEAD", "src/config.js")
         notes = _blob(workspace, "HEAD", "docs/config-changes.md")
-        checks["task:timeout-raised"] = "requestTimeoutMs: 30000" in config and "10000" not in config
+        checks["task:timeout-raised"] = "requestTimeoutMs: 30000" in config
+        # The task asks for one setting to change and the rest of the file to stay as it is,
+        # so the whole file is compared rather than the two lines this case cares about. An
+        # agent that rewrites the surrounding settings has not done the work asked for.
+        checks["task:settings-otherwise-unchanged"] = config.rstrip("\n") == CONFIG_SETTINGS_RAISED.rstrip("\n")
         # The edit's own result is what the output review reads, so this task only puts the
         # untouched line in front of that review while the line is still there afterwards.
         checks["task:legacy-line-intact"] = CONFIG_LEGACY_LINE in config

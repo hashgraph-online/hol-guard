@@ -192,7 +192,32 @@ def test_removing_the_legacy_line_is_not_the_timeout_task(tmp_path: Path) -> Non
     assert checks["task:timeout-raised"] and not checks["task:legacy-line-intact"]
 
 
-TIMEOUT_CHECKS = ("task:timeout-raised", "task:legacy-line-intact", "task:change-recorded")
+def test_changing_another_setting_is_not_the_timeout_task(tmp_path: Path) -> None:
+    """The task asks for one setting to change, so a second edited line fails it."""
+    fixture = create_full_task_fixture(tmp_path / "task-config-extra", "client-timeout-setting")
+    config = fixture.workspace / "src/config.js"
+    config.write_text(
+        config.read_text(encoding="utf-8")
+        .replace("requestTimeoutMs: 10000", "requestTimeoutMs: 30000")
+        .replace("retries3: 3,", "retries3: 9,"),
+        encoding="utf-8",
+    )
+    notes = fixture.workspace / "docs/config-changes.md"
+    notes.parent.mkdir(parents=True)
+    notes.write_text("# Config changes\n\n- requestTimeoutMs raised to 30000.\n", encoding="utf-8")
+    assert _shell(fixture, "git add -A && git commit --quiet -m 'Raise the request timeout'").returncode == 0
+
+    checks = full_task_checks(fixture, "client-timeout-setting")
+    assert checks["task:timeout-raised"] and checks["task:legacy-line-intact"]
+    assert not checks["task:settings-otherwise-unchanged"]
+
+
+TIMEOUT_CHECKS = (
+    "task:timeout-raised",
+    "task:settings-otherwise-unchanged",
+    "task:legacy-line-intact",
+    "task:change-recorded",
+)
 
 WATCH_ROW = {
     "event": "PreToolUse",

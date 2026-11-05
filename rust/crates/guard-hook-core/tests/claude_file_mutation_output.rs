@@ -159,3 +159,16 @@ fn other_harnesses_and_tools_keep_the_full_response_scan() {
     let other_tool = review_post_tool(&request("claude-code", other_tool));
     assert_eq!(other_tool.reason_code, "output_secret_match");
 }
+
+#[test]
+fn a_patch_shape_this_review_cannot_read_keeps_the_generic_one() {
+    let mut payload = edit(
+        &file_with_distant_credential(),
+        "export const label = \"old\";",
+        "export const label = \"new\";",
+        vec!["+export const label = \"new\";".into()],
+    );
+    payload["tool_response"]["structuredPatch"] = json!({"hunks": "not a list"});
+    let response = review_post_tool(&request("claude-code", payload));
+    assert_eq!(response.reason_code, "output_secret_match");
+}

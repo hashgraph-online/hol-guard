@@ -109,10 +109,12 @@ fn file_mutation_text(request: &NativeHookRequestV1) -> Option<String> {
             continue;
         }
         if PATCH_KEYS.contains(key) {
-            if let Some(text) = patch_text(value) {
-                collect(&Value::String(text));
-                continue;
-            }
+            // A patch this function cannot read in full is an unfamiliar
+            // result shape. Scanning what it can reach would keep the narrower
+            // review for a response nobody has modelled, so the whole request
+            // goes back to the generic one, which reads `originalFile` too.
+            collect(&Value::String(patch_text(value)?));
+            continue;
         }
         collect(value);
     }
@@ -124,8 +126,8 @@ fn file_mutation_text(request: &NativeHookRequestV1) -> Option<String> {
 }
 
 /// Every line of a `structuredPatch` as one text, or `None` for a shape that
-/// is not a list of hunks whose `lines` are strings. That shape keeps the
-/// generic walk.
+/// is not a list of hunks whose `lines` are strings. Its caller turns that
+/// `None` into the generic review of the whole result.
 fn patch_text(value: &Value) -> Option<String> {
     let mut lines: Vec<&str> = Vec::new();
     for hunk in value.as_array()? {
