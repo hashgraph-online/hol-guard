@@ -87,7 +87,7 @@ from ..policy_bundle_v2 import (
 )
 from ..policy_document_io import PolicyCompilationError, compile_policy_bundle_document
 from ..redaction import redact_sensitive_text
-from ..review_contracts import validated_review_verification_keys_from_sync
+from ..review_signature_verification import sync_review_verification_keys
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
@@ -1166,19 +1166,16 @@ def sync_receipts(
         workspace_dir=workspace_dir,
         now=now,
     )
-    if review_verification_keys_payload is not None:
-        if cloud_workspace_id is None:
-            raise RuntimeError("review_verification_keys_workspace_missing")
-        review_verification_keys = validated_review_verification_keys_from_sync(
+    review_verification_keys_rejection = (
+        sync_review_verification_keys(
             review_verification_keys_payload,
             store=store,
             workspace_id=cloud_workspace_id,
+            now=now,
         )
-        store.set_sync_payload(
-            "guard_review_verification_keyring",
-            [key.to_dict() for key in review_verification_keys],
-            now,
-        )
+        if review_verification_keys_payload is not None
+        else None
+    )
     _record_synced_alert_events(
         store=store,
         advisories=deduped_advisories,
@@ -1219,6 +1216,8 @@ def sync_receipts(
     }
     if remote_policy_sync_blocked:
         summary["remote_policy_sync_blocked"] = True
+    if review_verification_keys_rejection is not None:
+        summary["review_verification_keys_rejected"] = review_verification_keys_rejection
     summary["guard_events_v1"] = sync_guard_events(store, auth_context=resolved_auth_context)
     if include_aibom:
         from ..aibom_cli import sync_aibom_snapshots_if_due

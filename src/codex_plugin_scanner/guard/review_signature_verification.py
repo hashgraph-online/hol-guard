@@ -98,6 +98,30 @@ def validated_review_verification_keys_from_sync(
         return policy_bundle_keys_from_wire(result.get("keys"))
 
 
+def sync_review_verification_keys(
+    value: object,
+    *,
+    store,
+    workspace_id: str | None,
+    now: str,
+) -> str | None:
+    """Store Cloud's Review keys when they anchor; otherwise return why they did not.
+
+    A rejected key list is never stored, and the keyring Guard already holds stays
+    as it was, so a key that does not anchor is never admitted. The rejection is
+    returned instead of raised so the rest of the sync still runs.
+    """
+
+    if workspace_id is None:
+        return "review_verification_keys_workspace_missing"
+    try:
+        keys = validated_review_verification_keys_from_sync(value, store=store, workspace_id=workspace_id)
+    except GuardReviewContractError as error:
+        return str(error)
+    store.set_sync_payload(REVIEW_VERIFICATION_KEYRING_SYNC_KEY, [key.to_dict() for key in keys], now)
+    return None
+
+
 def _verify_signed_payload(
     payload: dict[str, object],
     *,
