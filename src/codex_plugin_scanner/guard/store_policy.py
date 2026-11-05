@@ -600,8 +600,14 @@ class StorePolicyMixin:
         *,
         policy_bundle_last_error: Mapping[str, object],
         managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
+        policy_bundle_ack: Mapping[str, object] | None = None,
     ) -> None:
-        """Atomically remove all cached and materialized remote authority."""
+        """Atomically remove all cached and materialized remote authority.
+
+        When ``policy_bundle_ack`` is given, it replaces the stored acknowledgement
+        in the same transaction, so a crash cannot leave the bundle cleared with
+        no failed acknowledgement queued for Cloud.
+        """
 
         normalized_now = _canonical_utc_timestamp(now)
         state_payloads: dict[str, object] = {
@@ -610,6 +616,8 @@ class StorePolicyMixin:
             "policy_bundle_last_error": dict(policy_bundle_last_error),
             "team_policy_pack": {},
         }
+        if policy_bundle_ack is not None:
+            state_payloads["policy_bundle_ack"] = dict(policy_bundle_ack)
         encoded_payloads = {
             state_key: json.dumps(payload, allow_nan=False) for state_key, payload in state_payloads.items()
         }

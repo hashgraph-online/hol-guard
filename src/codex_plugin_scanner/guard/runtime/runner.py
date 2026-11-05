@@ -1897,6 +1897,7 @@ def sync_runtime_session(
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
     catalog_sync: dict[str, object]
+    catalog_failed = False
     try:
         catalog_sync = _sync_extension_catalog_from_runtime_handshake(
             store=store,
@@ -1910,6 +1911,7 @@ def sync_runtime_session(
         if catalog_failures is None:
             raise
         catalog_failures.append(error)
+        catalog_failed = True
         catalog_sync = {
             "extension_catalog_sync_status": "failed",
             "extension_catalog_sync_reason": "catalog_sync_failed",
@@ -1921,7 +1923,11 @@ def sync_runtime_session(
         synced_at=synced_at,
         catalog_sync=catalog_sync,
     )
-    store.set_sync_payload("runtime_session_summary", summary, synced_at)
+    if not catalog_failed:
+        # A failed catalog step returns before this write when it raises; keep
+        # the previous summary, whose policy metadata identity and credential
+        # the managed-controls view still reads, when the caller takes it over.
+        store.set_sync_payload("runtime_session_summary", summary, synced_at)
     workspace_id = store.get_cloud_workspace_id()
     device_id = store.get_or_create_installation_id()
     if not _guard_events_endpoint_unavailable_recently(store):
@@ -3854,20 +3860,18 @@ def _clear_policy_bundle_authority_reporting_failure(
 ) -> None:
     """Clear remote authority and leave a ``failed`` acknowledgement for Cloud."""
 
-    previous = store.get_sync_payload("policy_bundle_ack")
-    store.clear_policy_bundle_authority(
-        now,
-        policy_bundle_last_error=policy_bundle_last_error,
-        managed_controls_publish=managed_controls_publish,
-    )
     failed = failed_policy_bundle_acknowledgement(
-        previous,
+        store.get_sync_payload("policy_bundle_ack"),
         device_id=device_id,
         device_name=device_name,
         failed_at=now,
     )
-    if failed is not None:
-        store.set_sync_payload("policy_bundle_ack", failed, now)
+    store.clear_policy_bundle_authority(
+        now,
+        policy_bundle_last_error=policy_bundle_last_error,
+        managed_controls_publish=managed_controls_publish,
+        policy_bundle_ack=failed,
+    )
 
 
 def _validated_policy_bundle_acknowledgement(
