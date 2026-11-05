@@ -273,7 +273,7 @@ pub(crate) fn confirm_pulse_enrollment(
         unreachable!("checked above");
     };
     let now_i = now_epoch as i64;
-    let (receipt, pinned_user_keys) = with_transport(agent_key, |t| {
+    let verified = with_transport(agent_key, |t| {
         let registry = t.user_keys()?;
         let policy = ReceiptPolicy {
             expected_issuer: YANEZ_ISSUER,
@@ -298,8 +298,17 @@ pub(crate) fn confirm_pulse_enrollment(
             .map(|k| k.public_key_hex.clone())
             .collect();
         Ok((receipt, pinned))
-    })
-    .map_err(|e| pulse_error(&e))?;
+    });
+    let (receipt, pinned_user_keys) = match verified {
+        Ok(verified) => verified,
+        Err(PulseError::Unavailable) => {
+            // Nothing is spent yet: keep the setup so the user can confirm
+            // again once Pulse answers, without a new scan.
+            restore_pending(guard_home, request_id, entry);
+            return Err(pulse_error(&PulseError::Unavailable));
+        }
+        Err(e) => return Err(pulse_error(&e)),
+    };
 
     // The verify above can take seconds. Settings saved meanwhile (a new
     // password, the gate turned off, Pulse set up from another window) win.

@@ -35,13 +35,13 @@ use serde_json::{json, Value};
 use zeroize::Zeroizing;
 
 use crate::approval_gate_grants::ApprovalGateErrorV1;
-use crate::approval_gate_pulse_store::{
-    clear_pending_for_home, pending, pending_key, record_pulse_cooldown, PULSE_COOLDOWN_STATE_KEY,
-};
 pub(crate) use crate::approval_gate_pulse_store::{
     insert_pending, ledger_error, ledger_reserve, pending_has_room, pulse_busy,
     pulse_cooldown_covers, restore_pending, same_pulse_factor, take_pending,
     verify_with_cached_keys, with_transport, PendingKind, PendingPulse,
+};
+use crate::approval_gate_pulse_store::{
+    pending, pending_key, record_pulse_cooldown, PULSE_COOLDOWN_STATE_KEY,
 };
 #[cfg(test)]
 pub(crate) use crate::approval_gate_pulse_store::{
@@ -55,6 +55,9 @@ use crate::approval_gate_verify::{
     current_totp_session_binding, raise_if_locked, token_urlsafe, ApprovalGateInputV1,
 };
 use crate::totp::TotpSecretStore;
+
+/// Clearing Pulse lives with turning it off.
+pub(crate) use crate::approval_gate_pulse_disable::{clear_pulse_state, TOTP_PAUSED_BY_PULSE};
 
 /// Pulse cooldowns a user may choose. `0`, the default, means a fresh
 /// biometric approval for every held action.
@@ -422,8 +425,17 @@ pub(crate) fn verify_pulse_stage(
             now_epoch: now,
         };
         verify_with_cached_keys(t, &artifact, &policy)
-    })
-    .map_err(|e| pulse_error(&e))?;
+    });
+    let receipt = match receipt {
+        Ok(receipt) => receipt,
+        Err(PulseError::Unavailable) => {
+            // Nothing is spent yet, locally or at Pulse: keep the user's
+            // approval so a retry can verify it without a new scan.
+            restore_pending(guard_home, request_id, entry);
+            return Err(pulse_error(&PulseError::Unavailable));
+        }
+        Err(e) => return Err(pulse_error(&e)),
+    };
     // The network call above can take seconds. Commit against what is saved
     // now, not the copy loaded before it: if Pulse was turned off or
     // replaced meanwhile, writing the old copy would bring it back.
@@ -455,37 +467,6 @@ pub(crate) fn verify_pulse_stage(
         o.remove(PULSE_COOLDOWN_STATE_KEY);
     }
     Ok(None)
-}
-
-/// Drop every Pulse field and secret from `state`.
-/// Set while Pulse is on over an authenticator that was already set up. The
-/// authenticator's secret stays stored but Guard accepts no codes from it.
-pub(crate) const TOTP_PAUSED_BY_PULSE: &str = "totp_paused_by_pulse";
-
-/// Remove Pulse's settings and secrets. An authenticator Pulse paused comes
-/// back as it was, if its secret is still stored.
-pub(crate) fn clear_pulse_state(guard_home: &Path, state: &mut Value) {
-    // Requests made under the old factor can never verify; free their slots.
-    clear_pending_for_home(guard_home);
-    let mut store = TotpSecretStore::new(guard_home);
-    for key in ["pulse_agent_secret_id", "pulse_binding_secret_id"] {
-        if let Some(id) = optional_string(state.get(key)) {
-            let _ = store.delete_secret(&id);
-        }
-    }
-    if let Some(o) = state.as_object_mut() {
-        o.retain(|k, _| !k.starts_with("pulse_"));
-        if o.remove(TOTP_PAUSED_BY_PULSE) == Some(Value::Bool(true)) {
-            let kept = optional_string(o.get("totp_secret_id"))
-                .is_some_and(|id| store.get_secret(&id).is_some());
-            if kept {
-                o.insert("totp_enabled".into(), Value::Bool(true));
-            } else {
-                o.remove("totp_secret_id");
-                o.remove("totp_last_counter");
-            }
-        }
-    }
 }
 
 #[cfg(test)]

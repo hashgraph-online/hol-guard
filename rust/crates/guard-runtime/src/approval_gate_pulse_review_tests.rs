@@ -232,3 +232,55 @@ fn the_phone_shows_the_decision_the_grant_is_bound_to() {
         .unwrap_or_else(|| panic!("no Decision row in {terms}"));
     assert_eq!(decision["value"], "Allow, everything from this publisher");
 }
+
+#[test]
+fn an_outage_while_checking_an_approval_keeps_it_for_a_retry() {
+    let (g, _) = pulse_gate("verify-outage", 0);
+    let id = request_id(&g.request("approval_decision", "allow", "artifact", false));
+    g.poll(&id);
+    let prompts = g.fake.created.borrow().len();
+    let input = json!({"pulse_request_id": id});
+    *g.fake.offline.borrow_mut() = true;
+    let down = g.verify(
+        "approval_decision",
+        "allow",
+        "artifact",
+        false,
+        input.clone(),
+    );
+    assert_eq!(code(&down), "approval_gate_pulse_unavailable", "{down}");
+    *g.fake.offline.borrow_mut() = false;
+    let r = g.verify(
+        "approval_decision",
+        "allow",
+        "artifact",
+        false,
+        input.clone(),
+    );
+    assert_eq!(r["status"], "ok", "the same approval verifies: {r}");
+    assert_eq!(
+        g.fake.created.borrow().len(),
+        prompts,
+        "no new prompt on the phone"
+    );
+    let replay = g.verify("approval_decision", "allow", "artifact", false, input);
+    assert_eq!(
+        code(&replay),
+        "approval_gate_pulse_required",
+        "still single-use"
+    );
+}
+
+#[test]
+fn an_outage_while_confirming_setup_keeps_it_for_a_retry() {
+    let g = password_gate("confirm-outage");
+    let id = request_id(&begin(&g));
+    g.poll(&id);
+    *g.fake.offline.borrow_mut() = true;
+    let down = confirm(&g, &id);
+    assert_eq!(code(&down), "approval_gate_pulse_unavailable", "{down}");
+    assert_ne!(load_state(&g.home)["pulse_enabled"], true);
+    *g.fake.offline.borrow_mut() = false;
+    let confirmed = confirm(&g, &id);
+    assert_eq!(confirmed["payload"]["pulse_enabled"], true, "{confirmed}");
+}

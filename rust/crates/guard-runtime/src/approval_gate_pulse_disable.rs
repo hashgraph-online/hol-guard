@@ -17,8 +17,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::approval_gate_grants::{ApprovalGateErrorV1, ApprovalGateGrantV1, ApprovalGateGrants};
-use crate::approval_gate_pulse::{clear_pulse_state, err, factor_generation, pulse_enabled};
+use crate::approval_gate_pulse::{err, factor_generation, pulse_enabled};
 use crate::approval_gate_pulse_enrollment::state_io;
+use crate::approval_gate_pulse_store::clear_pending_for_home;
 use crate::approval_gate_settings::public_config_locked;
 use crate::approval_gate_state::{
     constant_time_eq, epoch, load_state, optional_string, record_failed_attempt,
@@ -28,6 +29,37 @@ use crate::approval_gate_verify::{
     invalidate_active_grants, raise_if_locked, rotate_authentication_state, verify_password_stage,
     ApprovalGateInputV1,
 };
+use crate::totp::TotpSecretStore;
+
+/// Set while Pulse is on over an authenticator that was already set up. The
+/// authenticator's secret stays stored but Guard accepts no codes from it.
+pub(crate) const TOTP_PAUSED_BY_PULSE: &str = "totp_paused_by_pulse";
+
+/// Remove Pulse's settings and secrets. An authenticator Pulse paused comes
+/// back as it was, if its secret is still stored.
+pub(crate) fn clear_pulse_state(guard_home: &Path, state: &mut Value) {
+    // Requests made under the old factor can never verify; free their slots.
+    clear_pending_for_home(guard_home);
+    let mut store = TotpSecretStore::new(guard_home);
+    for key in ["pulse_agent_secret_id", "pulse_binding_secret_id"] {
+        if let Some(id) = optional_string(state.get(key)) {
+            let _ = store.delete_secret(&id);
+        }
+    }
+    if let Some(o) = state.as_object_mut() {
+        o.retain(|k, _| !k.starts_with("pulse_"));
+        if o.remove(TOTP_PAUSED_BY_PULSE) == Some(Value::Bool(true)) {
+            let kept = optional_string(o.get("totp_secret_id"))
+                .is_some_and(|id| store.get_secret(&id).is_some());
+            if kept {
+                o.insert("totp_enabled".into(), Value::Bool(true));
+            } else {
+                o.remove("totp_secret_id");
+                o.remove("totp_last_counter");
+            }
+        }
+    }
+}
 
 fn turn_pulse_off(
     guard_home: &Path,
