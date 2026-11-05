@@ -269,7 +269,7 @@ class HookWorker(HookWorkerNativeMixin):
                 return False
         # A helper the publisher cancelled may sit in quarantine after a failed
         # kill or cleanup; keep ownership until every quarantined helper is reaped.
-        return hook_processes_contained()
+        return hook_processes_contained(deadline_monotonic=deadline_monotonic)
 
     def prepare_workspace_policy(
         self, workspace: Path | None = None, *, deadline: float | None = None

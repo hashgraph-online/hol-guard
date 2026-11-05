@@ -110,9 +110,15 @@ _HOOK_PROCESS_QUARANTINE_LOCK = threading.Lock()
 _HOOK_PROCESS_QUARANTINE: list[_QuarantinedHookProcess] = []
 
 
-def _retry_quarantined_hook_processes() -> bool:
-    with _HOOK_PROCESS_QUARANTINE_LOCK:
-        retry_deadline = time.monotonic() + _HOOK_PROCESS_FINAL_IO_JOIN_TIMEOUT_SECONDS
+def _retry_quarantined_hook_processes(*, deadline_monotonic: float | None = None) -> bool:
+    if deadline_monotonic is None:
+        _ = _HOOK_PROCESS_QUARANTINE_LOCK.acquire()
+    elif not _HOOK_PROCESS_QUARANTINE_LOCK.acquire(timeout=max(0.0, deadline_monotonic - time.monotonic())):
+        return False
+    retry_deadline = time.monotonic() + _HOOK_PROCESS_FINAL_IO_JOIN_TIMEOUT_SECONDS
+    if deadline_monotonic is not None:
+        retry_deadline = min(retry_deadline, deadline_monotonic)
+    try:
         survivors: list[_QuarantinedHookProcess] = []
         for quarantined in _HOOK_PROCESS_QUARANTINE:
             contained = _kill_hook_process(quarantined.process, quarantined.windows_job)
@@ -147,13 +153,17 @@ def _retry_quarantined_hook_processes() -> bool:
             return False
         _HOOK_PROCESS_CONTAINMENT_FAILED.clear()
         return True
+    finally:
+        _HOOK_PROCESS_QUARANTINE_LOCK.release()
 
 
-def hook_processes_contained() -> bool:
+def hook_processes_contained(*, deadline_monotonic: float | None = None) -> bool:
     """Confirm no quarantined hook process survives, retrying the quarantine once."""
     if not _HOOK_PROCESS_CONTAINMENT_FAILED.is_set():
         return True
-    return _retry_quarantined_hook_processes()
+    if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+        return False
+    return _retry_quarantined_hook_processes(deadline_monotonic=deadline_monotonic)
 
 
 def _quarantine_hook_process(

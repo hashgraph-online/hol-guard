@@ -277,3 +277,24 @@ def test_hook_worker_keeps_ownership_while_a_cancelled_helper_is_quarantined(mon
     assert worker.close_contained() is True
     assert not launch_runtime._HOOK_PROCESS_QUARANTINE
     assert not latch.is_set()
+
+
+def test_hook_worker_quarantine_retry_stays_inside_the_close_deadline(monkeypatch):
+    latch = threading.Event()
+    latch.set()
+    kills: list[object] = []
+    monkeypatch.setattr(launch_runtime, "_HOOK_PROCESS_CONTAINMENT_FAILED", latch)
+    monkeypatch.setattr(launch_runtime, "_HOOK_PROCESS_QUARANTINE", [])
+    monkeypatch.setattr(launch_runtime, "_kill_hook_process", lambda *args: kills.append(args) or False)
+    worker = object.__new__(HookWorker)
+    worker._direct_evidence_drain = None
+    worker._owns_policy_snapshot_publisher = True
+    worker.policy_snapshot_publisher = SimpleNamespace(close_contained=lambda **_kwargs: True)
+
+    assert worker.close_contained(deadline_monotonic=time.monotonic() - 1) is False
+    assert latch.is_set()
+    assert not kills
+    with launch_runtime._HOOK_PROCESS_QUARANTINE_LOCK:
+        started = time.monotonic()
+        assert worker.close_contained(deadline_monotonic=started + 0.05) is False
+        assert time.monotonic() - started < 0.5
