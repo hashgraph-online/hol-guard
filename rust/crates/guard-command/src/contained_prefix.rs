@@ -158,9 +158,7 @@ fn transparent_step(
             held.push((name.to_string(), value.to_string()));
             continue;
         }
-        let Some(name) = drop_data.then(|| plain_data_setting(word)).flatten() else {
-            return None;
-        };
+        let name = drop_data.then(|| plain_data_setting(word)).flatten()?;
         shadow(&mut held, name);
         shadowed.push(name);
         held_drop = true;
