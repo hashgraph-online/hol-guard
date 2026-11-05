@@ -66,14 +66,14 @@ const PROXY_HARNESSES: [(&str, &str); 6] = [
 ];
 
 /// The configured connection a proxy's argv must describe.
-struct Connection<'a> {
-    harness: &'a str,
-    name: &'a str,
-    transport: &'a str,
-    source_scope: &'a str,
-    config_path: &'a str,
-    saved_origin: &'a Value,
-    saved_guard_home: Option<&'a str>,
+pub(super) struct Connection<'a> {
+    pub(super) harness: &'a str,
+    pub(super) name: &'a str,
+    pub(super) transport: &'a str,
+    pub(super) source_scope: &'a str,
+    pub(super) config_path: &'a str,
+    pub(super) saved_origin: &'a Value,
+    pub(super) saved_guard_home: Option<&'a str>,
 }
 
 pub(super) fn upstream(map: &Map<String, Value>) -> KindResult {
@@ -97,7 +97,7 @@ pub(super) fn upstream(map: &Map<String, Value>) -> KindResult {
     Ok(json!({"upstream": read(&connection, &args, &commands, &env_names)}))
 }
 
-fn read(
+pub(super) fn read(
     connection: &Connection<'_>,
     args: &[&str],
     commands: &[&str],
