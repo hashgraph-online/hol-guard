@@ -15,10 +15,16 @@ use std::time::{Duration, Instant, SystemTime};
 pub(crate) const MAX_CANDIDATES: usize = 24;
 const MAX_VISITED: usize = 6_000;
 const MAX_SCANNED_BYTES: u64 = 12 * 1024 * 1024;
-const MAX_FILE_BYTES: u64 = 65_536;
+/// Big enough for a project's main module, such as a CLI library's core file;
+/// the scanned-bytes cap still bounds the walk.
+const MAX_FILE_BYTES: u64 = 262_144;
 const MAX_DEPTH: usize = 10;
 const MAX_TERMS: usize = 12;
 const MAX_PHRASES: usize = 4;
+/// Files the prompt names, such as `CHANGES.rst`, each standing for at most
+/// `MAX_NAMED_MATCHES` files with that name.
+const MAX_NAMED: usize = 4;
+const MAX_NAMED_MATCHES: usize = 2;
 /// How far past an opening quote to look for its closing one, so a prompt
 /// full of unmatched quotes is still scanned in one pass.
 const MAX_PHRASE_SPAN: usize = 120;
@@ -43,11 +49,11 @@ const SKIPPED_DIRS: &[&str] = &[
 const TEST_DIRS: &[&str] = &["test", "tests", "__tests__", "spec", "e2e"];
 const TEST_WORDS: &[&str] = &["test", "tests", "spec", "e2e", "testing"];
 const TEXT_EXTENSIONS: &[&str] = &[
-    "astro", "c", "cc", "cjs", "clj", "cpp", "cs", "css", "dart", "erl", "ex", "exs", "go",
+    "adoc", "astro", "c", "cc", "cjs", "clj", "cpp", "cs", "css", "dart", "erl", "ex", "exs", "go",
     "gradle", "graphql", "h", "hpp", "html", "java", "js", "json", "jsx", "kt", "kts", "less",
-    "lua", "m", "md", "mdx", "mjs", "mm", "nix", "php", "proto", "py", "r", "rb", "rs", "sass",
-    "scala", "scss", "sh", "sql", "svelte", "swift", "toml", "ts", "tsx", "txt", "vue", "xml",
-    "yaml", "yml", "zig",
+    "lua", "m", "md", "mdx", "mjs", "mm", "nix", "php", "proto", "py", "r", "rb", "rs", "rst",
+    "sass", "scala", "scss", "sh", "sql", "svelte", "swift", "toml", "ts", "tsx", "txt", "vue",
+    "xml", "yaml", "yml", "zig",
 ];
 const SKIPPED_FILES: &[&str] = &[
     "package-lock.json",
@@ -98,9 +104,12 @@ pub(crate) fn project_root(cwd: &Path, home: &Path, guard_home: &Path) -> Option
 }
 
 /// Lowercase words from the prompt worth looking for in paths and code.
+/// Words written like code come first, so a long prompt keeps the names it
+/// is about (`case_sensitive`, `IntRange`) over the plain words around them.
 pub(crate) fn terms(prompt: &str) -> Vec<String> {
-    let mut found: Vec<String> = Vec::new();
-    for word in prompt.split(|c: char| !(c.is_alphanumeric() || c == '-' || c == '_')) {
+    let mut code: Vec<String> = Vec::new();
+    let mut plain: Vec<String> = Vec::new();
+    for (word, shaped) in words(prompt) {
         let joined = word.replace(['-', '_'], "").to_lowercase();
         for part in std::iter::once(joined).chain(
             word.split(['-', '_'])
@@ -111,22 +120,110 @@ pub(crate) fn terms(prompt: &str) -> Vec<String> {
             if term.chars().count() >= 3
                 && !STOP_WORDS.contains(&term.as_str())
                 && !term.chars().all(|c| c.is_ascii_digit())
-                && !found.contains(&term)
             {
-                found.push(term);
+                if shaped {
+                    code.push(term);
+                } else {
+                    plain.push(term);
+                }
             }
         }
+    }
+    let mut found: Vec<String> = Vec::new();
+    for term in code.into_iter().chain(plain) {
         if found.len() >= MAX_TERMS {
             break;
         }
+        if !found.contains(&term) {
+            found.push(term);
+        }
     }
-    found.truncate(MAX_TERMS);
     // A request for tests counts even when it comes late in a long prompt.
     if !asks_for_tests(&found) && prompt_mentions_tests(prompt) {
         found.truncate(MAX_TERMS - 1);
         found.push("test".into());
     }
     found
+}
+
+/// The prompt's words, each marked when it is written like code: inside
+/// backticks, dotted (`click.Choice`), snake_case or camelCase. A file name
+/// gives its name without the extension.
+fn words(prompt: &str) -> Vec<(String, bool)> {
+    let mut found = Vec::new();
+    for (span, ticked) in spans(prompt) {
+        for token in tokens(span) {
+            let token = token.trim_matches(['.', '-', '/']);
+            let token = file_name(token).map_or(token, |(stem, _)| stem);
+            let shaped = ticked || token.contains(['.', '_']) || camel(token);
+            for piece in token.split(['.', '/']).filter(|piece| !piece.is_empty()) {
+                found.push((piece.to_owned(), shaped));
+            }
+        }
+    }
+    found
+}
+
+/// The prompt's text between backticks and outside them, each marked when it
+/// was backticked. A backticked command line (`pytest -x tests`) says how to
+/// run something, not what the request is about, so it is left out.
+fn spans(prompt: &str) -> impl Iterator<Item = (&str, bool)> {
+    let parts: Vec<&str> = prompt.split('`').collect();
+    let last = parts.len() - 1;
+    parts
+        .into_iter()
+        .enumerate()
+        .map(move |(index, span)| (span, index % 2 == 1 && index < last))
+        .filter(|(span, ticked)| !(*ticked && span.trim().contains(char::is_whitespace)))
+}
+
+fn tokens(span: &str) -> impl Iterator<Item = &str> {
+    span.split(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '/')))
+}
+
+fn camel(word: &str) -> bool {
+    word.chars()
+        .zip(word.chars().skip(1))
+        .any(|(a, b)| a.is_lowercase() && b.is_uppercase())
+}
+
+/// `(stem, extension)` when `token` is a file name this search reads.
+fn file_name(token: &str) -> Option<(&str, &str)> {
+    let (stem, extension) = token.rsplit_once('.')?;
+    let base = stem.rsplit('/').next().unwrap_or(stem);
+    (!base.is_empty() && wanted_file(token.rsplit('/').next().unwrap_or(token)))
+        .then_some((stem, extension))
+}
+
+/// Files the prompt names, as typed (`CHANGES.rst`, `src/app/cli.py`).
+pub(crate) fn named(prompt: &str) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    for token in spans(prompt).flat_map(|(span, _)| tokens(span)) {
+        if found.len() >= MAX_NAMED {
+            break;
+        }
+        let name = token.trim_matches(['.', '/']);
+        if !token.contains("..") && file_name(name).is_some() && !found.iter().any(|n| n == name) {
+            found.push(name.to_owned());
+        }
+    }
+    found
+}
+
+/// Which of the prompt's `named` files `relative` is, if any: the same path,
+/// or the same file name when the prompt gave no folder.
+fn named_as(relative: &str, named: &[String]) -> Option<usize> {
+    let name = relative.rsplit('/').next().unwrap_or(relative);
+    named.iter().take(MAX_NAMED).position(|wanted| {
+        if wanted.contains('/') {
+            relative.eq_ignore_ascii_case(wanted)
+                || relative
+                    .to_lowercase()
+                    .ends_with(&format!("/{}", wanted.to_lowercase()))
+        } else {
+            name.eq_ignore_ascii_case(wanted)
+        }
+    })
 }
 
 /// True when the search terms ask about tests.
@@ -203,25 +300,29 @@ struct Seen {
     in_path: Vec<bool>,
     hits: Vec<u8>,
     quoted: Vec<bool>,
+    named: Option<usize>,
 }
 
 struct Scored {
     relative: String,
     score: f64,
     modified: SystemTime,
+    named: Option<usize>,
 }
 
-/// Project files that mention the prompt's words or quoted phrases, best first. An empty
-/// result means nothing in the project matched, so no context is added. The
-/// walk stops after `budget` or its own time limit, whichever comes first.
+/// Project files the prompt names, then the ones that mention its words or
+/// quoted phrases, best first. An empty result means nothing in the project
+/// matched, so no context is added. The walk stops after `budget` or its own
+/// time limit, whichever comes first.
 pub(crate) fn candidates(
     root: &Path,
     terms: &[String],
     phrases: &[String],
+    named: &[String],
     budget: Duration,
 ) -> Vec<String> {
     let budget = budget.min(WALK_BUDGET);
-    if terms.is_empty() && phrases.is_empty() {
+    if terms.is_empty() && phrases.is_empty() && named.is_empty() {
         return Vec::new();
     }
     let started = Instant::now();
@@ -297,13 +398,19 @@ pub(crate) fn candidates(
                 .map(|term| text.matches(term.as_str()).take(8).count() as u8)
                 .collect();
             let quoted: Vec<bool> = phrases.iter().map(|p| text.contains(p.as_str())).collect();
-            if in_path.contains(&true) || hits.iter().any(|&n| n > 0) || quoted.contains(&true) {
+            let named = named_as(&relative, named);
+            if in_path.contains(&true)
+                || hits.iter().any(|&n| n > 0)
+                || quoted.contains(&true)
+                || named.is_some()
+            {
                 seen.push(Seen {
                     relative,
                     modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
                     in_path,
                     hits,
                     quoted,
+                    named,
                 });
             }
         }
@@ -356,15 +463,37 @@ fn scores(seen: Vec<Seen>, files: usize, terms: usize, phrases: usize) -> Vec<Sc
                 relative: file.relative,
                 score,
                 modified: file.modified,
+                named: file.named,
             }
         })
         .collect()
 }
 
-/// Best first. Test files stay out when a source file matched and the prompt
-/// did not ask about tests, since a test that quotes the same words would
-/// otherwise crowd out the file the request is about.
-fn ranked(mut scored: Vec<Scored>, terms: &[String]) -> Vec<String> {
+/// Files the prompt names first, in its order and the shortest path first
+/// when a name matches several; then the rest, best first. Test files stay
+/// out when a source file matched and the prompt did not ask about tests,
+/// since a test that quotes the same words would otherwise crowd out the
+/// file the request is about.
+fn ranked(scored: Vec<Scored>, terms: &[String]) -> Vec<String> {
+    let (mut pinned, mut scored): (Vec<Scored>, Vec<Scored>) =
+        scored.into_iter().partition(|item| item.named.is_some());
+    pinned.sort_by(|a, b| {
+        a.named
+            .cmp(&b.named)
+            .then(
+                a.relative
+                    .matches('/')
+                    .count()
+                    .cmp(&b.relative.matches('/').count()),
+            )
+            .then(a.relative.cmp(&b.relative))
+    });
+    let mut per_name = [0_usize; MAX_NAMED];
+    pinned.retain(|item| {
+        let count = &mut per_name[item.named.unwrap_or_default()];
+        *count += 1;
+        *count <= MAX_NAMED_MATCHES
+    });
     if !asks_for_tests(terms) && scored.iter().any(|item| !test_file(&item.relative)) {
         scored.retain(|item| !test_file(&item.relative));
     }
@@ -374,8 +503,9 @@ fn ranked(mut scored: Vec<Scored>, terms: &[String]) -> Vec<String> {
             .then(b.modified.cmp(&a.modified))
             .then(a.relative.cmp(&b.relative))
     });
-    scored
+    pinned
         .into_iter()
+        .chain(scored)
         .take(MAX_CANDIDATES)
         .map(|item| item.relative)
         .collect()
