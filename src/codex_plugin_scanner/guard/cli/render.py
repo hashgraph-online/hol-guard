@@ -894,14 +894,18 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
     protection_off = protection_off or not in_effect
     protection_line += _watch_revert_line(payload)
     protection_line += harness_posture_line(payload)
+    body = (
+        f"[bold]HOL Guard status[/bold]\n"
+        f"{protection_line}\n"
+        f"{payload.get('managed_harnesses', 0)} managed harnesses {_bullet()} "
+        f"{payload.get('receipt_count', 0)} receipts {_bullet()} "
+        f"{payload.get('pending_approvals', 0)} approvals {_bullet()} "
+        f"sync {'connected' if payload.get('sync_configured') else 'local only'}"
+    )
+    # Markup escaping leaves emoji codes, so a home such as `/srv/:smile:` would print an emoji.
     console.print(
         Panel.fit(
-            f"[bold]HOL Guard status[/bold]\n"
-            f"{protection_line}\n"
-            f"{payload.get('managed_harnesses', 0)} managed harnesses {_bullet()} "
-            f"{payload.get('receipt_count', 0)} receipts {_bullet()} "
-            f"{payload.get('pending_approvals', 0)} approvals {_bullet()} "
-            f"sync {'connected' if payload.get('sync_configured') else 'local only'}",
+            Text.from_markup(body, emoji=False) if _rich_available else body,
             border_style="red" if protection_off else "cyan",
         )
     )

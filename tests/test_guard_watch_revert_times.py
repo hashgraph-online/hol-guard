@@ -112,6 +112,16 @@ def test_watch_restore_command_prints_bracketed_home_literally() -> None:
     assert "--guard-home '/srv/[bold]team'" in console.export_text()
 
 
+def test_status_panel_prints_emoji_code_home_literally() -> None:
+    from rich.console import Console
+
+    from codex_plugin_scanner.guard.cli.render import _render_status
+
+    console = Console(record=True, width=200)
+    _render_status(console, {"protection": "watch", "guard_home": "/srv/:smile:/team", "harnesses": []})
+    assert "--guard-home /srv/:smile:/team" in console.export_text()
+
+
 def test_watch_stamp_repair_keeps_a_posture_saved_after_the_read(tmp_path: Path, monkeypatch: object) -> None:
     from datetime import datetime, timedelta, timezone
 
