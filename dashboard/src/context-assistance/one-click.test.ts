@@ -254,7 +254,15 @@ const plan = install;
 {
   const { deps } = fakeGuard({ failPhase: "failed" });
   await assert.rejects(runCigarSetup(plan, off, deps), (cause: unknown) => cause instanceof CigarSetupError && cause.stage === "download"
-    && /fingerprint mismatch/.test(cause.message));
+    && /did not match what Guard expected/.test(cause.message) && !/_|fingerprint/.test(cause.message));
+}
+{
+  // Raw codes such as native_context_assistance_cigar_install_inputs_invalid never reach the page.
+  for (const failCode of ["native_context_assistance_cigar_install_inputs_invalid", "native_context_assistance_something_new"]) {
+    const { deps } = fakeGuard({ failPhase: "failed", failCode });
+    await assert.rejects(runCigarSetup(plan, off, deps), (cause: unknown) => cause instanceof CigarSetupError
+      && /Nothing was turned on/.test(cause.message) && !/native|context assistance|_/.test(cause.message));
+  }
 }
 {
   const { deps } = fakeGuard({ failPhase: "failed", failCode: "native_context_assistance_runtime_deadline_exceeded" });

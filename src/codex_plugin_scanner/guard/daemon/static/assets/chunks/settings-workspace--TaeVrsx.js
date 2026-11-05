@@ -6035,7 +6035,13 @@ function failedJobCopy(code) {
   if (code.endsWith("deadline_exceeded")) {
     return "This computer took too long to finish this step, so Guard stopped it. Nothing was turned on. Try again when the computer is less busy.";
   }
-  return "This step did not finish (" + code.replace(/_/g, " ") + "). Nothing was turned on.";
+  if (code.endsWith("fingerprint_mismatch")) {
+    return "The download did not match what Guard expected, so Guard threw it away. Nothing was turned on. Try again.";
+  }
+  if (code.endsWith("inputs_invalid")) {
+    return "Guard could not start this step with its current settings. Nothing was turned on. Update Guard, then try again.";
+  }
+  return "Guard could not finish this step. Nothing was turned on. Try again, or open Updates to see what happened.";
 }
 async function follow(deps, stage, input, proof, done) {
   guard(deps);
