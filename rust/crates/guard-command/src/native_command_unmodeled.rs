@@ -589,14 +589,28 @@ fn executor_name(word: &str) -> String {
 
 /// A pipeline whose only data movement is a pipe into an `xargs` that names
 /// the program it runs. A pipe into a shell, `curl url | sh`, is not one.
+/// A redirect that only discards or merges output, such as a search's
+/// `2>/dev/null`, writes nothing a review would need to see.
 fn named_xargs_pipeline(text: &str) -> bool {
-    let literal = unquoted_literal(text);
+    let kept: Vec<&str> = text
+        .split_whitespace()
+        .filter(|word| !DISCARDED_OUTPUT.contains(word))
+        .collect();
     text.contains("xargs")
         && xargs_names_its_program(text)
         && xargs_input_is_named(text)
-        && !text.contains(['<', '>', '`', '$', '\n'])
-        && !moves_data(&literal)
+        && !text.contains(['<', '`', '$', '\n'])
+        && !moves_data(&unquoted_literal(&kept.join(" ")))
 }
+
+/// Redirects that write nowhere but `/dev/null` or the other output stream.
+const DISCARDED_OUTPUT: &[&str] = &[
+    "2>/dev/null",
+    ">/dev/null",
+    "1>/dev/null",
+    "&>/dev/null",
+    "2>&1",
+];
 
 /// A `find` whose every `-exec` names the program it runs. find passes the
 /// paths it found as that program's operands, and those come from the roots
