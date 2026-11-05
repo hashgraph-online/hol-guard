@@ -9,13 +9,13 @@ changes what Guard enforces.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 from ..native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION
 from ..policy_bundle_delivery import is_failed_policy_bundle_acknowledgement, policy_bundle_failure_acknowledgement
 from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT, validated_policy_bundle_v2_acknowledgement
 from ..store import GuardStore
-from ..synced_policy import synced_policy_bundle_validation
 
 _ACK_STATE_KEY = "policy_bundle_ack"
 _FAILED = "failed"
@@ -72,8 +72,12 @@ def cached_bundle_failure_acknowledgement(
     acknowledgement: dict[str, object],
     device_id: str,
     device_name: str,
+    validate: Callable[[GuardStore, object], tuple[dict[str, object] | None, str | None]],
 ) -> dict[str, object] | None:
     """Return the failed acknowledgement this device should report, if any.
+
+    ``validate`` is the caller's cached-bundle validator, so this check and the
+    rest of the sync agree on whether the cached bundle is trusted.
 
     ``None`` means the cached bundle still validates (or Guard cannot tell), and
     the caller keeps its normal acknowledgement. An empty map means the cached
@@ -84,7 +88,7 @@ def cached_bundle_failure_acknowledgement(
 
     payload = store.get_sync_payload("policy_bundle")
     has_payload = isinstance(payload, dict) and bool(payload)
-    bundle, reason = synced_policy_bundle_validation(store) if has_payload else (None, None)
+    bundle, reason = validate(store, payload) if has_payload else (None, None)
     if bundle is not None:
         # The cached bundle validates again: a legacy failure describes a
         # bundle Guard has since recovered, so it is not resent.

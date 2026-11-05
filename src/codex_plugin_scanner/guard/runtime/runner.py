@@ -3908,6 +3908,7 @@ def _validated_policy_bundle_acknowledgement(
         acknowledgement=acknowledgement,
         device_id=device_id,
         device_name=device_name,
+        validate=lambda guard_store, policy_bundle: cached_policy_bundle_validation(guard_store, policy_bundle),
     )
     if failure is not None:
         return failure or None
