@@ -118,9 +118,11 @@ pub(super) fn project(
             }
             Quote::None => {}
         }
-        // `&>` is a redirect, not a separator, and the newline that opens a
-        // heredoc body ends a command the operator already belongs to.
-        let separates = !(current == '\n' && !heredocs.is_empty())
+        // The newline that opens a heredoc body ends a command the operator
+        // already belongs to, so it separates nothing the operator has not
+        // already reached. `&>` is a redirect rather than a separator.
+        let opens_a_heredoc_body = current == '\n' && !heredocs.is_empty();
+        let separates = !opens_a_heredoc_body
             && (matches!(current, ';' | '|' | '\n' | '(' | ')' | '{' | '}')
                 || (current == '&' && chars.get(index + 1) != Some(&'>'))
                 || substitution(&chars, index));
