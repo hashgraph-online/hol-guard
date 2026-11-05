@@ -255,6 +255,7 @@ def test_run_session_records_a_failed_step_and_keeps_the_teammate_commit_small(t
         out.write_text(json.dumps({"type": "thread.started", "thread_id": "t-1"}) + "\n", encoding="utf-8")
 
     monkeypatch.setattr(bench, "codex_exec", fake_exec)
+    monkeypatch.setattr(bench, "preflight", lambda *args: None)
     monkeypatch.setattr(bench, "check_step", lambda python, project: {"suite": "1 passed in 0.1s"})
     result = bench.run_session(tmp_path, "base", 1)
     assert result["passed"] is False
@@ -284,3 +285,28 @@ def test_report_command_fails_when_a_rep_failed(tmp_path: Path, capsys) -> None:
     rows[1]["passed"] = True
     (runs / "results.jsonl").write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
     assert bench.main(["--work", str(tmp_path), "report", "--base", "base", "cigar"]) == 0
+
+
+@pytest.mark.skipif(not Path("/bin/zsh").exists(), reason="the agent shell under test is zsh")
+def test_agent_env_puts_the_venv_first_in_a_login_shell(tmp_path: Path) -> None:
+    venv_bin = tmp_path / "venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    python = venv_bin / "python"
+    python.write_text("#!/bin/sh\n", encoding="utf-8")
+    python.chmod(0o755)
+    env = bench.agent_env(tmp_path, tmp_path / "codex", tmp_path / "other-home", python)
+    assert env["HOME"] == str(tmp_path / "other-home")
+    done = subprocess.run(
+        ["/bin/zsh", "-lc", "command -v python"],
+        env={**env, "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert done.stdout.strip() == str(python)
+
+
+def test_preflight_refuses_a_shell_without_the_venv(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(bench, "agent_env", lambda *args: {"PATH": "/usr/bin:/bin", "SHELL": "/bin/sh"})
+    with pytest.raises(SystemExit, match="resolves python"):
+        bench.preflight(tmp_path, tmp_path, None, tmp_path / "venv" / "bin" / "python")

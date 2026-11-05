@@ -28,22 +28,20 @@ import json
 import os
 import re
 import shutil
-import statistics
 import subprocess
 import sys
 import time
 from pathlib import Path
 
+from bench_guard_cigar_long_task_report import EFFORT, FIXTURE_SHA, MODEL, markdown, report
+
 HERE = Path(__file__).resolve().parent
 DATA = HERE / "cigar_long_task"
 FIXTURE_REPO = "https://github.com/pallets/click.git"
-# The "8.1.8" tag commit. Its tree (48a3e989...) is what the original rig measured.
-FIXTURE_SHA = "934813e4d421071a1b3db3973c02fe2721359a6e"
+# FIXTURE_SHA is the "8.1.8" tag commit. Its tree is what the original rig measured.
 FIXTURE_TREE = "48a3e9893840b8ad002fc31b14be47a31dfd96ed"
 # click 8.1.8's suite does not collect under pytest 9 (iterator parametrize became an error).
 PYTEST_VERSION = "8.3.4"
-MODEL = "gpt-6-luna"
-EFFORT = "medium"
 STEPS = 6
 TEAMMATE_STEP = 4
 ACCEPTANCE = ("t1", "t2", "s3")
@@ -263,6 +261,37 @@ def passed(results: dict) -> bool:
     )
 
 
+def agent_env(project: Path, codex_home: Path, home: Path | None, python: Path) -> dict:
+    """The environment Codex and its shell commands get, the same for every arm.
+
+    Codex runs commands through a login shell, and a login shell rebuilds PATH from the
+    user's startup files (and macOS path_helper), so a PATH set here alone does not reach
+    the agent. A bench-owned ZDOTDIR puts the fixture venv first after that rebuild,
+    whatever HOME the arm uses. Without it an arm with its own HOME found a Python
+    without pytest and spent a fifth of its tool calls looking for one.
+    """
+    zdot = python.parent.parent.parent / "zdot"
+    zdot.mkdir(exist_ok=True)
+    (zdot / ".zshenv").write_text("", encoding="utf-8")
+    (zdot / ".zprofile").write_text(f'export PATH="{python.parent}:$PATH"\n', encoding="utf-8")
+    path = os.pathsep.join([str(python.parent), os.environ.get("PATH", "")])
+    env = dict(os.environ, CODEX_HOME=str(codex_home), PYTHONPATH=str(project / "src"), PATH=path, ZDOTDIR=str(zdot))
+    if home:
+        env["HOME"] = str(home)
+    return env
+
+
+def preflight(project: Path, codex_home: Path, home: Path | None, python: Path) -> None:
+    """The agent's login shell must find the fixture venv's pytest before any step runs."""
+    env = agent_env(project, codex_home, home, python)
+    shell = env.get("SHELL") or "/bin/zsh"
+    done = subprocess.run(
+        [shell, "-lc", "command -v python"], cwd=project, env=env, capture_output=True, text=True, timeout=60
+    )
+    if done.stdout.strip() != str(python.parent / "python"):
+        raise SystemExit(f"agent shell resolves python to {done.stdout.strip() or 'nothing'}, not {python}")
+
+
 class StepError(RuntimeError):
     """A Codex step did not finish; the rep is recorded as failed and the next one starts."""
 
@@ -277,11 +306,7 @@ def codex_exec(
     if thread:
         command.append(thread)
     command.append(prompt)
-    # The fixture venv goes first on PATH so the agent's `python`/`pytest` are the checked ones.
-    path = os.pathsep.join([str(python.parent), os.environ.get("PATH", "")])
-    env = dict(os.environ, CODEX_HOME=str(codex_home), PYTHONPATH=str(project / "src"), PATH=path)
-    if home:
-        env["HOME"] = str(home)
+    env = agent_env(project, codex_home, home, python)
     with out.open("w", encoding="utf-8") as stdout, out.with_suffix(".err").open("a", encoding="utf-8") as stderr:
         try:
             streams = {"stdin": subprocess.DEVNULL, "stdout": stdout, "stderr": stderr}
@@ -309,6 +334,7 @@ def run_session(work: Path, arm: str, rep: int) -> dict:
         raise SystemExit(f"{arm} r{rep} is already recorded under {work / 'runs'}; pick another --first-rep")
     python = work / "venv" / "bin" / "python"
     project = fresh_project(work, arm, rep)
+    preflight(project, codex_home, home if home.is_dir() else None, python)
     runs = work / "runs"
     runs.mkdir(exist_ok=True)
     thread = None
@@ -377,71 +403,6 @@ def load_results(work: Path) -> list[dict]:
     if not path.exists():
         return []
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-
-
-def summarize(rows: list[dict]) -> dict:
-    inputs = [row["tokens"]["input_tokens"] for row in rows]
-    return {
-        "n": len(rows),
-        "passed": sum(1 for row in rows if row["passed"]),
-        "mean_input": round(statistics.fmean(inputs)) if inputs else 0,
-        "median_input": round(statistics.median(inputs)) if inputs else 0,
-        "min_input": min(inputs) if inputs else 0,
-        "max_input": max(inputs) if inputs else 0,
-        "mean_uncached": round(statistics.fmean(row["tokens"]["uncached_input_tokens"] for row in rows)) if rows else 0,
-        "mean_requests": round(statistics.fmean(row["tokens"]["requests"] for row in rows), 1) if rows else 0,
-        "mean_compactions": round(statistics.fmean(row["tokens"]["compactions"] for row in rows), 1) if rows else 0,
-        "mean_read_chars": round(statistics.fmean(row["tool_output"]["chars"].get("read", 0) for row in rows))
-        if rows
-        else 0,
-        "mean_secs": round(statistics.fmean(row["secs"] for row in rows)) if rows else 0,
-    }
-
-
-def report(rows: list[dict], base: str, arms: list[str]) -> dict:
-    """Per-arm summary and the change against the base arm's mean."""
-    by_arm = collections.defaultdict(list)
-    for row in rows:
-        by_arm[row["arm"]].append(row)
-    missing = [arm for arm in [base, *arms] if arm not in by_arm]
-    if missing:
-        raise ValueError(f"no recorded runs for arm(s) {', '.join(missing)}; recorded: {', '.join(sorted(by_arm))}")
-    summary = {arm: summarize(by_arm[arm]) for arm in dict.fromkeys([base, *arms])}
-    base_mean = summary[base]["mean_input"]
-    for stats in summary.values():
-        stats["change_vs_base"] = round((stats["mean_input"] - base_mean) / base_mean, 3) if base_mean else 0.0
-        stats["all_passed"] = stats["n"] > 0 and stats["passed"] == stats["n"]
-    return {"base": base, "fixture": FIXTURE_SHA, "model": MODEL, "effort": EFFORT, "arms": summary}
-
-
-def markdown(summary: dict) -> str:
-    head = (
-        f"Fixture pallets/click `{summary['fixture'][:10]}`, Codex `{summary['model']}` {summary['effort']}, "
-        "six resumed prompts, rollout `token_usage_record` sums."
-    )
-    lines = [
-        head,
-        "",
-        "| Arm | n | all pass | mean input | median | min-max | vs base "
-        "| uncached | requests | compactions | read chars |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
-    ]
-    for arm, stats in summary["arms"].items():
-        cells = [
-            arm,
-            str(stats["n"]),
-            "yes" if stats["all_passed"] else "NO",
-            f"{stats['mean_input']:,}",
-            f"{stats['median_input']:,}",
-            f"{stats['min_input']:,}-{stats['max_input']:,}",
-            f"{stats['change_vs_base']:+.1%}",
-            f"{stats['mean_uncached']:,}",
-            str(stats["mean_requests"]),
-            str(stats["mean_compactions"]),
-            f"{stats['mean_read_chars']:,}",
-        ]
-        lines.append("| " + " | ".join(cells) + " |")
-    return "\n".join(lines) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
