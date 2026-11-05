@@ -652,6 +652,11 @@ mod health_snapshot_binding;
 #[path = "adapters/detection/hermes_detect.rs"]
 mod hermes_detect;
 mod hermes_file_inspect;
+#[path = "adapters/hermes_hook_config.rs"]
+mod hermes_hook_config;
+#[cfg(test)]
+#[path = "adapters/hermes_hook_config_tests.rs"]
+mod hermes_hook_config_tests;
 mod hermes_inspect;
 mod hermes_printable;
 mod hermes_skills;
