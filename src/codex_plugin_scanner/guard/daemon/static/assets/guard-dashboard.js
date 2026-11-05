@@ -31929,9 +31929,23 @@ function firstToolInput(raw) {
     return null;
   }
   for (const key of TOOL_INPUT_KEYS) {
-    const input = recordValue(raw[key]);
+    const value = raw[key];
+    const input = recordValue(value);
     if (input !== null) {
       return input;
+    }
+    if (typeof value !== "string" || value.trim().length === 0) {
+      continue;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+    const parsedInput = recordValue(parsed);
+    if (parsedInput !== null) {
+      return parsedInput;
     }
   }
   return null;

@@ -89,10 +89,29 @@ function firstToolInput(raw: Record<string, unknown> | null): Record<string, unk
     return null;
   }
   for (const key of TOOL_INPUT_KEYS) {
-    const input = recordValue(raw[key]);
+    const value = raw[key];
+    const input = recordValue(value);
     if (input !== null) {
       return input;
     }
+    if (typeof value !== "string" || value.trim().length === 0) {
+      continue;
+    }
+    // Core parses a JSON string under these keys and uses it when it is an
+    // object. Redaction cuts long strings at 240 characters, so a string the
+    // card cannot parse may still be the input Core used: show nothing rather
+    // than quote a later key's input.
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+    const parsedInput = recordValue(parsed);
+    if (parsedInput !== null) {
+      return parsedInput;
+    }
+    // Core skips JSON that is not an object, so the next key decides.
   }
   return null;
 }

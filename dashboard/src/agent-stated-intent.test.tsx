@@ -146,6 +146,31 @@ assert(
   assert(resolveAgentStatedIntent(request)?.text === "Run the unit tests", "reads toolInput under run_shell_command");
 }
 
+// A JSON-string input is chosen the way Core chooses it.
+{
+  const withRaw = (raw: Record<string, unknown>) =>
+    requestWith({ raw_payload_redacted: { tool_name: "Bash", ...raw } });
+  const objectInput = { command: "npm test", description: "Second input's line" };
+  assert(
+    resolveAgentStatedIntent(withRaw({ tool_input: JSON.stringify({ command: "ls", description: "First input's line" }) }))
+      ?.text === "First input's line",
+    "a JSON-string tool_input is parsed",
+  );
+  assert(
+    resolveAgentStatedIntent(withRaw({ tool_input: JSON.stringify({ command: "ls" }), toolInput: objectInput })) === null,
+    "Core uses the first parsed object, so a later key's line is not shown",
+  );
+  assert(
+    resolveAgentStatedIntent(withRaw({ tool_input: '{"command":"ls","description":"cut by redac…', toolInput: objectInput })) ===
+      null,
+    "an unparseable string may be Core's input, so nothing is shown",
+  );
+  assert(
+    resolveAgentStatedIntent(withRaw({ tool_input: "[1, 2]", toolInput: objectInput }))?.text === "Second input's line",
+    "JSON that is not an object is skipped, as Core skips it",
+  );
+}
+
 // Missing or unusable input renders nothing.
 assert(resolveAgentStatedIntent({ ...BASE_REQUEST, action_envelope_json: null }) === null, "no envelope");
 assert(resolveAgentStatedIntent(requestWith({ raw_payload_redacted: {} })) === null, "no tool_input");
