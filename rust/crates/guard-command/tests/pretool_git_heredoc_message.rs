@@ -59,6 +59,7 @@ fn literal_standard_input_fed_to_anything_else_stays_reviewed() {
         // actually feeds, so every command still has to answer.
         "git apply <<'MSG'\ndiff --git a/x b/x\nMSG\ncat",
         "git hash-object -w --stdin <<'MSG'\npayload\nMSG\nwc -c",
+        "sh <<'MSG'\nrm -rf build\nMSG\ncat README.md",
         // An unquoted delimiter expands the body before git ever sees it.
         "git commit -F - <<MSG\n$(cat ~/.ssh/id_rsa)\nMSG",
     ] {
