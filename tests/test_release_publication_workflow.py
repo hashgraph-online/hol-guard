@@ -172,7 +172,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     main_verify = next(step for step in main_steps if step.get("name") == "Download and verify exact PyPI artifacts")
     assert main_verify["env"]["SCANNER_QUOTA_BLOCKED"] == "${{ steps.scanner_quota.outputs.blocked }}"
     assert '"${SCANNER_QUOTA_BLOCKED}" == "true"' in main_verify["run"]
-    assert 'scanner_status=skipped' in main_verify["run"]
+    assert "scanner_status=skipped" in main_verify["run"]
     assert main_verify["if"] == (
         "steps.pypi_quota.outputs.blocked != 'true' || steps.pypi.outputs.plugin_scanner_upload == 'true'"
     )
