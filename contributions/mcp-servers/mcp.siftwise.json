@@ -25,7 +25,8 @@
   "riskClasses": [
     "local-source-read",
     "local-file-read",
-    "external-network-read"
+    "external-network-read",
+    "external-data-egress"
   ],
   "tools": [
     {
@@ -52,9 +53,9 @@
     "https://pypi.org/project/siftwise/"
   ],
   "saferAlternatives": [
-    "The three tools only read: they run git in the checkout and read JUnit files. They never edit files, execute tests or record runs; select_tests returns a test command for the agent to run.",
-    "Data goes only to SIFTWISE_SERVER, the user's self-hosted siftwise server: changed file paths, import edges and parsed JUnit results. Use an https:// server URL; the API token is never returned in tool results.",
+    "Locally the tools only read: they run git in the checkout and read JUnit files. They never edit files, execute tests or record runs; select_tests returns a test command for the agent to run.",
+    "The tools send data to SIFTWISE_SERVER, the user's self-hosted siftwise server: changed file paths, import edges and parsed JUnit results. Use an https:// server URL; the API token is never returned in tool results.",
     "If the server is unreachable or the token is missing, select_tests answers 'run the full suite' and triage_failure reports verdicts unavailable, so failures are never hidden.",
-    "Guard matches the basename siftwise for every stdio invocation; launch it as `siftwise mcp` from `pip install siftwise[mcp]` (or `uv tool install`) so the identity matches."
+    "Guard matches the basename siftwise for every stdio invocation; install with `pip install 'siftwise[mcp]'` or `uv tool install 'siftwise[mcp]'` and launch `siftwise mcp` so the identity matches."
   ]
 }
