@@ -17443,9 +17443,46 @@ function guardApiInput(input) {
 function withGuardAuth(init) {
   return withGuardAuthForToken(init, readGuardToken());
 }
+const BUSY_RETRY_DELAYS_MS = [300, 900, 2e3];
+async function isBusyRefusal(response) {
+  if (response.status !== 503) {
+    return false;
+  }
+  try {
+    const payload = await response.clone().json();
+    return isRecord$4(payload) && payload["error"] === "native_route_policy_unavailable" && payload["reason_code"] === void 0;
+  } catch {
+    return false;
+  }
+}
+function waitForRetry(delayMs, signal) {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve(true);
+    }, delayMs);
+    function onAbort() {
+      clearTimeout(timer);
+      resolve(false);
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 async function daemonFetch(input, init) {
-  const response = await fetch(input, init);
+  let response = await fetch(input, init);
   observeDashboardBuild(response);
+  const resendable = !(input instanceof Request) && (init?.body == null || typeof init.body === "string");
+  for (const delayMs of resendable ? BUSY_RETRY_DELAYS_MS : []) {
+    if (!await isBusyRefusal(response) || !await waitForRetry(delayMs, init?.signal)) {
+      break;
+    }
+    response = await fetch(input, init);
+    observeDashboardBuild(response);
+  }
   return response;
 }
 function withGuardAuthForToken(init, guardToken) {

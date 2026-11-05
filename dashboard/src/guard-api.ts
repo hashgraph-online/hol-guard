@@ -1003,11 +1003,58 @@ function withGuardAuth(init?: RequestInit): RequestInit | undefined {
   return withGuardAuthForToken(init, readGuardToken());
 }
 
+// A busy computer can keep Guard's policy check from answering in time. The
+// daemon then refuses the request before acting on it, so sending it again
+// is safe. A refused restart is not busy and is not retried.
+const BUSY_RETRY_DELAYS_MS = [300, 900, 2_000];
+
+async function isBusyRefusal(response: Response): Promise<boolean> {
+  if (response.status !== 503) {
+    return false;
+  }
+  try {
+    const payload: unknown = await response.clone().json();
+    return (
+      isRecord(payload) &&
+      payload["error"] === "native_route_policy_unavailable" &&
+      payload["reason_code"] === undefined
+    );
+  } catch {
+    return false;
+  }
+}
+
+function waitForRetry(delayMs: number, signal: AbortSignal | null | undefined): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve(true);
+    }, delayMs);
+    function onAbort(): void {
+      clearTimeout(timer);
+      resolve(false);
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 // Every daemon response names the dashboard bundle it serves; note it so a tab
 // left running an older bundle after a Guard update can load the current one.
 async function daemonFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const response = await fetch(input, init);
+  let response = await fetch(input, init);
   observeDashboardBuild(response);
+  const resendable = !(input instanceof Request) && (init?.body == null || typeof init.body === "string");
+  for (const delayMs of resendable ? BUSY_RETRY_DELAYS_MS : []) {
+    if (!(await isBusyRefusal(response)) || !(await waitForRetry(delayMs, init?.signal))) {
+      break;
+    }
+    response = await fetch(input, init);
+    observeDashboardBuild(response);
+  }
   return response;
 }
 
