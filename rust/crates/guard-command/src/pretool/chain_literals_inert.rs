@@ -63,7 +63,7 @@ const DATE_CONVERSIONS: &str = "FHMSTYdjmsuwy";
 /// `None` when any substitution is not a known value producer, `allowed`
 /// refuses its text as a command of its own, or a temporary path could be
 /// steered (`TMPDIR`) or climbed out of (`..`).
-pub(super) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<String> {
+pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<String> {
     if !command.is_ascii()
         || command.len() > MAX_COMMAND_CHARS
         || command
