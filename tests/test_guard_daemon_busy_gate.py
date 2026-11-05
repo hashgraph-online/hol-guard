@@ -20,7 +20,7 @@ def _unanswered(*_args: object, **_kwargs: object) -> object:
 
 def _handler(home: Path) -> tuple[_GuardDaemonHandler, list[tuple[int, object]]]:
     handler = object.__new__(_GuardDaemonHandler)
-    handler.server = SimpleNamespace(  # type: ignore[assignment]
+    handler.server = SimpleNamespace(  # pyright: ignore[reportAttributeAccessIssue]
         store=SimpleNamespace(guard_home=home),
         classify_connection=lambda _request: None,
         claim_request_capacity=lambda _request, _path: True,
@@ -28,7 +28,7 @@ def _handler(home: Path) -> tuple[_GuardDaemonHandler, list[tuple[int, object]]]
     handler.request = None
     handler.client_address = ("127.0.0.1", 0)
     handler.request_version = "HTTP/1.1"
-    handler._touch_runtime_heartbeat = lambda _path: None  # type: ignore[method-assign]
+    handler._touch_runtime_heartbeat = lambda path: None  # pyright: ignore[reportAttributeAccessIssue]
     handler._record_auth_audit_event = lambda: None  # type: ignore[method-assign]
     written: list[tuple[int, object]] = []
 
@@ -43,7 +43,7 @@ def _handler(home: Path) -> tuple[_GuardDaemonHandler, list[tuple[int, object]]]
 def _get(handler: _GuardDaemonHandler, path: str, headers: str) -> None:
     # Runs the real request parsing so each request starts from a clean slate,
     # as it does for every request on a kept-alive connection.
-    handler.raw_requestline = f"GET {path} HTTP/1.1\r\n".encode()
+    handler.raw_requestline = f"GET {path} HTTP/1.1\r\n".encode()  # pyright: ignore[reportAttributeAccessIssue]
     handler.rfile = io.BytesIO(f"{headers}\r\n".encode())
     assert handler.parse_request()
     handler.do_GET()

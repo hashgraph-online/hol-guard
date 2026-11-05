@@ -1405,6 +1405,7 @@ class _GuardDaemonHandler(
     BaseHTTPRequestHandler,
 ):
     _MAX_BODY_BYTES = 1_000_000
+    _native_gate_unavailable = False
     server: _GuardDaemonHttpServer  # pyright: ignore[reportIncompatibleVariableOverride]
 
     def end_headers(self) -> None:
@@ -3138,7 +3139,7 @@ class _GuardDaemonHandler(
         # resident is not a verdict on the caller: the request stays refused, but
         # as the retryable 503 a busy resident gets everywhere else, so the
         # dashboard retries instead of dropping its session.
-        if status in (401, 403) and getattr(self, "_native_gate_unavailable", False):
+        if status in (401, 403) and self._native_gate_unavailable:
             payload, status = native_route_unavailable_body(), 503
         body = escape_json_for_html(json.dumps(payload).encode("utf-8"))
         self._write_json_bytes(body, status=status, extra_headers=extra_headers)
