@@ -97,6 +97,7 @@ def test_request_held_for_its_headers_is_answered_during_cold_home_work(
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     reconcile_started = threading.Event()
     release_reconcile = threading.Event()
+    reconcile_exited = threading.Event()
 
     def reconcile(
         _store: GuardStore,
@@ -105,7 +106,11 @@ def test_request_held_for_its_headers_is_answered_during_cold_home_work(
     ) -> RuntimeArtifactReconciliation:
         del home_dir
         reconcile_started.set()
-        assert release_reconcile.wait(timeout=8)
+        # No timeout: a timed failure here would let the daemon start the
+        # later watchdog, which could answer the request on its own. The
+        # finally block below always releases this wait.
+        release_reconcile.wait()
+        reconcile_exited.set()
         return RuntimeArtifactReconciliation(
             refreshed_launchers=(),
             repaired_harnesses=(),
@@ -152,7 +157,7 @@ def test_request_held_for_its_headers_is_answered_during_cold_home_work(
         except TimeoutError:
             reply = b""
         assert reply.startswith(b"HTTP/1."), "a held request got no answer during cold-home work"
-        assert release_reconcile.is_set() is False
+        assert reconcile_exited.is_set() is False, "the reply arrived after cold-home work ended"
     finally:
         if client is not None:
             client.close()
