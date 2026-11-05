@@ -60,9 +60,10 @@ const READONLY: &[&str] = &[
 /// `pytest-xdist` is installed, even for a run without `-n`, and pytest stops
 /// with an internal error when that bind is refused. The plugin listens from
 /// a background thread, where a refusal only warns. Seatbelt cannot name
-/// port 0, so the bind covers any loopback port. `listen`, `accept` and
-/// connecting out all stay denied: no host process can reach the socket and
-/// the run cannot reach a local service.
+/// port 0, and in practice it does not hold a bind to the loopback address
+/// either, so the grant is safe only because a bound socket can do nothing:
+/// `listen`, receiving a datagram and connecting out all stay denied. No
+/// host process can reach the socket and the run cannot reach a service.
 const PYTEST_LOOPBACK_BIND: &[&str] = &["(allow network-bind (local ip \"localhost:*\"))"];
 const MAC_ROOTS: &[&str] = &[
     "/System",
