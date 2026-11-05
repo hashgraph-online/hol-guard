@@ -46,6 +46,23 @@ DEFAULT_GUARD_DIRNAME = ".hol-guard"
 
 def maybe_auto_revert_watch(guard_home: Path, *, now: datetime | None = None) -> GuardConfig:
     config = load_guard_config(guard_home)
+    if (
+        config.protection_posture == "watch"
+        and config.protection_posture_explicit
+        and not config.watch_entered_at
+        and config.watch_auto_revert_hours > 0
+        # A Watch an administrator locked must not get an end the lock would then refuse.
+        and "protection_posture" not in config.managed_locked_settings
+    ):
+        # An explicit Watch saved without a start time would never revert. The runtime
+        # stamps it now, under its write lock, and only if Watch is still unstamped, so a
+        # posture saved after this read is never turned back into Watch.
+        config = update_guard_settings(
+            guard_home,
+            {"watch_stamp_repair": True},
+            event_source="auto-revert",
+            skip_approval_gate=True,
+        )
     revert: dict[str, object] = {}
     posture_due, due_harnesses = watch_auto_revert_due(config, now=now)
     if posture_due:

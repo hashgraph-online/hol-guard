@@ -89,6 +89,8 @@ pub(super) fn reviewable_substitutions(text: &str) -> Option<BoundedSubstitution
 }
 
 fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
+    let folded = super::heredoc::fold_printed_heredocs(text);
+    let text = folded.as_str();
     if text.contains("<<") || text.contains('`') {
         return None;
     }

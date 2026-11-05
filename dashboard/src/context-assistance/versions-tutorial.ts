@@ -11,7 +11,7 @@ export const CIGAR_UPDATE_TUTORIAL: CigarTutorial = {
     },
     {
       title: "Prepare beside your current runtime", description: "Downloading and verifying a replacement does not select or enable it.",
-      instructions: ["Choose a registered Python interpreter for an available SDK build, or explicitly prepare an eligible private Python build first.", "Click Prepare this build and watch its native job. The current runtime remains selected while preparation runs.", "Cancel the job if you change your mind. For an uncertain response, refresh jobs and inspect the recorded job ID before another action."],
+      instructions: ["Choose a registered Python interpreter for an available SDK build, or explicitly prepare an eligible private Python build first.", "Click Get this version and watch its progress. The current runtime remains selected while preparation runs.", "Click Stop if you change your mind. If Guard is not sure a step worked, refresh the list before trying again. In progress shows only jobs that still need something from you."],
       expect: "The prepared installation appears in the Versions list marked Installed, with your current selection intact.", target: "versions", action: "Prepare an eligible build",
     },
     {
@@ -31,7 +31,7 @@ export const CIGAR_UPDATE_TUTORIAL: CigarTutorial = {
     },
     {
       title: "Use the last good build deliberately", description: "Rollback prepares current compatible data for the previous verified installation.",
-      instructions: ["In Updates, choose Prepare last good build when you need to return to the retained installation.", "Wait for the rollback selection job, then commit it explicitly with the same reconnect acknowledgement when live.", "Use Recover job for interrupted work. Recovery does not re-grant context access. Your Guard approvals remain in place."],
+      instructions: ["In Updates, choose Prepare last good build when you need to return to the retained installation.", "Wait for the rollback selection job, then commit it explicitly with the same reconnect acknowledgement when live.", "Use Clean up for a step that stopped partway. Cleaning up does not turn context access back on. Your Guard approvals remain in place."],
       expect: "You know where to inspect a rollback or interrupted job before taking another action.", target: "versions", action: "Inspect rollback & recovery",
     },
   ],

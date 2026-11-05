@@ -321,6 +321,38 @@ fn presentation_change(payload: &Payload, current: &Value) -> Result<(Table, boo
     Ok((coerced, change))
 }
 
+/// The payload key that asks only to stamp an explicit Watch with no start time.
+pub(crate) const WATCH_STAMP_REPAIR_KEY: &str = "watch_stamp_repair";
+
+fn previous_state(current: &Value, selected: bool) -> Value {
+    json!({
+        "previous": current_str(current, "protection_posture"),
+        "previous_explicit": current_bool(current, "protection_posture_explicit"),
+        "selected": selected,
+        "harness_postures": current.get("harness_postures").cloned().unwrap_or_else(|| json!({})),
+    })
+}
+
+/// Stamps `watch_entered_at` on an explicit Watch that has none, so the
+/// auto-revert window can start. The posture is read under the config write
+/// lock, so a Protected or Extra careful save that landed first is left alone.
+/// Only a Watch the user saved qualifies: a Watch a managed policy imposes
+/// carries no stamp, and the lock would refuse the revert a stamp leads to.
+fn repair_watch_stamp(stored: &Table, current: &Value, now: &str) -> SettingsWrite {
+    let mut next = stored.clone();
+    if is_str(get(stored, "protection_posture"), "watch")
+        && current_str(current, "protection_posture") == "watch"
+        && current_bool(current, "protection_posture_explicit")
+        && current_str(current, "watch_entered_at").is_empty()
+    {
+        set(&mut next, "watch_entered_at", Tv::Str(now.to_owned()));
+    }
+    SettingsWrite {
+        next,
+        previous: previous_state(current, false),
+    }
+}
+
 /// `_update_guard_settings_locked` up to the write.
 pub(crate) fn update(
     stored: &Table,
@@ -330,6 +362,9 @@ pub(crate) fn update(
     cloud_sync_entitled: bool,
     now: &str,
 ) -> Result<SettingsWrite, String> {
+    if has(payload, WATCH_STAMP_REPAIR_KEY) {
+        return Ok(repair_watch_stamp(stored, current, now));
+    }
     let mut next = stored.clone();
     let (presentation, presentation_changed) = presentation_change(payload, current)?;
     let switching_to_custom = incoming_str(payload, "security_level") == Some("custom")
@@ -422,13 +457,10 @@ pub(crate) fn update(
     {
         return Err(invalid("Cloud sync requires a paid team plan."));
     }
-    let previous = json!({
-        "previous": current_str(current, "protection_posture"),
-        "previous_explicit": current_bool(current, "protection_posture_explicit"),
-        "selected": selected,
-        "harness_postures": current.get("harness_postures").cloned().unwrap_or_else(|| json!({})),
-    });
-    Ok(SettingsWrite { next, previous })
+    Ok(SettingsWrite {
+        next,
+        previous: previous_state(current, selected),
+    })
 }
 
 /// `reset_guard_settings`: drop every editable key and the harness stamps.
