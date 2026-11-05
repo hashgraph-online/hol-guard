@@ -67,7 +67,33 @@ pub(super) fn signs(segment: &CommandSegmentV1) -> bool {
 /// attached key) start the signing program, which the caller must prove.
 /// Short options may be clustered as Git allows: `-qm msg`, `-am msg`.
 pub(super) fn commit_form(rest: &[&str]) -> Option<bool> {
+    let form = commit_options(rest)?;
+    (form.message || (form.amend && form.no_edit)).then_some(form.signs)
+}
+
+/// Whether the commit reads its message from standard input, which is the only
+/// commit form that consumes the bytes a heredoc in front of it supplies.
+/// `-m`, a message file and an amended message all leave those bytes unread,
+/// so a projection that dropped the body would describe a command the shell
+/// never ran.
+pub(crate) fn message_from_standard_input(rest: &[&str]) -> bool {
+    commit_options(rest).is_some_and(|form| form.standard_input)
+}
+
+/// What the option scan found. `message` covers every spelling that supplies
+/// one; `standard_input` narrows that to the spellings that read it from
+/// standard input.
+struct CommitOptions {
+    message: bool,
+    standard_input: bool,
+    amend: bool,
+    no_edit: bool,
+    signs: bool,
+}
+
+fn commit_options(rest: &[&str]) -> Option<CommitOptions> {
     let (mut message, mut amend, mut no_edit, mut signs) = (false, false, false, false);
+    let mut standard_input = false;
     let mut options = true;
     let mut words = rest.iter();
     while let Some(word) = words.next() {
@@ -93,8 +119,12 @@ pub(super) fn commit_form(rest: &[&str]) -> Option<bool> {
                     return None;
                 }
                 message = true;
+                standard_input = true;
             }
-            "--file=-" => message = true,
+            "--file=-" => {
+                message = true;
+                standard_input = true;
+            }
             value if value == "--gpg-sign" || value.starts_with("--gpg-sign=") => signs = true,
             "--quiet" | "--all" | "--signoff" | "--no-verify" | "--allow-empty"
             | "--no-gpg-sign" | "--reset-author" => {}
@@ -127,6 +157,7 @@ pub(super) fn commit_form(rest: &[&str]) -> Option<bool> {
                                 return None;
                             }
                             message = true;
+                            standard_input = true;
                             break;
                         }
                         // The rest of the cluster names the key; Git never
@@ -141,7 +172,13 @@ pub(super) fn commit_form(rest: &[&str]) -> Option<bool> {
             }
         }
     }
-    (message || (amend && no_edit)).then_some(signs)
+    Some(CommitOptions {
+        message,
+        standard_input,
+        amend,
+        no_edit,
+        signs,
+    })
 }
 
 /// `branch -m NEW` or `branch -m OLD NEW`, options first. A rename moves the
@@ -333,7 +370,7 @@ pub(super) fn moves_head(original: &CommandSegmentV1) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::commit_form;
+    use super::{commit_form, message_from_standard_input};
 
     /// The commit forms that take their message from standard input.
     ///
@@ -367,6 +404,33 @@ mod tests {
             &["--allow-empty"][..],
         ] {
             assert_eq!(commit_form(rest), None, "{rest:?}");
+        }
+    }
+
+    /// Only a message read from standard input consumes a heredoc body in
+    /// front of the commit. An amended message and a message on the command
+    /// line are accepted commit forms that read nothing, so the projection
+    /// that drops the body must not treat them as readers.
+    #[test]
+    fn only_a_message_from_standard_input_reads_the_body() {
+        for rest in [
+            &["-F", "-"][..],
+            &["--file", "-"][..],
+            &["--file=-"][..],
+            &["-F-"][..],
+            &["-qF", "-"][..],
+        ] {
+            assert!(message_from_standard_input(rest), "{rest:?}");
+        }
+        for rest in [
+            &["-F", "notes.txt"][..],
+            &["--file=notes.txt"][..],
+            &["-Fnotes.txt"][..],
+            &["-m", "subject"][..],
+            &["--message=subject"][..],
+            &["--amend", "--no-edit"][..],
+        ] {
+            assert!(!message_from_standard_input(rest), "{rest:?}");
         }
     }
 }

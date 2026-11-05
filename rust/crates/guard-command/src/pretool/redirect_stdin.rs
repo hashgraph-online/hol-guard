@@ -67,8 +67,11 @@ fn segment_reads_data(segment: &CommandSegmentV1) -> bool {
         })
 }
 
-/// Whether the segment is a `git commit`, which reads standard input only as
-/// the message it records.
+/// Whether the segment is a `git commit` that takes its message from standard
+/// input, which is the only commit form that reads the bytes at all. A message
+/// on the command line, a message file and an amended message all leave them
+/// untouched, so dropping the body in front of one of those would project a
+/// command the shell never ran.
 ///
 /// The subcommand is the first word, so a global option such as `-C` or `-c`
 /// in front of it leaves the segment unrecognised and the projection closed.
@@ -76,11 +79,15 @@ fn segment_reads_data(segment: &CommandSegmentV1) -> bool {
 /// configuration the commit runs under, and this test answers only for what
 /// the bytes on standard input become.
 fn records_a_commit_message(executable: &str, segment: &CommandSegmentV1) -> bool {
-    executable == "git"
-        && segment
-            .arguments
-            .first()
-            .is_some_and(|word| word == "commit")
+    if executable != "git" {
+        return false;
+    }
+    let words: Vec<&str> = segment.arguments.iter().map(String::as_str).collect();
+    matches!(
+        words.split_first(),
+        Some((&"commit", rest))
+            if super::git_local_writes::forms::message_from_standard_input(rest)
+    )
 }
 
 /// The bare `cat` the caller may stand a no-op in for. Reading standard input
