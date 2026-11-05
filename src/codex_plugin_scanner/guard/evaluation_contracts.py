@@ -89,6 +89,11 @@ def _native_check(request: dict[str, object]) -> None:
     from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     request["temp_root"] = tempfile.gettempdir()
+    try:
+        # The runtime parses UTF-8 JSON, so an unpaired surrogate is invalid text, not an outage.
+        _ = json.dumps(request, ensure_ascii=False).encode("utf-8")
+    except UnicodeEncodeError:
+        raise EvaluationContractError("evaluation record contains invalid text") from None
     if len(json.dumps(request, separators=(",", ":")).encode()) > _MAX_CHECK_BYTES:
         raise EvaluationContractError("evaluation record is too large to check")
     timeout = None if request.get("portable") else _HOST_CHECK_TIMEOUT_SECONDS
