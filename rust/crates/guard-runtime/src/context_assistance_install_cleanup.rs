@@ -103,17 +103,17 @@ fn removed(
 ) -> Result<(), String> {
     let mut pause = Duration::from_millis(20);
     loop {
-        match remove() {
+        let refused = match remove() {
             Ok(()) => return Ok(()),
-            Err(e)
-                if e.kind() != std::io::ErrorKind::NotFound
-                    && Instant::now() + pause < deadline =>
-            {
-                std::thread::sleep(pause);
-                pause = (pause * 2).min(Duration::from_millis(500));
-            }
-            Err(_) => return Err(error("install_cleanup_failed")),
+            Err(e) => e.kind() != std::io::ErrorKind::NotFound,
+        };
+        let now = Instant::now();
+        if !refused || now >= deadline {
+            return Err(error("install_cleanup_failed"));
         }
+        // The last pause ends at the deadline, so one more attempt runs there.
+        std::thread::sleep(pause.min(deadline - now));
+        pause = (pause * 2).min(Duration::from_millis(500));
     }
 }
 pub(super) fn remove_collected(
@@ -242,12 +242,26 @@ mod removal_tests {
     }
 
     #[test]
+    fn a_file_released_just_before_the_deadline_is_removed() {
+        let started = Instant::now();
+        let result = removed(started + Duration::from_millis(500), || {
+            if started.elapsed() < Duration::from_millis(350) {
+                return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+            }
+            Ok(())
+        });
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
     fn a_file_that_stays_held_fails_at_the_deadline() {
         let started = Instant::now();
         let result = removed(started + Duration::from_millis(200), || {
             Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
         });
         assert_eq!(result, Err(error("install_cleanup_failed")));
-        assert!(started.elapsed() < Duration::from_secs(2));
+        let elapsed = started.elapsed();
+        assert!(elapsed >= Duration::from_millis(200));
+        assert!(elapsed < Duration::from_secs(2));
     }
 }
