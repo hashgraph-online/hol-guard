@@ -179,7 +179,10 @@ fn prove(
     // proof. On its own it reads nothing of the new checkout, so entering
     // the checkout and then only listing it keeps the review it had.
     let reads_git = segments[first..].iter().any(|segment| {
-        let name = segment.executable.as_deref().map(super::super::executable_basename);
+        let name = segment
+            .executable
+            .as_deref()
+            .map(super::super::executable_basename);
         segment.pipeline_index == 0 && matches!(name, Some("git" | "gh"))
     });
     let inert_allowed = reads_git && search_path_is_absolute(execution_environment);
