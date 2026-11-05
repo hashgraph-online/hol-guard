@@ -29,6 +29,9 @@ const PRIVATE_REF_DOMAIN: &[u8] = b"hol-guard.extension-control.private-ref.v1\x
 pub(crate) enum Fault {
     Tampered(String),
     Degraded(String),
+    /// A command-pack activation refused by name; the caller raises the
+    /// pack error it names.
+    Pack(String),
 }
 
 pub(crate) type Res<T> = Result<T, Fault>;

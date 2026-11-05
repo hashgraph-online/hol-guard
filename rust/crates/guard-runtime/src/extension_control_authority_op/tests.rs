@@ -109,6 +109,38 @@ impl Home {
         phase: &str,
         retained_pack: Option<&str>,
     ) -> String {
+        self.commit_with(
+            revision,
+            catalog_digest,
+            layers,
+            phase,
+            retained_pack,
+            false,
+        )
+    }
+
+    /// Commits `revision` as a transition that activates the command pack
+    /// `pack`, bound in both the transition and its snapshot.
+    pub(super) fn commit_activating(
+        &self,
+        revision: i64,
+        catalog_digest: &str,
+        layers: &[ExtensionControlLayer],
+        phase: &str,
+        pack: &str,
+    ) -> String {
+        self.commit_with(revision, catalog_digest, layers, phase, Some(pack), true)
+    }
+
+    fn commit_with(
+        &self,
+        revision: i64,
+        catalog_digest: &str,
+        layers: &[ExtensionControlLayer],
+        phase: &str,
+        pack: Option<&str>,
+        activates: bool,
+    ) -> String {
         let layers_json = layers_to_json(layers).unwrap();
         let previous_digest = if revision == 1 {
             catalog('0')
@@ -128,7 +160,7 @@ impl Home {
             "previous_digest": previous_digest,
             "committed_at": AT,
         }));
-        if let Some(pack) = retained_pack {
+        if let Some(pack) = pack {
             snapshot.insert("command_pack_record_digest".to_owned(), json!(pack));
         }
         let (snapshot_json, snapshot_digest, snapshot_mac) =
@@ -138,7 +170,7 @@ impl Home {
             private_hash(&format!("idem-{revision}"), &KEY, "idempotency"),
             private_hash(&format!("nonce-{revision}"), &KEY, "nonce"),
         ];
-        let transition = object(json!({
+        let mut transition = object(json!({
             "revision": revision,
             "previous_revision": revision - 1,
             "previous_digest": previous_digest,
@@ -150,6 +182,9 @@ impl Home {
             "created_at": AT,
             "phase": "prepared",
         }));
+        if let Some(pack) = pack.filter(|_| activates) {
+            transition.insert("command_pack_record_digest".to_owned(), json!(pack));
+        }
         let (transition_json, transition_digest, transition_mac) =
             authenticated_record(&transition, &KEY, TRANSITION_PURPOSE).unwrap();
         self.db
