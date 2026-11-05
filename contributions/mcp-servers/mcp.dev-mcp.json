@@ -100,6 +100,6 @@
     "Keep terminal execution (run_command) and desktop automation (desktop_click, desktop_type, desktop_action) on review to prevent unprompted local system manipulation.",
     "Keep destructive operations (delete_path, delete_recursive, reset_project_brain, reset_context) on review to protect repository files and project history.",
     "Keep file creation and directory operations (write_file, edit_file, batch_replace, create_directory) on review to avoid unprompted filesystem modifications.",
-    "Configure dev-mcp safety_mode to safe or trusted so file operations are constrained to the active project root."
+    "safe and trusted modes constrain file operations to the project root, except for onboarding tools (bootstrap_project, create_project_workspace, init_context) which intentionally accept outside paths and should remain on review."
   ]
 }
