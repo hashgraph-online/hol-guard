@@ -132,12 +132,14 @@ fn a_binding_to_a_plain_parameter_reaches_review() {
     ] {
         let (action, code) = decision(&controls, command);
         assert_ne!(code, FAILED, "{command}");
-        // An approval card either way: `git` in the list asks for its own
-        // reapproval, which stands above the review the binding reaches.
-        assert!(
-            matches!(action.as_str(), "review" | "require-reapproval"),
-            "{command}: {action} {code}"
-        );
+        // `git` in the list asks for its own reapproval, which stands above
+        // the review the binding reaches.
+        let expected = if command.starts_with("git ") {
+            "require-reapproval"
+        } else {
+            "review"
+        };
+        assert_eq!(action, expected, "{command}: {code}");
     }
 }
 
