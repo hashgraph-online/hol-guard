@@ -149,6 +149,13 @@ def _retry_quarantined_hook_processes() -> bool:
         return True
 
 
+def hook_processes_contained() -> bool:
+    """Confirm no quarantined hook process survives, retrying the quarantine once."""
+    if not _HOOK_PROCESS_CONTAINMENT_FAILED.is_set():
+        return True
+    return _retry_quarantined_hook_processes()
+
+
 def _quarantine_hook_process(
     process: subprocess.Popen[bytes],
     windows_job: WindowsHookJob | None,
