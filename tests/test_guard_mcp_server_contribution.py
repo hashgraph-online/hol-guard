@@ -109,6 +109,7 @@ def test_dev_mcp_protects_destructive_and_execution_tools() -> None:
         "create_directory",
         "add_key_file",
         "add_decision",
+        "get_context",
         "generate_handoff",
         "create_task",
         "set_phase",
