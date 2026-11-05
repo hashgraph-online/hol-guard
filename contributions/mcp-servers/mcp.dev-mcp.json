@@ -88,6 +88,9 @@
     { "name": "export_context_markdown", "state": "inherit" },
     { "name": "project_info", "state": "inherit" },
     { "name": "get_context", "state": "inherit" },
+    { "name": "generate_handoff", "state": "review" },
+    { "name": "create_task", "state": "review" },
+    { "name": "set_phase", "state": "review" },
     { "name": "other", "state": "inherit" }
   ],
   "referenceUrls": [
