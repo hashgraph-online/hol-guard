@@ -149,6 +149,16 @@ def test_private_args_that_are_not_strings_are_never_sent(monkeypatch: pytest.Mo
     assert sent == []
 
 
+def test_an_unencodable_entry_is_left_out_of_the_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _fake(monkeypatch, {"servers": [None]})
+    unencodable = _artifact("bad", mcp_env={"KEY": "\ud800"})
+
+    assert mcp_servers.managed_stdio_servers(_detection(unencodable, _artifact("good"))) == ()
+    requests = sent[0]["artifacts"]
+    assert isinstance(requests, list)
+    assert [row["name"] for row in requests] == ["good"]
+
+
 def test_saved_state_that_is_not_a_string_pair_is_not_sent(monkeypatch: pytest.MonkeyPatch) -> None:
     sent = _fake(monkeypatch, {"servers": [None, None]})
     detection = _detection(

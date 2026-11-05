@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Any, cast
@@ -81,9 +82,7 @@ def skipped_stdio_server_names(detection: HarnessDetection) -> tuple[str, ...]:
     """Return server names Guard cannot manage through the runtime proxy."""
 
     named = [
-        artifact
-        for artifact in detection.artifacts
-        if artifact.artifact_type == "mcp_server" and artifact.name.strip()
+        artifact for artifact in detection.artifacts if artifact.artifact_type == "mcp_server" and artifact.name.strip()
     ]
     selected = _select(named, include_guard_managed_proxy=False)
     return tuple(artifact.name for artifact, server in zip(named, selected, strict=True) if server is None)
@@ -237,7 +236,7 @@ def _select_request(artifact: GuardArtifact) -> dict[str, object] | None:
     env = private.get("mcp_env", artifact.metadata.get("env"))
     saved = private.get("managed_mcp_origin")
     saved_home = private.get("managed_guard_home")
-    return {
+    request: dict[str, object] = {
         "harness": artifact.harness,
         "name": artifact.name,
         "source_scope": artifact.source_scope,
@@ -255,6 +254,13 @@ def _select_request(artifact: GuardArtifact) -> dict[str, object] | None:
         ),
         "saved_guard_home": saved_home if isinstance(saved_home, str) else None,
     }
+    # The resident refuses a whole request holding text it cannot encode, so
+    # one such entry is left out rather than failing every other server.
+    try:
+        json.dumps(request, ensure_ascii=False).encode()
+    except UnicodeEncodeError:
+        return None
+    return request
 
 
 def _env_pairs(env: object) -> list[list[str]] | None:

@@ -1,11 +1,7 @@
-//! `runner_authority` kind `harness_mcp_discovery`: the stdio MCP server
-//! grouping, identities, redacted launch labels and observation matching that
-//! `guard/adapters/harness_mcp_discovery.py` computed before they moved here.
-//!
-//! Python keeps the harness reads, env values and store writes. One `group`
-//! request carries every server a discovery pass found; the answer names each
-//! kept server by the index of the entry that first declared it. One `match`
-//! request answers the index of the single server an observation names.
+//! `runner_authority` kind `harness_mcp_discovery`: stdio MCP server grouping,
+//! identities, redacted launch labels, observation matching, managed server
+//! selection and Cloud server IDs. Python keeps the harness reads, env values
+//! and store writes; each op answers one request per discovery pass.
 
 use std::collections::HashMap;
 
