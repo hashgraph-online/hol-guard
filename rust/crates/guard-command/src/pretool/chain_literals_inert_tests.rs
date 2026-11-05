@@ -279,6 +279,11 @@ fn a_cat_that_reads_more_than_a_quoted_heredoc_stays_opaque() {
         // projection as a command, and a bracket there is a glob.
         "git commit -m \"$(cat <<'EOF'\ndrop [legacy]\nEOF\n)\"",
         "git commit -m \"$(cat <<'EOF'\npath\\\\x\nEOF\n)\"",
+        // The quote in front of the substitution closes a quoted space
+        // rather than opening the word, so the shell runs the substitution
+        // unquoted and the value would be spliced in as code.
+        "git commit -m \" \"$(cat <<'EOF'\nx # EOF\nEOF\n)\" \" && id",
+        "git commit -m \"a\"\"$(cat <<'EOF'\nsubject\nEOF\n)\"",
     ] {
         assert_eq!(projected(command), None, "{command}");
     }

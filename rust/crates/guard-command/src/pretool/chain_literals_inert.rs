@@ -219,14 +219,38 @@ fn heredoc_value(chars: &[char], substitution: &ShellCommandSubstitution) -> Opt
     Some(body.trim_end_matches('\n').to_owned())
 }
 
+/// Whether the substitution is the whole of one double-quoted word, so its
+/// value stands where the substitution stood and the shell neither splits
+/// nor globs it.
 fn double_quoted_word(chars: &[char], substitution: &ShellCommandSubstitution) -> bool {
-    let opens = substitution.start.checked_sub(1);
-    if opens.and_then(|at| chars.get(at)) != Some(&'"') || chars.get(substitution.end) != Some(&'"')
-    {
+    let Some(opens) = substitution.start.checked_sub(1) else {
+        return false;
+    };
+    // Which quote opens the word is the shell's own state, not the character
+    // in front of the substitution. `" "$(...)" "` puts a `"` there too, but
+    // that one closes a quoted space and leaves the substitution unquoted, so
+    // its value would be spliced in as code rather than as one word.
+    let (mut single, mut double, mut escaped, mut opened_at) = (false, false, false, None);
+    for (at, &character) in chars[..substitution.start].iter().enumerate() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match character {
+            '\\' if !single => escaped = true,
+            '\'' if !double => single = !single,
+            '"' if !single => {
+                double = !double;
+                opened_at = double.then_some(at);
+            }
+            _ => {}
+        }
+    }
+    if !double || opened_at != Some(opens) || chars.get(substitution.end) != Some(&'"') {
         return false;
     }
     let before = opens
-        .and_then(|at| at.checked_sub(1))
+        .checked_sub(1)
         .map(|at| chars[at])
         .is_none_or(|character| character.is_ascii_whitespace());
     let after = chars
