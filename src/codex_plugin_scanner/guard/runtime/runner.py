@@ -1896,6 +1896,7 @@ def sync_runtime_session(
         raise RuntimeError(_sync_url_error_message(error)) from error
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
+    catalog_sync: dict[str, object]
     try:
         catalog_sync = _sync_extension_catalog_from_runtime_handshake(
             store=store,
