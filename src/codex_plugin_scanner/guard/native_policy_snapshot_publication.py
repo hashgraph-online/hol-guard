@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
-import threading
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, cast
 
@@ -49,11 +48,9 @@ def _publisher_api():
 
 
 class NativePolicySnapshotPublicationMixin:
-    _close_event: threading.Event
-
     @property
     def _closed(self) -> bool:
-        return self._close_event.is_set()
+        return cast("NativePolicySnapshotPublisher", self)._close_event.is_set()
 
     def _run(self) -> None:
         publisher = cast("NativePolicySnapshotPublisher", self)
