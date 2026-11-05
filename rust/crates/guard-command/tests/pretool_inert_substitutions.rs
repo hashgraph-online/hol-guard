@@ -167,15 +167,14 @@ fn heredoc_bodies_inside_substitutions_are_data_unless_a_shell_reads_them() {
     // An unquoted heredoc body is one the shell expands before `cat` ever
     // sees it, so it keeps whatever an unevaluated substitution earns.
     let plain = evaluate(&root, &controls, "git commit -m \"$(echo 'Add notes')\"");
-    for command in ["git commit -m \"$(cat <<EOF\nAdd notes\nEOF\n)\""] {
-        let result = evaluate(&root, &controls, command);
-        assert_ne!(result.reason_code, EVALUATION_FAILED, "{command}");
-        assert_eq!(
-            result.minimum_action, plain.minimum_action,
-            "{command}: {}",
-            result.reason
-        );
-    }
+    let command = "git commit -m \"$(cat <<EOF\nAdd notes\nEOF\n)\"";
+    let result = evaluate(&root, &controls, command);
+    assert_ne!(result.reason_code, EVALUATION_FAILED, "{command}");
+    assert_eq!(
+        result.minimum_action, plain.minimum_action,
+        "{command}: {}",
+        result.reason
+    );
     // A body a shell reads is still a script, and nested substitutions in a
     // data body still run.
     for command in [
