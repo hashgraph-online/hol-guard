@@ -330,3 +330,43 @@ pub(super) fn moves_head(original: &CommandSegmentV1) -> bool {
         matches!(command.as_str(), "checkout" | "switch" | "branch" | "reset")
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::commit_form;
+
+    /// The commit forms that take their message from standard input.
+    ///
+    /// The fixture tests around this proof accept the workspace sandbox as
+    /// well as the write proof, so they stay quiet even if these forms stop
+    /// being recognised. This reads the form directly, with no fixture and no
+    /// fallback, so the recognition itself is what fails.
+    #[test]
+    fn a_message_read_from_standard_input_is_an_accepted_commit_form() {
+        for rest in [
+            &["-F", "-"][..],
+            &["--file", "-"][..],
+            &["--file=-"][..],
+            &["-F-"][..],
+            &["-qF", "-"][..],
+            &["-q", "--allow-empty", "-F", "-"][..],
+        ] {
+            assert_eq!(commit_form(rest), Some(false), "{rest:?}");
+        }
+    }
+
+    /// A message read from a file is a file read this proof does not cover,
+    /// and a commit with no message at all is an editor session.
+    #[test]
+    fn a_message_read_from_a_path_is_not_an_accepted_commit_form() {
+        for rest in [
+            &["-F", "notes.txt"][..],
+            &["--file", "notes.txt"][..],
+            &["--file=notes.txt"][..],
+            &["-Fnotes.txt"][..],
+            &["--allow-empty"][..],
+        ] {
+            assert_eq!(commit_form(rest), None, "{rest:?}");
+        }
+    }
+}

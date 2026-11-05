@@ -135,6 +135,11 @@ pub(super) fn project(
             '\n' if !heredocs.is_empty() => {
                 out.push('\n');
                 index = skip_heredoc_bodies(&chars, index + 1, &mut heredocs)?;
+                // The newline closing the last body is consumed with it, and
+                // it ends the command the shell handed those bytes to. Another
+                // command after it means which segment reads standard input is
+                // no longer in the projected text.
+                stdin_separated |= chars[index..].iter().any(|value| !value.is_whitespace());
                 continue;
             }
             '>' => {

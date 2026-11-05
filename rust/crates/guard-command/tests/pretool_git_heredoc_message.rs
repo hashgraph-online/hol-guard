@@ -54,6 +54,11 @@ fn literal_standard_input_fed_to_anything_else_stays_reviewed() {
         // Something follows the body, so which command the shell hands the
         // bytes to is no longer in the text and every command answers.
         "git commit -F - <<'MSG'\nfeat(report): add the lane\nMSG\nrm -rf build",
+        // The command that reads the patch comes first and a filter follows
+        // it. Reading only the last command would miss the one the shell
+        // actually feeds, so every command still has to answer.
+        "git apply <<'MSG'\ndiff --git a/x b/x\nMSG\ncat",
+        "git hash-object -w --stdin <<'MSG'\npayload\nMSG\nwc -c",
         // An unquoted delimiter expands the body before git ever sees it.
         "git commit -F - <<MSG\n$(cat ~/.ssh/id_rsa)\nMSG",
     ] {

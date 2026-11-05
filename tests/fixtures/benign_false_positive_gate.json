@@ -17194,6 +17194,23 @@
       "expect": "allow"
     },
     {
+      "id": "neg-git-heredoc-receiver-before-a-filter",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git apply <<'MSG'\ndiff --git a/x b/x\nMSG\ncat"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-git-commit-heredoc-message-from-path",
       "fix_area": "negative",
       "harnesses": [
