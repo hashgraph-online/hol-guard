@@ -7302,6 +7302,150 @@
       "expect": "allow"
     },
     {
+      "id": "plain-sibling-gitattributes-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/acme-plain/.gitattributes"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "plain-sibling-npmignore-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/acme-plain/.npmignore"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "plain-sibling-node-version-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/acme-plain/.node-version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "plain-sibling-tool-versions-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/acme-plain/.tool-versions"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "plain-sibling-browserslistrc-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/acme-plain/.browserslistrc"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "plain-sibling-prettierrc-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/acme-plain/.prettierrc"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "plain-sibling-eslintrc-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/acme-plain/.eslintrc.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "plain-sibling-mocharc-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/acme-plain/.mocharc.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-plain-sibling-npmrc-read",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/acme-plain/.npmrc"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "absent-root-listing-beside-a-read",
       "fix_area": "shell",
       "harnesses": [

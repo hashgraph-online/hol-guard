@@ -240,6 +240,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "harness_settings_file" => harness_settings_file::dispatch(args),
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
+        "hermes_hook_config" => crate::hermes_hook_config::dispatch(args),
         "opencode_command_replace" => crate::opencode_command_replace::dispatch(args),
         "local_cli_change_request" => crate::local_cli_change_request::dispatch(args),
         "omp_code_mode" => crate::omp_code_mode::dispatch(args),

@@ -512,11 +512,101 @@ fn project_dotfiles_are_benign_only_as_the_final_component() {
         ".git/info/exclude",
         ".git/.gitignore",
         ".git-credentials",
-        ".gitattributes",
         ".npmrc",
         ".envrc",
         ".pre-commit-config.yaml",
     ] {
         assert!(!hidden_read_parts_allowed(Path::new(denied)), "{denied}");
+    }
+}
+
+/// A project keeps its toolchain pins, publish-ignore lists and formatter
+/// configuration in hidden files next to the ones already read. A sibling
+/// checkout holding one of them used to raise an approval for an ordinary
+/// cross-project read, so each name is read wherever it sits.
+#[test]
+fn ordinary_project_configuration_reads_outside_a_work_tree() {
+    for allowed in [
+        "/home/u/other-project/.gitattributes",
+        "/home/u/other-project/.npmignore",
+        "/home/u/other-project/.node-version",
+        "/home/u/other-project/.tool-versions",
+        "/home/u/other-project/.python-version",
+        "/home/u/other-project/.ruby-version",
+        "/home/u/other-project/.browserslistrc",
+        "/home/u/other-project/.stylelintignore",
+        "/home/u/other-project/.prettierrc",
+        "/home/u/other-project/.prettierrc.json",
+        "/home/u/other-project/.eslintrc.json",
+        "/home/u/other-project/.eslintrc.yml",
+        "/home/u/other-project/.mocharc.json",
+        "/home/u/other-project/.nycrc",
+        "/home/u/other-project/.babelrc",
+        "/home/u/other-project/.swcrc",
+        "/home/u/other-project/.taprc",
+        "/home/u/other-project/.c8rc.json",
+        "/home/u/other-project/.stylelintrc.yaml",
+    ] {
+        assert!(hidden_read_parts_allowed(Path::new(allowed)), "{allowed}");
+    }
+}
+
+/// The widened names keep the list's own rule. They are a file's name, never
+/// a directory's, so none of them opens a hidden tree; one config extension
+/// is read as config and a second is not; and the credential names the screen
+/// exists for stay refused however close their spelling sits.
+#[test]
+fn widened_project_configuration_opens_no_hidden_tree() {
+    for denied in [
+        ".keep/.ssh/id_rsa",
+        ".gitattributes/x",
+        ".prettierrc/credentials",
+        ".eslintrc.json/.npmrc",
+        ".node-version/.env",
+        ".tool-versions/.aws/credentials",
+        "project/.eslintrc.json.enc",
+        "project/.prettierrc.enc",
+        "project/.babelrc.secret",
+        "project/.keeper",
+        "project/.npmrc",
+        "project/.envrc",
+        "project/.netrc",
+        "project/.pypirc",
+        "project/.git-credentials",
+        "project/.gitconfig",
+        "project/.keep.key",
+    ] {
+        assert!(!hidden_read_parts_allowed(Path::new(denied)), "{denied}");
+    }
+}
+
+/// Reading a pinned toolchain version or an attribute table discloses a
+/// setting the checkout already states; writing one changes what every later
+/// command in that checkout does, and `.gitattributes` names filter drivers
+/// Git runs on checkout. The write screen therefore keeps the narrow list the
+/// bounded projection always had, and the read-only half never widens it.
+#[test]
+fn the_read_only_half_is_not_a_write_target() {
+    for allowed in [
+        "/home/u/project/.gitignore",
+        "/home/u/project/.dockerignore",
+        "/home/u/project/.editorconfig",
+        "/home/u/project/.eslintignore",
+        "/home/u/project/.prettierignore",
+        "/home/u/project/src/main.rs",
+    ] {
+        assert!(hidden_write_parts_allowed(Path::new(allowed)), "{allowed}");
+    }
+    for denied in [
+        "/home/u/project/.gitattributes",
+        "/home/u/project/.tool-versions",
+        "/home/u/project/.node-version",
+        "/home/u/project/.npmignore",
+        "/home/u/project/.browserslistrc",
+        "/home/u/project/.prettierrc",
+        "/home/u/project/.eslintrc.json",
+        "/home/u/project/.mocharc.yml",
+    ] {
+        assert!(!hidden_write_parts_allowed(Path::new(denied)), "{denied}");
     }
 }
