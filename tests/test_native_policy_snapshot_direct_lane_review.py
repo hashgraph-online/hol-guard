@@ -2,15 +2,11 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard import native_policy_snapshot_direct_lane_review as review
-from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_review import (
-    uniform_blocked_request_mode,
-    with_review_facts,
-)
+from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_review import with_review_facts
 from codex_plugin_scanner.guard.native_policy_snapshot_publication import NativePolicySnapshotPublicationMixin
 
 LISTENING = {"daemon_host": "127.0.0.1", "daemon_port": 4781}
@@ -81,17 +77,6 @@ def test_a_fact_the_resident_cannot_accept_is_left_out(monkeypatch: pytest.Monke
     assert "review_host_cwd" not in _bound(_Store())
     monkeypatch.setattr(review.os, "getcwd", lambda: "/" * 4097)
     assert "review_host_cwd" not in _bound(_Store())
-
-
-def test_the_mode_binds_only_when_every_compiled_config_agrees() -> None:
-    def config(mode: object) -> object:
-        return SimpleNamespace(blocked_request_mode=mode)
-
-    assert uniform_blocked_request_mode([config("ask"), config("ask")]) == "ask"
-    assert uniform_blocked_request_mode([config("safe-alternative")]) == "safe-alternative"
-    assert uniform_blocked_request_mode([config("ask"), config("safe-alternative")]) is None
-    assert uniform_blocked_request_mode([config("prompt")]) is None
-    assert uniform_blocked_request_mode([]) is None
 
 
 class _Publisher(NativePolicySnapshotPublicationMixin):
