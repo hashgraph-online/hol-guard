@@ -47,6 +47,10 @@ const recovery = { ...job, operation: "recover" as const, phase: "preparing_reco
 assert.match(jobs(recovery), /Recovery keeps CIGAR off/);
 assert.match(jobs(job), />Ready to switch</, "a switch waiting for the person does not look busy");
 assert.match(jobs({ ...job, phase: "preparing", can_commit: false }), />Working</);
+const waiting = { ...job, worker_live: true };
+assert.doesNotMatch(jobs(waiting), /animate-spin/, "a switch waiting for the person has no busy spinner");
+assert.match(jobs(waiting), />Stop<\/button>/, "a prepared switch can still be stopped");
+assert.match(jobs({ ...waiting, phase: "preparing", can_commit: false }), /animate-spin/);
 const stopped = { ...job, phase: "extracting", worker_live: false, recovery_available: true, can_commit: false };
 assert.match(jobs(stopped), />Stopped partway</);
 assert.match(jobs(stopped), />Clean up<\/button>/);

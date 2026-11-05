@@ -25,6 +25,8 @@ export function CigarVersionJobsPanel(props: Props) {
     {!props.jobs.length ? <p className="text-sm text-brand-dark/65">Nothing is running right now.</p> : null}
     {props.jobs.map((job) => {
       const pending = cigarJobPending(job);
+      // A prepared switch keeps its worker alive but is waiting on the person, not working.
+      const working = pending && !(job.phase === "ready" && job.can_commit);
       const attention = job.recovery_available || job.phase === "failed" || job.phase === "recovery_required";
       let tone: "amber" | "blue" | "slate" = pending ? "blue" : "slate";
       if (attention) tone = "amber";
@@ -32,7 +34,7 @@ export function CigarVersionJobsPanel(props: Props) {
         className={"guard-surface-in space-y-3 rounded-2xl border p-4 sm:p-5 " + (attention ? "border-amber-300/70 bg-amber-50/50" : "border-brand-blue/20 bg-brand-blue/[0.03]")}>
         <div className="flex flex-wrap items-center gap-2.5">
           <span aria-hidden="true" className={"flex size-8 items-center justify-center rounded-full " + (attention ? "bg-amber-100 text-amber-700" : "bg-brand-blue/10 text-brand-blue")}>
-            {attention ? <HiMiniExclamationTriangle className="size-4" /> : <HiMiniArrowPath className={"size-4" + (pending ? " motion-safe:animate-spin" : "")} />}
+            {attention ? <HiMiniExclamationTriangle className="size-4" /> : <HiMiniArrowPath className={"size-4" + (working ? " motion-safe:animate-spin" : "")} />}
           </span>
           <h4 className="font-semibold text-brand-dark">{operation[job.operation]}</h4>
           <span role="status"><Tag tone={tone}>{cigarJobPhaseLabel(job)}{job.cancel_requested ? " · stopping" : ""}</Tag></span>

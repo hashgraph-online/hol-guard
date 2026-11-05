@@ -6810,6 +6810,7 @@ function CigarVersionJobsPanel(props) {
     !props.jobs.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/65", children: "Nothing is running right now." }) : null,
     props.jobs.map((job) => {
       const pending = cigarJobPending(job);
+      const working = pending && !(job.phase === "ready" && job.can_commit);
       const attention = job.recovery_available || job.phase === "failed" || job.phase === "recovery_required";
       let tone = pending ? "blue" : "slate";
       if (attention) tone = "amber";
@@ -6820,7 +6821,7 @@ function CigarVersionJobsPanel(props) {
           className: "guard-surface-in space-y-3 rounded-2xl border p-4 sm:p-5 " + (attention ? "border-amber-300/70 bg-amber-50/50" : "border-brand-blue/20 bg-brand-blue/[0.03]"),
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2.5", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-8 items-center justify-center rounded-full " + (attention ? "bg-amber-100 text-amber-700" : "bg-brand-blue/10 text-brand-blue"), children: attention ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "size-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4" + (pending ? " motion-safe:animate-spin" : "") }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-8 items-center justify-center rounded-full " + (attention ? "bg-amber-100 text-amber-700" : "bg-brand-blue/10 text-brand-blue"), children: attention ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "size-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4" + (working ? " motion-safe:animate-spin" : "") }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "font-semibold text-brand-dark", children: operation[job.operation] }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone, children: [
                 cigarJobPhaseLabel(job),
