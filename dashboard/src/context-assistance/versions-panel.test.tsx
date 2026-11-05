@@ -45,6 +45,19 @@ const recovery = { ...job, operation: "recover" as const, phase: "preparing_reco
   keeps_disabled: true, reconnect_required: false,
   recovery_attempt: { id: "a".repeat(32), expected_generation: job.expected_generation, started_at_ms: 500000, deadline_at_ms: 620000 } };
 assert.match(jobs(recovery), /Recovery keeps CIGAR off/);
+assert.match(jobs(job), />Ready to switch</, "a switch waiting for the person does not look busy");
+assert.match(jobs({ ...job, phase: "preparing", can_commit: false }), />Working</);
+const waiting = { ...job, worker_live: true };
+assert.doesNotMatch(jobs(waiting), /animate-spin/, "a switch waiting for the person has no busy spinner");
+assert.match(jobs(waiting), />Stop<\/button>/, "a prepared switch can still be stopped");
+assert.match(jobs({ ...waiting, phase: "preparing", can_commit: false }), /animate-spin/);
+const stopped = { ...job, phase: "extracting", worker_live: false, recovery_available: true, can_commit: false };
+assert.match(jobs(stopped), />Stopped partway</);
+assert.match(jobs(stopped), />Clean up<\/button>/);
+assert.match(jobs(stopped), /stopped partway\. Choose Clean up/);
+assert.doesNotMatch(jobs(stopped), /extracting|Recover job|recovery required/);
+assert.match(jobs({ ...stopped, phase: "recovery_required" }), />Needs cleanup</);
+assert.match(jobs({ ...job, phase: "failed", worker_live: false }), />Did not finish</);
 assert.match(jobs(recovery), /Recovery deadline: <time dateTime="1970-01-01T00:10:20.000Z"/);
 assert.match(jobs(recovery), /Original preparation deadline: <time dateTime="1970-01-01T00:02:01.000Z"/);
 const initial = { ...job, operation: "select" as const, initial_selection: true, source_runtime_id: null, keeps_disabled: true, reconnect_required: false };
@@ -66,7 +79,7 @@ assert.match(cigarPythonBlock(catalog, python)!, /local development candidate/);
 const data: CigarVersionsData = { catalog, updates, interpreters: [], jobs: [], installations: [], state };
 const builds = renderToStaticMarkup(<CigarVersionBuildsPanel data={data} status={state} disabled={false} selectionDisabled={false} onAction={noAction} />);
 assert.match(builds, /No Python set up yet/);
-assert.match(builds, /disabled="">Prepare this build/);
+assert.match(builds, /disabled="">Get this version/);
 assert.match(builds, /Build details/);
 const pythonBuild = catalog.interpreter_builds[0].build_id;
 assert.ok(builds.includes(">Build: " + pythonBuild + "<"), "the Python build ID is readable text, not only a hover title");
@@ -77,7 +90,7 @@ assert.doesNotMatch(preferences, /Enable automatic/);
 const panel = renderToStaticMarkup(<CigarVersionsPanel status={state} gate={null} disabled={false} locked={false} dirty={false} captureStatus={() => () => {}} />);
 assert.match(panel, /<h2>Updates<\/h2>/);
 assert.match(panel, /Opening this page changes nothing/);
-assert.doesNotMatch(panel, /Switch now|Prepare this build/);
+assert.doesNotMatch(panel, /Switch now|Get this version/);
 console.log("CIGAR Versions controls preserve native readiness, stale-generation rejection, reconnect consent, disabled selection and honest capability labels.");
 
 assert.ok(compareCigarVersions("0.10.0", "0.9.3") > 0);

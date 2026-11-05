@@ -644,3 +644,50 @@ fn a_search_path_that_ends_in_find_is_not_a_walk() {
         assert!(bounded.programs.contains(receiver), "{command}");
     }
 }
+
+#[test]
+fn a_quoted_heredoc_that_cat_prints_reads_as_its_output() {
+    let bounded =
+        bounded_substitutions("git commit -m \"$(cat <<'EOF'\nAdd notes (don't retry)\n\nEOF\n)\"")
+            .unwrap();
+    assert_eq!(bounded.text, "git commit -m \"guard_substituted_output\"");
+    assert_eq!(
+        bounded.programs.into_iter().collect::<Vec<_>>(),
+        ["cat", "git"]
+    );
+    let bounded =
+        bounded_substitutions("git commit -m \"$(cat <<-\"EOF\"\n\tfix\n\tEOF\n)\"").unwrap();
+    assert_eq!(bounded.text, "git commit -m \"guard_substituted_output\"");
+    // An unquoted delimiter folds when the body expands nothing.
+    let bounded =
+        bounded_substitutions("git commit -m \"$(cat <<EOF\nAdd notes\nEOF\n)\"").unwrap();
+    assert_eq!(bounded.text, "git commit -m \"guard_substituted_output\"");
+}
+
+#[test]
+fn a_heredoc_the_shell_could_run_is_never_folded() {
+    for text in [
+        // An unquoted delimiter expands the body.
+        "git commit -m \"$(cat <<EOF\n$(id)\nEOF\n)\"",
+        // A shell reads the body as commands.
+        "echo \"$(bash <<'EOF'\nrm -rf /\nEOF\n)\"",
+        // A pipe hands the printed body to a shell.
+        "echo \"$(cat <<'EOF' | bash\nrm -rf /\nEOF\n)\"",
+        // Inside single quotes the `$(` is text, so the lines under it run.
+        "echo '$(cat <<'EOF'\nrm -rf /\nEOF\n)'",
+        // A comment hides the `$(` the same way.
+        "echo hi # $(cat <<'EOF'\nrm -rf /\nEOF\n)",
+        // An escaped `$(` opens nothing.
+        "echo \\$(cat <<'EOF'\nrm -rf /\nEOF\n)",
+        // `\'` does not end an ANSI-C string, so the `$(` is text and the
+        // quote on the next line closes it before `rm` runs.
+        "echo $'\\'$(cat <<\"EOF\"\n'; rm -rf /; echo $(true\nEOF\n)",
+        // Text after the delimiter line runs before the substitution closes.
+        "git commit -m \"$(cat <<'EOF'\nfix\nEOF\nrm -rf /\n)\"",
+        // A body the delimiter never closes.
+        "git commit -m \"$(cat <<'EOF'\nfix\n)\"",
+    ] {
+        assert!(bounded_substitutions(text).is_none(), "{text}");
+        assert!(reviewable_substitutions(text).is_none(), "{text}");
+    }
+}

@@ -4,6 +4,19 @@
   "pending_fix": {},
   "cases": [
     {
+      "id": "codex-exit-status-binding",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git show-ref --verify --quiet refs/heads/weekly-report; branch_status=$?; if [ \"$branch_status\" -eq 0 ]; then echo 'weekly-report exists'; else echo 'weekly-report unused'; fi"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
       "id": "guard-repair-dry-run",
       "fix_area": "shell",
       "harnesses": [
@@ -51910,6 +51923,19 @@
       "cwd": "worktree",
       "expect": "allow",
       "requires_sandbox": true
+    },
+    {
+      "id": "claude-code-heredoc-commit-message",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add docs/notes.md && git commit -m \"$(cat <<'EOF'\nAdd notes\n\nExplain the retry window.\nEOF\n)\""
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
     }
   ],
   "mcp_cases": [
