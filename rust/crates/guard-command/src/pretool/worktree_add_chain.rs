@@ -154,6 +154,13 @@ fn prove(
     if entered && super::chain_route::cd_target(next, context).as_ref() != Some(&destination) {
         return false;
     }
+    // After the `cd` the shell looks every program up again, `git` among
+    // them, so a search path entry inside the new checkout decides what the
+    // chain's own reads run. The add refuses an existing destination, so
+    // nothing but the ref it checks out fills such an entry.
+    if entered && !super::chain_route::search_path_outside(&destination, execution_environment) {
+        return false;
+    }
     // Reads are proven in the repository the checkout belongs to. If the
     // `cd` fails, a read after `;` runs in the shell's own directory, so `;`
     // is accepted only when that directory is the proven repository. A
@@ -185,8 +192,6 @@ fn prove(
             .map(super::super::executable_basename);
         segment.pipeline_index == 0 && matches!(name, Some("git" | "gh"))
     });
-    let inert_allowed =
-        reads_git && super::chain_route::search_path_outside(&destination, execution_environment);
     let mut links = Vec::new();
     (first..segments.len()).all(|index| {
         let joined = super::separator_between(model, index - 1, index);
@@ -214,7 +219,7 @@ fn prove(
             ) {
                 return true;
             }
-            return inert_allowed
+            return reads_git
                 && super::chain_route::inert_step(segment)
                 && super::chain_route::resolved_outside(segment, &destination);
         }
