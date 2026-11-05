@@ -197,3 +197,36 @@ fn collection_grants_metadata_for_links_in_the_directories_pytest_walks() {
     assert_eq!(targets, vec![main.join("dashboard/node_modules")]);
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+#[cfg(unix)]
+fn collection_lists_both_roots_before_the_budget_limits_descent() {
+    let root = std::env::temp_dir().join(format!(
+        "guard-collection-budget-{}-{}",
+        std::process::id(),
+        crate::unique_nanos::unique_nanos()
+    ));
+    let workspace = root.join("worktree");
+    let outside = root.join("outside");
+    for directory in [
+        workspace.join("tests"),
+        workspace.join("deep"),
+        outside.join("root"),
+        outside.join("deep"),
+    ] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    for name in ["a.py", "b.py", "c.py"] {
+        std::fs::write(workspace.join("tests").join(name), "").unwrap();
+    }
+    let workspace = workspace.canonicalize().unwrap();
+    let outside = outside.canonicalize().unwrap();
+    std::os::unix::fs::symlink(outside.join("root"), workspace.join("link")).unwrap();
+    std::os::unix::fs::symlink(outside.join("deep"), workspace.join("deep/link")).unwrap();
+    let mut value = input("pytest-readonly-v2", &[]);
+    value.workspace = workspace.clone();
+    value.cwd = workspace.join("tests");
+    let targets = collection_links::walk(&value, 2).unwrap();
+    assert_eq!(targets, vec![outside.join("root")]);
+    std::fs::remove_dir_all(&root).unwrap();
+}
