@@ -377,7 +377,12 @@ def _live_request_review_url(request_id: str, *, guard_home: Path) -> str | None
 
     from ..daemon.manager import load_guard_daemon_url
 
-    daemon_url = load_guard_daemon_url(guard_home)
+    try:
+        daemon_url = load_guard_daemon_url(guard_home)
+    except (OSError, RuntimeError, ValueError):
+        # The request is already queued; a failed optional lookup (including
+        # NativeDaemonLifecycleError) must not replace the denial and wait guidance.
+        return None
     if daemon_url is None:
         return None
     review_url = f"{daemon_url.rstrip('/')}/requests/{request_id}"

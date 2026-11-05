@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.cli.protect_approvals import _queue_local_protec
 from codex_plugin_scanner.guard.cli.protect_output import _protect_payload_for_human_output
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
+from codex_plugin_scanner.guard.native_daemon_lifecycle import NativeDaemonLifecycleError
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy, OpenCodeMcpGuardProxy, runtime_mcp
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.silent_review_assertions import assert_silent_review_recorded
@@ -66,7 +67,12 @@ _LIVE_DAEMON_URL = "http://127.0.0.1:61234"
 def _held_package_install_output(tmp_path, capsys, monkeypatch, *, token: bool, daemon_url: str | None):
     from codex_plugin_scanner.guard.daemon import manager
 
-    monkeypatch.setattr(manager, "load_guard_daemon_url", lambda _home: daemon_url)
+    def live_daemon_url(_home):
+        if isinstance(daemon_url, Exception):
+            raise daemon_url
+        return daemon_url
+
+    monkeypatch.setattr(manager, "load_guard_daemon_url", live_daemon_url)
     context = _context(tmp_path)
     context.guard_home.chmod(0o700)
     if token:
@@ -104,8 +110,12 @@ def test_local_package_denial_prints_signed_link_to_the_running_daemon(tmp_path,
 
 @pytest.mark.parametrize(
     ("token", "daemon_url"),
-    [(False, _LIVE_DAEMON_URL), (True, None)],
-    ids=["no-daemon-token", "no-running-daemon"],
+    [
+        (False, _LIVE_DAEMON_URL),
+        (True, None),
+        (True, NativeDaemonLifecycleError("native_daemon_lifecycle_fact_unknown")),
+    ],
+    ids=["no-daemon-token", "no-running-daemon", "daemon-lookup-fails"],
 )
 def test_local_package_denial_without_an_openable_link_keeps_wait_guidance(
     tmp_path, capsys, monkeypatch, token, daemon_url
