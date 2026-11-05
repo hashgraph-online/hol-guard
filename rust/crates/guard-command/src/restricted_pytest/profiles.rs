@@ -55,6 +55,19 @@ const READONLY: &[&str] = &[
     "python-eval-readonly-v1",
     "node-eval-readonly-v1",
 ];
+/// A read-only pytest run may bind a loopback socket, and nothing more.
+/// `pytest-rerunfailures` binds `localhost:0` in `pytest_configure` whenever
+/// `pytest-xdist` is installed, even for a run without `-n`, and pytest stops
+/// with an internal error when that bind is refused. The plugin listens from
+/// a background thread, where a refusal only warns. Seatbelt cannot name
+/// port 0, and in practice it does not hold a bind to the loopback address
+/// either, so the grant is safe only because a bound socket can do nothing:
+/// `listen`, receiving a datagram and connecting out all stay denied. No
+/// host process can reach the socket and the run cannot reach a service.
+/// What a bind can still do is hold a port, so a host service that starts
+/// on that port during the run gets `EADDRINUSE` until the socket closes or
+/// the run ends.
+const PYTEST_LOOPBACK_BIND: &[&str] = &["(allow network-bind (local ip \"localhost:*\"))"];
 const MAC_ROOTS: &[&str] = &[
     "/System",
     "/Library/Apple",
@@ -320,6 +333,9 @@ fn compose_macos_profile(
             "(deny file-write* {})",
             filter(&immutable, "literal")
         ));
+    }
+    if input.profile_version == "pytest-readonly-v2" {
+        lines.extend(PYTEST_LOOPBACK_BIND.iter().map(|line| (*line).to_owned()));
     }
     if readonly {
         lines.extend(denials(matches!(

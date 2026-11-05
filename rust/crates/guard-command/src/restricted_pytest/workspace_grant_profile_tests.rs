@@ -53,6 +53,46 @@ fn a_grant_without_loopback_keeps_the_network_closed() {
 }
 
 #[test]
+fn readonly_pytest_may_bind_loopback_but_not_listen_or_connect() {
+    let workspace = std::env::temp_dir().join(format!(
+        "guard-pytest-listener-{}-{}",
+        std::process::id(),
+        crate::unique_nanos::unique_nanos()
+    ));
+    std::fs::create_dir_all(&workspace).unwrap();
+    let workspace = workspace.canonicalize().unwrap();
+    let profile_for = |profile: &str| {
+        let mut value = input(profile, &[]);
+        value.workspace = workspace.clone();
+        value.cwd = workspace.clone();
+        value.allowed_executables = vec![PathBuf::from("/usr/bin/python3")];
+        macos_profile(&value).unwrap()
+    };
+    let pytest = profile_for("pytest-readonly-v2");
+    let network: Vec<&str> = pytest
+        .lines()
+        .filter(|line| line.contains("network"))
+        .collect();
+    assert_eq!(network, PYTEST_LOOPBACK_BIND);
+    for denied in ["network-inbound", "network-outbound"] {
+        assert!(!pytest.contains(denied), "{pytest}");
+    }
+    // The credential denials still come after the bind, so they win.
+    let lines: Vec<&str> = pytest.lines().collect();
+    let bind = lines.iter().position(|line| *line == network[0]).unwrap();
+    let tail = &lines[bind + 1..];
+    assert!(!tail.is_empty());
+    assert!(
+        tail.iter().all(|line| line.starts_with("(deny file-read")),
+        "{pytest}"
+    );
+    for other in ["git-readonly-v1", "python-eval-readonly-v1"] {
+        assert!(!profile_for(other).contains("network"), "{other}");
+    }
+    std::fs::remove_dir_all(&workspace).unwrap();
+}
+
+#[test]
 fn capabilities_never_reopen_credentials() {
     let base = macos_profile(&input(WORKSPACE_CONTAINED_PROFILE, &[])).unwrap();
     let state = PathBuf::from("/home/dev/.lanectl");
