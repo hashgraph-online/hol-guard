@@ -173,6 +173,8 @@ def test_explicit_macos_extension_authority_migration_rejects_partial_state(
         lambda _self, secret_id: legacy_secrets.get_secret(secret_id),
     )
     explicit_store = GuardStore(tmp_path, prime_policy_integrity=False, allow_system_keyring=True)
+    # The resident seals the anchor into the local vault; a legacy home has only Keychain.
+    explicit_store._secret_store().fallback.delete_secret(anchor_ref)
 
     assert explicit_store.migrate_legacy_extension_control_authority_secrets() is False
 
@@ -213,6 +215,8 @@ def test_explicit_macos_extension_authority_spends_one_interactive_read(
     migrating = explicit_store._secret_store()
     assert isinstance(migrating, MigratingFallbackSecretStore)
     assert isinstance(migrating.primary, SystemKeyringSecretStore)
+    # The resident seals the anchor into the local vault; a legacy home has only Keychain.
+    migrating.fallback.delete_secret(legacy_store._anchor_ref())
     # Other shard tests can leave background stores reading their own homes.
     # Track every read by this store without counting unrelated backend instances.
     monkeypatch.setattr(migrating.primary, "get_secret", tracked_interactive_read)
