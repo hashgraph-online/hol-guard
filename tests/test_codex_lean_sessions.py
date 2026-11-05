@@ -267,3 +267,43 @@ def test_a_limit_an_earlier_guard_wrote_still_turns_off(tmp_path: Path) -> None:
     assert lean.status(home, guard) == {**lean.status(home, guard), "state": "on", "limit": 30_000}
     assert lean.disable(home, guard)["state"] == "off"
     assert tomllib.loads(path.read_text(encoding="utf-8")) == tomllib.loads(USER_CONFIG)
+
+
+def test_on_with_a_new_size_replaces_the_size_guard_wrote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home, guard = homes(tmp_path)
+    path = write_config(home, f"{lean.KEY} = 30000\n" + USER_CONFIG)
+    lean._write_record(guard, path, 30_000)
+
+    assert lean.enable(home, guard, limit=SIZE)["limit"] == SIZE
+    assert tomllib.loads(path.read_text(encoding="utf-8"))[lean.KEY] == SIZE
+    assert lean.status(home, guard)["state"] == "on"
+
+    def refuse(*_args: object, **_kwargs: object) -> None:
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(lean, "_write_config", refuse)
+    with pytest.raises(PermissionError):
+        lean.enable(home, guard, limit=200_000)
+    assert lean._recorded(guard, path) == SIZE
+    assert lean.status(home, guard) == {**lean.status(home, guard), "state": "on", "limit": SIZE}
+
+
+def test_on_with_a_new_size_leaves_a_size_the_user_set(tmp_path: Path) -> None:
+    home, guard = homes(tmp_path)
+    path = write_config(home, f"{lean.KEY} = 50000\n" + USER_CONFIG)
+
+    assert lean.enable(home, guard, limit=SIZE) == {**lean.status(home, guard), "state": "yours", "limit": 50_000}
+    assert lean._recorded(guard, path) is None
+
+
+def test_cli_json_reports_a_guard_home_it_cannot_resolve(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home, _guard = homes(tmp_path)
+    code, text = run(
+        ["context", "lean", "--guard-home", "~no-such-user-for-guard-tests/guard", "--json"], home, monkeypatch
+    )
+    assert code == 1
+    assert json.loads(text) == {
+        "schema": "guard-codex-lean-sessions.v1",
+        "status": "error",
+        "code": "codex_config_unavailable",
+    }

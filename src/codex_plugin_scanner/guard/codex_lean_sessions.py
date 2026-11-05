@@ -76,16 +76,18 @@ def enable(
     with _locked(guard_home, path):
         text, payload = _read_config(path)
         current, recorded = payload.get(KEY), _recorded(guard_home, path)
-        if current is not None:
+        guard_owned = recorded is not None and current == recorded
+        if (current is not None and not guard_owned) or current == limit:
             return _view(path, current, recorded)
         # The record goes first: if Guard stops between the two writes, the
-        # config is untouched and status reads "off", never a value nobody owns.
+        # config still holds the earlier value and Guard never claims a value
+        # it did not write.
         _write_record(guard_home, path, limit)
         payload[KEY] = limit
         try:
             _write_config(path, payload, text)
         except BaseException:
-            _write_record(guard_home, path, None)
+            _write_record(guard_home, path, recorded if guard_owned else None)
             raise
         return _view(path, limit, limit)
 

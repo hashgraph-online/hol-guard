@@ -137,8 +137,8 @@ def _run_lean(args: argparse.Namespace, output: TextIO) -> int:
     from ..codex_lean_sessions import LeanSessionsError, disable, enable, render, status
     from ..config import resolve_guard_home
 
-    home, guard_home = Path.home(), resolve_guard_home(args.guard_home)
     try:
+        home, guard_home = Path.home(), resolve_guard_home(args.guard_home)
         if args.lean_action == "on":
             state = enable(home, guard_home, os.environ, limit=args.limit)
         else:

@@ -7666,7 +7666,7 @@ function CodexLeanSessions({ gate, disabled }) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs(SettingsFormSection, { title: "Codex summary size", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 py-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "guard-settings-caption max-w-prose", children: [
-          "An earlier version of Guard set Codex to sum up long sessions once they pass ",
+          "Guard set Codex to sum up long sessions once they pass ",
           size(state),
           ". That keeps the chat short but can raise your bill, because Codex then reads files again."
         ] }),

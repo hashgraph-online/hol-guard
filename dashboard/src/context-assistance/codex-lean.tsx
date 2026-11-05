@@ -20,9 +20,10 @@ function size(state: CodexLeanState): string {
 }
 
 /**
- * Earlier Guard versions wrote a small summary size to the Codex config. A smaller chat
- * is not a cheaper one, so Guard no longer offers to set it here. This only appears while
- * a size Guard wrote is still in the config, and offers to remove it.
+ * Earlier Guard versions wrote a small summary size to the Codex config, and
+ * `hol-guard context lean on --limit` still can. A smaller chat is not a cheaper one, so
+ * this page never sets one. It only appears while a size Guard wrote is in the config,
+ * and offers to remove it.
  */
 export function CodexLeanSessions({ gate, disabled }: Props) {
   const [state, setState] = useState<CodexLeanState | null>(null);
@@ -62,7 +63,7 @@ export function CodexLeanSessions({ gate, disabled }: Props) {
     <SettingsFormSection title="Codex summary size">
       <div className="flex flex-wrap items-center justify-between gap-3 py-3">
         <p className="guard-settings-caption max-w-prose">
-          An earlier version of Guard set Codex to sum up long sessions once they pass {size(state)}.
+          Guard set Codex to sum up long sessions once they pass {size(state)}.
           That keeps the chat short but can raise your bill, because Codex then reads files again.
         </p>
         <ActionButton variant="outline" disabled={disabled || saving}
