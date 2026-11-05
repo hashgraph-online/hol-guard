@@ -94,4 +94,4 @@ Pending origins and committed notifications are bounded at 128 and 64 respective
 
 ## Tool output and usage
 
-Guard never trims tool output to save tokens. It passes output on unchanged, blocks it when it holds a secret, and keeps only a scanned first part when output is too big to scan in full. `hol-guard context usage` and the CIGAR **Usage** tab show what Codex and Claude Code used, read from their own records. See [Tool output and usage](tool-output-and-usage.md).
+Guard never trims tool output to save tokens. It passes output on unchanged, blocks it when it holds a secret, and keeps only a scanned first part when output is too big to scan in full. Pi, Oh My Pi and the Cline plugin show Guard's message or that first part in place of the output; in other apps Guard adds its message after the tool has returned. `hol-guard context usage` and the CIGAR **Usage** tab show what Codex and Claude Code used, read from their own records. See [Tool output and usage](tool-output-and-usage.md).

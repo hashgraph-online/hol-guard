@@ -237,11 +237,11 @@ def test_the_cli_prints_plain_tables_and_json(
     assert next(tool for tool in data["week"] if tool["harness"] == "codex")["totals"]["uncached_input_tokens"] == 400
 
 
-def test_try_again_after_a_failed_count_reports_counting_then_ready(
+def test_a_failed_count_is_reported_and_try_again_counts_afresh(
     homes: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     real_scan = meter.scan
-    outcomes = iter([OSError("unreadable"), None])
+    outcomes = iter([RuntimeError("unexpected"), OSError("unreadable"), None])
 
     def flaky_scan(*args: object, **kwargs: object) -> dict:
         failure = next(outcomes)
@@ -251,11 +251,43 @@ def test_try_again_after_a_failed_count_reports_counting_then_ready(
 
     monkeypatch.setattr(meter, "scan", flaky_scan)
     usage_meter = meter.UsageMeter()
+
+    def read() -> str:
+        return usage_meter.read(homes.home, homes.guard, {})["state"]
+
+    def settle() -> None:
+        usage_meter._worker.join(timeout=10)
+
+    assert read() == "counting"
+    settle()
+    assert [read(), read()] == ["unavailable", "counting"]
+    settle()
+    assert [read(), read()] == ["unavailable", "counting"]
+    settle()
+    assert read() == "ready"
+
+
+def test_a_failed_refresh_keeps_the_totals_and_waits_before_scanning_again(
+    homes: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (homes.rollouts / "rollout-l.jsonl").write_text(_codex_usage(100, 0, 1))
+    usage_meter = meter.UsageMeter(max_age=3600.0)
     usage_meter.read(homes.home, homes.guard, {})
     usage_meter._worker.join(timeout=10)
-    assert usage_meter.read(homes.home, homes.guard, {})["state"] == "counting"
+    scans: list[int] = []
+
+    def failing_scan(*args: object, **kwargs: object) -> dict:
+        scans.append(1)
+        raise OSError("unreadable")
+
+    monkeypatch.setattr(meter, "scan", failing_scan)
+    usage_meter._read_at -= 7200
+    usage_meter.read(homes.home, homes.guard, {})
     usage_meter._worker.join(timeout=10)
-    assert usage_meter.read(homes.home, homes.guard, {})["state"] == "ready"
+    for _ in range(3):
+        summary = usage_meter.read(homes.home, homes.guard, {})
+        assert (summary["state"], summary["refreshing"], _week_of(summary)["totals"]["requests"]) == ("ready", False, 1)
+    assert len(scans) == 1
 
 
 def test_a_refresh_keeps_the_old_totals_and_says_it_is_still_counting(

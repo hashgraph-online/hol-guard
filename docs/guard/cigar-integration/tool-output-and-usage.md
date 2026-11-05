@@ -4,11 +4,13 @@ This page answers three questions: does Guard change what your AI app sees from 
 
 ## What Guard does to tool output
 
-Guard never shortens, summarizes or rewrites tool output to save tokens. After a tool runs, Guard's hook scans the output for secrets, such as an API key or a private key, and then does one of these:
+Guard never shortens, summarizes or rewrites tool output to save tokens. After a tool runs, Guard's hook scans the output for secrets, such as an API key or a private key, and decides one of these:
 
-- **Passes it on unchanged.** This is what happens to almost all output.
-- **Blocks all of it** when it contains a secret, or when the scan cannot finish in time. The app then sees a short message from Guard in place of the output, such as "HOL Guard blocked this output because it contains sensitive content."
-- **Keeps only the first part** when the output is too big to scan in full (over 5 MB of text, or nested too deeply). Guard scans the first 1 MB. In Pi and Oh My Pi, which let Guard swap the output, the app gets that first 1 MB. Other apps get Guard's message instead. If the first 1 MB holds a secret, Guard blocks all of it.
+- **Pass it on unchanged.** This is what happens to almost all output.
+- **Block it** when it contains a secret, or when the scan cannot finish in time.
+- **Keep only the first part** when the output is too big to scan in full (over 5 MB of text, or nested too deeply). Guard scans the first 1 MB and blocks the output if that part holds a secret.
+
+How much of a block or a cut the model sees depends on the app. Pi, Oh My Pi and the Cline plugin let Guard replace the result, so the model gets Guard's message, or the scanned first 1 MB, in place of the output. In Claude Code, Codex, Cline's native hooks and the other apps, Guard's hook runs after the tool has already returned. Guard adds its message, for example "HOL Guard blocked this output because it contains sensitive content.", but the app can still pass the output itself to the model. [Harness support](../harness-support.md) and the [Cline protection contract](../cline-local-protection-contract.md) cover each app's limits.
 
 CIGAR adds to a prompt and takes nothing away: when it is on, each prompt you send gets the few parts of your project that match it, with the file and lines each part came from. CIGAR itself leaves your prompt, the chat and tool output as they are.
 
@@ -22,7 +24,7 @@ Never trimmed to save tokens, in any version:
 
 ## Getting the raw output
 
-Guard does not keep a copy of output it blocks or cuts. To see all of it, run the same command yourself in a terminal outside the AI app, or send a very large output to a file and open the file.
+Guard does not keep a copy of output it blocks or cuts. The tool has already run by then, so running the command again repeats whatever it did. Rerun it yourself, in a terminal outside the AI app, only when it is safe to repeat, such as a read, a search or a test run. For a long output, send it to a file and open the file.
 
 ## Why Guard does not trim output to save money
 
@@ -68,13 +70,13 @@ Each row comes from the app's own usage record, not from an estimate:
 
 | Row | Meaning |
 |---|---|
-| Input at full price | Input the provider had not seen before in this chat. |
-| Input read from cache | Input the provider had already seen, billed at a fraction of the full price. |
+| Input at full price | Input the app reported as not read from the cache. This includes input sent again after the cache expired. |
+| Input read from cache | Input the app reported as read from the provider's cache, billed at a fraction of the full price. |
 | Input written to cache | Input stored for later reuse. Claude Code bills it above the full price; Codex reports none. |
 | Output | Tokens the model wrote. |
 | Model requests | Calls to the model. One prompt can make many. |
 | Chat summaries | Times the app shortened the chat so it could keep going. |
 
-The numbers count with CIGAR on or off, and Guard sends them nowhere. Guard keeps how far it has read each file, the per-day totals, and each session's model and folder name in `context-usage-meter.json` in the Guard home, so later counts read only what was added. The first count reads every session from the last week and can take a minute on a long history.
+The numbers count with CIGAR on or off, and Guard sends them nowhere. Guard keeps a local cache, `context-usage-meter.json` in the Guard home, holding for each session file of the last 7 days: its full path, how far Guard has read it, its per-day totals, its model and folder name, and, for Claude Code, the last 16 characters of up to 1024 reply ids so a reply written twice is counted once. Later counts then read only what was added. The first count reads every session from the last week and can take a minute on a long history.
 
 Guard does not read usage records from Copilot, Cursor, Gemini, OpenCode or Pi. Their usage is left out rather than guessed.

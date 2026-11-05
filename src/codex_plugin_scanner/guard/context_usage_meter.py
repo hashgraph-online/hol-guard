@@ -370,41 +370,51 @@ class UsageMeter:
         self._files: dict[str, dict[str, Any]] | None = None
         self._read_at = 0.0
         self._worker: threading.Thread | None = None
-        self._failed = False
+        # A failed first count is reported once; the read after that (Try again) counts afresh.
+        self._failure_unseen = False
         self._max_age = max_age
 
     def read(self, home: Path, guard_home: Path, env: Mapping[str, str]) -> dict[str, Any]:
         with self._lock:
+            running = self._worker is not None and self._worker.is_alive()
+            if self._failure_unseen and not running:
+                self._failure_unseen = False
+                if self._files is None:
+                    return self._empty("unavailable")
             stale = self._files is None or time.monotonic() - self._read_at > self._max_age
-            if stale and (self._worker is None or not self._worker.is_alive()):
+            if stale and not running:
                 self._worker = threading.Thread(
                     target=self._count, args=(home, guard_home, dict(env)), name="guard-usage-meter", daemon=True
                 )
                 self._worker.start()
-                self._failed = False
-            files, failed = self._files, self._failed
-            refreshing = self._worker is not None and self._worker.is_alive()
+                running = True
+            files = self._files
         if files is None:
-            return {
-                "schema": SCHEMA,
-                "state": "unavailable" if failed else "counting",
-                "window_days": WINDOW_DAYS,
-                "today": [],
-                "week": [],
-                "unread": list(UNREAD),
-            }
+            return self._empty("counting")
         # Totals from the last count stay on screen while a newer count runs.
-        return {**summarize(files), "refreshing": refreshing}
+        return {**summarize(files), "refreshing": running}
+
+    @staticmethod
+    def _empty(state: str) -> dict[str, Any]:
+        return {
+            "schema": SCHEMA,
+            "state": state,
+            "window_days": WINDOW_DAYS,
+            "today": [],
+            "week": [],
+            "unread": list(UNREAD),
+        }
 
     def _count(self, home: Path, guard_home: Path, env: Mapping[str, str]) -> None:
         try:
             files = scan(home, guard_home, env)
-        except (OSError, ValueError):
+        except Exception:
+            # Any failure counts: a refresh waits max_age before trying again, a first count waits for Try again.
             with self._lock:
-                self._failed = self._files is None
+                self._read_at, self._failure_unseen = time.monotonic(), True
             return
         with self._lock:
-            self._files, self._read_at, self._failed = files, time.monotonic(), False
+            self._files, self._read_at, self._failure_unseen = files, time.monotonic(), False
 
 
 METER = UsageMeter()
