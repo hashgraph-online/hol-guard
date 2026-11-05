@@ -55,6 +55,16 @@ const READONLY: &[&str] = &[
     "python-eval-readonly-v1",
     "node-eval-readonly-v1",
 ];
+/// A read-only pytest run may open a listener on the loopback address and
+/// accept on it. `pytest-rerunfailures` binds `127.0.0.1:0` in
+/// `pytest_configure` whenever `pytest-xdist` is installed, even for a run
+/// without `-n`, and pytest stops with an internal error when the bind is
+/// refused. A listener reaches nothing: connecting out stays denied, so the
+/// run still cannot talk to a local service or any other address.
+const PYTEST_LOOPBACK_LISTENER: &[&str] = &[
+    "(allow network-bind (local ip \"localhost:*\"))",
+    "(allow network-inbound (local ip \"localhost:*\"))",
+];
 const MAC_ROOTS: &[&str] = &[
     "/System",
     "/Library/Apple",
@@ -320,6 +330,13 @@ fn compose_macos_profile(
             "(deny file-write* {})",
             filter(&immutable, "literal")
         ));
+    }
+    if input.profile_version == "pytest-readonly-v2" {
+        lines.extend(
+            PYTEST_LOOPBACK_LISTENER
+                .iter()
+                .map(|line| (*line).to_owned()),
+        );
     }
     if readonly {
         lines.extend(denials(matches!(
