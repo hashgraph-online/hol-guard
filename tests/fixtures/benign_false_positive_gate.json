@@ -49027,6 +49027,68 @@
       "expect": "not_allow"
     },
     {
+      "id": "session-worktree-add-routed-new-branch-log",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add --detach ../wt-chain-k HEAD && git -C ../wt-chain-k checkout -b fix/chain-k && git -C ../wt-chain-k log --oneline -1"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-worktree-add-routed-switch-new-branch-status",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add --detach ../wt-chain-l HEAD && git -C ../wt-chain-l switch -c fix/chain-l && git -C ../wt-chain-l status --short"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-worktree-add-routed-new-branch-start-point",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add --detach ../wt-chain-m HEAD && git -C ../wt-chain-m checkout -b fix/chain-m HEAD~1 && git -C ../wt-chain-m status --short"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-worktree-add-routed-force-create-branch",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add --detach ../wt-chain-n HEAD && git -C ../wt-chain-n checkout -B fix/chain-n && git -C ../wt-chain-n status --short"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "redirect-heredoc-sort-to-scratch",
       "fix_area": "redirect",
       "harnesses": [

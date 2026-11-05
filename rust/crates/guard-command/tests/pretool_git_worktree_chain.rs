@@ -446,3 +446,36 @@ fn a_checkout_past_the_new_branch_revokes_the_proof() {
         assert_reviewed(&home, &repository, &format!("{add}{tail}"));
     }
 }
+
+/// The same setup written with `-C` instead of a `cd`. An agent that already
+/// routes the add into the repository routes the branch and the reads after
+/// it the same way, and `-C` enters exactly the checkout the `cd` would.
+#[test]
+fn a_new_branch_routed_into_the_new_checkout_keeps_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-branch-routed");
+    let repository_text = repository.display().to_string();
+    for command in [
+        "git worktree add --detach ../app-flat origin/main && git -C ../app-flat checkout -b feat/landing && git -C ../app-flat log --oneline -1".to_owned(),
+        "git worktree add --detach ../app-flat origin/main && git -C ../app-flat switch -c feat/landing && git -C ../app-flat status --short".to_owned(),
+        format!("git -C {repository_text} worktree add --detach ../app-flat origin/main && git -C ../app-flat checkout -b feat/landing && git -C ../app-flat rev-parse HEAD"),
+    ] {
+        assert_allowed(&home, &repository, &command);
+    }
+}
+
+/// The routed step is proven as the same branch creation the `cd` spelling
+/// proves, so a start point, a force-create and a `-C` that leaves the new
+/// checkout all keep their review.
+#[test]
+fn a_routed_checkout_past_the_new_branch_revokes_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-branch-routed-reviewed");
+    let add = "git worktree add --detach ../app-flat origin/main";
+    for tail in [
+        " && git -C ../app-flat checkout -b feat/landing origin/main~1 && git -C ../app-flat status --short",
+        " && git -C ../app-flat checkout -B feat/landing && git -C ../app-flat status --short",
+        " && git -C ../app-flat switch -c feat/landing origin/main && git -C ../app-flat status --short",
+        " && git -C .. checkout -b feat/landing && git -C ../app-flat status --short",
+    ] {
+        assert_reviewed(&home, &repository, &format!("{add}{tail}"));
+    }
+}

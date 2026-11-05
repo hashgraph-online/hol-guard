@@ -10,9 +10,10 @@
 //! checkout too. Anything else after the `cd` (a write, a push, a path read
 //! the repository's own copy could not stand in for) keeps its review.
 //!
-//! `git worktree add <path> <ref> && git -C <path> status` is the same read
-//! without the `cd`: each read names the new checkout with `-C`, and only
-//! a proven `mkdir` may run between them, in the shell's own directory.
+//! `git worktree add <path> <ref> && git -C <path> status` is the same work
+//! without the `cd`: each read, and the branch the chain creates, names the
+//! new checkout with `-C`, and only a proven `mkdir` may run between them,
+//! in the shell's own directory.
 
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 use std::time::Instant;
@@ -245,7 +246,7 @@ fn prove(
         if super::links::listing_through_links(segment, &links, &destination, context) {
             return true;
         }
-        routed_read(
+        routed_step(
             model,
             index,
             context,
@@ -256,9 +257,11 @@ fn prove(
     })
 }
 
-/// `git -C <checkout> <read>`: the read Git runs after entering the new
-/// checkout, proven as the same read without `-C` in its repository.
-fn routed_read(
+/// `git -C <checkout> <step>`: the read or new branch Git runs after
+/// entering the new checkout, proven as the same step without `-C` in its
+/// repository. Agents write the whole setup this way as readily as with a
+/// `cd`, and `-C` reaches exactly the directory the `cd` would enter.
+fn routed_step(
     model: &CanonicalCommandV1,
     index: usize,
     context: super::super::PathContext<'_>,
@@ -273,13 +276,14 @@ fn routed_read(
     stripped.segments[index]
         .arguments
         .drain(position..position + 2);
-    super::chain_route::unrouted_read(
-        &stripped,
-        index,
-        repository,
-        deadline,
-        execution_environment,
-    )
+    super::chain_route::new_branch_step(&stripped.segments[index])
+        || super::chain_route::unrouted_read(
+            &stripped,
+            index,
+            repository,
+            deadline,
+            execution_environment,
+        )
 }
 
 /// The position of segment `index`'s `-C` when it routes Git into the
