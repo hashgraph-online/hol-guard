@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use guard_yanez_pulse::client::{HttpPulseTransport, PulseTransport};
 use guard_yanez_pulse::jws::JwkSet;
 use guard_yanez_pulse::receipt::{verify_receipt, ReceiptPolicy, VerifiedReceipt};
-use guard_yanez_pulse::PulseError;
+use guard_yanez_pulse::{AssuranceTier, PulseError};
 use hmac::{Hmac, Mac};
 use serde_json::{json, Map, Value};
 use sha2::Sha256;
@@ -169,6 +169,8 @@ pub(crate) enum PendingKind {
         agent_key: Zeroizing<String>,
         binding_key: Zeroizing<Vec<u8>>,
         yid: String,
+        /// The floor the user chose; the enrollment receipt must meet it.
+        min_tier: AssuranceTier,
     },
 }
 

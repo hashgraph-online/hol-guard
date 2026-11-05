@@ -284,3 +284,108 @@ fn an_outage_while_confirming_setup_keeps_it_for_a_retry() {
     let confirmed = confirm(&g, &id);
     assert_eq!(confirmed["payload"]["pulse_enabled"], true, "{confirmed}");
 }
+
+/// Enroll with a chosen minimum tier; returns the gate.
+fn pulse_gate_at(tag: &str, min_tier: &str) -> Gate {
+    let g = password_gate(tag);
+    let id = request_id(&begin_at(&g, json!(min_tier)));
+    g.poll(&id);
+    let confirmed = confirm(&g, &id);
+    assert_eq!(
+        confirmed["payload"]["pulse_min_tier"], min_tier,
+        "{confirmed}"
+    );
+    g
+}
+
+fn begin_at(g: &Gate, min_tier: Value) -> Value {
+    g.send(
+        "begin_pulse_enrollment",
+        NOW,
+        json!({
+            "params": {"min_tier": min_tier},
+            "approval_gate_input": {"password": PASSWORD, "pulse_agent_key": AGENT_KEY},
+        }),
+    )
+}
+
+#[test]
+fn a_high_floor_refuses_a_medium_scan() {
+    let g = pulse_gate_at("tier-high", "high");
+    assert_eq!(load_state(&g.home)["pulse_min_tier"], "high");
+    *g.fake.approve_tier.borrow_mut() = AssuranceTier::Medium;
+    let r = g.approve("approval_decision", "allow", "artifact", json!({}));
+    assert_eq!(code(&r), "approval_gate_pulse_assurance_too_low", "{r}");
+    *g.fake.approve_tier.borrow_mut() = AssuranceTier::High;
+    let r = g.approve("approval_decision", "allow", "artifact", json!({}));
+    assert_eq!(r["status"], "ok", "a high scan still passes: {r}");
+}
+
+#[test]
+fn medium_is_the_floor_when_none_is_chosen() {
+    let (g, _) = pulse_gate("tier-default", 0);
+    assert_eq!(load_state(&g.home)["pulse_min_tier"], "medium");
+    *g.fake.approve_tier.borrow_mut() = AssuranceTier::Medium;
+    let r = g.approve("approval_decision", "allow", "artifact", json!({}));
+    assert_eq!(r["status"], "ok", "{r}");
+    *g.fake.approve_tier.borrow_mut() = AssuranceTier::Low;
+    let r = g.approve("approval_decision", "allow", "artifact", json!({}));
+    assert_eq!(code(&r), "approval_gate_pulse_assurance_too_low", "{r}");
+}
+
+#[test]
+fn low_or_unknown_floors_are_refused_before_setup_starts() {
+    let g = password_gate("tier-bad");
+    for bad in [
+        json!("low"),
+        json!("High"),
+        json!("ultra"),
+        json!(""),
+        json!(2),
+    ] {
+        let r = begin_at(&g, bad.clone());
+        assert_eq!(code(&r), "approval_gate_pulse_invalid_tier", "{bad}: {r}");
+        assert_eq!(r["error_status"], 400);
+    }
+    assert!(
+        g.fake.created.borrow().is_empty(),
+        "nothing reaches the phone"
+    );
+}
+
+#[test]
+fn a_high_floor_needs_a_device_that_can_sign_at_high() {
+    let g = password_gate("tier-device");
+    *g.fake.user_tier.borrow_mut() = Some(AssuranceTier::Medium);
+    let r = begin_at(&g, json!("high"));
+    assert_eq!(code(&r), "approval_gate_pulse_no_signing_key", "{r}");
+    assert!(g.fake.created.borrow().is_empty());
+}
+
+#[test]
+fn setup_at_a_high_floor_needs_a_high_scan() {
+    let g = password_gate("tier-setup");
+    let id = request_id(&begin_at(&g, json!("high")));
+    *g.fake.approve_tier.borrow_mut() = AssuranceTier::Medium;
+    g.poll(&id);
+    let r = confirm(&g, &id);
+    assert_eq!(code(&r), "approval_gate_pulse_assurance_too_low", "{r}");
+    assert_ne!(load_state(&g.home)["pulse_enabled"], true);
+}
+
+#[test]
+fn a_saved_floor_guard_cannot_read_counts_as_high() {
+    let (g, _) = pulse_gate("tier-tampered", 0);
+    for saved in [json!("low"), json!("none"), json!(1)] {
+        let mut st = load_state(&g.home);
+        st["pulse_min_tier"] = saved.clone();
+        write_state(&g.home, &st, Some(NOW)).unwrap();
+        *g.fake.approve_tier.borrow_mut() = AssuranceTier::Medium;
+        let r = g.approve("approval_decision", "allow", "artifact", json!({}));
+        assert_eq!(
+            code(&r),
+            "approval_gate_pulse_assurance_too_low",
+            "{saved}: {r}"
+        );
+    }
+}

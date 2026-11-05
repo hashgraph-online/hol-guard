@@ -423,6 +423,7 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
                 .and_then(|p| p.get("authorize_only"))
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            pulse_enrollment::requested_min_tier(params.and_then(|p| p.get("min_tier")))?,
             now,
         ),
         ApprovalGateMethodV1::ConfirmPulseEnrollment => pulse_enrollment::confirm_pulse_enrollment(

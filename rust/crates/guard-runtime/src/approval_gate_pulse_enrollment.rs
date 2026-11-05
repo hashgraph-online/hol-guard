@@ -1,13 +1,14 @@
 //! Pulse enrollment.
 //!
 //! - `begin_pulse_enrollment` needs the current factor, or a setup
-//!   authorization from `approval_gate_pulse_setup`. It asks Pulse which YID
-//!   the pasted agent key belongs to and sends an enrollment request to the
-//!   YID app.
+//!   authorization from `approval_gate_pulse_setup`. It takes the user's
+//!   minimum assurance tier (medium, the default, or high), asks Pulse which
+//!   YID the pasted agent key belongs to, checks that a device on it can sign
+//!   at that tier, and sends an enrollment request to the YID app.
 //! - `confirm_pulse_enrollment` verifies that enrollment receipt, from the
-//!   same OS session, at the fixed medium floor. Only then does it pin the YID,
-//!   issuer and agent key, store the secrets, pause TOTP and rotate the
-//!   factor generation, so every older grant and cooldown ends.
+//!   same OS session, at the chosen floor. Only then does it pin the YID,
+//!   issuer, agent key and floor, store the secrets, pause TOTP and rotate
+//!   the factor generation, so every older grant and cooldown ends.
 //!
 //! Turning Pulse off is in `approval_gate_pulse_disable`.
 
@@ -20,17 +21,17 @@ use guard_yanez_pulse::receipt::{ReceiptPolicy, DEFAULT_MAX_AGE_SECONDS, YANEZ_I
 use guard_yanez_pulse::terms::{
     binding_digest, build_terms, consumer_token, match_code, ActionBinding,
 };
-use guard_yanez_pulse::PulseError;
+use guard_yanez_pulse::{AssuranceTier, PulseError};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::approval_gate_grants::{ApprovalGateErrorV1, ApprovalGateGrants};
 use crate::approval_gate_pulse::{
-    clear_pulse_state, err, factor_generation, insert_pending, ledger_reserve, pending_has_room,
-    pulse_busy, pulse_enabled, pulse_error, restore_pending, take_pending, verify_with_cached_keys,
-    with_transport, PendingKind, PendingPulse, PULSE_ALLOWED_COOLDOWNS, PULSE_MIN_TIER,
-    TOTP_PAUSED_BY_PULSE,
+    clear_pulse_state, err, factor_generation, insert_pending, ledger_reserve, parse_min_tier,
+    pending_has_room, pulse_busy, pulse_enabled, pulse_error, restore_pending, take_pending,
+    verify_with_cached_keys, with_transport, PendingKind, PendingPulse, PULSE_ALLOWED_COOLDOWNS,
+    PULSE_DEFAULT_MIN_TIER, TOTP_PAUSED_BY_PULSE,
 };
 use crate::approval_gate_pulse_setup::{
     authorize_setup, end_setup_authorization, setup_authorized, totp_enabled, verify_current_factor,
@@ -48,6 +49,23 @@ use crate::encrypted_secret_store::random_bytes;
 use crate::totp::TotpSecretStore;
 
 const ENROLLMENT_PURPOSE: &str = "pulse_enrollment";
+
+/// The `min_tier` parameter: absent or null means medium; anything other
+/// than `"medium"` or `"high"` is refused, never lowered.
+pub(crate) fn requested_min_tier(
+    value: Option<&Value>,
+) -> Result<AssuranceTier, ApprovalGateErrorV1> {
+    match value {
+        None | Some(Value::Null) => Ok(PULSE_DEFAULT_MIN_TIER),
+        Some(v) => v.as_str().and_then(parse_min_tier).ok_or_else(|| {
+            err(
+                "approval_gate_pulse_invalid_tier",
+                "The minimum assurance tier must be medium or high.",
+                400,
+            )
+        }),
+    }
+}
 
 pub(crate) fn state_io() -> ApprovalGateErrorV1 {
     err(
@@ -93,6 +111,7 @@ pub(crate) fn begin_pulse_enrollment(
     guard_home: &Path,
     input: Option<&ApprovalGateInputV1>,
     authorize_only: bool,
+    min_tier: AssuranceTier,
     now: Option<&str>,
 ) -> Result<Value, ApprovalGateErrorV1> {
     let mut state = load_state(guard_home);
@@ -152,7 +171,7 @@ pub(crate) fn begin_pulse_enrollment(
         let binding = enrollment_binding(&registry.yid, &session_binding, &nonce, generation);
         let terms = build_terms(&binding_key, &binding)?;
         let digest = binding_digest(&binding_key, &binding)?;
-        if registry.signable_floors().is_empty() {
+        if !registry.signable_floors().contains(&min_tier) {
             return Ok(None);
         }
         let created = t.create_authorization(
@@ -166,7 +185,10 @@ pub(crate) fn begin_pulse_enrollment(
     .ok_or_else(|| {
         err(
             "approval_gate_pulse_no_signing_key",
-            "Your Yanez identity has no device that can approve at medium or high assurance. Register a device in the YID app, then start again.",
+            &format!(
+                "Your Yanez identity has no device that can approve at {} assurance or above. Register a device in the YID app, or choose a lower minimum, then start again.",
+                min_tier.as_str()
+            ),
             409,
         )
     })?;
@@ -179,6 +201,7 @@ pub(crate) fn begin_pulse_enrollment(
                 agent_key,
                 binding_key,
                 yid: registry.yid.clone(),
+                min_tier,
             },
             binding: digest,
             request_nonce: nonce,
@@ -268,6 +291,7 @@ pub(crate) fn confirm_pulse_enrollment(
         agent_key,
         binding_key,
         yid,
+        min_tier,
     } = &entry.kind
     else {
         unreachable!("checked above");
@@ -282,7 +306,7 @@ pub(crate) fn confirm_pulse_enrollment(
             expected_request_id: request_id,
             expected_terms: &entry.terms,
             expected_consent_not_after: entry.consent_not_after,
-            min_tier: PULSE_MIN_TIER,
+            min_tier: *min_tier,
             max_age_seconds: DEFAULT_MAX_AGE_SECONDS,
             registry: &registry,
             pinned_user_keys: None,
@@ -375,6 +399,7 @@ pub(crate) fn confirm_pulse_enrollment(
         o.insert("pulse_agent_key_id".into(), json!(receipt.agent_key_id));
         o.insert("pulse_user_keys".into(), json!(pinned_user_keys));
         o.insert("pulse_cooldown_seconds".into(), json!(cooldown_seconds));
+        o.insert("pulse_min_tier".into(), json!(min_tier.as_str()));
         o.insert("pulse_agent_secret_id".into(), json!(agent_secret_id));
         o.insert("pulse_binding_secret_id".into(), json!(binding_secret_id));
         o.insert(
@@ -396,6 +421,7 @@ pub(crate) fn confirm_pulse_enrollment(
     let mut out = public_config_locked(guard_home, now).to_dict();
     if let Some(o) = out.as_object_mut() {
         o.insert("yid_hint".into(), json!(yid_hint(&receipt.yid)));
+        o.insert("pulse_min_tier".into(), json!(min_tier.as_str()));
         // Shown once. Guard keeps only its hash.
         o.insert("recovery_code".into(), json!(recovery_code.as_str()));
     }

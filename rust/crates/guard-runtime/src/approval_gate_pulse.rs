@@ -111,9 +111,25 @@ pub(crate) fn pulse_cooldown_seconds(state: &Value) -> i64 {
         .unwrap_or(0)
 }
 
-/// The lowest tier a scan may reach. Not a setting: Guard accepts medium and
-/// high scans and refuses low ones.
-pub(crate) const PULSE_MIN_TIER: AssuranceTier = AssuranceTier::Medium;
+/// The floor when the user does not choose one at enrollment.
+pub(crate) const PULSE_DEFAULT_MIN_TIER: AssuranceTier = AssuranceTier::Medium;
+
+/// A floor the user may choose: `medium` or `high`. Low is never a floor.
+pub(crate) fn parse_min_tier(value: &str) -> Option<AssuranceTier> {
+    AssuranceTier::parse(value).filter(|tier| tier.is_allowed_floor())
+}
+
+/// The lowest tier a scan may reach, chosen at enrollment. A saved value
+/// Guard cannot read is treated as high, so it fails closed.
+pub(crate) fn pulse_min_tier(state: &Value) -> AssuranceTier {
+    match state.get("pulse_min_tier") {
+        None => PULSE_DEFAULT_MIN_TIER,
+        Some(saved) => saved
+            .as_str()
+            .and_then(parse_min_tier)
+            .unwrap_or(AssuranceTier::High),
+    }
+}
 
 /// Pinned Pulse settings plus the two secrets, loaded only when needed.
 pub(crate) struct PulseConfig {
@@ -418,7 +434,7 @@ pub(crate) fn verify_pulse_stage(
             expected_request_id: request_id,
             expected_terms: &entry.terms,
             expected_consent_not_after: entry.consent_not_after,
-            min_tier: PULSE_MIN_TIER,
+            min_tier: pulse_min_tier(state),
             max_age_seconds: DEFAULT_MAX_AGE_SECONDS,
             registry: &registry,
             pinned_user_keys: Some(&config.user_keys),
