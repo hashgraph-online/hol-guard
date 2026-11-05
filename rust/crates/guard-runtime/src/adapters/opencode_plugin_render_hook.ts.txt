@@ -112,6 +112,26 @@ export function guardBlockMessage(stdout: string, stderr: string): string {
   );
 }
 
+/**
+ * The tool input Guard reviews. OpenCode's own `bash` tool carries the
+ * model's one-line `description` of the command, which the review card shows
+ * as the agent's words. Only that tool sends it: Guard binds a `bash`
+ * approval to the command text alone, while another intercepted tool's whole
+ * input binds its approval, so a reworded description would ask again.
+ */
+export function hookToolInput(
+  tool: string,
+  args: Record<string, unknown> | undefined,
+  command: string,
+  workspace: string,
+): Record<string, string> {
+  const toolInput: Record<string, string> = { command, workdir: workspace };
+  if (tool === "bash" && typeof args?.description === "string") {
+    toolInput.description = args.description;
+  }
+  return toolInput;
+}
+
 export const HolGuardPretoolPlugin = async ({
   directory,
 }: {
@@ -139,16 +159,7 @@ export const HolGuardPretoolPlugin = async ({
             hook_event_name: "PreToolUse",
             event: "PreToolUse",
             tool_name: input.tool,
-            // The agent's own one-line account of the command, when it sent one.
-            // Guard shows it on the review card as the agent's words; a shell's
-            // approval binds its command text only, so it changes no decision.
-            tool_input: {
-              command,
-              workdir: workspace,
-              ...(typeof output.args?.description === "string"
-                ? { description: output.args.description }
-                : {}),
-            },
+            tool_input: hookToolInput(input.tool, output.args, command, workspace),
             cwd: workspace,
             workspace_root: directory || process.cwd(),
             source_scope: directory?.trim() ? "project" : "global",
