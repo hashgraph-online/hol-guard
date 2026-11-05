@@ -228,7 +228,7 @@ fn prove(
                 && super::chain_route::resolved_outside(segment, &destination);
         }
         if segment.executable.as_deref() == Some("mkdir") {
-            return proven_mkdir(segment, &destination, context);
+            return super::chain_route::proven_mkdir(segment, &destination, context);
         }
         if segment.executable.as_deref() == Some("ln") {
             return super::links::proven_link(
@@ -255,71 +255,6 @@ fn prove(
             execution_environment,
         )
     })
-}
-
-/// A `mkdir` the write screens admit that creates nothing in or below the
-/// new checkout. The screens read the disk before the add runs, so a
-/// tracked symlink the checkout brings (`notes -> ~/.ssh`) could otherwise
-/// lead `mkdir -p` out of it.
-fn proven_mkdir(
-    segment: &CommandSegmentV1,
-    destination: &Path,
-    context: super::super::PathContext<'_>,
-) -> bool {
-    segment.environment_names.is_empty()
-        && segment.wrapper_chain.is_empty()
-        && !segment.path_overridden
-        && !segment
-            .arguments
-            .iter()
-            .any(|argument| super::super::sensitive_path_argument(argument))
-        && super::super::directory_targets::home_targets_unquoted(segment)
-        && super::super::safe_reads::safe_file_mutation_arguments(
-            "mkdir",
-            &segment.arguments,
-            context,
-        )
-        && segment
-            .arguments
-            .last()
-            .is_some_and(|target| created_outside(target, destination, context))
-}
-
-/// Whether `target` resolves outside `destination`: through the deepest
-/// path that exists now, which must not be a dangling link, and then the
-/// names still to be created.
-fn created_outside(
-    target: &str,
-    destination: &Path,
-    context: super::super::PathContext<'_>,
-) -> bool {
-    let expanded = if target.starts_with('~') {
-        super::super::read_paths::expand_home_read_path(target, context.home_dir)
-    } else {
-        Some(target.to_owned())
-    };
-    let (Some(expanded), Some(cwd)) = (
-        expanded,
-        context.cwd.and_then(|cwd| std::fs::canonicalize(cwd).ok()),
-    ) else {
-        return false;
-    };
-    let mut existing = cwd.join(expanded);
-    let mut missing = Vec::new();
-    while std::fs::symlink_metadata(&existing).is_err() {
-        let Some(name) = existing.file_name().map(ToOwned::to_owned) else {
-            return false;
-        };
-        missing.push(name);
-        if !existing.pop() {
-            return false;
-        }
-    }
-    let Ok(mut resolved) = std::fs::canonicalize(&existing) else {
-        return false;
-    };
-    resolved.extend(missing.iter().rev());
-    !resolved.starts_with(destination)
 }
 
 /// `git -C <checkout> <read>`: the read Git runs after entering the new
