@@ -183,7 +183,9 @@ pub(super) fn fold_printed_heredocs(text: &str) -> String {
 }
 
 /// Whether a `$(` written after this text opens a substitution: no single
-/// quote is open, no backslash escapes it, and no comment has started.
+/// quote is open, no backslash escapes it, and no comment has started. An
+/// ANSI-C `$'…'` string ends at a different quote than a plain one (`\'`
+/// does not close it), so any `$'` outside double quotes refuses.
 fn reads_as_substitution(prefix: &str) -> bool {
     let (mut single, mut double, mut escaped) = (false, false, false);
     let mut previous = ' ';
@@ -195,6 +197,7 @@ fn reads_as_substitution(prefix: &str) -> bool {
         } else {
             match character {
                 '\\' => escaped = true,
+                '\'' if !double && previous == '$' => return false,
                 '\'' if !double => single = true,
                 '"' => double = !double,
                 '#' if !double

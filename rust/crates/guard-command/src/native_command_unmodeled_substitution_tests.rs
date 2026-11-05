@@ -679,6 +679,9 @@ fn a_heredoc_the_shell_could_run_is_never_folded() {
         "echo hi # $(cat <<'EOF'\nrm -rf /\nEOF\n)",
         // An escaped `$(` opens nothing.
         "echo \\$(cat <<'EOF'\nrm -rf /\nEOF\n)",
+        // `\'` does not end an ANSI-C string, so the `$(` is text and the
+        // quote on the next line closes it before `rm` runs.
+        "echo $'\\'$(cat <<\"EOF\"\n'; rm -rf /; echo $(true\nEOF\n)",
         // Text after the delimiter line runs before the substitution closes.
         "git commit -m \"$(cat <<'EOF'\nfix\nEOF\nrm -rf /\n)\"",
         // A body the delimiter never closes.
