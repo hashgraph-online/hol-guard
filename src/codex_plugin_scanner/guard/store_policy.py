@@ -605,7 +605,8 @@ class StorePolicyMixin:
         """Atomically remove all cached and materialized remote authority.
 
         A non-empty ``policy_bundle_ack`` replaces the stored acknowledgement in
-        the same transaction, so the next sync reports why authority was cleared.
+        the same transaction, so a crash cannot leave the bundle cleared with no
+        failed acknowledgement queued for Cloud.
         """
 
         normalized_now = _canonical_utc_timestamp(now)

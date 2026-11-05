@@ -18812,6 +18812,104 @@ def test_sync_receipts_reports_a_dropped_bundle_as_failed_to_cloud(tmp_path, mon
     assert sync_bodies[1]["syncContext"]["policyBundleAcknowledgement"] == failed_ack
 
 
+def test_sync_receipts_reports_failure_of_the_bundle_it_last_reported_as_synced(tmp_path, monkeypatch):
+    """A drop of the applied bundle goes out in the same cycle as its earlier success."""
+
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-a")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-a"),
+        "2026-06-05T13:29:00Z",
+    )
+    device_id, device_name = guard_runner_module._guard_device_metadata(store)
+
+    def _bundle(workspace_id: str, bundle_version: str) -> dict[str, object]:
+        return sign_policy_bundle(
+            {
+                "contractVersion": "guard-policy-bundle.v1",
+                "bundleVersion": bundle_version,
+                "bundleHash": "",
+                "issuedAt": "2026-06-05T13:30:00+00:00",
+                "expiresAt": None,
+                "verifier": {
+                    "algorithm": "rsa-pss-sha256",
+                    "keyId": "guard-policy-bundle-v1",
+                    "signature": None,
+                },
+                "rolloutState": "enforcing",
+                "workspaceId": workspace_id,
+                "policyDefaults": {
+                    "mode": "enforce",
+                    "defaultAction": "warn",
+                    "unknownPublisherAction": "review",
+                    "changedHashAction": "require-reapproval",
+                    "newNetworkDomainAction": "warn",
+                    "subprocessAction": "block",
+                    "telemetryEnabled": False,
+                    "syncEnabled": True,
+                },
+                "rules": [],
+                "acknowledgements": [],
+            },
+            workspace_id=workspace_id,
+        )
+
+    served = {"bundle": _bundle("workspace-a", "policy-2026-06-05.4")}
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    sync_bodies: list[dict[str, object]] = []
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        if request.full_url.endswith("/receipts/sync"):
+            sync_bodies.append(json.loads(request.data.decode("utf-8")))
+        return _Response(
+            {
+                "syncedAt": "2026-06-05T13:30:01+00:00",
+                "receiptsStored": 0,
+                "policyBundle": served["bundle"],
+            }
+        )
+
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    guard_runner_module.sync_receipts(store)
+    applied_ack = store.get_sync_payload("policy_bundle_ack")
+    assert isinstance(applied_ack, dict)
+    assert applied_ack["status"] == "synced"
+    applied_hash = applied_ack["bundleHash"]
+
+    served["bundle"] = _bundle("workspace-b", "policy-2026-06-05.5")
+    sync_bodies.clear()
+    guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy_bundle") is None
+    assert len(sync_bodies) == 2
+    first_ack = sync_bodies[0]["syncContext"]["policyBundleAcknowledgement"]
+    assert first_ack["bundleHash"] == applied_hash
+    assert first_ack["status"] == "synced"
+    follow_up_ack = sync_bodies[1]["syncContext"]["policyBundleAcknowledgement"]
+    assert follow_up_ack["bundleHash"] == applied_hash
+    assert follow_up_ack["status"] == "failed"
+    assert follow_up_ack["deviceId"] == device_id
+    assert follow_up_ack["deviceName"] == device_name
+
+
 @pytest.mark.parametrize(
     ("spec_extra", "reason", "rule_id"),
     [

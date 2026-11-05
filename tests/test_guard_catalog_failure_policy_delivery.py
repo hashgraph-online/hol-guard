@@ -86,3 +86,35 @@ def test_cloud_proof_sync_delivers_policy_before_reporting_a_catalog_failure(
 
     assert len(receipts_calls) == 1
     assert receipts_calls[0]["auth_context"] is _AUTH
+
+
+def test_runtime_session_sync_keeps_the_previous_summary_when_the_catalog_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    previous = {"runtime_session_id": "runtime-session-0", "runtime_credential_id": "credential-0"}
+    store.set_sync_payload("runtime_session_summary", previous, "2026-11-05T11:00:00+00:00")
+    _patch_runtime_session_transport(monkeypatch)
+
+    runner.sync_runtime_session(store, session={}, auth_context=_AUTH, catalog_failures=[])
+
+    assert store.get_sync_payload("runtime_session_summary") == previous
+
+
+def test_clearing_policy_authority_stores_the_failed_acknowledgement_in_the_same_write(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_payload("policy_bundle_ack", {"status": "synced"}, "2026-11-05T11:00:00Z")
+    failed = {"bundleHash": "sha256:applied", "status": "failed"}
+
+    store.clear_policy_bundle_authority(
+        "2026-11-05T12:00:00Z",
+        policy_bundle_last_error={"reason": "wrong_workspace"},
+        policy_bundle_ack=failed,
+    )
+
+    assert store.get_sync_payload("policy_bundle_ack") == failed
+    assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "wrong_workspace"}
+
+    store.clear_policy_bundle_authority("2026-11-05T12:05:00Z", policy_bundle_last_error={})
+
+    assert store.get_sync_payload("policy_bundle_ack") is None
