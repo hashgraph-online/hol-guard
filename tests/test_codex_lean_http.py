@@ -56,10 +56,11 @@ def test_the_route_reads_and_writes_through_the_dashboard_paths(
     handler = _Handler(guard)
 
     http.respond(handler, codex_lean_http.KIND)
-    http.respond(handler, codex_lean_http.KIND, {"enabled": True})
+    http.respond(handler, codex_lean_http.KIND, {"enabled": True, "limit": 100_000})
     http.respond(handler, codex_lean_http.KIND, {"enabled": False})
 
     assert [(data["state"], status) for data, status in handler.calls] == [("off", 200), ("on", 200), ("off", 200)]
+    assert handler.calls[1][0]["limit"] == 100_000
     assert [seen["purpose"] for seen in approvals] == ["settings_write", "settings_write"]
     assert lean.status(home, guard)["state"] == "off"
 
@@ -87,7 +88,7 @@ def test_a_refused_approval_leaves_the_config_alone(homes: tuple[Path, Path], mo
     monkeypatch.setattr(codex_lean_http, "require_high_risk", refuse)
     handler = _Handler(guard)
 
-    http.respond(handler, codex_lean_http.KIND, {"enabled": True})
+    http.respond(handler, codex_lean_http.KIND, {"enabled": True, "limit": 100_000})
 
     assert handler.gate_errors == [refusal]
     assert handler.calls == []
@@ -103,7 +104,23 @@ def test_an_unreadable_config_is_reported_not_overwritten(
     path.write_text("[broken\n", encoding="utf-8")
     handler = _Handler(guard)
 
-    http.respond(handler, codex_lean_http.KIND, {"enabled": True})
+    http.respond(handler, codex_lean_http.KIND, {"enabled": True, "limit": 100_000})
 
     assert handler.calls == [({"error": "codex_lean_unavailable", "code": "codex_config_unreadable"}, 409)]
     assert path.read_text(encoding="utf-8") == "[broken\n"
+
+
+@pytest.mark.parametrize(
+    ("payload", "code"), [({}, "codex_lean_limit_required"), ({"limit": 500}, "codex_lean_limit_invalid")]
+)
+def test_turning_on_without_a_valid_size_is_refused_before_any_approval(
+    homes: tuple[Path, Path], approvals: list[dict[str, object]], payload: dict[str, object], code: str
+) -> None:
+    home, guard = homes
+    handler = _Handler(guard)
+
+    http.respond(handler, codex_lean_http.KIND, {"enabled": True, **payload})
+
+    assert handler.calls == [({"error": "invalid_codex_lean_input", "code": code}, 400)]
+    assert approvals == []
+    assert not lean.config_path(home).exists()

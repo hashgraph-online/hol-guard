@@ -207,6 +207,44 @@ test("CIGAR saves with the existing approval proof, starts explicitly, and keeps
   expect(saves[0].body.settings.context_assistance.enabled).toBe(true);
 });
 
+test("a Codex summary size Guard wrote shows a Remove button that takes it out after approval", async ({ page }) => {
+  await fixture(page, true, true);
+  const lean: Call[] = [];
+  let state = { state: "on", limit: 30000 };
+  // Registered after the fixture, so this handler wins for the Codex config route.
+  await page.route("**/v1/context-assistance/codex-lean", async (route) => {
+    const request = route.request();
+    lean.push({ path: new URL(request.url()).pathname, method: request.method(), body: request.postDataJSON() });
+    if (request.method() === "POST") {
+      const approved = typeof request.postDataJSON()?.approval_password === "string";
+      if (!approved) {
+        await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ code: "approval_required" }) });
+        return;
+      }
+      state = { state: "off", limit: null };
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(state) });
+  });
+  await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=runtime");
+  const section = page.getByText("Codex summary size", { exact: true });
+  await expect(section).toBeVisible();
+  await expect(page.getByText(/once they pass 30,000 tokens/)).toBeVisible();
+  await expect(page.getByText("can raise your bill", { exact: false })).toBeVisible();
+  // The page never offers to set a size, only to remove one.
+  await expect(page.getByRole("switch", { name: /summary|lean/i })).toHaveCount(0);
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  const proof = page.getByRole("dialog");
+  await expect(proof).toBeVisible();
+  await expect(proof.getByText("Approve removing the Codex summary size")).toBeVisible();
+  await proof.getByLabel("Approval password").fill("lean-remove-proof");
+  await proof.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(proof).toHaveCount(0);
+  await expect(section).toHaveCount(0);
+  const posts = lean.filter((call) => call.method === "POST");
+  expect(posts).toHaveLength(1);
+  expect(posts[0].body).toEqual({ enabled: false, approval_password: "lean-remove-proof" });
+});
+
 test("a saved runtime turns on from the top of the page and adding a project stays optional", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const calls = await fixture(page, true, true);
