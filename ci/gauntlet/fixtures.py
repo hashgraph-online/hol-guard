@@ -667,6 +667,20 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
         ),
         # A plain directory with no .git, where a leaf probe finds nothing.
         (f"{PLAIN_DIRECTORY}/README.txt", "Plain notes directory.\n"),
+        # The ordinary project configuration such a directory carries: a
+        # placeholder, a git attribute table, a publish-ignore list, toolchain
+        # pins and formatter settings. None of them is a login, and an agent
+        # reads them to match the workspace it is working in.
+        (f"{PLAIN_DIRECTORY}/.keep", ""),
+        (f"{PLAIN_DIRECTORY}/.gitkeep", ""),
+        (f"{PLAIN_DIRECTORY}/.gitattributes", "* text=auto eol=lf\n"),
+        (f"{PLAIN_DIRECTORY}/.npmignore", "src/\ntests/\n"),
+        (f"{PLAIN_DIRECTORY}/.node-version", "22.11.0\n"),
+        (f"{PLAIN_DIRECTORY}/.tool-versions", "nodejs 22.11.0\npython 3.12.7\n"),
+        (f"{PLAIN_DIRECTORY}/.browserslistrc", "defaults\nnot IE 11\n"),
+        (f"{PLAIN_DIRECTORY}/.prettierrc", '{\n  "semi": false\n}\n'),
+        (f"{PLAIN_DIRECTORY}/.eslintrc.json", '{\n  "root": true\n}\n'),
+        (f"{PLAIN_DIRECTORY}/.mocharc.json", '{\n  "spec": "tests/**/*.spec.js"\n}\n'),
         # Ordinary files a toolchain and a repository's own automation keep
         # below a hidden home directory. Nothing here names a credential;
         # the hidden component is the only thing that sets them apart.

@@ -28,12 +28,51 @@ const SOURCE_EXTENSIONS: &[&str] = &[
 const BENIGN_SOURCE_DOTFILES: &[&str] = &[".nvmrc", ".worktrees"];
 /// Ordinary project config files. They are benign only as the final path
 /// component, so a directory spelled `.gitignore/` opens no hidden tree.
+///
+/// Each name has a fixed meaning the ecosystem gave it: an ignore list, a
+/// toolchain version, a git attribute table, or the empty file that keeps a
+/// directory in a commit. None of them is where a tool writes a login, and
+/// `sensitive_path_family` screens the basename before this list is read, so
+/// a project that spells one of these next door is read rather than queued
+/// for an approval nobody can answer.
 const BENIGN_PROJECT_DOTFILES: &[&str] = &[
+    ".browserslistrc",
     ".dockerignore",
     ".editorconfig",
     ".eslintignore",
+    ".gitattributes",
     ".gitignore",
+    ".gitkeep",
+    ".go-version",
+    ".java-version",
+    ".keep",
+    ".node-version",
+    ".npmignore",
     ".prettierignore",
+    ".python-version",
+    ".ruby-version",
+    ".stylelintignore",
+    ".terraform-version",
+    ".tool-versions",
+];
+/// Formatter, linter and test-runner rc files. Each is also spelled with one
+/// of [`PROJECT_CONFIG_EXTENSIONS`] -- `.prettierrc.json`, `.mocharc.yml` --
+/// so the stem is matched once rather than every spelling enumerated.
+const BENIGN_PROJECT_DOTFILE_STEMS: &[&str] = &[
+    ".babelrc",
+    ".c8rc",
+    ".eslintrc",
+    ".mocharc",
+    ".nycrc",
+    ".prettierrc",
+    ".stylelintrc",
+    ".swcrc",
+    ".taprc",
+];
+/// The config extensions the rc files above carry. Exactly one is accepted,
+/// so `.eslintrc.json.enc` keeps its review rather than reading as config.
+const PROJECT_CONFIG_EXTENSIONS: &[&str] = &[
+    "cjs", "cts", "js", "json", "json5", "mjs", "mts", "toml", "ts", "yaml", "yml",
 ];
 const SENSITIVE_SEARCH_BASENAMES: &[&str] = &[
     ".aws",
@@ -102,7 +141,7 @@ fn lowered_parts(path: &Path) -> Vec<String> {
 
 fn hidden_parts_allowed(parts: &[String]) -> bool {
     match parts.split_last() {
-        Some((name, parents)) if BENIGN_PROJECT_DOTFILES.contains(&name.as_str()) => {
+        Some((name, parents)) if project_config_file_name(name) => {
             hidden_dir_parts_allowed(parents)
         }
         _ => hidden_dir_parts_allowed(parts),
@@ -657,7 +696,21 @@ pub fn tool_login_name(name: &str) -> bool {
 /// keep the list's own rule: these names are benign as a file, so a directory
 /// spelled `.gitignore/` opens no hidden tree.
 pub fn project_config_file_name(name: &str) -> bool {
-    BENIGN_PROJECT_DOTFILES.contains(&name.to_ascii_lowercase().as_str())
+    let lowered = name.to_ascii_lowercase();
+    BENIGN_PROJECT_DOTFILES.contains(&lowered.as_str()) || project_config_rc_name(&lowered)
+}
+
+/// A formatter, linter or test-runner rc file: either the bare stem
+/// (`.prettierrc`) or the stem carrying one config extension
+/// (`.prettierrc.json`). `lowered` is already lowercased.
+fn project_config_rc_name(lowered: &str) -> bool {
+    if BENIGN_PROJECT_DOTFILE_STEMS.contains(&lowered) {
+        return true;
+    }
+    lowered.rsplit_once('.').is_some_and(|(stem, extension)| {
+        BENIGN_PROJECT_DOTFILE_STEMS.contains(&stem)
+            && PROJECT_CONFIG_EXTENSIONS.contains(&extension)
+    })
 }
 
 /// A hidden file at the leaf of a git work tree that a project keeps its own

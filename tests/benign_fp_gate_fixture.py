@@ -286,6 +286,23 @@ def build_fixture(root: Path) -> BenignFixture:
     _git(home / "Code" / "acme-platform", "commit", "--quiet", "-m", "platform base", home=home)
     _write(home / "acme-plain" / "README.txt", "Plain notes directory.\n")
     _write(home / "acme-plain" / "probe_py.py", "print('probe')\n")
+    # A project directory beside the checkout that was never `git init`-ed:
+    # a handed-over tree, an unpacked archive, a scaffold still being set up.
+    # Its hidden files are the ordinary project configuration an agent reads
+    # to match the workspace it is working in.
+    _write(home / "acme-plain" / ".keep", "")
+    _write(home / "acme-plain" / ".gitkeep", "")
+    _write(home / "acme-plain" / ".gitattributes", "* text=auto eol=lf\n")
+    _write(home / "acme-plain" / ".npmignore", "src/\ntests/\n")
+    _write(home / "acme-plain" / ".node-version", "22.11.0\n")
+    _write(home / "acme-plain" / ".tool-versions", "nodejs 22.11.0\npython 3.12.7\n")
+    _write(home / "acme-plain" / ".browserslistrc", "defaults\nnot IE 11\n")
+    _write(home / "acme-plain" / ".prettierrc", '{\n  "semi": false\n}\n')
+    _write(home / "acme-plain" / ".eslintrc.json", '{\n  "root": true\n}\n')
+    _write(home / "acme-plain" / ".mocharc.json", '{\n  "spec": "tests/**/*.spec.js"\n}\n')
+    # Negative control for the same directory: a registry file keeps its
+    # review wherever it sits, because that is where a publish token lands.
+    _write(home / "acme-plain" / ".npmrc", "registry=https://registry.npmjs.org/\n")
     _write(home / "kubeconfig.yaml", KUBECONFIG)
     # Connectors Guard has no decision for: a local CLI with its state directory, and harness MCP servers.
     write_connectors(home)
