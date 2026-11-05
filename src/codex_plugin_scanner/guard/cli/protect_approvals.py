@@ -85,12 +85,7 @@ def _queue_local_protect_approvals(
         review_url: str | None = None
         if queued:
             request_id = str(queued[0]["request_id"])
-            # The queued request's own page, so the agent can hand the user a
-            # link that opens it. Human output signs the loopback link; without
-            # a daemon token it cannot, and the copy keeps the wait guidance alone.
-            queued_url = _optional_string(queued[0].get("approval_url"))
-            if queued_url and authenticated_approval_review_url(queued_url, guard_home=guard_home):
-                review_url = queued_url
+            review_url = _live_request_review_url(request_id, guard_home=guard_home)
             guidance = safe_alternative_reason(
                 str(reason or "HOL Guard blocked this package request."),
                 reason_code=str(plan["review_reason_code"]),
@@ -368,6 +363,27 @@ def _suppress_package_shim_allow_output(args: argparse.Namespace, response_paylo
     verdict = response_payload.get("verdict")
     action = _optional_string(verdict.get("action")) if isinstance(verdict, dict) else None
     return action in {"allow", "warn"}
+
+
+def _live_request_review_url(request_id: str, *, guard_home: Path) -> str | None:
+    """Link to the queued request on the running daemon, or None.
+
+    The stored request URL uses the configured port, which is wrong when the
+    daemon fell back to another one, so the link comes from the verified live
+    daemon. This never starts a daemon. Human output signs the loopback link;
+    without a running daemon or its token there is nothing to open, and the
+    guidance keeps the wait command alone.
+    """
+
+    from ..daemon.manager import load_guard_daemon_url
+
+    daemon_url = load_guard_daemon_url(guard_home)
+    if daemon_url is None:
+        return None
+    review_url = f"{daemon_url.rstrip('/')}/requests/{request_id}"
+    if authenticated_approval_review_url(review_url, guard_home=guard_home) is None:
+        return None
+    return review_url
 
 
 def _optional_string(value: object | None) -> str | None:
