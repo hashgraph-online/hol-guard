@@ -47,6 +47,7 @@ def test_rollout_sum_counts_every_request_and_compaction(tmp_path: Path) -> None
     assert bench.rollout_sum(path) == {
         "input_tokens": 35000,
         "cached_input_tokens": 11000,
+        "cache_write_tokens": 0,
         "uncached_input_tokens": 24000,
         "output_tokens": 14,
         "requests": 2,
@@ -174,9 +175,11 @@ def test_report_changes_against_the_base_mean() -> None:
     assert summary["arms"]["cigar"]["change_vs_base"] == -0.6
     assert summary["arms"]["base"]["all_passed"] is True
     assert summary["arms"]["cigar"]["all_passed"] is False
+    # Raw input fell 60%, but the base's extra input was cache reads at a tenth of the price.
+    assert summary["arms"]["cigar"]["paid_change_vs_base"] == -0.493
     table = bench.markdown(summary)
-    assert "| cigar | 2 | 0 | NO | 1,660,000 |" in table
-    assert "-60.0%" in table
+    assert "| cigar | 2 | 0 | NO | 0.0256 | -49.3% |" in table
+    assert "| 1,660,000 | -60.0% |" in table
 
 
 def test_report_leaves_errored_reps_out_of_the_statistics() -> None:
@@ -187,7 +190,7 @@ def test_report_leaves_errored_reps_out_of_the_statistics() -> None:
     assert stats["errored"] == 1
     assert stats["mean_input"] == stats["min_input"] == 2_000_000
     assert stats["all_passed"] is False
-    assert "| cigar | 2 | 1 | NO | 2,000,000 |" in bench.markdown(bench.report(rows, "base", ["cigar"]))
+    assert "| cigar | 2 | 1 | NO |" in bench.markdown(bench.report(rows, "base", ["cigar"]))
 
 
 def test_report_drops_an_errored_rep_once_it_reran_clean() -> None:
@@ -353,6 +356,14 @@ def test_report_command_fails_when_a_rep_failed(tmp_path: Path, capsys) -> None:
     (runs / "results.jsonl").write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
     assert bench.main(["--work", str(tmp_path), "report", "--base", "base", "cigar"]) == 0
 
+
+
+def test_report_command_names_an_arm_with_no_runs(tmp_path: Path, capsys) -> None:
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    (runs / "results.jsonl").write_text(json.dumps(_row("base", 1, 4_000_000)) + "\n", encoding="utf-8")
+    assert bench.main(["--work", str(tmp_path), "report", "--base", "base", "cigar"]) == 2
+    assert "no recorded runs for arm(s) cigar" in capsys.readouterr().err
 
 @pytest.mark.skipif(not Path("/bin/zsh").exists(), reason="the agent shell under test is zsh")
 def test_agent_env_puts_the_venv_first_in_a_login_shell(tmp_path: Path) -> None:
