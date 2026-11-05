@@ -22,6 +22,13 @@ def test_trust_state_reported_before_the_socket_is_bound_is_deferred(tmp_path, m
     http.publish_trust_state({"state": "degraded"})
     assert written == []
 
+    # The superclass assigns the requested address before it binds, so a
+    # requested port 0 is present but is not the port the daemon listens on.
+    http.server_address = ("127.0.0.1", 0)
+    http.publish_trust_state()
+    assert written == []
+
     http.server_address = ("127.0.0.1", 48123)
+    http._socket_bound = True
     http.publish_trust_state()
     assert written == [48123]

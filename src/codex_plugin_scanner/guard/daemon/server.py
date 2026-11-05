@@ -375,6 +375,8 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     # Set while the control API serves the core registry because startup could
     # not read the installed authority.
     _extension_control_on_core_registry: bool = False
+    # Set once the HTTP superclass has bound the listening socket.
+    _socket_bound: bool = False
     store: GuardStore
     runtime: GuardSurfaceRuntime
     auth_token: str
@@ -588,6 +590,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self._initialize_request_services()
         self.request_executors_stopped = False
         super().__init__(server_address, handler_class)
+        self._socket_bound = True
 
     def _initialize_request_services(self) -> None:
         from .hook_direct_counters import bind_hook_counter_sink
@@ -1332,9 +1335,10 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
 
     def publish_trust_state(self, trust_status: dict[str, object] | None = None) -> None:
         # The store can report an integrity change while the hook worker starts,
-        # before the listening socket is bound. There is no port to record yet;
-        # the daemon publishes its trust state once it listens.
-        if getattr(self, "server_address", None) is None:
+        # before the listening socket is bound. `server_address` is assigned
+        # before the bind, so with port 0 it would still name no port; the
+        # daemon publishes its trust state once it listens.
+        if not self._socket_bound:
             return
         write_guard_daemon_state(
             self.store.guard_home,
