@@ -142,7 +142,7 @@ pub(super) fn run(
     let remaining = job
         .deadline_at_ms
         .saturating_sub(store::now()?)
-        .min(120_000);
+        .min(store::INSTALL_WINDOW_MS);
     if remaining == 0 {
         return Err(error("install_deadline_exceeded"));
     }
