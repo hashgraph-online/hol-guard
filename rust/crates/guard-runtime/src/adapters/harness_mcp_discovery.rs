@@ -16,6 +16,8 @@ use crate::context_digest_local_cli::python_path_name;
 use crate::copilot_hook_config::{list2cmdline, shlex_join};
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
+#[path = "harness_mcp_select.rs"]
+mod select;
 #[path = "harness_mcp_upstream.rs"]
 mod upstream;
 
@@ -76,6 +78,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         Some("group") => group(map),
         Some("match") => matching(map),
         Some("upstream") => upstream::upstream(map),
+        Some("select") => select::select(map),
+        Some("server_id") => select::server_ids(map),
         _ => Err(ERR_INVALID),
     }
 }
