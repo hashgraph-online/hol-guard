@@ -3,7 +3,7 @@
 
 use guard_contracts::{
     ExtensionControlAuthorityRequestV1, ExtensionControlCatalogMigrationV1,
-    ExtensionControlMigrationRecordV1,
+    ExtensionControlMigrationRecordV1, ExtensionControlPackReserveV1,
 };
 use serde_json::{json, Value};
 
@@ -175,4 +175,36 @@ fn migrate_refuses_a_request_without_its_record() {
         ),
         1
     );
+}
+
+#[test]
+fn migrate_refuses_a_pack_reservation_the_migration_does_not_activate() {
+    let home = Home::new();
+    home.commit(1, &catalog('b'), &[local(&catalog('b'))], "committed");
+    let request = ExtensionControlAuthorityRequestV1 {
+        now: Some(NOW.to_owned()),
+        catalog_migration: Some(ExtensionControlCatalogMigrationV1 {
+            previous_revision: 1,
+            previous_catalog_digest: catalog('b'),
+            layers: layers_to_values(&[local(&catalog('a'))]),
+            installed_upgrade: None,
+        }),
+        migration_record: Some(ExtensionControlMigrationRecordV1 {
+            provenance: json!({"writer_version": "2.0.0"}),
+            downgraded_from: None,
+            retired_target_ids: Vec::new(),
+        }),
+        pack_reserve: Some(ExtensionControlPackReserveV1::default()),
+        ..home.request("migrate", &catalog('a'))
+    };
+    let refused = run(&request);
+    assert_eq!(refused["fault"], json!("tampered"), "{refused}");
+    assert_eq!(
+        count(
+            &home,
+            "select count(*) from extension_control_authority_transition where revision = 2"
+        ),
+        0
+    );
+    assert_eq!(vault_anchor(&home), None);
 }

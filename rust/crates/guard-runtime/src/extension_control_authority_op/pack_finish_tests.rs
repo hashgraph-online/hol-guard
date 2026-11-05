@@ -3,11 +3,15 @@
 //! and a pending record that does not authenticate refused by name.
 
 use base64ct::{Base64UrlUnpadded, Encoding};
-use guard_contracts::{ExtensionControlAuthorityRequestV1, ExtensionControlPackFinishV1};
+use guard_contracts::{
+    ExtensionControlAuthorityRequestV1, ExtensionControlCatalogMigrationV1,
+    ExtensionControlMigrationRecordV1, ExtensionControlPackFinishV1,
+};
 use rusqlite::params;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+use super::super::layers::layers_to_values;
 use super::super::tests::{anchor, catalog, local, run, with_cloud_events, Home, KEY};
 
 const NOW: &str = "2026-10-21T00:05:00+00:00";
@@ -160,6 +164,15 @@ fn pack_with(adjust: impl FnOnce(&mut Value)) -> Pack {
 }
 
 fn resume(pack: &Pack, floor: Option<&str>) -> Value {
+    resume_with(pack, floor, None)
+}
+
+/// `resume`, finishing a catalog migration from `previous_revision`.
+fn resume_migration(pack: &Pack, previous_revision: i64) -> Value {
+    resume_with(pack, Some(pack.after.as_str()), Some(previous_revision))
+}
+
+fn resume_with(pack: &Pack, floor: Option<&str>, migrated_from: Option<i64>) -> Value {
     let snapshot: String = pack
         .home
         .db
@@ -177,6 +190,19 @@ fn resume(pack: &Pack, floor: Option<&str>) -> Value {
             key_b64: Base64UrlUnpadded::encode_string(&KEY),
             floor: Some(floor.to_owned()),
             ..ExtensionControlPackFinishV1::default()
+        }),
+        catalog_migration: migrated_from.map(|previous_revision| {
+            ExtensionControlCatalogMigrationV1 {
+                previous_revision,
+                previous_catalog_digest: catalog('b'),
+                layers: layers_to_values(&[local(&catalog('a'))]),
+                installed_upgrade: None,
+            }
+        }),
+        migration_record: migrated_from.map(|_| ExtensionControlMigrationRecordV1 {
+            provenance: json!({"writer_version": "2.0.0", "trigger": "catalog-migration"}),
+            downgraded_from: None,
+            retired_target_ids: Vec::new(),
         }),
         ..pack.home.request("resume", &catalog('a'))
     })
@@ -334,4 +360,52 @@ fn resume_refuses_an_activation_prepared_under_another_security_scope() {
         ),
         1
     );
+}
+
+#[test]
+fn resume_records_a_pack_migration_in_the_transaction_that_commits_it() {
+    let pack = pack();
+    let finished = resume_migration(&pack, 1);
+    assert_eq!(finished["resumed"]["revision"], json!(2), "{finished}");
+    let payload: String = pack
+        .home
+        .db
+        .query_row(
+            "select payload_json from guard_events \
+             where event_name = 'extension_control_authority_catalog_migrated'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let payload: Value = serde_json::from_str(&payload).unwrap();
+    assert_eq!(payload["previous_revision"], json!(1));
+    assert_eq!(payload["revision"], json!(2));
+    assert_eq!(payload["provenance"]["trigger"], json!("catalog-migration"));
+    // A migration queues no change event, whichever op commits it.
+    assert_eq!(
+        count(&pack.home, "select count(*) from guard_cloud_events"),
+        0
+    );
+}
+
+#[test]
+fn resume_refuses_a_migration_record_for_another_source_with_nothing_committed() {
+    let pack = pack();
+    let refused = resume_migration(&pack, 0);
+    assert_eq!(refused["fault"], json!("tampered"), "{refused}");
+    assert_eq!(
+        count(
+            &pack.home,
+            "select count(*) from extension_command_pack_pending"
+        ),
+        1
+    );
+    assert_eq!(
+        count(
+            &pack.home,
+            "select revision from extension_control_authority_snapshot where singleton = 1"
+        ),
+        1
+    );
+    assert_eq!(count(&pack.home, "select count(*) from guard_events"), 0);
 }

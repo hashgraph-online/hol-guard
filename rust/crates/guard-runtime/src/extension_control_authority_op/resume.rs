@@ -14,6 +14,11 @@
 //! (`pack_finish`). With it, the pending activation is installed in the same
 //! transaction as the row; a lifecycle floor that has not moved yet, or legacy
 //! evidence the link needs, comes back owed with nothing written.
+//!
+//! A catalog migration that activates a command pack is finished here too:
+//! the request carries its `migration_record`, the migration event is recorded
+//! in the transaction that commits the row, and no change event is queued, as
+//! for any other migration.
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -147,7 +152,9 @@ impl Ctx<'_> {
         self.write_anchor(&sealed)?;
         // Best effort, as in `_export_last_good_authority`.
         let _ = self.export_last_good(&anchor);
-        immediate(self.connection, || self.queue_change_event(&row))?;
+        if self.request.migration_record.is_none() {
+            immediate(self.connection, || self.queue_change_event(&row))?;
+        }
         Ok(json!({
             "resumed": {
                 "revision": revision,
@@ -243,6 +250,7 @@ impl Ctx<'_> {
                 if let Some(proof_hash) = proof_hash {
                     self.consume_proof(proof_hash, revision, &row_str(&row, "created_at")?)?;
                 }
+                self.record_migration(&row)?;
             }
             Resume::MarkCommitted => self.mark_committed(revision)?,
             Resume::Finish => {}

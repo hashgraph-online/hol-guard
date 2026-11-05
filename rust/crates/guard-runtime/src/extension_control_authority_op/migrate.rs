@@ -1,12 +1,16 @@
 //! `migrate`: the resident commits a catalog migration itself.
 //!
-//! This is `_migrate_extension_control_catalog` for a rebinding that activates
-//! no command pack. The plan is taken inside the immediate transaction that
-//! writes the prepared row, the anchored anchor is sealed into the credential
-//! vault and read back, and the second transaction moves the snapshot, commits
-//! the row and records the migration event before the committed anchor is
-//! sealed. A plan that reserves a command pack is refused: its activation
-//! journal stays with the caller.
+//! This is `_migrate_extension_control_catalog`. The plan is taken inside the
+//! immediate transaction that writes the prepared row, the anchored anchor is
+//! sealed into the credential vault and read back, and the second transaction
+//! moves the snapshot, commits the row and records the migration event before
+//! the committed anchor is sealed.
+//!
+//! A migration that activates a command pack reserves the staged activation
+//! (`pack_reserve`) with the prepared row and comes back `pack_bound` once the
+//! row is anchored. The caller then finishes it with `resume`, which installs
+//! the activation once the lifecycle floor has moved and records the
+//! migration in the transaction that commits the row.
 //!
 //! The caller settles the migration's provenance before the op opens a store
 //! transaction, so a slow provenance lookup never holds the write lock.
@@ -19,7 +23,9 @@ use serde_json::{json, Value};
 
 use super::chain::MIGRATED_EVENT;
 use super::layers::layers_from_values;
-use super::records::{canonical, degraded, store_fault, tampered, Anchor, Phase, Res};
+use super::records::{
+    canonical, degraded, row_int, row_str, store_fault, tampered, Anchor, Phase, Res, Row,
+};
 use super::resume::immediate;
 use super::seals::anchor_json;
 use super::writes::open_writer;
@@ -138,7 +144,16 @@ impl Ctx<'_> {
             snapshot_digest: snapshot_digest.clone(),
             phase: Phase::Anchored,
         };
-        self.write_anchor(&anchor_json(&anchored, key)?)?;
+        let sealed = anchor_json(&anchored, key)?;
+        self.write_anchor(&sealed)?;
+        if !plan["command_pack_record_digest"].is_null() {
+            return Ok(json!({
+                "resumed": null,
+                "pack_bound": true,
+                "revision": revision,
+                "anchor_json": sealed,
+            }));
+        }
         immediate(self.connection, || self.commit_migration(plan, &events))?;
         let committed = Anchor {
             revision,
@@ -162,7 +177,8 @@ impl Ctx<'_> {
         if plan["outcome"] != "migrate" {
             return Err(tampered(INVALID_MIGRATION));
         }
-        if !plan["command_pack_record_digest"].is_null() {
+        let pack = &plan["command_pack_record_digest"];
+        if pack.is_null() != self.request.pack_reserve.is_none() {
             return Err(tampered(
                 "installed command pack migration binding mismatch",
             ));
@@ -200,6 +216,14 @@ impl Ctx<'_> {
                 ],
             )
             .map_err(store_fault)?;
+        if !pack.is_null() {
+            self.reserve_pack(
+                text(pack)?,
+                int(&plan["revision"])?,
+                text(&snapshot["digest"])?,
+                self.catalog_digest()?,
+            )?;
+        }
         Ok(reply)
     }
 
@@ -250,7 +274,34 @@ impl Ctx<'_> {
                 params![Phase::Committed.as_str(), created_at, revision],
             )
             .map_err(store_fault)?;
-        let (payload, regression) = events;
+        self.insert_migration_events(events, created_at)
+    }
+
+    /// `resume` of a migration that activates a command pack: the migration
+    /// is recorded in the transaction that commits its row.
+    pub(super) fn record_migration(&self, row: &Row) -> Res<()> {
+        let Some(record) = self.request.migration_record.as_ref() else {
+            return Ok(());
+        };
+        let migration = self
+            .request
+            .catalog_migration
+            .as_ref()
+            .ok_or_else(|| tampered(INVALID_MIGRATION))?;
+        if row_str(row, "catalog_digest")? != self.catalog_digest()?
+            || row_int(row, "previous_revision")? != migration.previous_revision
+        {
+            return Err(tampered(INVALID_MIGRATION));
+        }
+        let events = migration_events(self.request, record, row_int(row, "revision")?)?;
+        self.insert_migration_events(&events, &row_str(row, "created_at")?)
+    }
+
+    fn insert_migration_events(
+        &self,
+        (payload, regression): &(String, Option<String>),
+        created_at: &str,
+    ) -> Res<()> {
         let insert = |name: &str, payload: &str| {
             self.connection
                 .execute(
