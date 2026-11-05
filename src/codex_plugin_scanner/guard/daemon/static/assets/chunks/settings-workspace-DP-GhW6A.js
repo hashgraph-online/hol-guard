@@ -5269,7 +5269,7 @@ const CIGAR_UPDATE_TUTORIAL = {
     {
       title: "Prepare beside your current runtime",
       description: "Downloading and verifying a replacement does not select or enable it.",
-      instructions: ["Choose a registered Python interpreter for an available SDK build, or explicitly prepare an eligible private Python build first.", "Click Prepare this build and watch its native job. The current runtime remains selected while preparation runs.", "Cancel the job if you change your mind. For an uncertain response, refresh jobs and inspect the recorded job ID before another action."],
+      instructions: ["Choose a registered Python interpreter for an available SDK build, or explicitly prepare an eligible private Python build first.", "Click Get this version and watch its progress. The current runtime remains selected while preparation runs.", "Click Stop if you change your mind. If Guard is not sure a step worked, refresh the list before trying again. In progress shows only jobs that still need something from you."],
       expect: "The prepared installation appears in the Versions list marked Installed, with your current selection intact.",
       target: "versions",
       action: "Prepare an eligible build"
@@ -5301,7 +5301,7 @@ const CIGAR_UPDATE_TUTORIAL = {
     {
       title: "Use the last good build deliberately",
       description: "Rollback prepares current compatible data for the previous verified installation.",
-      instructions: ["In Updates, choose Prepare last good build when you need to return to the retained installation.", "Wait for the rollback selection job, then commit it explicitly with the same reconnect acknowledgement when live.", "Use Recover job for interrupted work. Recovery does not re-grant context access. Your Guard approvals remain in place."],
+      instructions: ["In Updates, choose Prepare last good build when you need to return to the retained installation.", "Wait for the rollback selection job, then commit it explicitly with the same reconnect acknowledgement when live.", "Use Clean up for a step that stopped partway. Cleaning up does not turn context access back on. Your Guard approvals remain in place."],
       expect: "You know where to inspect a rollback or interrupted job before taking another action.",
       target: "versions",
       action: "Inspect rollback & recovery"
@@ -6637,7 +6637,7 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
                 detail: "Guard downloads and checks this version next to the one you have. Nothing changes until you switch."
               });
             },
-            children: "Prepare this build"
+            children: "Get this version"
           }
         )
       },
@@ -6698,10 +6698,10 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
             disabled: disabled || present || reason !== null,
             onClick: () => onAction({
               input: { action: "setup_interpreter", job_id: cigarVersionJobId(), build_id: build.build_id },
-              title: "Prepare private Python",
+              title: "Set up Python for CIGAR",
               detail: "Guard downloads and checks a private copy of Python for CIGAR. Your system Python and current CIGAR version stay as they are."
             }),
-            children: present ? "Python registered" : "Prepare private Python"
+            children: present ? "Python is set up" : "Set up Python for CIGAR"
           }
         )
       },
@@ -6785,15 +6785,21 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
   ] });
 }
 const operation = {
-  install: "Prepare SDK",
-  verify: "Verify installation",
-  setup_interpreter: "Prepare Python",
-  refresh_catalog: "Refresh catalog",
-  switch: "Switch runtime",
-  rollback: "Roll back runtime",
-  select: "Select first runtime",
-  recover: "Recover selection"
+  install: "Download CIGAR",
+  verify: "Check CIGAR",
+  setup_interpreter: "Set up Python for CIGAR",
+  refresh_catalog: "Look for new versions",
+  switch: "Switch CIGAR version",
+  rollback: "Go back to the earlier version",
+  select: "Choose a CIGAR version",
+  recover: "Clean up a version switch"
 };
+const phaseWords = { ready: "Ready", completed: "Done", cancelled: "Cancelled", failed: "Did not finish", recovery_required: "Needs cleanup" };
+function cigarJobPhaseLabel(job) {
+  if (job.phase === "ready" && job.can_commit) return "Ready to switch";
+  if (cigarJobPending(job)) return "Working";
+  return phaseWords[job.phase] ?? "Stopped partway";
+}
 const time = (ms) => /* @__PURE__ */ jsxRuntimeExports.jsx("time", { dateTime: new Date(ms).toISOString(), children: new Date(ms).toLocaleString() });
 function CigarVersionJobsPanel(props) {
   const [acknowledged, setAcknowledged] = reactExports.useState(null);
@@ -6803,9 +6809,10 @@ function CigarVersionJobsPanel(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: id2 + "-heading", className: versionHeading, children: "In progress" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Work Guard is doing for you. Each change waits for your go-ahead before it touches the version in use." })
     ] }),
-    !props.jobs.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/65", children: "No CIGAR update jobs have been recorded." }) : null,
+    !props.jobs.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/65", children: "Nothing is running right now." }) : null,
     props.jobs.map((job) => {
       const pending = cigarJobPending(job);
+      const working = pending && !(job.phase === "ready" && job.can_commit);
       const attention = job.recovery_available || job.phase === "failed" || job.phase === "recovery_required";
       let tone = pending ? "blue" : "slate";
       if (attention) tone = "amber";
@@ -6816,11 +6823,11 @@ function CigarVersionJobsPanel(props) {
           className: "guard-surface-in space-y-3 rounded-2xl border p-4 sm:p-5 " + (attention ? "border-amber-300/70 bg-amber-50/50" : "border-brand-blue/20 bg-brand-blue/[0.03]"),
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2.5", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-8 items-center justify-center rounded-full " + (attention ? "bg-amber-100 text-amber-700" : "bg-brand-blue/10 text-brand-blue"), children: attention ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "size-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4" + (pending ? " motion-safe:animate-spin" : "") }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-8 items-center justify-center rounded-full " + (attention ? "bg-amber-100 text-amber-700" : "bg-brand-blue/10 text-brand-blue"), children: attention ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "size-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4" + (working ? " motion-safe:animate-spin" : "") }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "font-semibold text-brand-dark", children: operation[job.operation] }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone, children: [
-                job.phase.replaceAll("_", " "),
-                job.cancel_requested ? " · cancellation requested" : ""
+                cigarJobPhaseLabel(job),
+                job.cancel_requested ? " · stopping" : ""
               ] }) })
             ] }),
             job.family === "selection" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 text-sm leading-6 text-brand-dark/75", children: [
@@ -6863,6 +6870,7 @@ function CigarVersionJobsPanel(props) {
                 !canCommitCigarJob(job, props.status) ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-amber-800", children: "The live selection changed. Refresh status and jobs before continuing." }) : null
               ] }) : null
             ] }) : null,
+            job.recovery_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-amber-900", children: "This step stopped partway. Choose Clean up and Guard finishes or undoes it." }) : null,
             pending && !job.cancel_requested || job.recovery_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
               pending && !job.cancel_requested ? /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "button",
@@ -6870,8 +6878,8 @@ function CigarVersionJobsPanel(props) {
                   type: "button",
                   className: versionButton,
                   disabled: props.disabled,
-                  onClick: () => props.onAction({ input: { action: "cancel", job_id: job.job_id }, title: "Cancel CIGAR job", detail: "Ask Guard to cancel this job and finish its cleanup." }),
-                  children: "Cancel job"
+                  onClick: () => props.onAction({ input: { action: "cancel", job_id: job.job_id }, title: "Stop this step", detail: "Guard stops this step and tidies up after it. The CIGAR version you use now stays as it is." }),
+                  children: "Stop"
                 }
               ) : null,
               job.recovery_available ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -6886,10 +6894,10 @@ function CigarVersionJobsPanel(props) {
                       job_id: job.job_id,
                       ...job.family === "selection" && props.status ? { expected_generation: props.status.generation } : {}
                     },
-                    title: "Recover interrupted CIGAR work",
-                    detail: "Ask Guard to reconcile the interrupted operation. Recovery never restores old context grants or approvals."
+                    title: "Clean up this step",
+                    detail: "Guard finishes or undoes the step that stopped partway. Context access you gave before is not turned back on, and your Guard approvals stay as they are."
                   }),
-                  children: "Recover job"
+                  children: "Clean up"
                 }
               ) : null
             ] }) : null,
@@ -7133,9 +7141,9 @@ function errorMessage(code, status) {
     return "CIGAR settings changed. Refresh the current selection and jobs before trying again.";
   }
   if (code.endsWith("_busy") || code.endsWith("cleanup_pending")) return "Another CIGAR operation is finishing. Refresh jobs after it completes.";
-  if (code.endsWith("recovery_required")) return "This CIGAR operation needs recovery. Refresh its job before choosing the next action.";
+  if (code.endsWith("recovery_required")) return "An earlier CIGAR step stopped partway. Refresh, then choose Clean up on that step.";
   if (code.endsWith("data_choice_required")) return "Saved CIGAR data needs an explicit choice before this selection can proceed.";
-  return "CIGAR did not return a confirmed result. Refresh status and jobs before trying again.";
+  return "Guard did not say whether this worked. Refresh to see where it stands before trying again.";
 }
 async function requestCigarVersions(input, proof, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "CIGAR updates require a local Guard installation.");
