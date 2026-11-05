@@ -139,7 +139,16 @@ export const HolGuardPretoolPlugin = async ({
             hook_event_name: "PreToolUse",
             event: "PreToolUse",
             tool_name: input.tool,
-            tool_input: { command, workdir: workspace },
+            // The agent's own one-line account of the command, when it sent one.
+            // Guard shows it on the review card as the agent's words; a shell's
+            // approval binds its command text only, so it changes no decision.
+            tool_input: {
+              command,
+              workdir: workspace,
+              ...(typeof output.args?.description === "string"
+                ? { description: output.args.description }
+                : {}),
+            },
             cwd: workspace,
             workspace_root: directory || process.cwd(),
             source_scope: directory?.trim() ? "project" : "global",
