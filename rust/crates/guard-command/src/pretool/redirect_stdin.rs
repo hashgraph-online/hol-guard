@@ -86,7 +86,7 @@ fn records_a_commit_message(executable: &str, segment: &CommandSegmentV1) -> boo
     matches!(
         words.split_first(),
         Some((&"commit", rest))
-            if super::git_local_writes::forms::message_from_standard_input(rest)
+            if crate::pretool::git_local_writes::forms::message_from_standard_input(rest)
     )
 }
 
