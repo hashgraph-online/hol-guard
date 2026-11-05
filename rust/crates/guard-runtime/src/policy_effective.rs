@@ -399,10 +399,28 @@ fn render(policy: &EffectiveNativePolicyV3, postures: Option<&StringMap>) -> Res
     Ok(value)
 }
 
-fn run(request: Request) -> Result<Value, Fail> {
+fn compose(
+    configs: &[Map<String, Value>],
+    guard_config: bool,
+    observed: Option<observed::Observed>,
+) -> Result<Value, Fail> {
+    let policies = configs
+        .iter()
+        .map(|config| effective(config, guard_config))
+        .collect::<Result<Vec<_>, _>>()?;
+    let (mut merged, postures) = merge(&policies)?;
+    if let Some(choices) = observed {
+        observed::overlay(&mut merged, choices)?;
+    }
+    render(&merged, Some(&postures))
+}
+
+/// The response fields beside `ok`.
+fn run(request: Request) -> Result<Map<String, Value>, Fail> {
     if request.schema != SCHEMA {
         return Err(POLICY_INVALID);
     }
+    let mut body = Map::new();
     match request.op.as_str() {
         "effective" => {
             if request.observed.is_some() {
@@ -411,22 +429,27 @@ fn run(request: Request) -> Result<Value, Fail> {
             let [config] = request.configs.as_slice() else {
                 return Err(POLICY_INVALID);
             };
-            render(&effective(config, request.guard_config)?.effective, None)
+            let policy = render(&effective(config, request.guard_config)?.effective, None)?;
+            body.insert("policy".into(), policy);
         }
         "compose" => {
-            let policies = request
-                .configs
-                .iter()
-                .map(|config| effective(config, request.guard_config))
-                .collect::<Result<Vec<_>, _>>()?;
-            let (mut merged, postures) = merge(&policies)?;
-            if let Some(choices) = request.observed {
-                observed::overlay(&mut merged, choices)?;
-            }
-            render(&merged, Some(&postures))
+            let policy = compose(&request.configs, request.guard_config, request.observed)?;
+            body.insert("policy".into(), policy);
         }
-        _ => Err(POLICY_INVALID),
+        // A publication: the composed policy plus the direct-lane views its
+        // binding carries, both from the same loaded configs.
+        "publish" => {
+            if !request.guard_config || request.configs.is_empty() {
+                return Err(POLICY_INVALID);
+            }
+            let views = views::views(&request.configs);
+            let policy = compose(&request.configs, true, request.observed)?;
+            body.insert("policy".into(), policy);
+            body.insert("views".into(), views);
+        }
+        _ => return Err(POLICY_INVALID),
     }
+    Ok(body)
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
@@ -459,7 +482,10 @@ fn evaluate(bytes: &[u8]) -> Result<Vec<u8>, String> {
     }
     // A rejected policy is data, not a crash: the caller maps the reason.
     let response = match run(request) {
-        Ok(policy) => json!({"ok": true, "policy": policy}),
+        Ok(mut body) => {
+            body.insert("ok".into(), Value::Bool(true));
+            Value::Object(body)
+        }
         Err(reason) => json!({"ok": false, "error": reason}),
     };
     serde_json::to_vec(&response).map_err(|_| "policy_effective_response_encode_failed".to_owned())
@@ -467,6 +493,9 @@ fn evaluate(bytes: &[u8]) -> Result<Vec<u8>, String> {
 
 #[path = "policy_effective_observed.rs"]
 mod observed;
+
+#[path = "policy_effective_views.rs"]
+mod views;
 
 #[cfg(test)]
 #[path = "policy_effective_tests.rs"]

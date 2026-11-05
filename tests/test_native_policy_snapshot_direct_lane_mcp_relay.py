@@ -1,25 +1,17 @@
 from __future__ import annotations
 
 import threading
-from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
-from typing import cast
 
 import pytest
 from typing_extensions import override
 
-from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_mcp_relay import (
     MCP_RELAY_BINDING_KEY,
     MCP_RELAY_VIEW_SCHEMA,
-    REDACTION_LEVEL_KEY,
     NativePolicySnapshotMcpRelayMixin,
     extension_layers,
-    harness_view,
     mcp_relay_view,
-    uniform_harness_views,
-    uniform_redaction_level,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -39,95 +31,18 @@ DIGEST = "a" * 64
 LAYERS: list[object] = [{"kind": "local-admin", "global_lockdown": False, "controls": []}]
 
 
-def _config(tmp_path: Path, **fields: object) -> GuardConfig:
-    return replace(GuardConfig(guard_home=tmp_path, workspace=None), **fields)
-
-
-def test_a_harness_view_carries_the_proxy_config_and_hash_fields(tmp_path: Path) -> None:
-    view = harness_view(_config(tmp_path, sandbox_analysis="on", managed_policy_hash="a" * 64), "codex")
-
-    assert view is not None
-    config = view["config"]
-    hash_config = view["hash_config"]
-    assert isinstance(config, dict) and isinstance(hash_config, dict)
-    assert config["mode"] == GuardConfig(guard_home=tmp_path, workspace=None).mode
-    assert set(config) == {
-        "mode",
-        "default_action",
-        "artifact_actions",
-        "publisher_actions",
-        "harness_actions",
-        "risk_actions",
-        "harness_risk_actions",
-        "harness_postures",
-        "security_level",
-        "protection_posture",
-        "protection_posture_explicit",
-        "managed_locked_settings",
+# A harness view as the native composer derives it; its shape is pinned in
+# rust/crates/guard-runtime/src/policy_effective_views_tests.rs.
+HARNESSES: dict[str, object] = {
+    "codex": {
+        "config": {"mode": "prompt", "harness_postures": {}},
+        "hash_config": {"mode": "prompt", "sandbox_analysis": "off"},
     }
-    # The posture override is the resolver's own input; the approval token the
-    # proxy binds does not carry it, so it stays out of the hash fields.
-    assert config["harness_postures"] == {}
-    assert hash_config == {
-        **{field: value for field, value in config.items() if field != "harness_postures"},
-        "managed_policy_hash": "a" * 64,
-        "managed_policy_status": "absent",
-        "sandbox_analysis": "on",
-    }
+}
 
 
-def test_a_per_harness_posture_changes_only_that_harness(tmp_path: Path) -> None:
-    config = _config(tmp_path, harness_postures={"cursor": "watch"})
-
-    assert harness_view(config, "cursor") != harness_view(config, "codex")
-    assert harness_view(config, "codex") == harness_view(_config(tmp_path), "codex")
-
-
-def test_a_harness_view_carries_only_its_own_posture_override(tmp_path: Path) -> None:
-    config = _config(tmp_path, harness_postures={"cursor": "extra_careful"})
-
-    cursor = harness_view(config, "cursor")
-    codex = harness_view(config, "codex")
-
-    assert cursor is not None and codex is not None
-    assert cast("dict[str, object]", cursor["config"])["harness_postures"] == {"cursor": "extra_careful"}
-    assert cast("dict[str, object]", codex["config"])["harness_postures"] == {}
-
-
-def test_only_harnesses_every_config_agrees_on_are_bound(tmp_path: Path) -> None:
-    home = _config(tmp_path)
-    workspace = _config(tmp_path, harness_postures={"cursor": "watch"})
-
-    assert set(uniform_harness_views([home])) == {"cline", "codex", "copilot", "cursor", "hermes", "opencode"}
-    assert set(uniform_harness_views([home, workspace])) == {"cline", "codex", "copilot", "hermes", "opencode"}
-    assert uniform_harness_views([]) == {}
-
-
-def test_a_bound_harness_carries_the_redaction_level_every_config_agrees_on(tmp_path: Path) -> None:
-    home = _config(tmp_path, receipt_redaction_level="partial")
-    workspace = _config(tmp_path, receipt_redaction_level="none")
-
-    bound = uniform_harness_views([home, _config(tmp_path, receipt_redaction_level="partial")])
-    assert {view[REDACTION_LEVEL_KEY] for view in bound.values()} == {"partial"}  # type: ignore[index]
-    assert uniform_redaction_level([home, workspace]) is None
-    assert uniform_redaction_level([_config(tmp_path, receipt_redaction_level="secret")]) is None
-    assert uniform_redaction_level([]) is None
-    # A disagreement leaves the harnesses bound without the level, so only a
-    # queued call defers.
-    unlevelled = uniform_harness_views([home, workspace])
-    assert set(unlevelled) == {"cline", "codex", "copilot", "cursor", "hermes", "opencode"}
-    assert all(REDACTION_LEVEL_KEY not in view for view in unlevelled.values())  # type: ignore[operator]
-    assert unlevelled["codex"] == harness_view(home, "codex")
-
-
-def test_a_view_the_resident_would_read_differently_binds_nothing(tmp_path: Path) -> None:
-    assert harness_view(_config(tmp_path, risk_actions={"network": 1.5}), "codex") is None
-    assert harness_view(SimpleNamespace(), "codex") is None
-    assert uniform_harness_views([_config(tmp_path, risk_actions={"network": 1.5})]) == {}
-
-
-def test_the_view_needs_a_bound_harness_and_keeps_unreadable_layers_out(tmp_path: Path) -> None:
-    harnesses = uniform_harness_views([_config(tmp_path)])
+def test_the_view_needs_a_bound_harness_and_keeps_unreadable_layers_out() -> None:
+    harnesses = dict(HARNESSES)
 
     assert mcp_relay_view({}, LAYERS) is None
     assert mcp_relay_view(None, LAYERS) is None
@@ -180,7 +95,7 @@ class _Publisher(NativePolicySnapshotMcpRelayMixin):
         self._publish_event = threading.Event()
         self.store = object()
         self._command_control_runtime: object | None = _runtime()
-        self._compiled_mcp_relay_harnesses: dict[str, object] | None = uniform_harness_views([_config(tmp_path)])
+        self._compiled_mcp_relay_harnesses: dict[str, object] | None = dict(HARNESSES)
         self._direct_lane_ack_target: tuple[int, str] | None = (7, "digest")
         self.rebound = 0
 

@@ -213,3 +213,55 @@ def test_mixed_loaded_and_mapping_configs_are_rejected(monkeypatch, tmp_path: Pa
         client.compose_effective_native_policies((GuardConfig(guard_home=tmp_path, workspace=None), dict(_BASE)))
 
     assert seen == []
+
+
+_PUBLISH_STATUS = _status(features=(client.POLICY_EFFECTIVE_FEATURE, client.POLICY_PUBLISH_FEATURE))
+_VIEWS = {"blocked_request_mode": "ask", "mcp_relay_harnesses": {"codex": {"config": {}, "hash_config": {}}}}
+
+
+def test_publish_returns_the_policy_and_the_views_rust_derived(monkeypatch, tmp_path: Path) -> None:
+    seen = _install(monkeypatch, {"ok": True, "policy": {"mode": "enforce"}, "views": _VIEWS}, status=_PUBLISH_STATUS)
+    config = GuardConfig(guard_home=tmp_path, workspace=None, blocked_request_mode="ask")
+
+    policy, mode, harnesses = client.compose_native_publication((config,), observed={"mcp_tool_actions": {}})
+
+    assert (policy, mode, harnesses) == ({"mode": "enforce"}, "ask", _VIEWS["mcp_relay_harnesses"])
+    request = seen[0]
+    assert request["op"] == "publish"
+    assert request["guard_config"] is True
+    fields = request["configs"][0]
+    assert fields["blocked_request_mode"] == "ask"
+    assert fields["managed_policy_status"] == config.managed_policy_status
+    assert "managed_policy_hash" in fields
+
+
+def test_publish_needs_its_own_capability(monkeypatch, tmp_path: Path) -> None:
+    seen = _install(monkeypatch, {"ok": True, "policy": {}, "views": _VIEWS})
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_effective_unavailable"):
+        client.compose_native_publication((GuardConfig(guard_home=tmp_path, workspace=None),))
+    assert seen == []
+
+
+@pytest.mark.parametrize(
+    "views",
+    [
+        None,
+        [],
+        {"blocked_request_mode": "ask"},
+        {"blocked_request_mode": 1, "mcp_relay_harnesses": {}},
+        {"blocked_request_mode": None, "mcp_relay_harnesses": {"codex": []}},
+    ],
+)
+def test_malformed_views_fail_closed(monkeypatch, tmp_path: Path, views: object) -> None:
+    _install(monkeypatch, {"ok": True, "policy": {}, "views": views}, status=_PUBLISH_STATUS)
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_effective_invalid"):
+        client.compose_native_publication((GuardConfig(guard_home=tmp_path, workspace=None),))
+
+
+def test_publish_refuses_mapping_configs_before_spawning(monkeypatch) -> None:
+    seen = _install(monkeypatch, {"ok": True, "policy": {}, "views": _VIEWS}, status=_PUBLISH_STATUS)
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_snapshot_policy_invalid"):
+        client.compose_native_publication((dict(_BASE),))
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_snapshot_policy_invalid"):
+        client.compose_native_publication(())
+    assert seen == []
