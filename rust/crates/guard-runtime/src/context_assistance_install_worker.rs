@@ -243,8 +243,9 @@ pub(super) fn run(
         site_packages: destination.join("site-packages"),
         work_dir: work.clone(),
     };
-    let approval = guard_context_assistance::inspect_release_bundle(&selection, release)
-        .map_err(|e| error(e.code()))?;
+    let approval =
+        guard_context_assistance::inspect_release_bundle_cancellable(&selection, release, &cancel)
+            .map_err(|e| error(e.code()))?;
     if approval.python_sha256 != interpreter.python_sha256 {
         return Err(error("interpreter_changed"));
     }
