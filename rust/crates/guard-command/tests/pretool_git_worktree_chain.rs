@@ -408,3 +408,41 @@ fn a_writing_step_beside_the_reads_still_revokes_the_proof() {
         assert_reviewed(&home, &repository, &format!("{add}{tail}"));
     }
 }
+
+/// Agents name the branch they will work on right after making the checkout.
+/// With no start point the branch begins at the commit the add already
+/// proved, so the step changes no file and runs only the hooks that proof
+/// covers.
+#[test]
+fn a_new_branch_in_the_entered_checkout_keeps_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-branch");
+    let add = "git worktree add --detach ../app-flat origin/main";
+    for tail in [
+        " && cd ../app-flat && git checkout -b feat/landing && git rev-parse HEAD",
+        " && cd ../app-flat && git switch -c feat/landing && git status --porcelain | head -3",
+        " && cd ../app-flat && git checkout -b feat/landing && git status --porcelain | head -3 && echo READY",
+    ] {
+        assert_allowed(&home, &repository, &format!("{add}{tail}"));
+    }
+}
+
+/// The step is proven only as a branch creation on the commit the add read.
+/// A start point names another commit, a checkout of a path rewrites files
+/// from the index, and a branch name spelled as an option or a parent step
+/// is not a name the proof answers for.
+#[test]
+fn a_checkout_past_the_new_branch_revokes_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-branch-reviewed");
+    let add = "git worktree add --detach ../app-flat origin/main";
+    for tail in [
+        " && cd ../app-flat && git checkout -b feat/landing origin/main~1 && git status --short",
+        " && cd ../app-flat && git checkout -b feat/landing HEAD~1 && git status --short",
+        " && cd ../app-flat && git checkout main && git status --short",
+        " && cd ../app-flat && git checkout -- . && git status --short",
+        " && cd ../app-flat && git checkout -b ../escape && git status --short",
+        " && cd ../app-flat && git checkout -B feat/landing && git status --short",
+        " && cd ../app-flat && git switch -c feat/landing origin/main && git status --short",
+    ] {
+        assert_reviewed(&home, &repository, &format!("{add}{tail}"));
+    }
+}

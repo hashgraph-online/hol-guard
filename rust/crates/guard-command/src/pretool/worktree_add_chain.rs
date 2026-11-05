@@ -219,6 +219,10 @@ fn prove(
             ) {
                 return true;
             }
+            // The branch the chain creates in the checkout it just made.
+            if super::chain_route::new_branch_step(segment) {
+                return true;
+            }
             return reads_git
                 && super::chain_route::inert_step(segment)
                 && super::chain_route::resolved_outside(segment, &destination);

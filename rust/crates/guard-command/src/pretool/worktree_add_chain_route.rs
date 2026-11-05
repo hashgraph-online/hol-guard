@@ -319,3 +319,49 @@ pub(super) fn inert_step(later: &CommandSegmentV1) -> bool {
         && !super::super::control_flow_flatten::command_word_changes_shell_state(&later.text)
         && super::super::search::grep::creates_nothing(later)
 }
+
+/// `git checkout -b <name>`, or `git switch -c <name>`, naming no start
+/// point. The chain's add proved this commit's `post-checkout` and
+/// `reference-transaction` hooks inert, and the new worktree shares the
+/// repository those hooks come from. With no start point the step stays on
+/// that commit: it writes one new ref, points `HEAD` at it, and changes no
+/// file of the working tree, so no filter or textconv runs over a tree the
+/// add never read. A start point would name another commit, whose hooks and
+/// tree the add never proved, so a second operand is refused.
+pub(super) fn new_branch_step(segment: &CommandSegmentV1) -> bool {
+    if segment.executable.as_deref() != Some("git")
+        || !segment.environment_names.is_empty()
+        || !segment.wrapper_chain.is_empty()
+        || segment.path_overridden
+    {
+        return false;
+    }
+    let mut arguments = segment.arguments.iter().map(String::as_str);
+    let mut word = arguments.next();
+    while matches!(word, Some("-P" | "--no-pager" | "--no-optional-locks")) {
+        word = arguments.next();
+    }
+    let flag = match word {
+        Some("checkout") => "-b",
+        Some("switch") => "-c",
+        _ => return false,
+    };
+    arguments.next() == Some(flag)
+        && arguments.next().is_some_and(new_branch_name)
+        && arguments.next().is_none()
+}
+
+/// A branch name Git reads as a name rather than an option or a path out of
+/// the repository: no leading dash, no absolute or home spelling, and no
+/// parent step.
+fn new_branch_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('-')
+        && !name.starts_with('/')
+        && !name.starts_with('~')
+        && !name.starts_with('\\')
+        && super::valid_path_text(name)
+        && !Path::new(name)
+            .components()
+            .any(|component| component == Component::ParentDir)
+}
