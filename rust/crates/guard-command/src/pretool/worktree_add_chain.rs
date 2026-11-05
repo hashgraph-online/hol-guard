@@ -469,11 +469,30 @@ fn entered_checkout(
                             .is_ok_and(|resolved| !resolved.starts_with(&destination)))
             })
         };
+        // A step that only reads and prints writes no configuration, ref or
+        // hook a later Git read in the checkout could pick up, so it leaves
+        // the destination proof standing. `cd`, `pushd` and `popd` would move
+        // those reads out of the checkout the proof answers for, and `rg`
+        // runs a caller-chosen program through `--pre`. A bare name resolves
+        // on the search path checked above, never inside the new checkout.
+        let inert_step = |later: &CommandSegmentV1| {
+            later.executable.as_deref().is_some_and(|value| {
+                super::super::executable_basename(value) == value
+                    && !matches!(value, "cd" | "pushd" | "popd" | "rg")
+            }) && later.environment_names.is_empty()
+                && later.wrapper_chain.is_empty()
+                && !later.path_overridden
+                && !super::super::control_flow_flatten::command_word_changes_shell_state(
+                    &later.text,
+                )
+                && super::super::search::grep::creates_nothing(later)
+        };
         // A later pipeline stage reads only what the step before it prints:
         // a bounded `head`, `tail` or `wc` with no path of its own.
         let rest_is_git = model.segments[after + 1..].iter().all(|later| {
             resolved_outside(later)
                 && (is(later, &["git", "gh"])
+                    || inert_step(later)
                     || (later.pipeline_index > 0
                         && super::chain_route::stdin_stage(later, context, execution_environment)))
         });

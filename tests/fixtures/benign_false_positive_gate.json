@@ -18342,6 +18342,39 @@
       "requires_sandbox": true
     },
     {
+      "id": "session-git-worktree-add-then-status-and-echo",
+      "fix_area": "git",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../app-portal-report-lane -b report-lane HEAD && cd ../app-portal-report-lane && git status --porcelain | head -3 && echo CLEAN"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-worktree-add-then-echo-before-the-read",
+      "fix_area": "git",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../app-portal-note-lane -b note-lane HEAD && cd ../app-portal-note-lane && echo entering && git log --oneline -3"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-worktree-add-then-pwd-and-status",
+      "fix_area": "git",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../parent-repo-pwd-lane -b pwd-lane HEAD && cd ../parent-repo-pwd-lane && pwd && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "session-git-worktree-add-then-uv-pytest-in-checkout",
       "fix_area": "git",
       "harnesses": [

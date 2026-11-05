@@ -472,3 +472,43 @@ fn a_weaker_separator_without_the_cd_stays_reviewed() {
         assert_reviewed(&home, &repository, &format!("{add}{tail}"));
     }
 }
+
+/// Agents end a worktree chain by saying what happened, and start one by
+/// saying what they are about to do. `echo`, `pwd` and a bare listing write
+/// no configuration the Git reads beside them could pick up, so they leave
+/// the entered-checkout proof standing.
+#[test]
+fn read_only_steps_beside_the_reads_keep_the_checkout_proof() {
+    let (_cleanup, home, repository) = repository("chain-inert");
+    let add = "git worktree add -b flat ../app-flat origin/main";
+    for tail in [
+        " && cd ../app-flat && git status --short && echo CLEAN",
+        " && cd ../app-flat && echo entering && git log -1 --oneline",
+        " && cd ../app-flat && pwd && git status --short",
+        " && cd ../app-flat && git status --short && ls",
+        " && cd ../app-flat && git status --porcelain | head -3 && echo CLEAN",
+        " && cd ../app-flat && true && git rev-parse --abbrev-ref HEAD",
+    ] {
+        assert_allowed(&home, &repository, &format!("{add}{tail}"));
+    }
+}
+
+/// The step has to be read-only on the proof's own terms. A writer, a
+/// redirect, a named environment value, a second `cd` and a program the new
+/// checkout could supply each reach past what the destination proof answers
+/// for, so the reads beside them stay reviewed.
+#[test]
+fn a_writing_step_beside_the_reads_still_revokes_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-inert-reviewed");
+    let add = "git worktree add -b flat ../app-flat origin/main";
+    for tail in [
+        " && cd ../app-flat && touch marker && git status --short",
+        " && cd ../app-flat && echo CLEAN > marker && git status --short",
+        " && cd ../app-flat && GIT_CONFIG_GLOBAL=../other true && git status --short",
+        " && cd ../app-flat && git status --short && cd .. && git status --short",
+        " && cd ../app-flat && ./report.sh && git status --short",
+        " && cd ../app-flat && rg --pre ./pre tracked && git status --short",
+    ] {
+        assert_reviewed(&home, &repository, &format!("{add}{tail}"));
+    }
+}
