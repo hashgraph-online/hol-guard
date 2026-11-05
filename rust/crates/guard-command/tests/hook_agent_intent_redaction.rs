@@ -5,9 +5,11 @@
 
 use std::path::Path;
 
-use crate::hook_adapter_envelope::{normalize_harness_envelope, EnvelopeRequest, IntentSummary};
-use crate::hook_adapter_paths::PathEnv;
-use crate::hook_adapter_value::{parse_python_json, OMap, OValue};
+use guard_command::hook_adapter_envelope::{
+    normalize_harness_envelope, EnvelopeRequest, IntentSummary,
+};
+use guard_command::hook_adapter_paths::PathEnv;
+use guard_command::hook_adapter_value::{parse_python_json, OMap, OValue};
 
 fn redacted_tool_input(harness: &str, tool_name: &str, tool_input: &str) -> OMap {
     let text = format!(
