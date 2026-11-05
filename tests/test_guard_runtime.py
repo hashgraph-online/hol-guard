@@ -18820,39 +18820,35 @@ def test_sync_receipts_reports_failure_of_the_bundle_it_last_reported_as_synced(
         "2026-06-05T13:29:00Z",
     )
     device_id, device_name = guard_runner_module._guard_device_metadata(store)
-
-    def _bundle(workspace_id: str, bundle_version: str) -> dict[str, object]:
-        return sign_policy_bundle(
-            {
-                "contractVersion": "guard-policy-bundle.v1",
-                "bundleVersion": bundle_version,
-                "bundleHash": "",
-                "issuedAt": "2026-06-05T13:30:00+00:00",
-                "expiresAt": None,
-                "verifier": {
-                    "algorithm": "rsa-pss-sha256",
-                    "keyId": "guard-policy-bundle-v1",
-                    "signature": None,
-                },
-                "rolloutState": "enforcing",
-                "workspaceId": workspace_id,
-                "policyDefaults": {
-                    "mode": "enforce",
-                    "defaultAction": "warn",
-                    "unknownPublisherAction": "review",
-                    "changedHashAction": "require-reapproval",
-                    "newNetworkDomainAction": "warn",
-                    "subprocessAction": "block",
-                    "telemetryEnabled": False,
-                    "syncEnabled": True,
-                },
-                "rules": [],
-                "acknowledgements": [],
+    bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-06-05.4",
+            "bundleHash": "",
+            "issuedAt": "2026-06-05T13:30:00+00:00",
+            "expiresAt": None,
+            "verifier": {
+                "algorithm": "rsa-pss-sha256",
+                "keyId": "guard-policy-bundle-v1",
+                "signature": None,
             },
-            workspace_id=workspace_id,
-        )
-
-    served = {"bundle": _bundle("workspace-a", "policy-2026-06-05.4")}
+            "rolloutState": "enforcing",
+            "workspaceId": "workspace-a",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "require-reapproval",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [],
+            "acknowledgements": [],
+        },
+        workspace_id="workspace-a",
+    )
 
     class _Response:
         def __init__(self, payload: dict[str, object]) -> None:
@@ -18878,7 +18874,7 @@ def test_sync_receipts_reports_failure_of_the_bundle_it_last_reported_as_synced(
             {
                 "syncedAt": "2026-06-05T13:30:01+00:00",
                 "receiptsStored": 0,
-                "policyBundle": served["bundle"],
+                "policyBundle": bundle,
             }
         )
 
@@ -18891,7 +18887,9 @@ def test_sync_receipts_reports_failure_of_the_bundle_it_last_reported_as_synced(
     assert applied_ack["status"] == "synced"
     applied_hash = applied_ack["bundleHash"]
 
-    served["bundle"] = _bundle("workspace-b", "policy-2026-06-05.5")
+    # The next cycle refuses the bundle it applied, so nothing is left to fall
+    # back to and Guard drops it.
+    monkeypatch.setattr(guard_runner_module, "policy_bundle_is_enforceable", lambda _bundle: False)
     sync_bodies.clear()
     guard_runner_module.sync_receipts(store)
 
