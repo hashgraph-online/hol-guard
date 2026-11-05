@@ -110,14 +110,7 @@ def test_the_binding_carries_the_view_only_for_a_resident_that_accepts_it(tmp_pa
     bound = publisher._with_mcp_relay_view({"generation": 1})
     assert bound is not None
     view = bound[MCP_RELAY_BINDING_KEY]
-    assert isinstance(view, dict) and set(view["harnesses"]) == {
-        "cline",
-        "codex",
-        "copilot",
-        "cursor",
-        "hermes",
-        "opencode",
-    }
+    assert isinstance(view, dict) and view["harnesses"] == HARNESSES
     assert publisher._with_mcp_relay_view(None) is None
     harnesses = publisher._compiled_mcp_relay_harnesses
     publisher._compiled_mcp_relay_harnesses = {}
