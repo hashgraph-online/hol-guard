@@ -11,8 +11,9 @@
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
 use crate::context_assistance_engine::{project_context_on, quick_excerpts, PickedExcerpt};
 use crate::context_assistance_prompt_files::{
-    asks_for_tests, candidates, named, phrases, project_root, terms, test_file,
+    asks_for_tests, named, phrases, project_root, test_file, walk,
 };
+use crate::context_assistance_prompt_words::marked_terms;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
 use lookup::{lookup, Miss, Request};
@@ -24,6 +25,8 @@ use std::time::{Duration, Instant};
 
 #[path = "context_assistance_prompt_lookup.rs"]
 mod lookup;
+#[path = "context_assistance_prompt_map.rs"]
+mod map;
 #[path = "context_assistance_prompt_seen.rs"]
 mod seen;
 
@@ -146,12 +149,14 @@ fn attach(
     let session = session(envelope, &root, harness);
     let earlier = session.as_ref().map(seen::earlier).unwrap_or_default();
     let left = || waiting_time(envelope.deadline_budget_ms).saturating_sub(started.elapsed());
-    let Some(walk) = left().checked_sub(MIN_WAIT) else {
+    let Some(budget) = left().checked_sub(MIN_WAIT) else {
         return;
     };
-    let mut words = terms(prompt);
+    let marked = marked_terms(prompt);
+    let mut words: Vec<String> = marked.iter().map(|(term, _)| term.clone()).collect();
     let quoted = phrases(prompt);
-    let found = candidates(&root, &words, &quoted, &named(prompt), walk);
+    let searched = walk(&root, &words, &quoted, &named(prompt), budget);
+    let found = searched.files.clone();
     if found.is_empty() {
         return;
     }
@@ -160,6 +165,26 @@ fn attach(
         return;
     }
     let deadline = Instant::now() + wait;
+    let home = store.guard_home();
+    // The map of where the request's code is comes first, from the matched
+    // files CIGAR would accept. Project context is checked again after the
+    // read, so a stop meanwhile sends nothing.
+    let mapped = service
+        .prompt_context_chosen()
+        .then(|| {
+            map::mapped(
+                home, &root, harness, &searched, &marked, &quoted, prompt, &earlier, deadline,
+            )
+        })
+        .flatten()
+        .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness));
+    if let Some(context) = mapped {
+        if let Some(session) = &session {
+            seen::remember(session, &context.shown);
+        }
+        add_context(response, &context.text);
+        return;
+    }
     // An excerpt holding only the quoted text is still about the request.
     words.extend(quoted);
     let request = Request {
@@ -171,7 +196,6 @@ fn attach(
         earlier: earlier.clone(),
     };
     let until = deadline + HOOK_MARGIN / 2;
-    let home = store.guard_home();
     // CIGAR still starting, busy with another prompt, or still loading the
     // project, as on a session's first prompt: Guard reads the matched files
     // CIGAR would accept and shows their best parts itself, or names them when
