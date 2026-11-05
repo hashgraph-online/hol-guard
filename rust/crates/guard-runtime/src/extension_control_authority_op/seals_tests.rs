@@ -208,7 +208,7 @@ fn a_catalog_migration_seals_the_rebinding_on_the_source_head() {
 
 /// Commits revisions 1 and 2, exports the head, and leaves the database
 /// re-created without its snapshot or the head's transition.
-fn quarantined(home: &Home) -> String {
+pub(super) fn quarantined(home: &Home) -> String {
     home.commit(1, &catalog('a'), &[], "committed");
     let head = home.commit(2, &catalog('a'), &[local(&catalog('a'))], "committed");
     let export: Value = home
