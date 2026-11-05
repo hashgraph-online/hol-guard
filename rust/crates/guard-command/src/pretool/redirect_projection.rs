@@ -73,6 +73,9 @@ pub(super) fn project(
     let mut escaped = false;
     let mut heredocs: Vec<(String, bool)> = Vec::new();
     let mut saw_stdin_data = false;
+    // Whether a separator came after the literal standard input, so which
+    // command the shell hands those bytes to is no longer in the text.
+    let mut stdin_separated = false;
     // The single file a plain `< path` redirect feeds the first command.
     let mut input_source: Option<String> = None;
     let mut removed = false;
@@ -115,10 +118,14 @@ pub(super) fn project(
             }
             Quote::None => {}
         }
-        // `&>` is a redirect, not a separator.
-        separated |= matches!(current, ';' | '|' | '\n' | '(' | ')' | '{' | '}')
-            || (current == '&' && chars.get(index + 1) != Some(&'>'))
-            || substitution(&chars, index);
+        // `&>` is a redirect, not a separator, and the newline that opens a
+        // heredoc body ends a command the operator already belongs to.
+        let separates = !(current == '\n' && !heredocs.is_empty())
+            && (matches!(current, ';' | '|' | '\n' | '(' | ')' | '{' | '}')
+                || (current == '&' && chars.get(index + 1) != Some(&'>'))
+                || substitution(&chars, index));
+        separated |= separates;
+        stdin_separated |= saw_stdin_data && separates;
         match current {
             '\'' => quote = Quote::Single,
             '"' => quote = Quote::Double,
@@ -226,7 +233,7 @@ pub(super) fn project(
     }
     // A heredoc body and a here-string word are both stdin, so the command
     // has to be one that reads them as data rather than running them.
-    if saw_stdin_data && !stdin::reads_data(&model) {
+    if saw_stdin_data && !stdin::reads_data(&model, stdin_separated) {
         return None;
     }
     // Literal standard input leaves a bare `cat` that still reads

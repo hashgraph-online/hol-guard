@@ -1,7 +1,7 @@
 //! The argument forms of the local Git writes `git_local_writes` proves:
-//! `add`, a non-forced `rm`, `commit` with its message on the command line
-//! and a non-forced `branch` rename, plus the `stash list` and `stash show`
-//! reads beside them.
+//! `add`, a non-forced `rm`, `commit` with its message on the command line or
+//! on standard input, and a non-forced `branch` rename, plus the `stash list`
+//! and `stash show` reads beside them.
 
 use super::super::git_remote_config::GitConfig;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
@@ -49,7 +49,8 @@ pub(super) fn rm(rest: &[&str]) -> bool {
     })
 }
 
-/// A commit whose message is on the command line, so no editor starts.
+/// A commit whose message is on the command line or on standard input, so no
+/// editor starts.
 pub(super) fn commit(rest: &[&str]) -> bool {
     commit_form(rest).is_some()
 }
@@ -84,6 +85,16 @@ pub(super) fn commit_form(rest: &[&str]) -> Option<bool> {
             }
             value if value.starts_with("--message=") => message = true,
             value if value.starts_with("--author=") => {}
+            // `-F -` takes the message from standard input, which the caller
+            // proves carries literal data. A path reads that file instead,
+            // and a commit message is not a read this proof covers.
+            "--file" => {
+                if *words.next()? != "-" {
+                    return None;
+                }
+                message = true;
+            }
+            "--file=-" => message = true,
             value if value == "--gpg-sign" || value.starts_with("--gpg-sign=") => signs = true,
             "--quiet" | "--all" | "--signoff" | "--no-verify" | "--allow-empty"
             | "--no-gpg-sign" | "--reset-author" => {}
@@ -100,6 +111,20 @@ pub(super) fn commit_form(rest: &[&str]) -> Option<bool> {
                         'm' => {
                             if cluster.len() == offset + 2 {
                                 words.next()?;
+                            }
+                            message = true;
+                            break;
+                        }
+                        // The rest of the cluster, or else the next word,
+                        // names the file the message comes from.
+                        'F' => {
+                            let value = if cluster.len() == offset + 2 {
+                                *words.next()?
+                            } else {
+                                &cluster[offset + 2..]
+                            };
+                            if value != "-" {
+                                return None;
                             }
                             message = true;
                             break;

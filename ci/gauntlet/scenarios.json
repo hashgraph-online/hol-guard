@@ -818,6 +818,18 @@
       ]
     },
     {
+      "id": "omp-native-git-commit-heredoc-message",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Record the retry window in the docs folder and commit it by running the listed command once from the project directory, then tell me the commit subject.",
+      "commands": [
+        "printf 'retry window checked\\n' > docs/retry-notes.md && git add docs/retry-notes.md && git commit -q -F - <<'MSG'\nchore(docs): record the retry window\nMSG"
+      ]
+    },
+    {
       "id": "omp-native-git-staged-file-listing",
       "expectation": "allow",
       "oracle": "native-tools",
