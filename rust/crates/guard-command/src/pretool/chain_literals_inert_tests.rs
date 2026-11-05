@@ -287,7 +287,7 @@ fn a_cat_that_reads_more_than_a_quoted_heredoc_stays_opaque() {
 #[test]
 fn a_heredoc_message_longer_than_the_bound_stays_opaque() {
     let line = "a".repeat(80);
-    let long: Vec<&str> = std::iter::repeat(line.as_str()).take(60).collect();
+    let long: Vec<&str> = std::iter::repeat_n(line.as_str(), 60).collect();
     let command = format!(
         "git commit -m \"$(cat <<'EOF'\n{}\nEOF\n)\"",
         long.join("\n")
