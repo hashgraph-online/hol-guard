@@ -134,6 +134,7 @@ from .managed_controls_sync import (
 from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
+from .policy_bundle_failure_ack import cached_bundle_failure_acknowledgement, failed_acknowledgement
 from .supply_chain_bundle import (
     SupplyChainBundleError,
     SupplyChainVerificationKey,
@@ -783,6 +784,9 @@ def sync_receipts(
     effective_policy_bundle: dict[str, object] | None = None
     retain_existing_policy_authority = False
     activation_last_error: dict[str, object] = {}
+    # The bundle Cloud is told failed when authority is cleared below.
+    failed_policy_bundle: object = None
+    failed_policy_bundle_reason: str | None = None
     trusted_policy_bundle_keys: tuple[PolicyBundleVerificationKey, ...] = ()
     update_last_good = False
     existing_policy_bundle_payload = store.get_sync_payload("policy_bundle")
@@ -891,6 +895,8 @@ def sync_receipts(
                 policy_bundle_rejection_reason,
                 policy_bundle_rejection_rule_id,
             )
+            failed_policy_bundle = policy_bundle_payload
+            failed_policy_bundle_reason = str(activation_last_error["reason"])
             store.add_event(
                 "policy_bundle/rejected",
                 activation_last_error,
@@ -911,6 +917,8 @@ def sync_receipts(
             ):
                 rejection_reason = existing_policy_bundle_error or last_good_error or "invalid_policy_bundle"
                 activation_last_error = _policy_bundle_rejection_payload(rejection_reason)
+                failed_policy_bundle = existing_policy_bundle_payload
+                failed_policy_bundle_reason = rejection_reason
                 store.add_event("policy_bundle/rejected", activation_last_error, now)
         if not activation_last_error:
             stored_last_error = store.get_sync_payload("policy_bundle_last_error")
@@ -958,6 +966,9 @@ def sync_receipts(
         if activation_bundle is None:
             activation_last_error = _policy_bundle_rejection_payload(activation_reason)
             store.add_event("policy_bundle/rejected", activation_last_error, now)
+            if failed_policy_bundle is None:
+                failed_policy_bundle = effective_policy_bundle
+                failed_policy_bundle_reason = str(activation_last_error["reason"])
             effective_policy_bundle = None
         else:
             # Use exactly the payload and anchor set from the final live trust
@@ -991,6 +1002,14 @@ def sync_receipts(
                 now,
                 policy_bundle_last_error=activation_last_error,
                 managed_controls_publish=managed_controls_publish,
+                policy_bundle_ack=failed_acknowledgement(
+                    store,
+                    policy_bundle=failed_policy_bundle,
+                    reason=failed_policy_bundle_reason,
+                    device_id=device_id,
+                    device_name=device_name,
+                    synced_at=now,
+                ),
             )
             _reset_cloud_receipt_redaction_authority(store, synced_at=now)
     else:
@@ -1020,12 +1039,21 @@ def sync_receipts(
             # is a verdict, so it must not leave a stale bundle in force.
             activation_last_error = _policy_bundle_rejection_payload(native_rejection_code(error))
             store.add_event("policy_bundle/rejected", activation_last_error, now)
+            rejected_policy_bundle = effective_policy_bundle
             effective_policy_bundle = None
             if not isinstance(error, PolicyBundleNativeUnavailableError) and not retain_existing_policy_authority:
                 store.clear_policy_bundle_authority(
                     now,
                     policy_bundle_last_error=activation_last_error,
                     managed_controls_publish=managed_controls_publish,
+                    policy_bundle_ack=failed_acknowledgement(
+                        store,
+                        policy_bundle=failed_policy_bundle or rejected_policy_bundle,
+                        reason=failed_policy_bundle_reason or str(activation_last_error["reason"]),
+                        device_id=device_id,
+                        device_name=device_name,
+                        synced_at=now,
+                    ),
                 )
                 _reset_cloud_receipt_redaction_authority(store, synced_at=now)
             selected_policy_decisions = []
@@ -3814,6 +3842,16 @@ def _validated_policy_bundle_acknowledgement(
     acknowledgement = store.get_sync_payload("policy_bundle_ack")
     if not isinstance(acknowledgement, dict):
         return None
+    # A cached bundle that no longer validates is reported as failed, never as
+    # the applied state Guard stopped enforcing.
+    failure = cached_bundle_failure_acknowledgement(
+        store,
+        acknowledgement=acknowledgement,
+        device_id=device_id,
+        device_name=device_name,
+    )
+    if failure is not None:
+        return failure or None
     if acknowledgement.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
         validated, _error = validated_policy_bundle_v2_acknowledgement(acknowledgement)
         return validated
@@ -3850,8 +3888,15 @@ def _sync_context_acknowledgement(sync_context: dict[str, object]) -> dict[str, 
 
 
 def _sync_context_bundle_hash(sync_context: dict[str, object]) -> str | None:
+    """The bundle the context acknowledges; a failure counts as a separate report."""
+
     acknowledgement = _sync_context_acknowledgement(sync_context)
-    return _optional_string(acknowledgement.get("bundleHash")) if acknowledgement is not None else None
+    if acknowledgement is None:
+        return None
+    bundle_hash = _optional_string(acknowledgement.get("bundleHash"))
+    if bundle_hash is not None and acknowledgement.get("status") == "failed":
+        return f"{bundle_hash}#failed"
+    return bundle_hash
 
 
 def _build_fleet_posture_for_sync(

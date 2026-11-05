@@ -27,7 +27,8 @@ const DELIVERY_KEYS: [&str; 14] = [
     "extensionProjectionDigest",
     "lastKnownGoodBundleHash",
 ];
-const GENERIC_IDENTITY_KEYS: [&str; 4] = ["workspaceId", "deviceId", "bundleVersion", "bundleHash"];
+pub(crate) const GENERIC_IDENTITY_KEYS: [&str; 4] =
+    ["workspaceId", "deviceId", "bundleVersion", "bundleHash"];
 const BAD: &str = "invalid_policy_bundle_delivery";
 const MISMATCH: &str = "policy_bundle_delivery_mismatch";
 
@@ -192,7 +193,7 @@ pub(crate) fn validate_managed(
     }
 }
 
-fn increment(token: &str) -> Option<Value> {
+pub(crate) fn increment(token: &str) -> Option<Value> {
     let next = match token.parse::<i128>() {
         Ok(number) => (number + 1).to_string(),
         Err(_) if token.bytes().all(|b| b.is_ascii_digit()) => {
@@ -319,8 +320,23 @@ fn generic_ack(request: &AckRequest) -> Result<Obj, String> {
     sequenced_ack(request, candidate, &GENERIC_IDENTITY_KEYS)
 }
 
+/// The status that follows `previous` for the same identity. An applied
+/// acknowledgement stays applied. Cloud moves a failed or offline
+/// acknowledgement back only through received and validated, one step per
+/// acknowledgement, so a bundle that failed and now validates climbs back to
+/// applied over the next syncs instead of being refused.
+fn next_status(requested: &str, previous: Option<&str>) -> &'static str {
+    match previous {
+        Some("applied") => "applied",
+        Some("failed" | "offline") => "received",
+        Some("received") => "validated",
+        _ if requested == "applied" => "applied",
+        _ => "validated",
+    }
+}
+
 /// Continue the sequence of a previous acknowledgement for the same identity,
-/// or start one; an applied acknowledgement stays applied.
+/// or start one.
 fn sequenced_ack(request: &AckRequest, candidate: Obj, identity: &[&str]) -> Result<Obj, String> {
     let generic = !candidate.contains_key("deliveryId");
     let matching = request.previous.filter(|previous| {
@@ -336,10 +352,10 @@ fn sequenced_ack(request: &AckRequest, candidate: Obj, identity: &[&str]) -> Res
         Some(token) => increment(token).ok_or("invalid_policy_bundle_acknowledgement")?,
         None => Value::from(1),
     };
-    let applied = request.status == "applied"
-        || matching.is_some_and(|previous| {
-            previous.get("status").and_then(Value::as_str) == Some("applied")
-        });
+    let status = next_status(
+        request.status,
+        matching.and_then(|previous| previous.get("status").and_then(Value::as_str)),
+    );
     let observed =
         normalized_observed_at(request.synced_at).ok_or("invalid_policy_bundle_acknowledgement")?;
     let mut ack = candidate;
@@ -348,10 +364,7 @@ fn sequenced_ack(request: &AckRequest, candidate: Obj, identity: &[&str]) -> Res
         Value::String(CONTRACT.to_owned()),
     );
     ack.insert("sequence".to_owned(), sequence);
-    ack.insert(
-        "status".to_owned(),
-        Value::String(if applied { "applied" } else { "validated" }.to_owned()),
-    );
+    ack.insert("status".to_owned(), Value::String(status.to_owned()));
     ack.insert("observedAt".to_owned(), Value::String(observed));
     ack.insert("errorCode".to_owned(), Value::Null);
     validate_ack(&ack, matching).map_err(str::to_owned)?;
@@ -388,6 +401,20 @@ fn base<'a>(
 }
 
 /// `effective_policy_bundle_acknowledgement`.
+/// A stored generic acknowledgement that has not reached applied, kept while
+/// Guard enforces a bundle without Extension semantics again: a bundle that
+/// failed validation and now passes, for example from last-good. Guard keeps
+/// climbing it toward applied instead of reporting the failure forever.
+fn recovering(effective: &Obj, stored: &Obj) -> bool {
+    !stored.contains_key("deliveryId")
+        && stored.get("contractVersion").and_then(Value::as_str) == Some(CONTRACT)
+        && matches!(
+            stored.get("status").and_then(Value::as_str),
+            Some("failed" | "offline" | "received" | "validated")
+        )
+        && !has_extension_semantics(effective)
+}
+
 pub(crate) fn effective_ack(request: &EffectiveRequest) -> Result<Obj, String> {
     if request
         .effective
@@ -404,6 +431,12 @@ pub(crate) fn effective_ack(request: &EffectiveRequest) -> Result<Obj, String> {
         )
     });
     if !activating {
+        if let Some(stored) = request
+            .stored
+            .filter(|stored| recovering(request.effective, stored))
+        {
+            return ack_payload(&base(request, request.device_id, Some(stored), None));
+        }
         return Ok(request.stored.cloned().unwrap_or_default());
     }
     let delivered = request

@@ -138,3 +138,39 @@ def effective_policy_bundle_acknowledgement(
             },
         )
     )
+
+
+def policy_bundle_failure_acknowledgement(
+    *,
+    device_id: str,
+    device_name: str,
+    policy_bundle: object,
+    error_code: str,
+    previous: object,
+    synced_at: str,
+) -> dict[str, object]:
+    """Build the failed acknowledgement for a bundle that failed local validation.
+
+    Returns ``{}`` when Cloud has no acknowledgement shape that can carry the
+    failure, or when the native runtime cannot build one. Reporting a failure
+    never changes what Guard enforces.
+    """
+
+    if not isinstance(policy_bundle, dict):
+        return {}
+    try:
+        return _acknowledgement(
+            policy_bundle_verdict(
+                "failed_ack",
+                {
+                    "device_id": device_id,
+                    "device_name": device_name,
+                    "bundle_chunks": _chunks(policy_bundle, _ACK_BUNDLE_KEYS),
+                    "synced_at": synced_at,
+                    "error_code": error_code,
+                    "previous": previous if isinstance(previous, dict) else None,
+                },
+            )
+        )
+    except PolicyBundleNativeError:
+        return {}

@@ -8,6 +8,9 @@ mod policy_bundle_decisions;
 mod policy_bundle_delivery;
 mod policy_bundle_dpop;
 mod policy_bundle_dpop_proof;
+mod policy_bundle_failed_ack;
+#[cfg(test)]
+mod policy_bundle_failed_ack_tests;
 mod policy_bundle_families;
 #[cfg(test)]
 mod policy_bundle_generic_ack_tests;
