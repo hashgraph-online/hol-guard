@@ -86,11 +86,14 @@ def test_request_held_for_its_headers_is_answered_during_cold_home_work(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Desktop opens the published URL while the daemon is still doing its
-    # cold-home work. A connection accepted before its headers arrive is held
-    # for the unclassified-connection watchdog. If that watchdog only starts
-    # after the work, the request waits it out and is then closed with no
-    # response, which the Desktop window shows as a terminated connection.
+    """Answer a request held for its headers while cold-home work runs.
+
+    Desktop opens the published URL while the daemon is still doing its
+    cold-home work. A connection accepted before its headers arrive is held
+    for the unclassified-connection watchdog. If that watchdog only starts
+    after the work, the request waits it out and is then closed with no
+    response, which the Desktop window shows as a terminated connection.
+    """
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     reconcile_started = threading.Event()
     release_reconcile = threading.Event()
@@ -112,6 +115,12 @@ def test_request_held_for_its_headers_is_answered_during_cold_home_work(
         )
 
     monkeypatch.setattr(daemon_server_module, "reconcile_runtime_artifacts", reconcile)
+    # A slow runner can pause between seeing the connection held and sending
+    # its request. Widen the header deadlines so a working watchdog cannot
+    # expire the connection first; without the watchdog nothing answers it
+    # before reconciliation is released, whatever the deadline.
+    monkeypatch.setattr(daemon_server_module, "_DAEMON_REQUEST_READ_TIMEOUT_SECONDS", 5.0)
+    monkeypatch.setattr(daemon_server_module, "_DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS", 5.0)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
     http_server = daemon._server
 
@@ -137,7 +146,6 @@ def test_request_held_for_its_headers_is_answered_during_cold_home_work(
                 time.sleep(0.005)
         assert held, "the connection was not held for its request headers"
 
-        # Send the request well inside the 0.4 s header deadline.
         client.sendall(b"GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
         try:
             reply = client.recv(64)
