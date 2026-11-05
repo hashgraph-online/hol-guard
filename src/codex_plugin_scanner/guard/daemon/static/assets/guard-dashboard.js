@@ -16312,13 +16312,27 @@ function normalizeExtension(raw) {
   if (raw.focus_rule_id !== null && raw.focus_rule_id !== void 0 && focus === null) return null;
   return { extension_id: extensionId, name, focus_rule_id: focus };
 }
+const MAX_RULE_TEXT = 240;
+const MAX_SAFER_ALTERNATIVES = 2;
 function normalizeRule(raw) {
   if (!isRecord$7(raw)) return null;
   const ruleId = catalogId$1(raw.rule_id);
-  const title = boundedText$1(raw.title, 120);
+  const title = raw.title === null || raw.title === void 0 ? null : boundedText$1(raw.title, 120);
   const severity = boundedText$1(raw.severity, 32);
-  if (ruleId === null || title === null || severity === null) return null;
-  return { rule_id: ruleId, title, severity };
+  if (ruleId === null || severity === null) return null;
+  if (raw.title !== null && raw.title !== void 0 && title === null) return null;
+  const rule2 = { rule_id: ruleId, title, severity };
+  if (raw.description !== void 0) {
+    if (raw.description !== null && typeof raw.description !== "string") return null;
+    rule2.description = boundedText$1(raw.description, MAX_RULE_TEXT);
+  }
+  if (raw.safer_alternatives !== void 0) {
+    if (!Array.isArray(raw.safer_alternatives)) return null;
+    const safer = raw.safer_alternatives.map((item) => boundedText$1(item, MAX_RULE_TEXT));
+    if (safer.some((item) => item === null)) return null;
+    rule2.safer_alternatives = safer.slice(0, MAX_SAFER_ALTERNATIVES);
+  }
+  return rule2;
 }
 function normalizePermission$1(raw) {
   if (!isRecord$7(raw)) return null;
@@ -16368,7 +16382,7 @@ function coverageStepLabel(segment) {
   return segment.executable === null ? step : `${step} · ${segment.executable}`;
 }
 function segmentDetail(segment) {
-  const titles = segment.rules.map((rule2) => rule2.title);
+  const titles = segment.rules.flatMap((rule2) => rule2.title === null ? [] : [rule2.title]);
   const labels = segment.permissions.filter((permission2) => permission2.configurable).map((item) => item.label);
   const linked = new Set(segment.extensions.map((extension2) => extension2.name));
   const parts = (titles.length > 0 ? titles : labels).filter((part) => !linked.has(part));
@@ -31611,6 +31625,49 @@ function DecodedLayerCard(props) {
     }
   );
 }
+const MAX_LINES = 4;
+function ruleMatchLines(coverage) {
+  if (!coverage) {
+    return [];
+  }
+  const showStep = coverage.compound || coverage.segments.length > 1;
+  const lines = [];
+  for (const segment of coverage.segments) {
+    for (const rule2 of segment.rules) {
+      const line = ruleLine(segment, rule2, showStep);
+      if (line !== null) {
+        lines.push(line);
+      }
+    }
+  }
+  return lines.slice(0, MAX_LINES);
+}
+function ruleLine(segment, rule2, showStep) {
+  const title = rule2.title;
+  const description = rule2.description ?? null;
+  if (title === null && description === null) {
+    return null;
+  }
+  const key = `${segment.index}:${rule2.rule_id}`;
+  const step = showStep ? coverageStepLabel(segment) : segment.executable;
+  const named = title !== null ? `Matched the rule “${title}”.` : "Matched a Guard rule.";
+  const text2 = description !== null ? `${named} ${description}` : named;
+  const safer = rule2.safer_alternatives?.[0] ?? null;
+  return { key, step, text: text2, safer };
+}
+function RuleMatchExplanation({ lines }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: "What Guard's command rules found:" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-2", children: lines.map((line) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-sm leading-relaxed text-brand-dark", children: [
+      line.step !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mr-1.5 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-brand-dark/80", children: line.step }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: line.text }),
+      line.safer !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: [
+        "Safer: ",
+        line.safer
+      ] })
+    ] }, line.key)) })
+  ] });
+}
 function ScannerEvidenceBadge(props) {
   const isScannerCategory = props.signal.category === "skill" || props.signal.category === "mcp";
   if (!isScannerCategory) return null;
@@ -31644,7 +31701,9 @@ function ScannerEvidenceSection(props) {
 function buildTopAlertItems(item) {
   const items = [];
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
-  const pauseReason = isWatchOnlyObservation(item) ? null : whyPaused(item);
+  const watchOnly = isWatchOnlyObservation(item);
+  const ruleLines = watchOnly ? [] : ruleMatchLines(item.extension_coverage);
+  const pauseReason = watchOnly || ruleLines.length > 0 ? null : whyPaused(item);
   if (secondaryRiskSummary) {
     items.push({
       id: "secondary-risk",
@@ -31654,7 +31713,15 @@ function buildTopAlertItems(item) {
       content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: secondaryRiskSummary })
     });
   }
-  if (pauseReason) {
+  if (ruleLines.length > 0) {
+    items.push({
+      id: "why-paused",
+      title: "Why paused",
+      tone: "blue",
+      icon: HiMiniInformationCircle,
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx(RuleMatchExplanation, { lines: ruleLines })
+    });
+  } else if (pauseReason) {
     items.push({
       id: "why-paused",
       title: "Why paused",
