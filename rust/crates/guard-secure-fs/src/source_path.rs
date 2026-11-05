@@ -29,26 +29,35 @@ const BENIGN_SOURCE_DOTFILES: &[&str] = &[".nvmrc", ".worktrees"];
 /// Ordinary project config files. They are benign only as the final path
 /// component, so a directory spelled `.gitignore/` opens no hidden tree.
 ///
-/// Each name has a fixed meaning the ecosystem gave it: an ignore list, a
-/// toolchain version, a git attribute table, or the empty file that keeps a
-/// directory in a commit. None of them is where a tool writes a login, and
-/// `sensitive_path_family` screens the basename before this list is read, so
-/// a project that spells one of these next door is read rather than queued
-/// for an approval nobody can answer.
+/// This list is the write-safe half: a redirect may land on one of these
+/// names without leaving the bounded projection. Everything a project only
+/// ever reads back belongs in [`BENIGN_PROJECT_READ_DOTFILES`] instead,
+/// because a name that is harmless to read is not therefore harmless to
+/// overwrite -- `.gitattributes` names filter drivers Git runs on checkout.
 const BENIGN_PROJECT_DOTFILES: &[&str] = &[
-    ".browserslistrc",
     ".dockerignore",
     ".editorconfig",
     ".eslintignore",
-    ".gitattributes",
     ".gitignore",
-    ".gitkeep",
+    ".prettierignore",
+];
+/// Project config files that a read admits and a write does not.
+///
+/// Each name has a fixed meaning the ecosystem gave it: a browser target
+/// list, a git attribute table, an ignore list, or a pinned toolchain
+/// version. None of them is where a tool writes a login, and
+/// `sensitive_path_family` screens the basename before this list is read, so
+/// a project that spells one of these next door is read rather than queued
+/// for an approval nobody can answer. A placeholder such as `.keep` is not
+/// here: it has no ecosystem-defined contents, so it stays on the existing
+/// empty-marker route, which admits it only while it is empty.
+const BENIGN_PROJECT_READ_DOTFILES: &[&str] = &[
+    ".browserslistrc",
+    ".gitattributes",
     ".go-version",
     ".java-version",
-    ".keep",
     ".node-version",
     ".npmignore",
-    ".prettierignore",
     ".python-version",
     ".ruby-version",
     ".stylelintignore",
@@ -556,6 +565,20 @@ pub fn hidden_read_parts_allowed(path: &Path) -> bool {
     hidden_parts_allowed(&lowered_parts(path))
 }
 
+/// The same screen for a write target. A write admits only
+/// [`BENIGN_PROJECT_DOTFILES`], never the read-only half, because reading a
+/// pinned toolchain version or an attribute table discloses a setting the
+/// checkout already states while writing one changes what later commands do.
+pub fn hidden_write_parts_allowed(path: &Path) -> bool {
+    let parts = lowered_parts(path);
+    match parts.split_last() {
+        Some((name, parents)) if BENIGN_PROJECT_DOTFILES.contains(&name.as_str()) => {
+            hidden_dir_parts_allowed(parents)
+        }
+        _ => hidden_dir_parts_allowed(&parts),
+    }
+}
+
 /// An existing, empty, regular hidden file (a marker such as a deploy
 /// sentinel) inside a git work tree. Only the final component may be hidden;
 /// every other hidden component must be on the benign list. Size zero bounds
@@ -697,7 +720,9 @@ pub fn tool_login_name(name: &str) -> bool {
 /// spelled `.gitignore/` opens no hidden tree.
 pub fn project_config_file_name(name: &str) -> bool {
     let lowered = name.to_ascii_lowercase();
-    BENIGN_PROJECT_DOTFILES.contains(&lowered.as_str()) || project_config_rc_name(&lowered)
+    BENIGN_PROJECT_DOTFILES.contains(&lowered.as_str())
+        || BENIGN_PROJECT_READ_DOTFILES.contains(&lowered.as_str())
+        || project_config_rc_name(&lowered)
 }
 
 /// A formatter, linter or test-runner rc file: either the bare stem

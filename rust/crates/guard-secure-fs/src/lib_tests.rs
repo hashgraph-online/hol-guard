@@ -520,15 +520,13 @@ fn project_dotfiles_are_benign_only_as_the_final_component() {
     }
 }
 
-/// A project keeps its placeholders, toolchain pins, publish-ignore lists and
-/// formatter configuration in hidden files next to the ones already read. A
-/// sibling checkout holding one of them used to raise an approval for an
-/// ordinary cross-project read, so each name is read wherever it sits.
+/// A project keeps its toolchain pins, publish-ignore lists and formatter
+/// configuration in hidden files next to the ones already read. A sibling
+/// checkout holding one of them used to raise an approval for an ordinary
+/// cross-project read, so each name is read wherever it sits.
 #[test]
 fn ordinary_project_configuration_reads_outside_a_work_tree() {
     for allowed in [
-        "/home/u/other-project/.keep",
-        "/home/u/other-project/.gitkeep",
         "/home/u/other-project/.gitattributes",
         "/home/u/other-project/.npmignore",
         "/home/u/other-project/.node-version",
@@ -579,5 +577,36 @@ fn widened_project_configuration_opens_no_hidden_tree() {
         "project/.keep.key",
     ] {
         assert!(!hidden_read_parts_allowed(Path::new(denied)), "{denied}");
+    }
+}
+
+/// Reading a pinned toolchain version or an attribute table discloses a
+/// setting the checkout already states; writing one changes what every later
+/// command in that checkout does, and `.gitattributes` names filter drivers
+/// Git runs on checkout. The write screen therefore keeps the narrow list the
+/// bounded projection always had, and the read-only half never widens it.
+#[test]
+fn the_read_only_half_is_not_a_write_target() {
+    for allowed in [
+        "/home/u/project/.gitignore",
+        "/home/u/project/.dockerignore",
+        "/home/u/project/.editorconfig",
+        "/home/u/project/.eslintignore",
+        "/home/u/project/.prettierignore",
+        "/home/u/project/src/main.rs",
+    ] {
+        assert!(hidden_write_parts_allowed(Path::new(allowed)), "{allowed}");
+    }
+    for denied in [
+        "/home/u/project/.gitattributes",
+        "/home/u/project/.tool-versions",
+        "/home/u/project/.node-version",
+        "/home/u/project/.npmignore",
+        "/home/u/project/.browserslistrc",
+        "/home/u/project/.prettierrc",
+        "/home/u/project/.eslintrc.json",
+        "/home/u/project/.mocharc.yml",
+    ] {
+        assert!(!hidden_write_parts_allowed(Path::new(denied)), "{denied}");
     }
 }

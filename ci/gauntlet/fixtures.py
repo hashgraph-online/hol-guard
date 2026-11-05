@@ -667,12 +667,10 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
         ),
         # A plain directory with no .git, where a leaf probe finds nothing.
         (f"{PLAIN_DIRECTORY}/README.txt", "Plain notes directory.\n"),
-        # The ordinary project configuration such a directory carries: a
-        # placeholder, a git attribute table, a publish-ignore list, toolchain
-        # pins and formatter settings. None of them is a login, and an agent
-        # reads them to match the workspace it is working in.
-        (f"{PLAIN_DIRECTORY}/.keep", ""),
-        (f"{PLAIN_DIRECTORY}/.gitkeep", ""),
+        # The ordinary project configuration such a directory carries: a git
+        # attribute table, a publish-ignore list, toolchain pins and formatter
+        # settings. None of them is a login, and an agent reads them to match
+        # the workspace it is working in.
         (f"{PLAIN_DIRECTORY}/.gitattributes", "* text=auto eol=lf\n"),
         (f"{PLAIN_DIRECTORY}/.npmignore", "src/\ntests/\n"),
         (f"{PLAIN_DIRECTORY}/.node-version", "22.11.0\n"),

@@ -290,8 +290,6 @@ def build_fixture(root: Path) -> BenignFixture:
     # a handed-over tree, an unpacked archive, a scaffold still being set up.
     # Its hidden files are the ordinary project configuration an agent reads
     # to match the workspace it is working in.
-    _write(home / "acme-plain" / ".keep", "")
-    _write(home / "acme-plain" / ".gitkeep", "")
     _write(home / "acme-plain" / ".gitattributes", "* text=auto eol=lf\n")
     _write(home / "acme-plain" / ".npmignore", "src/\ntests/\n")
     _write(home / "acme-plain" / ".node-version", "22.11.0\n")

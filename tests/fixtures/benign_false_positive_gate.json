@@ -7302,38 +7302,6 @@
       "expect": "allow"
     },
     {
-      "id": "plain-sibling-keep-read",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "cat ${HOME}/acme-plain/.keep"
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
-      "id": "plain-sibling-gitkeep-read",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "cat ${HOME}/acme-plain/.gitkeep"
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
       "id": "plain-sibling-gitattributes-read",
       "fix_area": "shell",
       "harnesses": [
@@ -7457,22 +7425,6 @@
       "tool": "shell",
       "tool_input": {
         "command": "cat ${HOME}/acme-plain/.mocharc.json"
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
-      "id": "plain-sibling-keep-encoded-read",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "base64 -i ${HOME}/acme-plain/.keep"
       },
       "cwd": "worktree",
       "expect": "allow"
