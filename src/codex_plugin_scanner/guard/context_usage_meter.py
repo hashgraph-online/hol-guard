@@ -24,6 +24,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Any, cast
 
 SCHEMA = "guard-context-usage-meter.v1"
 CACHE_NAME = "context-usage-meter.json"
@@ -43,8 +44,6 @@ UNREAD = ("copilot", "cursor", "gemini", "opencode", "pi")
 _CHUNK = 1 << 24
 # Claude Code re-logs a message (same id and usage) up to a few hundred lines later after a resume.
 _RECENT_IDS = 1024
-# A file not written for an hour is finished; its dedupe ids are dropped from the cache.
-_IDS_KEPT_FOR = 3600.0
 
 
 @dataclass(frozen=True)
@@ -116,11 +115,15 @@ def _local_day(stamp: object) -> str | None:
     return moment.astimezone().date().isoformat()
 
 
+def _mapping(value: object) -> dict[str, Any]:
+    return cast("dict[str, Any]", value) if isinstance(value, dict) else {}
+
+
 def _number(value: object) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
 
 
-def _count(entry: dict, day: str | None, **values: int) -> None:
+def _count(entry: dict[str, Any], day: str | None, **values: int) -> None:
     if day is None:
         return
     bucket = entry["days"].setdefault(day, dict.fromkeys(FIELDS, 0))
@@ -128,12 +131,12 @@ def _count(entry: dict, day: str | None, **values: int) -> None:
         bucket[key] += value if isinstance(value, int) and value > 0 else 0
 
 
-def _codex_line(entry: dict, record: dict) -> None:
+def _codex_line(entry: dict[str, Any], record: dict[str, Any]) -> None:
     kind = record.get("type")
-    payload = record.get("payload") if isinstance(record.get("payload"), dict) else {}
+    payload = _mapping(record.get("payload"))
     day = _local_day(record.get("timestamp"))
     if kind == "token_usage_record":
-        usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
+        usage = _mapping(payload.get("usage"))
         total, cached, written = (
             _number(usage.get(key)) for key in ("input_tokens", "cached_input_tokens", "cache_write_input_tokens")
         )
@@ -153,12 +156,12 @@ def _codex_line(entry: dict, record: dict) -> None:
         _describe(entry, payload.get("model"), payload.get("cwd"))
 
 
-def _claude_line(entry: dict, record: dict) -> None:
+def _claude_line(entry: dict[str, Any], record: dict[str, Any]) -> None:
     day = _local_day(record.get("timestamp"))
     if record.get("type") == "system" and record.get("subtype") == "compact_boundary":
         _count(entry, day, compactions=1)
         return
-    message = record.get("message") if isinstance(record.get("message"), dict) else {}
+    message = _mapping(record.get("message"))
     usage = message.get("usage")
     if record.get("type") != "assistant" or not isinstance(usage, dict):
         return
@@ -187,7 +190,7 @@ def _claude_line(entry: dict, record: dict) -> None:
     )
 
 
-def _describe(entry: dict, model: object, cwd: object) -> None:
+def _describe(entry: dict[str, Any], model: object, cwd: object) -> None:
     if isinstance(model, str) and model:
         entry["model"] = model[:80]
     if isinstance(cwd, str) and cwd:
@@ -199,10 +202,11 @@ def _session_key(source: _Source, path: Path) -> str:
     if source.harness == "claude-code" and len(parts) > 2:
         # Subagent transcripts live in a folder named after their parent session.
         return f"{parts[0]}/{parts[1]}"
-    return "/".join(parts)[: -len(".jsonl")] if parts[-1].endswith(".jsonl") else "/".join(parts)
+    joined = "/".join(parts)
+    return joined[: -len(".jsonl")] if path.name.endswith(".jsonl") else joined
 
 
-def _fresh(stat: os.stat_result, session: str) -> dict:
+def _fresh(stat: os.stat_result, session: str) -> dict[str, Any]:
     return {
         "ino": stat.st_ino,
         "size": 0,
@@ -216,7 +220,7 @@ def _fresh(stat: os.stat_result, session: str) -> dict:
     }
 
 
-def _read_file(source: _Source, path: Path, entry: dict | None) -> dict:
+def _read_file(source: _Source, path: Path, entry: dict[str, Any] | None) -> dict[str, Any]:
     stat = path.stat()
     if entry is None or entry.get("ino") != stat.st_ino or stat.st_size < entry.get("offset", 0):
         entry = _fresh(stat, _session_key(source, path))
@@ -242,7 +246,7 @@ def _read_file(source: _Source, path: Path, entry: dict | None) -> dict:
     return entry
 
 
-def _load_cache(path: Path) -> dict[str, dict]:
+def _load_cache(path: Path) -> dict[str, dict[str, Any]]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -257,10 +261,7 @@ def _load_cache(path: Path) -> dict[str, dict]:
     return files
 
 
-def _save_cache(path: Path, files: dict[str, dict], now: float) -> None:
-    for entry in files.values():
-        if now - entry.get("mtime", 0) > _IDS_KEPT_FOR:
-            entry["ids"] = []
+def _save_cache(path: Path, files: dict[str, dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=".context-usage-meter.", dir=path.parent)
     try:
@@ -272,13 +273,15 @@ def _save_cache(path: Path, files: dict[str, dict], now: float) -> None:
             os.unlink(temporary)
 
 
-def scan(home: Path, guard_home: Path, env: Mapping[str, str], *, now: float | None = None) -> dict[str, dict]:
+def scan(
+    home: Path, guard_home: Path, env: Mapping[str, str], *, now: float | None = None
+) -> dict[str, dict[str, Any]]:
     """Bring the per-file counts up to date for sessions active in the last WINDOW_DAYS days."""
     now = time.time() if now is None else now
     cutoff = now - WINDOW_DAYS * 86400
     cache_path = guard_home / CACHE_NAME
     previous = _load_cache(cache_path)
-    files: dict[str, dict] = {}
+    files: dict[str, dict[str, Any]] = {}
     for source in _sources(home, env):
         if not source.root.is_dir():
             continue
@@ -291,16 +294,16 @@ def scan(home: Path, guard_home: Path, env: Mapping[str, str], *, now: float | N
             except (OSError, ValueError):
                 if key in previous:
                     files[key] = previous[key]
-    _save_cache(cache_path, files, now)
+    _save_cache(cache_path, files)
     return files
 
 
-def _tools(files: Mapping[str, dict], days: int, today: date, recent: int) -> list[dict]:
+def _tools(files: Mapping[str, dict[str, Any]], days: int, today: date, recent: int) -> list[dict[str, Any]]:
     first = (today - timedelta(days=days - 1)).isoformat()
-    sessions: dict[tuple[str, str], dict] = {}
+    sessions: dict[tuple[str, str], dict[str, Any]] = {}
     for key, entry in files.items():
         harness = key.split(":", 1)[0]
-        counts = collections.Counter()
+        counts: collections.Counter[str] = collections.Counter()
         for day, bucket in entry["days"].items():
             if day >= first:
                 counts.update({field: int(bucket.get(field, 0)) for field in FIELDS})
@@ -346,7 +349,7 @@ def _tools(files: Mapping[str, dict], days: int, today: date, recent: int) -> li
     return tools
 
 
-def summarize(files: Mapping[str, dict], *, today: date | None = None) -> dict:
+def summarize(files: Mapping[str, dict[str, Any]], *, today: date | None = None) -> dict[str, Any]:
     """Totals per tool for today and the last WINDOW_DAYS local days, with the week's latest sessions."""
     today = today or date.today()
     return {
@@ -364,13 +367,13 @@ class UsageMeter:
 
     def __init__(self, *, max_age: float = 30.0) -> None:
         self._lock = threading.Lock()
-        self._files: dict[str, dict] | None = None
+        self._files: dict[str, dict[str, Any]] | None = None
         self._read_at = 0.0
         self._worker: threading.Thread | None = None
         self._failed = False
         self._max_age = max_age
 
-    def read(self, home: Path, guard_home: Path, env: Mapping[str, str]) -> dict:
+    def read(self, home: Path, guard_home: Path, env: Mapping[str, str]) -> dict[str, Any]:
         with self._lock:
             stale = self._files is None or time.monotonic() - self._read_at > self._max_age
             if stale and (self._worker is None or not self._worker.is_alive()):
@@ -378,7 +381,9 @@ class UsageMeter:
                     target=self._count, args=(home, guard_home, dict(env)), name="guard-usage-meter", daemon=True
                 )
                 self._worker.start()
+                self._failed = False
             files, failed = self._files, self._failed
+            refreshing = self._worker is not None and self._worker.is_alive()
         if files is None:
             return {
                 "schema": SCHEMA,
@@ -388,7 +393,8 @@ class UsageMeter:
                 "week": [],
                 "unread": list(UNREAD),
             }
-        return summarize(files)
+        # Totals from the last count stay on screen while a newer count runs.
+        return {**summarize(files), "refreshing": refreshing}
 
     def _count(self, home: Path, guard_home: Path, env: Mapping[str, str]) -> None:
         try:

@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 NAMES = {
     "codex": "Codex",
@@ -28,7 +28,7 @@ ROWS = (
 )
 
 
-def configure(actions: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def configure(actions: argparse._SubParsersAction[Any]) -> None:
     usage = actions.add_parser(
         "usage",
         help="Show model usage per AI tool, read from each tool's own records on this computer",
@@ -64,7 +64,7 @@ def run(args: argparse.Namespace, output: TextIO) -> int:
     return 0
 
 
-def render(state: dict, output: TextIO) -> None:
+def render(state: dict[str, Any], output: TextIO) -> None:
     print(
         f"Model usage from each tool's own records on this computer, today and over the last "
         f"{state['window_days']} days.",
@@ -82,7 +82,7 @@ def render(state: dict, output: TextIO) -> None:
         for field, label in ROWS:
             now = today.get(tool["harness"], {}).get("totals", {}).get(field, 0)
             print(f"  {label:24}{now:>18,}{tool['totals'][field]:>20,}", file=output)
-    names = [NAMES.get(name, name) for name in state["unread"]]
+    names = [NAMES.get(name) or str(name) for name in state["unread"]]
     unread = ", ".join(names[:-1]) + " or " + names[-1] if len(names) > 1 else "".join(names)
     print(file=output)
     print(f"Guard does not read usage records from {unread}, so they are not counted here.", file=output)

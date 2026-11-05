@@ -75,7 +75,7 @@ export function CigarUsagePanel() {
     setError(null);
     const load = () => readUsageMeter(controller.signal).then((next) => {
       setMeter(next);
-      if (next.state === "counting") timer = setTimeout(load, POLL_MS);
+      if (next.state === "counting" || next.refreshing) timer = setTimeout(load, POLL_MS);
     }, (cause: unknown) => {
       if (controller.signal.aborted) return;
       setError(cause instanceof ContextAssistanceApiError ? cause.message : "Guard could not read usage right now. Try again in a moment.");

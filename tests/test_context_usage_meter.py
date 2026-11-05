@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
 from datetime import date, datetime
 from pathlib import Path
@@ -138,6 +139,7 @@ def test_a_later_scan_reads_only_new_lines_and_waits_for_a_half_written_one(home
 def test_the_dedupe_window_survives_between_scans(homes: SimpleNamespace) -> None:
     transcript = homes.projects / "session-2.jsonl"
     transcript.write_text(_claude("msg_keep", 1, 1, 1, 1))
+    os.utime(transcript, (NOW - 7200, NOW - 7200))
     meter.scan(homes.home, homes.guard, {}, now=NOW)
     with transcript.open("a") as handle:
         handle.write(_claude("msg_keep", 1, 1, 1, 1))
@@ -233,3 +235,54 @@ def test_the_cli_prints_plain_tables_and_json(
     data = json.loads(capsys.readouterr().out)
     assert data["schema"] == meter.SCHEMA
     assert next(tool for tool in data["week"] if tool["harness"] == "codex")["totals"]["uncached_input_tokens"] == 400
+
+
+def test_try_again_after_a_failed_count_reports_counting_then_ready(
+    homes: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_scan = meter.scan
+    outcomes = iter([OSError("unreadable"), None])
+
+    def flaky_scan(*args: object, **kwargs: object) -> dict:
+        failure = next(outcomes)
+        if failure is not None:
+            raise failure
+        return real_scan(*args, **kwargs)
+
+    monkeypatch.setattr(meter, "scan", flaky_scan)
+    usage_meter = meter.UsageMeter()
+    usage_meter.read(homes.home, homes.guard, {})
+    usage_meter._worker.join(timeout=10)
+    assert usage_meter.read(homes.home, homes.guard, {})["state"] == "counting"
+    usage_meter._worker.join(timeout=10)
+    assert usage_meter.read(homes.home, homes.guard, {})["state"] == "ready"
+
+
+def test_a_refresh_keeps_the_old_totals_and_says_it_is_still_counting(
+    homes: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (homes.rollouts / "rollout-j.jsonl").write_text(_codex_usage(100, 0, 1))
+    usage_meter = meter.UsageMeter(max_age=0.0)
+    usage_meter.read(homes.home, homes.guard, {})
+    usage_meter._worker.join(timeout=10)
+    release = threading.Event()
+    real_scan = meter.scan
+
+    def slow_scan(*args: object, **kwargs: object) -> dict:
+        release.wait(timeout=10)
+        return real_scan(*args, **kwargs)
+
+    monkeypatch.setattr(meter, "scan", slow_scan)
+    (homes.rollouts / "rollout-k.jsonl").write_text(_codex_usage(200, 0, 1))
+    during = usage_meter.read(homes.home, homes.guard, {})
+    assert (during["state"], during["refreshing"]) == ("ready", True)
+    assert _week_of(during)["totals"]["requests"] == 1
+    release.set()
+    usage_meter._worker.join(timeout=10)
+    usage_meter._max_age = 3600.0
+    after = usage_meter.read(homes.home, homes.guard, {})
+    assert (after["refreshing"], _week_of(after)["totals"]["requests"]) == (False, 2)
+
+
+def _week_of(summary: dict) -> dict:
+    return next(tool for tool in summary["week"] if tool["harness"] == "codex")

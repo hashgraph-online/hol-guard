@@ -4,11 +4,15 @@ This page answers three questions: does Guard change what your AI app sees from 
 
 ## What Guard does to tool output
 
-Guard does not shorten, summarize or rewrite tool output. After a tool runs, Guard's hook either passes the output to the AI app exactly as the tool returned it, or blocks all of it. It blocks output only when the output contains a secret, such as an API key or a private key. The app then sees "HOL Guard blocked this output because it contains sensitive content." in place of the output. Guard never hands the app a cut-down version.
+Guard never shortens, summarizes or rewrites tool output to save tokens. After a tool runs, Guard's hook scans the output for secrets, such as an API key or a private key, and then does one of these:
 
-CIGAR adds to a prompt and takes nothing away: when it is on, each prompt you send gets the few parts of your project that match it, with the file and lines each part came from. Your prompt, the chat and the tool output reach the app unchanged.
+- **Passes it on unchanged.** This is what happens to almost all output.
+- **Blocks all of it** when it contains a secret, or when the scan cannot finish in time. The app then sees a short message from Guard in place of the output, such as "HOL Guard blocked this output because it contains sensitive content."
+- **Keeps only the first part** when the output is too big to scan in full (over 5 MB of text, or nested too deeply). Guard scans the first 1 MB. In Pi and Oh My Pi, which let Guard swap the output, the app gets that first 1 MB. Other apps get Guard's message instead. If the first 1 MB holds a secret, Guard blocks all of it.
 
-Never shaped, in any version:
+CIGAR adds to a prompt and takes nothing away: when it is on, each prompt you send gets the few parts of your project that match it, with the file and lines each part came from. CIGAR itself leaves your prompt, the chat and tool output as they are.
+
+Never trimmed to save tokens, in any version:
 
 - command, test and build output;
 - file reads;
@@ -18,7 +22,7 @@ Never shaped, in any version:
 
 ## Getting the raw output
 
-Because Guard does not trim output, what the app saw is what the tool returned. When Guard blocks output for a secret, it does not keep a copy. To see the output, run the same command yourself in a terminal outside the AI app.
+Guard does not keep a copy of output it blocks or cuts. To see all of it, run the same command yourself in a terminal outside the AI app, or send a very large output to a file and open the file.
 
 ## Why Guard does not trim output to save money
 

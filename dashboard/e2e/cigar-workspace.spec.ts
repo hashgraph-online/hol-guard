@@ -462,3 +462,22 @@ test("Usage says plainly when Guard cannot count, and tries again on request", a
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(page.getByRole("article", { name: "Codex usage" })).toBeVisible();
 });
+
+test("Usage keeps the last totals on screen while Guard recounts, then shows the new ones", async ({ page }) => {
+  const calls = await fixture(page);
+  let reads = 0;
+  await page.route("**/v1/context-assistance/usage", async (route) => {
+    reads += 1;
+    const body = reads === 1 ? { ...usageReady, refreshing: true }
+      : { ...usageReady, refreshing: false, today: [{ ...usageWeek, sessions: 1, totals: usageTotals(2), recent: [] }, emptyTool("claude-code")] };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=usage");
+  const fullPrice = page.getByRole("article", { name: "Codex usage" }).getByRole("row", { name: /Input at full price/ });
+  await expect(fullPrice).toContainText("1,200");
+  await expect(page.getByText("Counting your usage…", { exact: true })).toHaveCount(0);
+  await expect(fullPrice).toContainText("2,400", { timeout: 10_000 });
+  await page.waitForTimeout(3_500);
+  expect(reads).toBe(2);
+  expect(writes(calls)).toEqual([]);
+});

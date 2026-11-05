@@ -5597,7 +5597,7 @@ function tool(v) {
   return object$6(v) && typeof v.harness === "string" && count$2(v.sessions) && totals(v.totals) && Array.isArray(v.recent) && v.recent.every((s) => object$6(s) && typeof s.last_active === "string" && text(s.model) && text(s.folder) && totals(s.totals));
 }
 function parseUsageMeter(body) {
-  if (!object$6(body) || body.state !== "ready" && body.state !== "counting" && body.state !== "unavailable" || !count$2(body.window_days) || !Array.isArray(body.today) || !body.today.every(tool) || !Array.isArray(body.week) || !body.week.every(tool) || !Array.isArray(body.unread) || !body.unread.every((name) => typeof name === "string")) {
+  if (!object$6(body) || body.state !== "ready" && body.state !== "counting" && body.state !== "unavailable" || !count$2(body.window_days) || !Array.isArray(body.today) || !body.today.every(tool) || !Array.isArray(body.week) || !body.week.every(tool) || !Array.isArray(body.unread) || !body.unread.every((name) => typeof name === "string") || body.refreshing !== void 0 && typeof body.refreshing !== "boolean") {
     throw new ContextAssistanceApiError("usage_payload_invalid", "Guard returned usage numbers this page does not understand.");
   }
   return body;
@@ -5709,7 +5709,7 @@ function CigarUsagePanel() {
     setError(null);
     const load = () => readUsageMeter(controller.signal).then((next) => {
       setMeter(next);
-      if (next.state === "counting") timer = setTimeout(load, POLL_MS$1);
+      if (next.state === "counting" || next.refreshing) timer = setTimeout(load, POLL_MS$1);
     }, (cause) => {
       if (controller.signal.aborted) return;
       setError(cause instanceof ContextAssistanceApiError ? cause.message : "Guard could not read usage right now. Try again in a moment.");

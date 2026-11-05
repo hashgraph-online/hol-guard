@@ -18,6 +18,8 @@ export type UsageMeter = {
   today: UsageTool[];
   week: UsageTool[];
   unread: string[];
+  /** True while a newer count runs behind the totals shown. */
+  refreshing?: boolean;
 };
 
 const PATH = "/v1/context-assistance/usage";
@@ -39,7 +41,8 @@ export function parseUsageMeter(body: unknown): UsageMeter {
   if (!object(body) || (body.state !== "ready" && body.state !== "counting" && body.state !== "unavailable")
     || !count(body.window_days) || !Array.isArray(body.today) || !body.today.every(tool)
     || !Array.isArray(body.week) || !body.week.every(tool)
-    || !Array.isArray(body.unread) || !body.unread.every((name) => typeof name === "string")) {
+    || !Array.isArray(body.unread) || !body.unread.every((name) => typeof name === "string")
+    || (body.refreshing !== undefined && typeof body.refreshing !== "boolean")) {
     throw new ContextAssistanceApiError("usage_payload_invalid", "Guard returned usage numbers this page does not understand.");
   }
   return body as UsageMeter;
