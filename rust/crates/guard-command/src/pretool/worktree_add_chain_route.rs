@@ -269,23 +269,39 @@ pub(super) fn search_path_outside(
         .all(|directory| directory.is_absolute() && !entry_in_checkout(&directory, destination))
 }
 
-/// Whether one search path entry names a folder of the new checkout,
-/// directly or through a symbolic link that leads into it. The entry cannot
-/// be resolved on disk first: the destination does not exist until the add
-/// runs, so an entry inside it does not resolve yet either.
+/// Whether one search path entry names a folder of the new checkout. The
+/// entry is compared the way the shell will read it, not as it is spelled:
+/// an entry the shell cannot be shown to name a folder outside the
+/// destination counts as inside it.
 fn entry_in_checkout(directory: &Path, destination: &Path) -> bool {
-    if directory.starts_with(destination) {
-        return true;
+    normalized_entry(directory).is_none_or(|entry| entry.starts_with(destination))
+}
+
+/// A search path entry resolved the way the kernel will resolve it once the
+/// add has run: the deepest ancestor that exists now is canonicalized,
+/// which follows every symbolic link above the entry and every `..` in it,
+/// and the names still to be created are applied to the result.
+///
+/// The destination does not exist until the add runs, so an entry inside it
+/// cannot be resolved on disk and a component-wise comparison of the raw
+/// entry reads a spelling the shell never uses: `<repository>/../app-flat/bin`
+/// and `<link-to-parent>/app-flat/bin` both name a folder of the checkout
+/// while sharing no component with it. An entry that cannot be resolved at
+/// all -- a dangling link, a name whose tail still holds `..`, a path with
+/// no existing ancestor -- returns `None` and is treated as inside the
+/// checkout, because nothing here can say where the shell would land.
+fn normalized_entry(directory: &Path) -> Option<PathBuf> {
+    let mut existing = directory.to_path_buf();
+    let mut missing = Vec::new();
+    while std::fs::symlink_metadata(&existing).is_err() {
+        missing.push(existing.file_name()?.to_owned());
+        if !existing.pop() {
+            return None;
+        }
     }
-    let Ok(target) = std::fs::read_link(directory) else {
-        return false;
-    };
-    if target.is_absolute() {
-        return target.starts_with(destination);
-    }
-    directory
-        .parent()
-        .is_none_or(|parent| parent.join(target).starts_with(destination))
+    let mut resolved = std::fs::canonicalize(&existing).ok()?;
+    resolved.extend(missing.iter().rev());
+    Some(resolved)
 }
 
 /// A relative path after the `cd` names a file of the new checkout, which
