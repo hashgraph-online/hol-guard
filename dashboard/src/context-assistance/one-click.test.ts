@@ -143,9 +143,10 @@ assert.ok(heldPaused?.kind === "blocked" && heldPaused.block.title === "An earli
 
 // Running: a fake Guard that answers each step the way the daemon does.
 type Script = { calls: string[]; stages: CigarSetupStage[]; jobs: (string | null)[]; saved: GuardContextAssistanceConfig[] };
-function fakeGuard(options: { submitError?: Record<string, unknown>; failPhase?: string; neverReady?: boolean; stopAt?: string; initial?: ContextAssistanceStatus } = {}) {
+function fakeGuard(options: { submitError?: Record<string, unknown>; failPhase?: string; failCode?: string; busyPolls?: number; slowPollMs?: number; neverReady?: boolean;
+  stopAt?: string; initial?: ContextAssistanceStatus } = {}) {
   const script: Script = { calls: [], stages: [], jobs: [], saved: [] };
-  let state: ContextAssistanceStatus = options.initial ?? off, clock = 0, stopped = false;
+  let state: ContextAssistanceStatus = options.initial ?? off, clock = 0, stopped = false, busy = options.busyPolls ?? 0;
   const submitted = new Map<string, CigarVersionsRequest>();
   const reply = (result: Record<string, unknown> = {}): CigarVersionsReply => ({ state, result });
   const base = { created_at_ms: 1, updated_at_ms: 2, deadline_at_ms: 999999, worker_live: true, cancel_requested: false,
@@ -160,10 +161,11 @@ function fakeGuard(options: { submitError?: Record<string, unknown>; failPhase?:
         if (error) throw error;
         return reply();
       }
+      if (busy > 0) { busy -= 1; clock += options.slowPollMs ?? 0; throw new TypeError("Failed to fetch"); }
       const sent = submitted.get(input.job_id)!;
       if (options.failPhase && sent.action === "install") {
         return reply({ ...base, schema: "guard-cigar-install-job.v1", operation: "install", job_id: input.job_id, phase: options.failPhase,
-          code: "fingerprint_mismatch", worker_live: false, build_id: "b", interpreter_id: "python:managed", runtime_id: "cigar:new",
+          code: options.failCode ?? "fingerprint_mismatch", worker_live: false, build_id: "b", interpreter_id: "python:managed", runtime_id: "cigar:new",
           sdk_version: "0.14.1", core_version: "0.14.1", activation_granted: false });
       }
       if (sent.action === "setup_interpreter") return reply({ ...base, schema: "guard-cigar-python-setup-job.v1", operation: "setup_interpreter",
@@ -252,7 +254,36 @@ const plan = install;
 {
   const { deps } = fakeGuard({ failPhase: "failed" });
   await assert.rejects(runCigarSetup(plan, off, deps), (cause: unknown) => cause instanceof CigarSetupError && cause.stage === "download"
-    && /fingerprint mismatch/.test(cause.message));
+    && /did not match what Guard expected/.test(cause.message) && !/_|fingerprint/.test(cause.message));
+}
+{
+  // Raw codes such as native_context_assistance_cigar_install_inputs_invalid never reach the page.
+  for (const failCode of ["native_context_assistance_cigar_install_inputs_invalid", "native_context_assistance_something_new"]) {
+    const { deps } = fakeGuard({ failPhase: "failed", failCode });
+    await assert.rejects(runCigarSetup(plan, off, deps), (cause: unknown) => cause instanceof CigarSetupError
+      && /Nothing was turned on/.test(cause.message) && !/native|context assistance|_/.test(cause.message));
+  }
+}
+{
+  const { deps } = fakeGuard({ failPhase: "failed", failCode: "native_context_assistance_runtime_deadline_exceeded" });
+  await assert.rejects(runCigarSetup(plan, off, deps), (cause: unknown) => cause instanceof CigarSetupError
+    && /took too long/.test(cause.message) && !/native context assistance/.test(cause.message));
+}
+{
+  const { deps } = fakeGuard({ busyPolls: 15 });
+  const result = await runCigarSetup(plan, off, deps);
+  assert.equal(result.effective_enabled, true, "twelve seconds of a busy Guard does not end a setup that is still running");
+}
+{
+  const { deps, script } = fakeGuard({ busyPolls: 1_000 });
+  await assert.rejects(runCigarSetup(plan, off, deps), /did not confirm/);
+  assert.ok(script.calls.filter((call) => call === "job").length < 45, "a Guard that stays silent ends the wait after about 30 seconds");
+}
+{
+  // Each poll here takes 12 seconds to time out; the 30-second limit still counts from Guard's last answer.
+  const { deps, script } = fakeGuard({ busyPolls: 1_000, slowPollMs: 12_000 });
+  await assert.rejects(runCigarSetup(plan, off, deps), /did not confirm/);
+  assert.equal(script.calls.filter((call) => call === "job").length, 3, "slow failing polls do not stretch the silence limit");
 }
 {
   const { deps } = fakeGuard({ failPhase: "recovery_required" });
@@ -321,6 +352,14 @@ const plan = install;
     ? { ...saved, requested_enabled: true, job: { id: "1", operation: "activate", phase: "verifying" } }
     : { ...saved, requested_enabled: false, job: null });
   await assert.rejects(runCigarSetup(planCigarStart(saved, false)!, saved, deps), CigarSetupStopped);
+}
+{
+  // The browser's "Failed to fetch" is not something a person can act on.
+  const { deps } = fakeGuard({ initial: saved });
+  deps.saveSettings = async () => { throw new TypeError("Failed to fetch"); };
+  const elsewhere = { ...saved, preferences: { ...saved.preferences, enabled: false } };
+  await assert.rejects(runCigarSetup(planCigarStart(saved, false)!, elsewhere, deps),
+    (cause: unknown) => cause instanceof CigarSetupError && /Guard did not answer/.test(cause.message) && !/fetch/i.test(cause.message));
 }
 console.log("CIGAR one-click planning, approval, stop, retry and live-readiness contracts passed.");
 
