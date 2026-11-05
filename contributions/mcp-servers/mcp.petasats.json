@@ -21,7 +21,7 @@
   "launch": {
     "kind": "package-launcher",
     "command": "npx",
-    "package": "petasats-mcp@0.2.15"
+    "package": "petasats-mcp"
   },
   "riskClasses": [
     "external-network-read",
@@ -90,6 +90,6 @@
     "Use stop_spending to stop new swaps and withdrawals at once. Only the user can resume, from a terminal (npx petasats-mcp@0.2.15 resume); recovery of swaps already started keeps working.",
     "Leave speed at standard, the default, which waits for one BSV confirmation, or set allowFastSettlement to false. Fast settlement accepts an unconfirmed BSV lock and is limited to $25.",
     "Never let an agent read, print or send ~/.petasats/keys.json; it holds the only copy of the kit's keys, so keep a private backup.",
-    "This listing launches the reviewed release, petasats-mcp@0.2.15. Keep a pinned version in your own configuration too, so only a reviewed release runs."
+    "Pin the package version when launching with npx (for example petasats-mcp@0.2.15) so only the reviewed release runs."
   ]
 }
