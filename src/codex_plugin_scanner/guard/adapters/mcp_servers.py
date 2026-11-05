@@ -133,7 +133,7 @@ def proxy_cli_args(
 def stable_mcp_server_identifier(server: ManagedMcpServer) -> str:
     """Build a Cloud-stable MCP server ID without local config path material."""
 
-    request = {
+    request: dict[str, object] = {
         "op": "server_id",
         "servers": [
             {
