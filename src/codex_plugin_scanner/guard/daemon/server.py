@@ -1331,6 +1331,11 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         return int(self.server_address[1])
 
     def publish_trust_state(self, trust_status: dict[str, object] | None = None) -> None:
+        # The store can report an integrity change while the hook worker starts,
+        # before the listening socket is bound. There is no port to record yet;
+        # the daemon publishes its trust state once it listens.
+        if getattr(self, "server_address", None) is None:
+            return
         write_guard_daemon_state(
             self.store.guard_home,
             self.daemon_port(),
