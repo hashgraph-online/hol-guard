@@ -5269,7 +5269,7 @@ const CIGAR_UPDATE_TUTORIAL = {
     {
       title: "Prepare beside your current runtime",
       description: "Downloading and verifying a replacement does not select or enable it.",
-      instructions: ["Choose a registered Python interpreter for an available SDK build, or explicitly prepare an eligible private Python build first.", "Click Get this version and watch its progress. The current runtime remains selected while preparation runs.", "Click Stop if you change your mind. If Guard is not sure a step worked, refresh and check In progress before trying again."],
+      instructions: ["Choose a registered Python interpreter for an available SDK build, or explicitly prepare an eligible private Python build first.", "Click Get this version and watch its progress. The current runtime remains selected while preparation runs.", "Click Stop if you change your mind. If Guard is not sure a step worked, refresh the list before trying again. In progress shows only jobs that still need something from you."],
       expect: "The prepared installation appears in the Versions list marked Installed, with your current selection intact.",
       target: "versions",
       action: "Prepare an eligible build"
