@@ -49,42 +49,40 @@ def test_publisher_close_cancels_native_helpers_mid_pass(tmp_path: Path, monkeyp
     several seconds, longer than the daemon's one-second shutdown budget.
     """
 
+    import sys
+
+    import codex_plugin_scanner.guard.codex_hook_launch_runtime as launch_runtime
     import codex_plugin_scanner.guard.native_policy_snapshot_publication as publication
     import codex_plugin_scanner.guard.native_runtime as native_runtime
-    from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 
     publisher = NativePolicySnapshotPublisher(store=GuardStore(tmp_path / "guard-home"))
     helper_running = threading.Event()
-    helpers_started: list[str] = []
+    spawned: list[object] = []
+    real_spawn = launch_runtime._spawn_hook_process
 
-    def fake_helper_process(argv, *, stop_event=None, **_kwargs) -> BoundedHookProcessResult:
-        helpers_started.append(argv[1])
+    def counting_spawn(*args, **kwargs):
+        spawned.append(args[0])
+        result = real_spawn(*args, **kwargs)
         helper_running.set()
-        # A real helper is killed when stop_event is set; without one it runs
-        # to completion, which is the multi-second Windows pass.
-        if stop_event is None or not stop_event.wait(timeout=5):
-            threading.Event().wait(timeout=5)
-        return BoundedHookProcessResult(returncode=None, stdout="", output_limit_exceeded=False, timed_out=False)
+        return result
 
     def reconcile_with_helpers(_publisher) -> None:
-        for name in ("first", "second", "third"):
-            assert (
-                native_runtime._run_native_process(
-                    Path("hol-guard-runtime"), (name,), input_text="", timeout_seconds=30
-                )
-                is None
+        # Each helper would outlive the close budget unless it is killed.
+        for _ in range(3):
+            native_runtime._run_native_process(
+                Path(sys.executable), ("-c", "import time; time.sleep(30)"), input_text="", timeout_seconds=30
             )
 
-    monkeypatch.setattr(native_runtime, "run_isolated_hook_process", fake_helper_process)
+    monkeypatch.setattr(launch_runtime, "_spawn_hook_process", counting_spawn)
     monkeypatch.setattr(publication, "reconcile_policy_inputs", reconcile_with_helpers)
     thread = threading.Thread(target=publisher._run, daemon=True)
     publisher._thread = thread
     thread.start()
-    assert helper_running.wait(timeout=2)
+    assert helper_running.wait(timeout=10)
 
     assert publisher.close_contained(timeout_seconds=1) is True
     assert not thread.is_alive()
-    assert helpers_started == ["first"]
+    assert len(spawned) == 1
 
 
 def test_runtime_answer_skips_status_and_process_once_stopped(monkeypatch) -> None:

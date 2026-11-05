@@ -25,6 +25,7 @@ from .codex_hook_windows_job import (
     close_windows_hook_job,
     spawn_windows_hook_process,
 )
+from .native_process_stop_scope import scoped_native_stop_event
 
 _HOOK_SUBPROCESS_OUTPUT_LIMIT = 1_000_000
 _HOOK_ENVIRONMENT_KEYS = frozenset(
@@ -341,12 +342,18 @@ def run_isolated_hook_process(
 
     ``stop_event`` lets a long-lived reviewed helper terminate through the same
     process-group / Windows Job containment path used for deadlines. Existing
-    one-shot callers do not need to supply it.
+    one-shot callers do not need to supply it. Without one, the stop event
+    bound by ``native_process_stop_scope`` applies, and once it is set no
+    child starts.
 
     When ``deadline_monotonic`` is supplied it is authoritative. The deadline
     is captured before process creation so startup and stream cleanup consume
     the caller's existing budget instead of receiving a new minimum timeout.
     """
+    if stop_event is None:
+        stop_event = scoped_native_stop_event()
+    if stop_event is not None and stop_event.is_set():
+        return BoundedHookProcessResult(None, "", False, False)
     if deadline_monotonic is None:
         if timeout_seconds is None:
             return BoundedHookProcessResult(None, "", False, False)
