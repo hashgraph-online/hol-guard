@@ -6,6 +6,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 mod lifecycle_lease;
 
 pub(super) const MAX_JOBS: usize = 32;
+/// Starting the downloaded SDK and checking each of its features took over
+/// 100 seconds on an x64 build under ARM64 emulation, so installs get the same
+/// five-minute window as Python setup.
+pub(super) const INSTALL_WINDOW_MS: u64 = 300_000;
 const MAX_JOB_BYTES: u64 = 64 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -93,7 +97,7 @@ impl Job {
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
             || self.updated_at_ms < self.created_at_ms
             || self.deadline_at_ms < self.created_at_ms
-            || self.deadline_at_ms - self.created_at_ms > 120_000
+            || self.deadline_at_ms - self.created_at_ms > INSTALL_WINDOW_MS
         {
             return Err(error("install_job_invalid"));
         }
