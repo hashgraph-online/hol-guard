@@ -3020,8 +3020,14 @@ class _GuardDaemonHandler(
     ) -> dict[str, str] | None:
         parsed = urlparse(self.path)
         origin = self._normalize_origin(self.headers.get("Origin"))
-        if origin is None or not self._origin_is_allowed_for_request(parsed.path):
-            return None
+        # Choosing response headers is not the gate that refused the request,
+        # so a busy resident here must not turn a real denial into a retry.
+        gate_unavailable = self._native_gate_unavailable
+        try:
+            if origin is None or not self._origin_is_allowed_for_request(parsed.path):
+                return None
+        finally:
+            self._native_gate_unavailable = gate_unavailable
         return self._cors_headers(origin, allow_methods=allow_methods, allow_headers=allow_headers)
 
     def _native_handler_decision(self, ask: Callable[[], HandlerDecision]) -> HandlerDecision | None:

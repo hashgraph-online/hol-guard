@@ -2067,4 +2067,26 @@ for (const [status, body] of [
   assert(busyFetches === 1, `a ${status} refusal that is not a busy check is not retried`);
 }
 
+// A caller that gives up while the dashboard waits to retry gets the same
+// AbortError fetch would give it, so its own recovery still runs.
+busyFetches = 0;
+globalThis.fetch = async (): Promise<Response> => {
+  busyFetches += 1;
+  return new Response(JSON.stringify({ error: "native_route_policy_unavailable" }), {
+    status: 503,
+    headers: { "Content-Type": "application/json" },
+  });
+};
+const busyAbort = new AbortController();
+const abandoned = fetchCommandActivityApi("/v1/command-activity", { signal: busyAbort.signal });
+setTimeout(() => busyAbort.abort(new DOMException("gave up", "AbortError")), 50);
+let abandonedError: unknown = null;
+try {
+  await abandoned;
+} catch (error) {
+  abandonedError = error;
+}
+assert(abandonedError instanceof DOMException && abandonedError.name === "AbortError", "an abort during the retry wait rejects");
+assert(busyFetches === 1, "an aborted request is not sent again");
+
 console.log("guard-api.test.ts: all tests passed");
