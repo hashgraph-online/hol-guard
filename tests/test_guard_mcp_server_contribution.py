@@ -16,6 +16,7 @@ from .mcp_contribution_client import mcp_tool_state
 
 _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.filesystem.json"
 _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
+_DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
 
 
 def _filesystem_payload() -> dict[str, object]:
@@ -27,6 +28,12 @@ def _filesystem_payload() -> dict[str, object]:
 def _tether_payload() -> dict[str, object]:
     """Read the authored Tether manifest so missing tools cannot hide behind fallback defaults."""
     payload = json.loads(_TETHER.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _dev_mcp_payload() -> dict[str, object]:
+    payload = json.loads(_DEV_MCP.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
 
@@ -63,6 +70,49 @@ def test_tether_unknown_tool_inherits_policy() -> None:
     assert declared["other"] == "inherit"
     assert "unknown_tool" not in declared
     assert mcp_tool_state(payload, "unknown_tool") == "inherit"
+
+
+def test_dev_mcp_contribution_is_external_opt_in() -> None:
+    """Keep dev-mcp bound to its published package and explicit local opt-in."""
+    payload = _dev_mcp_payload()
+    validate_mcp_contribution(payload, filename=_DEV_MCP.name)
+    assert payload["id"] == "mcp.dev-mcp"
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {"kind": "package-launcher", "command": "uvx", "package": "dev-mcp"}
+
+
+def test_dev_mcp_protects_destructive_and_execution_tools() -> None:
+    """Require destructive, terminal execution, desktop and state-mutating tools on review."""
+    payload = _dev_mcp_payload()
+    tools = payload.get("tools")
+    assert isinstance(tools, list)
+    declared = {item["name"]: item["state"] for item in tools}
+    review_tools = {
+        "run_command",
+        "desktop_action",
+        "desktop_click",
+        "desktop_type",
+        "desktop_press",
+        "desktop_launch",
+        "delete_path",
+        "delete_recursive",
+        "reset_project_brain",
+        "reset_context",
+        "write_file",
+        "edit_file",
+        "batch_replace",
+        "git_add",
+        "git_commit",
+        "git_create_branch",
+        "install_git_hooks",
+    }
+    assert review_tools <= declared.keys()
+    for tool_name in review_tools:
+        assert declared[tool_name] == "review"
+        assert mcp_tool_state(payload, tool_name) == "review"
+    assert declared["other"] == "inherit"
+    assert mcp_tool_state(payload, "unlisted_diagnostic_tool") == "inherit"
 
 
 def test_filesystem_contribution_cannot_self_declare_trusted_library() -> None:
