@@ -103,16 +103,24 @@ def test_runtime_session_sync_keeps_the_previous_summary_when_the_catalog_fails(
 
 def test_clearing_policy_authority_stores_the_failed_acknowledgement_in_the_same_write(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_payload("policy_bundle_ack", {"status": "synced"}, "2026-11-05T11:00:00Z")
-    failed = {"bundleHash": "sha256:applied", "status": "failed"}
+    store.set_sync_payload("policy_bundle_ack", {"bundleHash": "sha256:a", "status": "synced"}, "2026-11-05T11:00:00Z")
+    # A concurrent sync activates bundle B before this clear runs; the failure must name B.
+    store.set_sync_payload("policy_bundle_ack", {"bundleHash": "sha256:b", "status": "synced"}, "2026-11-05T11:30:00Z")
+    seen: list[object] = []
+
+    def build_failed(stored: object) -> dict[str, object]:
+        seen.append(stored)
+        assert isinstance(stored, dict)
+        return {"bundleHash": stored["bundleHash"], "status": "failed"}
 
     store.clear_policy_bundle_authority(
         "2026-11-05T12:00:00Z",
         policy_bundle_last_error={"reason": "wrong_workspace"},
-        policy_bundle_ack=failed,
+        policy_bundle_ack=build_failed,
     )
 
-    assert store.get_sync_payload("policy_bundle_ack") == failed
+    assert seen == [{"bundleHash": "sha256:b", "status": "synced"}]
+    assert store.get_sync_payload("policy_bundle_ack") == {"bundleHash": "sha256:b", "status": "failed"}
     assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "wrong_workspace"}
 
     store.clear_policy_bundle_authority("2026-11-05T12:05:00Z", policy_bundle_last_error={})
