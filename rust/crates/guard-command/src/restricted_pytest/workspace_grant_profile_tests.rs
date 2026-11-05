@@ -77,10 +77,14 @@ fn readonly_pytest_may_bind_loopback_but_not_listen_or_connect() {
     for denied in ["network-inbound", "network-outbound"] {
         assert!(!pytest.contains(denied), "{pytest}");
     }
-    let last = pytest.lines().last().unwrap();
+    // The credential denials still come after the bind, so they win.
+    let lines: Vec<&str> = pytest.lines().collect();
+    let bind = lines.iter().position(|line| *line == network[0]).unwrap();
+    let tail = &lines[bind + 1..];
+    assert!(!tail.is_empty());
     assert!(
-        last.starts_with("(deny file-read* file-write* (regex"),
-        "{last}"
+        tail.iter().all(|line| line.starts_with("(deny file-read")),
+        "{pytest}"
     );
     for other in ["git-readonly-v1", "python-eval-readonly-v1"] {
         assert!(!profile_for(other).contains("network"), "{other}");
