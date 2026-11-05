@@ -82,6 +82,7 @@ from ..native_directory_trust import (
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_evidence_writer import NativeHookEvidenceWriter, unreachable_writer_stats
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
+from ..native_resident_client import record_native_resident_client_failure_code
 from ..native_resident_revival import native_route_unavailable_body
 from ..native_resident_watchdog import start_native_resident_watchdog
 from ..native_runtime_request_scope import scoped_hook_post
@@ -1417,7 +1418,10 @@ class _GuardDaemonHandler(
         super().end_headers()
 
     def parse_request(self) -> bool:
+        # A kept-alive connection reuses this thread, so each request starts
+        # without the previous request's gate or resident failure.
         self._native_gate_unavailable = False
+        record_native_resident_client_failure_code(None)
         parsed = super().parse_request()
         self._daemon_server().classify_connection(self.request)
         if not parsed:

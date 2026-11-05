@@ -12,6 +12,8 @@ import pytest
 from codex_plugin_scanner.guard import native_daemon_route as route
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
+from codex_plugin_scanner.guard.native_resident_client import record_native_resident_client_failure_code
+from codex_plugin_scanner.guard.native_resident_revival import RESTART_BLOCKED_CODE
 
 
 def _unanswered(*_args: object, **_kwargs: object) -> object:
@@ -98,5 +100,19 @@ def test_a_busy_reconnect_origin_check_answers_retryable_503(tmp_path: Path) -> 
     handler._native_gate_unavailable = True
 
     handler._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_origin_mismatch")
+
+    assert written == [(503, {"error": "native_route_policy_unavailable"})]
+
+
+def test_a_new_request_does_not_inherit_an_earlier_restart_refusal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A kept-alive connection reuses the worker thread. A restart refusal left
+    # by an earlier request must not mark this request's busy reply as final.
+    handler, written = _handler(tmp_path)
+    record_native_resident_client_failure_code(RESTART_BLOCKED_CODE)
+    monkeypatch.setattr(daemon_server, "native_origin_decision", _unanswered)
+
+    _get(handler, "/v1/runtime", "Origin: http://127.0.0.1:4781\r\n")
 
     assert written == [(503, {"error": "native_route_policy_unavailable"})]
