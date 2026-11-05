@@ -152,23 +152,93 @@ fn v2_failure_with_a_new_code_advances_the_sequence() {
     );
 }
 
+fn retraction(bundle_hash: &str, bundle_version: &str) -> Value {
+    json!({
+        "appliedAt": AT,
+        "bundleHash": bundle_hash,
+        "bundleVersion": bundle_version,
+        "deviceId": "dev-1",
+        "deviceName": "Dev One",
+        "status": "failed",
+    })
+}
+
 #[test]
-fn v2_failure_after_applied_reports_nothing() {
-    // Cloud refuses applied -> failed, and a refused sync-context
-    // acknowledgement would fail the whole sync.
+fn v2_failure_after_applied_retracts_it_in_the_legacy_shape() {
+    // Cloud refuses a v2 applied -> failed transition, and a refused
+    // sync-context acknowledgement would fail the whole sync. A legacy failed
+    // acknowledgement replaces the stored v2 one instead.
     let previous = generic_ack(2, "applied", Value::Null);
     assert_eq!(
         failed(&v2_bundle(json!([])), "wrong_workspace", previous),
+        retraction(HASH, "8")
+    );
+}
+
+#[test]
+fn failure_retracts_the_acknowledgement_of_another_bundle() {
+    let mut previous = generic_ack(5, "applied", Value::Null);
+    previous["bundleVersion"] = json!(7);
+    let ack = failed(&v2_bundle(json!([])), "wrong_workspace", previous);
+    assert_eq!(ack, retraction(HASH, "7"));
+}
+
+#[test]
+fn dropped_bundle_retracts_the_synced_acknowledgement() {
+    let previous = json!({
+        "appliedAt": "2026-07-15T11:00:00Z",
+        "bundleHash": "sha256:previous-bundle",
+        "bundleVersion": "policy-2026-06-05.4",
+        "deviceId": "dev-1",
+        "status": "synced",
+    });
+    let ack = failed(&json!({}), "wrong_workspace", previous);
+    assert_eq!(
+        ack,
+        retraction("sha256:previous-bundle", "policy-2026-06-05.4")
+    );
+}
+
+#[test]
+fn managed_applied_acknowledgement_is_retracted() {
+    let mut previous = generic_ack(4, "applied", Value::Null);
+    previous["deliveryId"] = json!("delivery-1");
+    let managed = v2_bundle(json!([{"x-hol-extension-targets": []}]));
+    assert_eq!(
+        failed(&managed, "wrong_workspace", previous),
+        retraction(HASH, "8")
+    );
+}
+
+#[test]
+fn stored_legacy_failure_is_resent_for_any_rejected_bundle() {
+    let first = failed(&json!({}), "wrong_workspace", retraction("sha256:old", "3"));
+    assert_eq!(first, retraction("sha256:old", "3"));
+    let again = run_page(
+        "failed_ack",
+        failed_request(
+            &v2_bundle(json!([])),
+            "wrong_workspace",
+            first.clone(),
+            LATER,
+        ),
+    )["ack"]
+        .clone();
+    assert_eq!(again, first);
+}
+
+#[test]
+fn dropped_bundle_without_any_acknowledgement_reports_nothing() {
+    assert_eq!(
+        failed(&json!({}), "wrong_workspace", Value::Null),
         json!({})
     );
 }
 
 #[test]
-fn v2_failure_ignores_an_acknowledgement_for_another_bundle() {
-    let mut previous = generic_ack(5, "applied", Value::Null);
-    previous["bundleVersion"] = json!(7);
-    let ack = failed(&v2_bundle(json!([])), "wrong_workspace", previous);
-    assert_eq!(ack, generic_ack(1, "failed", json!("wrong_workspace")));
+fn acknowledgement_without_identity_is_not_retracted() {
+    let previous = json!({"deviceId": "dev-1", "status": "synced", "bundleVersion": 0});
+    assert_eq!(failed(&json!({}), "wrong_workspace", previous), json!({}));
 }
 
 #[test]

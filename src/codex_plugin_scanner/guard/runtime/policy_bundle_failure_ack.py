@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from ..native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION
-from ..policy_bundle_delivery import policy_bundle_failure_acknowledgement
+from ..policy_bundle_delivery import is_failed_policy_bundle_acknowledgement, policy_bundle_failure_acknowledgement
 from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT, validated_policy_bundle_v2_acknowledgement
 from ..store import GuardStore
 from ..synced_policy import synced_policy_bundle_validation
@@ -30,9 +30,11 @@ def failed_acknowledgement(
     device_name: str,
     synced_at: str,
 ) -> dict[str, object]:
-    """Return the failed acknowledgement for ``policy_bundle``, or ``{}``.
+    """Return the failed acknowledgement to store when Guard rejects or drops a bundle.
 
-    A native outage is not a verdict about the bundle, so it reports nothing.
+    The native builder retracts the stored acknowledgement when it told Cloud a
+    bundle was delivered, and otherwise reports ``policy_bundle``. A native
+    outage is not a verdict about the bundle, so it reports nothing.
     """
 
     if not reason or reason == NATIVE_UNAVAILABLE_REJECTION:
@@ -76,14 +78,17 @@ def cached_bundle_failure_acknowledgement(
     request resends the same acknowledgement instead of a conflicting one.
     """
 
+    payload = store.get_sync_payload("policy_bundle")
+    has_payload = isinstance(payload, dict) and bool(payload)
+    bundle, reason = synced_policy_bundle_validation(store) if has_payload else (None, None)
+    if bundle is not None:
+        # The cached bundle validates again: a legacy failure describes a
+        # bundle Guard has since recovered, so it is not resent.
+        return {} if is_failed_policy_bundle_acknowledgement(acknowledgement) else None
     stored = _stored_failure(acknowledgement, device_id)
     if stored is not None:
         return stored
-    payload = store.get_sync_payload("policy_bundle")
-    if not isinstance(payload, dict) or not payload:
-        return None
-    bundle, reason = synced_policy_bundle_validation(store)
-    if bundle is not None:
+    if not has_payload:
         return None
     synced_at = datetime.now(timezone.utc).isoformat()
     failed = failed_acknowledgement(

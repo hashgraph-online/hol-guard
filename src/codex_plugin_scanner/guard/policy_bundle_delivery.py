@@ -149,15 +149,18 @@ def policy_bundle_failure_acknowledgement(
     previous: object,
     synced_at: str,
 ) -> dict[str, object]:
-    """Build the failed acknowledgement for a bundle that failed local validation.
+    """Build the failed acknowledgement after Guard rejects or drops a bundle.
 
-    Returns ``{}`` when Cloud has no acknowledgement shape that can carry the
-    failure, or when the native runtime cannot build one. Reporting a failure
-    never changes what Guard enforces.
+    The native builder retracts a ``previous`` acknowledgement that told Cloud
+    a bundle was delivered, and otherwise reports ``policy_bundle``; pass
+    ``None`` when no rejected bundle is in hand. Returns ``{}`` when Cloud has
+    no acknowledgement shape that can carry the failure, or when the native
+    runtime cannot build one. Reporting a failure never changes what Guard
+    enforces.
     """
 
     if not isinstance(policy_bundle, dict):
-        return {}
+        policy_bundle = {}
     try:
         return _acknowledgement(
             policy_bundle_verdict(
@@ -174,3 +177,11 @@ def policy_bundle_failure_acknowledgement(
         )
     except PolicyBundleNativeError:
         return {}
+
+
+def is_failed_policy_bundle_acknowledgement(acknowledgement: object) -> bool:
+    return (
+        isinstance(acknowledgement, Mapping)
+        and acknowledgement.get("status") == "failed"
+        and "contractVersion" not in acknowledgement
+    )
