@@ -27,8 +27,6 @@ fn a_quoted_heredoc_that_carries_a_commit_message_is_quiet() {
         "git commit --file=- <<'MSG'\nfeat(report): add the lane\nMSG",
         "git commit -F- <<'MSG'\nfeat(report): add the lane\nMSG",
         "git add -A && git commit -q -F - <<'MSG'\nfeat(report): add the lane\nMSG",
-        // The message is already on the command line; standard input is spare.
-        "git commit -m 'feat(report): add the lane' <<'MSG'\nunused\nMSG",
     ] {
         quiet(command).unwrap();
     }
@@ -62,6 +60,10 @@ fn literal_standard_input_fed_to_anything_else_stays_reviewed() {
         "sh <<'MSG'\nrm -rf build\nMSG\ncat README.md",
         // An unquoted delimiter expands the body before git ever sees it.
         "git commit -F - <<MSG\n$(cat ~/.ssh/id_rsa)\nMSG",
+        // The message is on the command line, so the commit never reads
+        // standard input. Dropping the body would project a command that
+        // leaves those bytes unaccounted for, which the proof does not do.
+        "git commit -m 'feat(report): add the lane' <<'MSG'\nunused\nMSG",
     ] {
         session.assert_not_allow(command);
     }
