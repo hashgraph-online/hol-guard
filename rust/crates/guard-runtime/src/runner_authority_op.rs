@@ -223,6 +223,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "codex_host_inventory" => crate::codex_host_inventory::dispatch(args),
         "package_script_memory" => crate::package_script_memory::dispatch(args),
         "cloud_review_ack" => crate::cloud_review_ack::dispatch(args),
+        "cloud_review_batch" => crate::cloud_review_batch::dispatch(args),
         "copilot_detect" => copilot_detect::detect(args),
         "copilot_hook_config" => copilot_hook_config::dispatch(args),
         "copilot_lifecycle_state" => copilot_lifecycle_state::dispatch(args),

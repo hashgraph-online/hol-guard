@@ -1367,6 +1367,18 @@ _ROOT_STATIC_FILES = {
 }
 
 
+def _is_public_static_path(path: str) -> bool:
+    """Whether ``path`` names a dashboard file bundled with the package.
+
+    These files are the same for every caller, and a page on any site can load
+    them with a plain script or image tag, which sends no ``Origin``. Asking the
+    native runtime about the caller's origin protects nothing here. The
+    dashboard requests a few dozen of them at once when it opens, and on a slow
+    machine that burst outlasted the origin check's budget and the page broke.
+    """
+    return path in _ROOT_STATIC_FILES or path.startswith(("/assets/", "/brand/"))
+
+
 _DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS = 60.0
 _DEFAULT_SUPPLY_CHAIN_REFRESH_INTERVAL_SECONDS = 15 * 60.0
 _EPHEMERAL_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 5
@@ -1467,7 +1479,7 @@ class _GuardDaemonHandler(
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
         path_parts = [part for part in parsed.path.split("/") if part]
-        if not self._origin_is_allowed_for_request(parsed.path):
+        if not _is_public_static_path(parsed.path) and not self._origin_is_allowed_for_request(parsed.path):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         if parsed.path == "/healthz":

@@ -182,6 +182,7 @@ mod cloud_request_text;
 #[cfg(test)]
 mod cloud_request_vectors_tests;
 mod cloud_review_ack;
+mod cloud_review_batch;
 mod cloud_review_event;
 mod cloud_sync_privacy;
 mod codex_app_server_socket;
@@ -400,6 +401,7 @@ mod edge_receipt;
 mod edge_review_evidence;
 mod edge_structured;
 mod encrypted_secret_store;
+mod exact_cloud_review;
 mod extension_allow_hint_op;
 mod extension_control_authority_op;
 mod extension_control_mutation_op;
@@ -1001,6 +1003,7 @@ mod protection_health_report_op;
 mod proxy_credentials;
 use guard_runtime_pyjson as pyjson;
 mod receipt_embedded_scripts;
+mod registry_trust;
 #[cfg(test)]
 mod registry_vectors_tests;
 mod release_feed_op;

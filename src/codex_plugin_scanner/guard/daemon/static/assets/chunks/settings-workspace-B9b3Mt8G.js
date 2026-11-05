@@ -6047,6 +6047,7 @@ async function follow(deps, stage, input, proof, done) {
   guard(deps);
   deps.onJob(input.job_id);
   let uncertain = false;
+  let limit = JOB_LIMIT_MS;
   try {
     deps.onState((await deps.versions(input, proof)).state);
   } catch (cause) {
@@ -6073,6 +6074,7 @@ async function follow(deps, stage, input, proof, done) {
     if (reply) {
       deps.onState(reply.state);
       const job = parseCigarVersionJob(reply.result);
+      limit = Math.max(limit, job.deadline_at_ms - job.created_at_ms + 6e4);
       if (done(job, reply.state)) {
         deps.onJob(null);
         return { job, state: reply.state };
@@ -6081,7 +6083,7 @@ async function follow(deps, stage, input, proof, done) {
         throw new CigarSetupError(stage, job.phase === "recovery_required" ? "Guard paused this step so nothing breaks. Open Updates to finish or undo it." : failedJobCopy(job.code));
       }
     }
-    if (deps.now() - started > JOB_LIMIT_MS) throw new CigarSetupError(stage, "This is taking longer than expected. Guard is still working; check Updates in a minute.");
+    if (deps.now() - started > limit) throw new CigarSetupError(stage, "This is taking longer than expected. Guard is still working; check Updates in a minute.");
     await deps.sleep(POLL_MS);
   }
 }
