@@ -59,6 +59,8 @@ from ..policy_bundle_activation import activate_with_reason, persist_activation_
 from ..policy_bundle_decisions import build_policy_bundle_decisions as _materialize_policy_bundle_decisions
 from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
+    failed_policy_bundle_acknowledgement,
+    is_failed_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
     CANONICAL_COMPILE_DOCUMENT_CODES,
@@ -987,10 +989,13 @@ def sync_receipts(
         retain_existing_policy_authority = True
     if effective_policy_bundle is None:
         if not retain_existing_policy_authority:
-            store.clear_policy_bundle_authority(
+            _clear_policy_bundle_authority_reporting_failure(
+                store,
                 now,
                 policy_bundle_last_error=activation_last_error,
                 managed_controls_publish=managed_controls_publish,
+                device_id=device_id,
+                device_name=device_name,
             )
             _reset_cloud_receipt_redaction_authority(store, synced_at=now)
     else:
@@ -1011,7 +1016,7 @@ def sync_receipts(
                 effective_policy_bundle=effective_policy_bundle,
                 validated_policy_bundle=validated_policy_bundle,
                 validated_delivery=validated_policy_bundle_delivery,
-                stored_acknowledgement=store.get_sync_payload("policy_bundle_ack"),
+                stored_acknowledgement=_stored_policy_bundle_acknowledgement(store),
                 synced_at=now,
             )
         except PolicyBundleNativeError as error:
@@ -1022,10 +1027,13 @@ def sync_receipts(
             store.add_event("policy_bundle/rejected", activation_last_error, now)
             effective_policy_bundle = None
             if not isinstance(error, PolicyBundleNativeUnavailableError) and not retain_existing_policy_authority:
-                store.clear_policy_bundle_authority(
+                _clear_policy_bundle_authority_reporting_failure(
+                    store,
                     now,
                     policy_bundle_last_error=activation_last_error,
                     managed_controls_publish=managed_controls_publish,
+                    device_id=device_id,
+                    device_name=device_name,
                 )
                 _reset_cloud_receipt_redaction_authority(store, synced_at=now)
             selected_policy_decisions = []
@@ -1818,8 +1826,14 @@ def sync_runtime_session(
     *,
     session: dict[str, object],
     auth_context: dict[str, object] | None = None,
+    catalog_failures: list[Exception] | None = None,
 ) -> dict[str, object]:
-    """Publish the active Guard runtime session so the dashboard can show the machine immediately."""
+    """Publish the active Guard runtime session so the dashboard can show the machine immediately.
+
+    A caller that passes ``catalog_failures`` takes over a failed Extension
+    catalog step: the error is appended there instead of raised, so the caller
+    can finish the rest of its sync before reporting it.
+    """
 
     resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
     sync_url = _sync.normalized_runtime_sessions_sync_url(
@@ -1882,14 +1896,26 @@ def sync_runtime_session(
         raise RuntimeError(_sync_url_error_message(error)) from error
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
-    catalog_sync = _sync_extension_catalog_from_runtime_handshake(
-        store=store,
-        guard_home=store.guard_home,
-        auth_context=resolved_auth_context,
-        runtime_sync_url=sync_url,
-        runtime_response=payload,
-        session_payload=session_payload,
-    )
+    catalog_sync: dict[str, object]
+    catalog_failed = False
+    try:
+        catalog_sync = _sync_extension_catalog_from_runtime_handshake(
+            store=store,
+            guard_home=store.guard_home,
+            auth_context=resolved_auth_context,
+            runtime_sync_url=sync_url,
+            runtime_response=payload,
+            session_payload=session_payload,
+        )
+    except Exception as error:
+        if catalog_failures is None:
+            raise
+        catalog_failures.append(error)
+        catalog_failed = True
+        catalog_sync = {
+            "extension_catalog_sync_status": "failed",
+            "extension_catalog_sync_reason": "catalog_sync_failed",
+        }
     synced_at = _sync_timestamp(payload)
     summary = runtime_session_success_summary(
         session_payload=session_payload,
@@ -1897,7 +1923,11 @@ def sync_runtime_session(
         synced_at=synced_at,
         catalog_sync=catalog_sync,
     )
-    store.set_sync_payload("runtime_session_summary", summary, synced_at)
+    if not catalog_failed:
+        # A failed catalog step returns before this write when it raises; keep
+        # the previous summary, whose policy metadata identity and credential
+        # the managed-controls view still reads, when the caller takes it over.
+        store.set_sync_payload("runtime_session_summary", summary, synced_at)
     workspace_id = store.get_cloud_workspace_id()
     device_id = store.get_or_create_installation_id()
     if not _guard_events_endpoint_unavailable_recently(store):
@@ -1969,6 +1999,10 @@ def sync_local_guard_cloud_proof(
         resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
         device_id = store.get_or_create_installation_id()
         workspace_id = store.get_cloud_workspace_id()
+        # The policy bundle arrives with the receipts sync. A failed Extension
+        # catalog step must not keep it from this device, so it is reported
+        # only after the receipts sync has delivered and acknowledged policy.
+        catalog_failures: list[Exception] = []
         runtime_summary = sync_runtime_session(
             store,
             session=_local_guard_runtime_session(
@@ -1976,6 +2010,7 @@ def sync_local_guard_cloud_proof(
                 workspace_id=workspace_id,
             ),
             auth_context=resolved_auth_context,
+            catalog_failures=catalog_failures,
         )
         receipts_summary = sync_receipts(
             store,
@@ -1988,6 +2023,8 @@ def sync_local_guard_cloud_proof(
             force_aibom=force_aibom,
             managed_controls_publish=managed_controls_publish,
         )
+        if catalog_failures:
+            raise catalog_failures[0]
         summary = dict(receipts_summary)
         summary.update(
             {
@@ -3805,6 +3842,37 @@ def _receipt_sync_cursor_rowids_from_batch(
     return [item.get("receipt_rowid") for item in receipt_batch if item.get("receipt_id") in cursor_receipt_ids]
 
 
+def _stored_policy_bundle_acknowledgement(store: GuardStore) -> object:
+    """A failed acknowledgement describes a dropped bundle; never carry it onto a new one."""
+
+    stored = store.get_sync_payload("policy_bundle_ack")
+    return None if is_failed_policy_bundle_acknowledgement(stored) else stored
+
+
+def _clear_policy_bundle_authority_reporting_failure(
+    store: GuardStore,
+    now: str,
+    *,
+    policy_bundle_last_error: dict[str, object],
+    managed_controls_publish: Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None,
+    device_id: str,
+    device_name: str,
+) -> None:
+    """Clear remote authority and leave a ``failed`` acknowledgement for Cloud."""
+
+    store.clear_policy_bundle_authority(
+        now,
+        policy_bundle_last_error=policy_bundle_last_error,
+        managed_controls_publish=managed_controls_publish,
+        policy_bundle_ack=lambda stored: failed_policy_bundle_acknowledgement(
+            stored,
+            device_id=device_id,
+            device_name=device_name,
+            failed_at=now,
+        ),
+    )
+
+
 def _validated_policy_bundle_acknowledgement(
     store: GuardStore,
     *,
@@ -3813,6 +3881,15 @@ def _validated_policy_bundle_acknowledgement(
 ) -> dict[str, object] | None:
     acknowledgement = store.get_sync_payload("policy_bundle_ack")
     if not isinstance(acknowledgement, dict):
+        return None
+    if is_failed_policy_bundle_acknowledgement(acknowledgement):
+        # Guard dropped this bundle; report that until a new one is applied.
+        if (
+            validated_synced_policy_bundle(store) is None
+            and acknowledgement.get("deviceId") == device_id
+            and _normalized_timestamp_string(acknowledgement.get("appliedAt")) is not None
+        ):
+            return acknowledgement
         return None
     if acknowledgement.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
         validated, _error = validated_policy_bundle_v2_acknowledgement(acknowledgement)
@@ -3850,8 +3927,13 @@ def _sync_context_acknowledgement(sync_context: dict[str, object]) -> dict[str, 
 
 
 def _sync_context_bundle_hash(sync_context: dict[str, object]) -> str | None:
+    """Key the acknowledgement by bundle and outcome, so dropping a bundle is reported at once."""
+
     acknowledgement = _sync_context_acknowledgement(sync_context)
-    return _optional_string(acknowledgement.get("bundleHash")) if acknowledgement is not None else None
+    bundle_hash = _optional_string(acknowledgement.get("bundleHash")) if acknowledgement is not None else None
+    if bundle_hash is not None and is_failed_policy_bundle_acknowledgement(acknowledgement):
+        return f"failed:{bundle_hash}"
+    return bundle_hash
 
 
 def _build_fleet_posture_for_sync(
