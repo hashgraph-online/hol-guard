@@ -98,41 +98,10 @@ impl Home {
         layers: &[ExtensionControlLayer],
         phase: &str,
     ) -> String {
-        self.commit_bound(revision, catalog_digest, layers, phase, None)
+        self.commit_bound(revision, catalog_digest, layers, phase, None, false)
     }
 
     pub(super) fn commit_bound(
-        &self,
-        revision: i64,
-        catalog_digest: &str,
-        layers: &[ExtensionControlLayer],
-        phase: &str,
-        retained_pack: Option<&str>,
-    ) -> String {
-        self.commit_with(
-            revision,
-            catalog_digest,
-            layers,
-            phase,
-            retained_pack,
-            false,
-        )
-    }
-
-    /// Commits `revision` as a transition that activates the command pack
-    /// `pack`, bound in both the transition and its snapshot.
-    pub(super) fn commit_activating(
-        &self,
-        revision: i64,
-        catalog_digest: &str,
-        layers: &[ExtensionControlLayer],
-        phase: &str,
-        pack: &str,
-    ) -> String {
-        self.commit_with(revision, catalog_digest, layers, phase, Some(pack), true)
-    }
-
-    fn commit_with(
         &self,
         revision: i64,
         catalog_digest: &str,
