@@ -671,6 +671,7 @@
       "src/redacted_command_tokens.rs",
       "src/restricted_command.rs",
       "src/restricted_pytest/authority.rs",
+      "src/restricted_pytest/collection_links.rs",
       "src/restricted_pytest/contained.rs",
       "src/restricted_pytest/contained_bun.rs",
       "src/restricted_pytest/credentials.rs",
