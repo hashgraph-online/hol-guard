@@ -53,7 +53,7 @@ fn a_grant_without_loopback_keeps_the_network_closed() {
 }
 
 #[test]
-fn readonly_pytest_may_listen_on_loopback_but_not_connect_out() {
+fn readonly_pytest_may_bind_loopback_but_not_listen_or_connect() {
     let workspace = std::env::temp_dir().join(format!(
         "guard-pytest-listener-{}-{}",
         std::process::id(),
@@ -73,8 +73,10 @@ fn readonly_pytest_may_listen_on_loopback_but_not_connect_out() {
         .lines()
         .filter(|line| line.contains("network"))
         .collect();
-    assert_eq!(network, PYTEST_LOOPBACK_LISTENER);
-    assert!(!pytest.contains("network-outbound"), "{pytest}");
+    assert_eq!(network, PYTEST_LOOPBACK_BIND);
+    for denied in ["network-inbound", "network-outbound"] {
+        assert!(!pytest.contains(denied), "{pytest}");
+    }
     let last = pytest.lines().last().unwrap();
     assert!(
         last.starts_with("(deny file-read* file-write* (regex"),

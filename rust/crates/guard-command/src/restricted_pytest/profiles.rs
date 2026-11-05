@@ -55,16 +55,15 @@ const READONLY: &[&str] = &[
     "python-eval-readonly-v1",
     "node-eval-readonly-v1",
 ];
-/// A read-only pytest run may open a listener on the loopback address and
-/// accept on it. `pytest-rerunfailures` binds `127.0.0.1:0` in
-/// `pytest_configure` whenever `pytest-xdist` is installed, even for a run
-/// without `-n`, and pytest stops with an internal error when the bind is
-/// refused. A listener reaches nothing: connecting out stays denied, so the
-/// run still cannot talk to a local service or any other address.
-const PYTEST_LOOPBACK_LISTENER: &[&str] = &[
-    "(allow network-bind (local ip \"localhost:*\"))",
-    "(allow network-inbound (local ip \"localhost:*\"))",
-];
+/// A read-only pytest run may bind a loopback socket, and nothing more.
+/// `pytest-rerunfailures` binds `localhost:0` in `pytest_configure` whenever
+/// `pytest-xdist` is installed, even for a run without `-n`, and pytest stops
+/// with an internal error when that bind is refused. The plugin listens from
+/// a background thread, where a refusal only warns. Seatbelt cannot name
+/// port 0, so the bind covers any loopback port. `listen`, `accept` and
+/// connecting out all stay denied: no host process can reach the socket and
+/// the run cannot reach a local service.
+const PYTEST_LOOPBACK_BIND: &[&str] = &["(allow network-bind (local ip \"localhost:*\"))"];
 const MAC_ROOTS: &[&str] = &[
     "/System",
     "/Library/Apple",
@@ -332,11 +331,7 @@ fn compose_macos_profile(
         ));
     }
     if input.profile_version == "pytest-readonly-v2" {
-        lines.extend(
-            PYTEST_LOOPBACK_LISTENER
-                .iter()
-                .map(|line| (*line).to_owned()),
-        );
+        lines.extend(PYTEST_LOOPBACK_BIND.iter().map(|line| (*line).to_owned()));
     }
     if readonly {
         lines.extend(denials(matches!(
