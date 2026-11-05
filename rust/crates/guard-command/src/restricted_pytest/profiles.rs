@@ -64,6 +64,9 @@ const READONLY: &[&str] = &[
 /// either, so the grant is safe only because a bound socket can do nothing:
 /// `listen`, receiving a datagram and connecting out all stay denied. No
 /// host process can reach the socket and the run cannot reach a service.
+/// What a bind can still do is hold a port, so a host service that starts
+/// on that port during the run gets `EADDRINUSE` until the socket closes or
+/// the run ends.
 const PYTEST_LOOPBACK_BIND: &[&str] = &["(allow network-bind (local ip \"localhost:*\"))"];
 const MAC_ROOTS: &[&str] = &[
     "/System",
