@@ -17268,7 +17268,7 @@ def test_receipt_sync_context_omits_invalid_policy_bundle_acknowledgement(
     assert "policyBundleAcknowledgement" not in context
 
 
-def test_receipt_sync_context_omits_acknowledgement_for_untrusted_cached_bundle(tmp_path: Path) -> None:
+def test_receipt_sync_context_reports_untrusted_cached_bundle_as_failed(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _cache_signed_test_policy_bundle(store, [])
     policy_bundle = store.get_sync_payload("policy_bundle")
@@ -17303,7 +17303,10 @@ def test_receipt_sync_context_omits_acknowledgement_for_untrusted_cached_bundle(
         local_guard_online_at="2026-04-19T00:01:00+00:00",
     )
 
-    assert "policyBundleAcknowledgement" not in context
+    reported = context["policyBundleAcknowledgement"]
+    assert reported["status"] == "failed"
+    assert reported["bundleHash"] == policy_bundle["bundleHash"]
+    assert reported["bundleVersion"] == policy_bundle["bundleVersion"]
 
 
 def test_policy_bundle_validation_rejects_missing_rules_field():
