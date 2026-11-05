@@ -282,6 +282,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-windows-process-command-lines-v1",
     "native-onefile-extraction-reclaim-v1",
     "native-policy-effective-v1",
+    "native-policy-effective-publish-v1",
     "native-policy-file-io-v1",
     "native-hook-removal-sweep-v1",
     "native-harness-version-compatibility-v1",

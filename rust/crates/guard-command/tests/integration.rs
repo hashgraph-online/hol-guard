@@ -45,6 +45,7 @@ pub mod guard_protection_health_parity;
 pub mod guard_protection_health_truth_table;
 pub mod guard_trust_attestation_verify_parity;
 pub mod guard_trust_claim_parity;
+pub mod hook_agent_intent_redaction;
 pub mod hook_fail_closed_envelopes;
 pub mod inline_expression_boundaries;
 pub mod js_semver_vectors;

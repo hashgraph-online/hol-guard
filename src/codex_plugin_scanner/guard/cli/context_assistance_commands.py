@@ -26,6 +26,9 @@ def configure_context_parser(subparsers: argparse._SubParsersAction[argparse.Arg
         action.set_defaults(context_kind=kind)
         action.add_argument("--guard-home", default=argparse.SUPPRESS)
         action.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    from .context_usage_commands import configure as configure_usage
+
+    configure_usage(actions)
 
     lean = actions.add_parser(
         "lean", help="Have Codex sum up older turns sooner, so long sessions stay small (on, off or status)"
@@ -52,6 +55,10 @@ def run_context_command(
     output = output_stream if output_stream is not None else sys.stdout
     if args.context_kind == "lean":
         return _run_lean(args, output)
+    if args.context_kind == "usage":
+        from .context_usage_commands import run
+
+        return run(args, output)
     try:
         home = resolve_guard_home(args.guard_home)
         if args.context_kind == "versions":
