@@ -16,7 +16,7 @@ import os
 import select
 import sys
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
@@ -94,6 +94,30 @@ def terminal_status_fd(env: Mapping[str, str] | None = None) -> int | None:
 def _write(descriptor: int, text: str) -> None:
     with contextlib.suppress(OSError):
         os.write(descriptor, text.encode("utf-8"))
+
+
+@contextlib.contextmanager
+def _stderr_on_terminal(descriptor: int) -> Iterator[None]:
+    """Send this process's stderr to the shim's terminal while the approval is recorded.
+
+    The shim captures Guard's stderr and prints it only after Guard exits, but the
+    approval gate's authenticator prompt goes straight to the terminal. Its
+    "waiting for your authenticator code" line therefore appeared after the code was
+    accepted and the install had started. Writing stderr to the shim's terminal for
+    the length of the approval keeps the gate's messages in order with its prompt.
+    """
+
+    try:
+        stream = os.fdopen(os.dup(descriptor), "w", encoding="utf-8", errors="replace", buffering=1)
+    except OSError:
+        yield
+        return
+    try:
+        with contextlib.redirect_stderr(stream):
+            yield
+    finally:
+        with contextlib.suppress(OSError):
+            stream.close()
 
 
 def _read_answer(
@@ -215,7 +239,8 @@ def inline_package_approval(
         _write(descriptor, "Kept blocked.\n")
         return _kept_blocked(request_id)
     label, remember = choice
-    result = _approve(request_id, remember=remember, store=store, workspace=workspace)
+    with _stderr_on_terminal(descriptor):
+        result = _approve(request_id, remember=remember, store=store, workspace=workspace)
     if result.get("resolved") is not True:
         current = store.get_approval_request(request_id)
         if isinstance(current, Mapping) and str(current.get("status") or "") == "resolved":
