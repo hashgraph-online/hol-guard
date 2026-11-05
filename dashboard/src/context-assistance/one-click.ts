@@ -215,19 +215,19 @@ async function follow(
     uncertain = true;
   }
   const started = deps.now();
-  let quietSince: number | null = null;
+  // Silence counts from Guard's last answer, so a slow failing poll cannot stretch it.
+  let heard = started;
   for (;;) {
     guard(deps);
     let reply: CigarVersionsReply | null = null;
     try {
       reply = await deps.versions({ action: "job", job_id: input.job_id });
-      quietSince = null;
+      heard = deps.now();
       uncertain = false;
     } catch (cause) {
       const retry = transient(cause) || (uncertain && missingJob(cause));
       if (!retry) failure(stage, cause);
-      quietSince ??= deps.now();
-      if (deps.now() - quietSince > QUIET_LIMIT_MS) {
+      if (deps.now() - heard > QUIET_LIMIT_MS) {
         throw new CigarSetupError(stage, "Guard did not confirm this step. Check Updates before trying again.");
       }
     }

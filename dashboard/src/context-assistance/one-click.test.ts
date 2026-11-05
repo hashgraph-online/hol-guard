@@ -143,7 +143,7 @@ assert.ok(heldPaused?.kind === "blocked" && heldPaused.block.title === "An earli
 
 // Running: a fake Guard that answers each step the way the daemon does.
 type Script = { calls: string[]; stages: CigarSetupStage[]; jobs: (string | null)[]; saved: GuardContextAssistanceConfig[] };
-function fakeGuard(options: { submitError?: Record<string, unknown>; failPhase?: string; failCode?: string; busyPolls?: number; neverReady?: boolean;
+function fakeGuard(options: { submitError?: Record<string, unknown>; failPhase?: string; failCode?: string; busyPolls?: number; slowPollMs?: number; neverReady?: boolean;
   stopAt?: string; initial?: ContextAssistanceStatus } = {}) {
   const script: Script = { calls: [], stages: [], jobs: [], saved: [] };
   let state: ContextAssistanceStatus = options.initial ?? off, clock = 0, stopped = false, busy = options.busyPolls ?? 0;
@@ -161,7 +161,7 @@ function fakeGuard(options: { submitError?: Record<string, unknown>; failPhase?:
         if (error) throw error;
         return reply();
       }
-      if (busy > 0) { busy -= 1; throw new TypeError("Failed to fetch"); }
+      if (busy > 0) { busy -= 1; clock += options.slowPollMs ?? 0; throw new TypeError("Failed to fetch"); }
       const sent = submitted.get(input.job_id)!;
       if (options.failPhase && sent.action === "install") {
         return reply({ ...base, schema: "guard-cigar-install-job.v1", operation: "install", job_id: input.job_id, phase: options.failPhase,
@@ -278,6 +278,12 @@ const plan = install;
   const { deps, script } = fakeGuard({ busyPolls: 1_000 });
   await assert.rejects(runCigarSetup(plan, off, deps), /did not confirm/);
   assert.ok(script.calls.filter((call) => call === "job").length < 45, "a Guard that stays silent ends the wait after about 30 seconds");
+}
+{
+  // Each poll here takes 12 seconds to time out; the 30-second limit still counts from Guard's last answer.
+  const { deps, script } = fakeGuard({ busyPolls: 1_000, slowPollMs: 12_000 });
+  await assert.rejects(runCigarSetup(plan, off, deps), /did not confirm/);
+  assert.equal(script.calls.filter((call) => call === "job").length, 3, "slow failing polls do not stretch the silence limit");
 }
 {
   const { deps } = fakeGuard({ failPhase: "recovery_required" });

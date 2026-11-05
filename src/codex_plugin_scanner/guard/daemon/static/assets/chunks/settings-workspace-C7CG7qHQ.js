@@ -6055,19 +6055,18 @@ async function follow(deps, stage, input, proof, done) {
     uncertain = true;
   }
   const started = deps.now();
-  let quietSince = null;
+  let heard = started;
   for (; ; ) {
     guard(deps);
     let reply = null;
     try {
       reply = await deps.versions({ action: "job", job_id: input.job_id });
-      quietSince = null;
+      heard = deps.now();
       uncertain = false;
     } catch (cause) {
       const retry = transient(cause) || uncertain && missingJob(cause);
       if (!retry) failure$1(stage, cause);
-      quietSince ??= deps.now();
-      if (deps.now() - quietSince > QUIET_LIMIT_MS) {
+      if (deps.now() - heard > QUIET_LIMIT_MS) {
         throw new CigarSetupError(stage, "Guard did not confirm this step. Check Updates before trying again.");
       }
     }
