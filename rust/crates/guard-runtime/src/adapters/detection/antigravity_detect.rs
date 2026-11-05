@@ -328,8 +328,10 @@ mod tests {
         }
         #[cfg(not(unix))]
         {
-            let _ = (left, right);
-            false
+            match (std::fs::canonicalize(left), std::fs::canonicalize(right)) {
+                (Ok(l), Ok(r)) => l == r,
+                _ => false,
+            }
         }
     }
 
