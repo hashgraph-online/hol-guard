@@ -263,6 +263,8 @@ fn collection_walks_a_skipped_directory_the_command_names() {
         "-m",
         "pytest",
         "-q",
+        "--ignore",
+        "dist",
         "build/tests::test_x",
         "../outside",
     ]

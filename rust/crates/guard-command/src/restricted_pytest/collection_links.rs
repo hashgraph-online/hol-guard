@@ -15,6 +15,20 @@ const COLLECTION_SKIPPED_DIRECTORIES: &[&str] = &[
 /// At most this many directory entries are examined across the whole walk.
 const COLLECTION_ENTRY_BUDGET: usize = 20_000;
 const COLLECTION_DEPTH_LIMIT: usize = 16;
+/// Options whose next argument is their value (`python -m` included).
+const OPTIONS_WITH_VALUES: &[&str] = &[
+    "--basetemp",
+    "--confcutdir",
+    "--deselect",
+    "--ignore",
+    "--ignore-glob",
+    "--rootdir",
+    "-c",
+    "-k",
+    "-m",
+    "-o",
+    "-p",
+];
 
 fn collection_skips(name: &str) -> bool {
     name.starts_with('.')
@@ -36,16 +50,24 @@ pub(super) fn collection_link_metadata(
 
 /// A directory named on the command line is collected even when its name is
 /// one pytest skips by default (`pytest build/tests`), so each argument that
-/// resolves to a directory inside the workspace is walked as a root too.
+/// resolves to a directory inside the workspace is walked as a root too. The
+/// value of an option such as `--ignore build` is not a collection path.
 fn selected_directories(input: &Input) -> Vec<PathBuf> {
     let Ok(workspace) = input.workspace.canonicalize() else {
         return vec![];
     };
+    let mut option_value = false;
     input
         .command
         .iter()
         .skip(1)
-        .filter(|argument| !argument.starts_with('-'))
+        .filter(|argument| {
+            let value = std::mem::replace(
+                &mut option_value,
+                OPTIONS_WITH_VALUES.contains(&argument.as_str()),
+            );
+            !value && !argument.starts_with('-')
+        })
         .filter_map(|argument| {
             let path = argument.split("::").next().unwrap_or(argument);
             input.cwd.join(path).canonicalize().ok()
