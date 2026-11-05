@@ -172,18 +172,29 @@ fn an_allowed_git_extension_reaches_the_shapes_it_has_no_rule_for() {
     assert!(failures.is_empty(), "{failures:#?}");
 }
 
+/// The shapes above that Guard does not prove on its own. Most unmodelled Git
+/// reads already carry a native benign proof, so they allow whatever the user
+/// answered; the rest are the ones the Allow has to reach, and they are what
+/// the scope tests below measure.
+fn shapes_that_need_the_allow(root: &Path) -> Vec<&'static str> {
+    let defaults = fixture::github_controls("default");
+    UNMODELLED
+        .iter()
+        .copied()
+        .filter(|command| decide(root, "omp", command, &defaults).decision != "allow")
+        .collect()
+}
+
 /// Without the Allow these shapes are not proven read-only on their own, so
 /// they wait for the user exactly as they did before. At least one must, or
 /// the test above proves nothing.
 #[test]
 fn the_same_shapes_wait_without_an_allow() {
     let (root, _cleanup) = checkout("default");
-    let controls = fixture::github_controls("default");
-    let waited = UNMODELLED
-        .iter()
-        .filter(|command| decide(&root, "omp", command, &controls).decision != "allow")
-        .count();
-    assert!(waited > 0, "no unmodelled shape waits without an Allow");
+    assert!(
+        !shapes_that_need_the_allow(&root).is_empty(),
+        "no unmodelled shape waits without an Allow"
+    );
 }
 
 /// Allowing part of Git is not allowing Git. A user who left one permission
@@ -194,15 +205,18 @@ fn a_partial_allow_does_not_reach_the_unmodelled_shapes() {
     let (root, _cleanup) = checkout("partial");
     let partial = git_allow(Some(WITHHELD));
     let full = git_allow(None);
+    let mut measured = 0;
     let mut reached = Vec::new();
-    for command in UNMODELLED {
+    for command in shapes_that_need_the_allow(&root) {
         if decide(&root, "omp", command, &full).decision != "allow" {
             continue;
         }
+        measured += 1;
         let result = decide(&root, "omp", command, &partial);
         if result.decision == "allow" {
             reached.push(format!("{command}: {}", result.reason_code));
         }
     }
     assert!(reached.is_empty(), "{reached:#?}");
+    assert!(measured > 0, "the full Allow reaches no shape to scope");
 }

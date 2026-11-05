@@ -297,3 +297,13 @@ mod tests {
         }
     }
 }
+
+/// Whether `segment` leaves what a later step runs as Guard read it.
+///
+/// A Git step that rewrites tracked files can replace the program, the
+/// configuration or the bind-mounted file a later step starts, so coverage
+/// that reads a whole extension as allowed stops at it. A step outside Git is
+/// answered by the caller's own proof rather than here.
+pub(crate) fn step_preserves_later_programs(segment: &crate::CommandSegmentV1) -> bool {
+    !git_segment(segment) || preserves_tree(&segment.arguments)
+}

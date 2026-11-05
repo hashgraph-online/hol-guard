@@ -466,11 +466,6 @@ impl CompiledNativeCommandControls {
         // GitHub permission-only owners run last so they never hide an
         // ungranted rule.
         covered.extend(self.github_granted_segments(permission_observations));
-        // An extension whose every permission the user explicitly enabled
-        // covers the programs it watches, including the spellings no rule
-        // models. It runs after the loop above so it never hides a rule the
-        // user left off.
-        covered.extend(self.fully_allowed_extension_segments(command));
         // A `cd` into the checkout a `git worktree add` of this command
         // creates, and the `head`/`tail`/`wc` stages after it, are covered
         // when the Git and GitHub steps after it are.
@@ -483,6 +478,11 @@ impl CompiledNativeCommandControls {
         covered.extend(crate::pretool::git_reads_after_allowed_steps(
             command, context, &benign, &covered,
         ));
+        // An extension whose every permission the user explicitly enabled
+        // covers the programs it watches, including the spellings no rule
+        // models. It runs last so it never hides a rule the user left off and
+        // never changes what the proofs above read.
+        covered.extend(self.fully_allowed_extension_segments(command, &benign));
         // Delegated package-firewall ownership is not execution consent. Only
         // verified rule observations or the native benign proof can cover a
         // segment; an extra unclassified command retains its own review.
@@ -502,11 +502,20 @@ impl CompiledNativeCommandControls {
     ///
     /// Only an extension whose every declared permission the user explicitly
     /// enabled counts, so a partial Allow still covers exactly its own rules.
+    /// The walk also stops at the first step that is neither proven benign nor
+    /// a Git step that rewrites no tracked file, because a checkout or reset
+    /// can replace the program, configuration or bind-mounted file a later
+    /// step runs; segments after such a step keep the review they had.
+    ///
     /// This widens coverage, not the floors around it: `fixed_command_floor`,
     /// `protected_checkout_destination`, the caller's bounded and
     /// sensitive-target checks and every floor Rust raises after the controls
     /// run all keep their answer.
-    fn fully_allowed_extension_segments(&self, command: &CanonicalCommandV1) -> BTreeSet<usize> {
+    fn fully_allowed_extension_segments(
+        &self,
+        command: &CanonicalCommandV1,
+        benign: &BTreeSet<usize>,
+    ) -> BTreeSet<usize> {
         let watched: BTreeSet<String> = self
             .program
             .extensions
@@ -523,27 +532,34 @@ impl CompiledNativeCommandControls {
         if watched.is_empty() {
             return BTreeSet::new();
         }
-        command
-            .segments
-            .iter()
-            .enumerate()
-            .filter(|(_, segment)| {
-                segment.executable.as_deref().is_some_and(|executable| {
-                    watched.contains(
-                        &crate::command_ascii_comparison::lowercase_for_ascii_comparison(
-                            crate::native_command_program::basename(executable),
-                        ),
-                    )
-                })
-            })
-            .map(|(index, _)| index)
-            .collect()
+        let mut covered = BTreeSet::new();
+        for (index, segment) in command.segments.iter().enumerate() {
+            let watches_this_segment = segment.executable.as_deref().is_some_and(|executable| {
+                watched.contains(
+                    &crate::command_ascii_comparison::lowercase_for_ascii_comparison(
+                        crate::native_command_program::basename(executable),
+                    ),
+                )
+            });
+            if watches_this_segment {
+                covered.insert(index);
+            }
+            if !benign.contains(&index) && !crate::pretool::step_preserves_later_programs(segment) {
+                break;
+            }
+        }
+        covered
     }
 
     /// Whether the user explicitly enabled every permission `extension`
     /// declares that they can turn on, with none of them blocked and the
     /// extension itself active. An extension that declares no such permission
     /// is left out rather than read as allowed by default.
+    ///
+    /// An extension that delegates its protection to the package firewall is
+    /// left out entirely. Its one permission names who owns the decision, not
+    /// consent to run whatever code an install or a task script fetches, so
+    /// turning it on never covers `npm`, `pip`, `cargo` or their siblings.
     ///
     /// A permission the user cannot configure is not read as missing consent,
     /// because no answer of theirs could supply it. Its protection is kept
@@ -557,6 +573,7 @@ impl CompiledNativeCommandControls {
             .filter(|permission| permission.configurable)
             .peekable();
         configurable.peek().is_some()
+            && extension.delegated_protection.is_none()
             && self.active_extensions.contains(&extension.extension_id)
             && !self.blocked_extensions.contains(&extension.extension_id)
             && configurable.all(|permission| {
