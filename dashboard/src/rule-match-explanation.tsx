@@ -12,9 +12,8 @@ import type {
  * Coverage lists the rules that matched, not the one that paused the command:
  * a rule whose permission is already allowed, or one a safe variant covers,
  * can still be listed. So every line says "matched", never "paused because".
- * A rule the matcher could only flag as uncertain is named as something Guard
- * could not rule out, never described as what the step does. Nothing here
- * reads the command text: the step and its executable come from Core.
+ * Nothing here reads the command text: the step and its executable come from
+ * Core.
  */
 export type RuleMatchLine = {
   readonly key: string;
@@ -51,15 +50,6 @@ function ruleLine(segment: GuardCoveredSegment, rule: GuardCoveredRule, showStep
   }
   const key = `${segment.index}:${rule.rule_id}`;
   const step = showStep ? coverageStepLabel(segment) : segment.executable;
-  if (rule.uncertain === true) {
-    const subject = title !== null ? `“${title}”` : `a rule that looks for this: ${description}`;
-    return {
-      key,
-      step,
-      text: `Guard could not fully read this part, so it could not rule out ${subject}.`,
-      safer: null,
-    };
-  }
   const named = title !== null ? `Matched the rule “${title}”.` : "Matched a Guard rule.";
   const text = description !== null ? `${named} ${description}` : named;
   const safer = rule.safer_alternatives?.[0] ?? null;

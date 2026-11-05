@@ -92,10 +92,8 @@ fn covered_segment(segment: &Value, catalog: &CommandCatalog) -> Option<Value> {
         .into_iter()
         .filter(|permission_id| !handed_off.contains(permission_id))
         .collect();
-    let uncertain: HashSet<&str> = ids(segment, "uncertain_rule_ids").into_iter().collect();
     // The rule's own catalog text, so the card can say what matched in the
-    // catalog's words. `uncertain` marks a rule the matcher could not rule in
-    // or out for this step: the card must not describe it as what the step does.
+    // catalog's words.
     let rules: Vec<Value> = rule_ids
         .iter()
         .filter_map(|rule_id| {
@@ -112,7 +110,6 @@ fn covered_segment(segment: &Value, catalog: &CommandCatalog) -> Option<Value> {
                     "severity": rule.severity,
                     "description": bounded(&rule.description, MAX_TEXT_CHARS),
                     "safer_alternatives": safer,
-                    "uncertain": uncertain.contains(rule_id),
                 })
             })
         })

@@ -23,11 +23,6 @@ export type GuardCoveredRule = {
   readonly description?: string | null;
   /** At most two catalog safer alternatives, from a daemon that sends them. */
   readonly safer_alternatives?: readonly string[];
-  /**
-   * True when the matcher could not read this step well enough to rule the
-   * rule in or out. The card must not describe such a rule as what the step does.
-   */
-  readonly uncertain?: boolean;
 };
 
 export type GuardCoveredPermission = {

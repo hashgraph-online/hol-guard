@@ -108,7 +108,6 @@ fn every_step_is_labelled_from_the_catalog() {
                             .filter_map(|text| bounded(text, MAX_TEXT_CHARS))
                             .take(MAX_SAFER_ALTERNATIVES)
                             .collect::<Vec<_>>(),
-                        "uncertain": false,
                     }],
                     "permissions": [],
                 },
@@ -267,17 +266,4 @@ fn a_matched_rule_carries_its_catalog_text() {
     assert!(safer.iter().all(|text| text
         .as_str()
         .is_some_and(|text| text.chars().count() <= MAX_TEXT_CHARS)));
-    assert_eq!(entry["uncertain"], json!(false));
-}
-
-#[test]
-fn an_uncertain_rule_is_marked_for_the_card() {
-    let catalog = catalog();
-    let mut step = git(0);
-    step["uncertain_rule_ids"] = json!([RESET_RULE]);
-    let coverage = coverage(&hint(vec![step], Some(1)), &catalog).expect("coverage");
-    assert_eq!(
-        coverage["segments"][0]["rules"][0]["uncertain"],
-        json!(true)
-    );
 }

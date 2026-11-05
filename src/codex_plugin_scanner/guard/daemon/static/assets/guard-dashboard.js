@@ -16332,10 +16332,6 @@ function normalizeRule(raw) {
     if (safer.some((item) => item === null)) return null;
     rule2.safer_alternatives = safer.slice(0, MAX_SAFER_ALTERNATIVES);
   }
-  if (raw.uncertain !== void 0) {
-    if (typeof raw.uncertain !== "boolean") return null;
-    rule2.uncertain = raw.uncertain;
-  }
   return rule2;
 }
 function normalizePermission$1(raw) {
@@ -31654,15 +31650,6 @@ function ruleLine(segment, rule2, showStep) {
   }
   const key = `${segment.index}:${rule2.rule_id}`;
   const step = showStep ? coverageStepLabel(segment) : segment.executable;
-  if (rule2.uncertain === true) {
-    const subject = title !== null ? `“${title}”` : `a rule that looks for this: ${description}`;
-    return {
-      key,
-      step,
-      text: `Guard could not fully read this part, so it could not rule out ${subject}.`,
-      safer: null
-    };
-  }
   const named = title !== null ? `Matched the rule “${title}”.` : "Matched a Guard rule.";
   const text2 = description !== null ? `${named} ${description}` : named;
   const safer = rule2.safer_alternatives?.[0] ?? null;

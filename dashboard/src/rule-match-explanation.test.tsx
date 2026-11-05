@@ -21,7 +21,6 @@ function rule(overrides: Record<string, unknown> = {}): Record<string, unknown> 
     severity: "high",
     description: "Discards uncommitted changes in the working tree.",
     safer_alternatives: ["Stash the changes first with git stash.", "Use git restore on named files."],
-    uncertain: false,
     ...overrides,
   };
 }
@@ -60,17 +59,6 @@ function coverage(
   assert(!lines[0].text.includes("because"), "a match is never called the cause");
 }
 
-// An uncertain rule is something Guard could not rule out, never what the step does.
-{
-  const lines = ruleMatchLines(coverage([rule({ uncertain: true })]));
-  assert(
-    lines[0].text === "Guard could not fully read this part, so it could not rule out “Git hard reset”.",
-    `uncertain wording: ${lines[0].text}`,
-  );
-  assert(!lines[0].text.includes("Discards"), "an uncertain rule is not described as what the step does");
-  assert(lines[0].safer === null, "no safer alternative for a rule that may not apply");
-}
-
 // A rule without a title is named by its description.
 {
   const normalized = coverage([rule({ title: null })]);
@@ -80,7 +68,10 @@ function coverage(
     "a title-less rule uses its description",
   );
   assert(segmentDetail(normalized!.segments[0]) === null, "the setup card skips a missing title");
+  assert(!ruleMatchLines(normalized)[0].text.includes(".."), "no doubled full stop after a description");
 }
+// A rule with neither title nor description has nothing to say.
+assert(ruleMatchLines(coverage([rule({ title: null, description: null })])).length === 0, "an empty rule is skipped");
 
 // A compound command labels each step.
 {
@@ -97,7 +88,6 @@ function coverage(
 
 // New fields with the wrong type are not the payload the daemon builds.
 assert(coverage([rule({ description: 42 })]) === null, "a non-string description drops the card");
-assert(coverage([rule({ uncertain: "yes" })]) === null, "a non-boolean uncertain drops the card");
 assert(coverage([rule({ safer_alternatives: "stash" })]) === null, "non-list safer alternatives drop the card");
 assert(coverage([rule({ safer_alternatives: ["ok", 7] })]) === null, "a non-string safer alternative drops the card");
 assert(coverage([rule({ title: 7 })]) === null, "a non-string title drops the card");

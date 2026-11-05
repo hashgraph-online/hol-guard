@@ -63,10 +63,6 @@ function normalizeRule(raw: unknown): GuardCoveredRule | null {
     if (safer.some((item) => item === null)) return null;
     rule.safer_alternatives = (safer as string[]).slice(0, MAX_SAFER_ALTERNATIVES);
   }
-  if (raw.uncertain !== undefined) {
-    if (typeof raw.uncertain !== "boolean") return null;
-    rule.uncertain = raw.uncertain;
-  }
   return rule;
 }
 
