@@ -17,7 +17,7 @@ fn key_hex() -> String {
     hex::encode(KEY)
 }
 
-fn seal(purpose: &str, payload: Value) -> Value {
+pub(in super::super) fn seal(purpose: &str, payload: Value) -> Value {
     crate::pack_lifecycle::evaluate(&json!({
         "kind": "record", "operation": "seal", "purpose": purpose,
         "key": key_hex(), "payload": payload,
@@ -26,7 +26,7 @@ fn seal(purpose: &str, payload: Value) -> Value {
 }
 
 /// A protected lifecycle floor enrolled for one installed release.
-fn floor(version: &str) -> String {
+pub(in super::super) fn floor(version: &str) -> String {
     let publication = serde_json::to_string(&json!({"authority_epoch": 3,
         "engine": "a".repeat(64), "source_sha": SOURCE,
         "policy": {"revocations": {"epoch": 2, "revoked": []}}}))
@@ -42,7 +42,7 @@ fn reference() -> Value {
     json!({"sha256": "a".repeat(64), "length": 10, "expanded_length": 10, "kind": "data"})
 }
 
-fn activation() -> Value {
+pub(in super::super) fn activation() -> Value {
     json!({
         "schema": "guard.command-pack-activation.v2", "revision": 1, "previous_digest": null,
         "program_digest": "1".repeat(64), "catalog_digest": catalog('a'),
@@ -54,27 +54,8 @@ fn activation() -> Value {
     })
 }
 
-struct Pack {
-    home: Home,
-    digest: String,
-    before: String,
-    after: String,
-}
-
-/// Revision 1 committed over a retained baseline, and revision 2 prepared to
-/// activate a pending command pack reserved for it.
-fn pack() -> Pack {
-    let home = with_cloud_events(Home::new());
-    home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
-    let record = seal("activation", activation());
-    let digest = record["digest"].as_str().unwrap().to_owned();
-    home.commit_activating(
-        2,
-        &catalog('a'),
-        &[local(&catalog('a'))],
-        "prepared",
-        &digest,
-    );
+/// The pack tables of a schema-v6 store, over a retained legacy baseline.
+pub(in super::super) fn pack_tables(home: &Home) {
     let checksum = hex::encode(Sha256::digest(
         b"hol-guard.extension-control-authority.schema.v6",
     ));
@@ -113,6 +94,30 @@ fn pack() -> Pack {
             ],
         )
         .unwrap();
+}
+
+struct Pack {
+    home: Home,
+    digest: String,
+    before: String,
+    after: String,
+}
+
+/// Revision 1 committed over a retained baseline, and revision 2 prepared to
+/// activate a pending command pack reserved for it.
+fn pack() -> Pack {
+    let home = with_cloud_events(Home::new());
+    home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    let record = seal("activation", activation());
+    let digest = record["digest"].as_str().unwrap().to_owned();
+    home.commit_activating(
+        2,
+        &catalog('a'),
+        &[local(&catalog('a'))],
+        "prepared",
+        &digest,
+    );
+    pack_tables(&home);
     let (before, after) = (floor("3.55.1"), floor("3.56.0"));
     let snapshot: String = home
         .db

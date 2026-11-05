@@ -30,6 +30,7 @@ mod managed_seals_tests;
 mod managed_tests;
 mod migrate;
 mod pack_finish;
+mod pack_reserve;
 mod plans;
 #[cfg(test)]
 mod plans_tests;

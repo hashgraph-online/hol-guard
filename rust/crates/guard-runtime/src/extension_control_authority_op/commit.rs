@@ -7,8 +7,8 @@
 //! The plan is taken inside the transaction that writes it, so no other
 //! writer can take the revision in between. Any verdict but `prepare` comes
 //! back as `commit_plan` answers it, with nothing written. A commit that
-//! activates a command pack is prepared by the caller, which reserves the pack
-//! activation in the same transaction as the row.
+//! activates a command pack reserves the staged activation in the same
+//! transaction as the row.
 
 use std::cell::RefCell;
 
@@ -191,7 +191,8 @@ impl Ctx<'_> {
             .commit
             .as_ref()
             .ok_or_else(|| tampered("invalid extension control commit request"))?;
-        if reply["plan"]["outcome"] != "prepare" || commit.pack_record_digest.is_some() {
+        let unreserved = commit.pack_record_digest.is_some() && self.request.pack_reserve.is_none();
+        if reply["plan"]["outcome"] != "prepare" || unreserved {
             return Ok(reply);
         }
         let plan = &reply["plan"];
@@ -238,6 +239,14 @@ impl Ctx<'_> {
                 ],
             )
             .map_err(store_fault)?;
+        if let Some(expected) = &commit.pack_record_digest {
+            self.reserve_pack(
+                expected,
+                revision,
+                text(&snapshot["digest"])?,
+                self.catalog_digest()?,
+            )?;
+        }
         reply["plan"]["prepared"] = json!(true);
         Ok(reply)
     }

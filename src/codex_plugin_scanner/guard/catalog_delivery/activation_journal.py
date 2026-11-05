@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 
 from ..native_command_control_authority_io import require_exclusive_command_control_mutation_lease
@@ -27,6 +28,48 @@ def _exists(connection):
         ).fetchone()
         is not None
     )
+
+
+def reserve_request(store, connection, draft, *, recorded_at, now=None):
+    """The ``pack_reserve`` the resident checks ``draft`` against and reserves.
+
+    The legacy baseline is retained and the schema marker upgraded here; the
+    resident authenticates the draft and checks it against the protected
+    floor, the active security scope and the active slot it extends.
+    """
+    require_exclusive_command_control_mutation_lease(store.guard_home)
+    if type(draft) is not ActivationDraft or draft.directory != directory_for_store(store):
+        raise NativePolicySnapshotError("native_command_pack_draft_invalid")
+    key = _key(store)
+    if draft.previous_digest is None:
+        if draft.baseline_metadata is None:
+            raise NativePolicySnapshotError("native_command_pack_baseline_missing")
+        activation_baseline.reserve_legacy_baseline(
+            store, connection, draft.baseline_metadata, key=key, recorded_at=recorded_at
+        )
+    try:
+        format_v2 = json.loads(draft.data).get("schema") == SCHEMA_V2
+    except (AttributeError, ValueError):
+        raise NativePolicySnapshotError("native_command_pack_draft_invalid") from None
+    from ..native_store_policy import encode_key
+    from ..store_extension_control_authority_schema import ensure_extension_control_authority_schema
+    from .active_security import read as read_security
+
+    ensure_extension_control_authority_schema(connection, activate_packs=True, activation_format_v2=format_v2)
+    fields = {
+        "key_b64": encode_key(key),
+        "floor": lifecycle_store.read(store),
+        "security": read_security(store),
+        "record_json": draft.data,
+        "record_digest": draft.digest,
+        "record_mac": draft.mac,
+        "previous_digest": draft.previous_digest,
+        "lifecycle_before": draft.lifecycle_before,
+        "lifecycle_after": draft.lifecycle_after,
+        "security_digest": draft.security_digest,
+        "admitted_at": int(time.time()) if now is None else now,
+    }
+    return {name: value for name, value in fields.items() if value is not None}
 
 
 @lifecycle.one_runtime
