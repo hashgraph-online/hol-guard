@@ -12,6 +12,9 @@ use super::PathContext;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 use std::path::{Path, PathBuf};
 
+#[path = "workspace_contained_sibling_list.rs"]
+mod list;
+
 /// The sibling repository root that confines the run, and the commands to
 /// check there: the rest after a `cd <root>` list, or `None` when the whole
 /// text runs from the root as issued, `cd` included.
@@ -164,7 +167,7 @@ fn sibling_cd_root(model: &CanonicalCommandV1, context: PathContext<'_>) -> Opti
     } else {
         match super::super::contained_wrapper::contained_core(model, context) {
             Some(core) => core,
-            None => joined_core(model, context)?,
+            None => list::joined_core(model, context)?,
         }
     };
     let trees = readable_trees(&root);
@@ -175,41 +178,6 @@ fn sibling_cd_root(model: &CanonicalCommandV1, context: PathContext<'_>) -> Opti
                 && (!sequenced || names_readable(segment, &root, &trees))
         })
         .then_some(root)
-}
-
-/// The commands after `cd <dir below a sibling root> &&`, when two or more
-/// of them follow and the sink rejoins the list whole rather than peeling one
-/// core out of it.
-///
-/// `contained_core` peels a single core, so a list of runs below a root --
-/// a checkout's own test files run one after another -- had no core and went
-/// to review, while the same list after a `cd` to the root itself ran. The
-/// sink rejoins both, and the edge roots the sandbox at the repository for
-/// either, so the grammar is the one `sibling_list` already reads.
-fn joined_core(model: &CanonicalCommandV1, context: PathContext<'_>) -> Option<CanonicalCommandV1> {
-    let commands = model
-        .segments
-        .iter()
-        .filter(|segment| segment.pipeline_index == 0)
-        .count();
-    if model.confidence != "exact"
-        || model.path_overridden
-        || !model.wrapper_chain.is_empty()
-        || commands < 3
-        || !joined_filters(model, context)
-    {
-        return None;
-    }
-    let mut rest = model.clone();
-    rest.segments.remove(0);
-    if rest
-        .segments
-        .iter()
-        .any(|segment| segment.executable.as_deref() == Some("cd"))
-    {
-        return None;
-    }
-    Some(rest)
 }
 
 /// The one plain command after `cd <dir>;`, with no other list, pipe or

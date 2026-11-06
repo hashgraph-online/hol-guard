@@ -12,8 +12,14 @@ use super::{contained, fixture, host, reason, worktree_packages};
 #[test]
 fn a_list_of_runs_below_a_sibling_root_stays_contained() {
     let (home, main, tree) = fixture();
+    let projects = main.parent().unwrap().to_path_buf();
     worktree_packages(&main, &tree);
     for command in [
+        format!("cd {0}/scripts && ./report.sh && ls", tree.display()),
+        format!(
+            "cd {0}/app-report/scripts && node report.mjs && cat out.md",
+            projects.display()
+        ),
         format!(
             "cd {0}/scripts && ./report.sh && ./report.sh",
             tree.display()
@@ -42,8 +48,9 @@ fn a_list_of_runs_below_a_sibling_root_stays_contained() {
 ///
 /// A stage that is not a bound applies to the one run it follows while the
 /// rest of the list still runs, so it is not the work the proof screened. A
-/// run naming a path outside the trees the sandbox mounts, or a second `cd`
-/// moving the rest of the list somewhere else, keeps its review too.
+/// run naming a path outside the trees the sandbox mounts, a redirection the
+/// sink hands no shell, or a second `cd` moving the rest of the list
+/// somewhere else, keeps its review too.
 #[test]
 fn a_list_outside_that_grammar_keeps_its_review() {
     let (home, main, tree) = fixture();
@@ -58,6 +65,14 @@ fn a_list_outside_that_grammar_keeps_its_review() {
             "cd {0}/scripts && ./report.sh && ./report.sh {1}/plain",
             tree.display(),
             projects.display()
+        ),
+        format!(
+            "cd {0}/scripts && ./report.sh > out.txt && ./report.sh",
+            tree.display()
+        ),
+        format!(
+            "cd {0}/scripts && ./report.sh && ./report.sh >> out.txt",
+            tree.display()
         ),
         format!(
             "cd {0}/scripts && ./report.sh && cd {1}/plain",
