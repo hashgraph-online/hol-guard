@@ -49,6 +49,7 @@ from .command_queue_protocol import lease_id as _lease_id
 from .command_queue_protocol import pending_result_is_stale as _pending_result_is_stale
 from .command_queue_protocol import result_payload as _result_payload
 from .command_queue_protocol import retry_wait_seconds as _retry_wait_seconds  # noqa: F401
+from .command_queue_results import drop_refused_result, post_result_unless_refused
 from .command_queue_state import (
     COMMAND_QUEUE_ENABLED_ENV,
     COMMAND_QUEUE_LEASE_WAIT_MS_ENV,  # noqa: F401 - public compatibility export
@@ -238,31 +239,6 @@ def _lease_next_job(
     )
 
 
-# Guard Cloud answered this exact result with a permanent refusal: the lease
-# went stale, the payload was malformed, or the result conflicts with what
-# Cloud already recorded. Resending the same bytes cannot succeed, so holding
-# the result as pending would stall every later job until its lease expires.
-_REFUSED_RESULT_STATUSES = frozenset({400, 404, 409, 410, 422})
-
-
-def _result_refused(error: urllib.error.HTTPError) -> bool:
-    return error.code in _REFUSED_RESULT_STATUSES
-
-
-def _drop_refused_result(
-    store: GuardStore,
-    state: dict[str, object],
-    job: dict[str, object],
-    error: urllib.error.HTTPError,
-) -> None:
-    _LOGGER.warning("Guard Cloud refused a command result (HTTP %s); dropping it.", error.code)
-    state.pop("pending_result", None)
-    state.pop("active_job", None)
-    state.update({"state": "idle", "last_error": None, "last_poll_was_empty": False})
-    _save_state(store, state)
-    audit_command_decision(store, "cloud_command.result_refused", job=job, reason=f"http_{error.code}")
-
-
 def _retry_pending_result(
     store: GuardStore,
     auth_context: dict[str, object],
@@ -287,16 +263,16 @@ def _retry_pending_result(
         _save_state(store, state)
         return False
     try:
-        _post_result(auth_context, job, payload)
+        refused = post_result_unless_refused(partial(_post_result, auth_context, job, payload))
     except urllib.error.HTTPError as error:
-        if _result_refused(error):
-            _drop_refused_result(store, state, job, error)
-            return False
         if error.code != 401:
             raise
         _LOGGER.warning("Pending Guard result 401, attempting OAuth refresh retry.")
         refreshed_auth_context = _resolve_command_queue_auth_context(store, force_refresh=True)
-        _post_result(refreshed_auth_context, job, payload)
+        refused = post_result_unless_refused(partial(_post_result, refreshed_auth_context, job, payload))
+    if refused is not None:
+        drop_refused_result(store, state, job, refused, save_state=_save_state)
+        return False
     state.pop("pending_result", None)
     state.pop("active_job", None)
     state.update(
@@ -484,13 +460,11 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
                 "failureMessage": "The local Guard command capability could not settle this job.",
             }
     payload = _result_payload(item, execution)
+    refused: urllib.error.HTTPError | None = None
     try:
         _heartbeat(auth_context, item)
-        _post_result(auth_context, item, payload)
+        refused = post_result_unless_refused(partial(_post_result, auth_context, item, payload))
     except urllib.error.HTTPError as error:
-        if _result_refused(error):
-            _drop_refused_result(store, state, item, error)
-            return command_queue_status(store)
         if error.code != 401:
             _LOGGER.warning("Guard command result upload failed.")
             state.update(
@@ -507,7 +481,7 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         _save_state(store, state)
         try:
             _heartbeat(auth_context, item)
-            _post_result(auth_context, item, payload)
+            refused = post_result_unless_refused(partial(_post_result, auth_context, item, payload))
         except Exception:
             _LOGGER.warning("Guard command result upload failed.")
             state.update(
@@ -528,6 +502,9 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         )
         _save_state(store, state)
         raise
+    if refused is not None:
+        drop_refused_result(store, state, item, refused, save_state=_save_state)
+        return command_queue_status(store)
     state.pop("active_job", None)
     state.pop("pending_result", None)
     state.update({"state": "idle", "last_result_at": _now(), "last_poll_was_empty": False})
