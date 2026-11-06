@@ -56,6 +56,8 @@ class _ControlPulseRoutes:
                 enrollment = begin_pulse_enrollment(
                     guard_home,
                     approval_gate_input=replace(gate_input, pulse_agent_key=_text(payload, "pulse_agent_key")),
+                    # Passed as sent: the resident accepts only "medium" or "high".
+                    min_tier=payload.get("min_tier"),
                 )
                 response = self._pulse_settings_response(approval_gate_public_config(guard_home).to_dict())
                 response["pulse_enrollment"] = enrollment

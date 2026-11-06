@@ -289,3 +289,51 @@ def test_a_settings_save_without_pulse_fields_is_unchanged() -> None:
     top_level = {"settings": {"mode": "enforce"}, "approval_password": "correct horse battery"}
     assert settings_input_from_payload(top_level) == input_from_mapping(top_level)
     assert settings_input_from_payload({"settings": {"mode": "enforce"}}) is None
+
+
+class _EnrollmentResident:
+    def __init__(self) -> None:
+        self.params: list[dict[str, object]] = []
+
+    def __call__(self, method: str, guard_home: Path, **kwargs: object) -> dict[str, object]:
+        assert method == "begin_pulse_enrollment"
+        self.params.append(dict(kwargs.get("params") or {}))
+        return {"status": "pending", "request_id": "azr_1", "match_code": "ABC123"}
+
+
+def test_enrollment_sends_the_chosen_floor_and_leaves_the_default_to_the_resident(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _EnrollmentResident()
+    monkeypatch.setattr(approval_gate, "_approval_gate_native", fake)
+    gate_input = ApprovalGateInput(password="pw", pulse_agent_key="yak_x")
+    approval_gate_pulse.begin_pulse_enrollment(tmp_path, approval_gate_input=gate_input, min_tier="high")
+    approval_gate_pulse.begin_pulse_enrollment(tmp_path, approval_gate_input=gate_input)
+    assert fake.params[0]["min_tier"] == "high"
+    assert "min_tier" not in fake.params[1], "the resident's default is medium"
+
+
+def test_the_cli_offers_only_medium_and_high() -> None:
+    import argparse
+
+    from codex_plugin_scanner.guard.cli.approval_pulse_commands import add_approval_pulse_parser
+
+    root = argparse.ArgumentParser()
+    settings = root.add_subparsers(dest="settings_command")
+    add_approval_pulse_parser(settings, lambda parser, **_: None, argparse.ArgumentParser)
+    assert root.parse_args(["approval-pulse", "enroll"]).min_tier == "medium"
+    assert root.parse_args(["approval-pulse", "enroll", "--min-tier", "high"]).min_tier == "high"
+    with pytest.raises(SystemExit):
+        root.parse_args(["approval-pulse", "enroll", "--min-tier", "low"])
+
+
+@pytest.mark.parametrize("floor", ["low", "ultra", 2])
+def test_the_resident_refuses_a_floor_below_medium_or_unknown(tmp_path: Path, floor: object) -> None:
+    # The real resident: the floor is checked before setup contacts Yanez.
+    with pytest.raises(ApprovalGateError) as refused:
+        approval_gate_pulse.begin_pulse_enrollment(
+            tmp_path,
+            approval_gate_input=ApprovalGateInput(password="pw", pulse_agent_key="yak_x"),
+            min_tier=floor,
+        )
+    assert refused.value.code == "approval_gate_pulse_invalid_tier"

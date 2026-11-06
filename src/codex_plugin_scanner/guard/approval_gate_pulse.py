@@ -196,17 +196,23 @@ def begin_pulse_enrollment(
     *,
     approval_gate_input: ApprovalGateInput,
     authorize_only: bool = False,
+    min_tier: object = None,
     now: str | None = None,
 ) -> dict[str, object]:
     """Check the current factor, resolve the agent key's YID and send the enrollment request.
 
     With ``authorize_only`` the resident only checks the current factor and lets
-    this session start setup without it for 15 minutes.
+    this session start setup without it for 15 minutes. ``min_tier`` is the
+    lowest assurance tier Guard will accept, ``"medium"`` or ``"high"``; the
+    resident validates it, saves it at confirmation and defaults to medium.
     """
+    params: dict[str, object] = {"authorize_only": authorize_only}
+    if min_tier is not None:
+        params["min_tier"] = min_tier
     return _gate._native(
         "begin_pulse_enrollment",
         guard_home,
-        params={"authorize_only": authorize_only},
+        params=params,
         approval_gate_input=approval_gate_input,
         now=now,
         timeout_seconds=_PULSE_TIMEOUT_SECONDS,

@@ -53,6 +53,12 @@ def add_approval_pulse_parser(settings_subparsers, add_common_args, parser_class
         default=0,
         help="Seconds one approval covers later actions of the same kind and scope (default 0: always ask)",
     )
+    enroll.add_argument(
+        "--min-tier",
+        choices=("medium", "high"),
+        default="medium",
+        help="Lowest face-scan assurance Guard accepts (default medium; high needs a device that signs at high)",
+    )
     disable = commands.add_parser("disable", help="Return to the approval password; needs a Pulse approval")
     recover = commands.add_parser(
         "recover",
@@ -89,6 +95,7 @@ def _enroll(args: argparse.Namespace, guard_home: Path) -> dict[str, object]:
     begun = begin_pulse_enrollment(
         guard_home,
         approval_gate_input=ApprovalGateInput(password=password, totp_code=totp_code, pulse_agent_key=agent_key),
+        min_tier=args.min_tier,
     )
     print(f"Pulse found Yanez identity {begun.get('yid_hint')}.", file=sys.stderr)
     request_id = await_pulse_approval(guard_home, begun, on_status=print_pulse_status)
@@ -98,8 +105,10 @@ def _enroll(args: argparse.Namespace, guard_home: Path) -> dict[str, object]:
         cooldown_seconds=int(args.cooldown),
     )
     recovery_code = confirmed.pop("recovery_code", None)
+    floor = confirmed.get("pulse_min_tier", args.min_tier)
     print(
-        "\nPulse is now your approval factor. Save this one-time recovery code somewhere offline.\n"
+        f"\nPulse is now your approval factor, at {floor} assurance or above.\n"
+        "Save this one-time recovery code somewhere offline.\n"
         "With your approval password it turns Pulse off if you lose the YID app. Guard cannot show it again.\n"
         f"\n    {recovery_code}\n",
         file=sys.stderr,
