@@ -55,6 +55,45 @@ fn optional(value: Option<&Value>) -> Result<Value, &'static str> {
     Ok(text(value)?.map_or(Value::Null, Value::String))
 }
 
+/// Row text a risk level is read from, in the order
+/// `review_contracts._risk_category` reads it.
+const RISK_TEXT_KEYS: [&str; 3] = ["risk_headline", "risk_summary", "policy_action"];
+/// Words naming each level, highest first.
+const RISK_LEVEL_WORDS: [(&str, &[&str]); 3] = [
+    (
+        "high",
+        &["critical", "high", "block", "blocked", "destructive"],
+    ),
+    ("medium", &["medium", "review", "reapproval"]),
+    ("low", &["low", "allow", "allowed"]),
+];
+
+/// The row's own `risk_category`, or else the level its risk text names. The
+/// local store keeps no risk column, so a Cloud card would otherwise always
+/// read Unknown. Whole words only: "follow" is not "low". A row whose text
+/// names no level sends null and stays Unknown.
+fn risk_category(item: &Map<String, Value>) -> Result<Value, &'static str> {
+    if let Some(category) = text(item.get("risk_category"))? {
+        return Ok(Value::String(category));
+    }
+    for key in RISK_TEXT_KEYS {
+        let Some(value) = item.get(key).and_then(Value::as_str) else {
+            continue;
+        };
+        let lowered = value.to_lowercase();
+        let words: Vec<&str> = lowered
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .collect();
+        for (level, names) in RISK_LEVEL_WORDS {
+            if words.iter().any(|word| names.contains(word)) {
+                return Ok(Value::String(level.to_owned()));
+            }
+        }
+    }
+    Ok(Value::Null)
+}
+
 fn exact<'a>(value: &'a Value, keys: &[&str]) -> Result<&'a Map<String, Value>, &'static str> {
     let fields = args_object(value)?;
     if fields.len() != keys.len() || !keys.iter().all(|key| fields.contains_key(*key)) {
@@ -130,7 +169,7 @@ pub(crate) fn review_event(
         "continuationHookAttached": hook_attached,
         "continuationOpaqueTargetId": target,
         "continuationWaitDeadline": deadline,
-        "riskCategory": optional(item.get("risk_category"))?,
+        "riskCategory": risk_category(item)?,
         "policyAction": optional(item.get("policy_action"))?,
         "recommendedScope": optional(item.get("recommended_scope"))?,
         "localCreatedAt": created_at,
