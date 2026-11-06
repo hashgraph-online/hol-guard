@@ -191,8 +191,7 @@ impl Ctx<'_> {
             .commit
             .as_ref()
             .ok_or_else(|| tampered("invalid extension control commit request"))?;
-        let unreserved = commit.pack_record_digest.is_some() && self.request.pack_reserve.is_none();
-        if reply["plan"]["outcome"] != "prepare" || unreserved {
+        if reply["plan"]["outcome"] != "prepare" {
             return Ok(reply);
         }
         let plan = &reply["plan"];
