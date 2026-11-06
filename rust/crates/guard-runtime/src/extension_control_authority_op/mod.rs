@@ -16,6 +16,7 @@
 
 mod catalog;
 mod chain;
+mod change_event;
 mod commit;
 mod earned_anchor;
 mod history;
@@ -111,7 +112,6 @@ fn evaluate(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, Strin
         "anchor" => anchor_op(request, key),
         "managed_activation" => managed::activation_op(request, key),
         "managed_revision" => managed::revision_op(request, key),
-        "seal_manifest" => seals::seal_manifest_op(request, key),
         "seal_managed_revision" => managed_seals::seal_revision_op(request, key),
         "seal_managed_activation" => managed_seals::seal_activation_op(request, key),
         "read" | "read_composed" | "sync_manifest" | "compose_managed" | "load_manifest"
@@ -122,6 +122,7 @@ fn evaluate(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, Strin
         "restore" | "roll_back" => return writes::with_writable_store(request, key),
         "commit_prepare" => return commit::commit_prepare_op(request, key),
         "resume" => return resume::resume_op(request, key),
+        "queue_change" => return change_event::queue_change_op(request, key),
         "migrate" => return migrate::migrate_op(request, key),
         "bootstrap" => return commit::bootstrap_op(request, key),
         "write_manifest" => return commit::write_manifest_op(request, key),

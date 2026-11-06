@@ -427,7 +427,7 @@ impl Ctx<'_> {
     }
 
     /// `_queue_extension_control_change_event`.
-    fn queue_change_event(&self, row: &Row) -> Res<()> {
+    pub(super) fn queue_change_event(&self, row: &Row) -> Res<()> {
         let revision = row_int(row, "revision")?;
         let occurred_at = row_str(row, "created_at")?;
         let layers = layers_from_json(&row_str(row, "layers_json")?)?;

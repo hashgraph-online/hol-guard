@@ -89,12 +89,12 @@ fn commit_prepare_writes_the_row_and_proof_that_resume_then_commits() {
 }
 
 #[test]
-fn commit_prepare_leaves_a_pack_bound_commit_to_the_caller() {
+fn commit_prepare_refuses_a_pack_bound_commit_without_its_staged_activation() {
     let home = Home::new();
     let head = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
     let reply = prepare(&home, &head, Some("p".repeat(64)));
-    assert_eq!(reply["plan"]["outcome"], json!("prepare"), "{reply}");
-    assert_eq!(reply["plan"]["prepared"], Value::Null);
+    assert_eq!(reply["fault"], json!("pack"), "{reply}");
+    assert_eq!(reply["reason"], json!("native_command_pack_draft_invalid"));
     assert_eq!(
         count(
             &home,

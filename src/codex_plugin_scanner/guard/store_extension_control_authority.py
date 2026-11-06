@@ -119,11 +119,9 @@ class StoreExtensionControlAuthorityMixin(
                             ),
                             key=key,
                         )
-                    committed = None
                     if current_revision > 0:
                         committed = connection.execute(
-                            """select previous_revision, layers_json, created_at
-                               from extension_control_authority_transition where revision = ? and phase = ?""",
+                            "select 1 from extension_control_authority_transition where revision = ? and phase = ?",
                             (current_revision, AuthorityPhase.COMMITTED.value),
                         ).fetchone()
                         if committed is None:
@@ -141,13 +139,13 @@ class StoreExtensionControlAuthorityMixin(
                         migration_registry=migration_registry,
                     )
                     if recovered.health is AuthorityHealth.PROTECTED:
-                        if committed is not None:
-                            self._queue_extension_control_change_event(
-                                connection,
+                        if current_revision > 0:
+                            self._extension_control_authority_op(
+                                "queue_change",
+                                key=key,
                                 revision=current_revision,
-                                previous_revision=_row_int(committed, "previous_revision"),
-                                layers_json=_row_str(committed, "layers_json"),
-                                occurred_at=_row_str(committed, "created_at"),
+                                now=_now(),
+                                event_queue_limit=self._guard_event_queue_limit,
                             )
                         return recovered
             return self._reset_extension_control_authority(
