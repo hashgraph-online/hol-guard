@@ -233,6 +233,9 @@ const OUTSIDE_THE_ALLOW: &[&str] = &[
     "git filter-branch --force --tree-filter 'rm -f secret.txt' HEAD",
     "git -c alias.sneak='!printf hi' sneak",
     "git -c core.pager='printf hi' log --oneline -3",
+    // `--output` reaches every verb that shows a diff, so this read writes
+    // the configuration the `git status` after it reads.
+    "git log -1 --output=.git/config && git status",
 ];
 
 /// Allowing Git in full answers for Git's own work, not for whatever program

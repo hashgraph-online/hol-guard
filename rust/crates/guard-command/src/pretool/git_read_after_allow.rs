@@ -313,9 +313,26 @@ fn writes_nothing(arguments: &[String]) -> bool {
     let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
         return false;
     };
+    if arguments[index..]
+        .iter()
+        .any(|argument| names_an_output_file(argument))
+    {
+        return false;
+    }
     arguments
         .get(index)
         .is_some_and(|operation| WRITES_NOTHING_STEPS.contains(&operation.as_str()))
+}
+
+/// Whether an argument points a step's output at a file of its own choosing.
+///
+/// Git's diff options reach every verb that can show a diff, so `log`, `show`,
+/// `whatchanged` and `rev-list` all take `--output=<file>` and write wherever
+/// it points -- over `.git/config` or a hook a later step runs. Git resolves
+/// any unambiguous long-option abbreviation, so every spelling from `--out`
+/// up is refused, as is a short `-o` whichever verb reads it.
+fn names_an_output_file(argument: &str) -> bool {
+    argument.starts_with("--out") || argument.starts_with("-o")
 }
 
 #[cfg(test)]
@@ -347,6 +364,11 @@ mod tests {
             "diff --output=hook",
             "archive -o out.tar HEAD",
             "config a.b c",
+            // Git's diff options reach every verb that shows a diff.
+            "log -1 --output=.git/config",
+            "show --output .git/hooks/pre-commit HEAD",
+            "whatchanged --out=.git/config",
+            "rev-list --output=.git/config HEAD",
         ] {
             assert!(!super::writes_nothing(&words(command)), "{command}");
         }
