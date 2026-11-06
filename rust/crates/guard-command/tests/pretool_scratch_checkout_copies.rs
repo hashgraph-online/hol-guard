@@ -274,6 +274,53 @@ fn scratch_checkout_package_bins_list() {
     }
 }
 
+/// A package manager's own state directories inside `node_modules` list like
+/// `.bin` does. `.pnpm` is absent whenever the project installed with another
+/// manager, and asking which one it used is the point of the listing.
+#[test]
+fn scratch_checkout_package_state_directories_list() {
+    let fixture = fixture("module-state");
+    let installed = fixture.scratch.join("installed");
+    let installed = installed.display();
+    for command in [
+        format!("ls {installed}/node_modules/.pnpm"),
+        format!("ls {installed}/node_modules/.pnpm 2>/dev/null | wc -l"),
+        format!("ls {installed}/node_modules/.cache"),
+        format!("ls {installed}/node_modules/.vite"),
+        format!("ls -la {installed}/node_modules/.cache"),
+        format!(
+            "ls {installed}/node_modules/.bin 2>/dev/null | wc -l; \
+             ls {installed}/node_modules/.pnpm 2>/dev/null | wc -l"
+        ),
+    ] {
+        assert!(permitted(&fixture, &command), "{command}");
+    }
+}
+
+/// The widened listing stays inside `node_modules`, and only for the state
+/// directories a package manager owns.
+#[test]
+fn package_state_listings_keep_their_screens() {
+    let fixture = fixture("module-state-reviewed");
+    let installed = fixture.scratch.join("installed");
+    let installed = installed.display();
+    let home = fixture.home.display();
+    for command in [
+        // A dot directory `node_modules` does not own.
+        format!("ls {installed}/node_modules/.husky"),
+        format!("ls {installed}/node_modules/.secrets"),
+        // The same names outside `node_modules`.
+        format!("ls {installed}/.pnpm"),
+        format!("ls {installed}/.cache"),
+        // Below a state directory, where `ls` prints a package's own files.
+        format!("ls {installed}/node_modules/.pnpm/pkg"),
+        // A protected root keeps its screen.
+        format!("ls {home}/.ssh/node_modules/.pnpm"),
+    ] {
+        assert!(!permitted(&fixture, &command), "{command}");
+    }
+}
+
 #[test]
 fn package_bin_listings_keep_link_and_credential_screens() {
     let fixture = fixture("bins-reviewed");

@@ -13673,6 +13673,118 @@
       "expect": "allow"
     },
     {
+      "id": "queue-ls-sibling-worktree-pnpm-store",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${ORG}/app-portal/node_modules/.pnpm"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-ls-sibling-worktree-pnpm-store-count",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${ORG}/app-portal/node_modules/.pnpm 2>/dev/null | wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-ls-sibling-worktree-module-cache",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${ORG}/app-portal/node_modules/.cache"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-ls-sibling-worktree-manager-probe",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${ORG}/app-portal/node_modules/.bin 2>/dev/null | wc -l; ls ${ORG}/app-portal/node_modules/.pnpm 2>/dev/null | wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-ls-sibling-worktree-module-hook-dir",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${ORG}/app-portal/node_modules/.husky"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-ls-sibling-worktree-dot-dir-outside-modules",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${ORG}/app-portal/.pnpm"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-ls-sibling-worktree-inside-pnpm-store",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${ORG}/app-portal/node_modules/.pnpm/registry.npmjs.org"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-ls-sibling-worktree-bin-dir",
       "fix_area": "git-sibling-worktree",
       "harnesses": [

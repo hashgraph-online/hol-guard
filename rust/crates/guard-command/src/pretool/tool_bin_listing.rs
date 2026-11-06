@@ -19,6 +19,13 @@ pub(super) use metadata::{credential_file_metadata_operand, global_package_listi
 /// Home components holding a `bin` directory of installed tools.
 const TOOL_ROOTS: [&str; 6] = [".bun", ".cargo", ".deno", ".local", ".npm-global", "go"];
 
+/// Package-manager state directories created directly inside `node_modules`.
+/// A package manager owns every one of them, so a listing prints installed
+/// package names and link metadata rather than anything the agent wrote, and
+/// none of them is where a tool keeps credentials. Any other dot directory
+/// below the project keeps its review.
+const MODULE_STATE_DIRS: [&str; 4] = [".bin", ".cache", ".pnpm", ".vite"];
+
 /// Bin directories a probe spells in full, outside home. Package managers own
 /// these paths, so a name below one of them is an installed tool rather than a
 /// file the agent chose the location of.
@@ -154,11 +161,13 @@ pub(super) fn tool_bin_listing_operand(value: &str, context: super::PathContext<
             ))
 }
 
-/// `ls <root>/node_modules/.bin` or `ls <root>/node_modules/.bin/<name>`:
-/// checking whether a package bin is installed in a readable checkout. The
-/// root must clear the ordinary directory read screens. `node_modules` and
-/// `.bin` must each be absent or a real directory, so neither can redirect the
-/// listing elsewhere. The named child may be absent, a regular file, or a link
+/// `ls <root>/node_modules/<state dir>`, or `ls <root>/node_modules/.bin/<name>`:
+/// checking what a package manager installed in a readable checkout. The
+/// root must clear the ordinary directory read screens. `node_modules` and the
+/// state directory must each be absent or a real directory, so neither can
+/// redirect the listing elsewhere. The state directory is absent whenever the
+/// project uses another package manager, which is exactly what such a listing
+/// asks, so an absent one is a listing of nothing rather than a refusal. The named child may be absent, a regular file, or a link
 /// to a file inside the same `node_modules` or one that clears every read
 /// screen. A directory child is refused, because `ls` would list its contents.
 pub(super) fn node_bin_listing_operand(value: &str, context: super::PathContext<'_>) -> bool {
@@ -191,10 +200,12 @@ pub(super) fn node_bin_listing_operand(value: &str, context: super::PathContext<
             _ => None,
         })
         .collect();
-    let (tail, child) = match names.as_slice() {
-        [.., modules, bin] if *modules == "node_modules" && *bin == ".bin" => (2, None),
+    let (tail, state, child) = match names.as_slice() {
+        [.., modules, state] if *modules == "node_modules" && MODULE_STATE_DIRS.contains(state) => {
+            (2, *state, None)
+        }
         [.., modules, bin, child] if *modules == "node_modules" && *bin == ".bin" => {
-            (3, Some(*child))
+            (3, *bin, Some(*child))
         }
         _ => return false,
     };
@@ -212,7 +223,7 @@ pub(super) fn node_bin_listing_operand(value: &str, context: super::PathContext<
         return false;
     }
     let modules = root.join("node_modules");
-    let bin_dir = modules.join(".bin");
+    let bin_dir = modules.join(state);
     let absent_or_directory = |path: &Path| match std::fs::symlink_metadata(path) {
         Ok(metadata) => metadata.is_dir(),
         Err(error) => error.kind() == std::io::ErrorKind::NotFound,
