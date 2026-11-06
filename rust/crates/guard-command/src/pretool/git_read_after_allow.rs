@@ -64,6 +64,37 @@ const CONFIG_STABLE_STEPS: &[&str] = &[
 /// leaves unsettled may replace a file a configuration include names.
 const TREE_PRESERVING_STEPS: &[&str] = &["add", "branch", "commit", "fetch", "push", "tag"];
 
+/// Git verbs that write nothing a later step could read: no tracked file, no
+/// configuration, no new path at all. A step on this list leaves the program,
+/// the configuration and the bind-mounted file a later step starts exactly as
+/// Guard read them, so coverage that reads a whole extension as allowed walks
+/// past it. `diff` is left out on purpose: `git diff --output=<file>` writes
+/// wherever it is pointed, and so can replace a later step's program.
+const WRITES_NOTHING_STEPS: &[&str] = &[
+    "blame",
+    "cat-file",
+    "check-attr",
+    "check-ref-format",
+    "describe",
+    "for-each-ref",
+    "grep",
+    "log",
+    "ls-files",
+    "ls-remote",
+    "ls-tree",
+    "merge-base",
+    "name-rev",
+    "rev-list",
+    "rev-parse",
+    "shortlog",
+    "show",
+    "show-branch",
+    "show-ref",
+    "status",
+    "var",
+    "whatchanged",
+];
+
 /// `git worktree` actions that write no file at a new path. Removing a linked
 /// worktree deletes files, which can drop configuration but never adds a
 /// program to it; `add` and `move` write where an absolute include may point.
@@ -277,6 +308,25 @@ mod tests {
     }
 
     #[test]
+    fn a_read_leaves_a_later_step_running_what_guard_read() {
+        for command in [
+            "status --short --branch",
+            "log --oneline -5",
+            "ls-remote --heads origin",
+        ] {
+            assert!(super::writes_nothing(&words(command)), "{command}");
+        }
+        // Each of these writes somewhere a later step could read.
+        for command in [
+            "diff --output=hook",
+            "archive -o out.tar HEAD",
+            "config a.b c",
+        ] {
+            assert!(!super::writes_nothing(&words(command)), "{command}");
+        }
+    }
+
+    #[test]
     fn a_step_routed_by_global_options_keeps_its_own_subcommand() {
         for command in [
             "push",
@@ -308,5 +358,18 @@ mod tests {
 /// modelling how, so it ends the walk unless the caller already proved that
 /// segment benign.
 pub(crate) fn step_preserves_later_programs(segment: &crate::CommandSegmentV1) -> bool {
-    git_segment(segment) && preserves_tree(&segment.arguments)
+    let arguments = &segment.arguments;
+    git_segment(segment) && (preserves_tree(arguments) || writes_nothing(arguments))
+}
+
+/// Whether a Git step, wherever its global options route it, writes nothing a
+/// later step reads. A global option the shared Git parser does not know
+/// leaves the subcommand unknown, so the step does not qualify.
+fn writes_nothing(arguments: &[String]) -> bool {
+    let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
+        return false;
+    };
+    arguments
+        .get(index)
+        .is_some_and(|operation| WRITES_NOTHING_STEPS.contains(&operation.as_str()))
 }

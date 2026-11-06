@@ -149,6 +149,10 @@ const UNMODELLED: &[&str] = &[
     "git shortlog -sn HEAD",
     "git count-objects -v",
     "git ls-remote --heads origin && git log --oneline -3",
+    // A read leaves the next step running what Guard read, so the Allow
+    // carries the whole chain.
+    "git ls-remote --heads origin && git archive --format=tar -o snapshot.tar HEAD",
+    "git status --short --branch && git log --oneline -5 && git remote -v",
 ];
 
 const HARNESSES: &[&str] = &["omp", "zcode", "codex", "claude-code"];

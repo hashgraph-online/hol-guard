@@ -267,6 +267,20 @@ fn subcommand_runs_program(arguments: &[String]) -> bool {
                     return true;
                 }
             }
+            // `git archive` resolves its format through `tar.<format>.command`
+            // and `tar.<format>.remote`, and infers the format from an output
+            // file's suffix when none is given, so a format this release does
+            // not build in names a program the user's configuration supplies.
+            if command == "archive" && (names("format") || names("output")) {
+                let wants_output = names("output");
+                let value = attached.or_else(|| rest.get(index).map(String::as_str));
+                if attached.is_none() {
+                    index += 1;
+                }
+                if value.is_none_or(|value| !archive_target_is_builtin(value, wants_output)) {
+                    return true;
+                }
+            }
             if merges(command) && names("strategy") {
                 let strategy = attached.or_else(|| rest.get(index).map(String::as_str));
                 if attached.is_none() {
@@ -297,6 +311,7 @@ fn subcommand_runs_program(arguments: &[String]) -> bool {
             "merge" => ("", "sXmFS"),
             "cherry-pick" | "revert" => ("", "XmS"),
             "rebase" => ("x", "sXCS"),
+            "archive" => ("", "o"),
             "grep" => ("O", "efABCm"),
             "difftool" | "mergetool" => ("x", "t"),
             _ => continue,
@@ -325,11 +340,38 @@ fn subcommand_runs_program(arguments: &[String]) -> bool {
                 {
                     return true;
                 }
+                if command == "archive"
+                    && flag == 'o'
+                    && value.is_none_or(|output| !archive_target_is_builtin(output, true))
+                {
+                    return true;
+                }
                 break;
             }
         }
     }
     false
+}
+
+/// Whether an archive format, or the output file a format is inferred from,
+/// names a writer Git builds in. Every other name is looked up in
+/// `tar.<format>.command`, which runs whatever program the configuration
+/// gives it. `tgz` and `tar.gz` are left out on purpose: Git ships them as
+/// configuration that runs `gzip`, which the user's own configuration can
+/// replace.
+fn archive_target_is_builtin(value: &str, is_output: bool) -> bool {
+    let format = if is_output {
+        let lowered = value.to_ascii_lowercase();
+        let name = lowered.rsplit(['/', '\\']).next().unwrap_or(&lowered);
+        let Some((_, suffix)) = name.rsplit_once('.') else {
+            // No suffix leaves the format at its `tar` default.
+            return true;
+        };
+        suffix.to_owned()
+    } else {
+        value.to_ascii_lowercase()
+    };
+    matches!(format.as_str(), "tar" | "zip")
 }
 
 fn merges(command: &str) -> bool {
@@ -407,4 +449,38 @@ pub(crate) fn repository_routes_verified(
         // `routed` stops at the first option it does not model; the routes
         // verify only when it stopped at the subcommand itself.
         && super::routed(&routes, context, true).is_some_and(|rest| rest.len() == command_length)
+}
+
+#[cfg(test)]
+mod archive_format_tests {
+    use super::subcommand_runs_program;
+
+    fn runs(arguments: &[&str]) -> bool {
+        let arguments: Vec<String> = arguments.iter().map(ToString::to_string).collect();
+        subcommand_runs_program(&arguments)
+    }
+
+    #[test]
+    fn a_built_in_archive_writer_runs_no_configured_program() {
+        assert!(!runs(&["archive", "HEAD"]));
+        assert!(!runs(&["archive", "--format=tar", "HEAD"]));
+        assert!(!runs(&["archive", "--format", "zip", "HEAD"]));
+        assert!(!runs(&["archive", "-o", "/tmp/snapshot.tar", "HEAD"]));
+        assert!(!runs(&["archive", "--output=snapshot.ZIP", "HEAD"]));
+    }
+
+    #[test]
+    fn an_archive_format_the_configuration_supplies_runs_a_program() {
+        // `tar.<format>.command` names the program that writes the stream.
+        assert!(runs(&["archive", "--format=mine", "HEAD"]));
+        // Git ships `tgz` and `tar.gz` as configuration, which a user's own
+        // configuration can replace.
+        assert!(runs(&["archive", "--format=tgz", "HEAD"]));
+        assert!(runs(&["archive", "--format=tar.gz", "HEAD"]));
+        // The output suffix picks the format when none is given.
+        assert!(runs(&["archive", "-o", "/tmp/snapshot.tgz", "HEAD"]));
+        assert!(runs(&["archive", "--output", "snapshot.tar.gz", "HEAD"]));
+        // A value the parser never sees settles nothing.
+        assert!(runs(&["archive", "--format"]));
+    }
 }
