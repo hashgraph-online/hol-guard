@@ -100,7 +100,7 @@ def test_subset_writes_schema6_and_keeps_schema5_readable(delivery, monkeypatch)
     assert activation_store.read(store).selected == {"command.core"}
     # New readers preserve the floor and baseline reservation cannot overwrite it.
     with hold_command_control_authority_lock(store.guard_home), connection:
-        activation_baseline.reserve_legacy_baseline(store, connection, None, key=KEY, recorded_at="unit")
+        assert activation_baseline.baseline_request(connection, None, recorded_at="unit") is None
     assert activation_store.read(store).record_digest == draft.digest
     with (
         hold_command_control_authority_lock(store.guard_home),

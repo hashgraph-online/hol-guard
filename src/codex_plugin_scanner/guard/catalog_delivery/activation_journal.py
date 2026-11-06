@@ -25,20 +25,20 @@ class UnverifiablePackTransitionError(NativePolicySnapshotError):
 def reserve_request(store, connection, draft, *, recorded_at, now=None):
     """The ``pack_reserve`` the resident checks ``draft`` against and reserves.
 
-    The legacy baseline is retained and the schema marker upgraded here; the
-    resident authenticates the draft and checks it against the protected
-    floor, the active security scope and the active slot it extends.
+    The schema marker is upgraded here. The resident retains the legacy
+    baseline in an empty slot, authenticates the draft and checks it against
+    the protected floor, the active security scope and the active slot it
+    extends.
     """
     require_exclusive_command_control_mutation_lease(store.guard_home)
     if type(draft) is not ActivationDraft or draft.directory != directory_for_store(store):
         raise NativePolicySnapshotError("native_command_pack_draft_invalid")
     key = _key(store)
+    baseline = None
     if draft.previous_digest is None:
         if draft.baseline_metadata is None:
             raise NativePolicySnapshotError("native_command_pack_baseline_missing")
-        activation_baseline.reserve_legacy_baseline(
-            store, connection, draft.baseline_metadata, key=key, recorded_at=recorded_at
-        )
+        baseline = activation_baseline.baseline_request(connection, draft.baseline_metadata, recorded_at=recorded_at)
     try:
         format_v2 = json.loads(draft.data).get("schema") == SCHEMA_V2
     except (AttributeError, ValueError):
@@ -60,5 +60,6 @@ def reserve_request(store, connection, draft, *, recorded_at, now=None):
         "lifecycle_after": draft.lifecycle_after,
         "security_digest": draft.security_digest,
         "admitted_at": int(time.time()) if now is None else now,
+        "baseline": baseline,
     }
     return {name: value for name, value in fields.items() if value is not None}
