@@ -392,3 +392,7 @@ mod shell_options;
 #[cfg(test)]
 #[path = "parser_wrappers_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "parser_wrappers_shell_options_tests.rs"]
+mod shell_options_tests;

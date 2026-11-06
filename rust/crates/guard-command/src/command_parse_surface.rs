@@ -147,11 +147,11 @@ pub(crate) fn parse_command_unbound(
 /// uncertainty. The bounded shape is what keeps the rest true: a known shell,
 /// options that end in `-c` and change only how the script reacts to a
 /// failure, what it traces or how a glob matches (`-e`, `-u`, `-x`, `-f`,
-/// `-o pipefail`, `-O extglob` and the like, `--norc`, `--posix`), one script
+/// `-o pipefail`, `-O extglob` and the like, `--norc`), one script
 /// word, and no expansion the parser would have to guess at. A shell that
 /// does not know one of those options stops before the script runs, so the
 /// script is still the most the text runs. Anything else — an extra operand,
-/// `-s`, `-a`, `-O expand_aliases`, a prefix, a shell this text only names —
+/// `-s`, `-a`, `--posix`, `-O expand_aliases`, a prefix, a shell this text only names —
 /// keeps that uncertainty too, as does a script this parser cannot model
 /// exactly.
 ///

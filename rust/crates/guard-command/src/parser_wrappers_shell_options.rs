@@ -13,8 +13,8 @@
 /// `shopt` name, so `bash -euo pipefail -c 'npm test'` and
 /// `bash -O extglob -c 'npm test'` are read only when that letter ends its
 /// bundle and the name is one of [`INERT_SET_OPTIONS`] or
-/// [`INERT_SHOPT_OPTIONS`]. `--norc`, `--noprofile` and `--posix` come before
-/// the short options, the only place bash reads a long option.
+/// [`INERT_SHOPT_OPTIONS`]. `--norc` and `--noprofile` come before the short
+/// options, the only place bash reads a long option.
 ///
 /// The options are not checked against the shell that reads them. `dash
 /// --norc -c 'ls'` and `sh -O extglob -c 'ls'` stop with an error where that
@@ -83,8 +83,8 @@ pub(super) fn carries_script(words: &[String]) -> Option<&[String]> {
 const INERT_SHELL_FLAGS: &str = "euxvfCET";
 
 /// The `set -o` names of those letters, plus `pipefail`, which only changes
-/// the status a pipeline reports, and `posix`, which keeps every program the
-/// words name.
+/// the status a pipeline reports. `posix` stays out: POSIX mode expands
+/// aliases in a script, as `expand_aliases` does.
 const INERT_SET_OPTIONS: &[&str] = &[
     "errexit",
     "nounset",
@@ -95,7 +95,6 @@ const INERT_SET_OPTIONS: &[&str] = &[
     "errtrace",
     "functrace",
     "pipefail",
-    "posix",
 ];
 
 /// The `shopt` names that change only how far a glob reaches or how a failure
@@ -113,6 +112,5 @@ const INERT_SHOPT_OPTIONS: &[&str] = &[
     "lastpipe",
 ];
 
-/// The bash long options that only stop it reading a startup file or put it
-/// in POSIX mode.
-const INERT_LONG_OPTIONS: &[&str] = &["norc", "noprofile", "posix"];
+/// The bash long options that only stop it reading a startup file.
+const INERT_LONG_OPTIONS: &[&str] = &["norc", "noprofile"];
