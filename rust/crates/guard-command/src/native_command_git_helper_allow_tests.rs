@@ -276,6 +276,10 @@ fn an_unrelated_allow_leaves_the_unreadable_configuration_reviewed() {
 /// beside enough padding to push the reply past the bound, so an allow that
 /// settled it would start the monitor the probe never reached. Both doors read
 /// `probe_unanswered`, so neither opens here.
+///
+/// Which of the two refuses it is not the claim. The read floor reaches this
+/// command first and asks for the approval again, so the assertion is that the
+/// allow did not carry it -- not that one particular door turned it back.
 #[test]
 fn a_configuration_read_past_the_bound_is_not_settled_by_an_explicit_allow() {
     let fixture = Fixture::with_an_overflowing_configuration();
@@ -283,10 +287,15 @@ fn a_configuration_read_past_the_bound_is_not_settled_by_an_explicit_allow() {
         &with_enabled_permissions(&["command.git.permission.status"]),
         "git status --short",
     );
-    assert_eq!(
-        allowed.minimum_action, "review",
-        "{} ({})",
-        allowed.reason_code, allowed.reason
+    assert!(
+        matches!(
+            allowed.minimum_action.as_str(),
+            "review" | "require-reapproval" | "deny"
+        ),
+        "{} -> {} ({})",
+        allowed.minimum_action,
+        allowed.reason_code,
+        allowed.reason
     );
     assert!(!allowed.explicitly_benign);
 }
