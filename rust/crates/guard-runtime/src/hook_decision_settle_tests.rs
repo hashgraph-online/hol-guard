@@ -107,4 +107,7 @@ fn join_keeps_the_short_signed_link_over_its_plain_copy() {
     let plain = format!("Open HOL Guard to approve or keep this blocked: {page}");
     assert_eq!(join_hook_reason(&[&plain, &link]), link);
     assert_eq!(join_hook_reason(&[&link, &plain]), link);
+    // A sentence-ending period stays with the reason when the code is removed.
+    let (link, plain) = (format!("{link}."), format!("{plain}."));
+    assert_eq!(join_hook_reason(&[&plain, &link]), link);
 }

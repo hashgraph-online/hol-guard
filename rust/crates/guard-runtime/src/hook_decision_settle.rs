@@ -32,7 +32,9 @@ static GUARD_TOKEN_FRAGMENT: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static HANDOFF_CODE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(/requests/[0-9a-f]{32})/[0-9]{1,12}-[0-9a-f]{32}")
+    // Ends where `carries_handoff_link` ends a code: at punctuation, space
+    // or the end of the reason, never mid-path.
+    Regex::new(r"(/requests/[0-9a-f]{32})/[0-9]{1,12}-[0-9a-f]{32}([^A-Za-z0-9/_-]|$)")
         .expect("approval handoff pattern compiles")
 });
 
@@ -464,7 +466,7 @@ fn join_hook_reason(values: &[&str]) -> String {
     });
     if let Some(replacement) = tokenized.cloned() {
         let unfragmented = GUARD_TOKEN_FRAGMENT.replace_all(&replacement, "");
-        let untokenized = HANDOFF_CODE.replace_all(&unfragmented, "$1").into_owned();
+        let untokenized = HANDOFF_CODE.replace_all(&unfragmented, "$1$2").into_owned();
         let mut merged: Vec<String> = Vec::new();
         let mut used_replacement = false;
         for message in &messages {

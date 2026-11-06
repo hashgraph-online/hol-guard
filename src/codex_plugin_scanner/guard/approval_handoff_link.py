@@ -6,8 +6,9 @@ link to the user routinely drop that fragment, so the user lands on a page
 with no local session. This link carries a short code in the path instead:
 `/requests/<id>/<expiry>-<mac>`, where the MAC binds the request id and the
 expiry to the daemon auth token. The daemon checks the code and redirects to
-the same signed session the long link carried. The code opens one request
-only and expires with the session it replaces.
+the same approval session the long link carried, so it grants no more than
+that link did. The code is checked against one request id, and the session it
+opens ends when the code expires.
 """
 
 from __future__ import annotations
