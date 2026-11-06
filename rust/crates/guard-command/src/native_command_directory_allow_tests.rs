@@ -63,7 +63,14 @@ fn an_allowed_extension_covers_a_list_that_changes_directory_before_a_sequence()
     let merge = "gh pr merge 1 --repo example-org/example-repo --squash";
     let view = "gh pr view 1 --repo example-org/example-repo --json state,mergedAt";
     let directory = target.display();
+    let inside = workspace.join("sub");
+    std::fs::create_dir_all(&inside).expect("inside");
+    let under_cwd = inside.display();
+    let here = workspace.display();
     let shapes = [
+        ("cd then pwd", format!("cd {directory} && pwd")),
+        ("cd to cwd", format!("cd {here} && {merge}")),
+        ("cd below cwd", format!("cd {under_cwd} && {merge}")),
         ("merge alone", merge.to_owned()),
         ("sequence, no cd", format!("{merge}; {view}")),
         ("cd then one step", format!("cd {directory} && {merge}")),
@@ -99,6 +106,9 @@ fn an_allowed_extension_covers_a_list_that_changes_directory_before_a_sequence()
     assert_eq!(
         actual,
         vec![
+            "cd then pwd: allow",
+            "cd to cwd: allow",
+            "cd below cwd: allow",
             "merge alone: allow",
             "sequence, no cd: allow",
             "cd then one step: allow",
