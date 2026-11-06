@@ -297,6 +297,31 @@ fn scratch_checkout_package_state_directories_list() {
     }
 }
 
+/// The same listing where the state directories are present, which is what
+/// an installed tree carries. The absent case above proves the probe, this
+/// one proves the listing a manager's own directory actually prints.
+#[test]
+fn present_scratch_checkout_package_state_directories_list() {
+    let fixture = fixture("module-state-present");
+    let installed = fixture.scratch.join("installed");
+    for relative in [
+        "node_modules/.pnpm/vitest@1.0.0/node_modules/vitest",
+        "node_modules/.cache/tsbuildinfo",
+        "node_modules/.vite/deps",
+    ] {
+        std::fs::create_dir_all(installed.join(relative)).unwrap();
+    }
+    let installed = installed.display();
+    for command in [
+        format!("ls {installed}/node_modules/.pnpm"),
+        format!("ls -la {installed}/node_modules/.cache"),
+        format!("ls {installed}/node_modules/.vite"),
+        format!("ls {installed}/node_modules/.pnpm 2>/dev/null | wc -l"),
+    ] {
+        assert!(permitted(&fixture, &command), "{command}");
+    }
+}
+
 /// The widened listing stays inside `node_modules`, and only for the state
 /// directories a package manager owns.
 #[test]
@@ -314,6 +339,13 @@ fn package_state_listings_keep_their_screens() {
     ] {
         std::fs::create_dir_all(installed.join(relative)).unwrap();
     }
+    // A state name planted as a link to a protected directory. The name is
+    // one a manager owns, so only resolving it keeps the screen.
+    symlink(
+        fixture.home.join(".ssh"),
+        installed.join("node_modules/.vite"),
+    )
+    .unwrap();
     let installed = installed.display();
     let home = fixture.home.display();
     let mut allowed = Vec::new();
@@ -328,6 +360,9 @@ fn package_state_listings_keep_their_screens() {
         format!("ls {installed}/node_modules/.pnpm/pkg"),
         // A protected root keeps its screen.
         format!("ls {home}/.ssh/node_modules/.pnpm"),
+        // A state name that is a link to a protected directory.
+        format!("ls {installed}/node_modules/.vite"),
+        format!("ls -la {installed}/node_modules/.vite"),
     ] {
         if permitted(&fixture, &command) {
             allowed.push(command);
