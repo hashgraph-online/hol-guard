@@ -294,6 +294,9 @@ fn a_configured_filter_leaves_out_the_working_tree() {
 fn a_partial_clone_shows_what_is_on_disk_and_never_fetches() {
     let source = Repo::new();
     let base = source.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    // Still checked out, so its blob is on disk, under two that are not.
+    source.write("src/kept.py", "KEPT = 1\n");
+    source.commit("add kept");
     source.write("src/old.py", "OLD = 1\n");
     source.commit("add old");
     source.git(&["rm", "-q", "src/old.py"]);
@@ -324,6 +327,10 @@ fn a_partial_clone_shows_what_is_on_disk_and_never_fetches() {
         "{text}"
     );
     assert!(!text.contains("OLD = 1"), "{text}");
+    assert!(
+        text.contains("add kept") && text.contains("+KEPT = 1"),
+        "an older commit on disk still shows: {text}"
+    );
     assert!(!marker.exists(), "a missing object was fetched");
 }
 

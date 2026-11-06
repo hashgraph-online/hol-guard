@@ -329,8 +329,10 @@ pub(super) fn changes(
             .chain(DIFF)
             .chain([commit.as_str()])
             .collect();
+        // A commit whose objects are not on disk is left out, not the ones
+        // before it. Out of time, `run` returns at once.
         let Some(diff) = git.run(&show, until) else {
-            break;
+            continue;
         };
         let label = format!("Commit {} {subject}", &commit[..8]);
         parts.push((label.trim_end().to_owned(), hunks(&diff)));
