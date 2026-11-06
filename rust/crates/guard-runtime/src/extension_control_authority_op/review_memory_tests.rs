@@ -1,7 +1,7 @@
 //! Pins `apply_review_memory`: a publish replaces the remote decisions and
 //! writes the memory state in one transaction, keeps local decisions, and a
 //! request that names a key or row it may not write is refused with nothing
-//! written.
+//! written, and a write that fails partway leaves everything as it was.
 
 use std::collections::BTreeMap;
 
@@ -139,6 +139,16 @@ fn a_publish_naming_what_it_may_not_write_is_refused() {
     unparsed
         .payloads
         .insert(REGISTRY.to_owned(), "{not json".to_owned());
+    let mut registry_object = memory();
+    registry_object
+        .payloads
+        .insert(REGISTRY.to_owned(), "{}".to_owned());
+    let mut version_list = memory();
+    version_list
+        .payloads
+        .insert(VERSION.to_owned(), "[]".to_owned());
+    let mut ack_scalar = memory();
+    ack_scalar.payloads.insert(ACK.to_owned(), "2".to_owned());
     let mut local_row = memory();
     local_row.rows.push(row("forged", "local"));
     let mut short_row = memory();
@@ -149,6 +159,9 @@ fn a_publish_naming_what_it_may_not_write_is_refused() {
         unknown_payload,
         missing_payload,
         unparsed,
+        registry_object,
+        version_list,
+        ack_scalar,
         local_row,
         short_row,
     ] {
@@ -156,5 +169,21 @@ fn a_publish_naming_what_it_may_not_write_is_refused() {
         assert_eq!(refused["fault"], json!("tampered"), "{refused}");
         assert_eq!(refused["reason"], json!("invalid review memory request"));
     }
+    assert_eq!(snapshot(&home), before);
+}
+
+#[test]
+fn a_write_that_fails_after_the_decisions_and_two_states_are_written_changes_nothing() {
+    let home = home();
+    home.db
+        .execute_batch(
+            "create trigger fail_registry before insert on sync_state
+             when new.state_key = 'guard_review_memory_registry'
+             begin select raise(abort, 'interrupted'); end;",
+        )
+        .unwrap();
+    let before = snapshot(&home);
+    let failed = publish(&home, memory());
+    assert!(failed.get("fault").is_some(), "{failed}");
     assert_eq!(snapshot(&home), before);
 }

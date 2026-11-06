@@ -45,8 +45,16 @@ pub(super) fn apply_review_memory_op(
 fn validate(memory: &ExtensionControlReviewMemoryV1) -> Res<()> {
     let payloads_valid = memory.payloads.len() == PAYLOAD_KEYS.len()
         && memory.payloads.iter().all(|(state_key, payload)| {
-            PAYLOAD_KEYS.contains(&state_key.as_str())
-                && serde_json::from_str::<Value>(payload).is_ok()
+            // The registry is a list, the version and acknowledgement are
+            // objects: a later sync reads them as such.
+            match (state_key.as_str(), serde_json::from_str::<Value>(payload)) {
+                ("guard_review_memory_registry", Ok(Value::Array(_))) => true,
+                (
+                    "guard_review_memory_policy_version" | "guard_review_memory_last_ack",
+                    Ok(Value::Object(_)),
+                ) => true,
+                _ => false,
+            }
         });
     if payloads_valid {
         Ok(())
