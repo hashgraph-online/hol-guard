@@ -411,16 +411,24 @@ python -m ci.gauntlet run --profile full-tasks --full-task-mode discover --full-
 - `--full-task-mode enforce` (the default) passes a task only when it completed with no approval request and no interruption under the core judge's rule, exempting only bound contained runs.
 - `--native-route PROVIDER/MODEL` runs a pinned native Oh My Pi backend through the same adapter as `--native-luna-route`. Tasks run one at a time; `--jobs`, `--fail-fast`, `--case-retries`, `--host-slots` and `--max-load` are rejected.
 
-### Approval round trips (`--profile approval-retry`, `--profile connector-setup`)
+### Approval round trips and connector setup (`--profile approval-retry`, `--profile connector-setup`)
 
-These two profiles answer the question the other lanes cannot reach: once a user approves a
+`approval-retry` answers the question the other lanes cannot reach: once a user approves a
 reviewed action, does the retry actually run, and does an **Always allow** still hold the next
 time? Core cases end at the review card. A round trip needs a runner that answers the card and
-tries again.
+tries again, which is what `approval_retry.ReviewApprover` does -- and `harness_case.py` builds
+one only for the `approved-retry` and bash-lifecycle oracles.
 
-`approval-retry` runs on every lane, Oh My Pi included. `runner.py` accepts the profile and
-`approval_retry_omp.OmpReview` supplies the approve-then-retry answers inside the isolated Oh My
-Pi session, so the login a core run already uses is enough to exercise it:
+`connector-setup` shares the suite but not that question. Its eleven cases carry
+`connector-setup`, `connector-tool`, `blocked-read`, `blocked-command` and `commands` oracles,
+no approver is built for them, and nothing in the lane approves and retries. It proves what an
+installed harness does with a configured MCP server Guard does not recognise, which granted
+connectors still run, and which actions stay blocked. Read it for connector handling, never as
+evidence that an approval survived.
+
+`approval-retry` runs on every lane. On Oh My Pi `runner.py` accepts the profile and
+`approval_retry_omp.OmpReview` answers the cards inside the isolated session, so the login a
+core run already uses is enough:
 
 ```sh
 python -m ci.gauntlet run --profile approval-retry --native-luna-route \
@@ -428,9 +436,22 @@ python -m ci.gauntlet run --profile approval-retry --native-luna-route \
   --output /absolute/path/outside-the-checkout/gauntlet-approval-retry
 ```
 
-`connector-setup` is the exception. It proves what an installed harness does with a configured
-MCP server Guard does not recognise, which means reading that harness's own configuration, so
-`--harness omp` refuses it and the lane runs through `claude-code`, `codex` or `cursor`.
+That lane drives Guard as a library. The release-time run is the installed one, because it is
+the only route through the hooks `hol-guard install` wrote into the harness's own configuration
+-- the path a user's approval actually travels:
+
+```sh
+python -m ci.gauntlet run --profile approval-retry --harness claude-code \
+  --timeout 900 --expected-source-sha "$(git rev-parse HEAD)" \
+  --output /absolute/path/outside-the-checkout/gauntlet-approval-retry-claude
+```
+
+`codex` and `cursor` take the same command. Run at least one installed harness and keep the Oh
+My Pi run as the cheap check beside it.
+
+`connector-setup` has no Oh My Pi route at all: reading a harness's own MCP configuration is the
+point of it, so `--harness omp` refuses the profile and the lane runs through `claude-code`,
+`codex` or `cursor`.
 
 - The lane carries its own catalog, `ci/gauntlet/approval_retry.json` (14 cases), rather than
   joining `core`. Every lane that reads the core catalog runs its scenarios, so adding these
@@ -440,10 +461,14 @@ MCP server Guard does not recognise, which means reading that harness's own conf
   that deliberately creates an approval row reads as a failure, and `is_benign` counts this
   lane's intended review as a benign interruption.
 - `connector-setup` runs the same suite over its own catalog, `ci/gauntlet/connector_setup.json`
-  (11 cases), so a configured MCP server Guard does not recognise is proved to produce one
-  grouped setup card rather than a review per call.
+  (11 cases). A passing case shows that the one request the case makes lands in a single
+  `connector:` approval group and that the agent neither retried an equivalent spelling nor
+  asked the user -- `connector_judge.py` fails the case outright on a second equivalent request,
+  so the lane does not demonstrate several calls sharing one card.
   `python -m ci.gauntlet list --catalog connector-setup` prints those cases.
-- `approval-retry` runs its cases one at a time; `--jobs` above 1 is refused.
+- Both lanes run their cases one at a time. On Oh My Pi `--jobs` above 1 is refused outright; an
+  installed harness never reaches that check, so it accepts the flag, ignores the value and runs
+  serially anyway. Expect no error there, and budget the wall clock for a serial run.
 - Both report `merge_qualified: false`, and neither qualifies a merge.
 
 **Neither lane is in the release gate, and `qualify` cannot put it there.** `qualify` drives
