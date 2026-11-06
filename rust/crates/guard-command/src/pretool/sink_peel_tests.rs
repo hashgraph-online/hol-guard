@@ -1,5 +1,5 @@
 use super::peel;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn fixture(name: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!("guard-sinkpeel-{}-{name}", std::process::id()));
@@ -9,7 +9,7 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 /// The peel as the sink calls it, from the workspace root with no home.
-fn peeled(command: &str, workspace: &PathBuf) -> Option<(String, PathBuf, Option<String>, u32)> {
+fn peeled(command: &str, workspace: &Path) -> Option<(String, PathBuf, Option<String>, u32)> {
     peel(command, workspace.to_str().unwrap(), None, None, false)
         .unwrap()
         .map(|core| {
