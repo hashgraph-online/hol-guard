@@ -11,6 +11,7 @@ from ..adapters.base import HarnessContext
 from ..review_verification_keyring import review_verification_keyring_ready
 from ..store import GuardStore
 from .auto_update import maybe_auto_update
+from .cloud_policy_revision import cloud_policy_store_key, observe_cloud_policy_revision
 from .command_capability import (
     CommandCapabilityError,
     CommandCapabilityUnavailableError,
@@ -236,6 +237,7 @@ def _lease_next_job(
         ),
         exact_route_failure=exact_route_failure,
         exact_route_success=exact_route_success,
+        observe_response=partial(observe_cloud_policy_revision, cloud_policy_store_key(store)),
     )
 
 

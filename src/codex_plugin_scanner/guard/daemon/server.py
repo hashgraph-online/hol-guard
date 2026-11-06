@@ -89,6 +89,7 @@ from ..native_resident_watchdog import start_native_resident_watchdog
 from ..native_runtime_request_scope import scoped_hook_post
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
+from ..runtime.cloud_policy_revision import cloud_policy_store_key, register_cloud_policy_wake
 from ..runtime.cloud_review_sync import CloudReviewSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
 from ..runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
@@ -3420,6 +3421,7 @@ class GuardDaemonServer:
         self._bundle_refresh_thread: threading.Thread | None = None
         self._command_queue_worker: CommandQueueWorker | None = None
         self._headless_cloud_sync_thread: threading.Thread | None = None
+        self._headless_cloud_sync_wake = threading.Event()
         self._command_activity_maintenance_thread: threading.Thread | None = None
         self._onefile_extraction_reclaim_thread: threading.Thread | None = None
         self._extension_control_refresh_thread: threading.Thread | None = None
@@ -4083,6 +4085,10 @@ class GuardDaemonServer:
             getattr(self, "_extension_control_refresh_thread", None),
             deadline=deadline,
         )
+        # The sync loop sleeps on its wake, not on shutdown, so stopping wakes it.
+        sync_wake = getattr(self, "_headless_cloud_sync_wake", None)
+        if sync_wake is not None:
+            sync_wake.set()
         self._headless_cloud_sync_thread = self._join_service_thread(
             getattr(self, "_headless_cloud_sync_thread", None),
             deadline=deadline,
@@ -4153,8 +4159,36 @@ class GuardDaemonServer:
             if self._headless_cloud_sync_backoff_seconds > 0
             else interval_seconds
         )
+        wake = getattr(self, "_headless_cloud_sync_wake", None)
+        if wake is None:
+            wake = self._headless_cloud_sync_wake = threading.Event()
+        # A policy published in Guard Cloud moves the revision the command lease
+        # reports; sync then instead of waiting out the interval.
+        unregister_policy_wake = register_cloud_policy_wake(
+            cloud_policy_store_key(self._server.store),
+            wake.set,
+        )
+        try:
+            self._run_headless_cloud_sync_loop(
+                wake=wake,
+                interval_seconds=interval_seconds,
+                backoff_seconds=backoff_seconds,
+            )
+        finally:
+            unregister_policy_wake()
+
+    def _run_headless_cloud_sync_loop(
+        self,
+        *,
+        wake: threading.Event,
+        interval_seconds: float,
+        backoff_seconds: float,
+    ) -> None:
         reported_failure: str | None = None
         while not self._shutdown_started.is_set():
+            # Cleared before the sync, so a wake that lands while it runs
+            # starts another one straight after instead of being lost.
+            wake.clear()
             try:
                 summary = _run_headless_cloud_sync_with_optional_publish(
                     store=self._server.store,
@@ -4179,7 +4213,8 @@ class GuardDaemonServer:
                 reported_failure = None
                 status = str(summary.get("status") or "")
             wait_seconds = interval_seconds if status == "synced" else backoff_seconds
-            if self._shutdown_started.wait(wait_seconds):
+            wake.wait(wait_seconds)
+            if self._shutdown_started.is_set():
                 return
 
     def _watch_for_idle_shutdown(self) -> None:

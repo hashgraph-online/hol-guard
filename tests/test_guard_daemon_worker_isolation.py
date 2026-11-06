@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon import server as guard_daemon_module
 from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
+from codex_plugin_scanner.guard.runtime.cloud_policy_revision import (
+    cloud_policy_store_key,
+    observe_cloud_policy_revision,
+    reset_cloud_policy_revisions,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_control_patching import patch_daemon_global
 
@@ -31,6 +37,47 @@ def test_daemon_headless_refresh_stops_cleanly(tmp_path: Path, monkeypatch: pyte
     daemon.start()
     assert synced.wait(timeout=1)
     daemon.stop()
+
+    assert daemon._headless_cloud_sync_thread is None
+
+
+@pytest.mark.daemon_headless_refresh
+def test_daemon_headless_refresh_syncs_at_once_when_cloud_policy_moves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    syncs: list[float] = []
+    first_sync = threading.Event()
+    second_sync = threading.Event()
+
+    def _fake_sync(*, store: GuardStore) -> dict[str, object]:
+        del store
+        syncs.append(time.monotonic())
+        (second_sync if first_sync.is_set() else first_sync).set()
+        return {"status": "synced"}
+
+    reset_cloud_policy_revisions()
+    patch_daemon_global(monkeypatch, "_run_headless_cloud_sync", _fake_sync)
+    daemon = guard_daemon_module.GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=60)
+    # Far longer than the test, so only the policy wake can start a second sync.
+    daemon._headless_cloud_sync_interval_seconds = 600
+
+    key = cloud_policy_store_key(store)
+    daemon.start()
+    try:
+        assert first_sync.wait(timeout=5)
+        # The first revision a lease reports is the baseline, and a response
+        # that repeats it changes nothing.
+        assert observe_cloud_policy_revision(key, {"item": None, "policyRevision": "v3@1000"}) is False
+        assert observe_cloud_policy_revision(key, {"item": None, "policyRevision": "v3@1000"}) is False
+        assert not second_sync.wait(timeout=0.3)
+
+        assert observe_cloud_policy_revision(key, {"item": None, "policyRevision": "v4@2000"}) is True
+        assert second_sync.wait(timeout=5)
+        assert len(syncs) == 2
+    finally:
+        daemon.stop()
+        reset_cloud_policy_revisions()
 
     assert daemon._headless_cloud_sync_thread is None
 
