@@ -260,12 +260,20 @@ impl<'a> Cursor<'a> {
         self.scan(None, 1) != Scan::Fail
     }
 
-    /// A comparison such as `token === expected`: the other side must be code,
-    /// never a literal.
+    /// A comparison such as `token === expected`: the other side is code, or
+    /// the kind of short plain literal [`equality_literals_ok`] already reads
+    /// as a mode or a label.
     fn comparison(&mut self) -> bool {
         self.skip_blanks();
-        if self.done() || matches!(self.bytes[self.at], b'"' | b'\'' | b'`') {
+        if self.done() {
             return false;
+        }
+        if matches!(self.bytes[self.at], b'"' | b'\'' | b'`') {
+            // The credential rule reads the comparison's own `==` as its
+            // separator, so a literal on the right arrives here at the front
+            // of the expression with no operator left for
+            // [`equality_literals_ok`] to find. Judge it the same way.
+            return every_literal_is_a_label(&self.bytes[self.at..]);
         }
         let start = self.at;
         self.operand(false).is_some()
@@ -306,6 +314,91 @@ fn equality_literals_ok(expression: &[u8]) -> bool {
         at = after;
     }
     true
+}
+
+/// Whether every quoted literal in `text` reads as a mode or a label, as in
+/// `if token == "--" {` or `if (secret === 'none' || mode !== 'prod')`. An
+/// unclosed literal hides however much the cursor never read, so it never
+/// qualifies, and literals joined by `+` spell out one value between them, so
+/// the pieces are read as that value rather than as labels. A value this rejects is still matched on its own line wherever it
+/// is spelled out, so the check loses no credential by reading only labels here.
+fn every_literal_is_a_label(text: &[u8]) -> bool {
+    let mut at = 0usize;
+    while at < text.len() {
+        let quote = text[at];
+        if !matches!(quote, b'"' | b'\'' | b'`') {
+            // A line comment is prose to the end of the line. An apostrophe in
+            // `don't` is not an unclosed literal, so reading on would reject a
+            // line whose code holds nothing but labels.
+            if text[at..].starts_with(b"//") {
+                return true;
+            }
+            // A block comment is prose too, but code can follow it, so the
+            // scan resumes after it closes.
+            if text[at..].starts_with(b"/*") {
+                let Some(end) = text[at + 2..].windows(2).position(|pair| pair == b"*/") else {
+                    return true;
+                };
+                at += end + 4;
+                continue;
+            }
+            // Pieces joined by `+` spell out one value between them, so none
+            // of them is a label however short each piece is on its own. A
+            // `+` beside anything else is ordinary arithmetic. A comment
+            // between a piece and the `+` is prose, so it is read past: the
+            // nearest code on each side is what the `+` joins.
+            if quote == b'+'
+                && (matches!(code_before(&text[..at]).last(), Some(b'"' | b'\'' | b'`'))
+                    || matches!(
+                        code_after(&text[at + 1..]).first(),
+                        Some(b'"' | b'\'' | b'`')
+                    ))
+            {
+                return false;
+            }
+            at += 1;
+            continue;
+        }
+        let Some(body) = leading_literal(&text[at..]) else {
+            return false;
+        };
+        if text.get(at + body.len() + 1) != Some(&quote) || !label(body) {
+            return false;
+        }
+        at += body.len() + 2;
+    }
+    true
+}
+
+/// `text` with any block comments and spacing at its end removed, so a comment
+/// cannot hide the code that ends it. An unopened `*/` ends the search: there
+/// is no code before it to read.
+fn code_before(mut text: &[u8]) -> &[u8] {
+    loop {
+        text = text.trim_ascii_end();
+        let Some(body) = text.strip_suffix(b"*/") else {
+            return text;
+        };
+        let Some(start) = body.windows(2).rposition(|pair| pair == b"/*") else {
+            return &[];
+        };
+        text = &body[..start];
+    }
+}
+
+/// `text` with any block comments and spacing at its start removed. An
+/// unclosed comment ends the search: it hides the rest of the line.
+fn code_after(mut text: &[u8]) -> &[u8] {
+    loop {
+        text = text.trim_ascii_start();
+        if !text.starts_with(b"/*") {
+            return text;
+        }
+        let Some(end) = text[2..].windows(2).position(|pair| pair == b"*/") else {
+            return &[];
+        };
+        text = &text[end + 4..];
+    }
 }
 
 fn label(literal: &[u8]) -> bool {
