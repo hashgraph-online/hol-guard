@@ -158,9 +158,13 @@ pub(super) fn pre_tool_result(result: &Map<String, Value>, harness: &str, event:
     };
     if let Some(extensions) = result.get("command_extensions") {
         // The floor for an uncertain match is the evaluator's to choose; a
-        // structurally valid receipt only has to keep a failed evaluation blocked.
+        // structurally valid receipt only has to keep a failed evaluation off
+        // the allow path. A check that ran out of time settles at a review, so
+        // the agent gets a card with Allow once and Always allow rather than a
+        // block no approval can clear; anything at review or stronger still
+        // asks before the command runs.
         if validate_native_command_observations(extensions).is_none()
-            || (!extensions["evaluation_error"].is_null() && minimum != "block")
+            || (!extensions["evaluation_error"].is_null() && matches!(minimum, "allow" | "warn"))
         {
             return false;
         }

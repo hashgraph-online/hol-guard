@@ -180,7 +180,7 @@ fn with_floor(evidence: Value, decision: &str, minimum: &str) -> Map<String, Val
 }
 
 #[test]
-fn command_extension_evidence_must_be_bound_and_a_failed_evaluation_must_block() {
+fn command_extension_evidence_must_be_bound_and_a_failed_evaluation_must_not_be_allowed() {
     let harness = pre_tool().harness;
     let accepted = |result: &Map<String, Value>| {
         edge_result_check::pre_tool_result(result, &harness, "PreToolUse")
@@ -198,7 +198,10 @@ fn command_extension_evidence_must_be_bound_and_a_failed_evaluation_must_block()
     )));
     let failed = extension_evidence(Some("native_command_evaluation_failed"));
     assert!(accepted(&with_floor(failed.clone(), "deny", "block")));
-    assert!(!accepted(&with_floor(failed.clone(), "deny", "review")));
+    // A check that ran out of time settles at a review, so the card keeps
+    // Allow once and Always allow. The edge has to carry that result through.
+    assert!(accepted(&with_floor(failed.clone(), "deny", "review")));
+    assert!(!accepted(&with_floor(failed.clone(), "allow", "warn")));
     assert!(!accepted(&with_floor(failed, "allow", "allow")));
 
     let mut unbound = extension_evidence(None);
