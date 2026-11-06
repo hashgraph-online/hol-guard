@@ -147,6 +147,82 @@ pub(crate) fn settled(connection: &Connection, args: &Args, spend: bool) -> Stor
     Ok(Value::Null)
 }
 
+/// Spends the retry authority of `request_id`'s Allow once on behalf of a
+/// live hook that resumed on it, under the write transaction the caller
+/// holds. The live hook and an identical retry are two ways of using the same
+/// approval: whichever comes first spends it, and the other is refused.
+///
+/// `false` when an earlier retry already spent the approval; `true` when this
+/// call spent it, or when the request carries no retry authority (no
+/// resolved allow, or a binding outside the native-review grammar).
+pub(crate) fn spend_for_live_resume(
+    connection: &Connection,
+    request_id: &str,
+    now: &str,
+) -> StoreResult<bool> {
+    let rows = query_all(
+        connection,
+        "select artifact_hash, resolved_at from approval_requests \
+         where request_id = ? and status = 'resolved' and resolution_action = 'allow' \
+           and resolution_scope in ('once', 'artifact')",
+        &[Value::from(request_id)],
+    )?;
+    let Some(row) = rows.first() else {
+        return Ok(true);
+    };
+    let artifact_hash = row
+        .get("artifact_hash")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !binding_pattern().is_match(artifact_hash) {
+        return Ok(true);
+    }
+    let (Some((_, approved_iso)), Some((_, current_iso))) = (
+        instant(row.get("resolved_at").and_then(Value::as_str)),
+        instant(Some(now)),
+    ) else {
+        // An approval Guard cannot place in time cannot be told apart from a
+        // spent one, so the resume is refused rather than reused.
+        return Ok(false);
+    };
+    insert_effect(
+        connection,
+        artifact_hash,
+        &approved_iso,
+        request_id,
+        &current_iso,
+    )
+}
+
+fn effect_key(artifact_hash: &str, approved_iso: &str) -> String {
+    hex::encode(Sha256::digest(
+        format!("native-review-once-v3\0{artifact_hash}\0{approved_iso}").as_bytes(),
+    ))
+}
+
+fn insert_effect(
+    connection: &Connection,
+    artifact_hash: &str,
+    approved_iso: &str,
+    request_id: &str,
+    current_iso: &str,
+) -> StoreResult<bool> {
+    let inserted = exec(
+        connection,
+        "insert or ignore into guard_continuation_effects \
+         (effect_key, request_id, evidence_id, event_name, created_at) \
+         values (?, ?, ?, ?, ?)",
+        &[
+            Value::from(effect_key(artifact_hash, approved_iso)),
+            Value::from(request_id),
+            Value::from(artifact_hash),
+            Value::from(EVENT_NAME),
+            Value::from(current_iso),
+        ],
+    )?;
+    Ok(inserted == 1)
+}
+
 fn matching_decision(
     connection: &Connection,
     args: &Args,
@@ -225,21 +301,11 @@ fn matching_decision(
         .unwrap_or_default();
     // All equivalent decisions at this instant are spent as one capability.
     let approved_iso = &latest[0].1;
-    let effect_key = hex::encode(Sha256::digest(
-        format!("native-review-once-v3\0{artifact_hash}\0{approved_iso}").as_bytes(),
-    ));
-    let inserted = exec(
+    Ok(json!(insert_effect(
         connection,
-        "insert or ignore into guard_continuation_effects \
-         (effect_key, request_id, evidence_id, event_name, created_at) \
-         values (?, ?, ?, ?, ?)",
-        &[
-            Value::from(effect_key),
-            Value::from(request_id),
-            Value::from(artifact_hash),
-            Value::from(EVENT_NAME),
-            Value::from(current_iso),
-        ],
-    )?;
-    Ok(json!(inserted == 1))
+        artifact_hash,
+        approved_iso,
+        request_id,
+        &current_iso
+    )?))
 }

@@ -799,27 +799,6 @@ class StorePolicyMixin:
             )
         return normalized_now, rows
 
-    @staticmethod
-    def _replace_remote_policy_rows_locked(
-        connection: sqlite3.Connection,
-        rows: Sequence[tuple[object, ...]],
-    ) -> None:
-        connection.execute(
-            f"delete from policy_decisions where source in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}",
-            _REMOTE_POLICY_SOURCE_PARAMS,
-        )
-        connection.executemany(
-            """
-            insert into policy_decisions (
-              harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
-              expires_at, updated_at, integrity_version, integrity_generation, payload_hash, payload_mac,
-              integrity_key_id, signed_at
-            )
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            rows,
-        )
-
     def peek_local_once_approval(
         self,
         *,

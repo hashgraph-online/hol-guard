@@ -9,6 +9,7 @@
 //! nothing is written and the caller decides again.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 
 use guard_contracts::{ExtensionControlAuthorityRequestV1, ExtensionControlPolicyApplyV1};
 use guard_policy_snapshot::policy_integrity::REMOTE_POLICY_SOURCES;
@@ -84,7 +85,7 @@ pub(super) fn apply_policy_op(
 }
 
 /// One decision's column values; a remote row only.
-fn row_values(row: &[Value]) -> Res<Vec<SqlValue>> {
+pub(super) fn row_values(row: &[Value]) -> Res<Vec<SqlValue>> {
     let remote = row
         .get(SOURCE_COLUMN)
         .and_then(Value::as_str)
@@ -221,6 +222,20 @@ impl Ctx<'_> {
                 )
                 .map_err(store_fault)?;
         }
+        self.replace_remote_rows(rows)?;
+        let mut payloads = apply.payloads.clone();
+        if apply.copy_last_good {
+            for (last_good, source) in LAST_GOOD_COPIES {
+                if let Some(payload) = apply.payloads.get(source) {
+                    payloads.insert(last_good.to_owned(), payload.clone());
+                }
+            }
+        }
+        self.write_sync_state(&payloads, now)
+    }
+
+    /// Replaces every remote policy decision with `rows`.
+    pub(super) fn replace_remote_rows(&self, rows: &[Vec<SqlValue>]) -> Res<()> {
         let placeholders = vec!["?"; REMOTE_POLICY_SOURCES.len()].join(",");
         self.connection
             .execute(
@@ -235,15 +250,16 @@ impl Ctx<'_> {
                 .execute(&insert, params_from_iter(row))
                 .map_err(store_fault)?;
         }
-        let copies = LAST_GOOD_COPIES
-            .iter()
-            .filter(|_| apply.copy_last_good)
-            .filter_map(|(last_good, source)| Some((*last_good, apply.payloads.get(*source)?)));
-        let payloads = apply
-            .payloads
-            .iter()
-            .map(|(state_key, payload)| (state_key.as_str(), payload));
-        for (state_key, payload) in payloads.chain(copies) {
+        Ok(())
+    }
+
+    /// Writes each `sync_state` payload, stamped `now`.
+    pub(super) fn write_sync_state(
+        &self,
+        payloads: &BTreeMap<String, String>,
+        now: &str,
+    ) -> Res<()> {
+        for (state_key, payload) in payloads {
             self.connection
                 .execute(
                     "insert into sync_state (state_key, payload_json, updated_at)

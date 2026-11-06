@@ -449,10 +449,12 @@ impl CompiledNativeCommandControls {
             evaluation_error.is_some() && deadline_expired && !admin_disabled && !self.global_block,
         );
         self.enforce_quarantine(command, tool, &mut result);
-        floor::explain_home_redirect(&mut result, command, |probe| {
+        let evaluates = |probe: &CanonicalCommandV1| {
             self.observe_command(probe, deadline, context, environment)
                 .is_ok_and(|(batch, _)| batch.evaluation_error.is_none())
-        });
+        };
+        floor::explain_home_redirect(&mut result, command, evaluates);
+        floor::explain_startup_shell(&mut result, command, evaluates);
         floor::explain_expired_deadline(&mut result, deadline);
         let global_lockdown = self
             .binding
@@ -578,6 +580,35 @@ impl CompiledNativeCommandControls {
             )
     }
 
+    /// Whether the user's explicit Allow settles this command outright,
+    /// uncertainty included.
+    ///
+    /// [`Self::explicit_allow_covers_command`] answers the permission
+    /// question alone. A floor the controls raise over a review Rust had
+    /// already decided keeps that review's reason code, because `strengthen`
+    /// does not replace a reason of equal rank, so the reason no longer says
+    /// whether an uncertain observation about an enabled rule is still
+    /// outstanding. A caller reading the result afterwards asks here instead,
+    /// and gets the same answer the precedence path computes while it still
+    /// has the batch in hand.
+    pub(crate) fn explicit_allow_settles_command(
+        &self,
+        command: &CanonicalCommandV1,
+        observations: &NativeCommandObservationsV1,
+        context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> bool {
+        let enabled_uncertainty = observations.observations.iter().any(|observation| {
+            !observation.uncertainty_reasons.is_empty()
+                && self.uncertain_candidate(&observation.rule_id).is_none()
+        });
+        (!enabled_uncertainty
+            || command.segments.iter().all(|segment| {
+                crate::command_compatibility::segment_settles_uncertainty(segment, context)
+            }))
+            && self.explicit_allow_covers_command(command, observations, context, environment)
+    }
+
     /// Whether an enabled extension names `executable` among the programs it
     /// watches. A projection that rewrites one spelling of a command into
     /// another drops the program it rewrote away, and with it the extension
@@ -633,6 +664,7 @@ mod precedence;
 #[path = "native_command_unmodeled.rs"]
 mod unmodeled;
 use floor::{add_authority_repair_hint, evaluation_error_reason, rank, rule_floor, strengthen};
+pub(crate) use precedence::settle_with_explicit_allow;
 pub(crate) use unmodeled::{
     bounds_its_owners, launcher_body, prefix_reads_a_program_file, python_is_builtin_only,
     python_stdin, unread_file_interpreter, Handover,
@@ -653,6 +685,10 @@ mod precedence_regressions;
 #[cfg(test)]
 #[path = "native_command_precedence_generic_tests.rs"]
 mod precedence_generic_regressions;
+
+#[cfg(all(test, unix))]
+#[path = "native_command_git_helper_allow_tests.rs"]
+mod git_helper_allow_regressions;
 
 #[cfg(test)]
 #[path = "native_command_compound_controls_tests.rs"]
