@@ -230,6 +230,18 @@ pub(super) fn object(value: Value) -> Map<String, Value> {
     map
 }
 
+/// `home` with the cloud-event queue a committed change is published to.
+pub(super) fn with_cloud_events(home: Home) -> Home {
+    home.db
+        .execute_batch(
+            "create table guard_cloud_events (
+                event_id text primary key, idempotency_key text, event_type text,
+                payload_json text, occurred_at text, uploaded_at text);",
+        )
+        .unwrap();
+    home
+}
+
 pub(super) fn anchor(revision: i64, snapshot_digest: &str, phase: &str) -> String {
     let payload =
         object(json!({ "revision": revision, "snapshot_digest": snapshot_digest, "phase": phase }));

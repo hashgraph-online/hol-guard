@@ -44,6 +44,7 @@ EXTENSION_CONTROL_AUTHORITY_FEATURE = "extension-control-authority-v1"
 # The resident applies these ops itself rather than answering a plan.
 EXTENSION_CONTROL_AUTHORITY_WRITES_FEATURE = "extension-control-authority-writes-v1"
 _WRITE_OPS = frozenset({"restore", "roll_back"})
+EXTENSION_CONTROL_AUTHORITY_COMMIT_FEATURE = "extension-control-authority-commit-v1"
 _REQUEST_SCHEMA = "guard-extension-control-authority-request.v1"
 _RESULT_SCHEMA = "guard-extension-control-authority-result.v1"
 _TIMEOUT_SECONDS = 10.0
@@ -117,9 +118,7 @@ def extension_control_authority(
             request=wire,
             guard_home=guard_home,
             timeout_seconds=_TIMEOUT_SECONDS,
-            required_feature=(
-                EXTENSION_CONTROL_AUTHORITY_WRITES_FEATURE if op in _WRITE_OPS else EXTENSION_CONTROL_AUTHORITY_FEATURE
-            ),
+            required_feature=_required_feature(op),
             response_schema=_RESULT_SCHEMA,
             max_request_bytes=_MAX_REQUEST_BYTES,
             record_success=False,
@@ -131,6 +130,12 @@ def extension_control_authority(
         raise NativeExtensionControlAuthorityUnavailableError()
     memo.keep(memo_key, payload)
     return payload
+
+
+def _required_feature(op: str) -> str:
+    if op in {"bootstrap", "commit_prepare", "resume", "migrate", "write_manifest"}:
+        return EXTENSION_CONTROL_AUTHORITY_COMMIT_FEATURE
+    return EXTENSION_CONTROL_AUTHORITY_WRITES_FEATURE if op in _WRITE_OPS else EXTENSION_CONTROL_AUTHORITY_FEATURE
 
 
 def raise_fault(payload: Mapping[str, object]) -> None:
@@ -195,6 +200,7 @@ def manifest_from_wire(value: object) -> dict[str, str] | None:
 
 
 __all__ = [
+    "EXTENSION_CONTROL_AUTHORITY_COMMIT_FEATURE",
     "EXTENSION_CONTROL_AUTHORITY_FEATURE",
     "EXTENSION_CONTROL_AUTHORITY_WRITES_FEATURE",
     "NativeExtensionControlAuthorityUnavailableError",

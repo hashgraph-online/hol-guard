@@ -40,7 +40,7 @@ def _commit(store: Path, statement: str, *values: object) -> None:
 
 
 _RUST_OPS = Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/src/extension_control_authority_op"
-_WRITER_SOURCES = frozenset({"writes.rs"})
+_WRITER_SOURCES = frozenset({"commit.rs", "migrate.rs", "resume.rs", "writes.rs"})
 
 
 def _wire(store: Path, *, op: str = "read", allow_migration: bool = False, request_id: str = "r1") -> dict[str, object]:
@@ -160,7 +160,22 @@ def test_unsettled_replies_always_go_back_to_the_resident(tmp_path: Path, payloa
     assert memo.lookup(_wire(store))[1] is None
 
 
-@pytest.mark.parametrize("op", ["commit_plan", "resume_plan", "rollback_plan", "restore", "roll_back", "unknown"])
+@pytest.mark.parametrize(
+    "op",
+    [
+        "commit_plan",
+        "commit_prepare",
+        "resume_plan",
+        "rollback_plan",
+        "restore",
+        "roll_back",
+        "resume",
+        "migrate",
+        "bootstrap",
+        "write_manifest",
+        "unknown",
+    ],
+)
 def test_a_writer_plan_is_never_kept(tmp_path: Path, op: str) -> None:
     store = _store(tmp_path)
     _keep(_wire(store, op=op), {"plan": {"outcome": "prepare"}})

@@ -63,6 +63,22 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         """
 
         self._invalidate_native_extension_control_policy()
+        return self._finish_resumed_transition(
+            connection, outcome, revision, current=current, key=key, pack_record_digest=pack_record_digest
+        )
+
+    def _finish_resumed_transition(
+        self,
+        connection: sqlite3.Connection,
+        outcome: str,
+        revision: int,
+        *,
+        current: ExtensionControlAuthorityView | None,
+        key: bytes,
+        pack_record_digest: str | None = None,
+    ) -> ExtensionControlAuthorityView | None:
+        """``_apply_resumed_transition`` once native readiness is closed."""
+
         row = connection.execute(
             "select * from extension_control_authority_transition where revision = ?", (revision,)
         ).fetchone()
@@ -117,14 +133,62 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         plan = self._authority_plan("resume_plan", key=key, revision=revision)
         if plan["outcome"] == "absent":
             return None
-        return self._apply_resumed_transition(
-            connection,
-            str(plan["outcome"]),
-            revision,
-            current=None,
+        self._invalidate_native_extension_control_policy()
+        # The resident takes the verdict again inside the transaction that
+        # applies it, then seals the committed anchor into the vault, refreshes
+        # the last-good export and queues the change event.
+        reply = self._extension_control_authority_op(
+            "resume",
             key=key,
-            pack_record_digest=_plan_pack_digest(plan),
+            anchor_json=self._read_anchor_json(),
+            revision=revision,
+            now=_now(),
+            event_queue_limit=self._guard_event_queue_limit,
         )
+        if reply.get("pack_bound") is True:
+            # Committing this row activates a command pack, which is still
+            # finished here.
+            return self._finish_resumed_transition(
+                connection,
+                "commit_pending",
+                revision,
+                current=None,
+                key=key,
+                pack_record_digest=_plan_pack_digest(reply),
+            )
+        return self._adopt_resumed_transition(reply, revision)
+
+    def _adopt_resumed_transition(
+        self, reply: dict[str, object], revision: int
+    ) -> ExtensionControlAuthorityView | None:
+        """Mirror the anchor a resident ``resume`` sealed and read the result."""
+
+        resumed_head = reply.get("resumed")
+        if resumed_head is None:
+            return None
+        if not isinstance(resumed_head, dict) or not isinstance(resumed_head.get("catalog_digest"), str):
+            raise ExtensionControlAuthorityError("invalid extension control authority plan")
+        sealed = reply.get("anchor_json")
+        if not isinstance(sealed, str):
+            raise ExtensionControlAuthorityError("invalid extension control anchor seal")
+        # The row is committed; an unrecorded anchor is finished on the next read.
+        try:
+            self._mirror_resident_anchor(sealed)
+        except Exception as exc:
+            raise ExtensionControlAuthorityError("extension control authority final anchor unavailable") from exc
+        resumed = self._read_extension_control_authority_locked(str(resumed_head["catalog_digest"]))
+        if resumed.health is not AuthorityHealth.PROTECTED or resumed.revision != revision:
+            raise ExtensionControlAuthorityError("idempotent transition recovery failed")
+        return resumed
+
+    def _mirror_resident_anchor(self, sealed: str) -> None:
+        """Mirror an anchor the resident sealed into the store this process reads."""
+
+        store = self._secret_store()
+        if store.get_secret(self._anchor_ref()) != sealed:
+            store.set_secret(self._anchor_ref(), sealed)
+            if store.get_secret(self._anchor_ref()) != sealed:
+                raise ExtensionControlAuthorityError("extension control anchor read-back mismatch")
 
     def _roll_back_abandoned_transition(
         self,

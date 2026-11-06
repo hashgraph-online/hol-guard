@@ -252,10 +252,9 @@ impl Ctx<'_> {
             .request
             .revision
             .ok_or_else(|| tampered("extension control transition head mismatch"))?;
-        let Some(row) = self.pending_transition(revision)? else {
+        let Some((_, outcome, pack)) = self.resume_verdict(revision)? else {
             return Ok(plan("absent", Map::new()));
         };
-        let (outcome, pack) = self.resume(&row, &Expected::of_row(&row)?, None)?;
         Ok(plan(
             outcome.as_str(),
             Map::from_iter([
@@ -263,6 +262,16 @@ impl Ctx<'_> {
                 ("command_pack_record_digest".to_owned(), pack),
             ]),
         ))
+    }
+
+    /// The prepared row at `revision`, what resuming it for its own request
+    /// comes to and the command pack it binds; `None` when there is no row.
+    pub(super) fn resume_verdict(&self, revision: i64) -> Res<Option<(Row, Resume, Value)>> {
+        let Some(row) = self.pending_transition(revision)? else {
+            return Ok(None);
+        };
+        let (outcome, pack) = self.resume(&row, &Expected::of_row(&row)?, None)?;
+        Ok(Some((row, outcome, pack)))
     }
 
     /// `rollback_plan`: `_roll_back_abandoned_transition`. The prepared row

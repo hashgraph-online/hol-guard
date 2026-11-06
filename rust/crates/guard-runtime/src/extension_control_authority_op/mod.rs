@@ -5,8 +5,8 @@
 //! only a writer may do comes back as an `action`, together with the
 //! authenticated inputs it needs, and the caller has it done under the
 //! exclusive authority lease before asking again. The writer's own decisions
-//! come back the same way, as the `plan` a `*_plan` op answers with; `restore`
-//! and `roll_back` apply theirs here (see `writes`). A read that ends on a
+//! come back the same way, as the `plan` a `*_plan` op answers with; `restore`,
+//! `roll_back` and `resume` apply theirs here (see `writes` and `resume`). A read that ends on a
 //! verdict also reports the catalog-migration events it found missing, which
 //! the caller records.
 //!
@@ -16,6 +16,7 @@
 
 mod catalog;
 mod chain;
+mod commit;
 mod history;
 mod installed_upgrade;
 #[cfg(test)]
@@ -27,10 +28,12 @@ mod managed_seals;
 mod managed_seals_tests;
 #[cfg(test)]
 mod managed_tests;
+mod migrate;
 mod plans;
 #[cfg(test)]
 mod plans_tests;
 pub(crate) mod records;
+mod resume;
 mod seals;
 #[cfg(test)]
 mod seals_tests;
@@ -114,6 +117,11 @@ fn evaluate(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, Strin
             return with_store(request, key);
         }
         "restore" | "roll_back" => return writes::with_writable_store(request, key),
+        "commit_prepare" => return commit::commit_prepare_op(request, key),
+        "resume" => return resume::resume_op(request, key),
+        "migrate" => return migrate::migrate_op(request, key),
+        "bootstrap" => return commit::bootstrap_op(request, key),
+        "write_manifest" => return commit::write_manifest_op(request, key),
         _ => return Err(INVALID.to_owned()),
     };
     Ok(outcome.unwrap_or_else(|fault| fault_value(&fault, Vec::new())))
