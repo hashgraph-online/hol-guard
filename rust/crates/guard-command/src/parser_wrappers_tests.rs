@@ -157,6 +157,13 @@ fn an_option_the_shell_reads_differently_keeps_the_wrapper_path() {
         "bash --rcfile ./rc -c 'npm test'",
         "bash --posix -c 'npm test'",
         "bash -- -c 'npm test'",
+        // Only bash reads `pipefail` and these long options; the other
+        // shells stop with an error and never run the script.
+        "dash --norc -c 'npm test'",
+        "sh --noprofile -c 'npm test'",
+        "ash --noprofile -c 'npm test'",
+        "dash -o pipefail -c 'npm test'",
+        "sh -euo pipefail -c 'npm test'",
         // No `-c` at all, and no script to model.
         "bash -e 'npm test'",
         "bash -ec",
