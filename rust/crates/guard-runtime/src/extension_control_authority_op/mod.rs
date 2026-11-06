@@ -36,6 +36,7 @@ mod pack_reserve;
 mod plans;
 #[cfg(test)]
 mod plans_tests;
+mod policy_clear;
 pub(crate) mod records;
 mod resume;
 mod seals;
@@ -123,6 +124,7 @@ fn evaluate(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, Strin
         "commit_prepare" => return commit::commit_prepare_op(request, key),
         "resume" => return resume::resume_op(request, key),
         "queue_change" => return change_event::queue_change_op(request, key),
+        "clear_policy" => return policy_clear::clear_policy_op(request, key),
         "migrate" => return migrate::migrate_op(request, key),
         "bootstrap" => return commit::bootstrap_op(request, key),
         "write_manifest" => return commit::write_manifest_op(request, key),

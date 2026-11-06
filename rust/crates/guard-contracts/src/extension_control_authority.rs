@@ -18,7 +18,8 @@
 //! that step under the exclusive authority lease. `write_anchor` writes an
 //! anchor the store has earned into the credential vault, and
 //! `seal_managed_revision` and `seal_managed_activation` seal the managed
-//! controls publication epoch and activation. When a read finds work only a writer may do --
+//! controls publication epoch and activation, and `clear_policy` removes the
+//! cached remote policy authority. When a read finds work only a writer may do --
 //! restoring the last-good export, resuming or abandoning a prepared
 //! transition, or committing a catalog migration -- it answers with an
 //! `action` naming that work and the authenticated inputs it needs. The caller
@@ -73,8 +74,8 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `validate_chain`, `history`, `commit_plan`, `resume_plan`,
     /// `rollback_plan`, `bootstrap_plan`, `migrate_plan`, `restore_plan`,
     /// `bootstrap`, `commit_prepare`, `resume`, `migrate`, `write_manifest`,
-    /// `queue_change`, `write_anchor`, `seal_managed_revision`,
-    /// `seal_managed_activation` or `anchor`.
+    /// `queue_change`, `clear_policy`, `write_anchor`,
+    /// `seal_managed_revision`, `seal_managed_activation` or `anchor`.
     pub op: String,
     /// Authority authentication key bytes (base64url, no padding); absent
     /// when the credential store holds none.
@@ -183,6 +184,34 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// authority committed under `catalog_digest`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub managed_activation: Option<ExtensionControlManagedActivationV1>,
+    /// `clear_policy`: the remote policy authority a clear removes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_clear: Option<ExtensionControlPolicyClearV1>,
+}
+
+/// `clear_policy_bundle_authority`. Without `managed_revision` the resident
+/// answers the publication epoch the clear moves to and the acknowledgement
+/// stored now, and writes nothing. With it, the clear is written only while
+/// the authority snapshot, that epoch and that acknowledgement are still the
+/// ones the caller published from.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlPolicyClearV1 {
+    /// The authority snapshot the caller read before the clear; both absent
+    /// when there was none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_revision: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_snapshot_digest: Option<String>,
+    /// The publication epoch the plan answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_revision: Option<i64>,
+    /// The `policy_bundle_ack` text the plan answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stored_ack: Option<String>,
+    /// The `sync_state` payloads the clear writes, as JSON text by key.
+    #[serde(default)]
+    pub payloads: BTreeMap<String, String>,
 }
 
 /// A verified managed-controls policy and the local authority it activates
