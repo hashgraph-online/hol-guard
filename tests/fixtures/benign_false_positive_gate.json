@@ -5773,6 +5773,23 @@
       "expect": "allow"
     },
     {
+      "id": "git-worktree-compound-status-log-remote",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short --branch && git log --oneline -5 && git remote -v"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "git-worktree-app-subdir-status",
       "fix_area": "git",
       "harnesses": [

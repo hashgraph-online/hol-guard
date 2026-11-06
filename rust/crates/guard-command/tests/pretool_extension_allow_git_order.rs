@@ -313,3 +313,91 @@ fn an_allowed_refresh_that_configures_git_itself_still_waits_for_review() {
         );
     }
 }
+
+/// A home configuration holding a value Git stores as bytes the probe cannot
+/// decode. The `git config` reply is read as one piece of text, so a single
+/// such value leaves the probe with no answer about any setting.
+///
+/// This stands in for every way the probe runs out of answers in a real
+/// session — a query that exhausts its budget part way through a compound, a
+/// Git the host does not trust, a home or working directory the hook cannot
+/// canonicalize, an environment that reaches Git's setup. Those depend on
+/// host timing or host layout; this one reproduces the same state from a
+/// fixture, on every platform, without a race.
+fn write_undecodable_configuration(root: &Path) {
+    let mut configuration = b"[core]\n\texcludesfile = /tmp/".to_vec();
+    configuration.extend_from_slice(&[0xff, 0xfe]);
+    configuration.extend_from_slice(b"/ignore\n");
+    std::fs::write(root.join(".gitconfig"), configuration).unwrap();
+}
+
+/// A probe that could not answer leaves the read unproven. That is not a
+/// helper Guard found: it is a question still open, and the user's Allow on
+/// the read answers it. Before this, an ordinary read-only chain stalled at
+/// review however much the user had allowed, because the only review this
+/// floor let an Allow settle was the order of earlier steps.
+#[test]
+fn an_allowed_read_runs_when_the_configuration_probe_cannot_answer() {
+    let (root, _cleanup) = checkout("unanswered-probe", false);
+    write_undecodable_configuration(&root);
+    let allowed = every_permission("enabled");
+    let defaults = fixture::github_controls("default");
+    // Each read alone, and the compound the user reported. `git remote` is
+    // not a read this probe models, so it is the compound's status step that
+    // the probe cannot answer for.
+    for command in [
+        "git status --short --branch",
+        "git status --short --branch && git remote -v",
+    ] {
+        // Without the Allow the unproven read waits. The fixture really does
+        // leave the probe unable to answer, so the Allow is what settles it.
+        let waiting = decide(&root, "omp", command, &defaults);
+        assert_ne!(
+            waiting.decision, "allow",
+            "{command} waits by default: {}",
+            waiting.reason_code
+        );
+    }
+    let mut failures = Vec::new();
+    for harness in ["omp", "zcode", "codex", "claude-code"] {
+        for command in [
+            "git status --short --branch",
+            "git remote -v",
+            "git status --short --branch && git remote -v",
+        ] {
+            let result = decide(&root, harness, command, &allowed);
+            if result.decision != "allow" {
+                failures.push(format!(
+                    "{harness}: {command}: {} {} {}",
+                    result.decision, result.reason_code, result.reason
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+/// The other half. Where the probe did answer and named a program the read
+/// would start, the review is a helper Guard can see, and no Allow settles
+/// it. A file-system monitor runs on the index `git status` refreshes.
+#[test]
+fn an_allowed_read_whose_configuration_names_a_monitor_still_waits_for_review() {
+    let (root, _cleanup) = checkout("fsmonitor", false);
+    std::fs::write(
+        root.join(".gitconfig"),
+        "[core]\n\tfsmonitor = /tmp/watch\n",
+    )
+    .unwrap();
+    let controls = every_permission("enabled");
+    for command in [
+        "git status --short --branch",
+        "git status --short --branch && git remote -v",
+    ] {
+        let result = decide(&root, "omp", command, &controls);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
