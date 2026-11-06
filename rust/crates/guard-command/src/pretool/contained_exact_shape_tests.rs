@@ -155,3 +155,29 @@ fn a_loop_or_branch_body_group_is_read_without_its_brackets() {
         assert!(shaped(command, &ws), "{command}");
     }
 }
+
+/// `git commit -m "$(cat <<'EOF' ... EOF)"` is how an agent hands a
+/// multi-line message to Git. The sandbox runs the raw text, where the real
+/// `cat` prints exactly the heredoc, so the shape is the one the message's
+/// own words earn. Without it the chain keeps the review its unevaluated
+/// substitution earned and ordinary committing stops.
+#[test]
+fn a_heredoc_commit_message_plans_as_the_message_it_passes() {
+    let ws = tree("heredoc-message");
+    for command in [
+        "git commit -m \"$(cat <<'EOF'\nfeat(x): subject\n\nbody line\nEOF\n)\"",
+        "git add README.md && git commit -m \"$(cat <<'EOF'\nAdd notes\n\nExplain the window.\nEOF\n)\"",
+    ] {
+        assert!(shaped(command, &ws), "{command}");
+    }
+    // Only the heredoc form reads as its value here. A substitution the
+    // projection judges as a command of its own has no shape without the
+    // verdict for that command, which this derivation never asks for.
+    for command in [
+        "git commit -m \"$(whoami)\"",
+        "git commit -m \"$(cat notes.txt)\"",
+        "git commit -m \"$(cat <<EOF\nsubject\nEOF\n)\"",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+}

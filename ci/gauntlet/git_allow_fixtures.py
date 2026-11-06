@@ -14,6 +14,10 @@ The origin is the offline shape ``fast_forward_fixtures`` builds: a remote URL
 with ``refs/remotes/origin/main`` one commit ahead, so a fast-forward merge
 runs without network. Chains that reach the network (``git fetch``/``git
 pull``) need a reachable origin and are not covered here.
+
+The unmodelled-read case is the exception: it builds its own origin as a
+bare repository beside the checkout, so ``git ls-remote`` answers from the
+filesystem with no network and no credential.
 """
 
 from __future__ import annotations
@@ -36,6 +40,10 @@ GIT_ALLOW_WORKTREE_CASE = "git-allow-worktree-sibling-then-status"
 GIT_ALLOW_HOOKS_WORKTREE_CASE = "git-allow-worktree-into-hooks-folder"
 # An allowed step never carries a blocked step in the same compound with it.
 GIT_ALLOW_MIXED_WORKTREE_CASE = "git-allow-worktree-then-secret-read"
+# Git work the catalog carries no rule for, run under a full git Allow.
+GIT_ALLOW_UNMODELLED_CASE = "git-allow-unmodelled-reads-against-origin"
+# Git's own plumbing names for work the porcelain above already settles.
+GIT_ALLOW_PLUMBING_CASE = "git-allow-plumbing-reads-under-allow"
 GIT_ALLOW_CASES = frozenset(
     {
         GIT_ALLOW_MERGE_CASE,
@@ -45,6 +53,8 @@ GIT_ALLOW_CASES = frozenset(
         GIT_ALLOW_WORKTREE_CASE,
         GIT_ALLOW_HOOKS_WORKTREE_CASE,
         GIT_ALLOW_MIXED_WORKTREE_CASE,
+        GIT_ALLOW_UNMODELLED_CASE,
+        GIT_ALLOW_PLUMBING_CASE,
     }
 )
 GIT_EXTENSION_ID = "command.git"
@@ -58,6 +68,9 @@ NAMED_WORKTREE = "pr/hol-guard-pr-12"
 SIBLING_WORKTREE = "review-wt"
 HOOKS_WORKTREE = ".git/hooks/review-wt"
 MIXED_WORKTREE = "mixed-wt"
+UNMODELLED_ORIGIN = "origin.git"
+UNMODELLED_ARCHIVE = "snapshot.tar"
+PLUMBING_ARCHIVE = "plumbing.tar"
 _IDENTITY = {
     "GIT_AUTHOR_NAME": "Gauntlet Fixture",
     "GIT_AUTHOR_EMAIL": "gauntlet@example.invalid",
@@ -91,6 +104,9 @@ def add_git_allow_shape(workspace: Path, environment: dict[str, str], scenario_i
     if scenario_id == GIT_ALLOW_NAMED_CHECKOUT_CASE:
         _add_named_checkout(workspace, environment)
         return
+    if scenario_id == GIT_ALLOW_UNMODELLED_CASE:
+        _add_local_origin(workspace, environment)
+        return
     if scenario_id == GIT_ALLOW_STASH_CASE:
         target = workspace / STASH_FILE
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -116,6 +132,26 @@ def _add_named_checkout(workspace: Path, environment: dict[str, str]) -> None:
         handle.write("/pr/\n")
     _git(workspace, environment, "worktree", "add", "--quiet", "-b", "pr", NAMED_WORKTREE)
     target.write_text("<Wix><Broken /></Wix>\n", encoding="utf-8", newline="\n")
+
+
+def _add_local_origin(workspace: Path, environment: dict[str, str]) -> None:
+    """A bare repository beside the checkout, registered as ``origin``.
+
+    ``git ls-remote`` then answers from the filesystem, with no network and no
+    credential, so the case measures Guard's answer rather than the host's
+    connectivity.
+    """
+    bare = workspace.parent / UNMODELLED_ORIGIN
+    subprocess.run(
+        ["git", "init", "--quiet", "--bare", str(bare)],
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    _git(workspace, environment, "remote", "add", "origin", str(bare))
+    _git(workspace, environment, "push", "--quiet", "origin", "HEAD:refs/heads/main")
 
 
 def _heads(workspace: Path) -> tuple[str, str] | None:
@@ -144,6 +180,16 @@ def git_allow_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
         return {"git-allow-sibling-worktree-at-origin": heads is not None and heads[0] == heads[1]}
     if scenario_id == GIT_ALLOW_HOOKS_WORKTREE_CASE:
         return {"git-allow-hooks-worktree-absent": not (workspace / HOOKS_WORKTREE).exists()}
+    if scenario_id == GIT_ALLOW_PLUMBING_CASE:
+        # The archive is the last step, so it exists only if the plumbing
+        # reads before it ran rather than waiting for the user.
+        archive = workspace / PLUMBING_ARCHIVE
+        return {"git-allow-plumbing-reads-ran": archive.is_file() and archive.stat().st_size > 0}
+    if scenario_id == GIT_ALLOW_UNMODELLED_CASE:
+        # The archive is the second step, so it exists only if the ls-remote
+        # before it ran rather than waiting for the user.
+        archive = workspace / UNMODELLED_ARCHIVE
+        return {"git-allow-unmodelled-reads-ran": archive.is_file() and archive.stat().st_size > 0}
     if scenario_id == GIT_ALLOW_MIXED_WORKTREE_CASE:
         # The whole compound is denied, so the allowed checkout never ran either.
         return {"git-allow-mixed-worktree-absent": not (workspace.parent / MIXED_WORKTREE).exists()}

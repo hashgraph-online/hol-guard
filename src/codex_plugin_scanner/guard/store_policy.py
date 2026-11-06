@@ -604,9 +604,14 @@ class StorePolicyMixin:
     ) -> None:
         """Atomically remove all cached and materialized remote authority.
 
-        When ``policy_bundle_ack`` is given, it is called with the acknowledgement
-        stored at the moment of the clear, read inside the clearing transaction,
-        and its result replaces that acknowledgement in the same write. A crash
+        The resident writes the clear. It first answers the managed publication
+        epoch the clear moves to and the acknowledgement stored now, then
+        writes only while the authority snapshot, that epoch and that
+        acknowledgement are unchanged, so the view published here is the one
+        the clear commits.
+
+        When ``policy_bundle_ack`` is given, it is called with that stored
+        acknowledgement and its result replaces it in the same write. A crash
         cannot leave the bundle cleared with no failed acknowledgement queued for
         Cloud, and a concurrent sync cannot swap the bundle between the read and
         the clear.
@@ -619,132 +624,66 @@ class StorePolicyMixin:
             "policy_bundle_last_error": dict(policy_bundle_last_error),
             "team_policy_pack": {},
         }
-        encoded_payloads = {
-            state_key: json.dumps(payload, allow_nan=False) for state_key, payload in state_payloads.items()
-        }
-        managed_base_snapshot: tuple[int, str] | None = None
-        managed_base_snapshot_captured = False
+        payloads = {state_key: json.dumps(payload, allow_nan=False) for state_key, payload in state_payloads.items()}
         managed_base_authority = self.read_persisted_extension_control_authority()
         with self._connect() as authority_connection:
             authority_row = authority_connection.execute(
                 "select revision, snapshot_digest from extension_control_authority_snapshot where singleton = 1"
             ).fetchone()
-        managed_base_snapshot_captured = True
-        if authority_row is not None:
-            managed_base_snapshot = (
-                int(authority_row["revision"]),
-                str(authority_row["snapshot_digest"]),
-            )
-        with self._extension_control_authority_lock(), self._connect() as connection:
+        base: dict[str, object] = (
+            {}
+            if authority_row is None
+            else {
+                "base_revision": int(authority_row["revision"]),
+                "base_snapshot_digest": str(authority_row["snapshot_digest"]),
+            }
+        )
+        key = self._authority_key(required=False)
+        with self._extension_control_authority_lock():
             self._invalidate_native_extension_control_policy()
-            connection.execute("begin immediate")
-            if managed_base_snapshot_captured:
-                authority_row = connection.execute(
-                    "select revision, snapshot_digest from extension_control_authority_snapshot where singleton = 1"
-                ).fetchone()
-                observed_base_snapshot = (
-                    None
-                    if authority_row is None
-                    else (
-                        int(authority_row["revision"]),
-                        str(authority_row["snapshot_digest"]),
-                    )
-                )
-                if observed_base_snapshot != managed_base_snapshot:
-                    connection.rollback()
-                    raise ExtensionControlAuthorityError("extension control authority changed during clear")
-            active_row = connection.execute(
-                "select payload_json from sync_state where state_key = ?",
-                (MANAGED_CONTROLS_ACTIVE_STATE_KEY,),
-            ).fetchone()
-            revision_row = connection.execute(
-                "select payload_json from sync_state where state_key = ?",
-                (MANAGED_CONTROLS_REVISION_STATE_KEY,),
-            ).fetchone()
-            managed_revision = 0
-            managed_authority_key = None
-            if active_row is not None or revision_row is not None:
-                managed_authority_key = self._authority_key(required=True)
-                if managed_authority_key is None:
-                    raise ExtensionControlAuthorityError("managed controls authority key is unavailable")
-            if revision_row is not None:
-                assert managed_authority_key is not None
-                try:
-                    revision_state = json.loads(str(revision_row["payload_json"]))
-                    managed_revision = self._managed_revision(revision_state, key=managed_authority_key)
-                except (json.JSONDecodeError, ExtensionControlAuthorityError) as exc:
-                    connection.rollback()
-                    raise ExtensionControlAuthorityError("invalid managed controls revision") from exc
-            if active_row is not None:
-                assert managed_authority_key is not None
-                try:
-                    previous_active = json.loads(str(active_row["payload_json"]))
-                    active_catalog_digest = (
-                        previous_active.get("catalogDigest") if isinstance(previous_active, dict) else None
-                    )
-                    if not isinstance(active_catalog_digest, str) or not active_catalog_digest:
-                        raise ExtensionControlAuthorityError("invalid managed controls activation catalog")
-                    _, active_revision = self._managed_activation(
-                        previous_active, key=managed_authority_key, catalog_digest=active_catalog_digest
-                    )
-                except (json.JSONDecodeError, ExtensionControlAuthorityError) as exc:
-                    connection.rollback()
-                    raise ExtensionControlAuthorityError("invalid managed controls activation") from exc
-                if revision_row is not None and active_revision != managed_revision:
-                    connection.rollback()
-                    raise ExtensionControlAuthorityError("managed controls revision mismatch")
-                managed_revision = active_revision + 1
-            if managed_revision > 0:
-                assert managed_authority_key is not None
-                encoded_payloads[MANAGED_CONTROLS_REVISION_STATE_KEY] = json.dumps(
-                    self._seal_managed_revision(managed_revision, key=managed_authority_key),
-                    allow_nan=False,
-                )
-            if policy_bundle_ack is not None:
-                ack_row = connection.execute(
-                    "select payload_json from sync_state where state_key = ?",
-                    ("policy_bundle_ack",),
-                ).fetchone()
-                stored_ack = None if ack_row is None else json.loads(str(ack_row["payload_json"]))
-                failed_ack = policy_bundle_ack(stored_ack)
-                if failed_ack is not None:
-                    encoded_payloads["policy_bundle_ack"] = json.dumps(dict(failed_ack), allow_nan=False)
-            self._replace_remote_policy_rows_locked(connection, ())
-            connection.execute(
-                "delete from sync_state where state_key in (?, ?, ?, ?)",
-                (
-                    "policy_bundle",
-                    "policy_bundle_ack",
-                    MANAGED_CONTROLS_ACTIVE_STATE_KEY,
-                    MANAGED_CONTROLS_NEGOTIATED_CAPABILITIES_STATE_KEY,
-                ),
+            # The resident hashes the request as it decodes it, so every field it
+            # serializes is sent and every absent one is omitted.
+            plan = self._extension_control_authority_op(
+                "clear_policy", key=key, now=normalized_now, policy_clear={**base, "payloads": {}}
             )
-            for state_key, payload_json in encoded_payloads.items():
-                connection.execute(
-                    """
-                    insert into sync_state (state_key, payload_json, updated_at)
-                    values (?, ?, ?)
-                    on conflict(state_key) do update set
-                      payload_json = excluded.payload_json,
-                      updated_at = excluded.updated_at
-                    """,
-                    (state_key, payload_json, normalized_now),
+            managed_revision = plan.get("managed_revision")
+            stored_ack = plan.get("stored_ack")
+            if type(managed_revision) is not int or not (stored_ack is None or isinstance(stored_ack, str)):
+                raise ExtensionControlAuthorityError("invalid policy clear plan")
+            if policy_bundle_ack is not None:
+                failed_ack = policy_bundle_ack(None if stored_ack is None else json.loads(stored_ack))
+                if failed_ack is not None:
+                    payloads["policy_bundle_ack"] = json.dumps(dict(failed_ack), allow_nan=False)
+
+            def commit() -> None:
+                self._extension_control_authority_op(
+                    "clear_policy",
+                    key=key,
+                    now=normalized_now,
+                    policy_clear={
+                        **base,
+                        "managed_revision": managed_revision,
+                        **({} if stored_ack is None else {"stored_ack": stored_ack}),
+                        "payloads": payloads,
+                    },
                 )
-            if managed_controls_publish is not None:
-                assert managed_base_authority is not None
-                local_layers = tuple(
-                    layer for layer in managed_base_authority.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN
-                )
-                managed_controls_publish(
-                    ExtensionControlAuthorityView(
-                        managed_base_authority.health,
-                        managed_base_authority.revision,
-                        managed_base_authority.catalog_digest,
-                        local_layers,
-                        managed_revision,
-                    ),
-                    connection.commit,
-                )
+
+            if managed_controls_publish is None:
+                commit()
+                return
+            local_layers = tuple(
+                layer for layer in managed_base_authority.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN
+            )
+            managed_controls_publish(
+                ExtensionControlAuthorityView(
+                    managed_base_authority.health,
+                    managed_base_authority.revision,
+                    managed_base_authority.catalog_digest,
+                    local_layers,
+                    managed_revision,
+                ),
+                commit,
+            )
 
     def _prepared_remote_policy_rows(
         self,

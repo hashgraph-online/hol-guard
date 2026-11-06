@@ -177,6 +177,8 @@ impl Ctx<'_> {
         };
         let sealed = anchor_json(&committed, key)?;
         self.write_anchor(&sealed)?;
+        // Best effort, as in `_export_last_good_authority`.
+        let _ = self.export_last_good(&committed);
         Ok(json!({
             "resumed": {
                 "revision": revision,
