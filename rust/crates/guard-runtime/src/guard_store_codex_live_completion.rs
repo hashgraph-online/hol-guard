@@ -275,6 +275,18 @@ fn finalize(
             return Ok(false);
         }
     }
+    // A resumed hook uses the Allow once; an identical retry in a later turn
+    // must not run on it again, and a retry that already ran on it leaves
+    // nothing for the hook to resume with.
+    if finalizing.action == "allow_once"
+        && !crate::guard_store_native_review_consume::spend_for_live_resume(
+            connection,
+            request_id,
+            finalizing.now,
+        )?
+    {
+        return Ok(false);
+    }
     Ok(crate::continuation_store::finalize(connection, &request)?["finalized"] == true)
 }
 
