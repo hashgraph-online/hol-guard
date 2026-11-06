@@ -6,13 +6,15 @@
 
 use super::*;
 
+/// `allow`, or `not-allow` with the reason code that held the command, so a
+/// failure names the screen rather than only the outcome.
 fn action_in(
     controls: &CompiledNativeCommandControls,
     command: &str,
     home: &std::path::Path,
     cwd: &std::path::Path,
 ) -> String {
-    crate::pretool::evaluate_pre_tool_envelope_with_context(
+    let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
         "omp",
         "PreToolUse",
         &serde_json::json!({
@@ -24,8 +26,11 @@ fn action_in(
         None,
         home.to_str(),
         cwd.to_str(),
-    )
-    .minimum_action
+    );
+    if result.minimum_action == "allow" {
+        return "allow".to_owned();
+    }
+    format!("not-allow({})", result.reason_code)
 }
 
 /// Every configurable permission of `extension_id`, as a user who turned the
@@ -95,12 +100,7 @@ fn an_allowed_extension_covers_a_list_that_changes_directory_before_a_sequence()
         .iter()
         .map(|(name, command)| {
             let action = action_in(&controls, command, &home, &workspace);
-            let allowed = if action == "allow" {
-                "allow"
-            } else {
-                "not-allow"
-            };
-            format!("{name}: {allowed}")
+            format!("{name}: {action}")
         })
         .collect();
     assert_eq!(
@@ -115,9 +115,9 @@ fn an_allowed_extension_covers_a_list_that_changes_directory_before_a_sequence()
             "cd then sequence: allow",
             "cd, read first: allow",
             // A step the Allow does not cover still keeps its review after a `cd`.
-            "uncovered step: not-allow",
+            "uncovered step: not-allow(native_command_review_required)",
             // So does a list whose `cd` cannot be proved to reach its directory.
-            "cd nowhere: not-allow",
+            "cd nowhere: not-allow(native_command_review_required)",
         ]
     );
 }
