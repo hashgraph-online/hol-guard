@@ -34,12 +34,12 @@ pub(super) fn record_migration_op(
         request,
         events: RefCell::new(Vec::new()),
     };
-    Ok(immediate(&connection, || ctx.record_migration())
+    Ok(immediate(&connection, || ctx.record_migration_event())
         .unwrap_or_else(|fault| fault_value(&fault, Vec::new())))
 }
 
 impl Ctx<'_> {
-    fn record_migration(&self) -> Res<Value> {
+    fn record_migration_event(&self) -> Res<Value> {
         let (Some(revision), Some(catalog_digest), Some(occurred_at), Some(record)) = (
             self.request.revision,
             self.request.catalog_digest.as_deref(),
