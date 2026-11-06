@@ -127,3 +127,41 @@ fn an_option_the_shell_reads_differently_keeps_the_wrapper_path() {
         assert!(super::inline_shell_script(command).is_none(), "{command}");
     }
 }
+
+#[test]
+fn a_refused_shell_offers_plain_dash_c_only_when_guard_reads_it() {
+    for command in [
+        "bash -lc 'ls'",
+        "bash -l -c 'git status'",
+        "bash --login -c 'ls'",
+        "bash --posix -c 'ls'",
+        "bash -O nullglob -c 'ls *.txt'",
+        "bash -ic 'npm test'",
+        "zsh -c 'git status'",
+        "zsh -lc 'ls'",
+        "bash --rcfile team.rc -c 'ls'",
+        "bash -o posix -c 'ls'",
+    ] {
+        assert!(super::refused_inline_shell(command).is_some(), "{command}");
+    }
+    for command in [
+        // Guard already reads these, so they are reviewed, not refused.
+        "bash -c 'ls'",
+        "sh -ec 'npm test'",
+        // A plain `-c` would not read these either, so it is no recovery.
+        "bash -lc 'echo $HOME'",
+        "bash -lc 'ls' > out.txt",
+        "bash -lc \"echo 'x'\"",
+        "bash -lc ''",
+        "fish -c 'ls'",
+        "bash script.sh",
+        "bash -lc 'ls' arg0",
+        // The last two words are arguments to an earlier script, or follow
+        // the end of the options, so they are no flag and script.
+        "bash -c 'git status' -lc 'ls'",
+        "bash -- -c ls",
+        "bash -o -c ls",
+    ] {
+        assert_eq!(super::refused_inline_shell(command), None, "{command}");
+    }
+}

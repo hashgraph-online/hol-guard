@@ -120,6 +120,36 @@ pub(super) fn explain_expired_deadline(result: &mut PreToolResultV1, deadline: O
     }
 }
 
+/// A shell carrying its script under a login, interactive or alias-changing
+/// option, or any `zsh`, runs code this text does not hold, so Guard keeps
+/// the block. The agent is told which options did that and offered the plain
+/// `bash -c` spelling, but only when `matches` shows Guard evaluates that
+/// spelling of the same script, so the recovery it names is one that works.
+pub(super) fn explain_startup_shell(
+    result: &mut PreToolResultV1,
+    command: Option<&CanonicalCommandV1>,
+    matches: impl FnOnce(&CanonicalCommandV1) -> bool,
+) {
+    if result.reason_code != "native_command_extension_evaluation_failed" {
+        return;
+    }
+    let Some(command) = command else {
+        return;
+    };
+    let Some(text) = crate::parser_wrappers::refused_inline_shell(&command.normalized_text) else {
+        return;
+    };
+    let probe = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: text,
+        dialect: command.dialect.clone(),
+        transport: command.transport.clone(),
+        extraction_provenance: command.extraction_provenance.clone(),
+    });
+    if probe.is_ok_and(|probe| matches(&probe)) {
+        result.reason = STARTUP_SHELL_REASON.to_owned();
+    }
+}
+
 /// A redirect into the home folder names a path the shell expands when the
 /// command runs, so Guard cannot match it and keeps the block, inside a loop
 /// as well as on its own. The agent is told about that redirect rather than
@@ -227,6 +257,8 @@ fn project_home_target(target: &str) -> Option<String> {
 
 pub(super) const HOME_REDIRECT_REASON: &str = "HOL Guard could not match this command to the installed extension controls, so it stays blocked. It writes to a path under the home folder (`~` or `$HOME`), which the shell only works out when the command runs. Write the output inside the project or a temporary folder instead, or use the built-in edit tool for a file in the home folder.";
 
+pub(super) const STARTUP_SHELL_REASON: &str = "HOL Guard blocked this because the shell options run code that is not in the command text: startup files (`-l`, `-i`, `--login`, `--rcfile`, or any `zsh`) or modes that change how the script's words are read (`--posix`, `-O expand_aliases`, `-O nullglob`, `-a`, `-k`). Guard cannot review that code, so this cannot be approved. Run the script's commands directly, or as `bash -c '...'` with no other options; Guard reviews those the usual way.";
+
 /// A check that ran out of time inspected nothing, so Guard asks rather
 /// than deciding for the user. The card keeps Allow once and Always allow.
 pub(super) const TIMED_OUT_REVIEW_REASON: &str = "HOL Guard ran out of time checking this command against the installed extension controls, so it has not inspected the command and is asking you instead of deciding for you. This is usually temporary while the machine is busy, and running the same command again in a moment normally clears it. If it keeps happening, run each chained step as its own command, or run `hol-guard doctor`.";
@@ -286,3 +318,7 @@ impl super::CompiledNativeCommandControls {
         granted.difference(&withheld).copied().collect()
     }
 }
+
+#[cfg(test)]
+#[path = "native_command_startup_shell_tests.rs"]
+mod startup_shell_tests;
