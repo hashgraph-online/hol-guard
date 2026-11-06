@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.native_command_control_authority_store import _k
 from tests.extension_builder_support import use_installed_native_source_compiler
 from tests.native_activation_support import BINARY, native, seed
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
+from tests.pack_activation_writer_support import write_in_transaction
 from tests.test_extension_pack_preparation import delivery as delivery
 
 PRODUCTION_INVOKE = lifecycle.invoke
@@ -190,9 +191,7 @@ def test_sqlite_loss_recovery_retains_native_publication_floor(delivery, tmp_pat
 
     draft = activation_transition.stage(None, prepared(), verifier_key=_key(store), store=store, now=1500)
     with hold_command_control_authority_lock(tmp_path), connect() as connection:
-        activation_store.write_in_transaction(
-            store, connection, draft, verifier_key=_key(store), recorded_at="unit", now=1500
-        )
+        write_in_transaction(store, connection, draft, verifier_key=_key(store), recorded_at="unit", now=1500)
     protected, floor = lifecycle_store.inspect(store)
     assert floor["remote"]["version"] == "12.1"
     database.unlink()  # Only this test's disposable SQLite file is removed.
@@ -204,9 +203,7 @@ def test_sqlite_loss_recovery_retains_native_publication_floor(delivery, tmp_pat
     delivery.value["publication_id"] = "12.1"
     recovered = activation_transition.stage(None, prepared(), verifier_key=_key(store), store=store, now=1500)
     with hold_command_control_authority_lock(tmp_path), connect() as connection:
-        activation_store.write_in_transaction(
-            store, connection, recovered, verifier_key=_key(store), recorded_at="recovered", now=1500
-        )
+        write_in_transaction(store, connection, recovered, verifier_key=_key(store), recorded_at="recovered", now=1500)
     assert activation_store.read(store).record()["publication_id"] == "12.1"
     assert lifecycle_store.inspect(store)[0] == protected
 
