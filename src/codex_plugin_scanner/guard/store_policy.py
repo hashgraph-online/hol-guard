@@ -641,7 +641,11 @@ class StorePolicyMixin:
         key = self._authority_key(required=False)
         with self._extension_control_authority_lock():
             self._invalidate_native_extension_control_policy()
-            plan = self._extension_control_authority_op("clear_policy", key=key, now=normalized_now, policy_clear=base)
+            # The resident hashes the request as it decodes it, so every field it
+            # serializes is sent and every absent one is omitted.
+            plan = self._extension_control_authority_op(
+                "clear_policy", key=key, now=normalized_now, policy_clear={**base, "payloads": {}}
+            )
             managed_revision = plan.get("managed_revision")
             stored_ack = plan.get("stored_ack")
             if type(managed_revision) is not int or not (stored_ack is None or isinstance(stored_ack, str)):
@@ -659,7 +663,7 @@ class StorePolicyMixin:
                     policy_clear={
                         **base,
                         "managed_revision": managed_revision,
-                        "stored_ack": stored_ack,
+                        **({} if stored_ack is None else {"stored_ack": stored_ack}),
                         "payloads": payloads,
                     },
                 )
