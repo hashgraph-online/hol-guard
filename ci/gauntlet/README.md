@@ -433,9 +433,9 @@ MCP server Guard does not recognise, which means reading that harness's own conf
 `--harness omp` refuses it and the lane runs through `claude-code`, `codex` or `cursor`.
 
 - The lane carries its own catalog, `ci/gauntlet/approval_retry.json` (14 cases), rather than
-  joining `core`. Every core scenario runs on every lane, including the installed acceptance
-  lane, so adding these would make each of those lanes grow the new oracles and would move
-  `catalog_sha256` and `expected_scenarios` in every lane's evidence. The existing judges would
+  joining `core`. Every lane that reads the core catalog runs its scenarios, so adding these
+  would make each of those lanes grow the new oracles and would move `catalog_sha256` and
+  `expected_scenarios` in their evidence. The existing judges would
   also fail them on their own terms: an allow-expectation case that is deliberately stopped and
   that deliberately creates an approval row reads as a failure, and `is_benign` counts this
   lane's intended review as a benign interruption.
