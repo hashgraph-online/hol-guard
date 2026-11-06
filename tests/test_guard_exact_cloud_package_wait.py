@@ -9,6 +9,7 @@ request and is reviewed again.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -139,6 +140,7 @@ def test_the_cloud_allow_binds_the_artifact_hash_and_is_spent_once(tmp_path: Pat
     )
 
 
+@pytest.mark.skipif(os.name == "nt", reason="launches a POSIX shell stub as npm")
 def test_the_install_that_waited_runs_once_and_a_later_retry_is_reviewed_again(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
