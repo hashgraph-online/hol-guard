@@ -24,6 +24,7 @@ from typing import Protocol
 
 from .codex_hook_launch_runtime import isolated_hook_environment
 from .native_mode import non_production_diagnostic_enabled
+from .native_process_stop_scope import get_unless_stopped
 from .native_resident_reap import reap_exited_client
 from .native_resident_transport import write_frame
 
@@ -450,7 +451,7 @@ class _PersistentNativeClient:
                     self._record_phase_failure("native_client_timed_out", "response_deadline")
                     return None
                 try:
-                    response = responses.get(timeout=remaining)
+                    response = get_unless_stopped(responses, remaining)
                 except Empty:
                     self.close(deadline_monotonic=deadline_monotonic)
                     self._record_phase_failure("native_client_timed_out", "response_wait")
