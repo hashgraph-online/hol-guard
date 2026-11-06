@@ -1,6 +1,5 @@
-//! The command-pack half of `resume`: `activation_journal.finish` and
-//! `activation_store.write_in_transaction`, inside the immediate transaction
-//! that commits the anchored control row.
+//! The command-pack half of `resume`: install the pending activation inside
+//! the immediate transaction that commits the anchored control row.
 //!
 //! The pending activation is authenticated against the transition it was
 //! reserved for, then installed in the active slot. Everything protected the
@@ -199,7 +198,7 @@ impl Ctx<'_> {
         Ok(PackStep::Finished)
     }
 
-    /// `_verify_pending`: the link binds this transition and pack record, and
+    /// The link binds this transition and pack record, and
     /// the pack record binds this catalog.
     fn verified_pending(&self, row: &Row, pending: &Row, key_hex: &str) -> Res<(Value, Value)> {
         let mut link = record_request("link", pending, "link")?;

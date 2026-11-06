@@ -306,7 +306,7 @@ fn baseline(value: &Map<String, Value>, row_revision: &Value) -> Result<()> {
     Ok(())
 }
 
-/// `activation_journal._verify_pending`'s link check.
+/// The link check: a link binds exactly one transition and pack record.
 fn link(value: &Map<String, Value>, expected: &Value) -> Result<()> {
     let mismatch = || "native_command_pack_transition_mismatch".to_owned();
     let expected = expected.as_object().ok_or_else(mismatch)?;

@@ -1,4 +1,4 @@
-//! The command-pack half of `commit_prepare`: `activation_journal.reserve`,
+//! The command-pack half of `commit_prepare`: reserve the staged activation
 //! inside the immediate transaction that writes the prepared row.
 //!
 //! The staged activation is authenticated, checked against the protected
