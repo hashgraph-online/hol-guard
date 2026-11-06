@@ -53,10 +53,12 @@ pub struct ApprovalGatePublicConfig {
     pub totp_enabled: bool,
     pub totp_pending: bool,
     pub totp_recent_satisfied: bool,
+    pub pulse_enabled: bool,
+    pub pulse_cooldown_seconds: i64,
 }
 
 impl ApprovalGatePublicConfig {
-    /// `to_dict` — 11-key payload, insertion order preserved.
+    /// `to_dict` — 13-key payload, insertion order preserved.
     pub fn to_dict(&self) -> Value {
         json!({
             "enabled": self.enabled,
@@ -70,6 +72,8 @@ impl ApprovalGatePublicConfig {
             "totp_enabled": self.totp_enabled,
             "totp_pending": self.totp_pending,
             "totp_recent_satisfied": self.totp_recent_satisfied,
+            "pulse_enabled": self.pulse_enabled,
+            "pulse_cooldown_seconds": self.pulse_cooldown_seconds,
         })
     }
 }
@@ -747,11 +751,13 @@ mod tests {
             totp_enabled: true,
             totp_pending: false,
             totp_recent_satisfied: true,
+            pulse_enabled: false,
+            pulse_cooldown_seconds: 0,
         };
         let d = cfg.to_dict();
         assert_eq!(d["cooldown_seconds"], json!(900));
         assert_eq!(d["totp_enabled"], json!(true));
         assert_eq!(d["locked_until"], Value::Null);
-        assert_eq!(d.as_object().unwrap().len(), 11);
+        assert_eq!(d.as_object().unwrap().len(), 13);
     }
 }

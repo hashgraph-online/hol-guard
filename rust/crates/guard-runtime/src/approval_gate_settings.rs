@@ -19,6 +19,7 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::approval_gate_grants::{ApprovalGateErrorV1, ApprovalGateGrantV1, ApprovalGateGrants};
+use crate::approval_gate_pulse as pulse;
 use crate::approval_gate_state::{
     constant_time_eq, cooldown_active, enabled, epoch, is_future, iso_from_epoch, load_state,
     optional_bool, optional_int, optional_string, reset_failed_attempts, verifier, write_state,
@@ -142,6 +143,12 @@ pub(crate) fn public_config_locked(
         totp_enabled: totp_enabled_v,
         totp_pending: has_pending_totp(&state, now_epoch),
         totp_recent_satisfied: totp_recent,
+        pulse_enabled: pulse::pulse_enabled(&state),
+        pulse_cooldown_seconds: if pulse::pulse_enabled(&state) {
+            pulse::pulse_cooldown_seconds(&state)
+        } else {
+            0
+        },
     }
 }
 
@@ -212,6 +219,7 @@ pub(crate) fn next_settings_state(
     if gate_input.revoke_cooldown {
         if let Some(o) = next_state.as_object_mut() {
             o.remove("cooldown_expires_at");
+            o.remove("pulse_cooldown");
         }
     }
     if gate_was_enabled {
@@ -263,6 +271,35 @@ pub(crate) fn next_settings_state(
             .unwrap()
             .insert("cooldown_seconds".into(), Value::Number(secs.into()));
     }
+    if let Some(pcs) = payload.get("pulse_cooldown_seconds") {
+        // Only an explicit choice opens a Pulse cooldown; the default is a
+        // fresh biometric approval for every held action.
+        let secs = pcs
+            .as_i64()
+            .filter(|s| pulse::PULSE_ALLOWED_COOLDOWNS.contains(s))
+            .ok_or_else(invalid_cooldown)?;
+        if pulse::pulse_enabled(&next_state) {
+            let o = next_state.as_object_mut().unwrap();
+            o.insert("pulse_cooldown_seconds".into(), Value::Number(secs.into()));
+            o.remove("pulse_cooldown");
+        } else if secs != 0 {
+            return Err(err(
+                "approval_gate_pulse_not_enabled",
+                "Yanez Pulse is not the approval factor for this Guard.",
+                409,
+            ));
+        }
+        // Without Pulse the public config reports 0, so a saved or imported
+        // config sends 0 back; that changes nothing.
+    }
+    if requested_enabled == Some(false) && pulse::pulse_enabled(&next_state) {
+        // Turning the gate off ends Pulse too. The secrets are deleted by
+        // `update_settings` once the new state is written.
+        if let Some(o) = next_state.as_object_mut() {
+            o.retain(|k, _| !k.starts_with("pulse_") || k.ends_with("_secret_id"));
+            o.insert("pulse_enabled".into(), Value::Bool(false));
+        }
+    }
     if let Some(sad) = payload.get("strict_all_decisions") {
         next_state.as_object_mut().unwrap().insert(
             "strict_all_decisions".into(),
@@ -283,7 +320,10 @@ pub(crate) fn update_settings(
 ) -> Result<ApprovalGatePublicConfig, ApprovalGateErrorV1> {
     let previous_generation = factor_generation(&load_state(guard_home));
     let next_state = next_settings_state(guard_home, grants, payload, approval_gate_grant, now)?;
-    if let Some(ns) = next_state {
+    if let Some(mut ns) = next_state {
+        if ns.get("pulse_enabled") == Some(&Value::Bool(false)) {
+            pulse::clear_pulse_state(guard_home, &mut ns);
+        }
         write_state(guard_home, &ns, now).map_err(|_| {
             err(
                 "approval_gate_state_io",
@@ -318,6 +358,7 @@ pub(crate) fn revoke_cooldown(
     let mut state = load_state(guard_home);
     if let Some(o) = state.as_object_mut() {
         o.remove("cooldown_expires_at");
+        o.remove("pulse_cooldown");
     }
     write_state(guard_home, &state, now).map_err(|_| {
         err(
@@ -358,6 +399,10 @@ pub(crate) fn unlock_cooldown_locked(
             "Cooldown unlock is unavailable while TOTP is enabled.",
             403,
         ));
+    }
+    if pulse::pulse_enabled(&state) {
+        // A password must never open a cooldown the Pulse factor guards.
+        return Err(pulse::pulse_required());
     }
     let seconds =
         crate::approval_gate_state::coerce_cooldown_seconds(Some(&Value::from(duration_seconds)))

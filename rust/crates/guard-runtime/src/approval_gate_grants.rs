@@ -362,7 +362,10 @@ impl ApprovalGateGrants {
             if !is_totp_factor || !grant.totp_verified {
                 return Err(ApprovalGateErrorV1::totp_required("TOTP code is required."));
             }
-        } else if strict && grant.factor_set != ["password"] {
+        } else if strict && grant.factor_set != ["password"] && grant.factor_set != ["pulse"] {
+            // A Pulse grant can exist only in the factor generation Pulse was
+            // enrolled in (enrolling and disabling both rotate), and only
+            // `verify_pulse_stage` mints one, so it stands in for the password.
             return Err(ApprovalGateErrorV1::password_required(
                 "Approval password is required.",
             ));

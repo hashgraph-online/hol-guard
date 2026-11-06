@@ -19,6 +19,7 @@ guard-cigar-artifacts = { path = "../guard-cigar-artifacts" }
 guard-cigar-install = { path = "../guard-cigar-install" }
 guard-contracts = { path = "../guard-contracts" }
 guard-google-identity = { path = "../guard-google-identity" }
+guard-yanez-pulse = { path = "../guard-yanez-pulse" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
 guard-policy-bundle = { path = "../guard-policy-bundle" }
@@ -84,6 +85,10 @@ capctl = "=0.2.4"
 [features]
 # Exposes the parser entry points in `src/fuzz_entry.rs` to `rust/fuzz`.
 fuzzing = []
+
+[dev-dependencies]
+guard-yanez-pulse = { path = "../guard-yanez-pulse", features = ["testkit"] }
+tempfile = "3.10"
 
 [lints]
 workspace = true
