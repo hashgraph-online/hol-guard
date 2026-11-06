@@ -7,6 +7,8 @@ from __future__ import annotations
 import base64
 import contextlib
 import secrets
+import time
+from collections.abc import Mapping
 
 from .native_extension_control_authority import view_to_wire
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
@@ -237,19 +239,31 @@ class ExtensionControlAuthorityCommitMixin:
                 # which omits an absent digest rather than sending null.
                 **({"pack_record_digest": pack_activation.digest} if pack_activation is not None else {}),
             }
+            reservation: Mapping[str, object] | None = None
+            if pack_activation is not None:
+                from .catalog_delivery.activation_journal import reserve_request
+
+                with self._connect() as connection:
+                    reservation = reserve_request(self, connection, pack_activation, recorded_at=_now())
             proof_already_consumed = False
             rollback_attempted = False
             for _ in range(_MAX_COMMIT_ROUNDS):
-                # Without a pack the resident prepares the row and reserves the
-                # proof in the transaction that plans them.
+                # The resident prepares the row, reserves the proof and any
+                # staged pack activation in the transaction that plans them.
+                # Each round checks the activation's admission at the time it
+                # reserves, so one that expired since an earlier round is refused.
+                pack_reserve: dict[str, object] = (
+                    {} if reservation is None else {"pack_reserve": {**reservation, "admitted_at": int(time.time())}}
+                )
                 plan = self._authority_plan(
-                    "commit_plan" if pack_activation is not None else "commit_prepare",
+                    "commit_prepare",
                     key=key,
                     catalog_digest=catalog_digest,
                     view=view_to_wire(current),
                     commit=commit,
                     now=_now(),
                     rollback_attempted=rollback_attempted,
+                    **pack_reserve,
                 )
                 outcome = str(plan["outcome"])
                 if outcome == "prepare":
@@ -314,70 +328,13 @@ class ExtensionControlAuthorityCommitMixin:
             revision = _plan_int(plan, "revision")
             previous_revision = _plan_int(plan, "previous_revision")
             previous_digest = str(plan["previous_digest"])
-            created_at = str(plan["created_at"])
             hashes = _plan_map(plan, "hashes")
-            actor_hash, idempotency_hash = str(hashes["actor"]), str(hashes["idempotency"])
-            nonce_hash, proof_hash = str(hashes["nonce"]), str(hashes["proof"])
+            proof_hash = str(hashes["proof"])
             snapshot, transition = _plan_map(plan, "snapshot"), _plan_map(plan, "transition")
-            snapshot_json, snapshot_digest, snapshot_mac = (
-                str(snapshot["json"]),
-                str(snapshot["digest"]),
-                str(snapshot["mac"]),
-            )
-            transition_json, transition_digest, transition_mac = (
-                str(transition["json"]),
-                str(transition["digest"]),
-                str(transition["mac"]),
-            )
+            snapshot_digest, transition_digest = str(snapshot["digest"]), str(transition["digest"])
+            created_at = str(plan["created_at"])
             if plan.get("prepared") is not True:
-                with self._connect() as connection:
-                    ensure_extension_control_authority_schema(connection)
-                    connection.execute(
-                        """
-                        insert into extension_control_authority_proof (
-                            proof_id_hash, mutation_digest, transition_revision, reserved_at
-                        ) values (?, ?, ?, ?)
-                        """,
-                        (proof_hash, mutation.canonical_digest, revision, created_at),
-                    )
-                    connection.execute(
-                        """
-                        insert into extension_control_authority_transition (
-                            revision, previous_revision, phase, actor_id_hash, idempotency_key_hash,
-                            nonce_hash, catalog_digest, layers_json, snapshot_json, snapshot_digest,
-                            snapshot_mac, transition_json, transition_digest, transition_mac, created_at
-                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            revision,
-                            previous_revision,
-                            AuthorityPhase.PREPARED.value,
-                            actor_hash,
-                            idempotency_hash,
-                            nonce_hash,
-                            catalog_digest,
-                            layers_json,
-                            snapshot_json,
-                            snapshot_digest,
-                            snapshot_mac,
-                            transition_json,
-                            transition_digest,
-                            transition_mac,
-                            created_at,
-                        ),
-                    )
-                    if pack_activation is not None:
-                        from .catalog_delivery.activation_journal import reserve
-
-                        reserve(
-                            self,
-                            connection,
-                            pack_activation,
-                            control_revision=revision,
-                            snapshot_digest=snapshot_digest,
-                            catalog_digest=catalog_digest,
-                            recorded_at=created_at,
-                        )
+                raise ExtensionControlAuthorityError("extension control authority unavailable")
             try:
                 if not proof_already_consumed:
                     consume_extension_control_proof(self.guard_home, proof, mutation)

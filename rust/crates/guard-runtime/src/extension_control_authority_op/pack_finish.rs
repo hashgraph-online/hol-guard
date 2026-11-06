@@ -23,15 +23,15 @@ use super::{Ctx, STORE_UNAVAILABLE};
 use crate::local_store_read::table_exists;
 
 const MISSING: &str = "native_command_pack_transition_missing";
-const MISMATCH: &str = "native_command_pack_transition_mismatch";
-const ACTIVATION_MISSING: &str = "native_command_pack_activation_missing";
-const CONFLICT: &str = "native_command_pack_activation_conflict";
-const REVISION_INVALID: &str = "native_command_pack_revision_invalid";
-const SCHEMA_INVALID: &str = "native_command_pack_schema_invalid";
-const BASELINE_SCHEMA: &str = "guard.command-pack-legacy-baseline.v1";
-const SCHEMA_V2: &str = "guard.command-pack-activation.v2";
+pub(super) const MISMATCH: &str = "native_command_pack_transition_mismatch";
+pub(super) const ACTIVATION_MISSING: &str = "native_command_pack_activation_missing";
+pub(super) const CONFLICT: &str = "native_command_pack_activation_conflict";
+pub(super) const REVISION_INVALID: &str = "native_command_pack_revision_invalid";
+pub(super) const SCHEMA_INVALID: &str = "native_command_pack_schema_invalid";
+pub(super) const BASELINE_SCHEMA: &str = "guard.command-pack-legacy-baseline.v1";
+pub(super) const SCHEMA_V2: &str = "guard.command-pack-activation.v2";
 /// `PACK_ACTIVATION_SCHEMA_VERSION` and `PACK_ACTIVATION_V2_SCHEMA_VERSION`.
-const PACK_SCHEMA_VERSIONS: [i64; 2] = [5, 6];
+pub(super) const PACK_SCHEMA_VERSIONS: [i64; 2] = [5, 6];
 
 /// How far the pack activation got.
 pub(super) enum PackStep {
@@ -43,19 +43,19 @@ pub(super) enum PackStep {
     LegacyOwed,
 }
 
-fn pack(reason: &str) -> Fault {
+pub(super) fn pack(reason: &str) -> Fault {
     Fault::Pack(reason.to_owned())
 }
 
 /// `lifecycle.invoke`: a refusal is the pack error the caller reports.
-fn lifecycle(input: &Value) -> Res<Value> {
+pub(super) fn lifecycle(input: &Value) -> Res<Value> {
     crate::pack_lifecycle::evaluate(input).map_err(Fault::Pack)
 }
 
 /// `lifecycle.record`: the verified value. A record that does not
 /// authenticate is tampered and one outside its schema is refused by name;
 /// a request the runtime could not answer stays retryable.
-fn verified(key_hex: &str, mut request: Value) -> Res<Value> {
+pub(super) fn verified(key_hex: &str, mut request: Value) -> Res<Value> {
     request["kind"] = json!("record");
     request["operation"] = json!("verify");
     request["key"] = json!(key_hex);
@@ -68,7 +68,7 @@ fn verified(key_hex: &str, mut request: Value) -> Res<Value> {
     }
 }
 
-fn record_request(purpose: &str, row: &Row, prefix: &str) -> Res<Value> {
+pub(super) fn record_request(purpose: &str, row: &Row, prefix: &str) -> Res<Value> {
     Ok(json!({
         "purpose": purpose,
         "record": row_str(row, &format!("{prefix}_json"))?,
@@ -79,7 +79,7 @@ fn record_request(purpose: &str, row: &Row, prefix: &str) -> Res<Value> {
 
 /// `extension_control_schema_marker_is_compatible` for a store that has
 /// activated packs.
-fn marker_version(connection: &rusqlite::Connection) -> Res<i64> {
+pub(super) fn marker_version(connection: &rusqlite::Connection) -> Res<i64> {
     let marker = query_row(
         connection,
         "select version, checksum from extension_control_schema_migration where singleton = 1",
@@ -288,4 +288,4 @@ impl Ctx<'_> {
 
 #[cfg(test)]
 #[path = "pack_finish_tests.rs"]
-mod tests;
+pub(super) mod tests;

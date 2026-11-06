@@ -170,6 +170,10 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// caller read from the protected store for the resident to check.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pack_finish: Option<ExtensionControlPackFinishV1>,
+    /// `commit_prepare` of a commit that activates a command pack: the
+    /// staged activation and the protected state it was staged against.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_reserve: Option<ExtensionControlPackReserveV1>,
     /// `seal_managed_activation`: the verified policy to activate on the
     /// authority committed under `catalog_digest`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -251,6 +255,45 @@ impl std::fmt::Debug for ExtensionControlPackFinishV1 {
             .debug_struct("ExtensionControlPackFinishV1")
             .field("security", &self.security.is_some())
             .field("legacy_evidence", &self.legacy_evidence.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+/// A staged command-pack activation to reserve with the prepared row, and
+/// the protected state the caller read for the resident to check it against.
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlPackReserveV1 {
+    /// The command-pack verifier key, base64url without padding.
+    pub key_b64: String,
+    /// The protected lifecycle floor record, when one is stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor: Option<String>,
+    /// The active pack security record, when one is stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub security: Option<String>,
+    /// The sealed activation record.
+    pub record_json: String,
+    pub record_digest: String,
+    pub record_mac: String,
+    /// The active record the activation extends; none over a baseline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_digest: Option<String>,
+    pub lifecycle_before: String,
+    pub lifecycle_after: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub security_digest: Option<String>,
+    /// Unix seconds the activation is admitted at.
+    pub admitted_at: i64,
+}
+
+impl std::fmt::Debug for ExtensionControlPackReserveV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ExtensionControlPackReserveV1")
+            .field("record_digest", &self.record_digest)
+            .field("previous_digest", &self.previous_digest)
+            .field("admitted_at", &self.admitted_at)
             .finish_non_exhaustive()
     }
 }
