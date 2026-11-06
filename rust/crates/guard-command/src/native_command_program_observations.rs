@@ -214,7 +214,7 @@ impl NativeCommandProgram {
             return Err("native_command_evidence_limit_exceeded");
         }
         if deadline.is_some_and(|limit| Instant::now() >= limit) {
-            return Err("native_command_deadline_exceeded");
+            return Err(super::NATIVE_COMMAND_DEADLINE_EXCEEDED);
         }
         Ok(batch)
     }

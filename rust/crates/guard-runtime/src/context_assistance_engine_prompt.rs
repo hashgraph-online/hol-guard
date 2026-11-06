@@ -11,7 +11,9 @@ use std::time::{Instant, SystemTime};
 
 #[path = "context_assistance_engine_quick.rs"]
 mod quick;
-pub(crate) use quick::{project_context_on, quick_excerpts};
+pub(crate) use quick::{
+    definition, opened, project_context_on, prose, quick_excerpts, screened_texts,
+};
 
 /// The graph holds 128 sources, Guard's own included, and a removed file
 /// still counts until the graph is rebuilt.

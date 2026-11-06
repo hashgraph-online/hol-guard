@@ -1,5 +1,8 @@
 use super::*;
 #[cfg(unix)]
+#[path = "hook_direct_review_queue_live_wait_tests.rs"]
+mod live_wait_tests;
+#[cfg(unix)]
 #[path = "hook_direct_review_queue_size_tests.rs"]
 mod size_tests;
 #[cfg(unix)]

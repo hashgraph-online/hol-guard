@@ -1069,7 +1069,7 @@ fn evaluate_envelope(
             result.minimum_action.as_str(),
             "allow" | "warn" | "review"
         )
-        && !git_read_order_settled_by_allow(
+        && !git_read_settled_by_allow(
             controls,
             command_model,
             &result,
@@ -1313,26 +1313,38 @@ fn extension_rule_matched(result: &PreToolResultV1) -> bool {
     })
 }
 
-/// Whether the user's extension permissions settle a Git floor that rests on
-/// the order of the command's steps alone.
+/// Whether the user's explicit extension permissions settle this Git read
+/// floor.
 ///
-/// That floor has two meanings. A Git read whose own configuration names a
-/// pager, diff driver or textconv helper, or whose configuration could not be
-/// read, has a program Guard cannot see waiting for it, and keeps its review
-/// however much the user allowed. The other meaning is narrower: every Git
-/// read in the command was proven helper-free against the configuration Guard
-/// read for it, and what is unproven is only that an earlier step leaves that
-/// configuration as the read found it. That is a judgment of the command's
-/// shape, which a user who allowed each of its steps has already settled, the
-/// same way an explicit Allow settles the shape judgments the controls
-/// themselves raise.
+/// The floor raises one review for two different questions, and the user's
+/// Allow answers both of them.
+///
+/// The first is the order of the command's steps: every Git read was proven
+/// helper-free against the configuration Guard read for it, and what is
+/// unproven is only that an earlier step leaves that configuration as the
+/// read found it. That is a judgment of the command's shape, which a user who
+/// allowed each of its steps has already settled, the same way an explicit
+/// Allow settles the shape judgments the controls themselves raise.
+///
+/// The second is a probe that could not answer. Guard asks the checkout what
+/// a read would run, and a loaded host, an unreadable configuration or an
+/// expired budget leaves the question open without anything having been found
+/// against the read. A user who allowed that read answered it: run it as this
+/// checkout configures it. Before this, every such read asked again however
+/// much the user had allowed, which is what made ordinary read-only Git work
+/// stall behind approvals.
+///
+/// What no Allow settles is a helper the probe actually read out of the
+/// configuration — a pager, diff driver, textconv or filter program Guard
+/// cannot see — or a Git binary this host does not trust. Those keep their
+/// review, and the floor reports them as `Other`.
 ///
 /// The floor is raised after the controls run, so it cannot read the Allow off
 /// the result's reason and asks the controls instead. `minimum_action` must
 /// still be plain allow: anything the controls or an earlier Rust proof raised
 /// — unsettled extension uncertainty among it — means the Allow did not carry
 /// the command, and the floor stands.
-fn git_read_order_settled_by_allow(
+fn git_read_settled_by_allow(
     controls: Option<&CompiledNativeCommandControls>,
     command_model: Option<&crate::CanonicalCommandV1>,
     result: &PreToolResultV1,
@@ -1349,26 +1361,31 @@ fn git_read_order_settled_by_allow(
     {
         return false;
     }
-    super::git_read_floor::unsettled_steps_before_reads(
+    let answerable = match super::git_read_floor::allowable_review(
         model,
         context,
         deadline,
         execution_environment,
-    )
-    .is_some_and(|steps| {
-        super::git_read_after_allow::allow_settles_read_order(
+    ) {
+        super::git_read_floor::AllowableReview::None => false,
+        super::git_read_floor::AllowableReview::EarlierSteps(steps)
+        | super::git_read_floor::AllowableReview::UnansweredProbe(steps) => {
+            super::git_read_after_allow::allow_settles_read_order(
+                model,
+                &steps,
+                context,
+                deadline,
+                execution_environment,
+            )
+        }
+    };
+    answerable
+        && controls.explicit_allow_covers_command(
             model,
-            &steps,
+            observations,
             context,
-            deadline,
             execution_environment,
         )
-    }) && controls.explicit_allow_covers_command(
-        model,
-        observations,
-        context,
-        execution_environment,
-    )
 }
 
 /// The Git floor's reason when every Git read was proven helper-free on its

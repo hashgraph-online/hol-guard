@@ -59,6 +59,11 @@ def run_command_queue_loop(
                     wait_seconds = retry_wait_seconds(poll_interval, error_backoff, empty_streak)
             else:
                 empty_streak = 0
+                if status.get("state") == "idle" and command_queue_long_poll_enabled():
+                    # A job just finished. Lease again at once: a decision made
+                    # while this device slept would otherwise wait out the
+                    # whole poll interval before it is seen.
+                    wait_seconds = _LONG_POLL_EMPTY_MIN_WAIT_SECONDS
         except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
             empty_streak = 0
             error_streak += 1

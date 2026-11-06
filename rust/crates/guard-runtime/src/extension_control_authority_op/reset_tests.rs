@@ -173,3 +173,19 @@ fn a_reset_without_its_reason_writes_nothing() {
         0
     );
 }
+
+#[test]
+fn an_abandoned_bootstrap_removes_only_a_revision_zero_snapshot() {
+    let home = home();
+    let abandon = |home: &Home| run(&home.request("abandon_bootstrap", &catalog('a')));
+    assert_eq!(abandon(&home), json!({ "abandoned": false }));
+    assert_eq!(count(&home, "extension_control_authority_snapshot"), 1);
+    home.db
+        .execute(
+            "update extension_control_authority_snapshot set revision = 0",
+            [],
+        )
+        .unwrap();
+    assert_eq!(abandon(&home), json!({ "abandoned": true }));
+    assert_eq!(count(&home, "extension_control_authority_snapshot"), 0);
+}

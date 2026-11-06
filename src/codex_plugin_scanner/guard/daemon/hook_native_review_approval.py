@@ -196,6 +196,10 @@ def pause_native_pre_tool_for_approval(
             review_binding=identity,
             connector_lookup=connector_lookup,
             policy_binding_verified=True,
+            # A block that links its approval holds the Codex bridge's wait;
+            # the resident links that wait only for such a block, so approving
+            # the row releases the waiting call.
+            codex_live_wait=canonical_harness(harness) == "codex",
             silent=True,
             respond={"silent_review_block": facts},
         )

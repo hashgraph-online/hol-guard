@@ -22,42 +22,58 @@ const STOP_WORDS: &[&str] = &[
 /// Lowercase words from the prompt worth looking for in paths and code.
 /// Words written like code come first, so a long prompt keeps the names it
 /// is about (`case_sensitive`, `IntRange`) over the plain words around them.
+#[cfg(test)]
 pub(crate) fn terms(prompt: &str) -> Vec<String> {
-    let mut code: Vec<String> = Vec::new();
-    let mut plain: Vec<String> = Vec::new();
+    marked_terms(prompt)
+        .into_iter()
+        .map(|(term, _)| term)
+        .collect()
+}
+
+/// The prompt's `terms`, each marked when the prompt wrote it whole as a
+/// name (`case_sensitive`, `IntRange`), not as a plain word or a piece of a
+/// name.
+pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
+    let mut code: Vec<(String, bool)> = Vec::new();
+    let mut plain: Vec<(String, bool)> = Vec::new();
     for (word, shaped) in words(prompt) {
         let joined = word.replace(['-', '_'], "").to_lowercase();
-        for part in std::iter::once(joined).chain(
-            word.split(['-', '_'])
-                .filter(|_| word.contains(['-', '_']))
-                .map(str::to_lowercase),
-        ) {
+        let pieces = word
+            .split(['-', '_'])
+            .filter(|_| word.contains(['-', '_']))
+            .map(|piece| (piece.to_lowercase(), false));
+        for (part, whole) in std::iter::once((joined, true)).chain(pieces) {
             let term = singular(&part);
             if term.chars().count() >= 3
                 && !STOP_WORDS.contains(&term.as_str())
                 && !term.chars().all(|c| c.is_ascii_digit())
             {
                 if shaped {
-                    code.push(term);
+                    code.push((term, whole));
                 } else {
-                    plain.push(term);
+                    plain.push((term, false));
                 }
             }
         }
     }
-    let mut found: Vec<String> = Vec::new();
-    for term in code.into_iter().chain(plain) {
+    let mut found: Vec<(String, bool)> = Vec::new();
+    for (term, name) in code.into_iter().chain(plain) {
         if found.len() >= MAX_TERMS {
             break;
         }
-        if !found.contains(&term) {
-            found.push(term);
+        match found.iter_mut().find(|(seen, _)| *seen == term) {
+            Some((_, seen_name)) => *seen_name |= name,
+            None => found.push((term, name)),
         }
     }
     // A request for tests counts even when it comes late in a long prompt.
-    if !asks_for_tests(&found) && prompt_mentions_tests(prompt) {
+    if !found
+        .iter()
+        .any(|(term, _)| TEST_WORDS.contains(&term.as_str()))
+        && prompt_mentions_tests(prompt)
+    {
         found.truncate(MAX_TERMS - 1);
-        found.push("test".into());
+        found.push(("test".into(), false));
     }
     found
 }
@@ -205,6 +221,11 @@ pub(crate) fn phrases(prompt: &str) -> Vec<String> {
         at += end + 2;
     }
     found
+}
+
+/// How `terms` spells `word`: lowercase, without `-` or `_`, singular.
+pub(crate) fn term_form(word: &str) -> String {
+    singular(&word.replace(['-', '_'], "").to_lowercase())
 }
 
 fn singular(word: &str) -> String {
