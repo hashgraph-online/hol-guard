@@ -19,10 +19,10 @@ use super::managed::{
     activation_layers, require_key, revision_from_state, ACTIVE_STATE_KEY, REVISION_STATE_KEY,
 };
 use super::managed_seals::revision_state;
-use super::records::{degraded, query_row, row_int, row_str, row_text, store_fault, tampered, Res};
+use super::records::{query_row, row_int, row_str, row_text, store_fault, tampered, Res};
 use super::resume::immediate;
 use super::writes::open_writer;
-use super::{fault_value, Ctx, STORE_UNAVAILABLE};
+use super::{fault_value, Ctx};
 
 pub(super) const NEGOTIATED_STATE_KEY: &str = "managed_controls_negotiated_capabilities";
 const ACK_STATE_KEY: &str = "policy_bundle_ack";
@@ -41,8 +41,9 @@ pub(super) fn clear_policy_op(
     request: &ExtensionControlAuthorityRequestV1,
     key: Option<&[u8]>,
 ) -> Result<Value, String> {
-    let Some(connection) = open_writer(request)? else {
-        return Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
+    let connection = match open_writer(request)? {
+        Ok(connection) => connection,
+        Err(reply) => return Ok(reply),
     };
     let ctx = Ctx {
         connection: &connection,

@@ -34,20 +34,16 @@ def baseline_request(connection, metadata, *, recorded_at):
 
     A store whose schema already activated packs keeps the baseline or
     activation it holds, and the resident authenticates that row when it
-    reserves the draft. Otherwise the schema is upgraded here and the
-    resident seals the baseline into the empty slot in the transaction that
-    reserves the draft. A slot still empty after an upgraded schema means an
-    earlier first activation was refused, so the baseline is sent again.
+    reserves the draft. Otherwise the resident upgrades the schema and seals
+    the baseline into the empty slot in the transaction that reserves the
+    draft. A slot still empty after an upgraded schema means an earlier
+    first activation was refused, so the baseline is sent again.
     """
-    from ..store_extension_control_authority_schema import ensure_extension_control_authority_schema
-
     marker = connection.execute("select version from extension_control_schema_migration where singleton=1").fetchone()
     if marker is not None and marker["version"] in {5, 6}:
         slot = connection.execute("select 1 from extension_command_pack_activation where singleton=1").fetchone()
         if slot is not None:
             return None
-    else:
-        ensure_extension_control_authority_schema(connection, activate_packs=True)
     return {
         **{name: getattr(metadata, name) for name in ("program_digest", "catalog_digest", "trust_digest")},
         "recorded_at": recorded_at,

@@ -77,8 +77,9 @@ pub(super) fn resume_op(
     request: &ExtensionControlAuthorityRequestV1,
     key: Option<&[u8]>,
 ) -> Result<Value, String> {
-    let Some(connection) = open_writer(request)? else {
-        return Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
+    let connection = match open_writer(request)? {
+        Ok(connection) => connection,
+        Err(reply) => return Ok(reply),
     };
     let ctx = Ctx {
         connection: &connection,

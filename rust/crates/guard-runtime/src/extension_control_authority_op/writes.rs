@@ -14,6 +14,8 @@ use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
 use super::records::{canonical, degraded, store_fault, tampered, Phase, Res};
+use super::resume::immediate;
+use super::schema;
 use super::{fault_value, Ctx, INVALID, STORE_UNAVAILABLE};
 use crate::guard_store_write_cache::{open_read_write_cached, CachedConnection};
 use crate::local_store_read::{require_store_path, table_exists};
@@ -21,22 +23,35 @@ use crate::local_store_read::{require_store_path, table_exists};
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 const RESTORED_EVENT: &str = "extension_control_authority_restored";
 
-/// The store a writer op writes, or `None` when it cannot be opened.
+/// The store a writer op writes, with the authority schema it writes
+/// ensured, or the reply the op answers with when it cannot be opened or its
+/// schema is not one this runtime writes. A pack reservation moves the
+/// marker to the pack schema its record names.
 pub(super) fn open_writer(
     request: &ExtensionControlAuthorityRequestV1,
-) -> Result<Option<CachedConnection>, String> {
+) -> Result<Result<CachedConnection, Value>, String> {
+    let unavailable = || Ok(Err(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new())));
     let store_path = require_store_path(&request.store_path, &request.guard_home)
         .map_err(|_| INVALID.to_owned())?;
     if !store_path.exists() {
-        return Ok(None);
+        return unavailable();
     }
     let Ok(connection) = open_read_write_cached(&store_path) else {
-        return Ok(None);
+        return unavailable();
     };
     if connection.busy_timeout(BUSY_TIMEOUT).is_err() {
-        return Ok(None);
+        return unavailable();
     }
-    Ok(Some(connection))
+    let wanted = schema::wanted_version(
+        request
+            .pack_reserve
+            .as_ref()
+            .map(|reserve| reserve.record_json.as_str()),
+    );
+    if let Err(fault) = immediate(&connection, || schema::ensure_schema(&connection, wanted)) {
+        return Ok(Err(fault_value(&fault, Vec::new())));
+    }
+    Ok(Ok(connection))
 }
 
 pub(super) fn with_writable_store(
@@ -44,8 +59,9 @@ pub(super) fn with_writable_store(
     key: Option<&[u8]>,
 ) -> Result<Value, String> {
     let unavailable = || Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
-    let Some(connection) = open_writer(request)? else {
-        return unavailable();
+    let connection = match open_writer(request)? {
+        Ok(connection) => connection,
+        Err(reply) => return Ok(reply),
     };
     if connection.execute_batch("BEGIN IMMEDIATE").is_err() {
         return unavailable();

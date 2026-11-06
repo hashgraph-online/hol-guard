@@ -43,6 +43,9 @@ pub(crate) mod records;
 mod reset;
 mod resume;
 mod review_memory;
+mod schema;
+#[cfg(test)]
+mod schema_tests;
 mod seals;
 #[cfg(test)]
 mod seals_tests;
