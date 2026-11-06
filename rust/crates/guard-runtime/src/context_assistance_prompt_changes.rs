@@ -13,7 +13,9 @@
 //! uncommitted part is left out when the repository configures a filter; a
 //! partial clone could fetch missing objects, so it gets nothing at all. Every
 //! changed file goes through the checks Guard's own read applies, and a file
-//! that fails them is left out.
+//! that fails them is left out. The diff holds lines no file has any more, so
+//! each part shown and each commit subject is also scanned for secrets, and
+//! one that has any is left out.
 use super::sections::sections;
 use super::seen::Session;
 use crate::context_assistance_engine::screened_texts;
@@ -35,6 +37,8 @@ const MAX_SUBJECT_CHARS: usize = 80;
 const MAX_SESSIONS: usize = 64;
 /// A Git call starts only with at least this much of the wait left.
 const MIN_LEFT: Duration = Duration::from_millis(150);
+/// The longest one secret scan of a part or subject may take.
+const SCAN_TIME: Duration = Duration::from_millis(50);
 const GLOBAL: [&str; 4] = [
     "--no-pager",
     "--no-optional-locks",
@@ -333,7 +337,8 @@ pub(super) fn changes(
         let Some(diff) = git.run(&show, until) else {
             break;
         };
-        parts.push((format!("Commit {} {subject}", &commit[..8]), hunks(&diff)));
+        let label = format!("Commit {} {subject}", &commit[..8]);
+        parts.push((label.trim_end().to_owned(), hunks(&diff)));
     }
     let paths: Vec<String> = parts
         .iter()
@@ -377,6 +382,11 @@ fn commits(git: &Git, base: Option<&str>, until: Instant) -> Vec<(String, String
                     .filter(|c| !c.is_control())
                     .take(MAX_SUBJECT_CHARS)
                     .collect();
+                let subject = if clean(&subject) {
+                    subject
+                } else {
+                    String::new()
+                };
                 (commit.to_owned(), subject)
             })
         })
@@ -402,7 +412,11 @@ pub(super) fn render(parts: &[(String, Vec<Hunk>)], texts: &[(String, String)]) 
                 hunk.start,
                 enclosing(&hunk.path, text, hunk)
             );
-            if used + place.len() + hunk.body.len() <= BUDGET {
+            let fits = used + place.len() + hunk.body.len() <= BUDGET;
+            if fits && !clean(&hunk.body) {
+                continue;
+            }
+            if fits {
                 used += place.len() + hunk.body.len();
                 section.push_str(&format!("{place}\n{}", hunk.body));
             } else if named < MAX_NAMED {
@@ -416,6 +430,21 @@ pub(super) fn render(parts: &[(String, Vec<Hunk>)], texts: &[(String, String)]) 
         }
     }
     any.then_some(out)
+}
+
+/// Whether Guard's secret scan finds nothing in `text`, having read it all.
+fn clean(text: &str) -> bool {
+    if text.is_empty() {
+        return true;
+    }
+    let scan = guard_scanner::scan_text(
+        text,
+        true,
+        false,
+        text.len(),
+        Some(Instant::now() + SCAN_TIME),
+    );
+    !scan.budget_exhausted && scan.bytes_scanned == text.len() && scan.matches.is_empty()
 }
 
 /// ` in <definition line> (lines start-end)` for the smallest named section

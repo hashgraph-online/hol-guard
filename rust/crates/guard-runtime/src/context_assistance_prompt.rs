@@ -154,20 +154,26 @@ fn attach(
     let earlier = session.as_ref().map(seen::earlier).unwrap_or_default();
     let left = || waiting_time(envelope.deadline_budget_ms).saturating_sub(started.elapsed());
     // What changed since the session began comes first, for a prompt about
-    // changes; a third of the wait at most, the rest is the search's.
-    let until = Instant::now() + left() / 3;
-    let changed = changes::since_start(
-        store.guard_home(),
-        home,
-        &root,
-        harness,
-        session.as_ref(),
-        prompt,
-        until,
-    )
-    .filter(|_| {
+    // changes; a third of the wait at most, the rest is the search's. Git
+    // runs only while project context is on, checked again after it.
+    let context_on = || {
         service.prompt_context_chosen() && project_context_on(store.guard_home(), &root, harness)
-    });
+    };
+    let until = Instant::now() + left() / 3;
+    let changed = context_on()
+        .then(|| {
+            changes::since_start(
+                store.guard_home(),
+                home,
+                &root,
+                harness,
+                session.as_ref(),
+                prompt,
+                until,
+            )
+        })
+        .flatten()
+        .filter(|_| context_on());
     if let Some(changed) = changed {
         add_context(response, &changed);
     }

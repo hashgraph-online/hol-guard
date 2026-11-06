@@ -11,7 +11,8 @@ use super::sections::{headed_sections, sections, Section};
 use super::{fence_for, language, Rendered, Span, MAX_CONTEXT_CHARS};
 use crate::context_assistance_engine::{prose, screened_texts};
 use crate::context_assistance_prompt_files::{test_file, Walk};
-use crate::context_assistance_prompt_words::term_form;
+use crate::context_assistance_prompt_words::{named, term_form};
+use std::cmp::Reverse;
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::time::Instant;
@@ -39,6 +40,8 @@ const SHORT_SECTION: f64 = 120.0;
 /// Sections scoring under this share of the best one are left out.
 const MIN_SHARE: f64 = 0.25;
 const CHANGELOG_NAMES: [&str; 4] = ["changes", "changelog", "history", "news"];
+/// How many lines or sections the map handles between looks at the clock.
+const CHECK_EVERY: usize = 256;
 
 /// One thing the prompt asks about, as the map looks for it: a term spelled
 /// as `terms` spells it, or quoted text; whether the prompt wrote it as a
@@ -90,7 +93,18 @@ pub(super) fn mapped(
         .cloned()
         .collect();
     let texts = screened_texts(home, root, app, &files, files.len(), until);
-    map(&texts, &sought, asks_for_docs(prompt), earlier)
+    let asked = Asked {
+        docs: asks_for_docs(prompt),
+        named: named(prompt),
+    };
+    map(&texts, &sought, &asked, earlier, until)
+}
+
+/// What else the prompt asks for besides its words: docs, and files by name.
+#[derive(Default)]
+pub(super) struct Asked {
+    pub(super) docs: bool,
+    pub(super) named: Vec<String>,
 }
 
 /// What the map looks for, with how rare the walk found each. The walk
@@ -146,12 +160,14 @@ fn weights(sought: &[Sought], defined: &BTreeSet<String>) -> Vec<f64> {
         .collect()
 }
 
-/// The rendered map of `texts` for `sought`, best sections first by kind.
+/// The rendered map of `texts` for `sought`, best sections first by kind, or
+/// `None` once `until` passes.
 pub(super) fn map(
     texts: &[(String, String)],
     sought: &[Sought],
-    docs: bool,
+    asked: &Asked,
     earlier: &[Span],
+    until: Instant,
 ) -> Option<Rendered> {
     let lines: Vec<Vec<&str>> = texts
         .iter()
@@ -171,35 +187,56 @@ pub(super) fn map(
     let weights = weights(sought, &defined);
     let mut scored: Vec<Scored> = Vec::new();
     for (((path, _), lines), sections) in texts.iter().zip(&lines).zip(sections) {
-        scored.extend(scored_sections(path, lines, sections, sought, &weights));
+        let found = scored_sections(path, lines, sections, sought, &weights, until)?;
+        // A changelog the prompt names keeps its newest section on the map,
+        // where the entry it asks for goes, even with no word of it inside.
+        if found.is_empty() && kind(path) == Kind::Changelog && named_in(path, &asked.named) {
+            scored.push(Scored {
+                path,
+                lines,
+                section: Section {
+                    start: 1,
+                    end: lines.len().max(1),
+                    name: None,
+                },
+                score: 0.0,
+            });
+        }
+        scored.extend(found);
     }
     scored.sort_by(|a, b| {
         b.score
             .total_cmp(&a.score)
             .then((a.section.end - a.section.start).cmp(&(b.section.end - b.section.start)))
     });
-    let picked = picked(&scored, docs);
+    let picked = picked(&scored, asked.docs);
     render(&picked, earlier)
 }
 
-/// Each of `sections` of `lines` that holds something sought, with its score.
+/// Each of `sections` of `lines` that holds something sought, with its
+/// score, or `None` once `until` passes.
 fn scored_sections<'a>(
     path: &'a str,
     lines: &'a [&'a str],
     sections: Vec<Section>,
     sought: &[Sought],
     weights: &[f64],
-) -> Vec<Scored<'a>> {
+    until: Instant,
+) -> Option<Vec<Scored<'a>>> {
     if sections.is_empty() {
-        return Vec::new();
+        return Some(Vec::new());
     }
+    let innermost = innermost(&sections, lines.len(), until)?;
     let mut held: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); sections.len()];
     for (index, line) in lines.iter().enumerate() {
+        if index % CHECK_EVERY == 0 && Instant::now() >= until {
+            return None;
+        }
         let found = holds(line, sought, weights);
         if found.is_empty() {
             continue;
         }
-        if let Some(at) = smallest_around(&sections, index + 1) {
+        if let Some(at) = innermost[index] {
             held[at].extend(found);
         }
     }
@@ -226,7 +263,7 @@ fn scored_sections<'a>(
             score,
         });
     }
-    scored
+    Some(scored)
 }
 
 /// Which of `sought` the line holds: a term as a whole word, spelled the way
@@ -257,21 +294,44 @@ fn holds(line: &str, sought: &[Sought], weights: &[f64]) -> Vec<usize> {
         .collect()
 }
 
-/// The index of the shortest section that holds line `line`.
-fn smallest_around(sections: &[Section], line: usize) -> Option<usize> {
-    sections
-        .iter()
-        .enumerate()
-        .filter(|(_, section)| section.start <= line && line <= section.end)
-        .min_by_key(|(_, section)| section.end - section.start)
-        .map(|(index, _)| index)
+/// For each of `count` lines, the index of the shortest section holding it,
+/// the earliest of equal ones; `None` once `until` passes. Longer sections
+/// are laid down first so shorter ones inside them overwrite their lines.
+fn innermost(sections: &[Section], count: usize, until: Instant) -> Option<Vec<Option<usize>>> {
+    let mut order: Vec<usize> = (0..sections.len()).collect();
+    order.sort_by_key(|&at| {
+        let section = &sections[at];
+        (Reverse(section.end - section.start), Reverse(at))
+    });
+    let mut innermost = vec![None; count];
+    for (done, at) in order.into_iter().enumerate() {
+        if done % CHECK_EVERY == 0 && Instant::now() >= until {
+            return None;
+        }
+        let section = &sections[at];
+        let lines = section.start.saturating_sub(1)..section.end.min(count);
+        for line in innermost.get_mut(lines).unwrap_or_default() {
+            *line = Some(at);
+        }
+    }
+    Some(innermost)
+}
+
+/// Whether the prompt named the file at `path`, by its name or a path ending.
+fn named_in(path: &str, named: &[String]) -> bool {
+    let lower = path.to_lowercase();
+    let name = lower.rsplit('/').next().unwrap_or(&lower);
+    named.iter().any(|wanted| {
+        let wanted = wanted.to_lowercase();
+        name == wanted || lower == wanted || lower.ends_with(&format!("/{wanted}"))
+    })
 }
 
 fn kind(path: &str) -> Kind {
     let lower = path.to_lowercase();
     let name = lower.rsplit('/').next().unwrap_or(&lower);
     let stem = name.split('.').next().unwrap_or(name);
-    if CHANGELOG_NAMES.contains(&stem) {
+    if CHANGELOG_NAMES.contains(&stem) && prose(Path::new(path)) {
         Kind::Changelog
     } else if test_file(path) {
         Kind::Test

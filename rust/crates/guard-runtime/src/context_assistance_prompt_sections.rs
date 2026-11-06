@@ -55,8 +55,9 @@ fn decorates(line: &str) -> bool {
 }
 
 /// The last line of the definition that opens on line `at`: the last line
-/// indented deeper than it, or the closing brace at its own depth. A closing
-/// parenthesis or bracket at its depth ends a long signature, not the body.
+/// indented deeper than it, or the closing brace at its own depth when it
+/// left a brace open. A closing parenthesis or bracket at its depth ends a
+/// long signature, not the body.
 fn block_end(lines: &[&str], at: usize) -> usize {
     let depth = indent(lines[at]);
     let mut last = at;
@@ -69,7 +70,14 @@ fn block_end(lines: &[&str], at: usize) -> usize {
             last = index;
             continue;
         }
-        if text.starts_with('}') || text == "end" || text.starts_with("end ") {
+        if indent(line) < depth {
+            break;
+        }
+        if text.starts_with('}') {
+            let open: isize = lines[at..=last].iter().map(|line| braces(line)).sum();
+            return if open > 0 { index } else { last };
+        }
+        if text == "end" || text.starts_with("end ") {
             return index;
         }
         if text.starts_with([')', ']', '{']) || text == "where" || text.starts_with("where ") {
@@ -79,6 +87,17 @@ fn block_end(lines: &[&str], at: usize) -> usize {
         break;
     }
     last
+}
+
+/// Opening braces on `line` less closing ones.
+fn braces(line: &str) -> isize {
+    line.chars()
+        .map(|c| match c {
+            '{' => 1,
+            '}' => -1,
+            _ => 0,
+        })
+        .sum()
 }
 
 fn indent(line: &str) -> usize {
@@ -117,14 +136,26 @@ fn defined_name(line: &str) -> Option<String> {
 /// Lines inside a fenced block are not headings.
 pub(super) fn headed_sections(lines: &[&str]) -> Vec<Section> {
     let mut starts = Vec::new();
-    let mut fenced = false;
+    let mut fence: Option<(char, usize)> = None;
     for (index, line) in lines.iter().enumerate() {
         let text = line.trim_start();
-        if text.starts_with("```") || text.starts_with("~~~") {
-            fenced = !fenced;
-            continue;
+        let mark = text.chars().next().filter(|c| matches!(c, '`' | '~'));
+        let run = mark.map_or(0, |mark| text.chars().take_while(|c| *c == mark).count());
+        if let Some(mark) = mark.filter(|_| run >= 3) {
+            let rest = &text[run..];
+            match fence {
+                None if mark == '~' || !rest.contains('`') => {
+                    fence = Some((mark, run));
+                    continue;
+                }
+                Some((open, length)) if open == mark && run >= length && rest.trim().is_empty() => {
+                    fence = None;
+                    continue;
+                }
+                _ => {}
+            }
         }
-        if fenced {
+        if fence.is_some() {
             continue;
         }
         let hashes = line.chars().take_while(|c| *c == '#').count();

@@ -290,3 +290,25 @@ fn a_configured_filter_leaves_out_the_working_tree_and_a_partial_clone_everythin
     repo.git(&["config", "remote.origin.promisor", "true"]);
     assert_eq!(repo.changes(Some(&base)), None);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_secret_in_the_diff_is_left_out_though_the_file_no_longer_has_it() {
+    let repo = Repo::new();
+    let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    let key = format!(
+        "{d}BEGIN PRIVATE KEY{d}\nprivate test material\n{d}END PRIVATE KEY{d}",
+        d = "-".repeat(5)
+    );
+    repo.write("src/core.py", &format!("{CORE}\n{key}\n"));
+    repo.commit("add key");
+    // The edit is a part of its own; the removed key's part is left out.
+    repo.write(
+        "src/core.py",
+        &CORE.replace("return value", "return value.strip()"),
+    );
+    repo.commit("drop key");
+    let text = repo.changes(Some(&base)).unwrap();
+    assert!(text.contains("+    return value.strip()"), "{text}");
+    assert!(!text.contains(&"-".repeat(5)), "{text}");
+}

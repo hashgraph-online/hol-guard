@@ -1,7 +1,7 @@
 use super::*;
 use crate::context_assistance_prompt_files::{plain, walk};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const CORE: &str = "import os
 
@@ -44,8 +44,19 @@ fn files(list: &[(&str, &str)]) -> Vec<(String, String)> {
         .collect()
 }
 
+fn later() -> Instant {
+    Instant::now() + Duration::from_secs(10)
+}
+
 fn mapped_text(list: &[(&str, &str)], terms: &[(&str, bool, usize)]) -> Option<String> {
-    map(&files(list), &looking_for(terms), false, &[]).map(|rendered| rendered.text)
+    map(
+        &files(list),
+        &looking_for(terms),
+        &Asked::default(),
+        &[],
+        later(),
+    )
+    .map(|rendered| rendered.text)
 }
 
 /// The definition that holds the prompt's names comes back whole as the best
@@ -144,9 +155,9 @@ Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
 fn a_body_the_session_already_has_is_listed_not_sent_again() {
     let terms = looking_for(&[("casesensitive", true, 2), ("choice", false, 30)]);
     let list = files(&[("src/core.py", CORE)]);
-    let first = map(&list, &terms, false, &[]).unwrap();
+    let first = map(&list, &terms, &Asked::default(), &[], later()).unwrap();
     assert_eq!(first.shown.len(), 1);
-    let again = map(&list, &terms, false, &first.shown).unwrap();
+    let again = map(&list, &terms, &Asked::default(), &first.shown, later()).unwrap();
     assert!(again.shown.is_empty(), "{}", again.text);
     assert!(!again.text.contains("Best match"), "{}", again.text);
     assert!(
@@ -189,6 +200,13 @@ fn definitions_cover_decorators_signatures_and_bodies() {
         found,
         vec![(1, 7, Some("load".into())), (9, 9, Some("next".into()))]
     );
+    let nested = "impl Loader {\n    fn target() {}\n}\n";
+    let lines: Vec<&str> = nested.lines().collect();
+    let found: Vec<(usize, usize)> = sections("a.rs", &lines)
+        .iter()
+        .map(|s| (s.start, s.end))
+        .collect();
+    assert_eq!(found, vec![(1, 3), (2, 2)], "the outer brace is the impl's");
 }
 
 /// Markdown and reStructuredText headings split a prose file; a `#` line in
@@ -202,6 +220,65 @@ fn headings_split_prose_but_fenced_code_does_not() {
         .map(|s| (s.start, s.end))
         .collect();
     assert_eq!(found, vec![(1, 8), (9, 11)]);
+    let nested = "# Guide\n\n````md\n```sh\n# inner\n```\n~~~\n# still code\n````\n\n## Install\n";
+    let lines: Vec<&str> = nested.lines().collect();
+    let found: Vec<(usize, usize)> = sections("README.md", &lines)
+        .iter()
+        .map(|s| (s.start, s.end))
+        .collect();
+    assert_eq!(
+        found,
+        vec![(1, 10), (11, 11)],
+        "only a matching fence closes"
+    );
+}
+
+/// A source file named like a changelog is mapped as source.
+#[test]
+fn only_prose_files_are_changelogs() {
+    assert_eq!(kind("src/history.py"), Kind::Source);
+    assert_eq!(kind("changes.rs"), Kind::Source);
+    assert_eq!(kind("HISTORY.md"), Kind::Changelog);
+    let history = "def history_entry():\n    return case_sensitive\n";
+    let text = mapped_text(
+        &[("src/history.py", history)],
+        &[("casesensitive", true, 1)],
+    )
+    .unwrap();
+    assert!(text.contains("src/history.py (lines 1-2)"), "{text}");
+}
+
+/// A changelog the prompt names is on the map with its newest section, even
+/// when nothing in it matches the prompt's words.
+#[test]
+fn a_named_changelog_stays_on_the_map() {
+    let changes = "Changes\n=======\n\nUnreleased\n----------\n\n- Fix thing.\n";
+    let list = files(&[("CHANGES.rst", changes), ("src/core.py", CORE)]);
+    let terms = looking_for(&[("casesensitive", true, 2)]);
+    let unnamed = map(&list, &terms, &Asked::default(), &[], later()).unwrap();
+    assert!(!unnamed.text.contains("CHANGES.rst"), "{}", unnamed.text);
+    let asked = Asked {
+        docs: false,
+        named: vec!["CHANGES.rst".into()],
+    };
+    let named = map(&list, &terms, &asked, &[], later()).unwrap();
+    assert!(
+        named.text.contains("CHANGES.rst:4-7 Unreleased"),
+        "{}",
+        named.text
+    );
+}
+
+/// The map gives up once its time is up, however big the files.
+#[test]
+fn the_map_stops_at_its_deadline() {
+    let many: String = (0..5_000)
+        .map(|n| format!("def case_sensitive_{n}():\n    case_sensitive()\n"))
+        .collect();
+    let list = files(&[("src/many.py", &many)]);
+    let terms = looking_for(&[("casesensitive", true, 1)]);
+    assert!(map(&list, &terms, &Asked::default(), &[], later()).is_some());
+    assert!(map(&list, &terms, &Asked::default(), &[], Instant::now()).is_none());
 }
 
 /// The map stays within the context limit however much matches.
