@@ -113,10 +113,17 @@ fn collect_output_text(value: &Value) -> ExtractedOutput {
     let mut truncated = false;
     let mut seen = HashSet::new();
     traverse(value, 0, &mut parts, &mut chars, &mut truncated, &mut seen);
+    // Join rather than concatenate: a secret rule that needs a word boundary
+    // reads two fields run together as one word. `originalFile: "a"` ahead of
+    // `newString: "AKIA..."` would scan as `aAKIA...`, and the rule that
+    // anchors on the key's prefix would never fire. A newline between fields
+    // is the same separator the payload-level pass already uses.
+    let joined = parts.join("\n");
+    let chars = joined.chars().count().max(chars);
     ExtractedOutput {
-        text: parts.concat(),
-        chars,
-        truncated,
+        text: joined.chars().take(MAX_OUTPUT_CHARS).collect(),
+        chars: chars.min(MAX_OUTPUT_CHARS),
+        truncated: truncated || chars > MAX_OUTPUT_CHARS,
     }
 }
 
@@ -919,6 +926,33 @@ mod tests {
         assert_eq!(response.reason_code, "output_too_large");
         assert_eq!(response.reviewed_output_sha256, None);
         assert!(!response.observe_mode);
+    }
+
+    #[test]
+    fn adjacent_fields_keep_the_word_boundary_a_secret_rule_needs() {
+        // Concatenating the fields of an unreadable patch produced
+        // `aaAKIA...`, and the access-key rule needs a word boundary ahead of
+        // the prefix, so the credential scanned clean.
+        let payload = json!({
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "src/config.ts"},
+            "tool_response": {
+                "originalFile": "a",
+                "oldString": "a",
+                "newString": aws_like_access_key(),
+            }
+        });
+        let extracted = extract_payload_output(&payload);
+        assert!(
+            !extracted
+                .text
+                .contains(&format!("a{}", aws_like_access_key())),
+            "{}",
+            extracted.text
+        );
+        let response = review_post_tool(&request(payload));
+        assert_eq!(response.decision, "deny");
+        assert_eq!(response.reason_code, "output_secret_match");
     }
 
     #[test]
