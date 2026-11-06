@@ -146,6 +146,7 @@ def _required_feature(op: str) -> str:
         "record_migration",
         "reset",
         "write_anchor",
+        "write_command_marker",
         "write_manifest",
     }:
         return EXTENSION_CONTROL_AUTHORITY_COMMIT_FEATURE
