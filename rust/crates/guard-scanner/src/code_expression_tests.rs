@@ -270,8 +270,10 @@ fn a_comparison_against_a_short_plain_literal_is_a_label() {
         // An apostrophe in a trailing comment is prose, not an unclosed
         // literal, so the code before it still reads as labels.
         "if (session.token === 'none') { // don't connect",
-        // A `+` that joins anything but literals is ordinary arithmetic.
+        // A `+` that joins anything but literals is ordinary arithmetic,
+        // including when a comment sits between it and the code it joins.
         "if (secret == 'default' && retries + 1 > max) {",
+        "if (secret == 'default' && retries /* note */ + 1 /* note */ > max) {",
     ] {
         assert!(!flagged(text), "{text:?}");
     }
@@ -287,6 +289,8 @@ fn a_comparison_against_a_short_plain_literal_is_a_label() {
         // Code after a closed block comment is still code.
         "if (token == 'dev' /* note */ || token == 'v2') {",
         "if (token === 'alpha' /* note */ + 'bravo' + 'charlie') {",
+        // A comment on each side of the only `+` hides neither piece.
+        "if (token === 'abcdefghijkl' /* note */ + /* note */ 'mnopqrstuvwx') {",
     ] {
         assert!(flagged(text), "{text:?}");
     }

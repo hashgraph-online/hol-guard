@@ -344,15 +344,15 @@ fn every_literal_is_a_label(text: &[u8]) -> bool {
             }
             // Pieces joined by `+` spell out one value between them, so none
             // of them is a label however short each piece is on its own. A
-            // `+` beside anything else is ordinary arithmetic.
+            // `+` beside anything else is ordinary arithmetic. A comment
+            // between a piece and the `+` is prose, so it is read past: the
+            // nearest code on each side is what the `+` joins.
             if quote == b'+'
-                && (matches!(
-                    text[..at].trim_ascii_end().last(),
-                    Some(b'"' | b'\'' | b'`')
-                ) || matches!(
-                    text[at + 1..].trim_ascii_start().first(),
-                    Some(b'"' | b'\'' | b'`')
-                ))
+                && (matches!(code_before(&text[..at]).last(), Some(b'"' | b'\'' | b'`'))
+                    || matches!(
+                        code_after(&text[at + 1..]).first(),
+                        Some(b'"' | b'\'' | b'`')
+                    ))
             {
                 return false;
             }
@@ -368,6 +368,37 @@ fn every_literal_is_a_label(text: &[u8]) -> bool {
         at += body.len() + 2;
     }
     true
+}
+
+/// `text` with any block comments and spacing at its end removed, so a comment
+/// cannot hide the code that ends it. An unopened `*/` ends the search: there
+/// is no code before it to read.
+fn code_before(mut text: &[u8]) -> &[u8] {
+    loop {
+        text = text.trim_ascii_end();
+        let Some(body) = text.strip_suffix(b"*/") else {
+            return text;
+        };
+        let Some(start) = body.windows(2).rposition(|pair| pair == b"/*") else {
+            return &[];
+        };
+        text = &body[..start];
+    }
+}
+
+/// `text` with any block comments and spacing at its start removed. An
+/// unclosed comment ends the search: it hides the rest of the line.
+fn code_after(mut text: &[u8]) -> &[u8] {
+    loop {
+        text = text.trim_ascii_start();
+        if !text.starts_with(b"/*") {
+            return text;
+        }
+        let Some(end) = text[2..].windows(2).position(|pair| pair == b"*/") else {
+            return &[];
+        };
+        text = &text[end + 4..];
+    }
 }
 
 fn label(literal: &[u8]) -> bool {
