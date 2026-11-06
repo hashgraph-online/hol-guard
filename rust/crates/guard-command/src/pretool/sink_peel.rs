@@ -619,17 +619,7 @@ fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathB
 /// `PATH` is not one of them: native authority refuses a command that sets it
 /// (`path_overridden`), so the sink must not peel past it either.
 fn environment_assignment(value: &str) -> bool {
-    let Some((name, _)) = value.split_once('=') else {
-        return false;
-    };
-    name != "PATH"
-        && name
-            .chars()
-            .next()
-            .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
-        && name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+    crate::parser_executables::assignment_name(value).is_some_and(|name| name != "PATH")
 }
 
 /// Any spelling of a directory flag: `--cwd`, `--cwd=x`, `-C`, `-Cx`.
@@ -908,3 +898,9 @@ fn require_blanks(characters: &[char], index: usize) -> Option<usize> {
     let end = skip_blanks(characters, index);
     (end > index).then_some(end)
 }
+
+// The tests spell the workspace path inside POSIX shell text, and the peel
+// itself is Unix-only, so they run where the arm they cover compiles.
+#[cfg(all(test, unix))]
+#[path = "sink_peel_tests.rs"]
+mod tests;

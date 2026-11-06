@@ -601,6 +601,7 @@
       "src/pretool/shell_script.rs",
       "src/pretool/shell_script_flow.rs",
       "src/pretool/sink_peel.rs",
+      "src/pretool/sink_peel_tests.rs",
       "src/pretool/source_reads.rs",
       "src/pretool/stderr_merge.rs",
       "src/pretool/stdin_filter_options.rs",
