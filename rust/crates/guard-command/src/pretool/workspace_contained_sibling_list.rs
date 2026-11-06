@@ -6,8 +6,8 @@
 //! root itself ran. The sink rejoins both, and the edge roots the sandbox at
 //! the repository for either, so the grammar here is the one `sibling_list`
 //! already reads.
-use super::super::sink_peel::ARGUMENT_REJECT;
 use super::{joined_filters, PathContext};
+use crate::pretool::sink_peel::ARGUMENT_REJECT;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 
 /// The commands after `cd <dir below a sibling root> &&`, when two or more
